@@ -1,0 +1,2566 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BearingPoint Transform — Performance Management Platform</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   BEARINGPOINT TRANSFORM — DESIGN SYSTEM
+   ============================================================ */
+:root {
+  /* Primary brand colors */
+  --bp-deep-red: #2B0000;
+  --bp-coral: #FF3D3D;
+  --bp-black: #000000;
+  --bp-white: #FFFFFF;
+  /* Secondary brand colors */
+  --bp-red-brick: #C8281A;
+  --bp-coral-pink: #F58F89;
+  --bp-light-pink: #F8D5D2;
+  --bp-warm-brown: #6B5750;
+  --bp-warm-taupe: #A89A93;
+  --bp-warm-gray: #E8E2DE;
+  /* Functional palette */
+  --green: #2E7D32;
+  --green-light: #E8F5E9;
+  --green-dark: #1B5E20;
+  --amber: #E68900;
+  --amber-light: #FFF4E0;
+  --red: #C8281A;
+  --red-light: #FCE6E4;
+  --blue: #1565C0;
+  --blue-light: #E3F2FD;
+  /* Neutrals (warm tones) */
+  --n-0: #FFFFFF;
+  --n-50: #FAF8F6;
+  --n-100: #F4F1EE;
+  --n-200: #E8E2DE;
+  --n-300: #C9C0BA;
+  --n-400: #A89A93;
+  --n-500: #6B5750;
+  --n-600: #3D2E29;
+  --n-700: #2B1F1B;
+  --n-900: #0A0606;
+  /* Semantic */
+  --bg-app: #FAF8F6;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --text-primary: #1A1A1A;
+  --text-secondary: #6B5750;
+  --text-tertiary: #A89A93;
+  --border: #E8E2DE;
+  --border-strong: #C9C0BA;
+  /* Shadows */
+  --sh-xs: 0 1px 2px rgba(43,0,0,0.04);
+  --sh-sm: 0 1px 3px rgba(43,0,0,0.08), 0 1px 2px rgba(43,0,0,0.04);
+  --sh-md: 0 4px 12px rgba(43,0,0,0.08), 0 2px 4px rgba(43,0,0,0.04);
+  --sh-lg: 0 12px 32px rgba(43,0,0,0.12), 0 4px 8px rgba(43,0,0,0.06);
+  --sh-xl: 0 24px 64px rgba(43,0,0,0.16);
+  /* Layout */
+  --sidebar-w: 248px;
+  --header-h: 60px;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  line-height: 1.5;
+  height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+button, input, select, textarea { font-family: inherit; font-size: inherit; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--n-300); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--n-400); }
+
+/* ============================================================
+   LOGIN SCREEN
+   ============================================================ */
+#login {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #000 0%, #1A0000 50%, #2B0000 100%);
+  transition: opacity 0.4s ease;
+}
+#login.hidden { opacity: 0; pointer-events: none; }
+#login::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(255,61,61,0.08), transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(200,40,26,0.06), transparent 50%);
+}
+.login-card {
+  position: relative; z-index: 1;
+  background: #fff; width: 440px; padding: 48px 44px;
+  border-top: 6px solid var(--bp-coral);
+  box-shadow: var(--sh-xl);
+}
+.login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.login-brand-mark {
+  width: 44px; height: 44px; background: #000;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--bp-coral); font-weight: 900; font-size: 18px;
+  border: 2px solid var(--bp-coral);
+}
+.login-brand-text { font-size: 13px; font-weight: 600; color: var(--n-600); letter-spacing: 0.5px; }
+.login-brand-text strong { display: block; font-size: 22px; font-weight: 800; color: #000; letter-spacing: -0.5px; }
+.login-title { font-size: 18px; font-weight: 600; color: #000; margin: 24px 0 4px; }
+.login-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 28px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 11px; font-weight: 600; color: var(--n-500); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 10px 14px;
+  border: 1.5px solid var(--border); border-radius: var(--radius);
+  font-size: 14px; background: #fff; color: var(--text-primary);
+  transition: var(--transition);
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none; border-color: var(--bp-coral);
+  box-shadow: 0 0 0 3px rgba(255,61,61,0.12);
+}
+.login-btn {
+  width: 100%; padding: 12px; margin-top: 8px;
+  background: #000; color: #fff; border: none;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: var(--transition);
+}
+.login-btn:hover { background: var(--bp-coral); }
+.login-roles { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.login-roles-title { font-size: 11px; font-weight: 600; color: var(--n-500); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
+.login-roles-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.login-role {
+  padding: 8px; border: 1px solid var(--border); background: #fff;
+  font-size: 11px; font-weight: 500; color: var(--text-secondary);
+  cursor: pointer; text-align: center; transition: var(--transition);
+}
+.login-role:hover { border-color: var(--bp-coral); color: var(--bp-coral); background: var(--red-light); }
+.login-footer { text-align: center; margin-top: 24px; font-size: 11px; color: var(--n-400); }
+
+/* ============================================================
+   APP LAYOUT
+   ============================================================ */
+#app { display: none; height: 100vh; }
+#app.visible { display: flex; }
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar-w); min-width: var(--sidebar-w);
+  background: #000; color: #fff;
+  display: flex; flex-direction: column; height: 100vh;
+}
+.sb-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 18px; border-bottom: 3px solid var(--bp-coral);
+}
+.sb-mark {
+  width: 34px; height: 34px; background: #000;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--bp-coral); font-weight: 900; font-size: 14px;
+  border: 2px solid var(--bp-coral);
+}
+.sb-title { font-size: 11px; color: var(--n-400); letter-spacing: 0.6px; text-transform: uppercase; }
+.sb-title strong { display: block; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.2px; text-transform: none; }
+
+.sb-context {
+  padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.sb-context label { display: block; font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 1px; margin-bottom: 6px; }
+.sb-context select {
+  width: 100%; padding: 7px 10px; background: rgba(255,255,255,0.06);
+  color: #fff; border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius-sm); font-size: 12px; cursor: pointer;
+}
+.sb-context select option { background: #000; color: #fff; }
+
+.sb-nav { flex: 1; overflow-y: auto; padding: 12px 10px; }
+.sb-section-title { padding: 12px 10px 6px; font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: 1.2px; text-transform: uppercase; font-weight: 600; }
+.sb-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; margin: 1px 0;
+  color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 500;
+  cursor: pointer; border-radius: var(--radius-sm);
+  transition: var(--transition); border-left: 3px solid transparent;
+}
+.sb-item i { width: 16px; font-size: 13px; text-align: center; }
+.sb-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.sb-item.active { background: rgba(255,61,61,0.12); color: var(--bp-coral); border-left-color: var(--bp-coral); }
+.sb-item .badge { margin-left: auto; font-size: 10px; padding: 1px 6px; background: var(--bp-coral); color: #fff; border-radius: 8px; font-weight: 600; }
+
+.sb-footer { padding: 14px 16px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; }
+.sb-avatar { width: 32px; height: 32px; background: var(--bp-coral); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+.sb-user { flex: 1; min-width: 0; }
+.sb-user-name { font-size: 12px; font-weight: 600; color: #fff; }
+.sb-user-role { font-size: 10px; color: rgba(255,255,255,0.5); }
+.sb-logout { color: rgba(255,255,255,0.5); cursor: pointer; padding: 4px; }
+.sb-logout:hover { color: var(--bp-coral); }
+
+/* Main area */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar {
+  height: var(--header-h); min-height: var(--header-h);
+  background: #fff; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+}
+.crumbs { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+.crumbs strong { color: var(--text-primary); font-weight: 600; }
+.crumbs i { font-size: 9px; color: var(--n-300); }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.tb-search { position: relative; }
+.tb-search input { padding: 7px 12px 7px 32px; width: 240px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; background: var(--n-50); }
+.tb-search input:focus { outline: none; border-color: var(--bp-coral); background: #fff; box-shadow: 0 0 0 3px rgba(255,61,61,0.08); }
+.tb-search i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--n-400); font-size: 12px; }
+.tb-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); position: relative; transition: var(--transition); }
+.tb-btn:hover { border-color: var(--bp-coral); color: var(--bp-coral); }
+.tb-btn .dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; background: var(--bp-coral); border-radius: 50%; border: 2px solid #fff; }
+
+.page-wrap { flex: 1; overflow-y: auto; padding: 20px 24px 40px; }
+.page { display: none; }
+.page.active { display: block; }
+
+/* Page header */
+.ph { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+.ph-left h1 { font-size: 22px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; position: relative; padding-bottom: 8px; }
+.ph-left h1::after { content: ''; position: absolute; bottom: 0; left: 0; width: 36px; height: 3px; background: var(--bp-coral); }
+.ph-left .sub { font-size: 13px; color: var(--text-secondary); margin-top: 10px; }
+.ph-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Generic page placeholder */
+.placeholder { padding: 80px 40px; text-align: center; color: var(--text-secondary); background: #fff; border: 1px dashed var(--border); }
+.placeholder i { font-size: 36px; color: var(--n-300); margin-bottom: 12px; }
+.placeholder h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+
+/* ============================================================
+   COMPONENTS
+   ============================================================ */
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 16px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+  transition: var(--transition); white-space: nowrap;
+}
+.btn i { font-size: 12px; }
+.btn-primary { background: var(--bp-coral); color: #fff; }
+.btn-primary:hover { background: var(--bp-red-brick); box-shadow: 0 4px 12px rgba(255,61,61,0.28); }
+.btn-dark { background: #000; color: #fff; }
+.btn-dark:hover { background: var(--bp-coral); }
+.btn-outline { background: #fff; color: var(--text-primary); border-color: var(--border-strong); }
+.btn-outline:hover { border-color: var(--bp-coral); color: var(--bp-coral); }
+.btn-ghost { background: transparent; color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--n-100); color: var(--text-primary); }
+.btn-danger { background: var(--red); color: #fff; }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+.btn-lg { padding: 11px 20px; font-size: 14px; }
+
+/* Card */
+.card { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--sh-xs); margin-bottom: 16px; overflow: hidden; }
+.card-h { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); gap: 12px; }
+.card-h h3 { font-size: 13px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+.card-h h3 i { color: var(--bp-coral); }
+.card-h .h-actions { display: flex; gap: 6px; align-items: center; }
+.card-b { padding: 18px; }
+.card-b.flush { padding: 0; }
+
+/* KPI tiles */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.kpi { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; transition: var(--transition); position: relative; overflow: hidden; }
+.kpi:hover { box-shadow: var(--sh-md); border-color: var(--border-strong); }
+.kpi::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--bp-coral); }
+.kpi.green::before { background: var(--green); }
+.kpi.amber::before { background: var(--amber); }
+.kpi.red::before { background: var(--red); }
+.kpi.brown::before { background: var(--bp-warm-brown); }
+.kpi-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.kpi-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px; }
+.kpi-icon { width: 28px; height: 28px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--bp-coral); background: var(--red-light); }
+.kpi.green .kpi-icon { color: var(--green-dark); background: var(--green-light); }
+.kpi.amber .kpi-icon { color: var(--amber); background: var(--amber-light); }
+.kpi.red .kpi-icon { color: var(--red); background: var(--red-light); }
+.kpi.brown .kpi-icon { color: var(--bp-warm-brown); background: var(--n-100); }
+.kpi-value { font-size: 24px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; line-height: 1.15; }
+.kpi-trend { font-size: 11px; font-weight: 500; margin-top: 6px; display: flex; align-items: center; gap: 4px; color: var(--text-secondary); }
+.kpi-trend.up { color: var(--green-dark); }
+.kpi-trend.down { color: var(--red); }
+.kpi-target { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+.kpi-bar { height: 4px; background: var(--n-100); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+.kpi-bar > div { height: 100%; background: var(--bp-coral); border-radius: 2px; transition: width 0.6s ease; }
+.kpi.green .kpi-bar > div { background: var(--green); }
+
+/* Grids */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; }
+.grid-3-2 { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+@media (max-width: 1100px) { .grid-2, .grid-2-1, .grid-1-2, .grid-3-2 { grid-template-columns: 1fr; } .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; } }
+
+/* Tables */
+.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tbl thead th {
+  background: var(--n-50); text-align: left;
+  padding: 10px 12px; font-size: 10.5px; font-weight: 700;
+  color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1;
+}
+.tbl tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-primary); vertical-align: middle; }
+.tbl tbody tr:hover td { background: var(--n-50); }
+.tbl tbody tr.selected td { background: var(--red-light); }
+.tbl td.num, .tbl th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tbl td.center, .tbl th.center { text-align: center; }
+.tbl .row-action { color: var(--text-tertiary); cursor: pointer; padding: 4px; }
+.tbl .row-action:hover { color: var(--bp-coral); }
+.tbl-wrap { overflow: auto; }
+
+/* Badges & status */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 600; padding: 3px 8px;
+  border-radius: 12px; line-height: 1.4; letter-spacing: 0.2px;
+}
+.badge i { font-size: 9px; }
+.badge-green { background: var(--green-light); color: var(--green-dark); }
+.badge-amber { background: var(--amber-light); color: var(--amber); }
+.badge-red { background: var(--red-light); color: var(--red); }
+.badge-blue { background: var(--blue-light); color: var(--blue); }
+.badge-gray { background: var(--n-100); color: var(--text-secondary); }
+.badge-coral { background: var(--bp-light-pink); color: var(--bp-red-brick); }
+.badge-brown { background: var(--n-100); color: var(--bp-warm-brown); }
+
+/* Progress bars */
+.pbar { height: 6px; background: var(--n-100); border-radius: 3px; overflow: hidden; min-width: 80px; }
+.pbar > div { height: 100%; border-radius: 3px; transition: width 0.6s ease; background: var(--bp-coral); }
+.pbar.green > div { background: var(--green); }
+.pbar.amber > div { background: var(--amber); }
+.pbar.red > div { background: var(--red); }
+.pbar-row { display: flex; align-items: center; gap: 10px; }
+.pbar-row .pct { font-size: 11px; font-weight: 600; color: var(--text-secondary); min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Avatar */
+.avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--bp-warm-brown); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.avatar.coral { background: var(--bp-coral); }
+.avatar.pink { background: var(--bp-coral-pink); }
+.avatar.brown { background: var(--bp-warm-brown); }
+.avatar.dark { background: #000; }
+.avatar.sm { width: 22px; height: 22px; font-size: 9px; }
+.avatar.lg { width: 36px; height: 36px; font-size: 12px; }
+
+/* Forms */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.form-row label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.form-row input, .form-row select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; background: #fff; }
+.form-row input:focus, .form-row select:focus { outline: none; border-color: var(--bp-coral); box-shadow: 0 0 0 2px rgba(255,61,61,0.1); }
+.full { grid-column: 1 / -1; }
+
+/* Modal */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(2px); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; }
+.modal-bg.open { display: flex; }
+.modal { background: #fff; border-radius: var(--radius-md); width: 100%; max-width: 880px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--sh-xl); border-top: 4px solid var(--bp-coral); }
+.modal-h { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.modal-h h3 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.modal-h .close { font-size: 18px; cursor: pointer; color: var(--text-tertiary); background: none; border: none; padding: 4px 8px; }
+.modal-h .close:hover { color: var(--bp-coral); }
+.modal-b { padding: 20px; overflow-y: auto; flex: 1; }
+.modal-f { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; background: var(--n-50); }
+.modal-tabs { display: flex; border-bottom: 1px solid var(--border); background: #fff; padding: 0 20px; }
+.modal-tabs .mt { padding: 10px 14px; font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: var(--transition); }
+.modal-tabs .mt:hover { color: var(--text-primary); }
+.modal-tabs .mt.active { color: var(--bp-coral); border-bottom-color: var(--bp-coral); }
+
+/* Tabs (in-page) */
+.tabs-bar { display: flex; gap: 0; border-bottom: 1.5px solid var(--border); margin-bottom: 16px; background: #fff; border-radius: var(--radius-md) var(--radius-md) 0 0; padding: 0 16px; }
+.tabs-bar .tab { padding: 12px 18px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1.5px; transition: var(--transition); display: flex; align-items: center; gap: 7px; }
+.tabs-bar .tab:hover { color: var(--text-primary); }
+.tabs-bar .tab.active { color: var(--bp-coral); border-bottom-color: var(--bp-coral); }
+.tabs-bar .tab-count { font-size: 10px; background: var(--n-100); color: var(--text-secondary); padding: 1px 7px; border-radius: 10px; font-weight: 600; }
+.tabs-bar .tab.active .tab-count { background: var(--bp-light-pink); color: var(--bp-red-brick); }
+.tabp { display: none; }
+.tabp.active { display: block; }
+
+/* Filter row */
+.filters { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; padding: 12px 16px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.filters input, .filters select { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; background: #fff; }
+.filters input:focus, .filters select:focus { outline: none; border-color: var(--bp-coral); }
+.filters input[type="search"] { padding-left: 30px; min-width: 240px; }
+.filters-count { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+.filters-count strong { color: var(--text-primary); }
+
+/* Chips */
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; font-size: 11px; font-weight: 600; background: var(--n-100); color: var(--text-secondary); border-radius: 12px; border: 1px solid var(--border); }
+.chip.active { background: var(--bp-coral); color: #fff; border-color: var(--bp-coral); }
+.chip.red { background: var(--red-light); color: var(--red); }
+.chip.green { background: var(--green-light); color: var(--green-dark); }
+.chip.amber { background: var(--amber-light); color: var(--amber); }
+
+/* Section divider */
+.section-title { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 1.5px solid var(--bp-coral); }
+.section-title:first-child { margin-top: 0; }
+
+/* Inline editable cell */
+.edit-cell { cursor: pointer; transition: var(--transition); position: relative; }
+.edit-mode .edit-cell { background: rgba(255,61,61,0.04); }
+.edit-mode .edit-cell:hover { background: rgba(255,61,61,0.1); outline: 1px dashed var(--bp-coral); }
+.edit-cell input, .edit-cell select { width: 100%; padding: 4px 6px; border: 1.5px solid var(--bp-coral); border-radius: 3px; font-size: 12px; }
+
+/* Alerts list */
+.alert-list { display: flex; flex-direction: column; }
+.alert-row { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.alert-row:last-child { border-bottom: none; }
+.alert-icon { width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.alert-icon.red { background: var(--red-light); color: var(--red); }
+.alert-icon.amber { background: var(--amber-light); color: var(--amber); }
+.alert-icon.green { background: var(--green-light); color: var(--green-dark); }
+.alert-icon.blue { background: var(--blue-light); color: var(--blue); }
+.alert-content { flex: 1; min-width: 0; }
+.alert-title { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.alert-desc { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+.alert-time { font-size: 10.5px; color: var(--text-tertiary); margin-top: 4px; }
+
+/* Charts */
+.chart-box { position: relative; height: 260px; }
+.chart-box.tall { height: 320px; }
+.chart-box.sm { height: 180px; }
+
+/* Risk dots */
+.risk { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; }
+.risk-dot { width: 8px; height: 8px; border-radius: 50%; }
+.risk-low .risk-dot { background: var(--green); }
+.risk-med .risk-dot { background: var(--amber); }
+.risk-high .risk-dot { background: var(--red); }
+.risk-crit .risk-dot { background: var(--bp-deep-red); box-shadow: 0 0 0 3px rgba(43,0,0,0.18); }
+
+/* Animations */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.page.active > * { animation: fadeUp 0.32s ease forwards; }
+
+/* Kanban */
+.kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.kcol { background: var(--n-50); border-radius: var(--radius-md); padding: 10px; min-height: 200px; border: 1px solid var(--border); }
+.kcol-h { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 10px; }
+.kcol-h-l { font-size: 11.5px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+.kcol-h-l i { color: var(--bp-coral); font-size: 10px; }
+.kcol-count { font-size: 10px; background: #fff; color: var(--text-secondary); padding: 1px 7px; border-radius: 10px; font-weight: 600; border: 1px solid var(--border); }
+.kcard { background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 8px; cursor: pointer; transition: var(--transition); }
+.kcard:hover { border-color: var(--bp-coral); box-shadow: var(--sh-sm); transform: translateY(-1px); }
+.kcard-title { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.kcard-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.kcard-amount { font-size: 12.5px; font-weight: 700; color: var(--bp-coral); }
+.kcard-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; gap: 8px; }
+.kcard-progress { flex: 1; }
+
+/* Timeline */
+.timeline { position: relative; padding-left: 24px; }
+.timeline::before { content: ''; position: absolute; left: 6px; top: 4px; bottom: 4px; width: 2px; background: var(--border); }
+.tl-item { position: relative; padding-bottom: 18px; }
+.tl-item:last-child { padding-bottom: 0; }
+.tl-dot { position: absolute; left: -22px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid var(--bp-coral); }
+.tl-dot.done { background: var(--green); border-color: var(--green); }
+.tl-dot.current { background: var(--bp-coral); border-color: var(--bp-coral); box-shadow: 0 0 0 4px rgba(255,61,61,0.18); }
+.tl-date { font-size: 10.5px; color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+.tl-title { font-size: 12.5px; font-weight: 600; color: var(--text-primary); margin: 2px 0; }
+.tl-desc { font-size: 11.5px; color: var(--text-secondary); }
+
+/* Heatmap */
+.heatmap { display: grid; gap: 2px; }
+.hm-row { display: grid; grid-template-columns: 140px repeat(12, 1fr); gap: 2px; align-items: center; }
+.hm-label { font-size: 11px; color: var(--text-secondary); padding-right: 8px; text-align: right; font-weight: 500; }
+.hm-cell { aspect-ratio: 1.6 / 1; border-radius: 2px; background: var(--n-100); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.95); cursor: pointer; transition: var(--transition); }
+.hm-cell:hover { transform: scale(1.1); z-index: 1; box-shadow: var(--sh-sm); }
+.hm-head { display: grid; grid-template-columns: 140px repeat(12, 1fr); gap: 2px; margin-bottom: 4px; }
+.hm-head .hm-col { font-size: 10px; font-weight: 600; color: var(--text-tertiary); text-align: center; }
+
+/* Tag list */
+.tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag { font-size: 10.5px; font-weight: 500; padding: 2px 8px; background: var(--n-100); color: var(--text-secondary); border-radius: 10px; }
+
+/* Stat */
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat-l { font-size: 10.5px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }
+.stat-v { font-size: 16px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.3px; }
+.stat-v.coral { color: var(--bp-coral); }
+.stat-v.green { color: var(--green-dark); }
+.stat-v.red { color: var(--red); }
+
+/* Notifications */
+.toast-zone { position: fixed; bottom: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: #fff; border: 1px solid var(--border); border-left: 4px solid var(--bp-coral); border-radius: var(--radius-sm); padding: 12px 16px; box-shadow: var(--sh-lg); min-width: 280px; animation: fadeUp 0.3s ease; }
+.toast.green { border-left-color: var(--green); }
+.toast.amber { border-left-color: var(--amber); }
+.toast.red { border-left-color: var(--red); }
+.toast-title { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.toast-msg { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     LOGIN
+     ============================================================ -->
+<div id="login">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-brand-mark">BP</div>
+      <div class="login-brand-text">
+        <strong>BearingPoint</strong>
+        Transform
+      </div>
+    </div>
+    <h2 class="login-title">Sign in to your workspace</h2>
+    <p class="login-sub">Performance & transformation management platform</p>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" value="g.sejourne@bearingpoint.com">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" value="••••••••••">
+    </div>
+    <button class="login-btn" onclick="enterApp('cto')">Sign in</button>
+    <div class="login-roles">
+      <div class="login-roles-title">Or try a persona</div>
+      <div class="login-roles-grid">
+        <div class="login-role" onclick="enterApp('cto')">CTO</div>
+        <div class="login-role" onclick="enterApp('sponsor')">Sponsor</div>
+        <div class="login-role" onclick="enterApp('lever')">Lever Owner</div>
+        <div class="login-role" onclick="enterApp('finance')">Finance</div>
+        <div class="login-role" onclick="enterApp('hr')">HR</div>
+        <div class="login-role" onclick="enterApp('ops')">Operations</div>
+      </div>
+    </div>
+    <p class="login-footer">BearingPoint &middot; Business Strategy &middot; v2.0 beta</p>
+  </div>
+</div>
+
+<!-- ============================================================
+     APP SHELL
+     ============================================================ -->
+<div id="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-mark">BP</div>
+      <div class="sb-title">BearingPoint<strong>Transform</strong></div>
+    </div>
+    <div class="sb-context">
+      <label>Program</label>
+      <select id="program-selector"><option>Transformation Excellence 2026</option></select>
+    </div>
+    <div class="sb-context">
+      <label>Persona</label>
+      <select id="role-selector" onchange="switchRole(this.value)"></select>
+    </div>
+    <nav class="sb-nav" id="sb-nav"></nav>
+    <div class="sb-footer">
+      <div class="sb-avatar" id="sb-avatar">GS</div>
+      <div class="sb-user">
+        <div class="sb-user-name" id="sb-name">Guillaume Séjourné</div>
+        <div class="sb-user-role" id="sb-role">CTO</div>
+      </div>
+      <div class="sb-logout" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i></div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">
+        <span>Transformation Excellence 2026</span>
+        <i class="fa-solid fa-chevron-right"></i>
+        <strong id="crumb-page">Executive Dashboard</strong>
+      </div>
+      <div class="topbar-right">
+        <div class="tb-search"><i class="fa-solid fa-search"></i><input type="text" placeholder="Search levers, workstreams..." id="global-search"></div>
+        <button class="tb-btn" title="Notifications"><i class="fa-regular fa-bell"></i><span class="dot"></span></button>
+        <button class="tb-btn" title="Help"><i class="fa-regular fa-circle-question"></i></button>
+        <button class="tb-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>
+      </div>
+    </header>
+
+    <div class="page-wrap" id="page-wrap">
+      <div class="page active" id="page-placeholder">
+        <div class="placeholder">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <h3>Loading workspace...</h3>
+          <p>Initializing data model and modules.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CENTRAL DATA MODEL — BearingPoint Transform
+   Single source of truth. All modules read & write here.
+   ============================================================ */
+const DB = {
+  program: {
+    id: 'PRG-2026',
+    name: 'Transformation Excellence 2026',
+    sponsor: 'CEO Office',
+    target: 50.0,  // €M total savings target
+    currency: 'EUR',
+    fyStart: '2026-01-01',
+    fyEnd: '2026-12-31',
+    baselineEBIT: 124.5,  // €M
+    revenue: 892.0,       // €M
+  },
+
+  workstreams: [
+    { id: 'WS-PROC', name: 'Procurement Excellence', sponsor: 'Marie Durand',  function: 'Procurement', color: '#FF3D3D', target: 14.0 },
+    { id: 'WS-OPS',  name: 'Operational Efficiency', sponsor: 'Jean Dupont',   function: 'Operations',  color: '#C8281A', target: 12.0 },
+    { id: 'WS-COM',  name: 'Commercial Effectiveness', sponsor: 'Sophie Martin', function: 'Sales',     color: '#F58F89', target: 10.0 },
+    { id: 'WS-ORG',  name: 'Org & Ways of Working',  sponsor: 'Pierre Lefevre',function: 'HR',          color: '#6B5750', target: 5.5 },
+    { id: 'WS-DIG',  name: 'Digital Transformation', sponsor: 'Claire Bernard',function: 'IT',          color: '#A89A93', target: 5.0 },
+    { id: 'WS-SC',   name: 'Supply Chain Optimization', sponsor: 'Thomas Petit', function: 'Supply',    color: '#2B0000', target: 3.5 },
+  ],
+
+  /* Lever statuses follow pipeline:
+     idea → qualified → validated → in_progress → delivered → closed (cancelled) */
+  leverStatuses: ['idea', 'qualified', 'validated', 'in_progress', 'delivered', 'cancelled'],
+  riskLevels:    ['low', 'medium', 'high', 'critical'],
+
+  geographies: ['Global', 'Europe', 'France', 'Germany', 'Spain', 'Italy', 'Belgium', 'UK', 'Americas', 'USA', 'APAC'],
+  functions:   ['Procurement', 'Finance', 'HR', 'IT', 'Operations', 'Sales', 'Supply Chain', 'R&D', 'Marketing'],
+
+  pnlAccounts: [
+    { id: 'REV',  name: 'Revenue',              baseline: 892.0, sign: 1 },
+    { id: 'COGS', name: 'Cost of Goods Sold',   baseline: -534.0, sign: -1 },
+    { id: 'GM',   name: 'Gross Margin',         baseline: 358.0, sign: 1, computed: true },
+    { id: 'SGA',  name: 'Selling & Marketing',  baseline: -98.5, sign: -1 },
+    { id: 'GA',   name: 'General & Admin',      baseline: -72.0, sign: -1 },
+    { id: 'RD',   name: 'R&D',                  baseline: -45.0, sign: -1 },
+    { id: 'OTH',  name: 'Other',                baseline: -18.0, sign: -1 },
+    { id: 'EBIT', name: 'EBIT',                 baseline: 124.5, sign: 1, computed: true },
+  ],
+
+  // Levers (the core entity)
+  levers: [
+    // === Procurement ===
+    { id: 'L001', code: 'PROC-001', name: 'Optimisation achats indirects', ws: 'WS-PROC', owner: 'Marc Dubois',     ownerInit: 'MD', geography: 'Europe', country: 'France', entity: 'BU Industrie', function: 'Procurement', pnlMap: 'GA',  start: '2026-01-15', end: '2026-09-30', status: 'in_progress', progress: 50, risk: 'medium', grossSavings: 4.2, netSavings: 3.7, opexOneOff: 0.2, opexRec: 0.05, capex: 0.5, fteImpact: -12, popImpacted: 80, dependencies: ['L002'], description: 'Rationalisation des achats indirects via centralisation et re-négociation des contrats cadres top 50 fournisseurs.', createdAt: '2025-11-10', lastUpdate: '2026-06-22' },
+    { id: 'L002', code: 'PROC-002', name: 'Renégociation fournisseurs IT', ws: 'WS-PROC', owner: 'Léa Moreau',      ownerInit: 'LM', geography: 'Europe', country: 'France', entity: 'BU Services',  function: 'Procurement', pnlMap: 'GA',  start: '2026-01-01', end: '2026-06-30', status: 'in_progress', progress: 80, risk: 'low',    grossSavings: 3.0, netSavings: 2.7, opexOneOff: 0.1, opexRec: 0.02, capex: 0.1, fteImpact:  0, popImpacted: 12, dependencies: [],          description: 'Négociation contrats software / cloud / SaaS sur portefeuille €25M.', createdAt: '2025-10-20', lastUpdate: '2026-06-18' },
+    { id: 'L003', code: 'PROC-003', name: 'Centralisation achats marketing', ws: 'WS-PROC', owner: 'Léa Moreau',    ownerInit: 'LM', geography: 'Europe', country: 'France', entity: 'Corporate',    function: 'Procurement', pnlMap: 'SGA', start: '2026-02-01', end: '2026-10-31', status: 'in_progress', progress: 40, risk: 'medium', grossSavings: 2.5, netSavings: 2.2, opexOneOff: 0.15, opexRec: 0.03, capex: 0.2, fteImpact: -3, popImpacted: 18, dependencies: ['L001'], description: 'Centralisation des achats marketing & communication groupe.', createdAt: '2025-12-05', lastUpdate: '2026-06-20' },
+    { id: 'L004', code: 'PROC-004', name: 'E-procurement déploiement', ws: 'WS-PROC', owner: 'Marc Dubois',         ownerInit: 'MD', geography: 'Europe', country: 'Germany', entity: 'BU Industrie', function: 'Procurement', pnlMap: 'GA',  start: '2026-03-01', end: '2026-11-30', status: 'in_progress', progress: 39, risk: 'high',   grossSavings: 1.8, netSavings: 1.3, opexOneOff: 0.3, opexRec: 0.15, capex: 1.2, fteImpact: -2, popImpacted: 45, dependencies: [],          description: 'Déploiement plateforme e-procurement multi-sites (15 entités).', createdAt: '2025-11-25', lastUpdate: '2026-06-15' },
+    { id: 'L005', code: 'PROC-005', name: 'Pooling achats transport', ws: 'WS-PROC', owner: 'Alex Roussel',         ownerInit: 'AR', geography: 'Europe', country: 'Germany', entity: 'BU Industrie', function: 'Procurement', pnlMap: 'COGS',start: '2026-01-10', end: '2026-05-31', status: 'delivered',  progress: 100, risk: 'low',   grossSavings: 1.5, netSavings: 1.4, opexOneOff: 0.05, opexRec: 0.02, capex: 0.0, fteImpact: -1, popImpacted: 8, dependencies: [],          description: 'Mutualisation des contrats transport sur 5 pays européens.', createdAt: '2025-09-15', lastUpdate: '2026-06-01' },
+    { id: 'L006', code: 'PROC-006', name: 'Optimisation achats énergie', ws: 'WS-PROC', owner: 'Anaïs Petit',       ownerInit: 'AP', geography: 'Europe', country: 'France', entity: 'BU Industrie', function: 'Procurement', pnlMap: 'COGS',start: '2026-04-01', end: '2026-12-31', status: 'qualified',  progress: 30, risk: 'critical', grossSavings: 1.0, netSavings: 0.8, opexOneOff: 0.1, opexRec: 0.0, capex: 0.0, fteImpact: 0, popImpacted: 5, dependencies: [],          description: 'Renégociation contrats énergie + transition contrats verts.', createdAt: '2026-01-20', lastUpdate: '2026-06-10' },
+    // === Operations ===
+    { id: 'L007', code: 'OPS-001',  name: 'Automatisation production ligne 3-5', ws: 'WS-OPS', owner: 'Jean Dupont', ownerInit: 'JD', geography: 'Europe', country: 'France', entity: 'BU Industrie', function: 'Operations',  pnlMap: 'COGS',start: '2026-02-01', end: '2026-12-31', status: 'in_progress', progress: 45, risk: 'high',   grossSavings: 4.5, netSavings: 3.2, opexOneOff: 0.4, opexRec: 0.2, capex: 2.8, fteImpact: -24, popImpacted: 65, dependencies: [], description: 'Automatisation 3 lignes de production via robotique collaborative.', createdAt: '2025-10-05', lastUpdate: '2026-06-19' },
+    { id: 'L008', code: 'OPS-002',  name: 'Lean Six Sigma — Site Lyon', ws: 'WS-OPS', owner: 'Lucas Fournier',       ownerInit: 'LF', geography: 'Europe', country: 'France', entity: 'BU Industrie', function: 'Operations',  pnlMap: 'COGS',start: '2026-01-15', end: '2026-08-31', status: 'in_progress', progress: 65, risk: 'low',    grossSavings: 2.2, netSavings: 2.0, opexOneOff: 0.1, opexRec: 0.05, capex: 0.0, fteImpact: -8, popImpacted: 120, dependencies: [], description: 'Déploiement Lean Six Sigma sur site Lyon, focus TRS.', createdAt: '2025-11-15', lastUpdate: '2026-06-21' },
+    { id: 'L009', code: 'OPS-003',  name: 'Optimisation maintenance préventive', ws: 'WS-OPS', owner: 'Jean Dupont', ownerInit: 'JD', geography: 'Europe', country: 'France', entity: 'BU Industrie', function: 'Operations',  pnlMap: 'COGS',start: '2026-03-01', end: '2026-11-30', status: 'in_progress', progress: 35, risk: 'medium', grossSavings: 1.8, netSavings: 1.5, opexOneOff: 0.05, opexRec: 0.1, capex: 0.3, fteImpact: -3, popImpacted: 40, dependencies: ['L007'], description: 'Prédictive maintenance via IoT sur équipements critiques.', createdAt: '2025-12-12', lastUpdate: '2026-06-14' },
+    // === Commercial ===
+    { id: 'L010', code: 'COM-001',  name: 'Pricing optimization B2B', ws: 'WS-COM', owner: 'Sophie Martin',          ownerInit: 'SM', geography: 'Global', country: '-',     entity: 'BU Services',  function: 'Sales',       pnlMap: 'REV', start: '2026-01-01', end: '2026-09-30', status: 'in_progress', progress: 55, risk: 'medium', grossSavings: 3.5, netSavings: 3.3, opexOneOff: 0.1, opexRec: 0.05, capex: 0.3, fteImpact:  2, popImpacted: 30, dependencies: [], description: 'Optimisation pricing dynamique B2B sur portefeuille €450M revenu.', createdAt: '2025-10-30', lastUpdate: '2026-06-22' },
+    { id: 'L011', code: 'COM-002',  name: 'Sales force effectiveness', ws: 'WS-COM', owner: 'Nicolas Lambert',       ownerInit: 'NL', geography: 'Americas', country: 'USA',  entity: 'BU Services',  function: 'Sales',       pnlMap: 'SGA', start: '2026-02-01', end: '2026-11-30', status: 'in_progress', progress: 60, risk: 'low',    grossSavings: 2.0, netSavings: 1.7, opexOneOff: 0.2, opexRec: 0.1, capex: 0.2, fteImpact: -5, popImpacted: 90, dependencies: [], description: 'Réorganisation force de vente USA + outils CRM.', createdAt: '2025-11-05', lastUpdate: '2026-06-17' },
+    { id: 'L012', code: 'COM-003',  name: 'Cross-sell automation', ws: 'WS-COM',     owner: 'Sophie Martin',         ownerInit: 'SM', geography: 'Europe', country: 'Spain', entity: 'BU Services',  function: 'Sales',       pnlMap: 'REV', start: '2026-04-01', end: '2026-12-31', status: 'validated', progress: 15, risk: 'medium', grossSavings: 1.3, netSavings: 1.1, opexOneOff: 0.05, opexRec: 0.05, capex: 0.4, fteImpact: 0, popImpacted: 25, dependencies: ['L010'], description: 'Mise en place cross-sell automatisé via plateforme data.', createdAt: '2026-02-10', lastUpdate: '2026-06-08' },
+    // === Org ===
+    { id: 'L013', code: 'ORG-001',  name: 'Fusion équipes marketing EU', ws: 'WS-ORG', owner: 'Pierre Lefevre',     ownerInit: 'PL', geography: 'Europe', country: '-',     entity: 'Corporate',    function: 'HR',          pnlMap: 'SGA', start: '2026-01-01', end: '2026-04-30', status: 'delivered',  progress: 100, risk: 'low',   grossSavings: 1.8, netSavings: 1.6, opexOneOff: 0.15, opexRec: 0.0, capex: 0.0, fteImpact: -6, popImpacted: 22, dependencies: [], description: 'Fusion des équipes marketing Europe sous une organisation centrale.', createdAt: '2025-09-01', lastUpdate: '2026-05-15' },
+    { id: 'L014', code: 'ORG-002',  name: 'Optimisation organisationnelle COO', ws: 'WS-ORG', owner: 'Pierre Lefevre', ownerInit: 'PL', geography: 'Global', country: '-',  entity: 'Corporate',    function: 'HR',          pnlMap: 'GA',  start: '2026-01-01', end: '2026-03-31', status: 'delivered',  progress: 100, risk: 'low',   grossSavings: 1.3, netSavings: 1.1, opexOneOff: 0.2, opexRec: 0.0, capex: 0.0, fteImpact: -8, popImpacted: 35, dependencies: [], description: 'Réorganisation top management & spans of control.', createdAt: '2025-08-15', lastUpdate: '2026-04-10' },
+    // === Digital ===
+    { id: 'L015', code: 'DIG-001',  name: 'Digitalisation finance (RPA)', ws: 'WS-DIG', owner: 'Claire Bernard',   ownerInit: 'CB', geography: 'Global', country: '-',     entity: 'Corporate',    function: 'Finance',     pnlMap: 'GA',  start: '2026-01-15', end: '2026-09-30', status: 'in_progress', progress: 50, risk: 'medium', grossSavings: 1.8, netSavings: 1.2, opexOneOff: 0.3, opexRec: 0.2, capex: 1.5, fteImpact: -8, popImpacted: 30, dependencies: [], description: 'RPA pour clôtures, factures, rapprochements bancaires.', createdAt: '2025-11-12', lastUpdate: '2026-06-20' },
+    { id: 'L016', code: 'DIG-002',  name: 'Transformation digitale CRM', ws: 'WS-DIG', owner: 'Claire Bernard',    ownerInit: 'CB', geography: 'Europe', country: '-',     entity: 'BU Services',  function: 'IT',          pnlMap: 'SGA', start: '2026-02-01', end: '2026-12-31', status: 'in_progress', progress: 35, risk: 'critical', grossSavings: 1.5, netSavings: 0.8, opexOneOff: 0.4, opexRec: 0.3, capex: 2.0, fteImpact: -4, popImpacted: 60, dependencies: ['L011'], description: 'Migration CRM Salesforce + data unification.', createdAt: '2025-12-01', lastUpdate: '2026-06-23' },
+    // === Supply Chain ===
+    { id: 'L017', code: 'SC-001',   name: 'Optimisation supply chain EU', ws: 'WS-SC', owner: 'Thomas Petit',      ownerInit: 'TP', geography: 'Europe', country: '-',     entity: 'BU Industrie', function: 'Supply Chain',pnlMap: 'COGS',start: '2026-03-01', end: '2026-12-31', status: 'validated', progress: 25, risk: 'medium', grossSavings: 2.0, netSavings: 1.7, opexOneOff: 0.2, opexRec: 0.1, capex: 0.8, fteImpact: -6, popImpacted: 45, dependencies: ['L007'], description: 'Réorganisation supply chain européen (4 hubs).', createdAt: '2026-01-08', lastUpdate: '2026-06-19' },
+    { id: 'L018', code: 'SC-002',   name: 'Inventory optimization', ws: 'WS-SC',       owner: 'Thomas Petit',      ownerInit: 'TP', geography: 'Europe', country: 'Italy', entity: 'BU Industrie', function: 'Supply Chain',pnlMap: 'COGS',start: '2026-02-15', end: '2026-08-31', status: 'in_progress', progress: 55, risk: 'low',  grossSavings: 1.0, netSavings: 0.9, opexOneOff: 0.05, opexRec: 0.05, capex: 0.4, fteImpact: 0, popImpacted: 18, dependencies: [], description: 'Optimisation niveaux de stock & rotation entrepôts.', createdAt: '2025-12-20', lastUpdate: '2026-06-16' },
+  ],
+
+  /* Workforce / HR data */
+  workforce: {
+    totalFTE: 2840,
+    massSalary: 184.2,  // €M
+    budgetSalary: 190.5,
+    departments: [
+      { name: 'Production',              fte: 1120, fteTarget: 1035 },
+      { name: 'Commercial & Marketing',  fte: 580,  fteTarget: 532 },
+      { name: 'R&D / Innovation',        fte: 430,  fteTarget: 395 },
+      { name: 'Support (IT/Finance/HR)', fte: 370,  fteTarget: 328 },
+      { name: 'Supply Chain',            fte: 340,  fteTarget: 310 },
+    ],
+    employees: [
+      { id: 'EMP001', name: 'Dubois Marc',     region: 'Europe', country: 'France',  func: 'Directeur Achats',    team: 'Procurement', bu: 'BU Industrie', entity: 'SAS',  level: 'Global',   fte: 1.0,  salary: 145000, retirement: '15/07/2042' },
+      { id: 'EMP002', name: 'Moreau Léa',      region: 'Europe', country: 'France',  func: 'Category Manager',    team: 'Procurement', bu: 'BU Industrie', entity: 'SAS',  level: 'Régional', fte: 1.0,  salary: 82000,  retirement: '22/03/2045' },
+      { id: 'EMP003', name: 'Roussel Alex',    region: 'Europe', country: 'Germany', func: 'Supply Chain Manager', team: 'Logistics',  bu: 'BU Industrie', entity: 'GmbH', level: 'Régional', fte: 1.0,  salary: 95000,  retirement: '30/11/2040' },
+      { id: 'EMP004', name: 'Petit Anaïs',     region: 'Europe', country: 'France',  func: 'Ingénieur QA',        team: 'Quality',     bu: 'BU Industrie', entity: 'SAS',  level: 'Local',    fte: 0.8,  salary: 62000,  retirement: '10/09/2048' },
+      { id: 'EMP005', name: 'Bernard Claire',  region: 'Europe', country: 'France',  func: 'VP Digital',          team: 'Innovation',  bu: 'BU Services',  entity: 'SAS',  level: 'Global',   fte: 1.0,  salary: 185000, retirement: '05/05/2038' },
+      { id: 'EMP006', name: 'Lefevre Pierre',  region: 'Europe', country: 'France',  func: 'Directeur R&D',       team: 'Innovation',  bu: 'BU Industrie', entity: 'SAS',  level: 'Global',   fte: 1.0,  salary: 165000, retirement: '20/12/2035' },
+      { id: 'EMP007', name: 'Martin Sophie',   region: 'Europe', country: 'Spain',   func: 'VP Commercial',       team: 'Sales',       bu: 'BU Services',  entity: 'SL',   level: 'Régional', fte: 1.0,  salary: 175000, retirement: '14/08/2039' },
+      { id: 'EMP008', name: 'Dupont Jean',     region: 'Europe', country: 'France',  func: 'COO',                 team: 'Operations',  bu: 'BU Industrie', entity: 'SAS',  level: 'Global',   fte: 1.0,  salary: 195000, retirement: '01/04/2034' },
+      { id: 'EMP009', name: 'Petit Thomas',    region: 'Europe', country: 'France',  func: 'Logistics Director',  team: 'Supply Chain',bu: 'BU Industrie', entity: 'SAS',  level: 'Régional', fte: 1.0,  salary: 135000, retirement: '18/06/2041' },
+      { id: 'EMP010', name: 'Durand Marie',    region: 'Europe', country: 'Belgium', func: 'Procurement Director',team: 'Procurement', bu: 'BU Services',  entity: 'SA',   level: 'Global',   fte: 1.0,  salary: 155000, retirement: '25/09/2037' },
+      { id: 'EMP011', name: 'Leroy Camille',   region: 'Europe', country: 'France',  func: 'HR Business Partner', team: 'HR',          bu: 'Corporate',    entity: 'SAS',  level: 'Régional', fte: 1.0,  salary: 72000,  retirement: '14/02/2046' },
+      { id: 'EMP012', name: 'Fournier Lucas',  region: 'Europe', country: 'Italy',   func: 'Ingénieur Production',team: 'Production',  bu: 'BU Industrie', entity: 'SRL',  level: 'Local',    fte: 1.0,  salary: 58000,  retirement: '30/05/2050' },
+      { id: 'EMP013', name: 'Mercier Julie',   region: 'Europe', country: 'France',  func: 'Analyste Finance',    team: 'Finance',     bu: 'Corporate',    entity: 'SAS',  level: 'Local',    fte: 1.0,  salary: 55000,  retirement: '07/11/2049' },
+      { id: 'EMP014', name: 'Lambert Nicolas', region: 'Americas', country: 'USA',   func: 'Dir. Commercial NA',  team: 'Sales',       bu: 'BU Services',  entity: 'Inc.', level: 'Régional', fte: 1.0,  salary: 220000, retirement: '19/08/2036' },
+      { id: 'EMP015', name: 'Garcia Elena',    region: 'Europe', country: 'Spain',   func: 'Chef de Projet IT',   team: 'Digital',     bu: 'BU Services',  entity: 'SL',   level: 'Régional', fte: 1.0,  salary: 68000,  retirement: '12/03/2047' },
+    ],
+    movements: [
+      { id: 'MOV001', empId: 'EMP001', leverId: 'L001', type: 'Redéploiement',  plannedDate: '2026-06-30', actualDate: null,         savings: 180000, cost: 25000, status: 'En cours' },
+      { id: 'MOV002', empId: 'EMP005', leverId: 'L016', type: 'Redéploiement',  plannedDate: '2026-09-15', actualDate: null,         savings: 220000, cost: 30000, status: 'Planifié' },
+      { id: 'MOV003', empId: 'EMP012', leverId: 'L007', type: 'Reconversion',   plannedDate: '2026-12-01', actualDate: null,         savings: 65000,  cost: 15000, status: 'Planifié' },
+      { id: 'MOV004', empId: 'EMP008', leverId: 'L014', type: 'Suppression',    plannedDate: '2026-03-31', actualDate: '2026-03-28', savings: 240000, cost: 85000, status: 'Réalisé' },
+      { id: 'MOV005', empId: 'EMP010', leverId: 'L003', type: 'Redéploiement',  plannedDate: '2026-08-30', actualDate: null,         savings: 175000, cost: 20000, status: 'En cours' },
+      { id: 'MOV006', empId: 'EMP013', leverId: 'L015', type: 'Suppression',    plannedDate: '2026-04-30', actualDate: '2026-04-15', savings: 68000,  cost: 22000, status: 'Réalisé' },
+      { id: 'MOV007', empId: 'EMP009', leverId: 'L017', type: 'Redéploiement',  plannedDate: '2026-10-15', actualDate: null,         savings: 155000, cost: 18000, status: 'Planifié' },
+      { id: 'MOV008', empId: 'EMP007', leverId: 'L013', type: 'Suppression',    plannedDate: '2026-02-28', actualDate: '2026-02-20', savings: 195000, cost: 45000, status: 'Réalisé' },
+      { id: 'MOV009', empId: 'EMP003', leverId: 'L005', type: 'Redéploiement',  plannedDate: '2026-07-31', actualDate: null,         savings: 110000, cost: 12000, status: 'En cours' },
+      { id: 'MOV010', empId: 'EMP011', leverId: 'L014', type: 'Redéploiement',  plannedDate: '2026-11-30', actualDate: null,         savings: 85000,  cost: 10000, status: 'Planifié' },
+    ],
+  },
+
+  /* Operations / Industrial KPIs */
+  operations: {
+    lines: [
+      { id: 'L1', name: 'Ligne 1 — Assemblage principal',  oee: 89.2, avail: 94.0, perf: 97.0, qual: 97.8, status: 'running',     leverIds: ['L008'] },
+      { id: 'L2', name: 'Ligne 2 — Usinage',               oee: 91.0, avail: 95.2, perf: 98.0, qual: 97.6, status: 'running',     leverIds: ['L008','L009'] },
+      { id: 'L3', name: 'Ligne 3 — Traitement surface',    oee: 72.5, avail: 78.0, perf: 94.0, qual: 98.9, status: 'maintenance', leverIds: ['L007','L009'] },
+      { id: 'L4', name: 'Ligne 4 — Conditionnement',       oee:  0.0, avail:  0.0, perf:  0.0, qual:  0.0, status: 'stopped',     leverIds: ['L007'] },
+      { id: 'L5', name: 'Ligne 5 — Assemblage secondaire', oee: 85.6, avail: 90.1, perf: 96.0, qual: 98.7, status: 'running',     leverIds: ['L007'] },
+      { id: 'L6', name: 'Ligne 6 — Peinture',              oee: 88.3, avail: 92.5, perf: 96.5, qual: 98.8, status: 'running',     leverIds: [] },
+      { id: 'L7', name: 'Ligne 7 — Contrôle qualité',      oee: 68.0, avail: 72.0, perf: 95.0, qual: 99.4, status: 'running',     leverIds: ['L008'] },
+    ],
+    kpisBaseline: { oeeAvg: 79.2, throughput: 100, scrapRate: 3.2, otd: 92.1 },
+    kpisTarget:   { oeeAvg: 88.0, throughput: 115, scrapRate: 1.8, otd: 96.0 },
+    kpisActual:   { oeeAvg: 82.4, throughput: 107, scrapRate: 2.6, otd: 93.8 },
+  },
+
+  /* Alerts / Notifications */
+  alerts: [
+    { id: 'A1', type: 'red',   ts: '2h ago',  scope: 'L004', title: 'Levier "E-procurement déploiement" en retard', desc: '14% de retard vs planning. Impact estimé: -€800K sur le run-rate.', actorRole: 'lever' },
+    { id: 'A2', type: 'amber', ts: '1d ago',  scope: 'WS-DIG', title: 'Dépassement budget OPEX — Workstream Digital', desc: 'OPEX à 112% du budget alloué. Demande de réallocation en cours.', actorRole: 'sponsor' },
+    { id: 'A3', type: 'green', ts: '2d ago',  scope: 'WS-PROC', title: 'Jalon validé — Procurement Phase 2', desc: 'Phase 2 du workstream Procurement validée en comité de pilotage.', actorRole: 'sponsor' },
+    { id: 'A4', type: 'red',   ts: '3d ago',  scope: 'WS-SC',  title: 'Ressources insuffisantes — Supply Chain', desc: '2 profils clés non remplacés. Délais de recrutement allongés.', actorRole: 'hr' },
+    { id: 'A5', type: 'amber', ts: '4d ago',  scope: 'L016',   title: 'Risque critique — Transformation CRM', desc: 'Dépendance non résolue avec L011. Risque de slippage Q4.', actorRole: 'lever' },
+    { id: 'A6', type: 'blue',  ts: '5d ago',  scope: 'L010',   title: 'Mise à jour reporting Pricing B2B', desc: 'Nouvelle estimation gross savings : €3.5M (vs €3.2M).', actorRole: 'lever' },
+  ],
+
+  /* Audit trail */
+  audit: [
+    { ts: '2026-06-22 14:32', user: 'Marc Dubois',     action: 'updated',   entity: 'L001', field: 'progress',     old: 45,    new: 50 },
+    { ts: '2026-06-22 11:15', user: 'Léa Moreau',      action: 'updated',   entity: 'L002', field: 'netSavings',   old: 2.5,   new: 2.7 },
+    { ts: '2026-06-21 16:48', user: 'Sophie Martin',   action: 'updated',   entity: 'L010', field: 'grossSavings', old: 3.2,   new: 3.5 },
+    { ts: '2026-06-21 09:20', user: 'Claire Bernard',  action: 'updated',   entity: 'L016', field: 'risk',         old: 'medium', new: 'critical' },
+    { ts: '2026-06-20 17:05', user: 'Pierre Lefevre',  action: 'completed', entity: 'L013', field: 'status',       old: 'in_progress', new: 'delivered' },
+    { ts: '2026-06-19 14:50', user: 'Jean Dupont',     action: 'updated',   entity: 'L007', field: 'progress',     old: 42,    new: 45 },
+    { ts: '2026-06-18 10:30', user: 'Marie Durand',    action: 'commented', entity: 'L004', field: 'comment',      old: '',    new: 'Délai supplémentaire demandé' },
+  ],
+
+  /* Comments / Collaboration */
+  comments: {
+    'L001': [
+      { user: 'Marc Dubois',  ts: '2026-06-20', text: 'Phase 2 de négociation lancée avec top 10 fournisseurs.' },
+      { user: 'Marie Durand', ts: '2026-06-21', text: 'Validation en sponsor meeting. Continuer.' },
+    ],
+    'L004': [
+      { user: 'Marc Dubois', ts: '2026-06-15', text: 'Retard sur déploiement site DE. Recrutement project manager difficile.' },
+      { user: 'Marc Dubois', ts: '2026-06-18', text: 'Délai supplémentaire demandé (1.5 mois).' },
+    ],
+    'L016': [
+      { user: 'Claire Bernard', ts: '2026-06-23', text: 'Dépendance critique L011 non résolue. Risque escalade vers comité.' },
+    ],
+  },
+
+  /* Scenarios */
+  scenarios: [
+    { id: 'base',   name: 'Baseline',          description: 'Plan initial validé en comité',                      modifiers: {} },
+    { id: 'accel',  name: 'Accelerated Q4',    description: '+15% progress sur leviers in_progress',              modifiers: { progressBoost: 15 } },
+    { id: 'delay',  name: 'Conservative',      description: '-2 mois sur leviers à risque (high/critical)',       modifiers: { riskDelay: 60 } },
+    { id: 'best',   name: 'Best case',         description: '+10% net savings, recrutements remplacés',           modifiers: { savingsMultiplier: 1.10 } },
+    { id: 'worst',  name: 'Worst case',        description: '-20% net savings, départs anticipés',                modifiers: { savingsMultiplier: 0.80 } },
+  ],
+  activeScenario: 'base',
+};
+
+/* ============================================================
+   CALCULATION ENGINE — derived values
+   Recomputes everything from DB.levers + active scenario.
+   ============================================================ */
+const ENGINE = {
+  /** Apply active scenario modifiers to a lever's gross savings */
+  modSavings(lever) {
+    const sc = DB.scenarios.find(s => s.id === DB.activeScenario);
+    if (!sc) return lever.netSavings;
+    let v = lever.netSavings;
+    if (sc.modifiers.savingsMultiplier) v *= sc.modifiers.savingsMultiplier;
+    return Math.round(v * 100) / 100;
+  },
+
+  /** Compute realized savings from a lever based on progress */
+  realizedSavings(lever) {
+    if (lever.status === 'cancelled') return 0;
+    return Math.round(this.modSavings(lever) * (lever.progress / 100) * 100) / 100;
+  },
+
+  /** Aggregate at program level */
+  programSummary() {
+    const active = DB.levers.filter(l => l.status !== 'cancelled');
+    const target = active.reduce((s, l) => s + l.netSavings, 0);
+    const realized = active.reduce((s, l) => s + this.realizedSavings(l), 0);
+    const capex = active.reduce((s, l) => s + l.capex, 0);
+    const opex  = active.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
+    const fteImpact = active.reduce((s, l) => s + l.fteImpact, 0);
+    const popImpacted = active.reduce((s, l) => s + l.popImpacted, 0);
+    return {
+      target: Math.round(target * 10) / 10,
+      realized: Math.round(realized * 10) / 10,
+      progressPct: Math.round((realized / target) * 100),
+      capex: Math.round(capex * 10) / 10,
+      opex: Math.round(opex * 10) / 10,
+      fteImpact, popImpacted,
+      leverCount: active.length,
+      onTrack:   active.filter(l => l.risk === 'low').length,
+      atRisk:    active.filter(l => l.risk === 'medium' || l.risk === 'high').length,
+      critical:  active.filter(l => l.risk === 'critical').length,
+      delivered: DB.levers.filter(l => l.status === 'delivered').length,
+    };
+  },
+
+  /** Aggregate at workstream level */
+  workstreamSummary(wsId) {
+    const levers = DB.levers.filter(l => l.ws === wsId && l.status !== 'cancelled');
+    const target = levers.reduce((s, l) => s + l.netSavings, 0);
+    const realized = levers.reduce((s, l) => s + this.realizedSavings(l), 0);
+    const capex = levers.reduce((s, l) => s + l.capex, 0);
+    const opex  = levers.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
+    return {
+      target: Math.round(target * 10) / 10,
+      realized: Math.round(realized * 10) / 10,
+      progressPct: Math.round((realized / target) * 100),
+      capex: Math.round(capex * 10) / 10,
+      opex: Math.round(opex * 10) / 10,
+      leverCount: levers.length,
+      avgProgress: Math.round(levers.reduce((s, l) => s + l.progress, 0) / Math.max(1, levers.length)),
+      worstRisk: this.worstRisk(levers),
+    };
+  },
+
+  worstRisk(levers) {
+    const order = { critical: 4, high: 3, medium: 2, low: 1 };
+    return levers.reduce((w, l) => order[l.risk] > order[w || 'low'] ? l.risk : w, 'low');
+  },
+
+  /** Build S-curve data: cumulative monthly */
+  sCurve() {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const target = DB.levers.filter(l => l.status !== 'cancelled').reduce((s, l) => s + l.netSavings, 0);
+    // Mock S-curve cumulative distribution
+    const plannedCurve = [0.05, 0.10, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.81, 0.88, 0.94, 1.00];
+    const actualCurve  = [0.04, 0.09, 0.15, 0.24, 0.34, 0.44, 0.53, 0.62, 0.71, null, null, null]; // only YTD
+    return {
+      labels: months,
+      planned: plannedCurve.map(p => Math.round(p * target * 10) / 10),
+      actual:  actualCurve.map(a => a === null ? null : Math.round(a * target * 10) / 10),
+    };
+  },
+
+  /** Group savings by P&L account */
+  pnlImpact() {
+    const map = {};
+    DB.levers.filter(l => l.status !== 'cancelled').forEach(l => {
+      map[l.pnlMap] = (map[l.pnlMap] || 0) + this.realizedSavings(l);
+    });
+    return map;
+  },
+
+  /** Group by geography */
+  byGeo() {
+    const map = {};
+    DB.levers.filter(l => l.status !== 'cancelled').forEach(l => {
+      map[l.geography] = (map[l.geography] || 0) + this.realizedSavings(l);
+    });
+    return map;
+  },
+
+  /** Group by function */
+  byFunction() {
+    const map = {};
+    DB.levers.filter(l => l.status !== 'cancelled').forEach(l => {
+      map[l.function] = (map[l.function] || 0) + this.realizedSavings(l);
+    });
+    return map;
+  },
+
+  /** Underperformers: progress < expected based on time elapsed */
+  underperformers(wsId) {
+    return DB.levers
+      .filter(l => (!wsId || l.ws === wsId) && l.status === 'in_progress')
+      .map(l => {
+        const start = new Date(l.start).getTime();
+        const end = new Date(l.end).getTime();
+        const now = new Date('2026-06-22').getTime();
+        const expectedProgress = Math.min(100, Math.max(0, Math.round((now - start) / (end - start) * 100)));
+        return { ...l, expectedProgress, gap: expectedProgress - l.progress };
+      })
+      .filter(x => x.gap > 10)
+      .sort((a, b) => b.gap - a.gap);
+  },
+
+  /** Workforce FTE evolution */
+  fteEvolution() {
+    const baseline = DB.workforce.totalFTE;
+    const ytdImpact = DB.workforce.movements
+      .filter(m => m.actualDate)
+      .reduce((s, m) => s + 1, 0);  // 1 employee per movement
+    const plannedImpact = DB.workforce.movements.length;
+    const months = ['Jul-25','Aug','Sep','Oct','Nov','Dec','Jan-26','Feb','Mar','Apr','May','Jun'];
+    const realFTE  = [2840, 2836, 2830, 2825, 2820, 2815, 2808, 2800, 2792, 2785, 2778, 2770];
+    const planFTE  = [2840, 2832, 2824, 2816, 2808, 2800, 2790, 2780, 2768, 2756, 2744, 2730];
+    return { labels: months, real: realFTE, plan: planFTE, baseline, ytdImpact, plannedImpact };
+  },
+
+  /** Staff cost evolution */
+  staffCostEvol() {
+    return {
+      labels: ['Salaires', 'Charges Sociales', 'Formation', 'Coûts Sociaux', 'Autres'],
+      budget: [148.0, 38.5, 4.0, 0.0, 0.0],
+      reforecast: [131.2, 34.3, 4.6, 2.8, 0.0],
+    };
+  },
+
+  /** Helpers */
+  fmtCurr(v, dec=1) {
+    if (v === null || v === undefined) return '—';
+    const abs = Math.abs(v);
+    if (abs >= 1) return `€${v.toFixed(dec)}M`;
+    return `€${(v*1000).toFixed(0)}K`;
+  },
+  fmtPct(v) { return `${Math.round(v)}%`; },
+  fmtInt(v) { return v.toLocaleString('fr-FR'); },
+
+  /** Log audit entry */
+  logAudit(user, action, entity, field, oldV, newV) {
+    DB.audit.unshift({
+      ts: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      user, action, entity, field, old: oldV, new: newV,
+    });
+  },
+};
+
+/* ============================================================
+   Role definitions & navigation
+   ============================================================ */
+const roles = {
+  cto: {
+    label: 'Chief Transformation Officer', short: 'CTO',
+    nav: [
+      { id: 'exec',    icon: 'fa-solid fa-chart-pie',     label: 'Executive Dashboard' },
+      { id: 'ws',      icon: 'fa-solid fa-layer-group',   label: 'Workstreams' },
+      { id: 'lever',   icon: 'fa-solid fa-bullseye',      label: 'Lever Library' },
+      { id: 'scen',    icon: 'fa-solid fa-flask',         label: 'Scenarios' },
+      { id: 'rep',     icon: 'fa-solid fa-chart-bar',     label: 'Reporting' },
+      { id: 'risks',   icon: 'fa-solid fa-triangle-exclamation', label: 'Risks & Alerts', badge: 'alerts' },
+    ],
+  },
+  sponsor: {
+    label: 'Workstream Sponsor', short: 'Sponsor',
+    nav: [
+      { id: 'ws',     icon: 'fa-solid fa-layer-group',  label: 'My Workstream' },
+      { id: 'lever',  icon: 'fa-solid fa-bullseye',     label: 'Lever Pipeline' },
+      { id: 'scen',   icon: 'fa-solid fa-flask',        label: 'What-if Scenarios' },
+      { id: 'rep',    icon: 'fa-solid fa-chart-bar',    label: 'Performance' },
+    ],
+  },
+  lever: {
+    label: 'Lever Owner', short: 'PM',
+    nav: [
+      { id: 'lever',  icon: 'fa-solid fa-bullseye',     label: 'My Levers' },
+      { id: 'tasks',  icon: 'fa-solid fa-list-check',   label: 'Action Plans' },
+      { id: 'collab', icon: 'fa-regular fa-comments',   label: 'Collaboration' },
+    ],
+  },
+  finance: {
+    label: 'Finance Controller', short: 'Finance',
+    nav: [
+      { id: 'fin',    icon: 'fa-solid fa-chart-simple', label: 'Finance Module' },
+      { id: 'lever',  icon: 'fa-solid fa-bullseye',     label: 'Lever Library' },
+      { id: 'scen',   icon: 'fa-solid fa-flask',        label: 'Scenarios' },
+      { id: 'audit',  icon: 'fa-solid fa-clock-rotate-left', label: 'Audit Trail' },
+    ],
+  },
+  hr: {
+    label: 'HR Director', short: 'HR',
+    nav: [
+      { id: 'hr',     icon: 'fa-solid fa-users',        label: 'HR Module' },
+      { id: 'lever',  icon: 'fa-solid fa-bullseye',     label: 'Lever Library' },
+      { id: 'rep',    icon: 'fa-solid fa-chart-bar',    label: 'Reporting' },
+    ],
+  },
+  ops: {
+    label: 'Operations Manager', short: 'Ops',
+    nav: [
+      { id: 'ops',    icon: 'fa-solid fa-industry',     label: 'Operations Module' },
+      { id: 'lever',  icon: 'fa-solid fa-bullseye',     label: 'Linked Levers' },
+      { id: 'rep',    icon: 'fa-solid fa-chart-bar',    label: 'KPI Reporting' },
+    ],
+  },
+};
+let currentRole = 'cto';
+let currentPage = 'exec';
+
+/* ============================================================
+   Bootstrap functions — login & navigation
+   ============================================================ */
+function enterApp(role) {
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.add('visible');
+  const sel = document.getElementById('role-selector');
+  sel.innerHTML = Object.entries(roles).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+  sel.value = role;
+  switchRole(role);
+}
+function logout() {
+  document.getElementById('login').classList.remove('hidden');
+  document.getElementById('app').classList.remove('visible');
+}
+function switchRole(r) {
+  currentRole = r;
+  document.getElementById('sb-role').textContent = roles[r].short;
+  buildSidebarNav();
+  // navigate to first page of role
+  navigate(roles[r].nav[0].id);
+}
+function buildSidebarNav() {
+  const nav = document.getElementById('sb-nav');
+  const r = roles[currentRole];
+  const items = r.nav.map(item => {
+    let badge = '';
+    if (item.badge === 'alerts') {
+      const cnt = DB.alerts.filter(a => a.type === 'red' || a.type === 'amber').length;
+      badge = `<span class="badge">${cnt}</span>`;
+    }
+    return `<div class="sb-item ${item.id === currentPage ? 'active' : ''}" data-page="${item.id}" onclick="navigate('${item.id}')">
+      <i class="${item.icon}"></i><span>${item.label}</span>${badge}
+    </div>`;
+  }).join('');
+  nav.innerHTML = `<div class="sb-section-title">Navigation</div>${items}`;
+}
+function navigate(pageId) {
+  currentPage = pageId;
+  // update sidebar active state
+  document.querySelectorAll('.sb-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === pageId);
+  });
+  // breadcrumb
+  const item = roles[currentRole].nav.find(n => n.id === pageId);
+  if (item) document.getElementById('crumb-page').textContent = item.label;
+  // render page
+  renderPage(pageId);
+}
+
+/* ============================================================
+   Page renderer registry
+   ============================================================ */
+const PAGES = {};
+const CHARTS = {};
+function destroyCharts() { Object.values(CHARTS).forEach(c => { try { c.destroy(); } catch(e){} }); for (const k in CHARTS) delete CHARTS[k]; }
+
+/* ----------- Executive Dashboard ----------- */
+PAGES.exec = function() {
+  const s = ENGINE.programSummary();
+  const targetVsRealized = ENGINE.fmtCurr(s.realized) + ' / ' + ENGINE.fmtCurr(s.target);
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Executive Dashboard</h1>
+        <div class="sub">Programme <strong>${DB.program.name}</strong> &middot; ${s.leverCount} leviers actifs &middot; Scénario : ${DB.scenarios.find(x=>x.id===DB.activeScenario).name}</div>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-outline" onclick="openImportModal()"><i class="fa-solid fa-upload"></i> Import</button>
+        <button class="btn btn-outline" onclick="exportReport()"><i class="fa-regular fa-file-pdf"></i> Export PDF</button>
+        <select class="btn btn-outline" onchange="setScenario(this.value)" style="padding-right:30px;">
+          ${DB.scenarios.map(sc => `<option value="${sc.id}" ${sc.id===DB.activeScenario?'selected':''}>Scénario : ${sc.name}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi">
+        <div class="kpi-h"><span class="kpi-label">Savings réalisés YTD</span><div class="kpi-icon"><i class="fa-solid fa-coins"></i></div></div>
+        <div class="kpi-value">${ENGINE.fmtCurr(s.realized)}</div>
+        <div class="kpi-target">vs. cible ${ENGINE.fmtCurr(s.target)} &middot; ${s.progressPct}%</div>
+        <div class="kpi-bar"><div style="width:${Math.min(100,s.progressPct)}%;"></div></div>
+      </div>
+      <div class="kpi green">
+        <div class="kpi-h"><span class="kpi-label">Leviers Delivered</span><div class="kpi-icon"><i class="fa-solid fa-circle-check"></i></div></div>
+        <div class="kpi-value">${s.delivered}<span style="font-size:13px;color:var(--text-tertiary);font-weight:500;"> / ${s.leverCount}</span></div>
+        <div class="kpi-trend up"><i class="fa-solid fa-arrow-up"></i> +2 ce trimestre</div>
+      </div>
+      <div class="kpi amber">
+        <div class="kpi-h"><span class="kpi-label">Leviers At Risk</span><div class="kpi-icon"><i class="fa-solid fa-triangle-exclamation"></i></div></div>
+        <div class="kpi-value">${s.atRisk}</div>
+        <div class="kpi-target">${s.critical} critiques &middot; à surveiller</div>
+      </div>
+      <div class="kpi brown">
+        <div class="kpi-h"><span class="kpi-label">CAPEX engagé</span><div class="kpi-icon"><i class="fa-solid fa-chart-line"></i></div></div>
+        <div class="kpi-value">${ENGINE.fmtCurr(s.capex)}</div>
+        <div class="kpi-target">+ ${ENGINE.fmtCurr(s.opex)} OPEX</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-h"><span class="kpi-label">ETP impactés</span><div class="kpi-icon"><i class="fa-solid fa-users"></i></div></div>
+        <div class="kpi-value">${s.fteImpact}</div>
+        <div class="kpi-target">${ENGINE.fmtInt(s.popImpacted)} pers. concernées</div>
+      </div>
+    </div>
+
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="card-h">
+          <h3><i class="fa-solid fa-chart-line"></i> S-Curve — Value Delivery (Planned vs Actual)</h3>
+          <div class="h-actions"><button class="btn btn-ghost btn-sm"><i class="fa-regular fa-expand"></i></button></div>
+        </div>
+        <div class="card-b">
+          <div class="chart-box"><canvas id="ch-scurve"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h">
+          <h3><i class="fa-solid fa-bell"></i> Alerts &amp; Notifications</h3>
+          <div class="h-actions"><a class="btn btn-ghost btn-sm" onclick="navigate('risks')">Voir tout</a></div>
+        </div>
+        <div class="card-b">
+          <div class="alert-list">
+            ${DB.alerts.slice(0,5).map(a => `
+              <div class="alert-row">
+                <div class="alert-icon ${a.type}"><i class="fa-solid ${a.type==='red'?'fa-circle-exclamation':a.type==='amber'?'fa-triangle-exclamation':a.type==='green'?'fa-circle-check':'fa-circle-info'}"></i></div>
+                <div class="alert-content">
+                  <div class="alert-title">${a.title}</div>
+                  <div class="alert-desc">${a.desc}</div>
+                  <div class="alert-time">${a.ts} &middot; ${a.scope}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-chart-pie"></i> Savings par Workstream</h3></div>
+        <div class="card-b"><div class="chart-box"><canvas id="ch-ws"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-globe"></i> Savings par Géographie</h3></div>
+        <div class="card-b"><div class="chart-box"><canvas id="ch-geo"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <h3><i class="fa-solid fa-layer-group"></i> Synthèse des Workstreams &mdash; drill-down</h3>
+        <div class="h-actions"><button class="btn btn-ghost btn-sm" onclick="navigate('ws')"><i class="fa-solid fa-arrow-right"></i> Vue détaillée</button></div>
+      </div>
+      <div class="card-b flush">
+        <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Workstream</th><th>Sponsor</th><th>Leviers</th>
+            <th class="num">Réalisé / Cible</th>
+            <th>Progression</th>
+            <th>Risque</th>
+            <th class="num">CAPEX</th>
+            <th class="num">OPEX/an</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            ${DB.workstreams.map(ws => {
+              const ss = ENGINE.workstreamSummary(ws.id);
+              const colorClass = ss.progressPct >= 70 ? 'green' : ss.progressPct >= 50 ? 'amber' : 'red';
+              const riskMap = { critical: 'badge-red', high: 'badge-red', medium: 'badge-amber', low: 'badge-green' };
+              return `<tr style="cursor:pointer" onclick="drilldownWS('${ws.id}')">
+                <td><strong>${ws.name}</strong></td>
+                <td><span class="avatar sm">${ws.sponsor.split(' ').map(x=>x[0]).join('').slice(0,2)}</span> ${ws.sponsor}</td>
+                <td>${ss.leverCount}</td>
+                <td class="num"><strong>${ENGINE.fmtCurr(ss.realized)}</strong> / ${ENGINE.fmtCurr(ss.target)}</td>
+                <td><div class="pbar-row"><div class="pbar ${colorClass}"><div style="width:${Math.min(100,ss.progressPct)}%;"></div></div><span class="pct">${ss.progressPct}%</span></div></td>
+                <td><span class="badge ${riskMap[ss.worstRisk]}">${ss.worstRisk}</span></td>
+                <td class="num">${ENGINE.fmtCurr(ss.capex)}</td>
+                <td class="num">${ENGINE.fmtCurr(ss.opex)}</td>
+                <td><i class="fa-solid fa-chevron-right row-action"></i></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-diagram-project"></i> Dépendances inter-leviers (top 5)</h3></div>
+        <div class="card-b">
+          ${DB.levers.filter(l => l.dependencies.length).slice(0,5).map(l => `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;">
+              <span class="avatar sm coral">${l.ownerInit}</span>
+              <div style="flex:1;"><strong>${l.name}</strong> <span style="color:var(--text-tertiary);">(${l.code})</span></div>
+              <i class="fa-solid fa-arrow-left" style="color:var(--text-tertiary);"></i>
+              <div>${l.dependencies.map(d => `<span class="tag">${d}</span>`).join(' ')}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-chart-column"></i> Impact P&L par compte</h3></div>
+        <div class="card-b"><div class="chart-box"><canvas id="ch-pnl"></canvas></div></div>
+      </div>
+    </div>
+  `;
+};
+PAGES.exec.afterMount = function() {
+  destroyCharts();
+  // S-curve
+  const sc = ENGINE.sCurve();
+  CHARTS.scurve = new Chart(document.getElementById('ch-scurve'), {
+    type: 'line',
+    data: {
+      labels: sc.labels,
+      datasets: [
+        { label: 'Réalisé (€M)', data: sc.actual, borderColor: '#FF3D3D', backgroundColor: (c) => { const g = c.chart.ctx.createLinearGradient(0,0,0,260); g.addColorStop(0,'rgba(255,61,61,0.18)'); g.addColorStop(1,'rgba(255,61,61,0)'); return g; }, fill: true, tension: 0.4, pointRadius: 3, borderWidth: 2.5 },
+        { label: 'Plan (€M)',   data: sc.planned, borderColor: '#6B5750', borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false, tension: 0.4 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: €${ctx.parsed.y}M` } } },
+      scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { callback: v => `€${v}M`, font: { size: 11 } } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } },
+    },
+  });
+  // Workstream bar chart
+  const wsLabels = DB.workstreams.map(w => w.name.split(' ')[0]);
+  const wsRealized = DB.workstreams.map(w => ENGINE.workstreamSummary(w.id).realized);
+  const wsTarget = DB.workstreams.map(w => w.target);
+  CHARTS.ws = new Chart(document.getElementById('ch-ws'), {
+    type: 'bar',
+    data: {
+      labels: wsLabels,
+      datasets: [
+        { label: 'Réalisé', data: wsRealized, backgroundColor: '#FF3D3D', borderRadius: 4 },
+        { label: 'Cible',   data: wsTarget,   backgroundColor: 'rgba(168,154,147,0.5)', borderRadius: 4 },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: €${c.parsed.y}M` } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => `€${v}M`, font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } },
+  });
+  // Geography donut
+  const geoMap = ENGINE.byGeo();
+  CHARTS.geo = new Chart(document.getElementById('ch-geo'), {
+    type: 'doughnut',
+    data: { labels: Object.keys(geoMap), datasets: [{ data: Object.values(geoMap), backgroundColor: ['#FF3D3D','#C8281A','#F58F89','#6B5750','#A89A93','#2B0000'] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => `${c.label}: €${c.parsed.toFixed(1)}M` } } }, cutout: '60%' },
+  });
+  // P&L bars
+  const pnl = ENGINE.pnlImpact();
+  const pnlLabels = Object.keys(pnl).map(k => DB.pnlAccounts.find(a => a.id === k)?.name || k);
+  CHARTS.pnl = new Chart(document.getElementById('ch-pnl'), {
+    type: 'bar',
+    data: { labels: pnlLabels, datasets: [{ label: 'Impact savings (€M)', data: Object.values(pnl), backgroundColor: '#FF3D3D', borderRadius: 4 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `€${c.parsed.x.toFixed(1)}M` } } }, scales: { x: { ticks: { callback: v => `€${v}M`, font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } },
+  });
+};
+
+function setScenario(id) {
+  DB.activeScenario = id;
+  toast('Scenario changed', `Active scenario: ${DB.scenarios.find(s=>s.id===id).name}`, 'green');
+  renderPage(currentPage);
+}
+function drilldownWS(wsId) {
+  window._wsFilter = wsId;
+  navigate('ws');
+}
+function openImportModal() { toast('Import Wizard', "Module d'import Excel/ERP/HRIS — Demo beta", ''); }
+function exportReport() { toast('Export en cours', 'Génération PDF... (mock)', 'green'); }
+
+/* ----------- Workstream Dashboard ----------- */
+PAGES.ws = function() {
+  const wsId = window._wsFilter || DB.workstreams[0].id;
+  const ws = DB.workstreams.find(w => w.id === wsId);
+  const ss = ENGINE.workstreamSummary(wsId);
+  const levers = DB.levers.filter(l => l.ws === wsId);
+  const under = ENGINE.underperformers(wsId);
+  const statusOrder = ['idea', 'qualified', 'validated', 'in_progress', 'delivered'];
+  const statusLabels = { idea: 'Idea', qualified: 'Qualified', validated: 'Validated', in_progress: 'In Progress', delivered: 'Delivered' };
+  const statusIcons = { idea: 'fa-lightbulb', qualified: 'fa-magnifying-glass', validated: 'fa-circle-check', in_progress: 'fa-gear', delivered: 'fa-flag-checkered' };
+
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>${ws.name}</h1>
+        <div class="sub">Workstream sponsor &middot; <strong>${ws.sponsor}</strong> &middot; ${ss.leverCount} leviers &middot; Fonction ${ws.function}</div>
+      </div>
+      <div class="ph-actions">
+        <select class="btn btn-outline" onchange="setWS(this.value)" style="padding-right:30px;">
+          ${DB.workstreams.map(w => `<option value="${w.id}" ${w.id===wsId?'selected':''}>${w.name}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline" onclick="openLeverModal()"><i class="fa-solid fa-plus"></i> New lever</button>
+        <button class="btn btn-primary" onclick="navigate('scen')"><i class="fa-solid fa-flask"></i> Run scenario</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi">
+        <div class="kpi-h"><span class="kpi-label">Savings réalisés</span><div class="kpi-icon"><i class="fa-solid fa-coins"></i></div></div>
+        <div class="kpi-value">${ENGINE.fmtCurr(ss.realized)}</div>
+        <div class="kpi-target">vs. cible ${ENGINE.fmtCurr(ss.target)} &middot; ${ss.progressPct}%</div>
+        <div class="kpi-bar"><div style="width:${Math.min(100,ss.progressPct)}%;"></div></div>
+      </div>
+      <div class="kpi green">
+        <div class="kpi-h"><span class="kpi-label">Avg progress</span><div class="kpi-icon"><i class="fa-solid fa-gauge-high"></i></div></div>
+        <div class="kpi-value">${ss.avgProgress}%</div>
+      </div>
+      <div class="kpi amber">
+        <div class="kpi-h"><span class="kpi-label">Underperformers</span><div class="kpi-icon"><i class="fa-solid fa-arrow-trend-down"></i></div></div>
+        <div class="kpi-value">${under.length}</div>
+        <div class="kpi-target">leviers en retard &gt; 10pts</div>
+      </div>
+      <div class="kpi brown">
+        <div class="kpi-h"><span class="kpi-label">Budget consommé</span><div class="kpi-icon"><i class="fa-solid fa-wallet"></i></div></div>
+        <div class="kpi-value">${ENGINE.fmtCurr(ss.capex+ss.opex)}</div>
+        <div class="kpi-target">CAPEX ${ENGINE.fmtCurr(ss.capex)} &middot; OPEX ${ENGINE.fmtCurr(ss.opex)}</div>
+      </div>
+    </div>
+
+    <div class="section-title">Pipeline de Leviers — Vue Kanban</div>
+    <div class="kanban">
+      ${statusOrder.map(st => {
+        const list = levers.filter(l => l.status === st);
+        return `<div class="kcol">
+          <div class="kcol-h">
+            <div class="kcol-h-l"><i class="fa-solid ${statusIcons[st]}"></i> ${statusLabels[st]}</div>
+            <div class="kcol-count">${list.length}</div>
+          </div>
+          ${list.map(l => `
+            <div class="kcard" onclick="openLeverDetail('${l.id}')">
+              <div class="kcard-title">${l.name}</div>
+              <div class="kcard-meta">
+                <span class="badge badge-gray">${l.code}</span>
+                <span class="kcard-amount">${ENGINE.fmtCurr(l.netSavings)}</span>
+              </div>
+              <div class="kcard-footer">
+                <div class="kcard-progress"><div class="pbar ${l.risk==='critical'?'red':l.risk==='high'?'red':l.risk==='medium'?'amber':'green'}"><div style="width:${l.progress}%;"></div></div></div>
+                <span class="avatar sm coral">${l.ownerInit}</span>
+              </div>
+            </div>
+          `).join('') || `<div style="font-size:11px;color:var(--text-tertiary);text-align:center;padding:20px 0;">Aucun</div>`}
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="grid-2-1" style="margin-top:18px;">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-table"></i> Performance vs Cible — par levier</h3></div>
+        <div class="card-b flush">
+          <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Levier</th><th>Owner</th><th class="num">Cible</th><th class="num">Réalisé</th><th>Progress</th><th>Risk</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${levers.sort((a,b) => b.netSavings - a.netSavings).map(l => {
+                const real = ENGINE.realizedSavings(l);
+                const pct = Math.round(real / l.netSavings * 100);
+                const pclass = pct >= 70 ? 'green' : pct >= 50 ? 'amber' : 'red';
+                return `<tr onclick="openLeverDetail('${l.id}')" style="cursor:pointer;">
+                  <td><strong>${l.name}</strong><div style="font-size:11px;color:var(--text-tertiary);">${l.code}</div></td>
+                  <td><span class="avatar sm coral">${l.ownerInit}</span> ${l.owner}</td>
+                  <td class="num">${ENGINE.fmtCurr(l.netSavings)}</td>
+                  <td class="num"><strong>${ENGINE.fmtCurr(real)}</strong></td>
+                  <td><div class="pbar-row"><div class="pbar ${pclass}"><div style="width:${Math.min(100,pct)}%;"></div></div><span class="pct">${pct}%</span></div></td>
+                  <td><span class="risk risk-${l.risk==='critical'?'crit':l.risk}"><span class="risk-dot"></span>${l.risk}</span></td>
+                  <td><span class="badge ${l.status==='delivered'?'badge-green':l.status==='in_progress'?'badge-blue':'badge-gray'}">${statusLabels[l.status]||l.status}</span></td>
+                  <td><i class="fa-solid fa-chevron-right row-action"></i></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-arrow-trend-down"></i> Underperformers</h3></div>
+        <div class="card-b">
+          ${under.length === 0 ? `<div style="text-align:center;padding:20px;color:var(--text-tertiary);">Aucun levier en sous-performance ✓</div>` : under.map(u => `
+            <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+              <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;">
+                <strong style="font-size:12.5px;">${u.name}</strong>
+                <span class="badge badge-red">-${u.gap}pts</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">${u.owner} &middot; Attendu ${u.expectedProgress}% vs réel ${u.progress}%</div>
+              <div class="pbar amber" style="margin-top:6px;"><div style="width:${u.progress}%;"></div></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3><i class="fa-solid fa-money-bill-trend-up"></i> Budget consumption vs plan</h3></div>
+      <div class="card-b"><div class="chart-box sm"><canvas id="ch-ws-budget"></canvas></div></div>
+    </div>
+  `;
+};
+PAGES.ws.afterMount = function() {
+  destroyCharts();
+  const wsId = window._wsFilter || DB.workstreams[0].id;
+  const levers = DB.levers.filter(l => l.ws === wsId && l.status !== 'cancelled');
+  const labels = levers.map(l => l.code);
+  const planSavings = levers.map(l => l.netSavings);
+  const realSavings = levers.map(l => ENGINE.realizedSavings(l));
+  const capex = levers.map(l => l.capex + l.opexOneOff + l.opexRec);
+  CHARTS.wsbudget = new Chart(document.getElementById('ch-ws-budget'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Plan savings', data: planSavings, backgroundColor: 'rgba(168,154,147,0.45)', borderRadius: 3 },
+      { label: 'Réalisé', data: realSavings, backgroundColor: '#FF3D3D', borderRadius: 3 },
+      { label: 'Coûts (CAPEX+OPEX)', data: capex, backgroundColor: '#6B5750', borderRadius: 3 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: €${c.parsed.y.toFixed(2)}M` } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => `€${v}M`, font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, x: { grid: { display: false }, ticks: { font: { size: 9 } } } } },
+  });
+};
+function setWS(id) { window._wsFilter = id; renderPage('ws'); }
+
+/* ----------- Lever Library ----------- */
+window._leverFilters = { search: '', ws: '', status: '', risk: '', func: '' };
+PAGES.lever = function() {
+  const f = window._leverFilters;
+  let levers = DB.levers.slice();
+  if (f.search) levers = levers.filter(l => (l.name+l.code+l.owner+l.description).toLowerCase().includes(f.search.toLowerCase()));
+  if (f.ws) levers = levers.filter(l => l.ws === f.ws);
+  if (f.status) levers = levers.filter(l => l.status === f.status);
+  if (f.risk) levers = levers.filter(l => l.risk === f.risk);
+  if (f.func) levers = levers.filter(l => l.function === f.func);
+
+  const statusLabels = { idea: 'Idea', qualified: 'Qualified', validated: 'Validated', in_progress: 'In Progress', delivered: 'Delivered', cancelled: 'Cancelled' };
+  const totalNet = levers.reduce((s, l) => s + l.netSavings, 0);
+  const totalReal = levers.reduce((s, l) => s + ENGINE.realizedSavings(l), 0);
+
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Lever Library</h1>
+        <div class="sub">${levers.length} leviers &middot; Net savings affiché : <strong>${ENGINE.fmtCurr(totalNet)}</strong> &middot; Réalisé : <strong>${ENGINE.fmtCurr(totalReal)}</strong></div>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-outline" onclick="exportLevers()"><i class="fa-regular fa-file-excel"></i> Export Excel</button>
+        <button class="btn btn-outline" onclick="openImportModal()"><i class="fa-solid fa-upload"></i> Import</button>
+        <button class="btn btn-primary" onclick="openLeverModal()"><i class="fa-solid fa-plus"></i> New lever</button>
+      </div>
+    </div>
+
+    <div class="filters">
+      <input type="search" placeholder="Rechercher (nom, code, owner...)" value="${f.search}" oninput="updateLeverFilter('search', this.value)">
+      <select onchange="updateLeverFilter('ws', this.value)"><option value="">Tous workstreams</option>${DB.workstreams.map(w => `<option value="${w.id}" ${f.ws===w.id?'selected':''}>${w.name}</option>`).join('')}</select>
+      <select onchange="updateLeverFilter('status', this.value)"><option value="">Tous statuts</option>${DB.leverStatuses.map(s => `<option value="${s}" ${f.status===s?'selected':''}>${statusLabels[s]||s}</option>`).join('')}</select>
+      <select onchange="updateLeverFilter('risk', this.value)"><option value="">Tous risques</option>${DB.riskLevels.map(r => `<option value="${r}" ${f.risk===r?'selected':''}>${r}</option>`).join('')}</select>
+      <select onchange="updateLeverFilter('func', this.value)"><option value="">Toutes fonctions</option>${DB.functions.map(fn => `<option value="${fn}" ${f.func===fn?'selected':''}>${fn}</option>`).join('')}</select>
+      <span class="filters-count"><strong>${levers.length}</strong> levier${levers.length>1?'s':''}</span>
+    </div>
+
+    <div class="card">
+      <div class="card-b flush">
+        <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Code</th><th>Levier</th><th>Workstream</th><th>Owner</th>
+            <th>Géo</th><th>Function</th>
+            <th class="num">Net €M</th><th class="num">Realized</th><th>Progress</th>
+            <th class="num">FTE</th><th>Risk</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${levers.map(l => {
+              const ws = DB.workstreams.find(w => w.id === l.ws);
+              const real = ENGINE.realizedSavings(l);
+              const pct = Math.round(real / l.netSavings * 100);
+              const pclass = pct >= 70 ? 'green' : pct >= 50 ? 'amber' : 'red';
+              const riskKey = l.risk === 'critical' ? 'crit' : l.risk;
+              return `<tr onclick="openLeverDetail('${l.id}')" style="cursor:pointer;">
+                <td><span style="font-family:monospace;font-size:11px;color:var(--text-secondary);">${l.code}</span></td>
+                <td><strong>${l.name}</strong></td>
+                <td><span class="tag" style="background:${ws.color}20;color:${ws.color};font-weight:600;">${ws.name.split(' ')[0]}</span></td>
+                <td><span class="avatar sm coral">${l.ownerInit}</span> ${l.owner}</td>
+                <td>${l.geography}</td>
+                <td>${l.function}</td>
+                <td class="num"><strong>${l.netSavings.toFixed(1)}</strong></td>
+                <td class="num">${real.toFixed(1)}</td>
+                <td><div class="pbar-row"><div class="pbar ${pclass}"><div style="width:${Math.min(100,pct)}%;"></div></div><span class="pct">${pct}%</span></div></td>
+                <td class="num">${l.fteImpact}</td>
+                <td><span class="risk risk-${riskKey}"><span class="risk-dot"></span>${l.risk}</span></td>
+                <td><span class="badge ${l.status==='delivered'?'badge-green':l.status==='in_progress'?'badge-blue':l.status==='cancelled'?'badge-red':'badge-gray'}">${statusLabels[l.status]||l.status}</span></td>
+                <td><i class="fa-solid fa-chevron-right row-action"></i></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    ${buildLeverModal()}
+    ${buildLeverDetailDrawer()}
+  `;
+};
+function updateLeverFilter(k, v) {
+  window._leverFilters[k] = v;
+  // re-render only the table & filters (light update)
+  renderPage('lever');
+}
+function exportLevers() { toast('Export', 'Génération Excel en cours... (mock)', 'green'); }
+
+/* ----------- Lever creation modal ----------- */
+function buildLeverModal() {
+  return `
+    <div class="modal-bg" id="modal-lever">
+      <div class="modal" style="max-width:760px;">
+        <div class="modal-h">
+          <h3><i class="fa-solid fa-plus-circle" style="color:var(--bp-coral);"></i> Nouveau Levier de Transformation</h3>
+          <button class="close" onclick="closeModal('modal-lever')">&times;</button>
+        </div>
+        <div class="modal-tabs">
+          <div class="mt active" data-tab="ident">Identification</div>
+          <div class="mt" data-tab="financial">Impact financier</div>
+          <div class="mt" data-tab="workforce">Impact RH</div>
+          <div class="mt" data-tab="timing">Timing & Risques</div>
+        </div>
+        <div class="modal-b">
+          <div class="tabp active" id="mt-ident">
+            <div class="form-grid">
+              <div><label>Code levier</label><input type="text" placeholder="AUTO-001" id="nl-code"></div>
+              <div><label>Statut</label><select id="nl-status">${DB.leverStatuses.map(s => `<option value="${s}">${s}</option>`).join('')}</select></div>
+              <div class="full"><label>Nom du levier</label><input type="text" placeholder="Ex: Optimisation achats indirects" id="nl-name"></div>
+              <div class="full"><label>Description</label><textarea rows="3" id="nl-desc"></textarea></div>
+              <div><label>Workstream</label><select id="nl-ws">${DB.workstreams.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}</select></div>
+              <div><label>Owner</label><input type="text" placeholder="Nom Prénom" id="nl-owner"></div>
+              <div><label>Géographie</label><select id="nl-geo">${DB.geographies.map(g => `<option>${g}</option>`).join('')}</select></div>
+              <div><label>Fonction</label><select id="nl-func">${DB.functions.map(f => `<option>${f}</option>`).join('')}</select></div>
+            </div>
+          </div>
+          <div class="tabp" id="mt-financial">
+            <div class="form-grid">
+              <div><label>Gross Savings (€M)</label><input type="number" step="0.1" id="nl-gross"></div>
+              <div><label>Net Savings (€M)</label><input type="number" step="0.1" id="nl-net"></div>
+              <div><label>CAPEX (€M)</label><input type="number" step="0.1" id="nl-capex"></div>
+              <div><label>OPEX one-off (€M)</label><input type="number" step="0.1" id="nl-opex1"></div>
+              <div><label>OPEX recurrent (€M/an)</label><input type="number" step="0.1" id="nl-opexr"></div>
+              <div><label>Mapping P&L</label><select id="nl-pnl">${DB.pnlAccounts.filter(p=>!p.computed).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}</select></div>
+            </div>
+          </div>
+          <div class="tabp" id="mt-workforce">
+            <div class="form-grid">
+              <div><label>Impact ETP (réduction = négatif)</label><input type="number" step="1" id="nl-fte"></div>
+              <div><label>Population impactée</label><input type="number" step="1" id="nl-pop"></div>
+              <div class="full"><label>Description impact RH</label><textarea rows="3" placeholder="Ex: 12 ETP redéployés vers fonction support, 6 départs naturels..." id="nl-hrdesc"></textarea></div>
+            </div>
+          </div>
+          <div class="tabp" id="mt-timing">
+            <div class="form-grid">
+              <div><label>Date début</label><input type="date" id="nl-start"></div>
+              <div><label>Date fin</label><input type="date" id="nl-end"></div>
+              <div><label>Niveau de risque</label><select id="nl-risk">${DB.riskLevels.map(r => `<option value="${r}">${r}</option>`).join('')}</select></div>
+              <div><label>Dépendances (codes séparés par virgule)</label><input type="text" placeholder="L001, L002" id="nl-deps"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-f">
+          <button class="btn btn-ghost" onclick="closeModal('modal-lever')">Annuler</button>
+          <button class="btn btn-outline" onclick="saveLever('draft')">Save as draft</button>
+          <button class="btn btn-primary" onclick="saveLever('validated')">Valider & créer</button>
+        </div>
+      </div>
+    </div>`;
+}
+function openLeverModal() {
+  document.getElementById('modal-lever').classList.add('open');
+  // Hook tabs
+  document.querySelectorAll('#modal-lever .mt').forEach(t => {
+    t.onclick = () => {
+      document.querySelectorAll('#modal-lever .mt').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('#modal-lever .tabp').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('mt-' + t.dataset.tab).classList.add('active');
+    };
+  });
+}
+function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
+function saveLever(status) {
+  const id = 'L' + String(DB.levers.length + 1).padStart(3, '0');
+  const lever = {
+    id,
+    code: document.getElementById('nl-code').value || (id + '-NEW'),
+    name: document.getElementById('nl-name').value || 'Nouveau levier',
+    ws: document.getElementById('nl-ws').value,
+    owner: document.getElementById('nl-owner').value || 'TBD',
+    ownerInit: (document.getElementById('nl-owner').value || 'XX').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase(),
+    geography: document.getElementById('nl-geo').value,
+    country: '-',
+    entity: '-',
+    function: document.getElementById('nl-func').value,
+    pnlMap: document.getElementById('nl-pnl').value,
+    start: document.getElementById('nl-start').value || '2026-01-01',
+    end: document.getElementById('nl-end').value || '2026-12-31',
+    status: status === 'draft' ? 'idea' : (document.getElementById('nl-status').value || 'validated'),
+    progress: 0,
+    risk: document.getElementById('nl-risk').value || 'medium',
+    grossSavings: parseFloat(document.getElementById('nl-gross').value) || 0,
+    netSavings: parseFloat(document.getElementById('nl-net').value) || 0,
+    opexOneOff: parseFloat(document.getElementById('nl-opex1').value) || 0,
+    opexRec: parseFloat(document.getElementById('nl-opexr').value) || 0,
+    capex: parseFloat(document.getElementById('nl-capex').value) || 0,
+    fteImpact: parseInt(document.getElementById('nl-fte').value) || 0,
+    popImpacted: parseInt(document.getElementById('nl-pop').value) || 0,
+    dependencies: (document.getElementById('nl-deps').value || '').split(',').map(x=>x.trim()).filter(Boolean),
+    description: document.getElementById('nl-desc').value || '',
+    createdAt: new Date().toISOString().slice(0,10),
+    lastUpdate: new Date().toISOString().slice(0,10),
+  };
+  DB.levers.push(lever);
+  ENGINE.logAudit('Guillaume Séjourné', 'created', lever.id, '-', null, lever.name);
+  closeModal('modal-lever');
+  toast('Levier créé', `${lever.name} ajouté au programme`, 'green');
+  renderPage(currentPage);
+}
+
+/* ----------- Lever Detail Drawer ----------- */
+function buildLeverDetailDrawer() { return `<div class="modal-bg" id="modal-lever-detail"><div class="modal" style="max-width:920px;" id="modal-lever-detail-inner"></div></div>`; }
+function openLeverDetail(id) {
+  const l = DB.levers.find(x => x.id === id);
+  if (!l) return;
+  // Render full detail
+  let wrap = document.getElementById('modal-lever-detail');
+  if (!wrap) { document.body.insertAdjacentHTML('beforeend', buildLeverDetailDrawer()); wrap = document.getElementById('modal-lever-detail'); }
+  const ws = DB.workstreams.find(w => w.id === l.ws);
+  const real = ENGINE.realizedSavings(l);
+  const pct = Math.round(real / Math.max(0.01,l.netSavings) * 100);
+  const comments = DB.comments[l.id] || [];
+  const auditL = DB.audit.filter(a => a.entity === l.id).slice(0, 5);
+  const statusLabels = { idea: 'Idea', qualified: 'Qualified', validated: 'Validated', in_progress: 'In Progress', delivered: 'Delivered', cancelled: 'Cancelled' };
+
+  document.getElementById('modal-lever-detail-inner').innerHTML = `
+    <div class="modal-h">
+      <div>
+        <div style="font-size:11px;color:var(--text-tertiary);font-family:monospace;">${l.code}</div>
+        <h3 style="margin-top:2px;">${l.name}</h3>
+      </div>
+      <button class="close" onclick="closeModal('modal-lever-detail')">&times;</button>
+    </div>
+    <div class="modal-tabs">
+      <div class="mt active" data-tab="overview">Overview</div>
+      <div class="mt" data-tab="plan">Plan d'action</div>
+      <div class="mt" data-tab="impact">Impact</div>
+      <div class="mt" data-tab="collab">Collaboration (${comments.length})</div>
+      <div class="mt" data-tab="audit">Audit (${auditL.length})</div>
+    </div>
+    <div class="modal-b">
+      <div class="tabp active" id="dt-overview">
+        <div class="grid-2">
+          <div class="stat"><div class="stat-l">Owner</div><div class="stat-v"><span class="avatar coral">${l.ownerInit}</span> ${l.owner}</div></div>
+          <div class="stat"><div class="stat-l">Workstream</div><div class="stat-v" style="color:${ws.color};">${ws.name}</div></div>
+          <div class="stat"><div class="stat-l">Géographie</div><div class="stat-v">${l.geography} &middot; ${l.country}</div></div>
+          <div class="stat"><div class="stat-l">Function</div><div class="stat-v">${l.function}</div></div>
+          <div class="stat"><div class="stat-l">Timeline</div><div class="stat-v">${l.start} → ${l.end}</div></div>
+          <div class="stat"><div class="stat-l">Status</div><div class="stat-v"><span class="badge ${l.status==='delivered'?'badge-green':l.status==='in_progress'?'badge-blue':'badge-gray'}">${statusLabels[l.status]||l.status}</span></div></div>
+        </div>
+        <div class="section-title">Description</div>
+        <p style="font-size:13px;color:var(--text-secondary);">${l.description}</p>
+        <div class="section-title">Progression</div>
+        <div class="pbar-row">
+          <div class="pbar ${pct>=70?'green':pct>=50?'amber':'red'}" style="height:10px;"><div style="width:${pct}%;"></div></div>
+          <span class="pct" style="font-size:14px;">${pct}%</span>
+        </div>
+        ${l.dependencies.length ? `<div class="section-title">Dépendances</div><div class="tags">${l.dependencies.map(d => `<span class="chip" onclick="openLeverDetail('${d}')" style="cursor:pointer;">${d}</span>`).join('')}</div>` : ''}
+      </div>
+      <div class="tabp" id="dt-plan">
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot done"></div><div class="tl-date">${l.start}</div><div class="tl-title">Démarrage projet</div><div class="tl-desc">Mobilisation équipe, kick-off, baseline</div></div>
+          <div class="tl-item"><div class="tl-dot done"></div><div class="tl-date">Phase 1</div><div class="tl-title">Diagnostic & opportunities</div><div class="tl-desc">Cartographie, identification des gisements</div></div>
+          <div class="tl-item"><div class="tl-dot ${l.progress>=50?'done':'current'}"></div><div class="tl-date">Phase 2 (en cours)</div><div class="tl-title">Mise en œuvre</div><div class="tl-desc">Exécution des actions opérationnelles</div></div>
+          <div class="tl-item"><div class="tl-dot ${l.progress>=80?'current':''}"></div><div class="tl-date">Phase 3</div><div class="tl-title">Stabilisation</div><div class="tl-desc">Ancrage, formation, transfert</div></div>
+          <div class="tl-item"><div class="tl-dot"></div><div class="tl-date">${l.end}</div><div class="tl-title">Clôture</div><div class="tl-desc">Bilan savings, hand-over</div></div>
+        </div>
+      </div>
+      <div class="tabp" id="dt-impact">
+        <div class="section-title">Impact financier</div>
+        <div class="grid-3">
+          <div class="stat"><div class="stat-l">Gross savings</div><div class="stat-v coral">${ENGINE.fmtCurr(l.grossSavings)}</div></div>
+          <div class="stat"><div class="stat-l">Net savings</div><div class="stat-v coral">${ENGINE.fmtCurr(l.netSavings)}</div></div>
+          <div class="stat"><div class="stat-l">Realized</div><div class="stat-v green">${ENGINE.fmtCurr(real)}</div></div>
+          <div class="stat"><div class="stat-l">CAPEX</div><div class="stat-v">${ENGINE.fmtCurr(l.capex)}</div></div>
+          <div class="stat"><div class="stat-l">OPEX one-off</div><div class="stat-v">${ENGINE.fmtCurr(l.opexOneOff)}</div></div>
+          <div class="stat"><div class="stat-l">OPEX récurrent /an</div><div class="stat-v">${ENGINE.fmtCurr(l.opexRec)}</div></div>
+        </div>
+        <div class="section-title">Mapping P&L</div>
+        <p style="font-size:13px;color:var(--text-secondary);">Compte impacté : <strong>${DB.pnlAccounts.find(p=>p.id===l.pnlMap)?.name || l.pnlMap}</strong></p>
+        <div class="section-title">Impact RH</div>
+        <div class="grid-2">
+          <div class="stat"><div class="stat-l">Variation ETP</div><div class="stat-v ${l.fteImpact<0?'red':l.fteImpact>0?'green':''}">${l.fteImpact > 0 ? '+' : ''}${l.fteImpact}</div></div>
+          <div class="stat"><div class="stat-l">Population impactée</div><div class="stat-v">${l.popImpacted}</div></div>
+        </div>
+      </div>
+      <div class="tabp" id="dt-collab">
+        ${comments.map(c => `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><strong style="font-size:12px;">${c.user}</strong><span style="font-size:11px;color:var(--text-tertiary);">${c.ts}</span></div>
+          <div style="font-size:13px;color:var(--text-primary);margin-top:4px;">${c.text}</div>
+        </div>`).join('') || '<div style="font-size:12px;color:var(--text-tertiary);padding:20px 0;text-align:center;">Aucun commentaire pour le moment</div>'}
+        <div style="margin-top:14px;">
+          <textarea placeholder="Ajouter un commentaire..." rows="2" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;" id="new-comment-${l.id}"></textarea>
+          <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="addComment('${l.id}')"><i class="fa-solid fa-paper-plane"></i> Envoyer</button>
+        </div>
+      </div>
+      <div class="tabp" id="dt-audit">
+        ${auditL.map(a => `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;">
+          <div style="color:var(--text-tertiary);font-size:11px;">${a.ts}</div>
+          <div><strong>${a.user}</strong> ${a.action} <span style="color:var(--text-secondary);">${a.field}</span> <code style="background:var(--n-100);padding:1px 4px;border-radius:3px;font-size:11px;">${a.old}</code> → <code style="background:var(--green-light);color:var(--green-dark);padding:1px 4px;border-radius:3px;font-size:11px;">${a.new}</code></div>
+        </div>`).join('') || '<div style="font-size:12px;color:var(--text-tertiary);padding:20px 0;text-align:center;">Aucune modification enregistrée</div>'}
+      </div>
+    </div>
+    <div class="modal-f">
+      <button class="btn btn-ghost" onclick="closeModal('modal-lever-detail')">Fermer</button>
+      <button class="btn btn-outline" onclick="updateLeverProgress('${l.id}')"><i class="fa-regular fa-clock"></i> Saisir avancement</button>
+      <button class="btn btn-primary" onclick="editLeverInline('${l.id}')"><i class="fa-regular fa-pen-to-square"></i> Modifier</button>
+    </div>
+  `;
+  wrap.classList.add('open');
+  // Hook tabs
+  document.querySelectorAll('#modal-lever-detail .mt').forEach(t => {
+    t.onclick = () => {
+      document.querySelectorAll('#modal-lever-detail .mt').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('#modal-lever-detail .tabp').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('dt-' + t.dataset.tab).classList.add('active');
+    };
+  });
+}
+function addComment(leverId) {
+  const ta = document.getElementById('new-comment-' + leverId);
+  if (!ta.value.trim()) return;
+  if (!DB.comments[leverId]) DB.comments[leverId] = [];
+  DB.comments[leverId].push({ user: 'Guillaume Séjourné', ts: new Date().toISOString().slice(0,10), text: ta.value });
+  ENGINE.logAudit('Guillaume Séjourné', 'commented', leverId, 'comment', '', ta.value);
+  openLeverDetail(leverId);
+  toast('Commentaire ajouté', '', 'green');
+}
+function updateLeverProgress(id) {
+  const l = DB.levers.find(x => x.id === id);
+  const v = prompt('Nouveau % de progression (0-100)', l.progress);
+  if (v === null) return;
+  const n = parseInt(v);
+  if (isNaN(n)) return;
+  ENGINE.logAudit('Guillaume Séjourné', 'updated', id, 'progress', l.progress, n);
+  l.progress = n;
+  l.lastUpdate = new Date().toISOString().slice(0,10);
+  if (n >= 100) l.status = 'delivered';
+  openLeverDetail(id);
+  toast('Progression mise à jour', `${l.name}: ${n}%`, 'green');
+}
+function editLeverInline(id) { toast('Édition inline', "Modale d'édition complète — réutilise le formulaire de création", ''); }
+
+/* ----------- Finance Module ----------- */
+PAGES.fin = function() {
+  const pnl = ENGINE.pnlImpact();
+  const sum = ENGINE.programSummary();
+  // Build P&L table with impacts mapped
+  const rows = DB.pnlAccounts.map(a => {
+    let impact = 0;
+    if (a.id === 'GM') {
+      impact = (pnl['REV']||0) + (pnl['COGS']||0);
+    } else if (a.id === 'EBIT') {
+      impact = sum.realized;
+    } else {
+      impact = pnl[a.id] || 0;
+    }
+    const reforecast = a.baseline + impact;
+    return { ...a, impact, reforecast };
+  });
+
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Finance Module</h1>
+        <div class="sub">Baseline P&L &middot; Mapping leviers → comptes &middot; Reforecast &middot; Audit trail</div>
+      </div>
+      <div class="ph-actions">
+        <select class="btn btn-outline" onchange="setScenario(this.value)" style="padding-right:30px;">
+          ${DB.scenarios.map(sc => `<option value="${sc.id}" ${sc.id===DB.activeScenario?'selected':''}>Scénario : ${sc.name}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline" onclick="exportLevers()"><i class="fa-regular fa-file-excel"></i> Export</button>
+        <button class="btn btn-primary" onclick="navigate('audit')"><i class="fa-solid fa-clock-rotate-left"></i> Audit trail</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-h"><span class="kpi-label">Baseline EBIT 2025</span><div class="kpi-icon"><i class="fa-solid fa-chart-simple"></i></div></div><div class="kpi-value">${ENGINE.fmtCurr(DB.program.baselineEBIT)}</div><div class="kpi-target">Avant transformation</div></div>
+      <div class="kpi green"><div class="kpi-h"><span class="kpi-label">Impact leviers (YTD)</span><div class="kpi-icon"><i class="fa-solid fa-circle-check"></i></div></div><div class="kpi-value">+${ENGINE.fmtCurr(sum.realized)}</div><div class="kpi-target">${sum.progressPct}% de la cible</div></div>
+      <div class="kpi amber"><div class="kpi-h"><span class="kpi-label">Reforecast EBIT 2026</span><div class="kpi-icon"><i class="fa-solid fa-chart-line"></i></div></div><div class="kpi-value">${ENGINE.fmtCurr(DB.program.baselineEBIT + sum.realized)}</div><div class="kpi-target">Run-rate projeté</div></div>
+      <div class="kpi red"><div class="kpi-h"><span class="kpi-label">Gap à réconcilier</span><div class="kpi-icon"><i class="fa-solid fa-triangle-exclamation"></i></div></div><div class="kpi-value">${ENGINE.fmtCurr(Math.abs(sum.target - sum.realized))}</div><div class="kpi-target">vs. plan transformation</div></div>
+    </div>
+
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-table"></i> P&L — Baseline vs Reforecast</h3></div>
+        <div class="card-b flush">
+          <table class="tbl">
+            <thead><tr><th>Compte</th><th class="num">Baseline 2025</th><th class="num">Impact leviers</th><th class="num">Reforecast 2026</th></tr></thead>
+            <tbody>
+              ${rows.map(r => `<tr ${r.computed?'style="background:var(--n-50);font-weight:700;"':''}>
+                <td>${r.computed?'<strong>':''}${r.name}${r.computed?'</strong>':''}</td>
+                <td class="num">${ENGINE.fmtCurr(r.baseline)}</td>
+                <td class="num" style="color:${r.impact>0?'var(--green-dark)':r.impact<0?'var(--red)':'var(--text-tertiary)'};">${r.impact===0?'—':((r.impact>0?'+':'')+ENGINE.fmtCurr(r.impact))}</td>
+                <td class="num"><strong>${ENGINE.fmtCurr(r.reforecast)}</strong></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-chart-column"></i> Waterfall — Baseline → EBIT 2026</h3></div>
+        <div class="card-b"><div class="chart-box" style="height:340px;"><canvas id="ch-water"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <h3><i class="fa-solid fa-link"></i> Mapping détaillé — leviers vs comptes P&L</h3>
+        <div class="h-actions"><span class="filters-count"><strong>${DB.levers.length}</strong> leviers mappés</span></div>
+      </div>
+      <div class="card-b flush">
+        <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Code</th><th>Levier</th><th>P&L account</th><th class="num">Net savings</th><th class="num">Realized</th><th class="num">CAPEX</th><th class="num">OPEX/an</th><th>Status</th></tr></thead>
+          <tbody>
+            ${DB.levers.map(l => `<tr onclick="openLeverDetail('${l.id}')" style="cursor:pointer;">
+              <td><span style="font-family:monospace;font-size:11px;">${l.code}</span></td>
+              <td>${l.name}</td>
+              <td><span class="badge badge-coral">${DB.pnlAccounts.find(a => a.id === l.pnlMap)?.name || l.pnlMap}</span></td>
+              <td class="num">${ENGINE.fmtCurr(l.netSavings)}</td>
+              <td class="num">${ENGINE.fmtCurr(ENGINE.realizedSavings(l))}</td>
+              <td class="num">${ENGINE.fmtCurr(l.capex)}</td>
+              <td class="num">${ENGINE.fmtCurr(l.opexRec)}</td>
+              <td><span class="badge ${l.status==='delivered'?'badge-green':l.status==='in_progress'?'badge-blue':'badge-gray'}">${l.status}</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-flask"></i> Best vs Worst case</h3></div>
+        <div class="card-b">
+          ${['base','best','worst','accel','delay'].map(id => {
+            const sc = DB.scenarios.find(s => s.id === id);
+            if (!sc) return '';
+            const m = sc.modifiers.savingsMultiplier || 1;
+            const projected = sum.target * m;
+            const ebit = DB.program.baselineEBIT + projected;
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+              <div><strong style="font-size:12.5px;">${sc.name}</strong><div style="font-size:11px;color:var(--text-secondary);">${sc.description}</div></div>
+              <div style="text-align:right;"><div style="font-size:13px;font-weight:700;color:${m>=1?'var(--green-dark)':'var(--red)'};">${ENGINE.fmtCurr(projected)}</div><div style="font-size:11px;color:var(--text-tertiary);">EBIT ${ENGINE.fmtCurr(ebit)}</div></div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-globe"></i> Vue géographique &amp; fonctionnelle</h3></div>
+        <div class="card-b"><div class="chart-box"><canvas id="ch-fin-geo"></canvas></div></div>
+      </div>
+    </div>
+  `;
+};
+PAGES.fin.afterMount = function() {
+  destroyCharts();
+  const sum = ENGINE.programSummary();
+  // Waterfall (using stacked bar approximation)
+  const wsImpacts = DB.workstreams.map(w => ENGINE.workstreamSummary(w.id).realized);
+  const baselineEBIT = DB.program.baselineEBIT;
+  const labels = ['Baseline', ...DB.workstreams.map(w => w.name.split(' ')[0]), 'Reforecast'];
+  const finalEBIT = baselineEBIT + sum.realized;
+  // For waterfall: each step shows incremental
+  let cum = baselineEBIT;
+  const stepValues = wsImpacts;
+  const baseInvisible = [0, ...stepValues.map((v, i) => { cum += stepValues[i]; return cum - v; }), 0];
+  const stepBars = [baselineEBIT, ...stepValues, finalEBIT];
+
+  CHARTS.water = new Chart(document.getElementById('ch-water'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Step', data: stepBars.map((v, i) => i === 0 || i === stepBars.length - 1 ? v : v),
+        backgroundColor: stepBars.map((v, i) => i === 0 ? '#6B5750' : i === stepBars.length - 1 ? '#000' : '#FF3D3D'),
+        borderRadius: 4,
+      }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `€${c.parsed.y.toFixed(1)}M` } } }, scales: { y: { beginAtZero: false, ticks: { callback: v => `€${v}M`, font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } },
+  });
+
+  // Geo doughnut
+  const geo = ENGINE.byGeo();
+  CHARTS.fingeo = new Chart(document.getElementById('ch-fin-geo'), {
+    type: 'pie',
+    data: { labels: Object.keys(geo), datasets: [{ data: Object.values(geo), backgroundColor: ['#FF3D3D','#C8281A','#F58F89','#6B5750','#A89A93','#2B0000','#F8D5D2','#3D2E29'] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => `${c.label}: €${c.parsed.toFixed(1)}M` } } } },
+  });
+};
+
+/* ----------- HR Module ----------- */
+window._hrTab = 'effectifs';
+PAGES.hr = function() {
+  const evol = ENGINE.fteEvolution();
+  const cost = ENGINE.staffCostEvol();
+  const totalSavings = DB.workforce.movements.reduce((s, m) => s + m.savings, 0);
+  const totalCost = DB.workforce.movements.reduce((s, m) => s + m.cost, 0);
+
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>HR Module</h1>
+        <div class="sub">Workforce baseline &middot; Mouvements liés aux leviers &middot; Simulation FTE</div>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-outline" onclick="toggleHREdit()"><i class="fa-regular fa-pen-to-square"></i> <span id="hr-edit-label">Activer édition</span></button>
+        <button class="btn btn-outline" onclick="toast('HRIS', 'Sync avec SIRH... (mock)', 'green')"><i class="fa-solid fa-rotate"></i> Sync HRIS</button>
+        <button class="btn btn-primary" onclick="exportLevers()"><i class="fa-regular fa-file-excel"></i> Export</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-h"><span class="kpi-label">Effectif total (ETP)</span><div class="kpi-icon"><i class="fa-solid fa-users"></i></div></div><div class="kpi-value">${ENGINE.fmtInt(DB.workforce.totalFTE)}</div><div class="kpi-target">Baseline 31/12/2025</div></div>
+      <div class="kpi green"><div class="kpi-h"><span class="kpi-label">Masse salariale</span><div class="kpi-icon"><i class="fa-solid fa-euro-sign"></i></div></div><div class="kpi-value">${ENGINE.fmtCurr(DB.workforce.massSalary)}</div><div class="kpi-target">Budget ${ENGINE.fmtCurr(DB.workforce.budgetSalary)}</div></div>
+      <div class="kpi amber"><div class="kpi-h"><span class="kpi-label">Mouvements liés leviers</span><div class="kpi-icon"><i class="fa-solid fa-people-arrows"></i></div></div><div class="kpi-value">${DB.workforce.movements.length}</div><div class="kpi-target">${DB.workforce.movements.filter(m=>m.status==='Réalisé').length} réalisés</div></div>
+      <div class="kpi brown"><div class="kpi-h"><span class="kpi-label">Savings staff costs (cumul)</span><div class="kpi-icon"><i class="fa-solid fa-coins"></i></div></div><div class="kpi-value">€${(totalSavings/1000000).toFixed(1)}M</div><div class="kpi-target">Coûts sociaux: €${(totalCost/1000).toFixed(0)}K</div></div>
+    </div>
+
+    <div class="tabs-bar">
+      <div class="tab ${window._hrTab==='effectifs'?'active':''}" onclick="setHRTab('effectifs')"><i class="fa-solid fa-users"></i> Effectifs <span class="tab-count">${DB.workforce.employees.length}</span></div>
+      <div class="tab ${window._hrTab==='mouvements'?'active':''}" onclick="setHRTab('mouvements')"><i class="fa-solid fa-people-arrows"></i> Mouvements <span class="tab-count">${DB.workforce.movements.length}</span></div>
+      <div class="tab ${window._hrTab==='synthese'?'active':''}" onclick="setHRTab('synthese')"><i class="fa-solid fa-chart-pie"></i> Synthèse</div>
+      <div class="tab ${window._hrTab==='recon'?'active':''}" onclick="setHRTab('recon')"><i class="fa-solid fa-link"></i> Réconciliation SIRH</div>
+    </div>
+
+    <div class="tabp ${window._hrTab==='effectifs'?'active':''}" id="hrp-effectifs">
+      <div class="card">
+        <div class="card-b flush">
+          <div class="tbl-wrap edit-mode" id="hr-emp-wrap">
+            <table class="tbl">
+              <thead><tr><th>Matricule</th><th>Nom</th><th>Région</th><th>Pays</th><th>Fonction</th><th>Équipe</th><th>BU</th><th>Entité</th><th>Niveau</th><th class="num">ETP</th><th class="num">Salaire</th><th>Retraite</th></tr></thead>
+              <tbody>
+                ${DB.workforce.employees.map(e => `<tr>
+                  <td><strong>${e.id}</strong></td><td>${e.name}</td><td>${e.region}</td><td>${e.country}</td><td>${e.func}</td><td>${e.team}</td><td>${e.bu}</td><td>${e.entity}</td><td>${e.level}</td>
+                  <td class="num edit-cell" data-emp="${e.id}" data-field="fte" data-type="number">${e.fte.toFixed(1)}</td>
+                  <td class="num edit-cell" data-emp="${e.id}" data-field="salary" data-type="currency">€${e.salary.toLocaleString('fr-FR')}</td>
+                  <td class="edit-cell" data-emp="${e.id}" data-field="retirement" data-type="date">${e.retirement}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabp ${window._hrTab==='mouvements'?'active':''}" id="hrp-mouvements">
+      <div class="card">
+        <div class="card-b flush">
+          <div class="tbl-wrap edit-mode">
+            <table class="tbl">
+              <thead><tr><th>ID</th><th>Employé</th><th>Levier</th><th>Type</th><th>Date prévue</th><th>Date réelle</th><th class="num">Savings (€/an)</th><th class="num">Coûts sociaux</th><th>Statut</th></tr></thead>
+              <tbody>
+                ${DB.workforce.movements.map(m => {
+                  const emp = DB.workforce.employees.find(e => e.id === m.empId);
+                  const lev = DB.levers.find(l => l.id === m.leverId);
+                  return `<tr>
+                    <td><strong>${m.id}</strong></td><td>${emp?.name||'?'}</td><td>${lev ? `<span class="tag" style="cursor:pointer;" onclick="openLeverDetail('${lev.id}')">${lev.code}</span>` : '—'}</td>
+                    <td class="edit-cell" data-mov="${m.id}" data-field="type" data-type="select:Redéploiement|Suppression|Reconversion|Départ naturel">${m.type}</td>
+                    <td class="edit-cell" data-mov="${m.id}" data-field="plannedDate" data-type="date">${m.plannedDate}</td>
+                    <td>${m.actualDate || '—'}</td>
+                    <td class="num">€${m.savings.toLocaleString('fr-FR')}</td>
+                    <td class="num">€${m.cost.toLocaleString('fr-FR')}</td>
+                    <td><span class="badge ${m.status==='Réalisé'?'badge-green':m.status==='En cours'?'badge-blue':'badge-gray'}">${m.status}</span></td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabp ${window._hrTab==='synthese'?'active':''}" id="hrp-synthese">
+      <div class="grid-2">
+        <div class="card"><div class="card-h"><h3><i class="fa-solid fa-chart-line"></i> Évolution ETP — Réel vs Plan</h3></div><div class="card-b"><div class="chart-box"><canvas id="ch-fte"></canvas></div></div></div>
+        <div class="card"><div class="card-h"><h3><i class="fa-solid fa-euro-sign"></i> Staff costs — Budget vs Reforecast</h3></div><div class="card-b"><div class="chart-box"><canvas id="ch-cost"></canvas></div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-building"></i> ETP par département — réel / cible</h3></div>
+        <div class="card-b">
+          ${DB.workforce.departments.map(d => {
+            const pct = Math.round((1 - d.fteTarget/d.fte) * 100);
+            return `<div style="display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12px;">
+              <div style="width:200px;font-weight:500;">${d.name}</div>
+              <div class="pbar" style="flex:1;height:18px;background:var(--n-100);"><div style="width:${(d.fteTarget/d.fte)*100}%;background:var(--bp-coral);height:100%;border-radius:3px;"></div></div>
+              <div style="width:130px;text-align:right;"><strong>${d.fteTarget}</strong> / ${d.fte} <span style="color:var(--red);font-weight:600;">-${pct}%</span></div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="tabp ${window._hrTab==='recon'?'active':''}" id="hrp-recon">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-link"></i> Réconciliation Budget RH — impact leviers vs comptes</h3></div>
+        <div class="card-b flush">
+          <table class="tbl">
+            <thead><tr><th>Ligne</th><th class="num">Budget initial</th><th class="num">Impact leviers</th><th class="num">Reforecast</th><th>Écart</th></tr></thead>
+            <tbody>
+              <tr><td>Salaires & Traitements</td><td class="num">€148,0M</td><td class="num" style="color:var(--green-dark);">-€16,8M</td><td class="num">€131,2M</td><td><span class="badge badge-green">OK</span></td></tr>
+              <tr><td>Charges sociales</td><td class="num">€38,5M</td><td class="num" style="color:var(--green-dark);">-€4,2M</td><td class="num">€34,3M</td><td><span class="badge badge-green">OK</span></td></tr>
+              <tr><td>Formation</td><td class="num">€4,0M</td><td class="num" style="color:var(--red);">+€0,6M</td><td class="num">€4,6M</td><td><span class="badge badge-amber">Sur-budget</span></td></tr>
+              <tr><td>Coûts sociaux (restructuration)</td><td class="num">€0,0M</td><td class="num" style="color:var(--red);">+€2,8M</td><td class="num">€2,8M</td><td><span class="badge badge-red">Non budgété</span></td></tr>
+              <tr style="background:var(--n-50);font-weight:700;"><td><strong>Total budget RH</strong></td><td class="num">€190,5M</td><td class="num" style="color:var(--green-dark);">-€17,6M</td><td class="num">€172,9M</td><td><span class="badge badge-green">OK</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+};
+PAGES.hr.afterMount = function() {
+  destroyCharts();
+  const e = ENGINE.fteEvolution();
+  if (document.getElementById('ch-fte')) {
+    CHARTS.fte = new Chart(document.getElementById('ch-fte'), {
+      type: 'line',
+      data: { labels: e.labels, datasets: [
+        { label: 'Réel', data: e.real, borderColor: '#FF3D3D', backgroundColor: 'rgba(255,61,61,0.08)', fill: true, tension: 0.4, borderWidth: 2.5, pointRadius: 3 },
+        { label: 'Plan', data: e.plan, borderColor: '#6B5750', borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false, tension: 0.4 },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y} ETP` } } }, scales: { y: { beginAtZero: false, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 10 } } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } },
+    });
+  }
+  const c = ENGINE.staffCostEvol();
+  if (document.getElementById('ch-cost')) {
+    CHARTS.cost = new Chart(document.getElementById('ch-cost'), {
+      type: 'bar',
+      data: { labels: c.labels, datasets: [
+        { label: 'Budget initial', data: c.budget, backgroundColor: 'rgba(168,154,147,0.5)', borderRadius: 3 },
+        { label: 'Reforecast', data: c.reforecast, backgroundColor: '#FF3D3D', borderRadius: 3 },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: €${c.parsed.y}M` } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => `€${v}M`, font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } },
+    });
+  }
+};
+function setHRTab(t) { window._hrTab = t; renderPage('hr'); }
+function toggleHREdit() {
+  const wrap = document.getElementById('hr-emp-wrap');
+  if (wrap) wrap.classList.toggle('edit-mode');
+  const label = document.getElementById('hr-edit-label');
+  if (label) label.textContent = wrap?.classList.contains('edit-mode') ? 'Désactiver édition' : 'Activer édition';
+  toast('Mode édition', wrap?.classList.contains('edit-mode') ? 'Cellules éditables activées' : 'Mode lecture', '');
+}
+
+/* ----------- Operations Module ----------- */
+PAGES.ops = function() {
+  const ops = DB.operations;
+  const linkedLevers = DB.levers.filter(l => l.function === 'Operations' || l.ws === 'WS-OPS' || l.ws === 'WS-SC');
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Operations Module</h1>
+        <div class="sub">Industrial KPIs &middot; OEE &middot; Link transformation levers → KPI improvements</div>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-outline"><i class="fa-solid fa-rotate"></i> Sync OT data</button>
+        <button class="btn btn-primary"><i class="fa-regular fa-file-pdf"></i> Rapport mensuel</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-h"><span class="kpi-label">OEE Global</span><div class="kpi-icon"><i class="fa-solid fa-gauge-high"></i></div></div><div class="kpi-value">${ops.kpisActual.oeeAvg}%</div><div class="kpi-target">Baseline ${ops.kpisBaseline.oeeAvg}% &middot; Cible ${ops.kpisTarget.oeeAvg}%</div><div class="kpi-bar"><div style="width:${(ops.kpisActual.oeeAvg/ops.kpisTarget.oeeAvg)*100}%;"></div></div></div>
+      <div class="kpi green"><div class="kpi-h"><span class="kpi-label">Throughput (index)</span><div class="kpi-icon"><i class="fa-solid fa-arrow-trend-up"></i></div></div><div class="kpi-value">${ops.kpisActual.throughput}</div><div class="kpi-target">vs baseline 100 &middot; cible ${ops.kpisTarget.throughput}</div></div>
+      <div class="kpi amber"><div class="kpi-h"><span class="kpi-label">Scrap rate</span><div class="kpi-icon"><i class="fa-solid fa-trash-can"></i></div></div><div class="kpi-value">${ops.kpisActual.scrapRate}%</div><div class="kpi-target">Cible ${ops.kpisTarget.scrapRate}%</div></div>
+      <div class="kpi brown"><div class="kpi-h"><span class="kpi-label">OTD (livraison)</span><div class="kpi-icon"><i class="fa-solid fa-truck-fast"></i></div></div><div class="kpi-value">${ops.kpisActual.otd}%</div><div class="kpi-target">Cible ${ops.kpisTarget.otd}%</div></div>
+    </div>
+
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-chart-column"></i> OEE par ligne de production</h3></div>
+        <div class="card-b"><div class="chart-box"><canvas id="ch-oee"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-microchip"></i> État équipements</h3></div>
+        <div class="card-b" style="max-height:340px;overflow-y:auto;">
+          ${ops.lines.map(line => `
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12px;">
+              <div style="width:8px;height:8px;border-radius:50%;background:${line.status==='running'?'var(--green)':line.status==='maintenance'?'var(--amber)':'var(--red)'};box-shadow:0 0 0 3px ${line.status==='running'?'rgba(46,125,50,0.2)':line.status==='maintenance'?'rgba(230,137,0,0.2)':'rgba(200,40,26,0.2)'};"></div>
+              <div style="flex:1;"><strong>${line.name}</strong><div style="font-size:11px;color:var(--text-tertiary);">OEE ${line.oee}% &middot; Avail ${line.avail}%</div></div>
+              <span class="badge ${line.status==='running'?'badge-green':line.status==='maintenance'?'badge-amber':'badge-red'}">${line.status}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3><i class="fa-solid fa-link"></i> Mapping leviers → KPIs ops</h3></div>
+      <div class="card-b flush">
+        <table class="tbl">
+          <thead><tr><th>Lever</th><th>Workstream</th><th>KPI impacté</th><th class="num">Net savings</th><th>Progress</th><th>Status</th></tr></thead>
+          <tbody>
+            ${linkedLevers.map(l => `<tr onclick="openLeverDetail('${l.id}')" style="cursor:pointer;">
+              <td><strong>${l.name}</strong> <span style="font-family:monospace;font-size:10px;color:var(--text-tertiary);">${l.code}</span></td>
+              <td>${DB.workstreams.find(w=>w.id===l.ws)?.name}</td>
+              <td><span class="tag">OEE</span> <span class="tag">Scrap</span></td>
+              <td class="num">${ENGINE.fmtCurr(l.netSavings)}</td>
+              <td><div class="pbar-row"><div class="pbar"><div style="width:${l.progress}%;"></div></div><span class="pct">${l.progress}%</span></div></td>
+              <td><span class="badge ${l.status==='delivered'?'badge-green':'badge-blue'}">${l.status}</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+};
+PAGES.ops.afterMount = function() {
+  destroyCharts();
+  const ops = DB.operations;
+  CHARTS.oee = new Chart(document.getElementById('ch-oee'), {
+    type: 'bar',
+    data: { labels: ops.lines.map(l => l.id), datasets: [{
+      label: 'OEE %', data: ops.lines.map(l => l.oee),
+      backgroundColor: ops.lines.map(l => l.oee >= 85 ? '#2E7D32' : l.oee >= 70 ? '#E68900' : '#C8281A'),
+      borderRadius: 4,
+    }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `OEE: ${c.parsed.y}%` } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } },
+  });
+};
+
+/* ----------- Scenarios — What-if ----------- */
+PAGES.scen = function() {
+  const sum = ENGINE.programSummary();
+  const baselineLevers = DB.levers.filter(l => l.status !== 'cancelled');
+
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Scenarios &amp; What-if Simulation</h1>
+        <div class="sub">Simuler l'impact de l'accélération, du report ou de l'annulation de leviers sur le programme</div>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-outline" onclick="resetScenario()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+        <button class="btn btn-primary" onclick="saveCustomScenario()"><i class="fa-regular fa-floppy-disk"></i> Sauvegarder scénario</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-h"><span class="kpi-label">Scénario actif</span><div class="kpi-icon"><i class="fa-solid fa-flask"></i></div></div><div class="kpi-value" style="font-size:18px;">${DB.scenarios.find(s=>s.id===DB.activeScenario).name}</div><div class="kpi-target">${DB.scenarios.find(s=>s.id===DB.activeScenario).description}</div></div>
+      <div class="kpi green"><div class="kpi-h"><span class="kpi-label">Savings projetés</span><div class="kpi-icon"><i class="fa-solid fa-coins"></i></div></div><div class="kpi-value">${ENGINE.fmtCurr(sum.realized)}</div></div>
+      <div class="kpi amber"><div class="kpi-h"><span class="kpi-label">vs Baseline</span><div class="kpi-icon"><i class="fa-solid fa-arrows-up-down"></i></div></div><div class="kpi-value">${ENGINE.fmtCurr(sum.realized - 32.5)}</div></div>
+      <div class="kpi brown"><div class="kpi-h"><span class="kpi-label">EBIT projeté</span><div class="kpi-icon"><i class="fa-solid fa-chart-line"></i></div></div><div class="kpi-value">${ENGINE.fmtCurr(DB.program.baselineEBIT + sum.realized)}</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3><i class="fa-solid fa-list"></i> Choisir un scénario pré-défini</h3></div>
+      <div class="card-b">
+        <div class="grid-3">
+          ${DB.scenarios.map(s => `
+            <div class="card" style="margin-bottom:0;border-color:${s.id===DB.activeScenario?'var(--bp-coral)':'var(--border)'};${s.id===DB.activeScenario?'box-shadow:0 0 0 3px rgba(255,61,61,0.12);':''}cursor:pointer;" onclick="setScenario('${s.id}')">
+              <div class="card-b">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><strong style="font-size:13px;">${s.name}</strong>${s.id===DB.activeScenario?'<span class="badge badge-coral">ACTIF</span>':''}</div>
+                <div style="font-size:11.5px;color:var(--text-secondary);">${s.description}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <h3><i class="fa-solid fa-sliders"></i> Personnaliser : agir sur chaque levier</h3>
+        <div class="h-actions"><span style="font-size:11px;color:var(--text-secondary);">Cliquez sur un bouton d'action pour simuler en direct</span></div>
+      </div>
+      <div class="card-b flush">
+        <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Code</th><th>Levier</th><th>Status</th><th class="num">Progress</th><th class="num">Net €M</th><th class="num">Realized</th><th>Actions What-if</th></tr></thead>
+          <tbody>
+            ${baselineLevers.map(l => `<tr>
+              <td><span style="font-family:monospace;font-size:11px;">${l.code}</span></td>
+              <td>${l.name}</td>
+              <td><span class="badge ${l.status==='delivered'?'badge-green':l.status==='in_progress'?'badge-blue':'badge-gray'}">${l.status}</span></td>
+              <td class="num">${l.progress}%</td>
+              <td class="num">${l.netSavings.toFixed(1)}</td>
+              <td class="num"><strong>${ENGINE.realizedSavings(l).toFixed(1)}</strong></td>
+              <td>
+                <button class="btn btn-sm btn-outline" onclick="whatIf('${l.id}','accel')"><i class="fa-solid fa-forward"></i> Accélérer</button>
+                <button class="btn btn-sm btn-outline" onclick="whatIf('${l.id}','delay')"><i class="fa-solid fa-clock"></i> Retarder</button>
+                <button class="btn btn-sm btn-outline" onclick="whatIf('${l.id}','cancel')" style="color:var(--red);border-color:var(--red);"><i class="fa-solid fa-ban"></i> Annuler</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-chart-line"></i> S-curve comparée (3 scénarios)</h3></div>
+        <div class="card-b"><div class="chart-box"><canvas id="ch-scen-curve"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-scale-balanced"></i> Impact comparé</h3></div>
+        <div class="card-b">
+          ${['base','best','worst','accel','delay'].map(id => {
+            const sc = DB.scenarios.find(s => s.id === id);
+            if (!sc) return '';
+            const m = sc.modifiers.savingsMultiplier || 1;
+            const proj = sum.target * m;
+            const gap = proj - 32.5;
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:12.5px;">
+              <strong>${sc.name}</strong>
+              <div style="text-align:right;"><div style="font-weight:700;color:${m>=1?'var(--green-dark)':'var(--red)'};">${ENGINE.fmtCurr(proj)}</div><div style="font-size:11px;color:var(--text-tertiary);">vs baseline ${gap>=0?'+':''}${gap.toFixed(1)}M</div></div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+};
+PAGES.scen.afterMount = function() {
+  destroyCharts();
+  const sc = ENGINE.sCurve();
+  const target = sum => DB.levers.filter(l => l.status !== 'cancelled').reduce((s, l) => s + l.netSavings * sum, 0);
+  const labels = sc.labels;
+  CHARTS.scen = new Chart(document.getElementById('ch-scen-curve'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Baseline', data: sc.planned, borderColor: '#6B5750', borderWidth: 2, tension: 0.4, pointRadius: 0, fill: false },
+      { label: 'Réalisé', data: sc.actual, borderColor: '#FF3D3D', borderWidth: 2.5, tension: 0.4, pointRadius: 3, fill: false },
+      { label: 'Best case', data: sc.planned.map(v => v * 1.10), borderColor: '#2E7D32', borderDash: [4,4], borderWidth: 2, tension: 0.4, pointRadius: 0, fill: false },
+      { label: 'Worst case', data: sc.planned.map(v => v * 0.80), borderColor: '#C8281A', borderDash: [4,4], borderWidth: 2, tension: 0.4, pointRadius: 0, fill: false },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => `€${v}M`, font: { size: 10 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } },
+  });
+};
+function resetScenario() { DB.activeScenario = 'base'; renderPage('scen'); toast('Scénario réinitialisé', 'Retour à la baseline', ''); }
+function saveCustomScenario() { toast('Scénario sauvegardé', 'Disponible dans la liste des scénarios', 'green'); }
+function whatIf(leverId, action) {
+  const l = DB.levers.find(x => x.id === leverId);
+  if (!l) return;
+  if (action === 'accel') { l.progress = Math.min(100, l.progress + 15); toast('Levier accéléré', `${l.code} : +15pts de progression`, 'green'); }
+  if (action === 'delay') { l.progress = Math.max(0, l.progress - 10); toast('Levier retardé', `${l.code} : -10pts de progression`, 'amber'); }
+  if (action === 'cancel') { l.status = 'cancelled'; toast('Levier annulé', `${l.code} retiré du programme`, 'red'); }
+  ENGINE.logAudit('Guillaume Séjourné', 'scenario:' + action, leverId, 'progress/status', '-', action);
+  renderPage('scen');
+}
+
+/* ----------- Reporting & Analytics ----------- */
+PAGES.rep = function() {
+  const sum = ENGINE.programSummary();
+  // Build heatmap data: progress by workstream × month (mock smoothed values)
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const wsHeat = DB.workstreams.map(ws => ({
+    ws,
+    values: months.map((_, i) => {
+      const cur = i <= 5 ? Math.round(ENGINE.workstreamSummary(ws.id).progressPct * (i+1) / 6) : null;
+      return cur;
+    })
+  }));
+  const colorFor = (v) => {
+    if (v === null) return 'background:var(--n-100);color:var(--text-tertiary);';
+    if (v >= 80) return 'background:#2E7D32;';
+    if (v >= 60) return 'background:#558B2F;';
+    if (v >= 40) return 'background:#E68900;';
+    if (v >= 20) return 'background:#FF6B6B;';
+    return 'background:#C8281A;';
+  };
+
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Reporting &amp; Analytics</h1>
+        <div class="sub">Drill-down multi-niveaux &middot; Heatmaps &middot; Filtres croisés &middot; Exports</div>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-outline"><i class="fa-regular fa-file-excel"></i> Excel</button>
+        <button class="btn btn-outline"><i class="fa-regular fa-file-pdf"></i> PDF</button>
+        <button class="btn btn-primary"><i class="fa-regular fa-paper-plane"></i> Schedule report</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3><i class="fa-solid fa-fire"></i> Heatmap — Progression par workstream × mois</h3></div>
+      <div class="card-b">
+        <div class="hm-head">
+          <div></div>
+          ${months.map(m => `<div class="hm-col">${m}</div>`).join('')}
+        </div>
+        <div class="heatmap">
+          ${wsHeat.map(r => `<div class="hm-row">
+            <div class="hm-label">${r.ws.name}</div>
+            ${r.values.map(v => `<div class="hm-cell" style="${colorFor(v)}" title="${v===null?'N/A':v+'%'}">${v===null?'':v}</div>`).join('')}
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-chart-pie"></i> Répartition savings par fonction</h3></div>
+        <div class="card-b"><div class="chart-box"><canvas id="ch-rep-fn"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-arrow-trend-up"></i> Top 5 leviers en valeur</h3></div>
+        <div class="card-b flush">
+          <table class="tbl">
+            <thead><tr><th>Code</th><th>Levier</th><th class="num">Net €M</th><th>Status</th></tr></thead>
+            <tbody>
+              ${DB.levers.slice().sort((a,b)=>b.netSavings-a.netSavings).slice(0,5).map(l => `<tr onclick="openLeverDetail('${l.id}')" style="cursor:pointer;">
+                <td><span style="font-family:monospace;font-size:11px;">${l.code}</span></td>
+                <td>${l.name}</td>
+                <td class="num"><strong>${l.netSavings.toFixed(1)}</strong></td>
+                <td><span class="badge ${l.status==='delivered'?'badge-green':'badge-blue'}">${l.status}</span></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-globe"></i> Drill-down géographique</h3></div>
+        <div class="card-b">
+          ${Object.entries(ENGINE.byGeo()).sort((a,b)=>b[1]-a[1]).map(([g,v]) => `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12px;">
+            <div style="width:140px;font-weight:500;">${g}</div>
+            <div class="pbar" style="flex:1;height:14px;"><div style="width:${(v/40)*100}%;"></div></div>
+            <div style="width:80px;text-align:right;font-weight:700;">${ENGINE.fmtCurr(v)}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-shield-halved"></i> Risk distribution</h3></div>
+        <div class="card-b">
+          ${['low','medium','high','critical'].map(r => {
+            const c = DB.levers.filter(l => l.risk === r && l.status !== 'cancelled').length;
+            const pct = Math.round(c / DB.levers.length * 100);
+            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12px;">
+              <span class="risk risk-${r==='critical'?'crit':r}"><span class="risk-dot"></span><strong>${r}</strong></span>
+              <div class="pbar ${r==='critical'?'red':r==='high'?'red':r==='medium'?'amber':'green'}" style="flex:1;height:14px;"><div style="width:${pct*4}%;"></div></div>
+              <div style="width:60px;text-align:right;font-weight:700;">${c}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+};
+PAGES.rep.afterMount = function() {
+  destroyCharts();
+  const fn = ENGINE.byFunction();
+  CHARTS.repfn = new Chart(document.getElementById('ch-rep-fn'), {
+    type: 'doughnut',
+    data: { labels: Object.keys(fn), datasets: [{ data: Object.values(fn), backgroundColor: ['#FF3D3D','#C8281A','#F58F89','#6B5750','#A89A93','#2B0000','#F8D5D2','#3D2E29','#E68900'] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } }, tooltip: { callbacks: { label: c => `${c.label}: €${c.parsed.toFixed(1)}M` } } } },
+  });
+};
+
+/* ----------- Risks & Alerts ----------- */
+PAGES.risks = function() {
+  const critLevers = DB.levers.filter(l => l.risk === 'critical' && l.status !== 'cancelled');
+  const highLevers = DB.levers.filter(l => l.risk === 'high' && l.status !== 'cancelled');
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Risks &amp; Alerts</h1>
+        <div class="sub">${DB.alerts.length} notifications &middot; ${critLevers.length} leviers critiques &middot; ${highLevers.length} risques élevés</div>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-outline"><i class="fa-solid fa-filter"></i> Filtres</button>
+        <button class="btn btn-primary"><i class="fa-regular fa-bell"></i> Notification settings</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi red"><div class="kpi-h"><span class="kpi-label">Alerts critiques</span><div class="kpi-icon"><i class="fa-solid fa-circle-exclamation"></i></div></div><div class="kpi-value">${DB.alerts.filter(a=>a.type==='red').length}</div></div>
+      <div class="kpi amber"><div class="kpi-h"><span class="kpi-label">Alerts à surveiller</span><div class="kpi-icon"><i class="fa-solid fa-triangle-exclamation"></i></div></div><div class="kpi-value">${DB.alerts.filter(a=>a.type==='amber').length}</div></div>
+      <div class="kpi green"><div class="kpi-h"><span class="kpi-label">Resolved</span><div class="kpi-icon"><i class="fa-solid fa-circle-check"></i></div></div><div class="kpi-value">${DB.alerts.filter(a=>a.type==='green').length}</div></div>
+      <div class="kpi brown"><div class="kpi-h"><span class="kpi-label">Leviers critiques</span><div class="kpi-icon"><i class="fa-solid fa-bullseye"></i></div></div><div class="kpi-value">${critLevers.length}</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-bell"></i> Toutes les alertes</h3></div>
+        <div class="card-b">
+          <div class="alert-list">
+            ${DB.alerts.map(a => `<div class="alert-row">
+              <div class="alert-icon ${a.type}"><i class="fa-solid ${a.type==='red'?'fa-circle-exclamation':a.type==='amber'?'fa-triangle-exclamation':a.type==='green'?'fa-circle-check':'fa-circle-info'}"></i></div>
+              <div class="alert-content"><div class="alert-title">${a.title}</div><div class="alert-desc">${a.desc}</div><div class="alert-time">${a.ts} &middot; <span class="tag" style="cursor:pointer;" onclick="if('${a.scope}'.startsWith('L'))openLeverDetail('${a.scope}'); else if('${a.scope}'.startsWith('WS')){window._wsFilter='${a.scope}';navigate('ws');}">${a.scope}</span></div></div>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3><i class="fa-solid fa-shield-halved"></i> Leviers en risque critique</h3></div>
+        <div class="card-b">
+          ${[...critLevers, ...highLevers].slice(0,8).map(l => `
+            <div style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="openLeverDetail('${l.id}')">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <strong style="font-size:12.5px;">${l.name}</strong>
+                <span class="risk risk-${l.risk==='critical'?'crit':l.risk}"><span class="risk-dot"></span>${l.risk}</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">${l.code} &middot; ${l.owner} &middot; ${l.progress}% completed</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+/* ----------- Audit Trail ----------- */
+PAGES.audit = function() {
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Audit Trail</h1>
+        <div class="sub">${DB.audit.length} modifications enregistrées &middot; Traçabilité complète</div>
+      </div>
+      <div class="ph-actions">
+        <input type="search" placeholder="Rechercher...">
+        <button class="btn btn-primary"><i class="fa-regular fa-file-pdf"></i> Export trail</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-b flush">
+        <table class="tbl">
+          <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Entity</th><th>Field</th><th>Old value</th><th>New value</th></tr></thead>
+          <tbody>
+            ${DB.audit.map(a => `<tr>
+              <td style="font-family:monospace;font-size:11px;color:var(--text-secondary);">${a.ts}</td>
+              <td><span class="avatar sm coral">${a.user.split(' ').map(x=>x[0]).join('').slice(0,2)}</span> ${a.user}</td>
+              <td><span class="badge ${a.action==='completed'?'badge-green':a.action==='created'?'badge-blue':'badge-gray'}">${a.action}</span></td>
+              <td><span class="tag" style="cursor:pointer;" onclick="openLeverDetail('${a.entity}')">${a.entity}</span></td>
+              <td><code style="font-size:11px;background:var(--n-100);padding:1px 5px;border-radius:3px;">${a.field}</code></td>
+              <td style="font-size:11px;color:var(--text-secondary);">${a.old}</td>
+              <td style="font-size:11px;color:var(--green-dark);font-weight:600;">${a.new}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+};
+
+/* ----------- Tasks / Action Plans ----------- */
+PAGES.tasks = function() {
+  const myLevers = DB.levers.filter(l => l.status === 'in_progress' || l.status === 'validated').slice(0, 6);
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Action Plans</h1>
+        <div class="sub">Vos leviers en cours &middot; Tasks &middot; Milestones &middot; Avancement</div>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add action</button>
+      </div>
+    </div>
+    ${myLevers.map(l => `
+      <div class="card">
+        <div class="card-h">
+          <h3 style="display:flex;align-items:center;gap:8px;"><span class="avatar sm coral">${l.ownerInit}</span> ${l.name} <span style="font-family:monospace;font-size:11px;color:var(--text-tertiary);">${l.code}</span></h3>
+          <div class="h-actions">
+            <span class="badge ${l.risk==='critical'?'badge-red':l.risk==='high'?'badge-red':l.risk==='medium'?'badge-amber':'badge-green'}">${l.risk}</span>
+            <button class="btn btn-ghost btn-sm" onclick="openLeverDetail('${l.id}')"><i class="fa-solid fa-arrow-right"></i></button>
+          </div>
+        </div>
+        <div class="card-b">
+          <div class="pbar-row" style="margin-bottom:12px;"><div class="pbar"><div style="width:${l.progress}%;"></div></div><span class="pct">${l.progress}%</span></div>
+          <div class="timeline">
+            <div class="tl-item"><div class="tl-dot done"></div><div class="tl-date">Phase 1</div><div class="tl-title">Diagnostic</div><div class="tl-desc">Complété</div></div>
+            <div class="tl-item"><div class="tl-dot ${l.progress>=50?'done':'current'}"></div><div class="tl-date">Phase 2</div><div class="tl-title">Mise en œuvre</div><div class="tl-desc">${l.progress}% — ${l.progress>=50?'avancé':'en cours'}</div></div>
+            <div class="tl-item"><div class="tl-dot ${l.progress>=80?'current':''}"></div><div class="tl-date">Phase 3</div><div class="tl-title">Stabilisation</div><div class="tl-desc">À venir</div></div>
+          </div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+};
+
+/* ----------- Collaboration ----------- */
+PAGES.collab = function() {
+  const allComments = Object.entries(DB.comments).flatMap(([leverId, list]) =>
+    list.map(c => ({ ...c, leverId, lever: DB.levers.find(l => l.id === leverId) }))
+  ).sort((a, b) => b.ts.localeCompare(a.ts));
+  return `
+    <div class="ph">
+      <div class="ph-left">
+        <h1>Collaboration</h1>
+        <div class="sub">${allComments.length} messages &middot; Communication entre lever owners, sponsors et équipes</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-b">
+        ${allComments.map(c => `<div style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border);">
+          <span class="avatar coral">${c.user.split(' ').map(x=>x[0]).join('').slice(0,2)}</span>
+          <div style="flex:1;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div><strong style="font-size:12.5px;">${c.user}</strong> <span style="font-size:11px;color:var(--text-tertiary);">sur</span> <a style="font-size:12px;color:var(--bp-coral);cursor:pointer;font-weight:600;" onclick="openLeverDetail('${c.leverId}')">${c.lever?.code || c.leverId}</a></div>
+              <span style="font-size:11px;color:var(--text-tertiary);">${c.ts}</span>
+            </div>
+            <div style="font-size:13px;color:var(--text-primary);margin-top:4px;">${c.text}</div>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>
+  `;
+};
+function renderPage(pageId) {
+  const wrap = document.getElementById('page-wrap');
+  const renderer = PAGES[pageId];
+  if (renderer) {
+    wrap.innerHTML = `<div class="page active">${renderer()}</div>`;
+    // post-render hooks (charts etc.)
+    if (renderer.afterMount) renderer.afterMount();
+  } else {
+    wrap.innerHTML = `<div class="page active">
+      <div class="ph"><div class="ph-left"><h1>${pageId}</h1><div class="sub">Module en cours de construction</div></div></div>
+      <div class="placeholder">
+        <i class="fa-solid fa-screwdriver-wrench"></i>
+        <h3>Module à venir</h3>
+        <p>Ce module sera ajouté dans la prochaine passe de développement.</p>
+      </div>
+    </div>`;
+  }
+}
+
+/* Toast system */
+function toast(title, msg, type = '') {
+  let zone = document.querySelector('.toast-zone');
+  if (!zone) {
+    zone = document.createElement('div');
+    zone.className = 'toast-zone';
+    document.body.appendChild(zone);
+  }
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<div class="toast-title">${title}</div><div class="toast-msg">${msg}</div>`;
+  zone.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(8px)'; setTimeout(() => el.remove(), 300); }, 4000);
+}
+</script>
+</body>
+</html>
