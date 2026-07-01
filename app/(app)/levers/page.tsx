@@ -16,6 +16,8 @@ import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
 import { Kanban } from "@/components/shared/Kanban";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
+import { Modal } from "@/components/shared/Modal";
+import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
 import type { Lever } from "@/types";
 
 type LeverRow = Lever & { realized: number; wsName: string };
@@ -28,6 +30,7 @@ export default function LeversPage() {
   const [view, setView] = useState<"table" | "kanban">(
     (searchParams.get("view") as "table" | "kanban") ?? "table"
   );
+  const [newLeverOpen, setNewLeverOpen] = useState(false);
 
   const wsFilter = searchParams.get("ws") ?? "";
   const statusFilter = searchParams.get("status") ?? "";
@@ -98,21 +101,32 @@ export default function LeversPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ExportButton type="excel" />
-          <ExcelUploadButton />
-          <Button
-            variant="primary"
-            onClick={() =>
-              showToast(
-                "Création de levier",
-                "Formulaire complet disponible dans une prochaine passe"
-              )
-            }
-          >
+          <ExportButton type="excel" data={data} />
+          <ExcelUploadButton data={data} />
+          <Button variant="primary" onClick={() => setNewLeverOpen(true)}>
             <Plus size={13} /> New lever
           </Button>
         </div>
       </div>
+
+      <Modal
+        open={newLeverOpen}
+        onOpenChange={setNewLeverOpen}
+        title="Nouveau levier"
+        maxWidth="760px"
+      >
+        <LeverForm
+          data={data}
+          submitLabel="Créer le levier"
+          onCancel={() => setNewLeverOpen(false)}
+          onSubmit={(values: LeverFormValues) => {
+            const created = data.createLever({ ...values, dependencies: [] });
+            setNewLeverOpen(false);
+            showToast("Levier créé", created.name, "success");
+            router.push(`/levers/detail?id=${created.id}`);
+          }}
+        />
+      </Modal>
 
       <Card>
         <CardBody flush>
@@ -182,12 +196,15 @@ export default function LeversPage() {
         <EditableTable
           data={rows}
           columns={columns}
-          onRowClick={(row) => router.push(`/levers/${row.id}`)}
+          onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
           searchPlaceholder="Rechercher (nom, code, owner...)"
           defaultSort={{ key: "risk", direction: "desc" }}
         />
       ) : (
-        <Kanban levers={filteredLevers} onCardClick={(id) => router.push(`/levers/${id}`)} />
+        <Kanban
+          levers={filteredLevers}
+          onCardClick={(id) => router.push(`/levers/detail?id=${id}`)}
+        />
       )}
     </div>
   );
