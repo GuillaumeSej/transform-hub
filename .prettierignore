@@ -1,0 +1,4 @@
+node_modules
+.next
+legacy
+package-lock.json
