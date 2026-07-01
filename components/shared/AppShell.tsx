@@ -3,7 +3,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
-import { initializeStorage, getAlerts, resetToMockData } from "@/lib/storage";
+import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { initializeStorage } from "@/lib/storage";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
@@ -16,8 +17,8 @@ import { Toaster } from "@/components/shared/Toaster";
 export function AppShell({ children }: { children: ReactNode }) {
   const { role } = useRole();
   const router = useRouter();
+  const data = useBeTrackData();
   const [ready, setReady] = useState(false);
-  const [alertCount, setAlertCount] = useState(0);
 
   useEffect(() => {
     if (!role) {
@@ -25,7 +26,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       return;
     }
     initializeStorage();
-    setAlertCount(getAlerts().length);
     setReady(true);
   }, [role, router]);
 
@@ -33,14 +33,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen">
-      <Sidebar alertCount={alertCount} role={role} />
+      <Sidebar alertCount={data.alerts.length} role={role} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
-          alertCount={alertCount}
+          alertCount={data.alerts.length}
           role={role}
           onReset={() => {
-            resetToMockData();
-            setAlertCount(getAlerts().length);
+            data.resetToMockData();
             window.location.reload();
           }}
         />

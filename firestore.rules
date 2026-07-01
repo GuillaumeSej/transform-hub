@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Périmètre "leviers" de BeTrack (voir lib/firestore/levers.ts). L'app n'a pas encore
+// d'authentification réelle (le choix de rôle est juste local au navigateur, voir
+// lib/hooks/useRole.tsx) : ces règles ouvrent donc la lecture/écriture à quiconque connaît le
+// projectId, ce qui est acceptable pour une démo interne mais PAS pour de la donnée sensible en
+// prod. Avant un déploiement public, ajouter Firebase Auth et restreindre via `request.auth`.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /levers/{leverId} {
+      allow read, write: if true;
+    }
+    match /subLevers/{subLeverId} {
+      allow read, write: if true;
+    }
+    match /leverMeta/{docId} {
+      allow read, write: if true;
+    }
+    match /meta/{docId} {
+      allow read, write: if true;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
