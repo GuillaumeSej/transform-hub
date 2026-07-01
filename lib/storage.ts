@@ -60,9 +60,13 @@ function write<T>(key: string, value: T): void {
   }
 }
 
+// Incrémenter cette valeur invalide tout cache existant (schéma de données modifié) et force
+// un reseed propre depuis mockData — évite les crashs sur un localStorage d'une version antérieure.
+const SCHEMA_VERSION = "2";
+
 export function initializeStorage(): void {
   if (!isBrowser()) return;
-  if (window.localStorage.getItem(KEYS.initialized)) return;
+  if (window.localStorage.getItem(KEYS.initialized) === SCHEMA_VERSION) return;
   write(KEYS.program, mockData.program);
   write(KEYS.workstreams, mockData.workstreams);
   write(KEYS.levers, mockData.levers);
@@ -73,7 +77,7 @@ export function initializeStorage(): void {
   write(KEYS.comments, mockData.comments);
   write(KEYS.scenarios, mockData.scenarios);
   write(KEYS.activeScenario, mockData.activeScenario);
-  window.localStorage.setItem(KEYS.initialized, "true");
+  window.localStorage.setItem(KEYS.initialized, SCHEMA_VERSION);
 }
 
 export function resetToMockData(): void {
