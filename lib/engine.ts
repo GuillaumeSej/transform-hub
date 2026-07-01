@@ -1,4 +1,14 @@
-import type { BeTrackData, Lever, ProgramSummary, RiskLevel, WorkstreamSummary } from "@/types";
+import type {
+  ActionStatus,
+  BeTrackData,
+  Lever,
+  LeverAction,
+  ProgramSummary,
+  RiskLevel,
+  SubLever,
+  WorkstreamSummary,
+} from "@/types";
+import { addDays, daysBetween } from "@/lib/dateUtils";
 
 /**
  * Portage fidèle du moteur de calcul `ENGINE` du prototype de Guillaume (legacy/index.html).
@@ -20,6 +30,11 @@ export function modSavings(lever: Lever, data: BeTrackData): number {
 export function realizedSavings(lever: Lever, data: BeTrackData): number {
   if (lever.status === "cancelled") return 0;
   return Math.round(modSavings(lever, data) * (lever.progress / 100) * 100) / 100;
+}
+
+export function realizedFte(lever: Lever): number {
+  if (lever.status === "cancelled") return 0;
+  return Math.round(lever.fteImpact * (lever.progress / 100) * 10) / 10;
 }
 
 export function worstRisk(levers: Lever[]): RiskLevel {
@@ -158,4 +173,135 @@ export function fmtPct(v: number): string {
 
 export function fmtInt(v: number): string {
   return v.toLocaleString("fr-FR");
+}
+
+// ---------- Sous-leviers, plan d'action, rollup de progression ----------
+
+const ACTION_STATUS_WEIGHT: Record<ActionStatus, number> = {
+  done: 100,
+  in_progress: 50,
+  todo: 0,
+  delayed: 0,
+};
+
+/** Progression d'un plan d'action : moyenne pondérée par statut des actions (done=100, in_progress=50). */
+export function actionProgress(actions: LeverAction[]): number {
+  if (actions.length === 0) return 0;
+  const total = actions.reduce((s, a) => s + ACTION_STATUS_WEIGHT[a.status], 0);
+  return Math.round(total / actions.length);
+}
+
+export function subLeverProgress(subLever: SubLever): number {
+  return actionProgress(subLever.actions);
+}
+
+/**
+ * Progression d'un levier : si des sous-leviers existent, moyenne de leur progression pondérée par
+ * leur poids financier (|netSavings|) ; sinon, si le levier a son propre plan d'action, la
+ * progression de ce plan ; sinon, la valeur manuelle existante (levier à impact unique, inchangé).
+ */
+export function recomputeLeverProgress(lever: Lever, subLevers: SubLever[]): number {
+  const mySubLevers = subLevers.filter((s) => s.leverId === lever.id);
+  if (mySubLevers.length > 0) {
+    const totalWeight = mySubLevers.reduce((s, sl) => s + Math.abs(sl.netSavings), 0);
+    if (totalWeight === 0) {
+      return Math.round(
+        mySubLevers.reduce((s, sl) => s + subLeverProgress(sl), 0) / mySubLevers.length
+      );
+    }
+    return Math.round(
+      mySubLevers.reduce((s, sl) => s + subLeverProgress(sl) * Math.abs(sl.netSavings), 0) /
+        totalWeight
+    );
+  }
+  if (lever.actions && lever.actions.length > 0) {
+    return actionProgress(lever.actions);
+  }
+  return lever.progress;
+}
+
+// ---------- Dépendances & cascade de retard ----------
+
+type ScheduleEntity = {
+  id: string;
+  kind: "lever" | "subLever";
+  name: string;
+  start: string;
+  end: string;
+  dependencies: string[];
+};
+
+function toScheduleEntities(data: BeTrackData): ScheduleEntity[] {
+  const leverEntities: ScheduleEntity[] = data.levers.map((l) => ({
+    id: l.id,
+    kind: "lever",
+    name: l.name,
+    start: l.start,
+    end: l.end,
+    dependencies: l.dependencies,
+  }));
+  const subEntities: ScheduleEntity[] = data.subLevers.map((s) => ({
+    id: s.id,
+    kind: "subLever",
+    name: s.name,
+    start: s.start,
+    end: s.end,
+    dependencies: s.dependencies,
+  }));
+  return [...leverEntities, ...subEntities];
+}
+
+export type CascadeShift = {
+  id: string;
+  kind: "lever" | "subLever";
+  name: string;
+  oldStart: string;
+  oldEnd: string;
+  newStart: string;
+  newEnd: string;
+};
+
+/**
+ * Calcule (sans rien muter) le décalage à proposer sur les entités dépendantes (leviers et
+ * sous-leviers confondus) quand `entityId` glisse de `oldEnd` à `newEnd`. Décalage rigide : même
+ * delta de jours appliqué en cascade transitive, avec garde-fou anti-cycle.
+ */
+export function computeCascadeShift(
+  entityId: string,
+  oldEnd: string,
+  newEnd: string,
+  data: BeTrackData
+): CascadeShift[] {
+  const deltaDays = daysBetween(oldEnd, newEnd);
+  if (deltaDays <= 0) return [];
+
+  const entities = toScheduleEntities(data);
+  const shifts: CascadeShift[] = [];
+  const visited = new Set<string>([entityId]);
+  let frontier = [entityId];
+
+  while (frontier.length > 0) {
+    const nextFrontier: string[] = [];
+    for (const currentId of frontier) {
+      const dependents = entities.filter(
+        (e) => e.dependencies.includes(currentId) && !visited.has(e.id)
+      );
+      for (const dep of dependents) {
+        visited.add(dep.id);
+        shifts.push({
+          id: dep.id,
+          kind: dep.kind,
+          name: dep.name,
+          oldStart: dep.start,
+          oldEnd: dep.end,
+          newStart: addDays(dep.start, deltaDays),
+          newEnd: addDays(dep.end, deltaDays),
+        });
+        nextFrontier.push(dep.id);
+      }
+    }
+    frontier = nextFrontier;
+  }
+
+  return shifts;
 }

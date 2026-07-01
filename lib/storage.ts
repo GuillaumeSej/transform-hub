@@ -1,13 +1,17 @@
 import { mockData } from "@/data/mockData";
+import * as engine from "@/lib/engine";
+import type { CascadeShift } from "@/lib/engine";
 import type {
   Alert,
   AuditEntry,
   Comment,
   Lever,
+  LeverAction,
   Operations,
   ProductionLine,
   ProgramConfig,
   Scenario,
+  SubLever,
   Workforce,
   WorkforceMovement,
   Workstream,
@@ -30,6 +34,7 @@ const KEYS = {
   program: "betrack_program",
   workstreams: "betrack_workstreams",
   levers: "betrack_levers",
+  subLevers: "betrack_sublevers",
   workforce: "betrack_workforce",
   operations: "betrack_operations",
   alerts: "betrack_alerts",
@@ -62,7 +67,7 @@ function write<T>(key: string, value: T): void {
 
 // Incrémenter cette valeur invalide tout cache existant (schéma de données modifié) et force
 // un reseed propre depuis mockData — évite les crashs sur un localStorage d'une version antérieure.
-const SCHEMA_VERSION = "2";
+const SCHEMA_VERSION = "4";
 
 export function initializeStorage(): void {
   if (!isBrowser()) return;
@@ -70,6 +75,7 @@ export function initializeStorage(): void {
   write(KEYS.program, mockData.program);
   write(KEYS.workstreams, mockData.workstreams);
   write(KEYS.levers, mockData.levers);
+  write(KEYS.subLevers, mockData.subLevers);
   write(KEYS.workforce, mockData.workforce);
   write(KEYS.operations, mockData.operations);
   write(KEYS.alerts, mockData.alerts);
@@ -77,6 +83,13 @@ export function initializeStorage(): void {
   write(KEYS.comments, mockData.comments);
   write(KEYS.scenarios, mockData.scenarios);
   write(KEYS.activeScenario, mockData.activeScenario);
+
+  // Recalage initial : les leviers dotés de sous-leviers/actions doivent afficher une progression
+  // dérivée du plan d'action dès le seed, pas la valeur manuelle héritée de mockData.
+  mockData.levers
+    .filter((l) => l.actions?.length || mockData.subLevers.some((s) => s.leverId === l.id))
+    .forEach((l) => recomputeAndPersistLeverProgress(l.id));
+
   window.localStorage.setItem(KEYS.initialized, SCHEMA_VERSION);
 }
 
@@ -102,6 +115,14 @@ export function getLevers(): Lever[] {
 
 export function getLeverById(id: string): Lever | undefined {
   return getLevers().find((l) => l.id === id);
+}
+
+export function getSubLevers(): SubLever[] {
+  return read(KEYS.subLevers, mockData.subLevers);
+}
+
+export function getSubLeversForLever(leverId: string): SubLever[] {
+  return getSubLevers().filter((s) => s.leverId === leverId);
 }
 
 export function getWorkforce(): Workforce {
@@ -146,6 +167,23 @@ export function addAuditEntry(entry: Omit<AuditEntry, "ts">): void {
 
 // ---------- Setters ----------
 
+export function createLever(
+  input: Omit<Lever, "id" | "createdAt" | "lastUpdate">,
+  user = "Utilisateur démo"
+): Lever {
+  const levers = getLevers();
+  const maxNum = levers.reduce((max, l) => {
+    const m = /^L(\d+)$/.exec(l.id);
+    return m ? Math.max(max, Number(m[1])) : max;
+  }, 0);
+  const id = `L${String(maxNum + 1).padStart(3, "0")}`;
+  const now = new Date().toISOString().slice(0, 10);
+  const lever: Lever = { ...input, id, createdAt: now, lastUpdate: now };
+  write(KEYS.levers, [...levers, lever]);
+  addAuditEntry({ user, action: "created", entity: id, field: "lever", old: "", new: lever.name });
+  return lever;
+}
+
 export function updateLever(id: string, patch: Partial<Lever>, user = "Utilisateur démo"): Lever {
   const levers = getLevers();
   const idx = levers.findIndex((l) => l.id === id);
@@ -169,6 +207,203 @@ export function updateLever(id: string, patch: Partial<Lever>, user = "Utilisate
   });
 
   return after;
+}
+
+/** Créé un levier si `code` est inconnu, sinon met à jour le levier existant portant ce code. */
+export function upsertLeverByCode(
+  input: Omit<Lever, "id" | "createdAt" | "lastUpdate">,
+  user = "Utilisateur démo"
+): { lever: Lever; created: boolean } {
+  const existing = getLevers().find((l) => l.code === input.code);
+  if (existing) {
+    return { lever: updateLever(existing.id, input, user), created: false };
+  }
+  return { lever: createLever(input, user), created: true };
+}
+
+// ---------- Sous-leviers & plan d'action ----------
+
+function nextEntityId(prefix: string, existingIds: string[]): string {
+  const pattern = new RegExp(`^${prefix}(\\d+)$`);
+  const maxNum = existingIds.reduce((max, id) => {
+    const m = pattern.exec(id);
+    return m ? Math.max(max, Number(m[1])) : max;
+  }, 0);
+  return `${prefix}${String(maxNum + 1).padStart(3, "0")}`;
+}
+
+function patchLeverSilently(id: string, patch: Partial<Lever>): Lever {
+  const levers = getLevers();
+  const idx = levers.findIndex((l) => l.id === id);
+  if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
+  const after = { ...levers[idx], ...patch };
+  levers[idx] = after;
+  write(KEYS.levers, levers);
+  return after;
+}
+
+/** Recalcule et persiste `lever.progress` à partir du plan d'action / des sous-leviers — sans
+ * entrée d'audit dédiée (dérivé automatiquement de la mutation qui vient de se produire). */
+function recomputeAndPersistLeverProgress(leverId: string): void {
+  const lever = getLeverById(leverId);
+  if (!lever) return;
+  const newProgress = engine.recomputeLeverProgress(lever, getSubLevers());
+  if (newProgress !== lever.progress) {
+    patchLeverSilently(leverId, {
+      progress: newProgress,
+      status: newProgress >= 100 && lever.status !== "cancelled" ? "delivered" : lever.status,
+    });
+  }
+}
+
+export function createSubLever(
+  input: Omit<SubLever, "id">,
+  user = "Utilisateur démo"
+): SubLever {
+  const subLevers = getSubLevers();
+  const id = nextEntityId("SL", subLevers.map((s) => s.id));
+  const subLever: SubLever = { ...input, id };
+  write(KEYS.subLevers, [...subLevers, subLever]);
+  addAuditEntry({
+    user,
+    action: "created",
+    entity: subLever.leverId,
+    field: "sous-levier",
+    old: "",
+    new: subLever.name,
+  });
+  recomputeAndPersistLeverProgress(subLever.leverId);
+  return subLever;
+}
+
+export function updateSubLever(
+  id: string,
+  patch: Partial<SubLever>,
+  user = "Utilisateur démo"
+): SubLever {
+  const subLevers = getSubLevers();
+  const idx = subLevers.findIndex((s) => s.id === id);
+  if (idx === -1) throw new Error(`Sous-levier "${id}" introuvable`);
+  const before = subLevers[idx];
+  const after: SubLever = { ...before, ...patch };
+  subLevers[idx] = after;
+  write(KEYS.subLevers, subLevers);
+  addAuditEntry({
+    user,
+    action: "updated",
+    entity: before.leverId,
+    field: `sous-levier ${before.name}`,
+    old: "",
+    new: "modifié",
+  });
+  recomputeAndPersistLeverProgress(before.leverId);
+  return after;
+}
+
+export function deleteSubLever(id: string, user = "Utilisateur démo"): void {
+  const subLevers = getSubLevers();
+  const target = subLevers.find((s) => s.id === id);
+  if (!target) return;
+  write(
+    KEYS.subLevers,
+    subLevers.filter((s) => s.id !== id)
+  );
+  addAuditEntry({
+    user,
+    action: "updated",
+    entity: target.leverId,
+    field: "sous-levier",
+    old: target.name,
+    new: "supprimé",
+  });
+  recomputeAndPersistLeverProgress(target.leverId);
+}
+
+type ActionScope = { leverId: string; subLeverId?: string };
+
+function readActions(scope: ActionScope): LeverAction[] {
+  if (scope.subLeverId) {
+    return getSubLevers().find((s) => s.id === scope.subLeverId)?.actions ?? [];
+  }
+  return getLeverById(scope.leverId)?.actions ?? [];
+}
+
+function writeActions(scope: ActionScope, actions: LeverAction[]): void {
+  if (scope.subLeverId) {
+    const subLevers = getSubLevers();
+    const idx = subLevers.findIndex((s) => s.id === scope.subLeverId);
+    if (idx === -1) throw new Error(`Sous-levier "${scope.subLeverId}" introuvable`);
+    subLevers[idx] = { ...subLevers[idx], actions };
+    write(KEYS.subLevers, subLevers);
+  } else {
+    patchLeverSilently(scope.leverId, { actions });
+  }
+  recomputeAndPersistLeverProgress(scope.leverId);
+}
+
+export function createAction(
+  scope: ActionScope,
+  input: Omit<LeverAction, "id">,
+  user = "Utilisateur démo"
+): LeverAction {
+  const allIds = [
+    ...getLevers().flatMap((l) => l.actions?.map((a) => a.id) ?? []),
+    ...getSubLevers().flatMap((s) => s.actions.map((a) => a.id)),
+  ];
+  const action: LeverAction = { ...input, id: nextEntityId("AC", allIds) };
+  writeActions(scope, [...readActions(scope), action]);
+  addAuditEntry({
+    user,
+    action: "created",
+    entity: scope.subLeverId ?? scope.leverId,
+    field: "action",
+    old: "",
+    new: action.name,
+  });
+  return action;
+}
+
+export function updateAction(
+  scope: ActionScope,
+  actionId: string,
+  patch: Partial<LeverAction>,
+  user = "Utilisateur démo"
+): LeverAction {
+  const actions = readActions(scope);
+  const idx = actions.findIndex((a) => a.id === actionId);
+  if (idx === -1) throw new Error(`Action "${actionId}" introuvable`);
+  const after = { ...actions[idx], ...patch };
+  const next = [...actions];
+  next[idx] = after;
+  writeActions(scope, next);
+  addAuditEntry({
+    user,
+    action: "updated",
+    entity: scope.subLeverId ?? scope.leverId,
+    field: `action ${after.name}`,
+    old: actions[idx].status,
+    new: after.status,
+  });
+  return after;
+}
+
+export function deleteAction(scope: ActionScope, actionId: string): void {
+  writeActions(
+    scope,
+    readActions(scope).filter((a) => a.id !== actionId)
+  );
+}
+
+// ---------- Dépendances & cascade de retard ----------
+
+export function applyCascadeShift(shifts: CascadeShift[], user = "Utilisateur démo"): void {
+  shifts.forEach((shift) => {
+    if (shift.kind === "lever") {
+      updateLever(shift.id, { start: shift.newStart, end: shift.newEnd }, user);
+    } else {
+      updateSubLever(shift.id, { start: shift.newStart, end: shift.newEnd }, user);
+    }
+  });
 }
 
 export function addComment(leverId: string, text: string, user = "Utilisateur démo"): Comment[] {

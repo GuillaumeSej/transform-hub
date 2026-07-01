@@ -1,32 +1,40 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 import type { Role } from "@/types";
 
 const ROLE_KEY = "betrack_role";
-const DEFAULT_ROLE: Role = "cto";
 
 type RoleContextValue = {
-  role: Role;
-  setRole: (role: Role) => void;
+  /** null = pas de session active, doit passer par /login */
+  role: Role | null;
+  login: (role: Role) => void;
+  logout: () => void;
 };
 
 const RoleContext = createContext<RoleContextValue | null>(null);
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRoleState] = useState<Role>(DEFAULT_ROLE);
+  // Lecture synchrone (initialiseur paresseux) plutôt qu'un useEffect : AppShell vérifie `role`
+  // dans son propre effet, qui s'exécute AVANT celui d'un useEffect ici (les enfants montent et
+  // effectuent leurs effets avant le parent) — un useEffect ici arriverait trop tard et
+  // provoquerait une redirection vers /login même avec une session déjà active.
+  const [role, setRoleState] = useState<Role | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(ROLE_KEY) as Role | null;
+  });
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem(ROLE_KEY) as Role | null;
-    if (stored) setRoleState(stored);
-  }, []);
-
-  const setRole = useCallback((next: Role) => {
+  const login = useCallback((next: Role) => {
     setRoleState(next);
     window.localStorage.setItem(ROLE_KEY, next);
   }, []);
 
-  return <RoleContext.Provider value={{ role, setRole }}>{children}</RoleContext.Provider>;
+  const logout = useCallback(() => {
+    setRoleState(null);
+    window.localStorage.removeItem(ROLE_KEY);
+  }, []);
+
+  return <RoleContext.Provider value={{ role, login, logout }}>{children}</RoleContext.Provider>;
 }
 
 export function useRole(): RoleContextValue {

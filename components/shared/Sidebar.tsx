@@ -2,15 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRole } from "@/lib/hooks/useRole";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Avatar } from "@/components/shared/Avatar";
+import type { Role } from "@/types";
 
 /** Sidebar noire fixe — porté depuis `.sidebar` du prototype legacy. */
-export function Sidebar({ alertCount }: { alertCount: number }) {
-  const { role } = useRole();
+export function Sidebar({ alertCount, role }: { alertCount: number; role: Role }) {
   const pathname = usePathname();
   const nav = roles[role].nav;
 

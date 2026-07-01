@@ -1,9 +1,11 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { Bell } from "lucide-react";
-import { RoleSwitcher } from "@/components/shared/RoleSwitcher";
+import { usePathname, useRouter } from "next/navigation";
+import { Bell, LogOut } from "lucide-react";
+import { useRole } from "@/lib/hooks/useRole";
+import { roles } from "@/lib/nav-config";
 import { ResetDemoButton } from "@/components/shared/ResetDemoButton";
+import type { Role } from "@/types";
 
 const CRUMBS: Record<string, string> = {
   "/dashboard": "Executive Dashboard",
@@ -17,9 +19,20 @@ const CRUMBS: Record<string, string> = {
   "/governance": "Risks & Alerts",
 };
 
-/** Barre supérieure — porté depuis `.topbar` du prototype legacy. */
-export function Topbar({ alertCount, onReset }: { alertCount: number; onReset: () => void }) {
+/** Barre supérieure — porté depuis `.topbar` du prototype legacy. Le profil est verrouillé pour
+ * la session (choisi sur /login) : plus de sélecteur, seulement un bouton de déconnexion. */
+export function Topbar({
+  alertCount,
+  role,
+  onReset,
+}: {
+  alertCount: number;
+  role: Role;
+  onReset: () => void;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useRole();
   const isLeverDetail = pathname.startsWith("/levers/") && pathname !== "/levers";
   const label = isLeverDetail ? "Détail du levier" : (CRUMBS[pathname] ?? "BeTrack");
 
@@ -29,7 +42,9 @@ export function Topbar({ alertCount, onReset }: { alertCount: number; onReset: (
         <strong className="font-semibold text-primary">{label}</strong>
       </div>
       <div className="flex items-center gap-2">
-        <RoleSwitcher />
+        <span className="rounded-md border border-border bg-neutral-50 px-3 py-1.5 text-xs font-medium text-primary">
+          {roles[role].label}
+        </span>
         <button
           className="relative flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-bp-coral hover:text-bp-coral"
           aria-label="Alertes"
@@ -40,6 +55,17 @@ export function Topbar({ alertCount, onReset }: { alertCount: number; onReset: (
           )}
         </button>
         <ResetDemoButton onReset={onReset} />
+        <button
+          onClick={() => {
+            logout();
+            router.push("/login");
+          }}
+          className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-bp-coral hover:text-bp-coral"
+          aria-label="Se déconnecter"
+          title="Se déconnecter"
+        >
+          <LogOut size={14} />
+        </button>
       </div>
     </header>
   );
