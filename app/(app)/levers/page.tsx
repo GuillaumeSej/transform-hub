@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LayoutGrid, Plus, Table2 } from "lucide-react";
+import { LayoutGrid, Plus, Table2, TriangleAlert } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useToast } from "@/lib/hooks/useToast";
 import * as engine from "@/lib/engine";
+import { STATUS_LABEL } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { ExportButton } from "@/components/shared/ExportButton";
@@ -16,11 +17,18 @@ import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
 import { Kanban } from "@/components/shared/Kanban";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
+import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
-import type { Lever } from "@/types";
+import type { Lever, LeverStatus, PriorityLevel, RiskLevel } from "@/types";
 
-type LeverRow = Lever & { realized: number; wsName: string };
+type LeverRow = Lever & {
+  realized: number;
+  wsName: string;
+  statusLabel: string;
+  costCenterLabel: string;
+  hasAlert: boolean;
+};
 
 export default function LeversPage() {
   const data = useBeTrackData();
@@ -32,9 +40,86 @@ export default function LeversPage() {
   );
   const [newLeverOpen, setNewLeverOpen] = useState(false);
 
-  const wsFilter = searchParams.get("ws") ?? "";
-  const statusFilter = searchParams.get("status") ?? "";
-  const riskFilter = searchParams.get("risk") ?? "";
+  // Leviers/sous-leviers avec au moins une contrainte de dépendance violée (colonne ⚠ + filtre)
+  const alertedLeverIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const alert of engine.dependencyAlerts(data)) {
+      for (const entityId of [alert.sourceId, alert.targetId]) {
+        if (entityId.startsWith("SL")) {
+          const parent = data.subLevers.find((s) => s.id === entityId);
+          if (parent) ids.add(parent.leverId);
+        } else {
+          ids.add(entityId);
+        }
+      }
+    }
+    return ids;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.levers, data.subLevers]);
+
+  // Toutes les propriétés catégorielles du levier sont filtrables — les valeurs proposées sont
+  // celles réellement présentes dans les données. L'état vit dans l'URL (préfixe f_) pour rester
+  // partageable/actualisable, comme les anciens filtres ws/status/risk.
+  const filterDefs: FilterDef<Lever>[] = useMemo(
+    () => [
+      { key: "f_type", label: "Type", getValue: (l) => l.type },
+      {
+        key: "f_ws",
+        label: "Workstream",
+        getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
+      },
+      { key: "f_status", label: "Niveau (L1-L5)", getValue: (l) => STATUS_LABEL[l.status] },
+      { key: "f_owner", label: "Owner", getValue: (l) => l.owner },
+      { key: "f_sponsor", label: "Sponsor", getValue: (l) => l.sponsor },
+      { key: "f_geography", label: "Géographie", getValue: (l) => l.geography },
+      { key: "f_country", label: "Pays", getValue: (l) => l.country },
+      { key: "f_entity", label: "Entité", getValue: (l) => l.entity },
+      { key: "f_function", label: "Fonction", getValue: (l) => l.function },
+      {
+        key: "f_costCenter",
+        label: "Centre de coût",
+        getValue: (l) =>
+          data.subLevers.some((s) => s.leverId === l.id) ? "Multi-centres" : l.costCenter,
+      },
+      { key: "f_priority", label: "Priorité", getValue: (l) => l.priority },
+      { key: "f_risk", label: "Risque", getValue: (l) => l.risk },
+      {
+        key: "f_pnl",
+        label: "Compte P&L",
+        getValue: (l) => data.pnlAccounts.find((p) => p.id === l.pnlMap)?.name ?? l.pnlMap,
+      },
+      {
+        key: "f_subLevers",
+        label: "Sous-leviers",
+        getValue: (l) =>
+          data.subLevers.some((s) => s.leverId === l.id) ? "Avec sous-leviers" : "Sans sous-levier",
+      },
+      {
+        key: "f_alerts",
+        label: "Alerte dépendance",
+        getValue: (l) => (alertedLeverIds.has(l.id) ? "En alerte" : "Sans alerte"),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.workstreams, data.subLevers, data.pnlAccounts, alertedLeverIds]
+  );
+
+  const activeFilters: ActiveFilters = useMemo(() => {
+    const entries: [string, string][] = [];
+    searchParams.forEach((value, key) => {
+      if (key.startsWith("f_")) entries.push([key, value]);
+    });
+    return Object.fromEntries(entries);
+  }, [searchParams]);
+
+  const setFilters = (next: ActiveFilters) => {
+    const params = new URLSearchParams(searchParams.toString());
+    Array.from(params.keys())
+      .filter((k) => k.startsWith("f_"))
+      .forEach((k) => params.delete(k));
+    Object.entries(next).forEach(([k, v]) => params.set(k, v));
+    router.replace(`/levers?${params.toString()}`);
+  };
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -44,47 +129,136 @@ export default function LeversPage() {
   };
 
   const filteredLevers = useMemo(() => {
-    let levers = data.levers.slice();
-    if (wsFilter) levers = levers.filter((l) => l.ws === wsFilter);
-    if (statusFilter) levers = levers.filter((l) => l.status === statusFilter);
-    if (riskFilter) levers = levers.filter((l) => l.risk === riskFilter);
-    return levers;
-  }, [data.levers, wsFilter, statusFilter, riskFilter]);
+    return data.levers.filter((lever) =>
+      Object.entries(activeFilters).every(([key, value]) => {
+        const def = filterDefs.find((d) => d.key === key);
+        return !def || def.getValue(lever) === value;
+      })
+    );
+  }, [data.levers, activeFilters, filterDefs]);
 
   const rows: LeverRow[] = filteredLevers.map((l) => ({
     ...l,
     realized: engine.realizedSavings(l, data),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
+    statusLabel: STATUS_LABEL[l.status],
+    costCenterLabel: data.subLevers.some((s) => s.leverId === l.id)
+      ? `${data.subLevers.filter((s) => s.leverId === l.id).length} centres`
+      : l.costCenter,
+    hasAlert: alertedLeverIds.has(l.id),
   }));
 
   const totalNet = filteredLevers.reduce((s, l) => s + l.netSavings, 0);
   const totalReal = filteredLevers.reduce((s, l) => s + engine.realizedSavings(l, data), 0);
 
+  /** Édition inline (double-clic) : les colonnes marquées editable écrivent directement sur le
+   * levier. Les selects (statut/priorité/risque) passent par un mapping label → valeur interne. */
+  const handleCellUpdate = (rowId: string, field: keyof LeverRow, value: string | number) => {
+    const patch: Partial<Lever> = {};
+    if (field === "statusLabel") {
+      const status = (Object.keys(STATUS_LABEL) as LeverStatus[]).find(
+        (s) => STATUS_LABEL[s] === value
+      );
+      if (status) patch.status = status;
+    } else if (field === "priority") {
+      patch.priority = value as PriorityLevel;
+    } else if (field === "risk") {
+      patch.risk = value as RiskLevel;
+    } else if (field === "netSavings" || field === "fteImpact") {
+      patch[field] = Number(value);
+    } else if (
+      field === "name" ||
+      field === "owner" ||
+      field === "sponsor" ||
+      field === "geography" ||
+      field === "country" ||
+      field === "function" ||
+      field === "costCenter" ||
+      field === "start" ||
+      field === "end"
+    ) {
+      patch[field] = String(value);
+    } else {
+      return;
+    }
+    data.updateLever(rowId, patch);
+    showToast("Levier mis à jour", "", "success");
+  };
+
   const columns: ColumnDef<LeverRow>[] = [
     {
       key: "code",
       label: "Code",
-      render: (r) => <span className="font-mono text-[11px] text-secondary">{r.code}</span>,
+      width: "90px",
+      render: (r) => (
+        <span className="inline-flex items-center gap-1 font-mono text-[11px] text-secondary">
+          {r.hasAlert && (
+            <TriangleAlert size={12} className="text-rag-red" aria-label="Alerte dépendance" />
+          )}
+          {r.code}
+        </span>
+      ),
     },
-    { key: "name", label: "Levier", render: (r) => <strong>{r.name}</strong> },
+    { key: "name", label: "Levier", editable: true, render: (r) => <strong>{r.name}</strong> },
+    { key: "type", label: "Type" },
     { key: "wsName", label: "Workstream" },
     {
       key: "owner",
       label: "Owner",
+      editable: true,
       render: (r) => (
         <span className="inline-flex items-center gap-1.5">
           <Avatar initials={r.ownerInit} size="sm" /> {r.owner}
         </span>
       ),
     },
-    { key: "geography", label: "Géo" },
-    { key: "function", label: "Function" },
-    { key: "netSavings", label: "Net €M", align: "right", render: (r) => r.netSavings.toFixed(1) },
+    { key: "sponsor", label: "Sponsor", editable: true },
+    { key: "geography", label: "Géo", editable: true },
+    { key: "country", label: "Pays", editable: true },
+    { key: "costCenterLabel", label: "Centre de coût" },
+    { key: "start", label: "Début", editable: true },
+    { key: "end", label: "Fin", editable: true },
+    {
+      key: "netSavings",
+      label: "Net €M",
+      align: "right",
+      editable: true,
+      type: "number",
+      render: (r) => r.netSavings.toFixed(1),
+    },
     { key: "realized", label: "Réalisé", align: "right", render: (r) => r.realized.toFixed(1) },
     { key: "progress", label: "Progress", render: (r) => <ProgressBar pct={r.progress} /> },
-    { key: "fteImpact", label: "FTE", align: "right" },
-    { key: "risk", label: "Risk", render: (r) => <StatusBadge risk={r.risk} /> },
-    { key: "status", label: "Status", render: (r) => <StageBadge status={r.status} /> },
+    {
+      key: "fteImpact",
+      label: "ETP",
+      align: "right",
+      editable: true,
+      type: "number",
+    },
+    {
+      key: "priority",
+      label: "Priorité",
+      editable: true,
+      type: "select",
+      options: data.priorityLevels,
+      render: (r) => <StatusBadge risk={r.priority} />,
+    },
+    {
+      key: "risk",
+      label: "Risque",
+      editable: true,
+      type: "select",
+      options: data.riskLevels,
+      render: (r) => <StatusBadge risk={r.risk} />,
+    },
+    {
+      key: "statusLabel",
+      label: "Niveau",
+      editable: true,
+      type: "select",
+      options: data.leverStatuses.map((s) => STATUS_LABEL[s]),
+      render: (r) => <StageBadge status={r.status} />,
+    },
   ];
 
   return (
@@ -131,42 +305,12 @@ export default function LeversPage() {
       <Card>
         <CardBody flush>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-            <select
-              value={wsFilter}
-              onChange={(e) => setParam("ws", e.target.value)}
-              className="rounded-sm border border-border px-2.5 py-1.5 text-xs"
-            >
-              <option value="">Tous workstreams</option>
-              {data.workstreams.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => setParam("status", e.target.value)}
-              className="rounded-sm border border-border px-2.5 py-1.5 text-xs"
-            >
-              <option value="">Tous statuts</option>
-              {data.leverStatuses.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <select
-              value={riskFilter}
-              onChange={(e) => setParam("risk", e.target.value)}
-              className="rounded-sm border border-border px-2.5 py-1.5 text-xs"
-            >
-              <option value="">Tous risques</option>
-              {data.riskLevels.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
+            <FilterBar
+              items={data.levers}
+              defs={filterDefs}
+              active={activeFilters}
+              onChange={setFilters}
+            />
 
             <div className="ml-auto flex overflow-hidden rounded-md border border-border">
               <button
@@ -196,6 +340,7 @@ export default function LeversPage() {
         <EditableTable
           data={rows}
           columns={columns}
+          onCellUpdate={handleCellUpdate}
           onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
           searchPlaceholder="Rechercher (nom, code, owner...)"
           defaultSort={{ key: "risk", direction: "desc" }}

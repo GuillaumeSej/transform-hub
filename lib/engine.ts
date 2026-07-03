@@ -1,8 +1,10 @@
 import type {
   ActionStatus,
   BeTrackData,
+  DependencyType,
   Lever,
   LeverAction,
+  LeverDependency,
   ProgramSummary,
   RiskLevel,
   SubLever,
@@ -228,7 +230,7 @@ type ScheduleEntity = {
   name: string;
   start: string;
   end: string;
-  dependencies: string[];
+  dependencies: LeverDependency[];
 };
 
 function toScheduleEntities(data: BeTrackData): ScheduleEntity[] {
@@ -261,22 +263,31 @@ export type CascadeShift = {
   newEnd: string;
 };
 
+export type CascadeResult = {
+  /** Décalages proposés — sous-leviers uniquement (jamais appliqués sans confirmation). */
+  shifts: CascadeShift[];
+  /** Leviers dépendants touchés par le retard : alertés, mais leurs dates ne sont JAMAIS
+   * modifiées automatiquement (décision inter-leviers = décision métier, hors outil). */
+  impactedLevers: { id: string; name: string; dependencyType: DependencyType }[];
+};
+
 /**
- * Calcule (sans rien muter) le décalage à proposer sur les entités dépendantes (leviers et
- * sous-leviers confondus) quand `entityId` glisse de `oldEnd` à `newEnd`. Décalage rigide : même
- * delta de jours appliqué en cascade transitive, avec garde-fou anti-cycle.
+ * Calcule (sans rien muter) l'impact d'un glissement de `oldEnd` à `newEnd` sur `entityId` :
+ * décalage rigide proposé en cascade transitive sur les SOUS-LEVIERS dépendants (même delta de
+ * jours, garde-fou anti-cycle), et simple liste d'alerte pour les LEVIERS dépendants.
  */
 export function computeCascadeShift(
   entityId: string,
   oldEnd: string,
   newEnd: string,
   data: BeTrackData
-): CascadeShift[] {
+): CascadeResult {
   const deltaDays = daysBetween(oldEnd, newEnd);
-  if (deltaDays <= 0) return [];
+  if (deltaDays <= 0) return { shifts: [], impactedLevers: [] };
 
   const entities = toScheduleEntities(data);
   const shifts: CascadeShift[] = [];
+  const impactedLevers: CascadeResult["impactedLevers"] = [];
   const visited = new Set<string>([entityId]);
   let frontier = [entityId];
 
@@ -284,10 +295,17 @@ export function computeCascadeShift(
     const nextFrontier: string[] = [];
     for (const currentId of frontier) {
       const dependents = entities.filter(
-        (e) => e.dependencies.includes(currentId) && !visited.has(e.id)
+        (e) => e.dependencies.some((d) => d.targetId === currentId) && !visited.has(e.id)
       );
       for (const dep of dependents) {
         visited.add(dep.id);
+        if (dep.kind === "lever") {
+          const link = dep.dependencies.find((d) => d.targetId === currentId);
+          impactedLevers.push({ id: dep.id, name: dep.name, dependencyType: link?.type ?? "FS" });
+          // On n'étend pas la cascade au-delà d'un levier : ses dates ne bougent pas, donc ses
+          // propres dépendants ne glissent pas non plus.
+          continue;
+        }
         shifts.push({
           id: dep.id,
           kind: dep.kind,
@@ -303,5 +321,73 @@ export function computeCascadeShift(
     frontier = nextFrontier;
   }
 
-  return shifts;
+  return { shifts, impactedLevers };
+}
+
+// ---------- Alertes de dépendances inter-leviers ----------
+
+export type DependencyAlert = {
+  sourceId: string;
+  sourceName: string;
+  sourceKind: "lever" | "subLever";
+  targetId: string;
+  targetName: string;
+  type: DependencyType;
+  message: string;
+};
+
+/** Tolérance (jours) pour les contraintes de simultanéité SS / FF. */
+const SIMULTANEITY_TOLERANCE_DAYS = 7;
+
+/**
+ * Évalue toutes les dépendances (leviers et sous-leviers) contre les dates actuelles et retourne
+ * les contraintes violées. Aucune date n'est modifiée : c'est du signalement pur, à afficher en
+ * alerte dans la bibliothèque et sur les fiches leviers.
+ */
+export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
+  const entities = toScheduleEntities(data);
+  const byId = new Map(entities.map((e) => [e.id, e]));
+  const alerts: DependencyAlert[] = [];
+
+  for (const source of entities) {
+    for (const dep of source.dependencies) {
+      const target = byId.get(dep.targetId);
+      if (!target) continue;
+
+      let violated = false;
+      let message = "";
+      switch (dep.type) {
+        case "FS":
+          violated = target.end > source.start;
+          message = `"${target.name}" se termine le ${target.end}, après le début prévu (${source.start})`;
+          break;
+        case "SS":
+          violated = Math.abs(daysBetween(target.start, source.start)) > SIMULTANEITY_TOLERANCE_DAYS;
+          message = `Débuts désynchronisés : ${target.start} vs ${source.start} (tolérance ${SIMULTANEITY_TOLERANCE_DAYS} j)`;
+          break;
+        case "FF":
+          violated = Math.abs(daysBetween(target.end, source.end)) > SIMULTANEITY_TOLERANCE_DAYS;
+          message = `Fins désynchronisées : ${target.end} vs ${source.end} (tolérance ${SIMULTANEITY_TOLERANCE_DAYS} j)`;
+          break;
+        case "SF":
+          violated = target.start > source.end;
+          message = `"${target.name}" démarre le ${target.start}, après la fin prévue (${source.end})`;
+          break;
+      }
+
+      if (violated) {
+        alerts.push({
+          sourceId: source.id,
+          sourceName: source.name,
+          sourceKind: source.kind,
+          targetId: target.id,
+          targetName: target.name,
+          type: dep.type,
+          message,
+        });
+      }
+    }
+  }
+
+  return alerts;
 }

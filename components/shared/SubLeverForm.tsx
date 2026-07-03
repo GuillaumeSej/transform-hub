@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@/components/shared/Button";
+import { DependencyEditor } from "@/components/shared/DependencyEditor";
+import { STATUS_LABEL } from "@/lib/status-config";
 import type { BeTrackData, LeverStatus, SubLever } from "@/types";
 
 const inputClass =
@@ -46,6 +48,8 @@ export function SubLeverForm({
   const [values, setValues] = useState<SubLeverFormValues>({
     leverId,
     name: "",
+    owner: "",
+    ownerInit: "",
     costCenter: "",
     pnlMap: data.pnlAccounts[0]?.id ?? "",
     grossSavings: 0,
@@ -68,15 +72,6 @@ export function SubLeverForm({
 
   const num = (v: string) => (v === "" ? 0 : Number(v));
 
-  const dependencyOptions = [
-    ...data.levers
-      .filter((l) => l.id !== leverId)
-      .map((l) => ({ id: l.id, label: `${l.code} — ${l.name}` })),
-    ...data.subLevers
-      .filter((s) => s.id !== excludeSubLeverId)
-      .map((s) => ({ id: s.id, label: `${s.id} — ${s.name}` })),
-  ];
-
   return (
     <form
       onSubmit={(e) => {
@@ -97,6 +92,21 @@ export function SubLeverForm({
             />
           </Field>
         </div>
+        <Field label={`Owner (défaut : ${parentLever?.owner ?? "owner du levier"})`}>
+          <input
+            className={inputClass}
+            value={values.owner ?? ""}
+            onChange={(e) => set("owner", e.target.value)}
+          />
+        </Field>
+        <Field label="Initiales owner">
+          <input
+            className={inputClass}
+            maxLength={3}
+            value={values.ownerInit ?? ""}
+            onChange={(e) => set("ownerInit", e.target.value.toUpperCase())}
+          />
+        </Field>
         <Field label="Centre de coût">
           <input
             required
@@ -134,7 +144,7 @@ export function SubLeverForm({
             onChange={(e) => set("end", e.target.value)}
           />
         </Field>
-        <Field label="Statut">
+        <Field label="Niveau d'avancement (L1-L5)">
           <select
             className={inputClass}
             value={values.status}
@@ -142,7 +152,7 @@ export function SubLeverForm({
           >
             {data.leverStatuses.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {STATUS_LABEL[s]}
               </option>
             ))}
           </select>
@@ -211,25 +221,13 @@ export function SubLeverForm({
           />
         </Field>
         <div className="col-span-2">
-          <Field label="Dépendances (leviers / sous-leviers) — Ctrl/Cmd+clic pour sélection multiple">
-            <select
-              multiple
-              className={`${inputClass} h-28`}
-              value={values.dependencies}
-              onChange={(e) =>
-                set(
-                  "dependencies",
-                  Array.from(e.target.selectedOptions).map((o) => o.value)
-                )
-              }
-            >
-              {dependencyOptions.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <span className={labelClass}>Dépendances (leviers / sous-leviers)</span>
+          <DependencyEditor
+            data={data}
+            value={values.dependencies}
+            onChange={(next) => set("dependencies", next)}
+            excludeIds={[leverId, ...(excludeSubLeverId ? [excludeSubLeverId] : [])]}
+          />
         </div>
       </div>
 

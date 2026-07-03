@@ -4,15 +4,13 @@ import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/shared/Avatar";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { fmtCurr } from "@/lib/engine";
+import { STATUS_CYCLE, STATUS_LABEL } from "@/lib/status-config";
 import type { Lever, LeverStatus } from "@/types";
 
-const COLUMNS: { status: LeverStatus; label: string }[] = [
-  { status: "idea", label: "Idea" },
-  { status: "qualified", label: "Qualified" },
-  { status: "validated", label: "Validated" },
-  { status: "in_progress", label: "In Progress" },
-  { status: "delivered", label: "Delivered" },
-];
+const COLUMNS: { status: LeverStatus; label: string }[] = STATUS_CYCLE.map((status) => ({
+  status,
+  label: STATUS_LABEL[status],
+}));
 
 /** Vue kanban du pipeline de leviers par statut — porté depuis `.kanban`/`.kcard` du prototype legacy. */
 export function Kanban({

@@ -1,5 +1,14 @@
 import * as engine from "@/lib/engine";
-import type { BeTrackData, Lever, LeverStatus, MaturityLevel, PriorityLevel, RiskLevel } from "@/types";
+import { STATUS_LABEL } from "@/lib/status-config";
+import type {
+  BeTrackData,
+  DependencyType,
+  Lever,
+  LeverDependency,
+  LeverStatus,
+  PriorityLevel,
+  RiskLevel,
+} from "@/types";
 
 /**
  * Mapping Excel <-> Lever partagé par ExportButton et ExcelUploadButton, pour garantir que
@@ -12,8 +21,35 @@ const ENUM_LISTS = {
   status: ["idea", "qualified", "validated", "in_progress", "delivered", "cancelled"] as LeverStatus[],
   risk: ["low", "medium", "high", "critical"] as RiskLevel[],
   priority: ["low", "medium", "high", "critical"] as PriorityLevel[],
-  maturity: ["L1", "L2", "L3", "L4", "L5"] as MaturityLevel[],
 };
+
+const DEP_TYPES: DependencyType[] = ["FS", "SS", "FF", "SF"];
+
+/** "L002:FS; SL003:SS" -> LeverDependency[] — tolérant : id sans `:type` = FS. */
+function parseDependencies(raw: string): LeverDependency[] {
+  if (!raw) return [];
+  return raw
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [targetId, typeRaw] = entry.split(":").map((s) => s.trim());
+      const type = DEP_TYPES.find((t) => t === typeRaw?.toUpperCase()) ?? "FS";
+      return { targetId, type };
+    })
+    .filter((d) => d.targetId.length > 0);
+}
+
+/** Statut accepté sous forme de clé ("in_progress") ou de label L1-L5 ("L4 · Planifié", "L4",
+ * "Planifié"). */
+function parseStatus(raw: string): LeverStatus | undefined {
+  const s = raw.toLowerCase();
+  return ENUM_LISTS.status.find((st) => {
+    const label = STATUS_LABEL[st].toLowerCase();
+    const [level, name] = label.split(" · ");
+    return st === s || label === s || level === s || name === s;
+  });
+}
 
 export function leverToExcelRow(lever: Lever, data: BeTrackData): Record<string, string | number> {
   const ws = data.workstreams.find((w) => w.id === lever.ws);
@@ -35,9 +71,8 @@ export function leverToExcelRow(lever: Lever, data: BeTrackData): Record<string,
     "Compte P&L impacté": pnl?.name ?? lever.pnlMap,
     "Date de départ": lever.start,
     "Date de fin estimée": lever.end,
-    Statut: lever.status,
+    Statut: STATUS_LABEL[lever.status],
     "Progression (%)": lever.progress,
-    "Niveau d'avancement": lever.maturityLevel,
     Priorité: lever.priority,
     Risque: lever.risk,
     "Impact estimé brut (€M)": lever.grossSavings,
@@ -49,7 +84,9 @@ export function leverToExcelRow(lever: Lever, data: BeTrackData): Record<string,
     "CAPEX (€M)": lever.capex,
     "OPEX one-off (€M)": lever.opexOneOff,
     "OPEX récurrent (€M/an)": lever.opexRec,
-    "Dépendances (IDs, séparées par ;)": lever.dependencies.join("; "),
+    "Dépendances (ID:type, séparées par ;)": lever.dependencies
+      .map((d) => `${d.targetId}:${d.type}`)
+      .join("; "),
     Description: lever.description,
     "Créé le": lever.createdAt,
     "Dernière mise à jour": lever.lastUpdate,
@@ -119,13 +156,11 @@ export function parseLeverExcelRow(
     );
   }
 
-  const depsRaw = str(row["Dépendances (IDs, séparées par ;)"]);
-  const dependencies = depsRaw
-    ? depsRaw
-        .split(";")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
+  // Nouveau format "ID:type" avec fallback sur l'ancien header "IDs" (fichiers déjà exportés).
+  const depsRaw =
+    str(row["Dépendances (ID:type, séparées par ;)"]) ||
+    str(row["Dépendances (IDs, séparées par ;)"]);
+  const dependencies = parseDependencies(depsRaw);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -146,15 +181,17 @@ export function parseLeverExcelRow(
     pnlMap: pnl?.id ?? data.pnlAccounts[0].id,
     start: str(row["Date de départ"]) || today,
     end: str(row["Date de fin estimée"]) || today,
-    status: enumOr(row["Statut"], ENUM_LISTS.status, "idea", warnings, `Ligne ${rowNumber} : statut`),
+    status: (() => {
+      const raw = str(row["Statut"]);
+      if (!raw) return "idea";
+      const parsed = parseStatus(raw);
+      if (!parsed) {
+        warnings.push(`Ligne ${rowNumber} : statut "${raw}" inconnu — "L1 · Idée" utilisé`);
+        return "idea";
+      }
+      return parsed;
+    })(),
     progress: Math.min(100, Math.max(0, numOr(row["Progression (%)"], 0))),
-    maturityLevel: enumOr(
-      row["Niveau d'avancement"],
-      ENUM_LISTS.maturity,
-      "L1",
-      warnings,
-      `Ligne ${rowNumber} : niveau d'avancement`
-    ),
     priority: enumOr(
       row["Priorité"],
       ENUM_LISTS.priority,

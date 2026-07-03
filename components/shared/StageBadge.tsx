@@ -1,14 +1,6 @@
 import { cn } from "@/lib/utils";
+import { STATUS_LABEL } from "@/lib/status-config";
 import type { LeverStatus } from "@/types";
-
-const LABELS: Record<LeverStatus, string> = {
-  idea: "Idea",
-  qualified: "Qualified",
-  validated: "Validated",
-  in_progress: "In Progress",
-  delivered: "Delivered",
-  cancelled: "Cancelled",
-};
 
 const STYLES: Record<LeverStatus, string> = {
   idea: "bg-neutral-100 text-secondary",
@@ -19,7 +11,7 @@ const STYLES: Record<LeverStatus, string> = {
   cancelled: "bg-rag-red-light text-rag-red",
 };
 
-/** Badge de stade du levier — porté depuis `.badge-*` (statut) du prototype legacy. */
+/** Badge du niveau d'avancement L1-L5 du levier (labels dans lib/status-config.ts). */
 export function StageBadge({ status, className }: { status: LeverStatus; className?: string }) {
   return (
     <span
@@ -29,7 +21,7 @@ export function StageBadge({ status, className }: { status: LeverStatus; classNa
         className
       )}
     >
-      {LABELS[status]}
+      {STATUS_LABEL[status]}
     </span>
   );
 }

@@ -10,7 +10,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { AuditEntry, Comment, Lever, SubLever } from "@/types";
+import type { AuditEntry, Comment, Lever, LeverDependency, SubLever } from "@/types";
 
 /**
  * Couche Firestore pour le périmètre "leviers" (levers, sous-leviers, commentaires, journal
@@ -29,15 +29,46 @@ const metaDoc = () => doc(db, "meta", "levers");
 const commentsDoc = () => doc(db, "leverMeta", "comments");
 const auditDoc = () => doc(db, "leverMeta", "auditLog");
 
+/** Normalise les dépendances lues depuis Firestore : les documents écrits avant l'introduction
+ * des types de dépendance stockent des ids bruts (`string[]`) — on les convertit en
+ * `{ targetId, type: "FS" }` à la lecture, sans bump du schéma (un bump forcerait un reseed qui
+ * écraserait les données saisies par l'équipe). */
+function normalizeDependencies(deps: unknown): LeverDependency[] {
+  if (!Array.isArray(deps)) return [];
+  return deps
+    .map((d): LeverDependency | null => {
+      if (typeof d === "string") return { targetId: d, type: "FS" };
+      if (d && typeof d === "object" && typeof (d as LeverDependency).targetId === "string") {
+        const type = (d as LeverDependency).type;
+        return {
+          targetId: (d as LeverDependency).targetId,
+          type: type === "SS" || type === "FF" || type === "SF" ? type : "FS",
+        };
+      }
+      return null;
+    })
+    .filter((d): d is LeverDependency => d !== null);
+}
+
 export function subscribeLevers(cb: (levers: Lever[]) => void): Unsubscribe {
   return onSnapshot(leversCol(), (snap) => {
-    cb(snap.docs.map((d) => d.data() as Lever));
+    cb(
+      snap.docs.map((d) => {
+        const lever = d.data() as Lever;
+        return { ...lever, dependencies: normalizeDependencies(lever.dependencies) };
+      })
+    );
   });
 }
 
 export function subscribeSubLevers(cb: (subLevers: SubLever[]) => void): Unsubscribe {
   return onSnapshot(subLeversCol(), (snap) => {
-    cb(snap.docs.map((d) => d.data() as SubLever));
+    cb(
+      snap.docs.map((d) => {
+        const subLever = d.data() as SubLever;
+        return { ...subLever, dependencies: normalizeDependencies(subLever.dependencies) };
+      })
+    );
   });
 }
 
