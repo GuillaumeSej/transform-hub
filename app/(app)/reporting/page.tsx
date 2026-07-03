@@ -20,6 +20,7 @@ type ActionRow = LeverAction & {
   leverId: string;
   leverName: string;
   subLeverName: string | null;
+  ownerName: string;
 };
 
 /** Reporting générique (STRETCH) pour la plupart des rôles ; pour le Lever Owner, la nav
@@ -49,6 +50,7 @@ export default function ReportingPage() {
             leverId: lever.id,
             leverName: lever.name,
             subLeverName: sl.name,
+            ownerName: sl.owner || lever.owner,
           })
         )
       );
@@ -59,6 +61,7 @@ export default function ReportingPage() {
         leverId: lever.id,
         leverName: lever.name,
         subLeverName: null,
+        ownerName: lever.owner,
       })
     );
   });
@@ -76,6 +79,7 @@ export default function ReportingPage() {
       label: "Sous-levier",
       render: (r) => r.subLeverName ?? "—",
     },
+    { key: "ownerName", label: "Owner" },
     { key: "start", label: "Début" },
     { key: "end", label: "Fin" },
     {

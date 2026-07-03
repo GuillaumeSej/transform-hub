@@ -91,7 +91,6 @@ export function useBeTrackData() {
       leverStatuses: mockData.leverStatuses,
       riskLevels: mockData.riskLevels,
       priorityLevels: mockData.priorityLevels,
-      maturityLevels: mockData.maturityLevels,
       leverTypes: mockData.leverTypes,
       geographies: mockData.geographies,
       functions: mockData.functions,

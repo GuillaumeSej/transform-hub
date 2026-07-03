@@ -1,12 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, BarChart3, LayoutGrid, Pencil, Plus, Send } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BarChart3,
+  Info,
+  LayoutGrid,
+  Link2,
+  Pencil,
+  Plus,
+  Send,
+  TriangleAlert,
+} from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useToast } from "@/lib/hooks/useToast";
 import * as engine from "@/lib/engine";
-import type { CascadeShift } from "@/lib/engine";
+import type { CascadeResult } from "@/lib/engine";
+import {
+  DEPENDENCY_TYPE_DESCRIPTION,
+  DEPENDENCY_TYPE_LABEL,
+  STATUS_CYCLE,
+  STATUS_LEVEL,
+  STATUS_ORDER,
+  STATUS_SHORT_LABEL,
+} from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { Avatar } from "@/components/shared/Avatar";
@@ -14,6 +33,7 @@ import { StageBadge } from "@/components/shared/StageBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Modal } from "@/components/shared/Modal";
+import { DependencyEditor } from "@/components/shared/DependencyEditor";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
 import { SubLeverForm, type SubLeverFormValues } from "@/components/shared/SubLeverForm";
 import { ActionForm, type ActionFormValues } from "@/components/shared/ActionForm";
@@ -31,7 +51,7 @@ const TAB_LABELS: Record<Tab, string> = {
   collab: "Collaboration",
 };
 
-type CascadeProposal = { shifts: CascadeShift[] };
+type CascadeProposal = CascadeResult & { checked: Record<string, boolean> };
 
 export default function LeverDetailClient() {
   const data = useBeTrackData();
@@ -51,8 +71,10 @@ export default function LeverDetailClient() {
   const [activeSubLeverId, setActiveSubLeverId] = useState<string | null>(null);
   const [actionView, setActionView] = useState<"kanban" | "gantt">("kanban");
   const [cascadeProposal, setCascadeProposal] = useState<CascadeProposal | null>(null);
+  const [depsModalOpen, setDepsModalOpen] = useState(false);
 
   const lever = data.getLeverById(id);
+  const allDependencyAlerts = useMemo(() => engine.dependencyAlerts(data), [data]);
 
   if (!lever) {
     return (
@@ -78,15 +100,39 @@ export default function LeverDetailClient() {
     ? (subLevers.find((s) => s.id === activeSubLeverId) ?? subLevers[0])
     : undefined;
   const actions = activeSubLever ? activeSubLever.actions : (lever.actions ?? []);
+  const hasAnyActions =
+    (lever.actions?.length ?? 0) > 0 || subLevers.some((s) => s.actions.length > 0);
   const actionScope = activeSubLever
     ? { leverId: lever.id, subLeverId: activeSubLever.id }
     : { leverId: lever.id };
 
-  /** Vérifie si un décalage de date en implique un autre en cascade sur les entités dépendantes,
-   * et propose la confirmation à l'utilisateur (jamais appliqué automatiquement). */
+  // Alertes de dépendance liées à ce levier et ses sous-leviers (dans les deux sens)
+  const localIds = new Set([lever.id, ...subLevers.map((s) => s.id)]);
+  const leverAlerts = allDependencyAlerts.filter(
+    (a) => localIds.has(a.sourceId) || localIds.has(a.targetId)
+  );
+
+  // Qui dépend de ce levier (recherche inverse, leviers et sous-leviers confondus)
+  const dependents = [
+    ...data.levers
+      .filter((l) => l.dependencies.some((d) => d.targetId === lever.id))
+      .map((l) => ({ id: l.id, name: l.name, type: l.dependencies.find((d) => d.targetId === lever.id)!.type })),
+    ...data.subLevers
+      .filter((s) => s.leverId !== lever.id && s.dependencies.some((d) => d.targetId === lever.id))
+      .map((s) => ({ id: s.id, name: `${s.name} (sous-levier)`, type: s.dependencies.find((d) => d.targetId === lever.id)!.type })),
+  ];
+
+  /** Vérifie si un décalage de date en implique d'autres : les sous-leviers dépendants reçoivent
+   * une proposition de décalage (à confirmer, sélective), les leviers dépendants sont uniquement
+   * alertés — leurs dates ne bougent jamais automatiquement. */
   const checkCascade = (entityId: string, oldEnd: string, newEnd: string) => {
-    const shifts = engine.computeCascadeShift(entityId, oldEnd, newEnd, data);
-    if (shifts.length > 0) setCascadeProposal({ shifts });
+    const result = engine.computeCascadeShift(entityId, oldEnd, newEnd, data);
+    if (result.shifts.length > 0 || result.impactedLevers.length > 0) {
+      setCascadeProposal({
+        ...result,
+        checked: Object.fromEntries(result.shifts.map((s) => [s.id, true])),
+      });
+    }
   };
 
   return (
@@ -104,12 +150,76 @@ export default function LeverDetailClient() {
           <h1 className="mt-0.5 text-xl font-bold text-primary">{lever.name}</h1>
         </div>
         <div className="flex items-center gap-2">
-          <StageBadge status={lever.status} />
+          {lever.status === "cancelled" && <StageBadge status="cancelled" />}
           <Button variant="outline" onClick={() => setEditOpen(true)}>
             <Pencil size={13} /> Modifier le levier
           </Button>
         </div>
       </div>
+
+      {/* Stepper du cycle de vie L1→L5 — clic pour changer de niveau (L5 automatique à 100 % du
+          plan d'action, non cliquable). */}
+      {lever.status !== "cancelled" && (
+        <div className="mb-4 rounded-lg border border-border bg-white px-4 py-3">
+          <div className="flex items-center gap-1">
+            {STATUS_CYCLE.map((s, i) => {
+              const isCurrent = lever.status === s;
+              const isPast = STATUS_ORDER[lever.status] > STATUS_ORDER[s];
+              const isAuto = s === "delivered";
+              return (
+                <div key={s} className="flex flex-1 items-center gap-1">
+                  <button
+                    onClick={() => {
+                      if (isAuto || isCurrent) return;
+                      data.updateLever(lever.id, { status: s });
+                      showToast("Niveau mis à jour", `${lever.name} : ${STATUS_LEVEL[s]} · ${STATUS_SHORT_LABEL[s]}`, "success");
+                    }}
+                    disabled={isAuto}
+                    title={
+                      isAuto
+                        ? "L5 est atteint automatiquement quand le plan d'action est à 100 %"
+                        : `Passer en ${STATUS_LEVEL[s]} · ${STATUS_SHORT_LABEL[s]}`
+                    }
+                    className={`flex flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 transition ${
+                      isCurrent
+                        ? "border-bp-coral bg-bp-coral text-white"
+                        : isPast
+                          ? "border-rag-green bg-rag-green-light text-rag-green-dark"
+                          : "border-border bg-neutral-50 text-secondary"
+                    } ${isAuto ? "cursor-not-allowed opacity-80" : "hover:border-bp-coral"}`}
+                  >
+                    <span className="text-[13px] font-bold">{STATUS_LEVEL[s]}</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide">
+                      {STATUS_SHORT_LABEL[s]}
+                    </span>
+                  </button>
+                  {i < STATUS_CYCLE.length - 1 && (
+                    <ArrowRight size={12} className="shrink-0 text-tertiary" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {hasAnyActions && STATUS_ORDER[lever.status] < STATUS_ORDER.in_progress && (
+            <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
+              <span className="flex items-center gap-1.5 text-xs text-info-blue">
+                <Info size={13} /> Des actions sont planifiées sur ce levier — il peut passer en L4
+                · Planifié.
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  data.updateLever(lever.id, { status: "in_progress" });
+                  showToast("Niveau mis à jour", `${lever.name} : L4 · Planifié`, "success");
+                }}
+              >
+                Passer en L4
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <Modal open={editOpen} onOpenChange={setEditOpen} title="Modifier le levier" maxWidth="760px">
         <LeverForm
@@ -208,50 +318,134 @@ export default function LeverDetailClient() {
       </Modal>
 
       <Modal
+        open={depsModalOpen}
+        onOpenChange={setDepsModalOpen}
+        title="Gérer les dépendances du levier"
+        maxWidth="560px"
+        footer={
+          <Button variant="primary" onClick={() => setDepsModalOpen(false)}>
+            Terminé
+          </Button>
+        }
+      >
+        <p className="mb-3 text-xs text-secondary">
+          Les dépendances sont suivies et alertées, mais les dates des leviers ne sont jamais
+          modifiées automatiquement en cas de retard.
+        </p>
+        <DependencyEditor
+          data={data}
+          value={lever.dependencies}
+          onChange={(next) => data.updateLever(lever.id, { dependencies: next })}
+          excludeIds={[lever.id, ...subLevers.map((s) => s.id)]}
+        />
+      </Modal>
+
+      <Modal
         open={cascadeProposal !== null}
         onOpenChange={(open) => !open && setCascadeProposal(null)}
-        title="Décalage à appliquer sur les dépendances"
+        title="Impact du retard sur les dépendances"
         maxWidth="560px"
         footer={
           <>
             <Button variant="ghost" onClick={() => setCascadeProposal(null)}>
-              Ignorer
+              Ne rien décaler
             </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                data.applyCascadeShift(cascadeProposal!.shifts);
-                showToast(
-                  "Décalage appliqué",
-                  `${cascadeProposal!.shifts.length} élément(s) mis à jour`,
-                  "success"
-                );
-                setCascadeProposal(null);
-              }}
-            >
-              Appliquer le décalage
-            </Button>
+            {(cascadeProposal?.shifts.length ?? 0) > 0 && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  const selected = cascadeProposal!.shifts.filter(
+                    (s) => cascadeProposal!.checked[s.id]
+                  );
+                  if (selected.length > 0) {
+                    data.applyCascadeShift(selected);
+                    showToast(
+                      "Décalage appliqué",
+                      `${selected.length} sous-levier(s) redaté(s)`,
+                      "success"
+                    );
+                  }
+                  setCascadeProposal(null);
+                }}
+              >
+                Décaler la sélection (
+                {cascadeProposal
+                  ? cascadeProposal.shifts.filter((s) => cascadeProposal.checked[s.id]).length
+                  : 0}
+                )
+              </Button>
+            )}
           </>
         }
       >
-        <p className="mb-3 text-[13px] text-secondary">
-          Ce retard impacte {cascadeProposal?.shifts.length} élément(s) dépendant(s). Voulez-vous
-          décaler leurs dates du même nombre de jours ?
-        </p>
-        <div className="space-y-2">
-          {cascadeProposal?.shifts.map((s) => (
-            <div key={s.id} className="rounded-md border border-border bg-neutral-50 p-2.5 text-xs">
-              <div className="font-semibold text-primary">
-                {s.kind === "lever" ? "Levier" : "Sous-levier"} · {s.name}
-              </div>
-              <div className="mt-1 text-tertiary">
-                {s.oldStart} → {s.oldEnd}{" "}
-                <span className="mx-1 font-semibold text-bp-coral">devient</span> {s.newStart} →{" "}
-                {s.newEnd}
-              </div>
+        {(cascadeProposal?.shifts.length ?? 0) > 0 && (
+          <>
+            <p className="mb-2 text-[13px] font-semibold text-primary">
+              Décalages proposés — sous-leviers dépendants
+            </p>
+            <p className="mb-3 text-xs text-secondary">
+              Cochez ceux à redater du même nombre de jours. Rien n&apos;est appliqué sans votre
+              confirmation.
+            </p>
+            <div className="space-y-2">
+              {cascadeProposal?.shifts.map((s) => (
+                <label
+                  key={s.id}
+                  className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-neutral-50 p-2.5 text-xs"
+                >
+                  <input
+                    type="checkbox"
+                    checked={cascadeProposal.checked[s.id] ?? false}
+                    onChange={(e) =>
+                      setCascadeProposal({
+                        ...cascadeProposal,
+                        checked: { ...cascadeProposal.checked, [s.id]: e.target.checked },
+                      })
+                    }
+                    className="mt-0.5 accent-[#FF3D3D]"
+                  />
+                  <span>
+                    <span className="font-semibold text-primary">{s.name}</span>
+                    <span className="mt-1 block text-tertiary">
+                      {s.oldStart} → {s.oldEnd}{" "}
+                      <span className="mx-1 font-semibold text-bp-coral">devient</span> {s.newStart}{" "}
+                      → {s.newEnd}
+                    </span>
+                  </span>
+                </label>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
+        {(cascadeProposal?.impactedLevers.length ?? 0) > 0 && (
+          <>
+            <p className="mb-2 mt-4 flex items-center gap-1.5 text-[13px] font-semibold text-primary">
+              <TriangleAlert size={14} className="text-rag-amber" /> Leviers impactés — alerte
+              seule
+            </p>
+            <p className="mb-3 text-xs text-secondary">
+              Ces leviers dépendent de l&apos;élément retardé. Leurs dates ne sont{" "}
+              <strong>jamais modifiées automatiquement</strong> : rapprochez-vous de leur owner.
+            </p>
+            <div className="space-y-1.5">
+              {cascadeProposal?.impactedLevers.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => {
+                    setCascadeProposal(null);
+                    router.push(`/levers/detail?id=${l.id}`);
+                  }}
+                  className="flex w-full items-center justify-between gap-2 rounded-md border border-rag-amber-light bg-rag-amber-light/40 px-2.5 py-2 text-left text-xs hover:border-rag-amber"
+                >
+                  <span className="font-semibold text-primary">
+                    {l.id} · {l.name}
+                  </span>
+                  <span className="text-tertiary">{DEPENDENCY_TYPE_LABEL[l.dependencyType]}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </Modal>
 
       <div className="mb-4 flex gap-0 rounded-t-lg border-b-[1.5px] border-border bg-white px-4">
@@ -300,11 +494,6 @@ export default function LeverDetailClient() {
               <Stat label="Centre de coût">
                 <span className="font-mono text-[13px]">
                   {hasSubLevers ? `${subLevers.length} centres de coût` : lever.costCenter}
-                </span>
-              </Stat>
-              <Stat label="Niveau d'avancement">
-                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold">
-                  {lever.maturityLevel}
                 </span>
               </Stat>
               <Stat label="Priorité">
@@ -367,21 +556,115 @@ export default function LeverDetailClient() {
               </div>
             )}
 
-            {lever.dependencies.length > 0 && (
-              <>
-                <SectionTitle>Dépendances</SectionTitle>
-                <div className="flex flex-wrap gap-1.5">
-                  {lever.dependencies.map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => router.push(`/levers/detail?id=${d}`)}
-                      className="rounded-full border border-border bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-secondary hover:border-bp-coral hover:text-bp-coral"
-                    >
-                      {d}
-                    </button>
-                  ))}
+            <div className="mt-6 flex items-center justify-between border-b-[1.5px] border-bp-coral pb-1.5">
+              <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-secondary">
+                <Link2 size={13} /> Dépendances
+                {leverAlerts.length > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rag-red-light px-2 py-0.5 text-[10px] font-bold normal-case text-rag-red">
+                    <TriangleAlert size={10} /> {leverAlerts.length} alerte(s)
+                  </span>
+                )}
+              </span>
+              <button
+                onClick={() => setDepsModalOpen(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-bp-coral hover:underline"
+              >
+                <Pencil size={11} /> Gérer les dépendances
+              </button>
+            </div>
+
+            <div className="mt-2.5 grid grid-cols-2 gap-4">
+              <div>
+                <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                  Ce levier dépend de
                 </div>
-              </>
+                {lever.dependencies.length === 0 && (
+                  <p className="text-xs text-tertiary">Aucune dépendance amont.</p>
+                )}
+                {lever.dependencies.map((d) => {
+                  const target =
+                    data.levers.find((l) => l.id === d.targetId) ??
+                    data.subLevers.find((s) => s.id === d.targetId);
+                  const alert = leverAlerts.find(
+                    (a) => a.sourceId === lever.id && a.targetId === d.targetId
+                  );
+                  return (
+                    <button
+                      key={d.targetId}
+                      onClick={() => {
+                        const leverTarget = data.levers.find((l) => l.id === d.targetId);
+                        const subTarget = data.subLevers.find((s) => s.id === d.targetId);
+                        router.push(
+                          `/levers/detail?id=${leverTarget ? d.targetId : (subTarget?.leverId ?? d.targetId)}`
+                        );
+                      }}
+                      title={alert ? alert.message : DEPENDENCY_TYPE_DESCRIPTION[d.type]}
+                      className={`mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition hover:border-bp-coral ${
+                        alert
+                          ? "border-rag-red-light bg-rag-red-light/40"
+                          : "border-border bg-neutral-50"
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="font-semibold text-primary">
+                          {d.targetId} · {target?.name ?? "?"}
+                        </span>
+                        {target && "end" in target && (
+                          <span className="mt-0.5 block text-[10.5px] text-tertiary">
+                            {target.start} → {target.end}
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {alert && <TriangleAlert size={13} className="text-rag-red" />}
+                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
+                          {DEPENDENCY_TYPE_LABEL[d.type]}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div>
+                <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                  Dépendent de ce levier
+                </div>
+                {dependents.length === 0 && (
+                  <p className="text-xs text-tertiary">Aucun levier ne dépend de celui-ci.</p>
+                )}
+                {dependents.map((dep) => (
+                  <button
+                    key={dep.id}
+                    onClick={() => {
+                      const subTarget = data.subLevers.find((s) => s.id === dep.id);
+                      router.push(`/levers/detail?id=${subTarget ? subTarget.leverId : dep.id}`);
+                    }}
+                    className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border border-border bg-neutral-50 px-2.5 py-2 text-left text-xs transition hover:border-bp-coral"
+                  >
+                    <span className="font-semibold text-primary">
+                      {dep.id} · {dep.name}
+                    </span>
+                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
+                      {DEPENDENCY_TYPE_LABEL[dep.type]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {leverAlerts.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {leverAlerts.map((a, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-2 rounded-md border border-rag-red-light bg-rag-red-light/30 px-2.5 py-2 text-xs text-primary"
+                  >
+                    <TriangleAlert size={13} className="mt-0.5 shrink-0 text-rag-red" />
+                    <span>
+                      <strong>{a.sourceName}</strong> ({DEPENDENCY_TYPE_LABEL[a.type]}) — {a.message}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </CardBody>
         </Card>
@@ -397,13 +680,22 @@ export default function LeverDetailClient() {
                     <button
                       key={s.id}
                       onClick={() => setActiveSubLeverId(s.id)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      title={`Owner : ${s.owner || lever.owner}`}
+                      className={`flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-xs font-semibold transition ${
                         activeSubLever?.id === s.id
                           ? "border-bp-coral bg-bp-coral text-white"
                           : "border-border bg-white text-secondary hover:border-bp-coral hover:text-bp-coral"
                       }`}
                     >
+                      <Avatar initials={s.ownerInit || lever.ownerInit} size="sm" />
                       {s.name}
+                      <span
+                        className={
+                          activeSubLever?.id === s.id ? "text-white/80" : "text-tertiary"
+                        }
+                      >
+                        {engine.subLeverProgress(s)}%
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -433,6 +725,27 @@ export default function LeverDetailClient() {
               </div>
             </div>
 
+            <div className="mb-4 flex flex-wrap items-center gap-4 rounded-md border border-border bg-neutral-50 px-3 py-2 text-xs">
+              <span className="font-semibold text-primary">
+                {actions.length} action{actions.length > 1 ? "s" : ""}
+              </span>
+              <span className="text-secondary">
+                À faire : {actions.filter((a) => a.status === "todo").length}
+              </span>
+              <span className="text-info-blue">
+                En cours : {actions.filter((a) => a.status === "in_progress").length}
+              </span>
+              <span className="text-rag-green-dark">
+                Fait : {actions.filter((a) => a.status === "done").length}
+              </span>
+              <span className="text-rag-red">
+                En retard : {actions.filter((a) => a.status === "delayed").length}
+              </span>
+              <span className="ml-auto font-bold text-bp-coral">
+                {engine.actionProgress(actions)}% du plan
+              </span>
+            </div>
+
             {actionView === "kanban" ? (
               <ActionKanban
                 actions={actions}
@@ -447,6 +760,13 @@ export default function LeverDetailClient() {
                 onCardClick={(action) => setActionModal({ mode: "edit", action })}
               />
             )}
+
+            <p className="mt-4 flex items-start gap-1.5 text-[11px] text-tertiary">
+              <Info size={12} className="mt-px shrink-0" />
+              Repousser la date de fin d&apos;une action peut retarder ce plan : l&apos;outil vous
+              proposera alors de décaler les sous-leviers dépendants (à confirmer), et alertera les
+              leviers dépendants sans toucher à leurs dates.
+            </p>
           </CardBody>
         </Card>
       )}
@@ -459,6 +779,7 @@ export default function LeverDetailClient() {
                 <SectionTitle first>Impact financier par sous-levier</SectionTitle>
                 <SubLeverImpactTable
                   subLevers={subLevers}
+                  fallbackOwner={{ owner: lever.owner, ownerInit: lever.ownerInit }}
                   pnlAccountName={(pnlId) =>
                     data.pnlAccounts.find((p) => p.id === pnlId)?.name ?? pnlId
                   }
@@ -548,20 +869,32 @@ export default function LeverDetailClient() {
 
 function SubLeverImpactTable({
   subLevers,
+  fallbackOwner,
   pnlAccountName,
 }: {
   subLevers: SubLever[];
+  fallbackOwner: { owner: string; ownerInit: string };
   pnlAccountName: (id: string) => string;
 }) {
-  type Row = SubLever & { pnlName: string; progressPct: number };
+  type Row = SubLever & { pnlName: string; progressPct: number; ownerName: string };
   const rows: Row[] = subLevers.map((s) => ({
     ...s,
     pnlName: pnlAccountName(s.pnlMap),
     progressPct: engine.subLeverProgress(s),
+    ownerName: s.owner || fallbackOwner.owner,
   }));
 
   const columns: ColumnDef<Row>[] = [
     { key: "name", label: "Sous-levier", render: (r) => <strong>{r.name}</strong> },
+    {
+      key: "ownerName",
+      label: "Owner",
+      render: (r) => (
+        <span className="inline-flex items-center gap-1.5">
+          <Avatar initials={r.ownerInit || fallbackOwner.ownerInit} size="sm" /> {r.ownerName}
+        </span>
+      ),
+    },
     { key: "costCenter", label: "Centre de coût" },
     { key: "pnlName", label: "Compte P&L" },
     {

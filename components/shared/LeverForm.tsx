@@ -2,14 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@/components/shared/Button";
-import type {
-  BeTrackData,
-  Lever,
-  LeverStatus,
-  MaturityLevel,
-  PriorityLevel,
-  RiskLevel,
-} from "@/types";
+import { STATUS_LABEL } from "@/lib/status-config";
+import type { BeTrackData, Lever, LeverStatus, PriorityLevel, RiskLevel } from "@/types";
 
 export type LeverFormValues = Omit<Lever, "id" | "createdAt" | "lastUpdate" | "dependencies">;
 
@@ -54,7 +48,6 @@ function emptyValues(data: BeTrackData): LeverFormValues {
     end: new Date().toISOString().slice(0, 10),
     status: "idea",
     progress: 0,
-    maturityLevel: "L1",
     priority: "medium",
     risk: "low",
     grossSavings: 0,
@@ -270,7 +263,7 @@ export function LeverForm({
             onChange={(e) => set("end", e.target.value)}
           />
         </Field>
-        <Field label="Statut">
+        <Field label="Niveau d'avancement (L1-L5)">
           <select
             className={inputClass}
             value={values.status}
@@ -278,7 +271,7 @@ export function LeverForm({
           >
             {data.leverStatuses.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {STATUS_LABEL[s]}
               </option>
             ))}
           </select>
@@ -292,19 +285,6 @@ export function LeverForm({
             value={values.progress}
             onChange={(e) => set("progress", num(e.target.value))}
           />
-        </Field>
-        <Field label="Niveau d'avancement">
-          <select
-            className={inputClass}
-            value={values.maturityLevel}
-            onChange={(e) => set("maturityLevel", e.target.value as MaturityLevel)}
-          >
-            {data.maturityLevels.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
         </Field>
         <Field label="Priorité">
           <select

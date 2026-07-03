@@ -1,12 +1,22 @@
 export type Role = "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
 
+// Cycle de vie unique d'un levier, affiché partout en L1-L5 (voir lib/status-config.ts) :
+// idea=L1 Idée, qualified=L2 Qualifié, validated=L3 Validé, in_progress=L4 Planifié,
+// delivered=L5 Réalisé (+ cancelled=Annulé, hors cycle).
 export type LeverStatus =
   "idea" | "qualified" | "validated" | "in_progress" | "delivered" | "cancelled";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type PriorityLevel = "low" | "medium" | "high" | "critical";
-export type MaturityLevel = "L1" | "L2" | "L3" | "L4" | "L5";
 export type AlertType = "red" | "amber" | "green" | "blue";
 export type ActionStatus = "todo" | "in_progress" | "done" | "delayed";
+
+/** Type de dépendance entre leviers/sous-leviers (sémantique planning classique). */
+export type DependencyType = "FS" | "SS" | "FF" | "SF";
+
+export type LeverDependency = {
+  targetId: string; // lever id (L###) ou sous-levier id (SL###), résolu par préfixe
+  type: DependencyType;
+};
 
 export type ProgramConfig = {
   id: string;
@@ -57,7 +67,6 @@ export type Lever = {
   end: string; // ISO date
   status: LeverStatus;
   progress: number; // 0-100
-  maturityLevel: MaturityLevel;
   priority: PriorityLevel;
   risk: RiskLevel;
   grossSavings: number; // €M
@@ -67,7 +76,7 @@ export type Lever = {
   capex: number; // €M
   fteImpact: number; // positive = hires, negative = departures
   popImpacted: number;
-  dependencies: string[]; // lever ids (L###) ou sous-levier ids (SL###), résolus par préfixe
+  dependencies: LeverDependency[]; // suivies + alertées, jamais décalées automatiquement
   description: string;
   createdAt: string;
   lastUpdate: string;
@@ -93,6 +102,9 @@ export type SubLever = {
   id: string;
   leverId: string;
   name: string;
+  // Owner propre au sous-levier (optionnel) — à défaut, l'owner du levier parent s'applique.
+  owner?: string;
+  ownerInit?: string;
   costCenter: string;
   pnlMap: string; // PnlAccount id
   grossSavings: number; // €M
@@ -105,7 +117,7 @@ export type SubLever = {
   start: string; // ISO date
   end: string; // ISO date
   status: LeverStatus;
-  dependencies: string[]; // lever ids (L###) ou sous-levier ids (SL###)
+  dependencies: LeverDependency[];
   actions: LeverAction[];
 };
 
@@ -219,7 +231,6 @@ export type BeTrackData = {
   leverStatuses: LeverStatus[];
   riskLevels: RiskLevel[];
   priorityLevels: PriorityLevel[];
-  maturityLevels: MaturityLevel[];
   leverTypes: string[];
   geographies: string[];
   functions: string[];
