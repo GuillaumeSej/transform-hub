@@ -1,6 +1,43 @@
 import * as engine from "@/lib/engine";
 import type { CascadeShift } from "@/lib/engine";
-import type { AuditEntry, Comment, Lever, LeverAction, SubLever } from "@/types";
+import { STATUS_ORDER } from "@/lib/status-config";
+import type { AuditEntry, Comment, FinancialSnapshot, Lever, LeverAction, SubLever } from "@/types";
+
+type PlanLockable = Pick<
+  Lever,
+  | "status"
+  | "lockedPlan"
+  | "reforecast"
+  | "grossSavings"
+  | "netSavings"
+  | "opexOneOff"
+  | "opexRec"
+  | "capex"
+>;
+
+function snapshot(entity: PlanLockable): FinancialSnapshot {
+  return {
+    grossSavings: entity.grossSavings,
+    netSavings: entity.netSavings,
+    opexOneOff: entity.opexOneOff,
+    opexRec: entity.opexRec,
+    capex: entity.capex,
+  };
+}
+
+/** Fige le plan initial dès le passage en L3 · Validé (une seule fois), puis initialise la
+ * réactualisation dès le passage en L4 · Planifié (une seule fois, sur la base du plan figé). Ne
+ * fait rien si déjà figé/initialisé, ou si le statut n'atteint pas ces paliers. */
+export function applyPlanLock<T extends PlanLockable>(entity: T): T {
+  let next = entity;
+  if (!next.lockedPlan && STATUS_ORDER[next.status] >= STATUS_ORDER.validated) {
+    next = { ...next, lockedPlan: snapshot(next) };
+  }
+  if (!next.reforecast && STATUS_ORDER[next.status] >= STATUS_ORDER.in_progress) {
+    next = { ...next, reforecast: next.lockedPlan ?? snapshot(next) };
+  }
+  return next;
+}
 
 /**
  * Logique métier pure du périmètre "leviers" : mêmes règles que l'ancienne couche
@@ -59,7 +96,7 @@ export function createLever(
   }, 0);
   const id = `L${String(maxNum + 1).padStart(3, "0")}`;
   const now = nowDate();
-  const lever: Lever = { ...input, id, createdAt: now, lastUpdate: now };
+  const lever: Lever = applyPlanLock({ ...input, id, createdAt: now, lastUpdate: now });
   return {
     levers: [...levers, lever],
     lever,
@@ -85,12 +122,24 @@ export function updateLever(
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
   const before = levers[idx];
-  const after: Lever = { ...before, ...patch, lastUpdate: nowDate() };
+  // Une fois le plan initial figé (L3+), les chiffres bruts ne sont plus modifiables par cette
+  // voie — seule la réactualisation (patch.reforecast) l'est encore.
+  const safePatch = before.lockedPlan
+    ? {
+        ...patch,
+        grossSavings: before.grossSavings,
+        netSavings: before.netSavings,
+        opexOneOff: before.opexOneOff,
+        opexRec: before.opexRec,
+        capex: before.capex,
+      }
+    : patch;
+  const after: Lever = applyPlanLock({ ...before, ...safePatch, lastUpdate: nowDate() });
   const nextLevers = [...levers];
   nextLevers[idx] = after;
 
   const auditEntries: AuditEntry[] = [];
-  (Object.keys(patch) as (keyof Lever)[]).forEach((field) => {
+  (Object.keys(safePatch) as (keyof Lever)[]).forEach((field) => {
     if (before[field] !== after[field]) {
       auditEntries.push(
         makeAuditEntry({
@@ -138,7 +187,7 @@ export function createSubLever(
     "SL",
     subLevers.map((s) => s.id)
   );
-  const subLever: SubLever = { ...input, id };
+  const subLever: SubLever = applyPlanLock({ ...input, id });
   const nextSubLevers = [...subLevers, subLever];
 
   const auditEntries = [
@@ -171,7 +220,17 @@ export function updateSubLever(
   const idx = subLevers.findIndex((s) => s.id === id);
   if (idx === -1) throw new Error(`Sous-levier "${id}" introuvable`);
   const before = subLevers[idx];
-  const after: SubLever = { ...before, ...patch };
+  const safePatch = before.lockedPlan
+    ? {
+        ...patch,
+        grossSavings: before.grossSavings,
+        netSavings: before.netSavings,
+        opexOneOff: before.opexOneOff,
+        opexRec: before.opexRec,
+        capex: before.capex,
+      }
+    : patch;
+  const after: SubLever = applyPlanLock({ ...before, ...safePatch });
   const nextSubLevers = [...subLevers];
   nextSubLevers[idx] = after;
 

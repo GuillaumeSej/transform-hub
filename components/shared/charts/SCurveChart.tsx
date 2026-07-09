@@ -10,9 +10,15 @@ import {
   YAxis,
 } from "recharts";
 
-export type SCurvePoint = { month: string; planned: number; actual: number | null };
+export type SCurvePoint = {
+  month: string;
+  planned: number;
+  actual: number | null;
+  reforecast: number;
+};
 
-/** S-Curve Plan vs Réel — porté depuis le chart Chart.js `ch-scurve` du prototype legacy. */
+/** S-Curve à 3 courbes — Plan initial (figé à L3), Réalisé à date, Réactualisé (prévision à jour,
+ * éditable à partir de L4). Porté/étendu depuis le chart Chart.js `ch-scurve` du prototype legacy. */
 export function SCurveChart({ data }: { data: SCurvePoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
@@ -38,10 +44,19 @@ export function SCurveChart({ data }: { data: SCurvePoint[] }) {
         <Line
           type="monotone"
           dataKey="planned"
-          name="Plan (€M)"
+          name="Plan initial (€M)"
           stroke="#6B5750"
           strokeWidth={2}
           strokeDasharray="6 4"
+          dot={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="reforecast"
+          name="Réactualisé (€M)"
+          stroke="#2E7D32"
+          strokeWidth={2}
+          strokeDasharray="2 3"
           dot={false}
         />
       </LineChart>

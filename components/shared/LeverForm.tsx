@@ -84,6 +84,7 @@ export function LeverForm({
     setValues((prev) => ({ ...prev, [key]: value }));
 
   const num = (v: string) => (v === "" ? 0 : Number(v));
+  const isLocked = Boolean((initialValues as Lever | undefined)?.lockedPlan);
 
   return (
     <form
@@ -315,12 +316,19 @@ export function LeverForm({
       </div>
 
       <SectionTitle>Impact financier (€M)</SectionTitle>
+      {isLocked && (
+        <p className="mb-3 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+          Plan initial figé au passage en L3 · Validé — lecture seule. Utilisez la réactualisation
+          (onglet Impact du levier) pour ajuster la projection.
+        </p>
+      )}
       <div className="grid grid-cols-3 gap-3">
         <Field label="Impact brut estimé">
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.grossSavings}
             onChange={(e) => set("grossSavings", num(e.target.value))}
           />
@@ -329,7 +337,8 @@ export function LeverForm({
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.netSavings}
             onChange={(e) => set("netSavings", num(e.target.value))}
           />
@@ -339,7 +348,8 @@ export function LeverForm({
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.capex}
             onChange={(e) => set("capex", num(e.target.value))}
           />
@@ -348,7 +358,8 @@ export function LeverForm({
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.opexOneOff}
             onChange={(e) => set("opexOneOff", num(e.target.value))}
           />
@@ -357,7 +368,8 @@ export function LeverForm({
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.opexRec}
             onChange={(e) => set("opexRec", num(e.target.value))}
           />

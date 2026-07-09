@@ -11,6 +11,8 @@ import type {
   WorkstreamSummary,
 } from "@/types";
 import { addDays, daysBetween } from "@/lib/dateUtils";
+import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
+import type { LeverStatus } from "@/types";
 
 /**
  * Portage fidèle du moteur de calcul `ENGINE` du prototype de Guillaume (legacy/index.html).
@@ -362,7 +364,8 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
           message = `"${target.name}" se termine le ${target.end}, après le début prévu (${source.start})`;
           break;
         case "SS":
-          violated = Math.abs(daysBetween(target.start, source.start)) > SIMULTANEITY_TOLERANCE_DAYS;
+          violated =
+            Math.abs(daysBetween(target.start, source.start)) > SIMULTANEITY_TOLERANCE_DAYS;
           message = `Débuts désynchronisés : ${target.start} vs ${source.start} (tolérance ${SIMULTANEITY_TOLERANCE_DAYS} j)`;
           break;
         case "FF":
@@ -390,4 +393,143 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
   }
 
   return alerts;
+}
+
+// ---------- Avancement L1-L5, Sankey, S-curve 3 courbes, Marimekko, waterfall trimestriel ----------
+
+export type StageCount = { status: LeverStatus; level: string; label: string; count: number };
+
+/** Nombre de leviers par étape L1-L5 (+ Annulé, hors cycle), pour le bandeau d'avancement et le
+ * diagramme Sankey de l'Executive Dashboard. */
+export function stageCounts(data: BeTrackData): StageCount[] {
+  const statuses: LeverStatus[] = [...STATUS_CYCLE, "cancelled"];
+  return statuses.map((status) => ({
+    status,
+    level: STATUS_LEVEL[status],
+    label: STATUS_SHORT_LABEL[status],
+    count: data.levers.filter((l) => l.status === status).length,
+  }));
+}
+
+/** Flux Sankey "tous les leviers" -> étape atteinte (L1..L5, + Annulé) : un seul niveau de liens
+ * suffit puisque chaque levier a une étape courante unique (pas d'historique de transition). */
+export function sankeyData(data: BeTrackData) {
+  const counts = stageCounts(data);
+  const nodes = [{ name: "Tous les leviers" }, ...counts.map((c) => ({ name: c.label }))];
+  const links = counts
+    .filter((c) => c.count > 0)
+    .map((c) => ({
+      source: 0,
+      target: nodes.findIndex((n) => n.name === c.label),
+      value: c.count,
+    }));
+  return { nodes, links };
+}
+
+function financialTotal(data: BeTrackData, pick: (l: Lever) => number): number {
+  return (
+    Math.round(
+      data.levers.filter((l) => l.status !== "cancelled").reduce((s, l) => s + pick(l), 0) * 10
+    ) / 10
+  );
+}
+
+/** S-curve à 3 courbes : Plan initial (figé à L3, ou valeur courante tant que non figé), Réalisé
+ * à date (inchangé, calculé depuis la progression), Réactualisé (dernière prévision, ou plan
+ * initial/valeur courante tant que non réactualisé à L4). Même forme de courbe mensuelle que
+ * l'ancien planned/actual — seule la valeur totale distribuée diffère par série. */
+export function sCurve3(data: BeTrackData) {
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const plannedTotal = financialTotal(data, (l) => l.lockedPlan?.netSavings ?? l.netSavings);
+  const reforecastTotal = financialTotal(
+    data,
+    (l) => l.reforecast?.netSavings ?? l.lockedPlan?.netSavings ?? l.netSavings
+  );
+  const actualTotal = data.levers
+    .filter((l) => l.status !== "cancelled")
+    .reduce((s, l) => s + realizedSavings(l, data), 0);
+
+  const curve = [0.05, 0.1, 0.18, 0.28, 0.4, 0.52, 0.62, 0.72, 0.81, 0.88, 0.94, 1.0];
+  const actualCurve = [0.04, 0.09, 0.15, 0.24, 0.34, 0.44, 0.53, 0.62, 0.71, null, null, null];
+
+  return months.map((label, i) => ({
+    month: label,
+    planned: Math.round(curve[i] * plannedTotal * 10) / 10,
+    reforecast: Math.round(curve[i] * reforecastTotal * 10) / 10,
+    actual:
+      actualCurve[i] === null
+        ? null
+        : Math.round((actualCurve[i] as number) * actualTotal * 10) / 10,
+  }));
+}
+
+export type MarimekkoSegment = {
+  function: string;
+  totalSavings: number;
+  widthPct: number;
+  levers: { id: string; name: string; netSavings: number; risk: RiskLevel; status: LeverStatus }[];
+};
+
+/** Répartition Marimekko par fonction : largeur proportionnelle au poids (net savings) de la
+ * fonction dans le total du programme. */
+export function marimekko(data: BeTrackData): MarimekkoSegment[] {
+  const active = data.levers.filter((l) => l.status !== "cancelled");
+  const total = active.reduce((s, l) => s + Math.abs(l.netSavings), 0) || 1;
+  const byFunc = new Map<string, Lever[]>();
+  active.forEach((l) => {
+    if (!byFunc.has(l.function)) byFunc.set(l.function, []);
+    byFunc.get(l.function)!.push(l);
+  });
+  return Array.from(byFunc.entries())
+    .map(([func, levers]) => {
+      const totalSavings = levers.reduce((s, l) => s + l.netSavings, 0);
+      const weight = levers.reduce((s, l) => s + Math.abs(l.netSavings), 0);
+      return {
+        function: func,
+        totalSavings: Math.round(totalSavings * 10) / 10,
+        widthPct: Math.round((weight / total) * 1000) / 10,
+        levers: levers.map((l) => ({
+          id: l.id,
+          name: l.name,
+          netSavings: l.netSavings,
+          risk: l.risk,
+          status: l.status,
+        })),
+      };
+    })
+    .sort((a, b) => b.totalSavings - a.totalSavings);
+}
+
+export type QuarterBridge = { quarter: string; delta: number; cumulative: number };
+
+/** Économies réalisées par trimestre (date de fin du levier), cumulées jusqu'à la cible du
+ * programme — sert au graphique en pont trimestriel de l'Executive Dashboard. */
+export function quarterlyBridge(data: BeTrackData): QuarterBridge[] {
+  const active = data.levers.filter((l) => l.status !== "cancelled");
+  const byQuarter = new Map<string, number>();
+  active.forEach((l) => {
+    const d = new Date(l.end);
+    const q = `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
+    byQuarter.set(q, (byQuarter.get(q) ?? 0) + realizedSavings(l, data));
+  });
+  const quarters = Array.from(byQuarter.keys()).sort();
+  let cumulative = 0;
+  return quarters.map((quarter) => {
+    const delta = Math.round((byQuarter.get(quarter) ?? 0) * 10) / 10;
+    cumulative = Math.round((cumulative + delta) * 10) / 10;
+    return { quarter, delta, cumulative };
+  });
 }
