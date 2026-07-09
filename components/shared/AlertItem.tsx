@@ -10,11 +10,23 @@ const ICON_STYLE = {
   blue: "bg-info-blue-light text-info-blue",
 };
 
-/** Ligne d'alerte — porté depuis `.alert-row` du prototype legacy. */
-export function AlertItem({ alert }: { alert: Alert }) {
+/** Ligne d'alerte — porté depuis `.alert-row` du prototype legacy. Clic -> creuse vers le levier
+ * ou le workstream concerné (alert.scope). */
+export function AlertItem({ alert, onClick }: { alert: Alert; onClick?: () => void }) {
   const Icon = ICONS[alert.type];
   return (
-    <div className="flex gap-3 border-b border-border py-3 last:border-b-0">
+    <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (onClick && e.key === "Enter") onClick();
+      }}
+      className={cn(
+        "flex gap-3 border-b border-border py-3 last:border-b-0",
+        onClick && "cursor-pointer rounded-sm px-1.5 -mx-1.5 transition hover:bg-neutral-50"
+      )}
+    >
       <div
         className={cn(
           "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-sm",

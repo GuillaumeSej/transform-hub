@@ -1,6 +1,7 @@
 import { mockData } from "@/data/mockData";
 import type {
   Alert,
+  Department,
   Operations,
   ProductionLine,
   ProgramConfig,
@@ -128,6 +129,34 @@ export function updateWorkforceMovement(
   const before = workforce.movements[idx];
   const after = { ...before, ...patch };
   workforce.movements[idx] = after;
+  write(KEYS.workforce, workforce);
+  return after;
+}
+
+export function createWorkforceMovement(input: Omit<WorkforceMovement, "id">): WorkforceMovement {
+  const workforce = getWorkforce();
+  const maxNum = workforce.movements.reduce((max, m) => {
+    const n = /^MV(\d+)$/.exec(m.id);
+    return n ? Math.max(max, Number(n[1])) : max;
+  }, 0);
+  const movement: WorkforceMovement = { ...input, id: `MV${String(maxNum + 1).padStart(3, "0")}` };
+  workforce.movements.push(movement);
+  write(KEYS.workforce, workforce);
+  return movement;
+}
+
+export function deleteWorkforceMovement(id: string): void {
+  const workforce = getWorkforce();
+  workforce.movements = workforce.movements.filter((m) => m.id !== id);
+  write(KEYS.workforce, workforce);
+}
+
+export function updateDepartment(name: string, patch: Partial<Department>): Department {
+  const workforce = getWorkforce();
+  const idx = workforce.departments.findIndex((d) => d.name === name);
+  if (idx === -1) throw new Error(`Département "${name}" introuvable`);
+  const after = { ...workforce.departments[idx], ...patch };
+  workforce.departments[idx] = after;
   write(KEYS.workforce, workforce);
   return after;
 }

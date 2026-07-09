@@ -9,16 +9,21 @@ const COLORS = ["#6B5750", "#FF3D3D", "#F5A623", "#4A90D9", "#2E7D32", "#8E24AA"
  * un segment pour creuser vers les leviers de cette fonction. */
 export function MarimekkoChart({
   data,
+  height = 220,
   onSegmentClick,
 }: {
   data: MarimekkoSegment[];
+  height?: number;
   onSegmentClick?: (func: string) => void;
 }) {
   if (data.length === 0) {
     return <p className="py-10 text-center text-sm text-tertiary">Aucun levier à représenter.</p>;
   }
   return (
-    <div className="flex h-[220px] w-full items-stretch gap-0.5 overflow-hidden rounded-md">
+    <div
+      className="flex w-full items-stretch gap-0.5 overflow-hidden rounded-md"
+      style={{ height }}
+    >
       {data.map((seg, i) => (
         <button
           key={seg.function}
