@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { DependencyEditor } from "@/components/shared/DependencyEditor";
-import { STATUS_LABEL } from "@/lib/status-config";
-import type { BeTrackData, LeverStatus, SubLever } from "@/types";
+import { STATUS_LABEL, STATUS_ORDER } from "@/lib/status-config";
+import type { BeTrackData, FinancialSnapshot, LeverStatus, SubLever } from "@/types";
 
 const inputClass =
   "w-full rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-bp-coral focus:outline-none";
@@ -50,7 +50,8 @@ export function SubLeverForm({
     name: "",
     owner: "",
     ownerInit: "",
-    costCenter: "",
+    expensePost: "",
+    businessUnit: "",
     pnlMap: data.pnlAccounts[0]?.id ?? "",
     grossSavings: 0,
     netSavings: 0,
@@ -72,11 +73,25 @@ export function SubLeverForm({
 
   const num = (v: string) => (v === "" ? 0 : Number(v));
 
+  // Plan initial figé dès L3 · Validé : les chiffres d'origine ne sont plus modifiables, seule la
+  // réactualisation (à partir de L4 · Planifié) l'est encore, dans un bloc séparé.
+  const isLocked = Boolean(values.lockedPlan);
+  const canReforecast = STATUS_ORDER[values.status] >= STATUS_ORDER.in_progress;
+  const setReforecast = (key: keyof FinancialSnapshot, value: number) =>
+    setValues((prev) => ({
+      ...prev,
+      reforecast: {
+        ...(prev.reforecast ?? prev.lockedPlan ?? prev),
+        [key]: value,
+      } as FinancialSnapshot,
+    }));
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (!values.name.trim() || !values.costCenter.trim()) return;
+        if (!values.name.trim() || !values.expensePost.trim() || !values.businessUnit.trim())
+          return;
         onSubmit(values);
       }}
     >
@@ -107,12 +122,20 @@ export function SubLeverForm({
             onChange={(e) => set("ownerInit", e.target.value.toUpperCase())}
           />
         </Field>
-        <Field label="Centre de coût">
+        <Field label="Poste de dépense">
           <input
             required
             className={inputClass}
-            value={values.costCenter}
-            onChange={(e) => set("costCenter", e.target.value)}
+            value={values.expensePost}
+            onChange={(e) => set("expensePost", e.target.value)}
+          />
+        </Field>
+        <Field label="BU associée">
+          <input
+            required
+            className={inputClass}
+            value={values.businessUnit}
+            onChange={(e) => set("businessUnit", e.target.value)}
           />
         </Field>
         <Field label="Compte P&L impacté">
@@ -157,12 +180,18 @@ export function SubLeverForm({
             ))}
           </select>
         </Field>
-        <div />
+        {isLocked && (
+          <div className="col-span-2 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+            Plan initial figé au passage en L3 · Validé. Les valeurs ci-dessous sont en lecture
+            seule — utilisez le bloc « Réactualisation » plus bas pour ajuster la projection.
+          </div>
+        )}
         <Field label="Impact estimé brut (€M)">
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.grossSavings}
             onChange={(e) => set("grossSavings", num(e.target.value))}
           />
@@ -171,7 +200,8 @@ export function SubLeverForm({
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.netSavings}
             onChange={(e) => set("netSavings", num(e.target.value))}
           />
@@ -180,7 +210,8 @@ export function SubLeverForm({
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.capex}
             onChange={(e) => set("capex", num(e.target.value))}
           />
@@ -189,7 +220,8 @@ export function SubLeverForm({
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.opexOneOff}
             onChange={(e) => set("opexOneOff", num(e.target.value))}
           />
@@ -198,7 +230,8 @@ export function SubLeverForm({
           <input
             type="number"
             step="0.1"
-            className={inputClass}
+            disabled={isLocked}
+            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
             value={values.opexRec}
             onChange={(e) => set("opexRec", num(e.target.value))}
           />
@@ -220,6 +253,40 @@ export function SubLeverForm({
             onChange={(e) => set("popImpacted", num(e.target.value))}
           />
         </Field>
+        {canReforecast && (
+          <div className="col-span-2 rounded-sm border border-border bg-neutral-50 p-3">
+            <span className={labelClass}>Réactualisation (prévisions à date)</span>
+            <div className="mt-2 grid grid-cols-3 gap-3">
+              <Field label="Net réactualisé (€M)">
+                <input
+                  type="number"
+                  step="0.1"
+                  className={inputClass}
+                  value={(values.reforecast ?? values.lockedPlan)?.netSavings ?? values.netSavings}
+                  onChange={(e) => setReforecast("netSavings", num(e.target.value))}
+                />
+              </Field>
+              <Field label="CAPEX réactualisé (€M)">
+                <input
+                  type="number"
+                  step="0.1"
+                  className={inputClass}
+                  value={(values.reforecast ?? values.lockedPlan)?.capex ?? values.capex}
+                  onChange={(e) => setReforecast("capex", num(e.target.value))}
+                />
+              </Field>
+              <Field label="OPEX réactualisé (€M/an)">
+                <input
+                  type="number"
+                  step="0.1"
+                  className={inputClass}
+                  value={(values.reforecast ?? values.lockedPlan)?.opexRec ?? values.opexRec}
+                  onChange={(e) => setReforecast("opexRec", num(e.target.value))}
+                />
+              </Field>
+            </div>
+          </div>
+        )}
         <div className="col-span-2">
           <span className={labelClass}>Dépendances (leviers / sous-leviers)</span>
           <DependencyEditor

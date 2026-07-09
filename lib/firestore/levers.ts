@@ -21,7 +21,7 @@ import type { AuditEntry, Comment, Lever, LeverDependency, SubLever } from "@/ty
 
 // Incrémenter force un reseed complet de la BDD (schéma de données modifié) — même logique
 // que SCHEMA_VERSION dans lib/storage.ts.
-const SCHEMA_VERSION = "1";
+const SCHEMA_VERSION = "2";
 
 const leversCol = () => collection(db, "levers");
 const subLeversCol = () => collection(db, "subLevers");

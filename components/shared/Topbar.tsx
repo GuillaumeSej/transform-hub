@@ -10,13 +10,10 @@ import type { Role } from "@/types";
 const CRUMBS: Record<string, string> = {
   "/dashboard": "Executive Dashboard",
   "/levers": "Lever Library",
-  "/workstreams": "Workstreams",
-  "/scenarios": "Scenarios",
-  "/reporting": "Reporting",
+  "/workstreams": "Workstream Dashboard",
   "/finance": "Finance Module",
   "/hr": "HR Module",
   "/operations": "Operations Module",
-  "/governance": "Risks & Alerts",
 };
 
 /** Barre supérieure — porté depuis `.topbar` du prototype legacy. Le profil est verrouillé pour
@@ -32,7 +29,7 @@ export function Topbar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useRole();
+  const { logout, user } = useRole();
   const isLeverDetail = pathname.startsWith("/levers/") && pathname !== "/levers";
   const label = isLeverDetail ? "Détail du levier" : (CRUMBS[pathname] ?? "BeTrack");
 
@@ -43,7 +40,7 @@ export function Topbar({
       </div>
       <div className="flex items-center gap-2">
         <span className="rounded-md border border-border bg-neutral-50 px-3 py-1.5 text-xs font-medium text-primary">
-          {roles[role].label}
+          {user?.name ?? roles[role].label}
         </span>
         <button
           className="relative flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-bp-coral hover:text-bp-coral"

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutGrid, Plus, Table2, TriangleAlert } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import * as engine from "@/lib/engine";
 import { STATUS_LABEL } from "@/lib/status-config";
@@ -32,6 +33,7 @@ type LeverRow = Lever & {
 
 export default function LeversPage() {
   const data = useBeTrackData();
+  const { role, user } = useRole();
   const router = useRouter();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
@@ -39,6 +41,14 @@ export default function LeversPage() {
     (searchParams.get("view") as "table" | "kanban") ?? "table"
   );
   const [newLeverOpen, setNewLeverOpen] = useState(false);
+
+  // Le Lever Owner ne voit que ses propres leviers (owner === son nom de compte de test). Les
+  // autres rôles (CTO, Sponsor, ...) voient toute la bibliothèque.
+  const scopedLevers = useMemo(
+    () =>
+      role === "lever" && user ? data.levers.filter((l) => l.owner === user.name) : data.levers,
+    [data.levers, role, user]
+  );
 
   // Leviers/sous-leviers avec au moins une contrainte de dépendance violée (colonne ⚠ + filtre)
   const alertedLeverIds = useMemo(() => {
@@ -77,9 +87,11 @@ export default function LeversPage() {
       { key: "f_function", label: "Fonction", getValue: (l) => l.function },
       {
         key: "f_costCenter",
-        label: "Centre de coût",
-        getValue: (l) =>
-          data.subLevers.some((s) => s.leverId === l.id) ? "Multi-centres" : l.costCenter,
+        label: "Centre de coût / Poste de dépense",
+        getValue: (l) => {
+          const subs = data.subLevers.filter((s) => s.leverId === l.id);
+          return subs.length ? subs.map((s) => s.expensePost).join(", ") : l.costCenter;
+        },
       },
       { key: "f_priority", label: "Priorité", getValue: (l) => l.priority },
       { key: "f_risk", label: "Risque", getValue: (l) => l.risk },
@@ -129,22 +141,23 @@ export default function LeversPage() {
   };
 
   const filteredLevers = useMemo(() => {
-    return data.levers.filter((lever) =>
+    return scopedLevers.filter((lever) =>
       Object.entries(activeFilters).every(([key, value]) => {
         const def = filterDefs.find((d) => d.key === key);
         return !def || def.getValue(lever) === value;
       })
     );
-  }, [data.levers, activeFilters, filterDefs]);
+  }, [scopedLevers, activeFilters, filterDefs]);
 
   const rows: LeverRow[] = filteredLevers.map((l) => ({
     ...l,
     realized: engine.realizedSavings(l, data),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
     statusLabel: STATUS_LABEL[l.status],
-    costCenterLabel: data.subLevers.some((s) => s.leverId === l.id)
-      ? `${data.subLevers.filter((s) => s.leverId === l.id).length} centres`
-      : l.costCenter,
+    costCenterLabel: (() => {
+      const subs = data.subLevers.filter((s) => s.leverId === l.id);
+      return subs.length ? subs.map((s) => s.expensePost).join(", ") : l.costCenter;
+    })(),
     hasAlert: alertedLeverIds.has(l.id),
   }));
 
@@ -215,7 +228,7 @@ export default function LeversPage() {
     { key: "sponsor", label: "Sponsor", editable: true },
     { key: "geography", label: "Géo", editable: true },
     { key: "country", label: "Pays", editable: true },
-    { key: "costCenterLabel", label: "Centre de coût" },
+    { key: "costCenterLabel", label: "Centre de coût / Poste de dépense" },
     { key: "start", label: "Début", editable: true },
     { key: "end", label: "Fin", editable: true },
     {
@@ -266,7 +279,7 @@ export default function LeversPage() {
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
         <div>
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            Lever Library
+            {role === "lever" ? "Mes leviers" : "Lever Library"}
           </h1>
           <div className="mt-2.5 text-[13px] text-secondary">
             {filteredLevers.length} leviers · Net savings affiché :{" "}
@@ -306,7 +319,7 @@ export default function LeversPage() {
         <CardBody flush>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
             <FilterBar
-              items={data.levers}
+              items={scopedLevers}
               defs={filterDefs}
               active={activeFilters}
               onChange={setFilters}

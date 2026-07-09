@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   Send,
+  Settings,
   TriangleAlert,
 } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
@@ -62,12 +63,14 @@ export default function LeverDetailClient() {
   const [tab, setTab] = useState<Tab>("overview");
   const [comment, setComment] = useState("");
   const [editOpen, setEditOpen] = useState(false);
-  const [subLeverModal, setSubLeverModal] = useState<{ mode: "create" | "edit"; sub?: SubLever } | null>(
-    null
-  );
-  const [actionModal, setActionModal] = useState<{ mode: "create" | "edit"; action?: LeverAction } | null>(
-    null
-  );
+  const [subLeverModal, setSubLeverModal] = useState<{
+    mode: "create" | "edit";
+    sub?: SubLever;
+  } | null>(null);
+  const [actionModal, setActionModal] = useState<{
+    mode: "create" | "edit";
+    action?: LeverAction;
+  } | null>(null);
   const [activeSubLeverId, setActiveSubLeverId] = useState<string | null>(null);
   const [actionView, setActionView] = useState<"kanban" | "gantt">("kanban");
   const [cascadeProposal, setCascadeProposal] = useState<CascadeProposal | null>(null);
@@ -116,10 +119,18 @@ export default function LeverDetailClient() {
   const dependents = [
     ...data.levers
       .filter((l) => l.dependencies.some((d) => d.targetId === lever.id))
-      .map((l) => ({ id: l.id, name: l.name, type: l.dependencies.find((d) => d.targetId === lever.id)!.type })),
+      .map((l) => ({
+        id: l.id,
+        name: l.name,
+        type: l.dependencies.find((d) => d.targetId === lever.id)!.type,
+      })),
     ...data.subLevers
       .filter((s) => s.leverId !== lever.id && s.dependencies.some((d) => d.targetId === lever.id))
-      .map((s) => ({ id: s.id, name: `${s.name} (sous-levier)`, type: s.dependencies.find((d) => d.targetId === lever.id)!.type })),
+      .map((s) => ({
+        id: s.id,
+        name: `${s.name} (sous-levier)`,
+        type: s.dependencies.find((d) => d.targetId === lever.id)!.type,
+      })),
   ];
 
   /** Vérifie si un décalage de date en implique d'autres : les sous-leviers dépendants reçoivent
@@ -172,7 +183,11 @@ export default function LeverDetailClient() {
                     onClick={() => {
                       if (isAuto || isCurrent) return;
                       data.updateLever(lever.id, { status: s });
-                      showToast("Niveau mis à jour", `${lever.name} : ${STATUS_LEVEL[s]} · ${STATUS_SHORT_LABEL[s]}`, "success");
+                      showToast(
+                        "Niveau mis à jour",
+                        `${lever.name} : ${STATUS_LEVEL[s]} · ${STATUS_SHORT_LABEL[s]}`,
+                        "success"
+                      );
                     }}
                     disabled={isAuto}
                     title={
@@ -269,7 +284,11 @@ export default function LeverDetailClient() {
                 data.createSubLever(values);
               }
               setSubLeverModal(null);
-              showToast(before ? "Sous-levier mis à jour" : "Sous-levier créé", values.name, "success");
+              showToast(
+                before ? "Sous-levier mis à jour" : "Sous-levier créé",
+                values.name,
+                "success"
+              );
             }}
           />
         )}
@@ -302,7 +321,11 @@ export default function LeverDetailClient() {
                 data.createAction(actionScope, values);
               }
               setActionModal(null);
-              showToast(actionModal.action ? "Action mise à jour" : "Action créée", values.name, "success");
+              showToast(
+                actionModal.action ? "Action mise à jour" : "Action créée",
+                values.name,
+                "success"
+              );
 
               // Une action qui dépasse la date de fin de son sous-levier/levier étend cette
               // dernière — et déclenche la cascade sur les dépendants si nécessaire.
@@ -420,8 +443,7 @@ export default function LeverDetailClient() {
         {(cascadeProposal?.impactedLevers.length ?? 0) > 0 && (
           <>
             <p className="mb-2 mt-4 flex items-center gap-1.5 text-[13px] font-semibold text-primary">
-              <TriangleAlert size={14} className="text-rag-amber" /> Leviers impactés — alerte
-              seule
+              <TriangleAlert size={14} className="text-rag-amber" /> Leviers impactés — alerte seule
             </p>
             <p className="mb-3 text-xs text-secondary">
               Ces leviers dépendent de l&apos;élément retardé. Leurs dates ne sont{" "}
@@ -491,10 +513,21 @@ export default function LeverDetailClient() {
               <Stat label="Function / Entité">
                 {lever.function} · {lever.entity}
               </Stat>
-              <Stat label="Centre de coût">
-                <span className="font-mono text-[13px]">
-                  {hasSubLevers ? `${subLevers.length} centres de coût` : lever.costCenter}
-                </span>
+              <Stat label={hasSubLevers ? "Postes de dépense impactés" : "Centre de coût"}>
+                {hasSubLevers ? (
+                  <span className="flex flex-wrap gap-1">
+                    {subLevers.map((s) => (
+                      <span
+                        key={s.id}
+                        className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-[11px] text-secondary"
+                      >
+                        {s.expensePost}
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="font-mono text-[13px]">{lever.costCenter}</span>
+                )}
               </Stat>
               <Stat label="Priorité">
                 <StatusBadge risk={lever.priority} />
@@ -508,7 +541,9 @@ export default function LeverDetailClient() {
             </div>
             <SectionTitle>Description</SectionTitle>
             <p className="text-[13px] text-secondary">{lever.description}</p>
-            <SectionTitle>Progression {hasSubLevers && "(calculée depuis les sous-leviers)"}</SectionTitle>
+            <SectionTitle>
+              Progression {hasSubLevers && "(calculée depuis les sous-leviers)"}
+            </SectionTitle>
             <ProgressBar pct={lever.progress} />
 
             <div className="mt-6 flex items-center justify-between border-b-[1.5px] border-bp-coral pb-1.5">
@@ -531,16 +566,42 @@ export default function LeverDetailClient() {
             {hasSubLevers && (
               <div className="mt-2.5 grid grid-cols-2 gap-2.5">
                 {subLevers.map((s) => (
-                  <button
+                  <div
                     key={s.id}
-                    onClick={() => setSubLeverModal({ mode: "edit", sub: s })}
-                    className="rounded-md border border-border bg-white p-3 text-left transition hover:border-bp-coral"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setActiveSubLeverId(s.id);
+                      setTab("plan");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        setActiveSubLeverId(s.id);
+                        setTab("plan");
+                      }
+                    }}
+                    title="Voir le plan d'action de ce sous-levier"
+                    className="cursor-pointer rounded-md border border-border bg-white p-3 text-left transition hover:border-bp-coral"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-semibold text-primary">{s.name}</span>
-                      <StageBadge status={s.status} />
+                      <span className="flex items-center gap-1.5">
+                        <StageBadge status={s.status} />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSubLeverModal({ mode: "edit", sub: s });
+                          }}
+                          title="Paramètres du sous-levier"
+                          className="rounded-full p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
+                        >
+                          <Settings size={13} />
+                        </button>
+                      </span>
                     </div>
-                    <div className="mt-1 text-[11px] text-tertiary">{s.costCenter}</div>
+                    <div className="mt-1 text-[11px] text-tertiary">
+                      {s.expensePost} · {s.businessUnit}
+                    </div>
                     <div className="mt-2 flex items-center justify-between gap-2">
                       <span className="text-xs font-bold text-bp-coral">
                         {engine.fmtCurr(s.netSavings)}
@@ -551,7 +612,7 @@ export default function LeverDetailClient() {
                         className="ml-2 flex-1"
                       />
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -660,7 +721,8 @@ export default function LeverDetailClient() {
                   >
                     <TriangleAlert size={13} className="mt-0.5 shrink-0 text-rag-red" />
                     <span>
-                      <strong>{a.sourceName}</strong> ({DEPENDENCY_TYPE_LABEL[a.type]}) — {a.message}
+                      <strong>{a.sourceName}</strong> ({DEPENDENCY_TYPE_LABEL[a.type]}) —{" "}
+                      {a.message}
                     </span>
                   </div>
                 ))}
@@ -690,9 +752,16 @@ export default function LeverDetailClient() {
                       <Avatar initials={s.ownerInit || lever.ownerInit} size="sm" />
                       {s.name}
                       <span
-                        className={
-                          activeSubLever?.id === s.id ? "text-white/80" : "text-tertiary"
-                        }
+                        className={`rounded-full px-1.5 py-px text-[10px] font-bold ${
+                          activeSubLever?.id === s.id
+                            ? "bg-white/20 text-white"
+                            : "bg-neutral-100 text-secondary"
+                        }`}
+                      >
+                        {STATUS_LEVEL[s.status]}
+                      </span>
+                      <span
+                        className={activeSubLever?.id === s.id ? "text-white/80" : "text-tertiary"}
                       >
                         {engine.subLeverProgress(s)}%
                       </span>
@@ -719,7 +788,11 @@ export default function LeverDetailClient() {
                     <BarChart3 size={13} /> Gantt
                   </button>
                 </div>
-                <Button variant="primary" size="sm" onClick={() => setActionModal({ mode: "create" })}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setActionModal({ mode: "create" })}
+                >
                   <Plus size={12} /> Action
                 </Button>
               </div>
@@ -789,13 +862,13 @@ export default function LeverDetailClient() {
               <>
                 <SectionTitle first>Impact financier</SectionTitle>
                 <div className="grid grid-cols-3 gap-4">
-                  <Stat label="Impact estimé (brut)" accent>
-                    {engine.fmtCurr(lever.grossSavings)}
-                  </Stat>
-                  <Stat label="Impact estimé (net)" accent>
-                    {engine.fmtCurr(lever.netSavings)}
+                  <Stat label="Plan initial (net, figé à L3)" accent>
+                    {lever.lockedPlan ? engine.fmtCurr(lever.lockedPlan.netSavings) : "—"}
                   </Stat>
                   <Stat label="Réalisé à date (€)">{engine.fmtCurr(real)}</Stat>
+                  <Stat label="Réactualisé (net)">
+                    {lever.reforecast ? engine.fmtCurr(lever.reforecast.netSavings) : "—"}
+                  </Stat>
                   <Stat label="CAPEX">{engine.fmtCurr(lever.capex)}</Stat>
                   <Stat label="OPEX one-off">{engine.fmtCurr(lever.opexOneOff)}</Stat>
                   <Stat label="OPEX récurrent /an">{engine.fmtCurr(lever.opexRec)}</Stat>
@@ -895,7 +968,8 @@ function SubLeverImpactTable({
         </span>
       ),
     },
-    { key: "costCenter", label: "Centre de coût" },
+    { key: "expensePost", label: "Poste de dépense" },
+    { key: "businessUnit", label: "BU" },
     { key: "pnlName", label: "Compte P&L" },
     {
       key: "netSavings",
@@ -927,8 +1001,7 @@ function SubLeverImpactTable({
       totalsConfig={{
         netSavings: (list) => list.reduce((s, r) => s + r.netSavings, 0).toFixed(1),
         capex: (list) => list.reduce((s, r) => s + r.capex, 0).toFixed(1),
-        opexOneOff: (list) =>
-          list.reduce((s, r) => s + r.opexOneOff + r.opexRec, 0).toFixed(1),
+        opexOneOff: (list) => list.reduce((s, r) => s + r.opexOneOff + r.opexRec, 0).toFixed(1),
         fteImpact: (list) => list.reduce((s, r) => s + r.fteImpact, 0),
       }}
     />

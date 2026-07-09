@@ -6,11 +6,13 @@ import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Avatar } from "@/components/shared/Avatar";
+import { useRole } from "@/lib/hooks/useRole";
 import type { Role } from "@/types";
 
 /** Sidebar noire fixe — porté depuis `.sidebar` du prototype legacy. */
 export function Sidebar({ alertCount, role }: { alertCount: number; role: Role }) {
   const pathname = usePathname();
+  const { user } = useRole();
   const nav = roles[role].nav;
 
   return (
@@ -58,8 +60,10 @@ export function Sidebar({ alertCount, role }: { alertCount: number; role: Role }
       <div className="flex items-center gap-2.5 border-t border-white/[0.08] px-4 py-3.5">
         <Avatar initials={roles[role].short.slice(0, 2).toUpperCase()} variant="coral" />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-semibold text-white">{roles[role].label}</div>
-          <div className="text-[10px] text-white/50">Session démo</div>
+          <div className="truncate text-xs font-semibold text-white">
+            {user?.name ?? roles[role].label}
+          </div>
+          <div className="text-[10px] text-white/50">{roles[role].label}</div>
         </div>
       </div>
     </aside>

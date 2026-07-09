@@ -10,6 +10,18 @@ import type { AuditEntry, Comment, Lever, LeverAction, SubLever } from "@/types"
 
 const DEMO_USER = "Utilisateur démo";
 
+/** Applique le verrouillage plan initial/réactualisation (voir leversLogic.applyPlanLock) au
+ * seed mockData : sans ça, les leviers de démo déjà en L3+/L4+ n'auraient pas de plan figé tant
+ * qu'on ne les modifie pas manuellement. */
+function lockedSeed() {
+  return {
+    levers: mockData.levers.map((l) => leversLogic.applyPlanLock(l)),
+    subLevers: mockData.subLevers.map((s) => leversLogic.applyPlanLock(s)),
+    comments: mockData.comments,
+    audit: mockData.audit,
+  };
+}
+
 /**
  * Point d'accès React unique à la couche de persistance. Toute page/composant qui a besoin
  * des données BeTrack doit passer par ce hook plutôt que par `lib/storage.ts` ou
@@ -46,12 +58,7 @@ export function useBeTrackData() {
   useEffect(() => {
     let cancelled = false;
     leversDb
-      .ensureLeversSeeded({
-        levers: mockData.levers,
-        subLevers: mockData.subLevers,
-        comments: mockData.comments,
-        audit: mockData.audit,
-      })
+      .ensureLeversSeeded(lockedSeed())
       .catch((err) => console.error("[betrack] échec du seed Firestore des leviers :", err));
 
     const unsubscribers = [
@@ -357,12 +364,7 @@ export function useBeTrackData() {
   const resetToMockData = useCallback(() => {
     storage.resetToMockData();
     leversDb
-      .forceReseedLevers({
-        levers: mockData.levers,
-        subLevers: mockData.subLevers,
-        comments: mockData.comments,
-        audit: mockData.audit,
-      })
+      .forceReseedLevers(lockedSeed())
       .catch((err) => console.error("[betrack] échec du reset Firestore des leviers :", err));
     bump();
   }, [bump]);

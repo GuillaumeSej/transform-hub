@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Banknote, CircleCheck, TriangleAlert, TrendingUp, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import * as engine from "@/lib/engine";
+import { STATUS_LABEL } from "@/lib/status-config";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { AlertItem } from "@/components/shared/AlertItem";
@@ -15,11 +17,32 @@ import { SCurveChart } from "@/components/shared/charts/SCurveChart";
 import { WorkstreamBarChart } from "@/components/shared/charts/WorkstreamBarChart";
 import { GeoDonutChart } from "@/components/shared/charts/GeoDonutChart";
 import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
+import { StageFunnel } from "@/components/shared/charts/StageFunnel";
+import { SankeyChart } from "@/components/shared/charts/SankeyChart";
+import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
+import { QuarterlyBridgeChart } from "@/components/shared/charts/QuarterlyBridgeChart";
+import type { LeverStatus } from "@/types";
 
 export default function DashboardPage() {
   const data = useBeTrackData();
+  const router = useRouter();
   const summary = engine.programSummary(data);
-  const sCurve = engine.sCurve(data);
+  const sCurve = engine.sCurve3(data);
+  const stages = engine.stageCounts(data);
+  const sankey = engine.sankeyData(data);
+  const mekko = engine.marimekko(data);
+  const bridge = engine.quarterlyBridge(data);
+
+  const goToLevers = (params: Record<string, string>) => {
+    const qs = new URLSearchParams(params).toString();
+    router.push(`/levers${qs ? `?${qs}` : ""}`);
+  };
+  const goToStage = (status: LeverStatus) => goToLevers({ f_status: STATUS_LABEL[status] });
+  const goToStageLabel = (label: string) => {
+    const stage = stages.find((s) => s.label === label);
+    if (stage) goToStage(stage.status);
+  };
+
   const wsBars = data.workstreams.map((w) => ({
     label: w.name.split(" ")[0],
     realized: engine.workstreamSummary(data, w.id).realized,
@@ -101,11 +124,9 @@ export default function DashboardPage() {
 
       <div className="mb-4 grid grid-cols-[2fr_1fr] gap-4 max-[1100px]:grid-cols-1">
         <Card className="mb-0">
-          <CardHeader title="S-Curve — Value Delivery (Planned vs Actual)" />
+          <CardHeader title="Avancement des leviers (L1 → L5)" />
           <CardBody>
-            <SCurveChart
-              data={sCurve.map((p) => ({ month: p.month, planned: p.planned, actual: p.actual }))}
-            />
+            <StageFunnel data={stages} onStageClick={goToStage} />
           </CardBody>
         </Card>
         <Card className="mb-0">
@@ -117,6 +138,39 @@ export default function DashboardPage() {
             {data.alerts.length === 0 && (
               <p className="py-6 text-center text-sm text-tertiary">Aucune alerte active</p>
             )}
+          </CardBody>
+        </Card>
+      </div>
+
+      <div className="mb-4 grid grid-cols-[2fr_1fr] gap-4 max-[1100px]:grid-cols-1">
+        <Card className="mb-0">
+          <CardHeader title="Flux des leviers par étape (Sankey)" />
+          <CardBody>
+            <SankeyChart data={sankey} onNodeClick={goToStageLabel} />
+          </CardBody>
+        </Card>
+        <Card className="mb-0">
+          <CardHeader title="S-Curve — Plan initial / Réalisé / Réactualisé" />
+          <CardBody>
+            <SCurveChart data={sCurve} />
+          </CardBody>
+        </Card>
+      </div>
+
+      <div className="mb-4 grid grid-cols-[3fr_2fr] gap-4 max-[1100px]:grid-cols-1">
+        <Card className="mb-0">
+          <CardHeader title="Savings par fonction (Marimekko)" />
+          <CardBody>
+            <MarimekkoChart
+              data={mekko}
+              onSegmentClick={(func) => goToLevers({ f_function: func })}
+            />
+          </CardBody>
+        </Card>
+        <Card className="mb-0">
+          <CardHeader title="Économies par trimestre → cible" />
+          <CardBody>
+            <QuarterlyBridgeChart data={bridge} target={summary.target} />
           </CardBody>
         </Card>
       </div>
@@ -168,7 +222,8 @@ export default function DashboardPage() {
                   return (
                     <tr
                       key={ws.id}
-                      className="border-b border-border last:border-b-0 hover:bg-neutral-50"
+                      onClick={() => goToLevers({ f_ws: ws.name })}
+                      className="cursor-pointer border-b border-border last:border-b-0 hover:bg-neutral-50"
                     >
                       <td className="px-3 py-2.5 font-semibold text-primary">{ws.name}</td>
                       <td className="px-3 py-2.5">

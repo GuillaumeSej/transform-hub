@@ -1,5 +1,14 @@
 export type Role = "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
 
+/** Compte de test (voir lib/auth.ts) — login réel par identifiant/mot de passe, mais toujours
+ * des comptes de démo (mot de passe unique "test" pour les 6). */
+export type AuthUser = {
+  username: string;
+  password: string;
+  role: Role;
+  name: string; // nom affiché + utilisé pour filtrer "mes leviers" (Lever.owner)
+};
+
 // Cycle de vie unique d'un levier, affiché partout en L1-L5 (voir lib/status-config.ts) :
 // idea=L1 Idée, qualified=L2 Qualifié, validated=L3 Validé, in_progress=L4 Planifié,
 // delivered=L5 Réalisé (+ cancelled=Annulé, hors cycle).
@@ -47,6 +56,16 @@ export type PnlAccount = {
   computed?: boolean;
 };
 
+/** Instantané des chiffres financiers d'un levier/sous-levier, utilisé pour figer le plan initial
+ * (à L3 · Validé) et pour la réactualisation (à partir de L4 · Planifié). */
+export type FinancialSnapshot = {
+  grossSavings: number; // €M
+  netSavings: number; // €M
+  opexOneOff: number; // €M
+  opexRec: number; // €M/an
+  capex: number; // €M
+};
+
 export type Lever = {
   id: string;
   code: string;
@@ -61,6 +80,9 @@ export type Lever = {
   country: string;
   entity: string;
   function: string;
+  // Centre de coût du levier lorsqu'il n'a AUCUN sous-levier. S'il a des sous-leviers, l'impact
+  // se lit sur chaque sous-levier (poste de dépense + BU, voir SubLever) — ce champ est alors
+  // ignoré côté affichage au profit de la liste réelle des postes de dépense des sous-leviers.
   costCenter: string;
   pnlMap: string; // PnlAccount id
   start: string; // ISO date
@@ -76,6 +98,11 @@ export type Lever = {
   capex: number; // €M
   fteImpact: number; // positive = hires, negative = departures
   popImpacted: number;
+  // Plan initial figé automatiquement au passage en L3 · Validé — plus jamais modifiable ensuite.
+  lockedPlan?: FinancialSnapshot;
+  // Prévisions réactualisées, éditables uniquement à partir de L4 · Planifié (initialisées à
+  // lockedPlan à l'entrée en L4, puis ajustables librement).
+  reforecast?: FinancialSnapshot;
   dependencies: LeverDependency[]; // suivies + alertées, jamais décalées automatiquement
   description: string;
   createdAt: string;
@@ -95,8 +122,8 @@ export type LeverAction = {
   status: ActionStatus;
 };
 
-/** Un sous-levier = l'impact d'un levier sur UN centre de coût unique, avec son propre plan
- * d'action. Un levier avec plusieurs centres de coût impactés se décompose en plusieurs
+/** Un sous-levier = l'impact d'un levier sur UN poste de dépense/BU unique, avec son propre plan
+ * d'action. Un levier avec plusieurs postes de dépense impactés se décompose en plusieurs
  * sous-leviers ; un levier à impact unique n'en a pas besoin (voir Lever.actions). */
 export type SubLever = {
   id: string;
@@ -105,7 +132,9 @@ export type SubLever = {
   // Owner propre au sous-levier (optionnel) — à défaut, l'owner du levier parent s'applique.
   owner?: string;
   ownerInit?: string;
-  costCenter: string;
+  // Poste de dépense impacté (remplace l'ancien "centre de coût" unique) + BU associée.
+  expensePost: string;
+  businessUnit: string;
   pnlMap: string; // PnlAccount id
   grossSavings: number; // €M
   netSavings: number; // €M
@@ -117,6 +146,8 @@ export type SubLever = {
   start: string; // ISO date
   end: string; // ISO date
   status: LeverStatus;
+  lockedPlan?: FinancialSnapshot;
+  reforecast?: FinancialSnapshot;
   dependencies: LeverDependency[];
   actions: LeverAction[];
 };
