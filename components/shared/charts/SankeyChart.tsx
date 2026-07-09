@@ -12,16 +12,18 @@ const NODE_COLORS = ["#6B5750", "#FF3D3D", "#F5A623", "#4A90D9", "#2E7D32", "#8E
 /** Flux "tous les leviers" -> étape atteinte (L1..L5, Annulé) — clic sur un nœud pour creuser. */
 export function SankeyChart({
   data,
+  height = 260,
   onNodeClick,
 }: {
   data: SankeyDatum;
+  height?: number;
   onNodeClick?: (name: string) => void;
 }) {
   if (data.links.length === 0) {
     return <p className="py-10 text-center text-sm text-tertiary">Aucun levier à représenter.</p>;
   }
   return (
-    <ResponsiveContainer width="100%" height={260}>
+    <ResponsiveContainer width="100%" height={height}>
       <Sankey
         data={data}
         nodePadding={22}

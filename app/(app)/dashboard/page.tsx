@@ -42,6 +42,19 @@ export default function DashboardPage() {
     const stage = stages.find((s) => s.label === label);
     if (stage) goToStage(stage.status);
   };
+  const goToAlert = (alert: (typeof data.alerts)[number]) => {
+    if (alert.scope.startsWith("WS-")) {
+      const ws = data.workstreams.find((w) => w.id === alert.scope);
+      goToLevers(ws ? { f_ws: ws.name } : {});
+    } else if (data.getLeverById(alert.scope)) {
+      router.push(`/levers/detail?id=${alert.scope}`);
+    } else {
+      goToLevers({});
+    }
+  };
+  const currentYear = new Date(data.program.fyStart).getFullYear();
+  const goToMonth = (month: string) => goToLevers({ f_endMonth: `${month} ${currentYear}` });
+  const goToQuarter = (quarter: string) => goToLevers({ f_endQuarter: quarter });
 
   const wsBars = data.workstreams.map((w) => ({
     label: w.name.split(" ")[0],
@@ -122,7 +135,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="mb-4 grid grid-cols-[2fr_1fr] gap-4 max-[1100px]:grid-cols-1">
+      <div className="mb-4 grid grid-cols-[1.4fr_1fr] gap-4 max-[1100px]:grid-cols-1">
         <Card className="mb-0">
           <CardHeader title="Avancement des leviers (L1 → L5)" />
           <CardBody>
@@ -133,7 +146,7 @@ export default function DashboardPage() {
           <CardHeader title="Alerts & Notifications" />
           <CardBody>
             {data.alerts.slice(0, 5).map((a) => (
-              <AlertItem key={a.id} alert={a} />
+              <AlertItem key={a.id} alert={a} onClick={() => goToAlert(a)} />
             ))}
             {data.alerts.length === 0 && (
               <p className="py-6 text-center text-sm text-tertiary">Aucune alerte active</p>
@@ -142,35 +155,40 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="mb-4 grid grid-cols-[2fr_1fr] gap-4 max-[1100px]:grid-cols-1">
+      <Card className="mb-4">
+        <CardHeader title="S-Curve — Plan initial / Réalisé / Réactualisé" />
+        <CardBody>
+          <SCurveChart data={sCurve} height={360} onPointClick={goToMonth} />
+        </CardBody>
+      </Card>
+
+      <Card className="mb-4">
+        <CardHeader title="Économies par trimestre → cible" />
+        <CardBody>
+          <QuarterlyBridgeChart
+            data={bridge}
+            target={summary.target}
+            height={340}
+            onBarClick={goToQuarter}
+          />
+        </CardBody>
+      </Card>
+
+      <div className="mb-4 grid grid-cols-[1.4fr_1fr] gap-4 max-[1100px]:grid-cols-1">
         <Card className="mb-0">
           <CardHeader title="Flux des leviers par étape (Sankey)" />
           <CardBody>
-            <SankeyChart data={sankey} onNodeClick={goToStageLabel} />
+            <SankeyChart data={sankey} height={300} onNodeClick={goToStageLabel} />
           </CardBody>
         </Card>
-        <Card className="mb-0">
-          <CardHeader title="S-Curve — Plan initial / Réalisé / Réactualisé" />
-          <CardBody>
-            <SCurveChart data={sCurve} />
-          </CardBody>
-        </Card>
-      </div>
-
-      <div className="mb-4 grid grid-cols-[3fr_2fr] gap-4 max-[1100px]:grid-cols-1">
         <Card className="mb-0">
           <CardHeader title="Savings par fonction (Marimekko)" />
           <CardBody>
             <MarimekkoChart
               data={mekko}
+              height={300}
               onSegmentClick={(func) => goToLevers({ f_function: func })}
             />
-          </CardBody>
-        </Card>
-        <Card className="mb-0">
-          <CardHeader title="Économies par trimestre → cible" />
-          <CardBody>
-            <QuarterlyBridgeChart data={bridge} target={summary.target} />
           </CardBody>
         </Card>
       </div>

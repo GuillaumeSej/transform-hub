@@ -90,34 +90,6 @@ export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSu
   };
 }
 
-export function sCurve(data: BeTrackData) {
-  const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  const target = data.levers
-    .filter((l) => l.status !== "cancelled")
-    .reduce((s, l) => s + l.netSavings, 0);
-  const plannedCurve = [0.05, 0.1, 0.18, 0.28, 0.4, 0.52, 0.62, 0.72, 0.81, 0.88, 0.94, 1.0];
-  const actualCurve = [0.04, 0.09, 0.15, 0.24, 0.34, 0.44, 0.53, 0.62, 0.71, null, null, null];
-  return months.map((label, i) => ({
-    month: label,
-    planned: Math.round(plannedCurve[i] * target * 10) / 10,
-    actual:
-      actualCurve[i] === null ? null : Math.round((actualCurve[i] as number) * target * 10) / 10,
-  }));
-}
-
 export function pnlImpact(data: BeTrackData): Record<string, number> {
   const map: Record<string, number> = {};
   data.levers
@@ -434,25 +406,41 @@ function financialTotal(data: BeTrackData, pick: (l: Lever) => number): number {
   );
 }
 
+export const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/** Libellé "Mois Année" (ex: "Jun 2026") de la date de fin d'un levier — sert de valeur de filtre
+ * pour le drill-down depuis la S-curve de l'Executive Dashboard. */
+export function leverEndMonthLabel(lever: Lever): string {
+  const d = new Date(lever.end);
+  return `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Libellé "Qn Année" (ex: "Q2 2026") de la date de fin d'un levier — même regroupement que
+ * quarterlyBridge, sert de valeur de filtre pour son drill-down. */
+export function leverEndQuarterLabel(lever: Lever): string {
+  const d = new Date(lever.end);
+  return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
+}
+
 /** S-curve à 3 courbes : Plan initial (figé à L3, ou valeur courante tant que non figé), Réalisé
  * à date (inchangé, calculé depuis la progression), Réactualisé (dernière prévision, ou plan
  * initial/valeur courante tant que non réactualisé à L4). Même forme de courbe mensuelle que
  * l'ancien planned/actual — seule la valeur totale distribuée diffère par série. */
 export function sCurve3(data: BeTrackData) {
-  const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
+  const months = MONTH_LABELS;
   const plannedTotal = financialTotal(data, (l) => l.lockedPlan?.netSavings ?? l.netSavings);
   const reforecastTotal = financialTotal(
     data,

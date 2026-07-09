@@ -18,15 +18,32 @@ export type SCurvePoint = {
 };
 
 /** S-Curve à 3 courbes — Plan initial (figé à L3), Réalisé à date, Réactualisé (prévision à jour,
- * éditable à partir de L4). Porté/étendu depuis le chart Chart.js `ch-scurve` du prototype legacy. */
-export function SCurveChart({ data }: { data: SCurvePoint[] }) {
+ * éditable à partir de L4). Porté/étendu depuis le chart Chart.js `ch-scurve` du prototype legacy.
+ * Clic sur un point (ou son mois) -> creuse vers les leviers qui se terminent ce mois-là. */
+export function SCurveChart({
+  data,
+  height = 260,
+  onPointClick,
+}: {
+  data: SCurvePoint[];
+  height?: number;
+  onPointClick?: (month: string) => void;
+}) {
   return (
-    <ResponsiveContainer width="100%" height={260}>
-      <LineChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart
+        data={data}
+        margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+        onClick={(e) => {
+          const label = e?.activeLabel;
+          if (typeof label === "string") onPointClick?.(label);
+        }}
+        style={{ cursor: onPointClick ? "pointer" : undefined }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-        <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+        <XAxis dataKey="month" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <YAxis
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 12 }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(v) => `€${v}M`}
@@ -39,6 +56,7 @@ export function SCurveChart({ data }: { data: SCurvePoint[] }) {
           stroke="#FF3D3D"
           strokeWidth={2.5}
           dot={{ r: 3 }}
+          activeDot={{ r: 5 }}
           connectNulls={false}
         />
         <Line

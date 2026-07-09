@@ -111,6 +111,16 @@ export default function LeversPage() {
         label: "Alerte dépendance",
         getValue: (l) => (alertedLeverIds.has(l.id) ? "En alerte" : "Sans alerte"),
       },
+      {
+        key: "f_endMonth",
+        label: "Mois de fin",
+        getValue: (l) => engine.leverEndMonthLabel(l),
+      },
+      {
+        key: "f_endQuarter",
+        label: "Trimestre de fin",
+        getValue: (l) => engine.leverEndQuarterLabel(l),
+      },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.workstreams, data.subLevers, data.pnlAccounts, alertedLeverIds]

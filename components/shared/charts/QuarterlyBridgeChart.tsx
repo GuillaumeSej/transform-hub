@@ -18,10 +18,12 @@ export type QuarterBridgePoint = { quarter: string; delta: number; cumulative: n
 export function QuarterlyBridgeChart({
   data,
   target,
+  height = 240,
   onBarClick,
 }: {
   data: QuarterBridgePoint[];
   target: number;
+  height?: number;
   onBarClick?: (quarter: string) => void;
 }) {
   if (data.length === 0) {
@@ -29,12 +31,12 @@ export function QuarterlyBridgeChart({
   }
   const withTarget = data.map((d) => ({ ...d, target }));
   return (
-    <ResponsiveContainer width="100%" height={240}>
+    <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={withTarget} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-        <XAxis dataKey="quarter" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+        <XAxis dataKey="quarter" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <YAxis
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 12 }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(v) => `€${v}M`}

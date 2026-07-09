@@ -33,6 +33,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { StageBadge } from "@/components/shared/StageBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
+import { RadialProgress } from "@/components/shared/RadialProgress";
 import { Modal } from "@/components/shared/Modal";
 import { DependencyEditor } from "@/components/shared/DependencyEditor";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
@@ -490,6 +491,20 @@ export default function LeverDetailClient() {
       {tab === "overview" && (
         <Card>
           <CardBody>
+            <div className="mb-6 flex flex-wrap items-center gap-6 rounded-lg border border-border bg-neutral-50 p-4">
+              <RadialProgress
+                pct={lever.progress}
+                size={140}
+                strokeWidth={12}
+                label={hasSubLevers ? "Global (sous-leviers)" : "Progression"}
+              />
+              <div className="flex flex-1 flex-wrap gap-x-8 gap-y-4">
+                <BigStat label="Réalisé à date" value={engine.fmtCurr(real)} accent />
+                <BigStat label="Net savings visé" value={engine.fmtCurr(lever.netSavings)} />
+                <BigStat label="Niveau" value={<StageBadge status={lever.status} />} />
+                <BigStat label="Risque" value={<StatusBadge risk={lever.risk} />} />
+              </div>
+            </div>
             <div className="grid grid-cols-3 gap-4">
               <Stat label="Code">
                 <span className="font-mono text-[13px]">{lever.code}</span>
@@ -541,10 +556,6 @@ export default function LeverDetailClient() {
             </div>
             <SectionTitle>Description</SectionTitle>
             <p className="text-[13px] text-secondary">{lever.description}</p>
-            <SectionTitle>
-              Progression {hasSubLevers && "(calculée depuis les sous-leviers)"}
-            </SectionTitle>
-            <ProgressBar pct={lever.progress} />
 
             <div className="mt-6 flex items-center justify-between border-b-[1.5px] border-bp-coral pb-1.5">
               <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
@@ -564,56 +575,69 @@ export default function LeverDetailClient() {
               </p>
             )}
             {hasSubLevers && (
-              <div className="mt-2.5 grid grid-cols-2 gap-2.5">
-                {subLevers.map((s) => (
-                  <div
-                    key={s.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      setActiveSubLeverId(s.id);
-                      setTab("plan");
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        setActiveSubLeverId(s.id);
-                        setTab("plan");
-                      }
-                    }}
-                    title="Voir le plan d'action de ce sous-levier"
-                    className="cursor-pointer rounded-md border border-border bg-white p-3 text-left transition hover:border-bp-coral"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-primary">{s.name}</span>
-                      <span className="flex items-center gap-1.5">
-                        <StageBadge status={s.status} />
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSubLeverModal({ mode: "edit", sub: s });
-                          }}
-                          title="Paramètres du sous-levier"
-                          className="rounded-full p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
-                        >
-                          <Settings size={13} />
-                        </button>
-                      </span>
-                    </div>
-                    <div className="mt-1 text-[11px] text-tertiary">
-                      {s.expensePost} · {s.businessUnit}
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-bp-coral">
-                        {engine.fmtCurr(s.netSavings)}
-                      </span>
-                      <ProgressBar
-                        pct={engine.subLeverProgress(s)}
-                        showLabel={false}
-                        className="ml-2 flex-1"
-                      />
-                    </div>
+              <div className="mt-4 flex flex-col items-center">
+                {/* Nœud racine — le levier lui-même */}
+                <div className="rounded-md border-2 border-bp-coral bg-white px-4 py-2 text-center shadow-sm">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                    {lever.code}
                   </div>
-                ))}
+                  <div className="text-xs font-bold text-primary">{lever.name}</div>
+                </div>
+                <div className="h-6 w-px bg-neutral-300" />
+                {/* Branches vers chaque sous-levier */}
+                <div className="flex w-full items-start justify-center gap-4">
+                  {subLevers.map((s, i) => (
+                    <div key={s.id} className="relative flex-1 pt-5" style={{ maxWidth: 220 }}>
+                      {i > 0 && <div className="absolute left-0 top-0 h-px w-1/2 bg-neutral-300" />}
+                      {i < subLevers.length - 1 && (
+                        <div className="absolute right-0 top-0 h-px w-1/2 bg-neutral-300" />
+                      )}
+                      <div className="absolute left-1/2 top-0 h-5 w-px -translate-x-1/2 bg-neutral-300" />
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setActiveSubLeverId(s.id);
+                          setTab("plan");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            setActiveSubLeverId(s.id);
+                            setTab("plan");
+                          }
+                        }}
+                        title="Voir le plan d'action de ce sous-levier"
+                        className="flex cursor-pointer flex-col items-center gap-2 rounded-md border border-border bg-white p-3 text-center transition hover:border-bp-coral hover:shadow-md"
+                      >
+                        <div className="flex w-full items-center justify-between gap-1">
+                          <StageBadge status={s.status} />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSubLeverModal({ mode: "edit", sub: s });
+                            }}
+                            title="Paramètres du sous-levier"
+                            className="rounded-full p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
+                          >
+                            <Settings size={13} />
+                          </button>
+                        </div>
+                        <RadialProgress
+                          pct={engine.subLeverProgress(s)}
+                          size={64}
+                          strokeWidth={6}
+                        />
+                        <span className="text-xs font-semibold text-primary">{s.name}</span>
+                        <span className="text-[10.5px] text-tertiary">
+                          {s.expensePost} · {s.businessUnit}
+                        </span>
+                        <span className="text-xs font-bold text-bp-coral">
+                          {engine.fmtCurr(s.netSavings)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1034,6 +1058,27 @@ function Stat({
       </div>
       <div className={`mt-1 text-sm font-semibold ${accent ? "text-bp-coral" : "text-primary"}`}>
         {children}
+      </div>
+    </div>
+  );
+}
+
+function BigStat({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  accent?: boolean;
+}) {
+  return (
+    <div>
+      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+        {label}
+      </div>
+      <div className={`mt-1 text-xl font-bold ${accent ? "text-bp-coral" : "text-primary"}`}>
+        {value}
       </div>
     </div>
   );

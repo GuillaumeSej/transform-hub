@@ -6,7 +6,15 @@ import * as leversLogic from "@/lib/leversLogic";
 import * as leversDb from "@/lib/firestore/levers";
 import type { CascadeShift } from "@/lib/engine";
 import { mockData } from "@/data/mockData";
-import type { AuditEntry, Comment, Lever, LeverAction, SubLever } from "@/types";
+import type {
+  AuditEntry,
+  Comment,
+  Department,
+  Lever,
+  LeverAction,
+  SubLever,
+  WorkforceMovement,
+} from "@/types";
 
 const DEMO_USER = "Utilisateur démo";
 
@@ -353,6 +361,41 @@ export function useBeTrackData() {
     [bump]
   );
 
+  const updateWorkforceMovement = useCallback(
+    (id: string, patch: Partial<WorkforceMovement>) => {
+      const result = storage.updateWorkforceMovement(id, patch);
+      bump();
+      return result;
+    },
+    [bump]
+  );
+
+  const createWorkforceMovement = useCallback(
+    (input: Omit<WorkforceMovement, "id">) => {
+      const result = storage.createWorkforceMovement(input);
+      bump();
+      return result;
+    },
+    [bump]
+  );
+
+  const deleteWorkforceMovement = useCallback(
+    (id: string) => {
+      storage.deleteWorkforceMovement(id);
+      bump();
+    },
+    [bump]
+  );
+
+  const updateDepartment = useCallback(
+    (name: string, patch: Partial<Department>) => {
+      const result = storage.updateDepartment(name, patch);
+      bump();
+      return result;
+    },
+    [bump]
+  );
+
   const setActiveScenario = useCallback(
     (scenarioId: string) => {
       storage.setActiveScenario(scenarioId);
@@ -386,6 +429,10 @@ export function useBeTrackData() {
     applyCascadeShift,
     addComment,
     resolveAlert,
+    updateWorkforceMovement,
+    createWorkforceMovement,
+    deleteWorkforceMovement,
+    updateDepartment,
     setActiveScenario,
     resetToMockData,
   };
