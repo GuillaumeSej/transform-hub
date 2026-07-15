@@ -2,7 +2,7 @@
 
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
-const COLORS = ["#FF3D3D", "#C8281A", "#F58F89", "#6B5750", "#A89A93", "#2B0000"];
+const COLORS = ["#FF3C47", "#991D1F", "#FF797B", "#806659", "#A99E9A", "#320300"];
 
 export type GeoDonutPoint = { name: string; value: number };
 

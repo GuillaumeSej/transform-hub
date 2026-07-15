@@ -12,7 +12,8 @@ const CRUMBS: Record<string, string> = {
   "/levers": "Lever Library",
   "/workstreams": "Workstream Dashboard",
   "/finance": "Finance Module",
-  "/hr": "HR Module",
+  "/hr": "Dashboard RH",
+  "/hr/etp": "Base ETP",
   "/operations": "Operations Module",
 };
 
@@ -43,7 +44,7 @@ export function Topbar({
           {user?.name ?? roles[role].label}
         </span>
         <button
-          className="relative flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-bp-coral hover:text-bp-coral"
+          className="relative flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black"
           aria-label="Alertes"
         >
           <Bell size={14} />
@@ -57,7 +58,7 @@ export function Topbar({
             logout();
             router.push("/login");
           }}
-          className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-bp-coral hover:text-bp-coral"
+          className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black"
           aria-label="Se déconnecter"
           title="Se déconnecter"
         >

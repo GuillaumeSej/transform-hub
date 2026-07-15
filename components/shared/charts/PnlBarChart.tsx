@@ -26,7 +26,7 @@ export function PnlBarChart({ data }: { data: PnlBarPoint[] }) {
           width={140}
         />
         <Tooltip formatter={(value) => [`€${Number(value).toFixed(1)}M`, "Impact savings"]} />
-        <Bar dataKey="impact" fill="#FF3D3D" radius={[0, 4, 4, 0]} />
+        <Bar dataKey="impact" fill="#FF3C47" radius={[0, 4, 4, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

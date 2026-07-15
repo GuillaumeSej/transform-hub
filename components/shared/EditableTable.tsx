@@ -117,14 +117,14 @@ export function EditableTable<T extends { id: string }>({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={searchPlaceholder}
-          className="min-w-[220px] rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-bp-coral focus:outline-none"
+          className="min-w-[220px] rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none"
         />
         {filterableColumns.map((c) => (
           <select
             key={c.key}
             value={columnFilters[c.key] ?? ""}
             onChange={(e) => setColumnFilters((prev) => ({ ...prev, [c.key]: e.target.value }))}
-            className="rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-bp-coral focus:outline-none"
+            className="rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none"
           >
             <option value="">{c.label} (tous)</option>
             {c.options!.map((opt) => (

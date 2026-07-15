@@ -5,7 +5,7 @@ import { Button } from "@/components/shared/Button";
 import type { BeTrackData, MovementStatus, MovementType, WorkforceMovement } from "@/types";
 
 const inputClass =
-  "w-full rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-bp-coral focus:outline-none";
+  "w-full rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none";
 const labelClass = "mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-tertiary";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -269,7 +269,7 @@ export function MovementForm({
               type="checkbox"
               checked={values.inPSE ?? false}
               onChange={(e) => set("inPSE", e.target.checked)}
-              className="accent-[#FF3D3D]"
+              className="accent-[#FF3C47]"
             />
             <span className="text-xs font-medium text-primary">Inclus dans le PSE</span>
           </label>

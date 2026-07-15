@@ -14,9 +14,9 @@ import {
 import type { FteBridgeBucket } from "@/lib/hrEngine";
 
 // Polarité validée (dataviz) : réductions en corail, ajouts en bleu — ΔE CVD 81.6.
-const COLOR_DOWN = "#FF3D3D";
-const COLOR_UP = "#1565C0";
-const COLOR_TARGET = "#6B5750";
+const COLOR_DOWN = "#FF3C47";
+const COLOR_UP = "#421799";
+const COLOR_TARGET = "#806659";
 
 type WaterfallDatum = {
   label: string;
@@ -101,7 +101,7 @@ export function FteWaterfallChart({
             return (
               <div className="rounded-md border border-border bg-white px-3 py-2 text-xs shadow-sm">
                 <div className="font-semibold text-primary">{d.label}</div>
-                <div className={d.delta < 0 ? "text-bp-coral" : "text-info-blue"}>
+                <div className="font-semibold text-primary">
                   {d.delta > 0 ? "+" : ""}
                   {fmt(d.delta)} {unit}
                 </div>
@@ -133,7 +133,7 @@ export function FteWaterfallChart({
           y={baseline - offset}
           stroke="rgba(0,0,0,0.35)"
           strokeWidth={1}
-          label={{ value: `Baseline ${fmt(baseline)}`, fontSize: 10, position: "insideTopLeft", fill: "#6B5750" }}
+          label={{ value: `Baseline ${fmt(baseline)}`, fontSize: 10, position: "insideTopLeft", fill: "#806659" }}
         />
         <ReferenceLine
           y={target - offset}

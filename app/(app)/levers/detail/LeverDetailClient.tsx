@@ -151,7 +151,7 @@ export default function LeverDetailClient() {
     <div className="animate-fade-up">
       <button
         onClick={() => router.push("/levers")}
-        className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:text-bp-coral"
+        className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:text-primary hover:underline"
       >
         <ArrowLeft size={13} /> Retour au pipeline
       </button>
@@ -198,11 +198,11 @@ export default function LeverDetailClient() {
                     }
                     className={`flex flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 transition ${
                       isCurrent
-                        ? "border-bp-coral bg-bp-coral text-white"
+                        ? "border-bp-coral bg-black text-white"
                         : isPast
                           ? "border-rag-green bg-rag-green-light text-rag-green-dark"
                           : "border-border bg-neutral-50 text-secondary"
-                    } ${isAuto ? "cursor-not-allowed opacity-80" : "hover:border-bp-coral"}`}
+                    } ${isAuto ? "cursor-not-allowed opacity-80" : "hover:border-black"}`}
                   >
                     <span className="text-[13px] font-bold">{STATUS_LEVEL[s]}</span>
                     <span className="text-[10px] font-semibold uppercase tracking-wide">
@@ -426,13 +426,13 @@ export default function LeverDetailClient() {
                         checked: { ...cascadeProposal.checked, [s.id]: e.target.checked },
                       })
                     }
-                    className="mt-0.5 accent-[#FF3D3D]"
+                    className="mt-0.5 accent-[#FF3C47]"
                   />
                   <span>
                     <span className="font-semibold text-primary">{s.name}</span>
                     <span className="mt-1 block text-tertiary">
                       {s.oldStart} → {s.oldEnd}{" "}
-                      <span className="mx-1 font-semibold text-bp-coral">devient</span> {s.newStart}{" "}
+                      <span className="mx-1 font-semibold text-primary">devient</span> {s.newStart}{" "}
                       → {s.newEnd}
                     </span>
                   </span>
@@ -478,7 +478,7 @@ export default function LeverDetailClient() {
             onClick={() => setTab(t)}
             className={`-mb-[1.5px] border-b-[2.5px] px-4 py-3 text-[12.5px] font-semibold transition ${
               tab === t
-                ? "border-bp-coral text-bp-coral"
+                ? "border-bp-coral text-primary"
                 : "border-transparent text-secondary hover:text-primary"
             }`}
           >
@@ -607,7 +607,7 @@ export default function LeverDetailClient() {
                           }
                         }}
                         title="Voir le plan d'action de ce sous-levier"
-                        className="flex cursor-pointer flex-col items-center gap-2 rounded-md border border-border bg-white p-3 text-center transition hover:border-bp-coral hover:shadow-md"
+                        className="flex cursor-pointer flex-col items-center gap-2 rounded-md border border-border bg-white p-3 text-center transition hover:border-black hover:shadow-md"
                       >
                         <div className="flex w-full items-center justify-between gap-1">
                           <StageBadge status={s.status} />
@@ -617,7 +617,7 @@ export default function LeverDetailClient() {
                               setSubLeverModal({ mode: "edit", sub: s });
                             }}
                             title="Paramètres du sous-levier"
-                            className="rounded-full p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
+                            className="rounded-full p-1 text-tertiary transition hover:bg-neutral-100 hover:text-primary hover:underline"
                           >
                             <Settings size={13} />
                           </button>
@@ -631,7 +631,7 @@ export default function LeverDetailClient() {
                         <span className="text-[10.5px] text-tertiary">
                           {s.expensePost} · {s.businessUnit}
                         </span>
-                        <span className="text-xs font-bold text-bp-coral">
+                        <span className="text-xs font-bold text-primary">
                           {engine.fmtCurr(s.netSavings)}
                         </span>
                       </div>
@@ -684,7 +684,7 @@ export default function LeverDetailClient() {
                         );
                       }}
                       title={alert ? alert.message : DEPENDENCY_TYPE_DESCRIPTION[d.type]}
-                      className={`mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition hover:border-bp-coral ${
+                      className={`mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition hover:border-black ${
                         alert
                           ? "border-rag-red-light bg-rag-red-light/40"
                           : "border-border bg-neutral-50"
@@ -724,7 +724,7 @@ export default function LeverDetailClient() {
                       const subTarget = data.subLevers.find((s) => s.id === dep.id);
                       router.push(`/levers/detail?id=${subTarget ? subTarget.leverId : dep.id}`);
                     }}
-                    className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border border-border bg-neutral-50 px-2.5 py-2 text-left text-xs transition hover:border-bp-coral"
+                    className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border border-border bg-neutral-50 px-2.5 py-2 text-left text-xs transition hover:border-black"
                   >
                     <span className="font-semibold text-primary">
                       {dep.id} · {dep.name}
@@ -769,8 +769,8 @@ export default function LeverDetailClient() {
                       title={`Owner : ${s.owner || lever.owner}`}
                       className={`flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-xs font-semibold transition ${
                         activeSubLever?.id === s.id
-                          ? "border-bp-coral bg-bp-coral text-white"
-                          : "border-border bg-white text-secondary hover:border-bp-coral hover:text-bp-coral"
+                          ? "border-bp-coral bg-black text-white"
+                          : "border-border bg-white text-secondary hover:border-black"
                       }`}
                     >
                       <Avatar initials={s.ownerInit || lever.ownerInit} size="sm" />
@@ -801,13 +801,13 @@ export default function LeverDetailClient() {
                 <div className="flex overflow-hidden rounded-md border border-border">
                   <button
                     onClick={() => setActionView("kanban")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${actionView === "kanban" ? "bg-bp-coral text-white" : "bg-white text-secondary"}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${actionView === "kanban" ? "bg-black text-white" : "bg-white text-secondary"}`}
                   >
                     <LayoutGrid size={13} /> Kanban
                   </button>
                   <button
                     onClick={() => setActionView("gantt")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${actionView === "gantt" ? "bg-bp-coral text-white" : "bg-white text-secondary"}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${actionView === "gantt" ? "bg-black text-white" : "bg-white text-secondary"}`}
                   >
                     <BarChart3 size={13} /> Gantt
                   </button>
@@ -838,7 +838,7 @@ export default function LeverDetailClient() {
               <span className="text-rag-red">
                 En retard : {actions.filter((a) => a.status === "delayed").length}
               </span>
-              <span className="ml-auto font-bold text-bp-coral">
+              <span className="ml-auto font-bold text-primary">
                 {engine.actionProgress(actions)}% du plan
               </span>
             </div>
@@ -941,7 +941,7 @@ export default function LeverDetailClient() {
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Ajouter un commentaire..."
                 rows={2}
-                className="w-full rounded-sm border border-border px-3 py-2 text-xs focus:border-bp-coral focus:outline-none"
+                className="w-full rounded-sm border border-border px-3 py-2 text-xs focus:border-black focus:outline-none"
               />
               <Button
                 variant="primary"
@@ -1056,7 +1056,7 @@ function Stat({
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
         {label}
       </div>
-      <div className={`mt-1 text-sm font-semibold ${accent ? "text-bp-coral" : "text-primary"}`}>
+      <div className={`mt-1 text-sm font-semibold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}>
         {children}
       </div>
     </div>
@@ -1077,7 +1077,7 @@ function BigStat({
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
         {label}
       </div>
-      <div className={`mt-1 text-xl font-bold ${accent ? "text-bp-coral" : "text-primary"}`}>
+      <div className={`mt-1 text-xl font-bold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}>
         {value}
       </div>
     </div>

@@ -19,7 +19,7 @@ export function ResetDemoButton({ onReset }: { onReset: () => void }) {
           <Tooltip.Trigger asChild>
             <button
               onClick={() => setOpen(true)}
-              className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-bp-coral hover:text-bp-coral"
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black"
               aria-label="Réinitialiser les données démo"
             >
               <RotateCcw size={14} />

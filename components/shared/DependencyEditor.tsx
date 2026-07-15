@@ -7,7 +7,7 @@ import { DEPENDENCY_TYPES, DEPENDENCY_TYPE_DESCRIPTION, DEPENDENCY_TYPE_LABEL } 
 import type { BeTrackData, DependencyType, LeverDependency } from "@/types";
 
 const inputClass =
-  "rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-bp-coral focus:outline-none";
+  "rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none";
 
 /**
  * Éditeur de dépendances typées (cible + type Fin→Début / Début→Début / Fin→Fin / Début→Fin),
@@ -87,7 +87,7 @@ export function DependencyEditor({
           <button
             type="button"
             onClick={() => onChange(value.filter((d) => d.targetId !== dep.targetId))}
-            className="p-1 text-tertiary hover:text-bp-coral"
+            className="p-1 text-tertiary hover:text-primary hover:underline"
             aria-label="Retirer la dépendance"
           >
             <X size={13} />

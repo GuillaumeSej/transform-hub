@@ -45,7 +45,7 @@ export function Kanban({
                 key={l.id}
                 onClick={() => onCardClick(l.id)}
                 className={cn(
-                  "mb-2 block w-full rounded-sm border border-border bg-white p-2.5 text-left transition hover:-translate-y-px hover:border-bp-coral hover:shadow-sm"
+                  "mb-2 block w-full rounded-sm border border-border bg-white p-2.5 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm"
                 )}
               >
                 <div className="mb-1.5 text-xs font-semibold text-primary">{l.name}</div>
@@ -53,7 +53,7 @@ export function Kanban({
                   <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
                     {l.code}
                   </span>
-                  <span className="text-[12.5px] font-bold text-bp-coral">
+                  <span className="text-[12.5px] font-bold text-primary">
                     {fmtCurr(l.netSavings)}
                   </span>
                 </div>

@@ -52,7 +52,7 @@ export function ActionGantt({
             <div key={a.id} className="flex items-center gap-3">
               <button
                 onClick={() => onCardClick(a)}
-                className="w-40 shrink-0 truncate text-left text-xs font-medium text-primary hover:text-bp-coral"
+                className="w-40 shrink-0 truncate text-left text-xs font-medium text-primary hover:text-primary hover:underline"
                 title={a.name}
               >
                 {a.name}
