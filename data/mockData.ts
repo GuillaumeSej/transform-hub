@@ -1,9 +1,274 @@
-import type { BeTrackData } from "@/types";
+import type { BeTrackData, Employee, WorkforceMovement } from "@/types";
 
 /**
  * Seed initial — copié fidèlement depuis le prototype de Guillaume (legacy/index.html, `const DB`).
  * Ne jamais importer ce module directement dans une page/composant : passer par lib/storage.ts.
  */
+// ---------------------------------------------------------------------------
+// Générateur déterministe de la base ETP (pas de Math.random : le seed doit être
+// identique à chaque build/SSG). ~160 employés sur le périmètre transformation
+// (les totaux entreprise — 2 840 ETP — restent portés par workforceMeta), et
+// ~45 mouvements cohérents avec les fteImpact des leviers.
+// ---------------------------------------------------------------------------
+
+const FIRST_NAMES = [
+  "Marc", "Léa", "Alex", "Anaïs", "Claire", "Jean", "Sophie", "Pierre", "Thomas", "Nicolas",
+  "Lucas", "Emma", "Hugo", "Chloé", "Louis", "Camille", "Nathan", "Sarah", "Paul", "Julie",
+];
+const LAST_NAMES = [
+  "Dubois", "Moreau", "Roussel", "Petit", "Bernard", "Dupont", "Martin", "Lefevre", "Fournier",
+  "Lambert", "Garnier", "Faure", "Mercier", "Blanc", "Henry", "Chevalier", "Masson", "Weber",
+  "Schneider", "Rossi", "Ferrari", "Garcia", "Lopez", "Smith",
+];
+
+type DeptSpec = {
+  name: string;
+  direction: string;
+  bu: string;
+  count: number;
+  funcs: string[];
+  baseSalary: number;
+};
+
+const DEPT_SPECS: DeptSpec[] = [
+  {
+    name: "Production",
+    direction: "Direction Industrielle",
+    bu: "BU Industrie",
+    count: 56,
+    funcs: ["Opérateur ligne", "Technicien maintenance", "Chef d'équipe", "Ingénieur process", "Responsable atelier"],
+    baseSalary: 38000,
+  },
+  {
+    name: "Commercial & Marketing",
+    direction: "Direction Commerciale",
+    bu: "BU Services",
+    count: 32,
+    funcs: ["Account Manager", "Chargé de marketing", "Business Developer", "Responsable grands comptes", "Analyste pricing"],
+    baseSalary: 52000,
+  },
+  {
+    name: "R&D / Innovation",
+    direction: "Direction Innovation",
+    bu: "Corporate",
+    count: 24,
+    funcs: ["Ingénieur R&D", "Chef de projet innovation", "Data Scientist", "Designer produit"],
+    baseSalary: 58000,
+  },
+  {
+    name: "Support (IT/Finance/HR)",
+    direction: "Direction Fonctions Support",
+    bu: "Corporate",
+    count: 26,
+    funcs: ["Comptable", "Analyste financier", "Gestionnaire paie", "Administrateur SI", "Acheteur", "Category Manager"],
+    baseSalary: 46000,
+  },
+  {
+    name: "Supply Chain",
+    direction: "Direction Supply Chain",
+    bu: "BU Industrie",
+    count: 22,
+    funcs: ["Planificateur", "Responsable entrepôt", "Coordinateur logistique", "Prévisionniste"],
+    baseSalary: 44000,
+  },
+];
+
+const COUNTRY_POOL: { country: string; region: string; entity: string; hrOwner: string }[] = [
+  { country: "France", region: "Europe", entity: "SAS", hrOwner: "Nadia Benali" },
+  { country: "France", region: "Europe", entity: "SAS", hrOwner: "Nadia Benali" },
+  { country: "Germany", region: "Europe", entity: "GmbH", hrOwner: "Petra Schmidt" },
+  { country: "France", region: "Europe", entity: "SAS", hrOwner: "Nadia Benali" },
+  { country: "Spain", region: "Europe", entity: "SL", hrOwner: "Laura Conti" },
+  { country: "Germany", region: "Europe", entity: "GmbH", hrOwner: "Petra Schmidt" },
+  { country: "Italy", region: "Europe", entity: "SpA", hrOwner: "Laura Conti" },
+  { country: "UK", region: "Europe", entity: "Ltd", hrOwner: "Emily Clarke" },
+  { country: "France", region: "Europe", entity: "SAS", hrOwner: "Nadia Benali" },
+  { country: "USA", region: "Americas", entity: "Inc", hrOwner: "Emily Clarke" },
+];
+
+const LEVELS: Employee["level"][] = ["Local", "Local", "Local", "Régional", "Local", "Local", "Régional", "Local", "Global", "Local"];
+
+function generateEmployees(): Employee[] {
+  const employees: Employee[] = [];
+  let seq = 0;
+  for (const dept of DEPT_SPECS) {
+    for (let i = 0; i < dept.count; i++) {
+      seq += 1;
+      const geo = COUNTRY_POOL[(seq * 3) % COUNTRY_POOL.length];
+      const level = LEVELS[seq % LEVELS.length];
+      const func = dept.funcs[seq % dept.funcs.length];
+      const levelBonus = level === "Global" ? 2.2 : level === "Régional" ? 1.45 : 1;
+      const variation = 1 + ((seq * 7) % 25) / 100; // 1.00 → 1.24, déterministe
+      const salary = Math.round((dept.baseSalary * levelBonus * variation) / 500) * 500;
+      const fte = seq % 11 === 0 ? 0.8 : seq % 17 === 0 ? 0.5 : 1.0;
+      const hireYear = 2005 + ((seq * 5) % 20); // 2005-2024
+      const retirementYear = 2032 + ((seq * 3) % 20); // 2032-2051
+      const month = String(1 + (seq % 12)).padStart(2, "0");
+      const day = String(1 + ((seq * 2) % 28)).padStart(2, "0");
+      employees.push({
+        id: `EMP${String(seq).padStart(3, "0")}`,
+        name: `${LAST_NAMES[seq % LAST_NAMES.length]} ${FIRST_NAMES[(seq * 3) % FIRST_NAMES.length]}`,
+        region: geo.region,
+        country: geo.country,
+        department: dept.name,
+        direction: dept.direction,
+        hrOwner: geo.hrOwner,
+        func,
+        team: func,
+        bu: dept.bu,
+        entity: geo.entity,
+        level,
+        fte,
+        salary,
+        hireDate: `${hireYear}-${month}-${day}`,
+        retirement: `${day}/${month}/${retirementYear}`,
+      });
+    }
+  }
+  return employees;
+}
+
+/** Plan de mouvements par levier : [leverId, département source, nb suppressions,
+ * nb redéploiements (vers toDept), nb reconversions, PSE?] — aligné sur les fteImpact
+ * des leviers (L007 −24, L001 −12, L014 −8, L008 −8, L015 −8, L013 −6, L017 −6…). */
+const MOVEMENT_PLAN: {
+  leverId: string;
+  dept: string;
+  suppressions: number;
+  redeploy: number;
+  toDept?: string;
+  reconversions: number;
+  pse: boolean;
+  startMonth: number; // mois de la 1ère échéance (2026)
+}[] = [
+  { leverId: "L007", dept: "Production", suppressions: 8, redeploy: 3, toDept: "Supply Chain", reconversions: 2, pse: true, startMonth: 3 },
+  { leverId: "L001", dept: "Support (IT/Finance/HR)", suppressions: 4, redeploy: 2, toDept: "Commercial & Marketing", reconversions: 1, pse: true, startMonth: 2 },
+  { leverId: "L014", dept: "Commercial & Marketing", suppressions: 3, redeploy: 1, toDept: "Support (IT/Finance/HR)", reconversions: 0, pse: false, startMonth: 2 },
+  { leverId: "L008", dept: "Production", suppressions: 3, redeploy: 2, toDept: "Production", reconversions: 1, pse: true, startMonth: 4 },
+  { leverId: "L015", dept: "Support (IT/Finance/HR)", suppressions: 3, redeploy: 1, toDept: "R&D / Innovation", reconversions: 1, pse: false, startMonth: 5 },
+  { leverId: "L013", dept: "Commercial & Marketing", suppressions: 2, redeploy: 1, toDept: "Commercial & Marketing", reconversions: 0, pse: false, startMonth: 1 },
+  { leverId: "L017", dept: "Supply Chain", suppressions: 2, redeploy: 2, toDept: "Production", reconversions: 1, pse: false, startMonth: 6 },
+];
+
+const RECRUITMENTS: { label: string; dept: string; country: string; leverId: string; fte: number; salary: number; month: number }[] = [
+  { label: "Data Engineer (poste créé)", dept: "R&D / Innovation", country: "France", leverId: "L015", fte: 1, salary: 65000, month: 4 },
+  { label: "Data Engineer (poste créé)", dept: "R&D / Innovation", country: "France", leverId: "L015", fte: 1, salary: 65000, month: 6 },
+  { label: "Expert e-procurement", dept: "Support (IT/Finance/HR)", country: "Germany", leverId: "L004", fte: 1, salary: 72000, month: 5 },
+  { label: "Pricing Analyst", dept: "Commercial & Marketing", country: "USA", leverId: "L010", fte: 1, salary: 78000, month: 7 },
+  { label: "Automaticien senior", dept: "Production", country: "France", leverId: "L007", fte: 1, salary: 55000, month: 8 },
+  { label: "Chef de projet supply", dept: "Supply Chain", country: "Italy", leverId: "L017", fte: 1, salary: 60000, month: 9 },
+];
+
+// Référence temporelle du scénario démo (voir DEMO_NOW dans lib/engine.ts) : 2026-06-22.
+// Les statuts sont dérivés de la date planifiée pour produire un mix réaliste : réalisés
+// (dont certains non validés RH), en cours, planifiés, et quelques retards non traités.
+function movementStatus(plannedMonth: number, seq: number): { status: WorkforceMovement["status"]; actual: boolean; validated: boolean } {
+  if (plannedMonth <= 4) {
+    // Échéance passée : majoritairement réalisés, validés pour la plupart
+    if (seq % 5 === 0) return { status: "En cours", actual: false, validated: false }; // retard non résorbé
+    return { status: "Réalisé", actual: true, validated: seq % 3 !== 0 };
+  }
+  if (plannedMonth <= 6) {
+    if (seq % 3 === 0) return { status: "Réalisé", actual: true, validated: false }; // à valider
+    return { status: "En cours", actual: false, validated: false };
+  }
+  return { status: "Planifié", actual: false, validated: false };
+}
+
+function generateMovements(employees: Employee[]): WorkforceMovement[] {
+  const movements: WorkforceMovement[] = [];
+  const used = new Set<string>();
+  let seq = 0;
+
+  const pickEmployee = (dept: string, offset: number): Employee => {
+    const pool = employees.filter((e) => e.department === dept && !used.has(e.id));
+    const emp = pool[(offset * 5) % pool.length];
+    used.add(emp.id);
+    return emp;
+  };
+
+  const push = (
+    emp: Employee | null,
+    label: string,
+    plan: { leverId: string; dept: string; country?: string },
+    type: WorkforceMovement["type"],
+    fte: number,
+    month: number,
+    opts: { toDept?: string; pse?: boolean; salaryImpact: number; savings: number; cost: number }
+  ) => {
+    seq += 1;
+    const day = String(1 + ((seq * 3) % 27)).padStart(2, "0");
+    const plannedDate = `2026-${String(month).padStart(2, "0")}-${day}`;
+    const st = movementStatus(month, seq);
+    movements.push({
+      id: `MV${String(seq).padStart(3, "0")}`,
+      empId: emp?.id ?? null,
+      label,
+      leverId: plan.leverId,
+      type,
+      fte,
+      department: plan.dept,
+      toDepartment: opts.toDept,
+      country: emp?.country ?? plan.country ?? "France",
+      hrOwner: emp?.hrOwner ?? "Nadia Benali",
+      plannedDate,
+      actualDate: st.actual ? plannedDate : null,
+      status: st.status,
+      hrValidated: st.validated,
+      inPSE: opts.pse,
+      salaryImpact: opts.salaryImpact,
+      savings: opts.savings,
+      cost: opts.cost,
+    });
+  };
+
+  for (const plan of MOVEMENT_PLAN) {
+    for (let i = 0; i < plan.suppressions; i++) {
+      const emp = pickEmployee(plan.dept, seq + i);
+      const month = Math.min(12, plan.startMonth + (i % 6));
+      push(emp, emp.name, plan, "Suppression", emp.fte, month, {
+        pse: plan.pse,
+        salaryImpact: -emp.salary,
+        savings: emp.salary,
+        cost: plan.pse ? 45000 + ((seq * 7) % 4) * 5000 : 20000,
+      });
+    }
+    for (let i = 0; i < plan.redeploy; i++) {
+      const emp = pickEmployee(plan.dept, seq + i);
+      const month = Math.min(12, plan.startMonth + 1 + (i % 5));
+      push(emp, emp.name, plan, "Redéploiement", emp.fte, month, {
+        toDept: plan.toDept,
+        salaryImpact: 0,
+        savings: 0,
+        cost: 8000,
+      });
+    }
+    for (let i = 0; i < plan.reconversions; i++) {
+      const emp = pickEmployee(plan.dept, seq + i);
+      const month = Math.min(12, plan.startMonth + 2 + (i % 4));
+      push(emp, emp.name, plan, "Reconversion", emp.fte, month, {
+        toDept: plan.toDept,
+        salaryImpact: -Math.round(emp.salary * 0.1),
+        savings: Math.round(emp.salary * 0.1),
+        cost: 15000,
+      });
+    }
+  }
+
+  for (const rec of RECRUITMENTS) {
+    push(null, rec.label, { leverId: rec.leverId, dept: rec.dept, country: rec.country }, "Recrutement", rec.fte, rec.month, {
+      salaryImpact: rec.salary,
+      savings: 0,
+      cost: 20000,
+    });
+  }
+
+  return movements;
+}
+
+const WORKFORCE_EMPLOYEES = generateEmployees();
+const WORKFORCE_MOVEMENTS = generateMovements(WORKFORCE_EMPLOYEES);
+
 export const mockData: BeTrackData = {
   program: {
     id: "PRG-2026",
@@ -1318,330 +1583,8 @@ export const mockData: BeTrackData = {
       { name: "Support (IT/Finance/HR)", fte: 370, fteTarget: 328 },
       { name: "Supply Chain", fte: 340, fteTarget: 310 },
     ],
-    employees: [
-      {
-        id: "EMP001",
-        name: "Dubois Marc",
-        region: "Europe",
-        country: "France",
-        func: "Directeur Achats",
-        team: "Procurement",
-        bu: "BU Industrie",
-        entity: "SAS",
-        level: "Global",
-        fte: 1.0,
-        salary: 145000,
-        retirement: "15/07/2042",
-      },
-      {
-        id: "EMP002",
-        name: "Moreau Léa",
-        region: "Europe",
-        country: "France",
-        func: "Category Manager",
-        team: "Procurement",
-        bu: "BU Industrie",
-        entity: "SAS",
-        level: "Régional",
-        fte: 1.0,
-        salary: 82000,
-        retirement: "22/03/2045",
-      },
-      {
-        id: "EMP003",
-        name: "Roussel Alex",
-        region: "Europe",
-        country: "Germany",
-        func: "Supply Chain Manager",
-        team: "Logistics",
-        bu: "BU Industrie",
-        entity: "GmbH",
-        level: "Régional",
-        fte: 1.0,
-        salary: 95000,
-        retirement: "30/11/2040",
-      },
-      {
-        id: "EMP004",
-        name: "Petit Anaïs",
-        region: "Europe",
-        country: "France",
-        func: "Ingénieur QA",
-        team: "Quality",
-        bu: "BU Industrie",
-        entity: "SAS",
-        level: "Local",
-        fte: 0.8,
-        salary: 62000,
-        retirement: "10/09/2048",
-      },
-      {
-        id: "EMP005",
-        name: "Bernard Claire",
-        region: "Europe",
-        country: "France",
-        func: "VP Digital",
-        team: "Innovation",
-        bu: "BU Services",
-        entity: "SAS",
-        level: "Global",
-        fte: 1.0,
-        salary: 185000,
-        retirement: "05/05/2038",
-      },
-      {
-        id: "EMP006",
-        name: "Lefevre Pierre",
-        region: "Europe",
-        country: "France",
-        func: "Directeur R&D",
-        team: "Innovation",
-        bu: "BU Industrie",
-        entity: "SAS",
-        level: "Global",
-        fte: 1.0,
-        salary: 165000,
-        retirement: "20/12/2035",
-      },
-      {
-        id: "EMP007",
-        name: "Martin Sophie",
-        region: "Europe",
-        country: "Spain",
-        func: "VP Commercial",
-        team: "Sales",
-        bu: "BU Services",
-        entity: "SL",
-        level: "Régional",
-        fte: 1.0,
-        salary: 175000,
-        retirement: "14/08/2039",
-      },
-      {
-        id: "EMP008",
-        name: "Dupont Jean",
-        region: "Europe",
-        country: "France",
-        func: "COO",
-        team: "Operations",
-        bu: "BU Industrie",
-        entity: "SAS",
-        level: "Global",
-        fte: 1.0,
-        salary: 195000,
-        retirement: "01/04/2034",
-      },
-      {
-        id: "EMP009",
-        name: "Petit Thomas",
-        region: "Europe",
-        country: "France",
-        func: "Logistics Director",
-        team: "Supply Chain",
-        bu: "BU Industrie",
-        entity: "SAS",
-        level: "Régional",
-        fte: 1.0,
-        salary: 135000,
-        retirement: "18/06/2041",
-      },
-      {
-        id: "EMP010",
-        name: "Durand Marie",
-        region: "Europe",
-        country: "Belgium",
-        func: "Procurement Director",
-        team: "Procurement",
-        bu: "BU Services",
-        entity: "SA",
-        level: "Global",
-        fte: 1.0,
-        salary: 155000,
-        retirement: "25/09/2037",
-      },
-      {
-        id: "EMP011",
-        name: "Leroy Camille",
-        region: "Europe",
-        country: "France",
-        func: "HR Business Partner",
-        team: "HR",
-        bu: "Corporate",
-        entity: "SAS",
-        level: "Régional",
-        fte: 1.0,
-        salary: 72000,
-        retirement: "14/02/2046",
-      },
-      {
-        id: "EMP012",
-        name: "Fournier Lucas",
-        region: "Europe",
-        country: "Italy",
-        func: "Ingénieur Production",
-        team: "Production",
-        bu: "BU Industrie",
-        entity: "SRL",
-        level: "Local",
-        fte: 1.0,
-        salary: 58000,
-        retirement: "30/05/2050",
-      },
-      {
-        id: "EMP013",
-        name: "Mercier Julie",
-        region: "Europe",
-        country: "France",
-        func: "Analyste Finance",
-        team: "Finance",
-        bu: "Corporate",
-        entity: "SAS",
-        level: "Local",
-        fte: 1.0,
-        salary: 55000,
-        retirement: "07/11/2049",
-      },
-      {
-        id: "EMP014",
-        name: "Lambert Nicolas",
-        region: "Americas",
-        country: "USA",
-        func: "Dir. Commercial NA",
-        team: "Sales",
-        bu: "BU Services",
-        entity: "Inc.",
-        level: "Régional",
-        fte: 1.0,
-        salary: 220000,
-        retirement: "19/08/2036",
-      },
-      {
-        id: "EMP015",
-        name: "Garcia Elena",
-        region: "Europe",
-        country: "Spain",
-        func: "Chef de Projet IT",
-        team: "Digital",
-        bu: "BU Services",
-        entity: "SL",
-        level: "Régional",
-        fte: 1.0,
-        salary: 68000,
-        retirement: "12/03/2047",
-      },
-    ],
-    movements: [
-      {
-        id: "MOV001",
-        empId: "EMP001",
-        leverId: "L001",
-        type: "Redéploiement",
-        plannedDate: "2026-06-30",
-        actualDate: null,
-        savings: 180000,
-        cost: 25000,
-        status: "En cours",
-      },
-      {
-        id: "MOV002",
-        empId: "EMP005",
-        leverId: "L016",
-        type: "Redéploiement",
-        plannedDate: "2026-09-15",
-        actualDate: null,
-        savings: 220000,
-        cost: 30000,
-        status: "Planifié",
-      },
-      {
-        id: "MOV003",
-        empId: "EMP012",
-        leverId: "L007",
-        type: "Reconversion",
-        plannedDate: "2026-12-01",
-        actualDate: null,
-        savings: 65000,
-        cost: 15000,
-        status: "Planifié",
-      },
-      {
-        id: "MOV004",
-        empId: "EMP008",
-        leverId: "L014",
-        type: "Suppression",
-        plannedDate: "2026-03-31",
-        actualDate: "2026-03-28",
-        savings: 240000,
-        cost: 85000,
-        status: "Réalisé",
-      },
-      {
-        id: "MOV005",
-        empId: "EMP010",
-        leverId: "L003",
-        type: "Redéploiement",
-        plannedDate: "2026-08-30",
-        actualDate: null,
-        savings: 175000,
-        cost: 20000,
-        status: "En cours",
-      },
-      {
-        id: "MOV006",
-        empId: "EMP013",
-        leverId: "L015",
-        type: "Suppression",
-        plannedDate: "2026-04-30",
-        actualDate: "2026-04-15",
-        savings: 68000,
-        cost: 22000,
-        status: "Réalisé",
-      },
-      {
-        id: "MOV007",
-        empId: "EMP009",
-        leverId: "L017",
-        type: "Redéploiement",
-        plannedDate: "2026-10-15",
-        actualDate: null,
-        savings: 155000,
-        cost: 18000,
-        status: "Planifié",
-      },
-      {
-        id: "MOV008",
-        empId: "EMP007",
-        leverId: "L013",
-        type: "Suppression",
-        plannedDate: "2026-02-28",
-        actualDate: "2026-02-20",
-        savings: 195000,
-        cost: 45000,
-        status: "Réalisé",
-      },
-      {
-        id: "MOV009",
-        empId: "EMP003",
-        leverId: "L005",
-        type: "Redéploiement",
-        plannedDate: "2026-07-31",
-        actualDate: null,
-        savings: 110000,
-        cost: 12000,
-        status: "En cours",
-      },
-      {
-        id: "MOV010",
-        empId: "EMP011",
-        leverId: "L014",
-        type: "Redéploiement",
-        plannedDate: "2026-11-30",
-        actualDate: null,
-        savings: 85000,
-        cost: 10000,
-        status: "Planifié",
-      },
-    ],
+    employees: WORKFORCE_EMPLOYEES,
+    movements: WORKFORCE_MOVEMENTS,
   },
 
   operations: {

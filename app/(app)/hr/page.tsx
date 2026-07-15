@@ -1,253 +1,396 @@
 "use client";
 
-import { useState } from "react";
-import { Banknote, PiggyBank, Plus, Trash2, Users } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Banknote, TriangleAlert, Users, Wallet } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
-import { useToast } from "@/lib/hooks/useToast";
-import * as engine from "@/lib/engine";
-import { KPICard } from "@/components/shared/KPICard";
+import * as hr from "@/lib/hrEngine";
+import { fmtCurr } from "@/lib/engine";
+import { STATUS_LABEL } from "@/lib/status-config";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
-import { Button } from "@/components/shared/Button";
+import { KPICard } from "@/components/shared/KPICard";
+import { RadialProgress } from "@/components/shared/RadialProgress";
+import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Modal } from "@/components/shared/Modal";
-import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import { MovementForm, type MovementFormValues } from "@/components/shared/MovementForm";
-import type { Department, WorkforceMovement } from "@/types";
+import { Button } from "@/components/shared/Button";
+import {
+  FteWaterfallChart,
+  FteWaterfallLegend,
+} from "@/components/shared/charts/FteWaterfallChart";
+import {
+  DepartmentMovementsChart,
+  HrDonutChart,
+} from "@/components/shared/charts/HrBreakdownCharts";
+import type { MovementAlertKind } from "@/lib/hrEngine";
 
-type DepartmentRow = Department & { id: string; gap: number };
-type MovementRow = WorkforceMovement & {
-  id: string;
-  employeeName: string;
-  leverName: string;
-  net: number;
+const ALERT_LABELS: Record<MovementAlertKind, string> = {
+  overdue: "En retard",
+  leverMismatch: "Désynchronisé levier",
+  toValidate: "À valider",
+  due: "Échéance proche",
 };
 
 /**
- * Module RH — baseline ETP par département et suivi des mouvements, édités inline comme un
- * tableau Excel (double-clic sur une cellule éditable), comme le reste de l'app.
+ * Dashboard RH — pilotage visuel de la transformation effectifs : waterfall baseline → cible
+ * cliquable (décomposition par levier), mouvements par département/pays, impact masse salariale,
+ * suivi PSE et alertes de réconciliation avec les leviers. La donnée détaillée vit dans la
+ * Base ETP (/hr/etp).
  */
-export default function HrPage() {
+export default function HrDashboardPage() {
   const data = useBeTrackData();
-  const { showToast } = useToast();
-  const [movementModalOpen, setMovementModalOpen] = useState(false);
+  const router = useRouter();
+  const [granularity, setGranularity] = useState<"month" | "quarter">("quarter");
+  const [drillBucket, setDrillBucket] = useState<string | null>(null);
 
   const wf = data.workforce;
+  const alerts = useMemo(() => hr.movementAlerts(wf, data.levers), [wf, data.levers]);
+  const bridge = useMemo(() => hr.fteBridge(wf, granularity), [wf, granularity]);
+  const salary = useMemo(() => hr.salaryBridge(wf, "quarter"), [wf]);
+  const byDept = useMemo(() => hr.movementsByDepartment(wf), [wf]);
+  const byCountry = useMemo(() => hr.movementsByCountry(wf), [wf]);
+  const deptDeltas = useMemo(() => hr.deltaByDepartment(wf), [wf]);
+  const pse = useMemo(() => hr.pseSummary(wf), [wf]);
 
-  const deptRows: DepartmentRow[] = wf.departments.map((d) => ({
-    ...d,
-    id: d.name,
-    gap: Math.round((d.fte - d.fteTarget) * 10) / 10,
-  }));
+  const current = hr.currentFTE(wf);
+  const target = hr.targetFTE(wf);
+  const landing = hr.plannedFTE(wf);
+  const reductionGoal = wf.totalFTE - target;
+  const reductionDone = wf.totalFTE - current;
+  const goalPct =
+    reductionGoal > 0 ? Math.round((reductionDone / reductionGoal) * 100) : 100;
 
-  const deptColumns: ColumnDef<DepartmentRow>[] = [
-    { key: "name", label: "Département" },
-    { key: "fte", label: "FTE actuel", align: "right", editable: true, type: "number" },
-    { key: "fteTarget", label: "FTE cible", align: "right", editable: true, type: "number" },
-    {
-      key: "gap",
-      label: "Écart",
-      align: "right",
-      render: (r) => (
-        <span
-          className={r.gap > 0 ? "text-rag-red" : r.gap < 0 ? "text-info-blue" : "text-secondary"}
-        >
-          {r.gap > 0 ? `+${r.gap}` : r.gap}
-        </span>
-      ),
-    },
-  ];
+  const alertCounts = (Object.keys(ALERT_LABELS) as MovementAlertKind[])
+    .map((kind) => ({ kind, count: alerts.filter((a) => a.kind === kind).length }))
+    .filter((a) => a.count > 0);
 
-  const movementRows: MovementRow[] = wf.movements.map((m) => {
-    const emp = wf.employees.find((e) => e.id === m.empId);
-    const lever = data.levers.find((l) => l.id === m.leverId);
-    return {
-      ...m,
-      employeeName: emp?.name ?? m.empId,
-      leverName: lever ? `${lever.code} — ${lever.name}` : m.leverId,
-      net: Math.round((m.savings - m.cost) * 10) / 10,
-    };
-  });
+  const drill = useMemo(() => {
+    if (!drillBucket) return [];
+    const bucket = bridge.find((b) => b.label === drillBucket);
+    return bucket ? hr.bucketByLever(bucket, data.levers) : [];
+  }, [drillBucket, bridge, data.levers]);
 
-  const movementColumns: ColumnDef<MovementRow>[] = [
-    { key: "employeeName", label: "Employé" },
-    { key: "leverName", label: "Levier" },
-    {
-      key: "type",
-      label: "Type",
-      editable: true,
-      type: "select",
-      options: ["Redéploiement", "Reconversion", "Suppression"],
-    },
-    {
-      key: "status",
-      label: "Statut",
-      editable: true,
-      type: "select",
-      options: ["Planifié", "En cours", "Réalisé"],
-    },
-    { key: "plannedDate", label: "Date planifiée", editable: true },
-    {
-      key: "actualDate",
-      label: "Date réalisée",
-      editable: true,
-      render: (r) => r.actualDate ?? "—",
-    },
-    {
-      key: "savings",
-      label: "Économies (€)",
-      align: "right",
-      editable: true,
-      type: "number",
-      render: (r) => r.savings.toLocaleString("fr-FR"),
-    },
-    {
-      key: "cost",
-      label: "Coût (€)",
-      align: "right",
-      editable: true,
-      type: "number",
-      render: (r) => r.cost.toLocaleString("fr-FR"),
-    },
-    {
-      key: "net",
-      label: "Net (€)",
-      align: "right",
-      render: (r) => r.net.toLocaleString("fr-FR"),
-    },
-    {
-      key: "id",
-      label: "",
-      sortable: false,
-      width: "40px",
-      render: (r) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            data.deleteWorkforceMovement(r.id);
-            showToast("Mouvement supprimé", "", "success");
-          }}
-          title="Supprimer ce mouvement"
-          className="rounded-full p-1 text-tertiary transition hover:bg-rag-red-light hover:text-rag-red"
-        >
-          <Trash2 size={13} />
-        </button>
-      ),
-    },
-  ];
-
-  const handleDeptUpdate = (rowId: string, field: keyof DepartmentRow, value: string | number) => {
-    if (field !== "fte" && field !== "fteTarget") return;
-    data.updateDepartment(rowId, { [field]: Number(value) });
-    showToast("Baseline mise à jour", rowId, "success");
-  };
-
-  const handleMovementUpdate = (
-    rowId: string,
-    field: keyof MovementRow,
-    value: string | number
-  ) => {
-    const patch: Partial<WorkforceMovement> = {};
-    if (field === "savings" || field === "cost") patch[field] = Number(value);
-    else if (field === "type") patch.type = value as WorkforceMovement["type"];
-    else if (field === "status") patch.status = value as WorkforceMovement["status"];
-    else if (field === "plannedDate" || field === "actualDate") patch[field] = String(value);
-    else return;
-    data.updateWorkforceMovement(rowId, patch);
-    showToast("Mouvement mis à jour", "", "success");
-  };
-
-  const plannedCount = wf.movements.filter((m) => m.status === "Planifié").length;
-  const inProgressCount = wf.movements.filter((m) => m.status === "En cours").length;
-  const doneCount = wf.movements.filter((m) => m.status === "Réalisé").length;
+  const realizedMovements = wf.movements.filter((m) => m.status === "Réalisé").length;
 
   return (
     <div className="animate-fade-up">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
         <div>
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            HR Module
+            Dashboard RH
           </h1>
           <div className="mt-2.5 text-[13px] text-secondary">
-            Baseline ETP par département et suivi des mouvements RH — édition directe comme un
-            tableur (double-clic sur une cellule).
+            Trajectoire effectifs {wf.totalFTE.toLocaleString("fr-FR")} →{" "}
+            {target.toLocaleString("fr-FR")} ETP · {wf.movements.length} mouvements ·{" "}
+            {realizedMovements} réalisés
           </div>
         </div>
-      </div>
-
-      <div className="mb-4 grid grid-cols-4 gap-3.5 max-[1100px]:grid-cols-2">
-        <KPICard label="Total ETP" value={engine.fmtInt(wf.totalFTE)} icon={Users} />
-        <KPICard
-          label="Masse salariale"
-          value={engine.fmtCurr(wf.massSalary)}
-          icon={Banknote}
-          accent="brown"
-        />
-        <KPICard label="Budget salarial" value={engine.fmtCurr(wf.budgetSalary)} icon={PiggyBank} />
-        <KPICard
-          label="Mouvements"
-          value={`${doneCount} / ${wf.movements.length}`}
-          icon={Users}
-          sub={`${plannedCount} planifiés · ${inProgressCount} en cours`}
-        />
-      </div>
-
-      <Card>
-        <CardHeader title="Baseline ETP par département" />
-        <CardBody flush>
-          <EditableTable
-            data={deptRows}
-            columns={deptColumns}
-            onCellUpdate={handleDeptUpdate}
-            searchPlaceholder="Rechercher un département..."
-            showTotalsRow
-            totalsConfig={{
-              fte: (rows) => rows.reduce((s, r) => s + r.fte, 0).toFixed(1),
-              fteTarget: (rows) => rows.reduce((s, r) => s + r.fteTarget, 0).toFixed(1),
-              gap: (rows) => rows.reduce((s, r) => s + r.gap, 0).toFixed(1),
-            }}
-          />
-        </CardBody>
-      </Card>
-
-      <div className="mt-4 mb-3 flex items-center justify-between">
-        <h2 className="text-[15px] font-bold text-primary">Mouvements RH</h2>
-        <Button variant="primary" size="sm" onClick={() => setMovementModalOpen(true)}>
-          <Plus size={13} /> Nouveau mouvement
+        <Button variant="primary" onClick={() => router.push("/hr/etp")}>
+          <Users size={13} /> Ouvrir la Base ETP
         </Button>
       </div>
 
-      <Modal
-        open={movementModalOpen}
-        onOpenChange={setMovementModalOpen}
-        title="Nouveau mouvement RH"
-        maxWidth="640px"
-      >
-        <MovementForm
-          data={data}
-          onCancel={() => setMovementModalOpen(false)}
-          onSubmit={(values: MovementFormValues) => {
-            data.createWorkforceMovement(values);
-            setMovementModalOpen(false);
-            showToast("Mouvement créé", "", "success");
-          }}
-        />
-      </Modal>
+      {/* Alertes RH — réconciliation avec les leviers */}
+      {alerts.length > 0 && (
+        <div className="mb-4 rounded-lg border border-rag-amber-light bg-rag-amber-light/30 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-primary">
+              <TriangleAlert size={14} className="text-rag-amber" /> {alerts.length} alerte(s)
+              mouvement
+            </span>
+            {alertCounts.map(({ kind, count }) => (
+              <button
+                key={kind}
+                onClick={() =>
+                  router.push(`/hr/etp?f_alert=${encodeURIComponent(ALERT_LABELS[kind])}`)
+                }
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition hover:border-bp-coral ${
+                  kind === "overdue" || kind === "leverMismatch"
+                    ? "border-rag-red-light bg-rag-red-light/60 text-rag-red"
+                    : "border-border bg-white text-secondary"
+                }`}
+              >
+                {ALERT_LABELS[kind]} · {count}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-1">
+            {alerts.slice(0, 3).map((a, i) => (
+              <div key={i} className="text-xs text-secondary">
+                <span className="font-mono text-[10px] text-tertiary">{a.movement.id}</span>{" "}
+                {a.message}
+              </div>
+            ))}
+            {alerts.length > 3 && (
+              <button
+                onClick={() => router.push("/hr/etp")}
+                className="text-xs font-medium text-bp-coral hover:underline"
+              >
+                Voir les {alerts.length - 3} autres dans la Base ETP →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
+      {/* KPIs */}
+      <div className="mb-4 grid grid-cols-[auto_1fr_1fr_1fr_1fr] gap-3.5 max-[1100px]:grid-cols-2">
+        <div className="flex items-center justify-center rounded-lg border border-border bg-white px-5 shadow-sm">
+          <RadialProgress pct={goalPct} size={104} label={`${goalPct}%`} sublabel="objectif réalisé" />
+        </div>
+        <KPICard
+          label="Effectif actuel"
+          value={current.toLocaleString("fr-FR")}
+          icon={Users}
+          sub={`baseline ${wf.totalFTE.toLocaleString("fr-FR")} ETP`}
+        />
+        <KPICard
+          label="Cible fin 2026"
+          value={target.toLocaleString("fr-FR")}
+          icon={Users}
+          accent="green"
+          sub={`atterrissage plan : ${landing.toLocaleString("fr-FR")} (${landing - target > 0 ? "+" : ""}${(landing - target).toLocaleString("fr-FR")} vs cible)`}
+        />
+        <KPICard
+          label="Masse salariale"
+          value={`€${wf.massSalary.toFixed(1)}M`}
+          icon={Wallet}
+          accent="brown"
+          sub={`budget €${wf.budgetSalary.toFixed(1)}M`}
+        />
+        <KPICard
+          label="Économies salariales réalisées"
+          value={fmtCurr(hr.realizedSalarySavings(wf) / 1_000_000)}
+          icon={Banknote}
+          accent="green"
+          sub="annualisées · mouvements réalisés"
+        />
+      </div>
+
+      {/* Waterfall ETP */}
       <Card>
-        <CardBody flush>
-          <EditableTable
-            data={movementRows}
-            columns={movementColumns}
-            onCellUpdate={handleMovementUpdate}
-            searchPlaceholder="Rechercher (employé, levier...)"
-            showTotalsRow
-            totalsConfig={{
-              savings: (rows) => rows.reduce((s, r) => s + r.savings, 0).toLocaleString("fr-FR"),
-              cost: (rows) => rows.reduce((s, r) => s + r.cost, 0).toLocaleString("fr-FR"),
-              net: (rows) => rows.reduce((s, r) => s + r.net, 0).toLocaleString("fr-FR"),
-            }}
+        <CardHeader
+          title="Trajectoire des effectifs — waterfall des mouvements"
+          actions={
+            <div className="flex overflow-hidden rounded-md border border-border">
+              {(["month", "quarter"] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setGranularity(g)}
+                  className={`px-3 py-1.5 text-xs font-semibold ${granularity === g ? "bg-bp-coral text-white" : "bg-white text-secondary"}`}
+                >
+                  {g === "month" ? "Mois" : "Trimestre"}
+                </button>
+              ))}
+            </div>
+          }
+        />
+        <CardBody>
+          <FteWaterfallChart
+            buckets={bridge}
+            baseline={wf.totalFTE}
+            target={target}
+            onBarClick={(label) => setDrillBucket(label)}
           />
+          <FteWaterfallLegend />
         </CardBody>
       </Card>
+
+      {/* Breakdowns département / pays */}
+      <div className="mb-4 grid grid-cols-2 gap-4 max-[1100px]:grid-cols-1">
+        <Card className="mb-0">
+          <CardHeader title="Mouvements par département (ETP)" />
+          <CardBody>
+            <DepartmentMovementsChart data={byDept} />
+          </CardBody>
+        </Card>
+        <Card className="mb-0">
+          <CardHeader title="Mouvements par pays (ETP)" />
+          <CardBody>
+            <HrDonutChart
+              data={byCountry.map((c) => ({ name: c.country, value: c.fte }))}
+              onSliceClick={(country) =>
+                router.push(`/hr/etp?f_country=${encodeURIComponent(country)}`)
+              }
+            />
+            <p className="mt-1 text-center text-[10.5px] text-tertiary">
+              Cliquer sur un pays pour ouvrir la Base ETP filtrée
+            </p>
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* Masse salariale + PSE */}
+      <div className="mb-4 grid grid-cols-2 gap-4 max-[1100px]:grid-cols-1">
+        <Card className="mb-0">
+          <CardHeader title="Impact masse salariale (€M, annualisé)" />
+          <CardBody>
+            <FteWaterfallChart
+              buckets={salary}
+              baseline={wf.massSalary}
+              target={wf.massSalary + salary.reduce((s, b) => s + b.delta, 0)}
+              unit="€M"
+              decimals={1}
+              height={240}
+            />
+            <FteWaterfallLegend downLabel="Économies" upLabel="Recrutements (coûts)" />
+          </CardBody>
+        </Card>
+        <Card className="mb-0">
+          <CardHeader title="Suivi du PSE (Plan de Sauvegarde de l'Emploi)" />
+          <CardBody>
+            <div className="mb-4 flex items-end gap-3">
+              {[
+                { label: "Postes concernés", value: pse.postes, color: "bg-neutral-300" },
+                { label: "En cours", value: pse.enCours, color: "bg-rag-amber" },
+                { label: "Réalisés", value: pse.realises, color: "bg-bp-coral" },
+                { label: "Validés RH", value: pse.valides, color: "bg-rag-green" },
+              ].map((stage) => {
+                const max = Math.max(1, pse.postes);
+                return (
+                  <div key={stage.label} className="flex flex-1 flex-col items-center gap-1.5">
+                    <span className="text-lg font-bold text-primary">{stage.value}</span>
+                    <div
+                      className={`w-full rounded-t-sm ${stage.color}`}
+                      style={{ height: `${Math.max(8, (Number(stage.value) / max) * 90)}px` }}
+                    />
+                    <span className="text-center text-[10px] uppercase tracking-wide text-tertiary">
+                      {stage.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="space-y-1.5 border-t border-border pt-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-secondary">Coût social engagé / provision</span>
+                <strong>
+                  {fmtCurr(pse.coutEngage / 1_000_000)} / {fmtCurr(pse.coutTotal / 1_000_000)}
+                </strong>
+              </div>
+              <ProgressBar
+                pct={pse.coutTotal > 0 ? Math.round((pse.coutEngage / pse.coutTotal) * 100) : 0}
+              />
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* Départements : actuel / cible / atterrissage */}
+      <Card>
+        <CardHeader title="Effectifs par département — actuel vs cible vs atterrissage" />
+        <CardBody flush>
+          <table className="w-full border-collapse text-[12.5px]">
+            <thead>
+              <tr>
+                {[
+                  "Département",
+                  "Actuel",
+                  "Cible",
+                  "Atterrissage plan",
+                  "Écart vs cible",
+                  "Avancement",
+                ].map((h) => (
+                  <th
+                    key={h}
+                    className="border-b border-border bg-neutral-50 px-3 py-2.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-secondary"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {deptDeltas.map((d) => {
+                const toDo = d.fte - d.fteTarget;
+                const done = d.fte - d.landing;
+                const pct = toDo !== 0 ? Math.round((done / toDo) * 100) : 100;
+                return (
+                  <tr
+                    key={d.name}
+                    className="border-b border-border last:border-b-0 hover:bg-neutral-50"
+                  >
+                    <td className="px-3 py-2.5 font-semibold text-primary">{d.name}</td>
+                    <td className="px-3 py-2.5 tabular-nums">{d.fte.toLocaleString("fr-FR")}</td>
+                    <td className="px-3 py-2.5 tabular-nums">
+                      {d.fteTarget.toLocaleString("fr-FR")}
+                    </td>
+                    <td className="px-3 py-2.5 tabular-nums">{d.landing.toLocaleString("fr-FR")}</td>
+                    <td
+                      className={`px-3 py-2.5 font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
+                    >
+                      {d.gapToTarget > 0 ? "+" : ""}
+                      {d.gapToTarget.toLocaleString("fr-FR")}
+                    </td>
+                    <td className="w-[180px] px-3 py-2.5">
+                      <ProgressBar pct={Math.max(0, Math.min(100, pct))} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </CardBody>
+      </Card>
+
+      {/* Drill-down waterfall par levier */}
+      <Modal
+        open={drillBucket !== null}
+        onOpenChange={(open) => !open && setDrillBucket(null)}
+        title={`Mouvements ${granularity === "month" ? "du mois de" : "du"} ${drillBucket ?? ""} — décomposition par levier`}
+        maxWidth="640px"
+      >
+        {drill.length === 0 ? (
+          <p className="py-6 text-center text-sm text-tertiary">
+            Aucun mouvement sur cette période.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {drill.map((entry) => {
+              const lever = data.levers.find((l) => l.id === entry.leverId);
+              return (
+                <div
+                  key={entry.leverId}
+                  className="rounded-md border border-border bg-neutral-50 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => router.push(`/levers/detail?id=${entry.leverId}`)}
+                      className="text-left text-xs font-semibold text-primary hover:text-bp-coral"
+                    >
+                      <span className="font-mono text-[10px] text-tertiary">{entry.leverCode}</span>{" "}
+                      {entry.leverName}
+                    </button>
+                    <span
+                      className={`text-sm font-bold ${entry.fte < 0 ? "text-bp-coral" : "text-info-blue"}`}
+                    >
+                      {entry.fte > 0 ? "+" : ""}
+                      {entry.fte} ETP
+                    </span>
+                  </div>
+                  {lever && (
+                    <div className="mt-0.5 text-[10.5px] text-tertiary">
+                      {STATUS_LABEL[lever.status]} · fin prévue {lever.end}
+                    </div>
+                  )}
+                  <div className="mt-2 space-y-1">
+                    {entry.movements.map((m) => (
+                      <div key={m.id} className="flex items-center justify-between text-[11px]">
+                        <span className="text-secondary">
+                          {m.type} · {m.label}
+                        </span>
+                        <span className="text-tertiary">
+                          {m.plannedDate} · {m.status}
+                          {m.hrValidated ? " ✓RH" : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -4,12 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as storage from "@/lib/storage";
 import * as leversLogic from "@/lib/leversLogic";
 import * as leversDb from "@/lib/firestore/levers";
+import * as workforceLogic from "@/lib/workforceLogic";
+import * as workforceDb from "@/lib/firestore/workforce";
 import type { CascadeShift } from "@/lib/engine";
 import { mockData } from "@/data/mockData";
 import type {
   AuditEntry,
   Comment,
   Department,
+  Employee,
   Lever,
   LeverAction,
   SubLever,
@@ -27,6 +30,19 @@ function lockedSeed() {
     subLevers: mockData.subLevers.map((s) => leversLogic.applyPlanLock(s)),
     comments: mockData.comments,
     audit: mockData.audit,
+  };
+}
+
+function workforceSeed(): workforceDb.WorkforceSeed {
+  return {
+    employees: mockData.workforce.employees,
+    movements: mockData.workforce.movements,
+    meta: {
+      totalFTE: mockData.workforce.totalFTE,
+      massSalary: mockData.workforce.massSalary,
+      budgetSalary: mockData.workforce.budgetSalary,
+      departments: mockData.workforce.departments,
+    },
   };
 }
 
@@ -50,6 +66,9 @@ export function useBeTrackData() {
   const [subLevers, setSubLevers] = useState<SubLever[]>([]);
   const [comments, setComments] = useState<Record<string, Comment[]>>({});
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [movements, setMovements] = useState<WorkforceMovement[]>([]);
+  const [workforceMeta, setWorkforceMeta] = useState<workforceDb.WorkforceMeta | null>(null);
 
   // Refs toujours à jour pour que les callbacks de mutation lisent l'état le plus récent sans
   // dépendre du cycle de rendu React (évite les fermetures obsolètes entre deux mutations
@@ -62,18 +81,30 @@ export function useBeTrackData() {
   commentsRef.current = comments;
   const auditRef = useRef(audit);
   auditRef.current = audit;
+  const employeesRef = useRef(employees);
+  employeesRef.current = employees;
+  const movementsRef = useRef(movements);
+  movementsRef.current = movements;
+  const workforceMetaRef = useRef(workforceMeta);
+  workforceMetaRef.current = workforceMeta;
 
   useEffect(() => {
     let cancelled = false;
     leversDb
       .ensureLeversSeeded(lockedSeed())
       .catch((err) => console.error("[betrack] échec du seed Firestore des leviers :", err));
+    workforceDb
+      .ensureWorkforceSeeded(workforceSeed())
+      .catch((err) => console.error("[betrack] échec du seed Firestore workforce :", err));
 
     const unsubscribers = [
       leversDb.subscribeLevers((l) => !cancelled && setLevers(l)),
       leversDb.subscribeSubLevers((s) => !cancelled && setSubLevers(s)),
       leversDb.subscribeComments((c) => !cancelled && setComments(c)),
       leversDb.subscribeAuditLog((a) => !cancelled && setAudit(a)),
+      workforceDb.subscribeEmployees((e) => !cancelled && setEmployees(e)),
+      workforceDb.subscribeMovements((m) => !cancelled && setMovements(m)),
+      workforceDb.subscribeWorkforceMeta((m) => !cancelled && setWorkforceMeta(m)),
     ];
     return () => {
       cancelled = true;
@@ -95,7 +126,16 @@ export function useBeTrackData() {
       workstreams: storage.getWorkstreams(),
       levers,
       subLevers,
-      workforce: storage.getWorkforce(),
+      // Reconstruit au format Workforce historique pour ne pas casser les consommateurs
+      // existants — mais la donnée vit désormais dans Firestore (temps réel partagé).
+      workforce: {
+        totalFTE: workforceMeta?.totalFTE ?? mockData.workforce.totalFTE,
+        massSalary: workforceMeta?.massSalary ?? mockData.workforce.massSalary,
+        budgetSalary: workforceMeta?.budgetSalary ?? mockData.workforce.budgetSalary,
+        departments: workforceMeta?.departments ?? mockData.workforce.departments,
+        employees,
+        movements,
+      },
       operations: storage.getOperations(),
       alerts: storage.getAlerts(),
       audit,
@@ -112,7 +152,7 @@ export function useBeTrackData() {
       pnlAccounts: mockData.pnlAccounts,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [version, levers, subLevers, comments, audit]
+    [version, levers, subLevers, comments, audit, employees, movements, workforceMeta]
   );
 
   const updateLever = useCallback(
@@ -363,37 +403,90 @@ export function useBeTrackData() {
 
   const updateWorkforceMovement = useCallback(
     (id: string, patch: Partial<WorkforceMovement>) => {
-      const result = storage.updateWorkforceMovement(id, patch);
-      bump();
-      return result;
+      const result = workforceLogic.updateMovement(movementsRef.current, id, patch, DEMO_USER);
+      movementsRef.current = result.movements;
+      setMovements(result.movements);
+      persistAudit(result.auditEntries);
+      workforceDb
+        .saveMovements(result.movements)
+        .catch((err) => console.error("[betrack] mouvement :", err));
+      return result.movement;
     },
-    [bump]
+    [persistAudit]
   );
 
   const createWorkforceMovement = useCallback(
     (input: Omit<WorkforceMovement, "id">) => {
-      const result = storage.createWorkforceMovement(input);
-      bump();
-      return result;
+      const result = workforceLogic.createMovement(movementsRef.current, input, DEMO_USER);
+      movementsRef.current = result.movements;
+      setMovements(result.movements);
+      persistAudit(result.auditEntries);
+      workforceDb
+        .saveMovements(result.movements)
+        .catch((err) => console.error("[betrack] mouvement :", err));
+      return result.movement;
     },
-    [bump]
+    [persistAudit]
+  );
+
+  /** Validation RH : statut Réalisé + date réelle + flag hrValidated, en un clic. */
+  const validateMovement = useCallback(
+    (id: string) => {
+      const result = workforceLogic.validateMovement(movementsRef.current, id, DEMO_USER);
+      movementsRef.current = result.movements;
+      setMovements(result.movements);
+      persistAudit(result.auditEntries);
+      workforceDb
+        .saveMovements(result.movements)
+        .catch((err) => console.error("[betrack] mouvement :", err));
+      return result.movement;
+    },
+    [persistAudit]
   );
 
   const deleteWorkforceMovement = useCallback(
     (id: string) => {
-      storage.deleteWorkforceMovement(id);
-      bump();
+      const result = workforceLogic.deleteMovement(movementsRef.current, id, DEMO_USER);
+      movementsRef.current = result.movements;
+      setMovements(result.movements);
+      persistAudit(result.auditEntries);
+      workforceDb
+        .saveMovements(result.movements)
+        .catch((err) => console.error("[betrack] mouvement :", err));
     },
-    [bump]
+    [persistAudit]
+  );
+
+  /** Créé (import Excel, recrutement intégré) ou met à jour (édition inline) un employé. */
+  const upsertEmployee = useCallback(
+    (input: Employee | (Omit<Employee, "id"> & { id?: string })) => {
+      const result = workforceLogic.upsertEmployee(employeesRef.current, input, DEMO_USER);
+      employeesRef.current = result.employees;
+      setEmployees(result.employees);
+      persistAudit(result.auditEntries);
+      workforceDb
+        .saveEmployees(result.employees)
+        .catch((err) => console.error("[betrack] employé :", err));
+      return result.employee;
+    },
+    [persistAudit]
   );
 
   const updateDepartment = useCallback(
     (name: string, patch: Partial<Department>) => {
-      const result = storage.updateDepartment(name, patch);
-      bump();
-      return result;
+      const currentMeta = workforceMetaRef.current ?? workforceSeed().meta;
+      const departments = currentMeta.departments.map((d) =>
+        d.name === name ? { ...d, ...patch } : d
+      );
+      const nextMeta = { ...currentMeta, departments };
+      workforceMetaRef.current = nextMeta;
+      setWorkforceMeta(nextMeta);
+      workforceDb
+        .saveWorkforceMeta(nextMeta)
+        .catch((err) => console.error("[betrack] workforce meta :", err));
+      return departments.find((d) => d.name === name)!;
     },
-    [bump]
+    []
   );
 
   const setActiveScenario = useCallback(
@@ -409,6 +502,9 @@ export function useBeTrackData() {
     leversDb
       .forceReseedLevers(lockedSeed())
       .catch((err) => console.error("[betrack] échec du reset Firestore des leviers :", err));
+    workforceDb
+      .forceReseedWorkforce(workforceSeed())
+      .catch((err) => console.error("[betrack] échec du reset Firestore workforce :", err));
     bump();
   }, [bump]);
 
@@ -431,7 +527,9 @@ export function useBeTrackData() {
     resolveAlert,
     updateWorkforceMovement,
     createWorkforceMovement,
+    validateMovement,
     deleteWorkforceMovement,
+    upsertEmployee,
     updateDepartment,
     setActiveScenario,
     resetToMockData,
