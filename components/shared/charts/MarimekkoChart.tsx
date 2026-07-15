@@ -3,7 +3,7 @@
 import * as engine from "@/lib/engine";
 import type { MarimekkoSegment } from "@/lib/engine";
 
-const COLORS = ["#6B5750", "#FF3D3D", "#F5A623", "#4A90D9", "#2E7D32", "#8E24AA", "#00838F"];
+const COLORS = ["#806659", "#FF3C47", "#FFB1B5", "#421799", "#320300", "#421799", "#CCC1BD"];
 
 /** Marimekko par fonction : largeur = poids financier de la fonction dans le programme. Clic sur
  * un segment pour creuser vers les leviers de cette fonction. */

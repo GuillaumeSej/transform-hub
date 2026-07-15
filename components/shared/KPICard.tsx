@@ -1,20 +1,22 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Brand BearingPoint : le filet d'accent (élément graphique) peut porter la famille
+// rouge/taupe ; les icônes restent encre sur fond neutre (jamais colorées).
 const ACCENT: Record<string, string> = {
   default: "before:bg-bp-coral",
-  green: "before:bg-rag-green",
-  amber: "before:bg-rag-amber",
-  red: "before:bg-rag-red",
-  brown: "before:bg-bp-warm-brown",
+  green: "before:bg-black",
+  amber: "before:bg-bp-warm-brown",
+  red: "before:bg-bp-coral",
+  brown: "before:bg-bp-warm-taupe",
 };
 
 const ICON_STYLE: Record<string, string> = {
-  default: "bg-rag-red-light text-bp-coral",
-  green: "bg-rag-green-light text-rag-green-dark",
-  amber: "bg-rag-amber-light text-rag-amber",
-  red: "bg-rag-red-light text-rag-red",
-  brown: "bg-neutral-100 text-bp-warm-brown",
+  default: "bg-neutral-100 text-primary",
+  green: "bg-neutral-100 text-primary",
+  amber: "bg-neutral-100 text-primary",
+  red: "bg-neutral-100 text-primary",
+  brown: "bg-neutral-100 text-primary",
 };
 
 /** Carte KPI — porté depuis `.kpi` du prototype legacy (Executive Dashboard). */

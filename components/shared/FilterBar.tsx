@@ -86,7 +86,7 @@ export function FilterBar<T>({
           <select
             value=""
             onChange={(e) => setPendingKey(e.target.value)}
-            className="rounded-full border border-dashed border-border-strong bg-white px-2.5 py-1 text-xs font-medium text-secondary hover:border-bp-coral hover:text-bp-coral focus:outline-none"
+            className="rounded-full border border-dashed border-border-strong bg-white px-2.5 py-1 text-xs font-medium text-secondary hover:border-black focus:outline-none"
           >
             <option value="">＋ Filtre…</option>
             {availableDefs.map((d) => (

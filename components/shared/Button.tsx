@@ -1,11 +1,14 @@
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
+// Boutons BearingPoint : le primaire est NOIR (la marque est monochrome, type-led — le rouge
+// est réservé au surlignage graphique et au danger). Hover : noir → gris-800, outline se
+// remplit de gris-100. Texte toujours noir ou blanc, jamais coloré.
 const VARIANTS = {
-  primary: "bg-bp-coral text-white hover:bg-bp-red-brick hover:shadow-md",
-  dark: "bg-neutral-900 text-white hover:bg-bp-coral",
-  outline:
-    "border border-border-strong bg-white text-primary hover:border-bp-coral hover:text-bp-coral",
+  primary: "bg-black text-white hover:bg-neutral-700",
+  dark: "bg-neutral-900 text-white hover:bg-neutral-700",
+  danger: "bg-bp-coral text-white hover:bg-bp-red-brick",
+  outline: "border border-black bg-white text-primary hover:bg-neutral-100",
   ghost: "bg-transparent text-secondary hover:bg-neutral-100 hover:text-primary",
 };
 

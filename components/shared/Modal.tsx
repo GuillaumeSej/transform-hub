@@ -30,7 +30,7 @@ export function Modal({
         >
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <Dialog.Title className="text-base font-bold text-primary">{title}</Dialog.Title>
-            <Dialog.Close className="p-1 text-tertiary hover:text-bp-coral">
+            <Dialog.Close className="p-1 text-tertiary hover:text-primary hover:underline">
               <X size={18} />
             </Dialog.Close>
           </div>

@@ -103,7 +103,7 @@ export default function HrDashboardPage() {
                 onClick={() =>
                   router.push(`/hr/etp?f_alert=${encodeURIComponent(ALERT_LABELS[kind])}`)
                 }
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition hover:border-bp-coral ${
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition hover:border-black ${
                   kind === "overdue" || kind === "leverMismatch"
                     ? "border-rag-red-light bg-rag-red-light/60 text-rag-red"
                     : "border-border bg-white text-secondary"
@@ -176,7 +176,7 @@ export default function HrDashboardPage() {
                 <button
                   key={g}
                   onClick={() => setGranularity(g)}
-                  className={`px-3 py-1.5 text-xs font-semibold ${granularity === g ? "bg-bp-coral text-white" : "bg-white text-secondary"}`}
+                  className={`px-3 py-1.5 text-xs font-semibold ${granularity === g ? "bg-black text-white" : "bg-white text-secondary"}`}
                 >
                   {g === "month" ? "Mois" : "Trimestre"}
                 </button>
@@ -355,13 +355,13 @@ export default function HrDashboardPage() {
                   <div className="flex items-center justify-between gap-2">
                     <button
                       onClick={() => router.push(`/levers/detail?id=${entry.leverId}`)}
-                      className="text-left text-xs font-semibold text-primary hover:text-bp-coral"
+                      className="text-left text-xs font-semibold text-primary hover:text-primary hover:underline"
                     >
                       <span className="font-mono text-[10px] text-tertiary">{entry.leverCode}</span>{" "}
                       {entry.leverName}
                     </button>
                     <span
-                      className={`text-sm font-bold ${entry.fte < 0 ? "text-bp-coral" : "text-info-blue"}`}
+                      className={`text-sm font-bold text-primary`}
                     >
                       {entry.fte > 0 ? "+" : ""}
                       {entry.fte} ETP

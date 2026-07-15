@@ -28,7 +28,7 @@ export function WorkstreamBarChart({ data }: { data: WorkstreamBarPoint[] }) {
         />
         <Tooltip formatter={(value, name) => [`€${value}M`, name]} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Bar dataKey="realized" name="Réalisé" fill="#FF3D3D" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="realized" name="Réalisé" fill="#FF3C47" radius={[4, 4, 0, 0]} />
         <Bar dataKey="target" name="Cible" fill="rgba(168,154,147,0.5)" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>

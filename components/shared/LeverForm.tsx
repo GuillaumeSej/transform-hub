@@ -8,7 +8,7 @@ import type { BeTrackData, Lever, LeverStatus, PriorityLevel, RiskLevel } from "
 export type LeverFormValues = Omit<Lever, "id" | "createdAt" | "lastUpdate" | "dependencies">;
 
 const inputClass =
-  "w-full rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-bp-coral focus:outline-none";
+  "w-full rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none";
 const labelClass = "mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-tertiary";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

@@ -7,7 +7,7 @@ export type SankeyDatum = {
   links: { source: number; target: number; value: number }[];
 };
 
-const NODE_COLORS = ["#6B5750", "#FF3D3D", "#F5A623", "#4A90D9", "#2E7D32", "#8E24AA", "#9E9E9E"];
+const NODE_COLORS = ["#806659", "#FF3C47", "#FFB1B5", "#421799", "#320300", "#421799", "#969696"];
 
 /** Flux "tous les leviers" -> étape atteinte (L1..L5, Annulé) — clic sur un nœud pour creuser. */
 export function SankeyChart({
@@ -29,7 +29,7 @@ export function SankeyChart({
         nodePadding={22}
         nodeWidth={10}
         margin={{ top: 8, right: 110, bottom: 8, left: 8 }}
-        link={{ stroke: "#D8CFC9" }}
+        link={{ stroke: "#E2E2E2" }}
         node={({ x, y, width, height, index, payload }) => (
           <g
             onClick={() => onNodeClick?.(payload.name)}
@@ -43,7 +43,7 @@ export function SankeyChart({
               fill={NODE_COLORS[index % NODE_COLORS.length]}
               rx={2}
             />
-            <text x={x + width + 6} y={y + height / 2} dy={4} fontSize={10.5} fill="#3A342F">
+            <text x={x + width + 6} y={y + height / 2} dy={4} fontSize={10.5} fill="#1A1A1A">
               {payload.name} ({payload.value})
             </text>
           </g>

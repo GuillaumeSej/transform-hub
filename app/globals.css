@@ -2,49 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================================
+   Tokens BeTrack — alignés sur le BearingPoint Design System officiel
+   (claude.ai/design "BearingPoint Design System", colors_and_type.css).
+   Règles clés : texte uniquement noir/blanc ; rouge #FF3C47 = SEUL accent,
+   appliqué aux éléments graphiques (jamais au texte) ; graphiques en familles
+   rouge + taupe (foncé→clair), violet en secours ; gris neutres ; flat, coins
+   droits, hairlines gris-200, emphase = filet noir 2px.
+   ============================================================================ */
 :root {
-  --bp-deep-red: #2b0000;
-  --bp-coral: #ff3d3d;
-  --bp-red-brick: #c8281a;
-  --bp-coral-pink: #f58f89;
-  --bp-light-pink: #f8d5d2;
-  --bp-warm-brown: #6b5750;
-  --bp-warm-taupe: #a89a93;
-  --bp-warm-gray: #e8e2de;
+  /* ---- Marque (famille rouge) ---- */
+  --bp-deep-red: #320300; /* Deep Red — fond plein autorisé */
+  --bp-coral: #ff3c47; /* BearingPoint Red — L'accent */
+  --bp-red-brick: #991d1f; /* graphique : rouge foncé */
+  --bp-coral-pink: #ff797b; /* graphique : rouge moyen */
+  --bp-light-pink: #ffb1b5; /* graphique : rouge clair */
 
+  /* ---- Famille taupe / warm gray (fonds + graphiques) ---- */
+  --bp-warm-brown: #806659; /* graphique : taupe foncé */
+  --bp-warm-taupe: #a99e9a; /* graphique : taupe moyen */
+  --bp-warm-gray: #ccc1bd; /* "Gray" — fond plein autorisé */
+
+  /* ---- Violet — graphique de SECOURS uniquement ---- */
+  --bp-purple: #421799;
+
+  /* ---- Échelle de gris neutre (aucune dominante chaude/froide) ---- */
   --n-0: #ffffff;
-  --n-50: #faf8f6;
-  --n-100: #f4f1ee;
-  --n-200: #e8e2de;
-  --n-300: #c9c0ba;
-  --n-400: #a89a93;
-  --n-500: #6b5750;
-  --n-600: #3d2e29;
-  --n-700: #2b1f1b;
-  --n-900: #0a0606;
+  --n-50: #f7f7f7;
+  --n-100: #f0f0f0;
+  --n-200: #e2e2e2;
+  --n-300: #c4c4c4;
+  --n-400: #969696;
+  --n-500: #737373;
+  --n-600: #595959;
+  --n-700: #404040;
+  --n-900: #0a0a0a;
 
-  --green: #2e7d32;
-  --green-light: #e8f5e9;
-  --green-dark: #1b5e20;
-  --amber: #e68900;
-  --amber-light: #fff4e0;
-  --red: #c8281a;
-  --red-light: #fce6e4;
-  --blue: #1565c0;
-  --blue-light: #e3f2fd;
+  /* ---- Statuts : monochrome + rouge seul (la marque interdit vert/orange/bleu).
+     success = encre (différencié par icône/graisse), warning = taupe foncé,
+     danger = BearingPoint Red, info = gris-700. ---- */
+  --green: #1a1a1a;
+  --green-light: #f0f0f0;
+  --green-dark: #000000;
+  --amber: #806659;
+  --amber-light: #e7dedb;
+  --red: #ff3c47;
+  --red-light: #ffe7e8;
+  --blue: #404040;
+  --blue-light: #f0f0f0;
 
-  --bg-app: #faf8f6;
-  --text-primary: #1a1a1a;
-  --text-secondary: #6b5750;
-  --text-tertiary: #a89a93;
-  --border: #e8e2de;
-  --border-strong: #c9c0ba;
+  /* ---- Sémantique surfaces / texte ---- */
+  --bg-app: #f7f7f7;
+  --text-primary: #000000;
+  --text-secondary: #404040;
+  --text-tertiary: #737373;
+  --border: #e2e2e2;
+  --border-strong: #000000;
 }
 
 body {
   color: var(--text-primary);
   background: var(--bg-app);
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Overline / eyebrow — dispositif signature BearingPoint au-dessus des titres */
+.bp-overline {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
 ::-webkit-scrollbar {
@@ -56,7 +85,7 @@ body {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--n-300);
-  border-radius: 4px;
+  border-radius: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--n-400);
@@ -73,5 +102,5 @@ body {
   }
 }
 .animate-fade-up {
-  animation: fadeUp 0.32s ease forwards;
+  animation: fadeUp 0.2s cubic-bezier(0.2, 0, 0, 1) forwards;
 }

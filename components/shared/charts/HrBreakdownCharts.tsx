@@ -17,11 +17,11 @@ import {
 import type { DepartmentMovements } from "@/lib/hrEngine";
 
 // Palette catégorielle validée (dataviz, tous checks PASS sur surface claire).
-export const HR_CATEGORICAL = ["#FF3D3D", "#1565C0", "#2E7D32", "#C77800", "#6D4C9F", "#0097A7"];
+export const HR_CATEGORICAL = ["#FF3C47", "#421799", "#320300", "#FFB1B5", "#421799", "#A99E9A"];
 
-const COLOR_DOWN = "#FF3D3D"; // suppressions
-const COLOR_UP = "#1565C0"; // recrutements
-const COLOR_NEUTRAL = "#6B5750"; // transferts (redéploiements + reconversions)
+const COLOR_DOWN = "#FF3C47"; // suppressions
+const COLOR_UP = "#421799"; // recrutements
+const COLOR_NEUTRAL = "#806659"; // transferts (redéploiements + reconversions)
 
 /** Barres divergentes par département : suppressions vers le bas (corail), recrutements vers le
  * haut (bleu), transferts en neutre — trois séries co-signées, un seul axe ETP. */

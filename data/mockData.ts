@@ -288,7 +288,7 @@ export const mockData: BeTrackData = {
       name: "Procurement Excellence",
       sponsor: "Marie Durand",
       function: "Procurement",
-      color: "#FF3D3D",
+      color: "#FF3C47",
       target: 14.0,
     },
     {
@@ -296,7 +296,7 @@ export const mockData: BeTrackData = {
       name: "Operational Efficiency",
       sponsor: "Jean Dupont",
       function: "Operations",
-      color: "#C8281A",
+      color: "#991D1F",
       target: 12.0,
     },
     {
@@ -304,7 +304,7 @@ export const mockData: BeTrackData = {
       name: "Commercial Effectiveness",
       sponsor: "Sophie Martin",
       function: "Sales",
-      color: "#F58F89",
+      color: "#FF797B",
       target: 10.0,
     },
     {
@@ -312,7 +312,7 @@ export const mockData: BeTrackData = {
       name: "Org & Ways of Working",
       sponsor: "Pierre Lefevre",
       function: "HR",
-      color: "#6B5750",
+      color: "#806659",
       target: 5.5,
     },
     {
@@ -320,7 +320,7 @@ export const mockData: BeTrackData = {
       name: "Digital Transformation",
       sponsor: "Claire Bernard",
       function: "IT",
-      color: "#A89A93",
+      color: "#A99E9A",
       target: 5.0,
     },
     {
@@ -328,7 +328,7 @@ export const mockData: BeTrackData = {
       name: "Supply Chain Optimization",
       sponsor: "Thomas Petit",
       function: "Supply",
-      color: "#2B0000",
+      color: "#320300",
       target: 3.5,
     },
   ],

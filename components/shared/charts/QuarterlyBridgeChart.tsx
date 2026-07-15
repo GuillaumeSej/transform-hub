@@ -45,7 +45,7 @@ export function QuarterlyBridgeChart({
         <Bar
           dataKey="delta"
           name="Économies du trimestre (€M)"
-          fill="#FF3D3D"
+          fill="#FF3C47"
           radius={[3, 3, 0, 0]}
           onClick={(d) => {
             const quarter = (d as { quarter?: string })?.quarter;
@@ -57,7 +57,7 @@ export function QuarterlyBridgeChart({
           type="monotone"
           dataKey="cumulative"
           name="Cumulé (€M)"
-          stroke="#6B5750"
+          stroke="#806659"
           strokeWidth={2}
           dot={{ r: 3 }}
         />
@@ -65,7 +65,7 @@ export function QuarterlyBridgeChart({
           type="monotone"
           dataKey="target"
           name="Cible (€M)"
-          stroke="#2E7D32"
+          stroke="#320300"
           strokeWidth={1.5}
           strokeDasharray="4 4"
           dot={false}

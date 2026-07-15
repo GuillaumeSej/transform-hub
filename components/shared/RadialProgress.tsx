@@ -6,8 +6,8 @@ export function RadialProgress({
   pct,
   size = 120,
   strokeWidth = 10,
-  color = "#FF3D3D",
-  trackColor = "#F0EBE8",
+  color = "#FF3C47",
+  trackColor = "#F0F0F0",
   label,
   sublabel,
 }: {

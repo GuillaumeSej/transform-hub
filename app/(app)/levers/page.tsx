@@ -341,7 +341,7 @@ export default function LeversPage() {
                   setView("table");
                   setParam("view", "table");
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${view === "table" ? "bg-bp-coral text-white" : "bg-white text-secondary"}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${view === "table" ? "bg-black text-white" : "bg-white text-secondary"}`}
               >
                 <Table2 size={13} /> Table
               </button>
@@ -350,7 +350,7 @@ export default function LeversPage() {
                   setView("kanban");
                   setParam("view", "kanban");
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${view === "kanban" ? "bg-bp-coral text-white" : "bg-white text-secondary"}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${view === "kanban" ? "bg-black text-white" : "bg-white text-secondary"}`}
               >
                 <LayoutGrid size={13} /> Kanban
               </button>

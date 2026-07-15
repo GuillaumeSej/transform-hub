@@ -53,7 +53,7 @@ export function SCurveChart({
           type="monotone"
           dataKey="actual"
           name="Réalisé (€M)"
-          stroke="#FF3D3D"
+          stroke="#FF3C47"
           strokeWidth={2.5}
           dot={{ r: 3 }}
           activeDot={{ r: 5 }}
@@ -63,7 +63,7 @@ export function SCurveChart({
           type="monotone"
           dataKey="planned"
           name="Plan initial (€M)"
-          stroke="#6B5750"
+          stroke="#806659"
           strokeWidth={2}
           strokeDasharray="6 4"
           dot={false}
@@ -72,7 +72,7 @@ export function SCurveChart({
           type="monotone"
           dataKey="reforecast"
           name="Réactualisé (€M)"
-          stroke="#2E7D32"
+          stroke="#320300"
           strokeWidth={2}
           strokeDasharray="2 3"
           dot={false}

@@ -8,6 +8,22 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // Marque BearingPoint : coins droits par défaut (flat, type-led). Les cartes/tables
+      // (rounded-lg/xl) deviennent carrées, les inputs/boutons gardent 2-4px, les pills restent.
+      borderRadius: {
+        none: "0px",
+        sm: "2px",
+        DEFAULT: "2px",
+        md: "4px",
+        lg: "0px",
+        xl: "0px",
+        "2xl": "0px",
+        "3xl": "0px",
+      },
+      fontFamily: {
+        sans: ["var(--font-sans)", "Helvetica Neue", "Arial", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+      },
       colors: {
         background: "var(--bg-app)",
         foreground: "var(--text-primary)",
@@ -20,6 +36,7 @@ const config: Config = {
           "warm-brown": "var(--bp-warm-brown)",
           "warm-taupe": "var(--bp-warm-taupe)",
           "warm-gray": "var(--bp-warm-gray)",
+          purple: "var(--bp-purple)",
         },
         neutral: {
           0: "var(--n-0)",

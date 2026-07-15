@@ -47,7 +47,7 @@ export function ActionKanban({
               <div key={a.id} className="mb-2 rounded-sm border border-border bg-white p-2.5">
                 <button
                   onClick={() => onCardClick(a)}
-                  className="mb-1.5 block w-full text-left text-xs font-semibold text-primary hover:text-bp-coral"
+                  className="mb-1.5 block w-full text-left text-xs font-semibold text-primary hover:text-primary hover:underline"
                 >
                   {a.name}
                 </button>
@@ -65,8 +65,8 @@ export function ActionKanban({
                       className={cn(
                         "rounded-full border px-2 py-0.5 text-[9.5px] font-semibold transition",
                         a.status === c.status
-                          ? "border-bp-coral bg-bp-coral text-white"
-                          : "border-border bg-white text-secondary hover:border-bp-coral hover:text-bp-coral"
+                          ? "border-bp-coral bg-black text-white"
+                          : "border-border bg-white text-secondary hover:border-black"
                       )}
                     >
                       {c.label}
