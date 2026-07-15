@@ -163,26 +163,51 @@ export type Employee = {
   name: string;
   region: string;
   country: string;
+  department: string; // FK Department.name
+  direction: string; // direction organisationnelle (ex. "Direction Industrielle")
+  hrOwner: string; // RH local responsable de l'employé
   func: string;
   team: string;
   bu: string;
   entity: string;
   level: "Global" | "Régional" | "Local";
   fte: number;
-  salary: number;
+  salary: number; // € brut annuel
+  hireDate: string; // ISO date
   retirement: string;
 };
 
+export type MovementType = "Redéploiement" | "Reconversion" | "Suppression" | "Recrutement";
+export type MovementStatus = "Planifié" | "En cours" | "Réalisé";
+
 export type WorkforceMovement = {
   id: string;
-  empId: string;
+  /** null = Recrutement (le collaborateur n'existe pas encore dans la base) */
+  empId: string | null;
+  /** Nom de l'employé concerné, ou intitulé du poste pour un Recrutement */
+  label: string;
   leverId: string;
-  type: "Redéploiement" | "Reconversion" | "Suppression";
+  type: MovementType;
+  /** ETP concernés (positif) — l'effet sur l'effectif total est signé par le type :
+   * Suppression = −fte, Recrutement = +fte, Redéploiement/Reconversion = 0 (transfert). */
+  fte: number;
+  department: string;
+  /** Département d'arrivée (Redéploiement/Reconversion) */
+  toDepartment?: string;
+  country: string;
+  hrOwner: string;
   plannedDate: string;
   actualDate: string | null;
-  savings: number; // €
-  cost: number; // €
-  status: "Planifié" | "En cours" | "Réalisé";
+  status: MovementStatus;
+  /** Validation RH que le mouvement a réellement eu lieu (distincte du statut opérationnel) */
+  hrValidated: boolean;
+  /** Mouvement inclus dans le Plan de Sauvegarde de l'Emploi (suppressions) */
+  inPSE?: boolean;
+  /** Impact masse salariale €/an (négatif = économie) */
+  salaryImpact: number;
+  savings: number; // € économies run-rate attendues
+  cost: number; // € coût one-off (indemnités, formation, recrutement)
+  comment?: string;
 };
 
 export type Workforce = {
@@ -232,8 +257,8 @@ export type Alert = {
 export type AuditEntry = {
   ts: string;
   user: string;
-  action: "updated" | "commented" | "completed" | "created";
-  entity: string; // lever id
+  action: "updated" | "commented" | "completed" | "created" | "validated" | "deleted";
+  entity: string; // lever id, mouvement id (MV###) ou employé id (EMP###)
   field: string;
   old: string | number;
   new: string | number;

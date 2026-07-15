@@ -35,7 +35,8 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "HR Director",
     short: "HR",
     nav: [
-      { id: "hr", icon: "Users", label: "HR Module" },
+      { id: "hr", icon: "PieChart", label: "Dashboard RH" },
+      { id: "hr-etp", icon: "Users", label: "Base ETP" },
       { id: "levers", icon: "Target", label: "Lever Library" },
     ],
   },
@@ -55,5 +56,6 @@ export const PAGE_ROUTES: Record<string, string> = {
   levers: "/levers",
   finance: "/finance",
   hr: "/hr",
+  "hr-etp": "/hr/etp",
   operations: "/operations",
 };
