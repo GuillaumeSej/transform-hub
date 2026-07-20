@@ -2,12 +2,14 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   setDoc,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { AuthUser, Company, LifecycleStage, Project } from "@/types";
+import { TEST_USERS } from "@/lib/auth";
 
 // --- Companies ---
 
@@ -82,4 +84,35 @@ export async function saveUser(user: AuthUser): Promise<void> {
 
 export async function deleteUser(username: string): Promise<void> {
   await deleteDoc(doc(usersCol(), username));
+}
+
+// --- Seed: ensure test company + test users exist in Firestore ---
+
+export const TEST_COMPANY: Company = {
+  id: "c1",
+  name: "Acme Corp",
+  industry: "Industrie / Manufacturing",
+  createdAt: "2026-01-15",
+  fyStart: "2026-01-01",
+  fyEnd: "2026-12-31",
+};
+
+let adminSeeded = false;
+
+export async function ensureAdminSeeded(): Promise<void> {
+  if (adminSeeded) return;
+  adminSeeded = true;
+
+  // Seed test company if missing
+  const companiesSnap = await getDocs(companiesCol());
+  if (companiesSnap.empty) {
+    await setDoc(doc(companiesCol(), TEST_COMPANY.id), TEST_COMPANY);
+  }
+
+  // Seed test users if missing
+  const usersSnap = await getDocs(usersCol());
+  if (usersSnap.empty) {
+    const batch = TEST_USERS.map((u) => setDoc(doc(usersCol(), u.username), u));
+    await Promise.all(batch);
+  }
 }
