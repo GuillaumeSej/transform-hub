@@ -1,6 +1,9 @@
 "use client";
 
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useGlobalFilters, matchesGlobalFilters } from "@/lib/hooks/useGlobalFilters";
+import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Banknote, CircleCheck, TriangleAlert, TrendingUp, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import * as engine from "@/lib/engine";
@@ -21,18 +24,81 @@ import { StageFunnel } from "@/components/shared/charts/StageFunnel";
 import { SankeyChart } from "@/components/shared/charts/SankeyChart";
 import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
 import { QuarterlyBridgeChart } from "@/components/shared/charts/QuarterlyBridgeChart";
-import type { LeverStatus } from "@/types";
+import type { Lever, LeverStatus } from "@/types";
 
 export default function DashboardPage() {
   const data = useBeTrackData();
   const router = useRouter();
-  const summary = engine.programSummary(data);
+  const { filters, setFilter, resetFilters } = useGlobalFilters();
+
+  const filterDefs: FilterDef<Lever>[] = useMemo(
+    () => [
+      { key: "status", label: "Statut", getValue: (l) => STATUS_LABEL[l.status] },
+      { key: "ws", label: "Workstream", getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws },
+      { key: "owner", label: "Owner", getValue: (l) => l.owner },
+      { key: "geography", label: "Géographie", getValue: (l) => l.geography },
+      { key: "function", label: "Fonction", getValue: (l) => l.function },
+      { key: "type", label: "Type", getValue: (l) => l.type },
+    ],
+    [data.workstreams],
+  );
+
+  const activeForBar: ActiveFilters = useMemo(() => {
+    const result: ActiveFilters = {};
+    if (filters.f_status) result.status = filters.f_status;
+    if (filters.f_ws) result.ws = filters.f_ws;
+    if (filters.f_owner) result.owner = filters.f_owner;
+    if (filters.f_geography) result.geography = filters.f_geography;
+    if (filters.f_function) result.function = filters.f_function;
+    if (filters.f_type) result.type = filters.f_type;
+    return result;
+  }, [filters]);
+
+  const handleFilterChange = (next: ActiveFilters) => {
+    resetFilters();
+    const map: Record<string, keyof typeof filters> = {
+      status: "f_status",
+      ws: "f_ws",
+      owner: "f_owner",
+      geography: "f_geography",
+      function: "f_function",
+      type: "f_type",
+    };
+    Object.entries(next).forEach(([key, value]) => {
+      const globalKey = map[key];
+      if (globalKey) setFilter(globalKey, value);
+    });
+  };
+
+  const filteredLevers = useMemo(() => {
+    return data.levers.filter((l) =>
+      matchesGlobalFilters(
+        {
+          status: STATUS_LABEL[l.status],
+          ws: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
+          function: l.function,
+          geography: l.geography,
+          country: l.country,
+          owner: l.owner,
+          type: l.type,
+          priority: l.priority,
+          risk: l.risk,
+          end: l.end,
+        },
+        filters,
+      ),
+    );
+  }, [data.levers, data.workstreams, filters]);
+
+  const filteredData = useMemo(() => ({ ...data, levers: filteredLevers }), [data, filteredLevers]);
+
+  const summary = engine.programSummary(filteredData);
   const sCurve = engine.sCurve3(data);
-  const stages = engine.stageCounts(data);
-  const sankey = engine.sankeyData(data);
-  const sankeyChrono = engine.sankeyChronology(data);
-  const mekko = engine.marimekko(data);
-  const bridge = engine.quarterlyBridge(data);
+  const stages = engine.stageCounts(filteredData);
+  const sankey = engine.sankeyData(filteredData);
+  const sankeyChrono = engine.sankeyChronology(filteredData);
+  const mekko = engine.marimekko(filteredData);
+  const bridge = engine.quarterlyBridge(filteredData);
 
   const goToLevers = (params: Record<string, string>) => {
     const qs = new URLSearchParams(params).toString();
@@ -62,9 +128,9 @@ export default function DashboardPage() {
     realized: engine.workstreamSummary(data, w.id).realized,
     target: w.target,
   }));
-  const geoMap = engine.byGeo(data);
+  const geoMap = engine.byGeo(filteredData);
   const geoData = Object.entries(geoMap).map(([name, value]) => ({ name, value }));
-  const pnlMap = engine.pnlImpact(data);
+  const pnlMap = engine.pnlImpact(filteredData);
   const pnlData = Object.entries(pnlMap).map(([id, impact]) => ({
     account: data.pnlAccounts.find((a) => a.id === id)?.name ?? id,
     impact,
@@ -98,6 +164,15 @@ export default function DashboardPage() {
             ))}
           </select>
         </div>
+      </div>
+
+      <div className="mb-4">
+        <FilterBar
+          items={data.levers}
+          defs={filterDefs}
+          active={activeForBar}
+          onChange={handleFilterChange}
+        />
       </div>
 
       <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2">

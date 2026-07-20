@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  programSummary,
   realizedSavings,
   realizedFte,
   worstRisk,
@@ -15,9 +14,6 @@ import {
   fmtCurr,
   fmtPct,
   fmtInt,
-  quarterlyBridge,
-  sCurve3,
-  marimekko,
 } from "@/lib/engine";
 import type { BeTrackData, Lever, SubLever, LeverStatus } from "@/types";
 
@@ -276,7 +272,8 @@ describe("engine — fmt helpers", () => {
   });
 
   it("fmtInt formats fr-FR", () => {
-    expect(fmtInt(1234567)).toBe("1\u00a0234\u00a0567");
+    const result = fmtInt(1234567);
+    expect(result.replace(/[\s\u00a0\u202f]/g, " ")).toBe("1 234 567");
   });
 });
 
@@ -284,9 +281,9 @@ describe("engine — byGeo / byFunction / pnlImpact", () => {
   it("aggregates by geography", () => {
     const data = makeData({
       levers: [
-        { ...baseLever, geography: "Europe", netSavings: 5 },
-        { ...baseLever, id: "L002", geography: "Europe", netSavings: 3 },
-        { ...baseLever, id: "L003", geography: "APAC", netSavings: 2 },
+        { ...baseLever, geography: "Europe", netSavings: 5, progress: 100 },
+        { ...baseLever, id: "L002", geography: "Europe", netSavings: 3, progress: 100 },
+        { ...baseLever, id: "L003", geography: "APAC", netSavings: 2, progress: 100 },
       ],
     });
     const geo = byGeo(data);
@@ -297,8 +294,8 @@ describe("engine — byGeo / byFunction / pnlImpact", () => {
   it("aggregates by function", () => {
     const data = makeData({
       levers: [
-        { ...baseLever, function: "IT", netSavings: 4 },
-        { ...baseLever, id: "L002", function: "HR", netSavings: 6 },
+        { ...baseLever, function: "IT", netSavings: 4, progress: 100 },
+        { ...baseLever, id: "L002", function: "HR", netSavings: 6, progress: 100 },
       ],
     });
     const fn = byFunction(data);

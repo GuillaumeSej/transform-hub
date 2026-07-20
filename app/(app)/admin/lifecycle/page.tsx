@@ -1,32 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Workflow, Save, RotateCcw, ChevronUp, ChevronDown } from "lucide-react";
-import type { LifecycleStage, LeverStatus } from "@/types";
+import type { Company, LifecycleStage, LeverStatus } from "@/types";
 import { DEFAULT_LIFECYCLE_STAGES, STATUS_LEVEL } from "@/lib/status-config";
-
-const ALL_STATUS_KEYS: LeverStatus[] = ["idea", "qualified", "validated", "in_progress", "delivered", "cancelled"];
+import { subscribeCompanies, subscribeLifecycleConfig, saveLifecycleConfig } from "@/lib/firestore/admin";
 
 export default function AdminLifecyclePage() {
-  const [configs, setConfigs] = useState<Record<string, LifecycleStage[]>>({
-    c1: structuredClone(DEFAULT_LIFECYCLE_STAGES),
-    c2: [
-      { key: "idea", label: "Proposition", validationRequired: false },
-      { key: "qualified", label: "Analyse", validationRequired: true },
-      { key: "validated", label: "Approuvé", validationRequired: true },
-      { key: "in_progress", label: "En cours", validationRequired: false },
-      { key: "delivered", label: "Terminé", validationRequired: false },
-    ],
-  });
-  const [selectedCompany, setSelectedCompany] = useState("c1");
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [stages, setStages] = useState<LifecycleStage[]>(structuredClone(DEFAULT_LIFECYCLE_STAGES));
+  const [selectedCompany, setSelectedCompany] = useState("");
 
-  const stages = configs[selectedCompany] ?? DEFAULT_LIFECYCLE_STAGES;
+  useEffect(() => {
+    const unsub = subscribeCompanies((list) => {
+      setCompanies(list);
+      if (!selectedCompany && list.length > 0) {
+        setSelectedCompany(list[0].id);
+      }
+    });
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCompany) return;
+    const unsub = subscribeLifecycleConfig(selectedCompany, (fetched) => {
+      setStages(fetched.length > 0 ? fetched : structuredClone(DEFAULT_LIFECYCLE_STAGES));
+    });
+    return unsub;
+  }, [selectedCompany]);
 
   const updateStage = (key: LeverStatus, patch: Partial<LifecycleStage>) => {
-    setConfigs((prev) => ({
-      ...prev,
-      [selectedCompany]: stages.map((s) => (s.key === key ? { ...s, ...patch } : s)),
-    }));
+    setStages((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
   };
 
   const moveStage = (key: LeverStatus, direction: "up" | "down") => {
@@ -36,11 +41,11 @@ export default function AdminLifecyclePage() {
     if (swap < 0 || swap >= stages.length) return;
     const next = [...stages];
     [next[idx], next[swap]] = [next[swap], next[idx]];
-    setConfigs((prev) => ({ ...prev, [selectedCompany]: next }));
+    setStages(next);
   };
 
   const resetToDefault = () => {
-    setConfigs((prev) => ({ ...prev, [selectedCompany]: structuredClone(DEFAULT_LIFECYCLE_STAGES) }));
+    setStages(structuredClone(DEFAULT_LIFECYCLE_STAGES));
   };
 
   return (
@@ -62,9 +67,9 @@ export default function AdminLifecyclePage() {
           onChange={(e) => setSelectedCompany(e.target.value)}
           className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
         >
-          <option value="c1">Acme Corp</option>
-          <option value="c2">GlobalTech</option>
-          <option value="c3">EuroFinance (défaut)</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
         </select>
       </div>
 
@@ -133,8 +138,9 @@ export default function AdminLifecyclePage() {
 
       <div className="flex gap-3">
         <button
-          onClick={() => {
-            alert("Configuration enregistrée (démo) !");
+          onClick={async () => {
+            if (!selectedCompany) return;
+            await saveLifecycleConfig(selectedCompany, stages);
           }}
           className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
         >

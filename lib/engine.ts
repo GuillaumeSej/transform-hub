@@ -494,9 +494,21 @@ export function sankeyChronology(data: BeTrackData): { nodes: SankeyChronoNode[]
     }
   });
 
+  const keptIndices = nodes
+    .map((_, i) => i)
+    .filter((i) => links.some((l) => l.source === i || l.target === i));
+  const indexMap = new Map<number, number>();
+  keptIndices.forEach((oldIdx, newIdx) => indexMap.set(oldIdx, newIdx));
+
   return {
-    nodes: nodes.filter((_, i) => links.some((l) => l.source === i || l.target === i)),
-    links: links.filter((l) => l.value > 0),
+    nodes: keptIndices.map((i) => nodes[i]),
+    links: links
+      .filter((l) => l.value > 0 && indexMap.has(l.source) && indexMap.has(l.target))
+      .map((l) => ({
+        source: indexMap.get(l.source)!,
+        target: indexMap.get(l.target)!,
+        value: l.value,
+      })),
   };
 }
 

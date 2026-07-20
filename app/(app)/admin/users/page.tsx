@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Users, Plus, Pencil, Trash2 } from "lucide-react";
 import type { AuthUser, Role } from "@/types";
-import { TEST_USERS } from "@/lib/auth";
+import { subscribeUsers, saveUser, deleteUser } from "@/lib/firestore/admin";
 
 const ROLES: { value: Role; label: string }[] = [
   { value: "admin", label: "Administrator" },
@@ -16,7 +16,12 @@ const ROLES: { value: Role; label: string }[] = [
 ];
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<AuthUser[]>(TEST_USERS);
+  const [users, setUsers] = useState<AuthUser[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeUsers(setUsers);
+    return unsub;
+  }, []);
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [form, setForm] = useState({ username: "", name: "", role: "cto" as Role, companyId: "c1" });
   const [showForm, setShowForm] = useState(false);
@@ -33,7 +38,7 @@ export default function AdminUsersPage() {
     setShowForm(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.username.trim() || !form.name.trim()) return;
     const newUser: AuthUser = {
       username: form.username,
@@ -42,16 +47,12 @@ export default function AdminUsersPage() {
       name: form.name,
       companyId: form.role === "admin" ? null : form.companyId,
     };
-    if (editIdx !== null) {
-      setUsers((prev) => prev.map((u, i) => (i === editIdx ? newUser : u)));
-    } else {
-      setUsers((prev) => [...prev, newUser]);
-    }
+    await saveUser(newUser);
     setShowForm(false);
   };
 
-  const remove = (idx: number) => {
-    setUsers((prev) => prev.filter((_, i) => i !== idx));
+  const remove = async (username: string) => {
+    await deleteUser(username);
   };
 
   return (
@@ -157,7 +158,7 @@ export default function AdminUsersPage() {
                   <button onClick={() => startEdit(u, idx)} className="mr-2 text-text-secondary hover:text-bp-coral">
                     <Pencil size={14} />
                   </button>
-                  <button onClick={() => remove(idx)} className="text-text-secondary hover:text-red-500">
+                  <button onClick={() => remove(u.username)} className="text-text-secondary hover:text-red-500">
                     <Trash2 size={14} />
                   </button>
                 </td>

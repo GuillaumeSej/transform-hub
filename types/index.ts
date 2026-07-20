@@ -106,6 +106,7 @@ export type Lever = {
   // Prévisions réactualisées, éditables uniquement à partir de L4 · Planifié (initialisées à
   // lockedPlan à l'entrée en L4, puis ajustables librement).
   reforecast?: FinancialSnapshot;
+  companyId?: string | null;
   dependencies: LeverDependency[]; // suivies + alertées, jamais décalées automatiquement
   description: string;
   createdAt: string;
@@ -151,6 +152,7 @@ export type SubLever = {
   status: LeverStatus;
   lockedPlan?: FinancialSnapshot;
   reforecast?: FinancialSnapshot;
+  companyId?: string | null;
   dependencies: LeverDependency[];
   actions: LeverAction[];
 };

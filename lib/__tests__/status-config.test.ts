@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   STATUS_LEVEL,
-  STATUS_SHORT_LABEL,
-  STATUS_LABEL,
   STATUS_CYCLE,
   STATUS_ORDER,
   DEFAULT_LIFECYCLE_STAGES,

@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Building2, Plus, Pencil, Trash2 } from "lucide-react";
 import type { Company } from "@/types";
-
-const DEMO_COMPANIES: Company[] = [
-  { id: "c1", name: "Acme Corp", industry: "Industrie", createdAt: "2026-01-15" },
-  { id: "c2", name: "GlobalTech", industry: "Technologie", createdAt: "2026-02-10" },
-  { id: "c3", name: "EuroFinance", industry: "Finance", createdAt: "2026-03-05" },
-];
+import { subscribeCompanies, saveCompany, deleteCompany } from "@/lib/firestore/admin";
 
 export default function AdminCompaniesPage() {
-  const [companies, setCompanies] = useState<Company[]>(DEMO_COMPANIES);
+  const [companies, setCompanies] = useState<Company[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeCompanies(setCompanies);
+    return unsub;
+  }, []);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", industry: "" });
   const [showForm, setShowForm] = useState(false);
@@ -28,21 +28,22 @@ export default function AdminCompaniesPage() {
     setShowForm(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.name.trim()) return;
     if (editId) {
-      setCompanies((prev) =>
-        prev.map((c) => (c.id === editId ? { ...c, name: form.name, industry: form.industry } : c))
-      );
+      const existing = companies.find((c) => c.id === editId);
+      if (existing) {
+        await saveCompany({ ...existing, name: form.name, industry: form.industry });
+      }
     } else {
       const id = `c${Date.now()}`;
-      setCompanies((prev) => [...prev, { id, name: form.name, industry: form.industry, createdAt: new Date().toISOString().slice(0, 10) }]);
+      await saveCompany({ id, name: form.name, industry: form.industry, createdAt: new Date().toISOString().slice(0, 10) });
     }
     setShowForm(false);
   };
 
-  const remove = (id: string) => {
-    setCompanies((prev) => prev.filter((c) => c.id !== id));
+  const remove = async (id: string) => {
+    await deleteCompany(id);
   };
 
   return (

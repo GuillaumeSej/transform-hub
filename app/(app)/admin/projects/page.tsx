@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FolderKanban, Plus, Pencil, Trash2 } from "lucide-react";
 import type { Project } from "@/types";
-
-const DEMO_PROJECTS: Project[] = [
-  { id: "p1", companyId: "c1", name: "Transformation 2026", sponsor: "CEO Acme", target: 50, currency: "€M", fyStart: "2026-01", fyEnd: "2026-12", baselineEBIT: 120, revenue: 800, createdAt: "2026-01-20" },
-  { id: "p2", companyId: "c2", name: "GlobalTech Cost Program", sponsor: "CFO GT", target: 30, currency: "€M", fyStart: "2026-01", fyEnd: "2026-12", baselineEBIT: 90, revenue: 500, createdAt: "2026-02-15" },
-  { id: "p3", companyId: "c3", name: "EuroFinance Efficiency", sponsor: "COO EF", target: 20, currency: "€M", fyStart: "2026-01", fyEnd: "2026-12", baselineEBIT: 60, revenue: 300, createdAt: "2026-03-10" },
-];
+import { subscribeProjects, saveProject, deleteProject } from "@/lib/firestore/admin";
 
 export default function AdminProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>(DEMO_PROJECTS);
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeProjects(setProjects);
+    return unsub;
+  }, []);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ companyId: "c1", name: "", sponsor: "", target: "" });
   const [showForm, setShowForm] = useState(false);
@@ -28,27 +28,23 @@ export default function AdminProjectsPage() {
     setShowForm(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.name.trim()) return;
     const target = parseFloat(form.target) || 0;
     if (editId) {
-      setProjects((prev) =>
-        prev.map((p) =>
-          p.id === editId ? { ...p, name: form.name, sponsor: form.sponsor, target, companyId: form.companyId } : p
-        )
-      );
+      const existing = projects.find((p) => p.id === editId);
+      if (existing) {
+        await saveProject({ ...existing, name: form.name, sponsor: form.sponsor, target, companyId: form.companyId });
+      }
     } else {
       const id = `p${Date.now()}`;
-      setProjects((prev) => [
-        ...prev,
-        { id, companyId: form.companyId, name: form.name, sponsor: form.sponsor, target, currency: "€M", fyStart: "2026-01", fyEnd: "2026-12", baselineEBIT: 0, revenue: 0, createdAt: new Date().toISOString().slice(0, 10) },
-      ]);
+      await saveProject({ id, companyId: form.companyId, name: form.name, sponsor: form.sponsor, target, currency: "€M", fyStart: "2026-01", fyEnd: "2026-12", baselineEBIT: 0, revenue: 0, createdAt: new Date().toISOString().slice(0, 10) });
     }
     setShowForm(false);
   };
 
-  const remove = (id: string) => {
-    setProjects((prev) => prev.filter((p) => p.id !== id));
+  const remove = async (id: string) => {
+    await deleteProject(id);
   };
 
   return (
