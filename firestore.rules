@@ -19,6 +19,18 @@ service cloud.firestore {
     match /meta/{docId} {
       allow read, write: if true;
     }
+    match /companies/{docId} {
+      allow read, write: if true;
+    }
+    match /projects/{docId} {
+      allow read, write: if true;
+    }
+    match /lifecycleConfigs/{docId} {
+      allow read, write: if true;
+    }
+    match /adminUsers/{docId} {
+      allow read, write: if true;
+    }
     match /{document=**} {
       allow read, write: if false;
     }

@@ -15,8 +15,6 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import type { Employee, WorkforceMovement } from "@/types";
 
-/** Une ligne = un employé (joint à son mouvement le plus pertinent) OU un recrutement (poste
- * sans employé existant). Le RH voit ainsi toute sa base ET les postes entrants au même endroit. */
 type EtpRow = {
   id: string;
   matricule: string;
@@ -29,7 +27,7 @@ type EtpRow = {
   fte: number;
   salary: number;
   hrOwner: string;
-  hasMovement: string; // "Oui"/"Non" (filtrable)
+  hasMovement: string;
   movementType: string;
   leverCode: string;
   leverId: string | null;
@@ -42,11 +40,29 @@ type EtpRow = {
   employee: Employee | null;
 };
 
+type MovementRow = {
+  id: string;
+  label: string;
+  type: string;
+  department: string;
+  country: string;
+  fte: number;
+  plannedDate: string;
+  actualDate: string;
+  status: string;
+  hrValidated: boolean;
+  leverCode: string;
+  leverId: string | null;
+  alertKind: hr.MovementAlertKind | null;
+  movement: WorkforceMovement;
+};
+
 export default function BaseEtpPage() {
   const data = useBeTrackData();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
+  const [tab, setTab] = useState<"etp" | "mouvements">("etp");
   const [movementModal, setMovementModal] = useState<{ movement?: WorkforceMovement } | null>(null);
 
   const wf = data.workforce;
@@ -58,13 +74,13 @@ export default function BaseEtpPage() {
     return map;
   }, [alerts]);
 
-  const rows: EtpRow[] = useMemo(() => {
+  const employeeRows: EtpRow[] = useMemo(() => {
     const movementByEmp = new Map<string, WorkforceMovement>();
     for (const m of wf.movements) {
       if (m.empId && !movementByEmp.has(m.empId)) movementByEmp.set(m.empId, m);
     }
 
-    const employeeRows: EtpRow[] = wf.employees.map((e) => {
+    const baseRows: EtpRow[] = wf.employees.map((e) => {
       const m = movementByEmp.get(e.id) ?? null;
       const lever = m ? data.levers.find((l) => l.id === m.leverId) : undefined;
       return {
@@ -123,10 +139,34 @@ export default function BaseEtpPage() {
         };
       });
 
-    return [...employeeRows, ...recruitmentRows];
+    return [...baseRows, ...recruitmentRows];
   }, [wf, data.levers, alertByMovement]);
 
-  const filterDefs: FilterDef<EtpRow>[] = useMemo(
+  const movementRows: MovementRow[] = useMemo(
+    () =>
+      wf.movements.map((m) => {
+        const lever = data.levers.find((l) => l.id === m.leverId);
+        return {
+          id: m.id,
+          label: m.label,
+          type: m.type,
+          department: m.department,
+          country: m.country,
+          fte: m.fte,
+          plannedDate: m.plannedDate,
+          actualDate: m.actualDate ?? "—",
+          status: `${m.status}${m.hrValidated ? " ✓RH" : ""}`,
+          hrValidated: m.hrValidated,
+          leverCode: lever?.code ?? "—",
+          leverId: lever?.id ?? null,
+          alertKind: alertByMovement.get(m.id) ?? null,
+          movement: m,
+        };
+      }),
+    [wf.movements, data.levers, alertByMovement]
+  );
+
+  const etpFilterDefs: FilterDef<EtpRow>[] = useMemo(
     () => [
       { key: "f_department", label: "Département", getValue: (r) => r.department },
       { key: "f_direction", label: "Direction", getValue: (r) => r.direction },
@@ -135,8 +175,6 @@ export default function BaseEtpPage() {
       { key: "f_level", label: "Niveau", getValue: (r) => r.level },
       { key: "f_hrOwner", label: "RH local", getValue: (r) => r.hrOwner },
       { key: "f_hasMovement", label: "Mouvement prévu", getValue: (r) => r.hasMovement },
-      { key: "f_movementType", label: "Type de mouvement", getValue: (r) => r.movementType },
-      { key: "f_movementStatus", label: "Statut mouvement", getValue: (r) => r.movementStatus },
       { key: "f_lever", label: "Levier lié", getValue: (r) => r.leverCode },
       { key: "f_pse", label: "PSE", getValue: (r) => r.pse },
       {
@@ -157,7 +195,33 @@ export default function BaseEtpPage() {
     []
   );
 
-  const activeFilters: ActiveFilters = useMemo(() => {
+  const movementFilterDefs: FilterDef<MovementRow>[] = useMemo(
+    () => [
+      { key: "f_type", label: "Type", getValue: (r) => r.type },
+      { key: "f_department", label: "Département", getValue: (r) => r.department },
+      { key: "f_country", label: "Pays", getValue: (r) => r.country },
+      { key: "f_status", label: "Statut", getValue: (r) => r.status },
+      { key: "f_hrValidated", label: "Validé RH", getValue: (r) => (r.hrValidated ? "Oui" : "Non") },
+      { key: "f_lever", label: "Levier lié", getValue: (r) => r.leverCode },
+      {
+        key: "f_alert",
+        label: "Alerte",
+        getValue: (r) =>
+          r.alertKind === "overdue"
+            ? "En retard"
+            : r.alertKind === "due"
+              ? "Échéance proche"
+              : r.alertKind === "toValidate"
+                ? "À valider"
+                : r.alertKind === "leverMismatch"
+                  ? "Désynchronisé levier"
+                  : "Aucune",
+      },
+    ],
+    []
+  );
+
+  const etpActiveFilters: ActiveFilters = useMemo(() => {
     const entries: [string, string][] = [];
     searchParams.forEach((value, key) => {
       if (key.startsWith("f_")) entries.push([key, value]);
@@ -174,23 +238,42 @@ export default function BaseEtpPage() {
     router.replace(`/hr/etp?${params.toString()}`);
   };
 
-  const filteredRows = useMemo(
+  const movementActiveFilters: ActiveFilters = useMemo(() => {
+    const entries: [string, string][] = [];
+    searchParams.forEach((value, key) => {
+      if (key.startsWith("f_")) entries.push([key, value]);
+    });
+    return Object.fromEntries(entries);
+  }, [searchParams]);
+
+  const filteredEmployees = useMemo(
     () =>
-      rows.filter((row) =>
-        Object.entries(activeFilters).every(([key, value]) => {
-          const def = filterDefs.find((d) => d.key === key);
+      employeeRows.filter((row) =>
+        Object.entries(etpActiveFilters).every(([key, value]) => {
+          const def = etpFilterDefs.find((d) => d.key === key);
           return !def || def.getValue(row) === value;
         })
       ),
-    [rows, activeFilters, filterDefs]
+    [employeeRows, etpActiveFilters, etpFilterDefs]
+  );
+
+  const filteredMovements = useMemo(
+    () =>
+      movementRows.filter((row) =>
+        Object.entries(movementActiveFilters).every(([key, value]) => {
+          const def = movementFilterDefs.find((d) => d.key === key);
+          return !def || def.getValue(row) === value;
+        })
+      ),
+    [movementRows, movementActiveFilters, movementFilterDefs]
   );
 
   const toValidateCount = alerts.filter((a) => a.kind === "toValidate").length;
   const plannedCount = wf.movements.filter((m) => m.status !== "Réalisé").length;
 
   const handleCellUpdate = (rowId: string, field: keyof EtpRow, value: string | number) => {
-    const row = rows.find((r) => r.id === rowId);
-    if (!row?.employee) return; // lignes recrutement : édition via le modal mouvement
+    const row = employeeRows.find((r) => r.id === rowId);
+    if (!row?.employee) return;
     const patch: Partial<Employee> = {};
     if (field === "salary" || field === "fte") patch[field] = Number(value);
     else if (
@@ -206,7 +289,7 @@ export default function BaseEtpPage() {
     showToast("Employé mis à jour", row.employee.name, "success");
   };
 
-  const columns: ColumnDef<EtpRow>[] = [
+  const etpColumns: ColumnDef<EtpRow>[] = [
     {
       key: "matricule",
       label: "Matricule",
@@ -237,27 +320,57 @@ export default function BaseEtpPage() {
       render: (r) => r.salary.toLocaleString("fr-FR"),
     },
     { key: "hrOwner", label: "RH local", editable: true },
+  ];
+
+  const movementColumns: ColumnDef<MovementRow>[] = [
+    { key: "id", label: "ID", width: "100px", render: (r) => <span className="font-mono text-[11px] text-secondary">{r.id}</span> },
     {
-      key: "movementType",
-      label: "Mouvement",
+      key: "label",
+      label: "Libellé",
+      render: (r) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setMovementModal({ movement: r.movement });
+          }}
+          className="font-semibold text-bp-coral hover:underline"
+        >
+          {r.label}
+        </button>
+      ),
+    },
+    { key: "type", label: "Type" },
+    { key: "department", label: "Département" },
+    { key: "country", label: "Pays" },
+    { key: "fte", label: "ETP", align: "right" },
+    { key: "plannedDate", label: "Date prévue" },
+    { key: "actualDate", label: "Date réelle" },
+    { key: "status", label: "Statut" },
+    {
+      key: "hrValidated",
+      label: "Validé RH",
       render: (r) =>
-        r.movement ? (
-          <button
+        r.hrValidated ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rag-green-dark">
+            <CheckCircle2 size={13} /> Validé
+          </span>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              setMovementModal({ movement: r.movement! });
+              data.validateMovement(r.movement.id);
+              showToast("Mouvement validé", r.movement.label, "success");
             }}
-            className="font-semibold text-bp-coral hover:underline"
           >
-            {r.movementType}
-          </button>
-        ) : (
-          "—"
+            ✓ Valider
+          </Button>
         ),
     },
     {
       key: "leverCode",
-      label: "Levier",
+      label: "Levier lié",
       render: (r) =>
         r.leverId ? (
           <button
@@ -273,36 +386,15 @@ export default function BaseEtpPage() {
           "—"
         ),
     },
-    { key: "plannedDate", label: "Date prévue" },
-    { key: "actualDate", label: "Date réelle" },
-    { key: "movementStatus", label: "Statut" },
-    { key: "pse", label: "PSE", align: "center" },
     {
-      key: "id",
-      label: "Validation RH",
-      sortable: false,
+      key: "alertKind",
+      label: "Alerte",
       render: (r) => {
-        if (!r.movement) return null;
-        if (r.movement.hrValidated) {
-          return (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rag-green-dark">
-              <CheckCircle2 size={13} /> Validé
-            </span>
-          );
-        }
-        return (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              data.validateMovement(r.movement!.id);
-              showToast("Mouvement validé", r.movement!.label, "success");
-            }}
-          >
-            ✓ Valider
-          </Button>
-        );
+        if (r.alertKind === "overdue") return <span className="text-[11px] text-rag-red">En retard</span>;
+        if (r.alertKind === "due") return <span className="text-[11px] text-rag-amber">Échéance proche</span>;
+        if (r.alertKind === "toValidate") return <span className="text-[11px] text-rag-amber">À valider</span>;
+        if (r.alertKind === "leverMismatch") return <span className="text-[11px] text-rag-red">Désynchronisé levier</span>;
+        return <span className="text-[11px] text-tertiary">—</span>;
       },
     },
   ];
@@ -351,17 +443,57 @@ export default function BaseEtpPage() {
         />
       </div>
 
-      <div className="mb-3.5 rounded-md border border-border bg-white p-3">
-        <FilterBar items={rows} defs={filterDefs} active={activeFilters} onChange={setFilters} />
+      <div className="mb-3.5 flex gap-1 border-b border-border">
+        <button
+          onClick={() => setTab("etp")}
+          className={`px-4 py-2 text-[13px] font-medium transition-colors ${
+            tab === "etp"
+              ? "border-b-2 border-bp-coral text-bp-coral"
+              : "text-tertiary hover:text-primary"
+          }`}
+        >
+          Base ETP
+        </button>
+        <button
+          onClick={() => setTab("mouvements")}
+          className={`px-4 py-2 text-[13px] font-medium transition-colors ${
+            tab === "mouvements"
+              ? "border-b-2 border-bp-coral text-bp-coral"
+              : "text-tertiary hover:text-primary"
+          }`}
+        >
+          Suivi des mouvements
+        </button>
       </div>
 
-      <EditableTable
-        data={filteredRows}
-        columns={columns}
-        onCellUpdate={handleCellUpdate}
-        searchPlaceholder="Rechercher (nom, matricule, fonction, levier...)"
-        defaultSort={{ key: "department", direction: "asc" }}
-      />
+      {tab === "etp" && (
+        <>
+          <div className="mb-3.5 rounded-md border border-border bg-white p-3">
+            <FilterBar items={employeeRows} defs={etpFilterDefs} active={etpActiveFilters} onChange={setFilters} />
+          </div>
+          <EditableTable
+            data={filteredEmployees}
+            columns={etpColumns}
+            onCellUpdate={handleCellUpdate}
+            searchPlaceholder="Rechercher (nom, matricule, fonction...)"
+            defaultSort={{ key: "department", direction: "asc" }}
+          />
+        </>
+      )}
+
+      {tab === "mouvements" && (
+        <>
+          <div className="mb-3.5 rounded-md border border-border bg-white p-3">
+            <FilterBar items={movementRows} defs={movementFilterDefs} active={movementActiveFilters} onChange={setFilters} />
+          </div>
+          <EditableTable
+            data={filteredMovements}
+            columns={movementColumns}
+            searchPlaceholder="Rechercher (libellé, type, département...)"
+            defaultSort={{ key: "plannedDate", direction: "desc" }}
+          />
+        </>
+      )}
 
       <Modal
         open={movementModal !== null}
