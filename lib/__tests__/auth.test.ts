@@ -2,14 +2,20 @@ import { describe, it, expect } from "vitest";
 import { TEST_USERS, findUser } from "@/lib/auth";
 
 describe("auth — TEST_USERS", () => {
-  it("has 7 test users (6 roles + admin)", () => {
-    expect(TEST_USERS).toHaveLength(7);
+  it("has 8 test users (admin + admin_entreprise + 6 roles)", () => {
+    expect(TEST_USERS).toHaveLength(8);
   });
 
-  it("has one admin user", () => {
+  it("has one global admin user", () => {
     const admin = TEST_USERS.find((u) => u.role === "admin");
     expect(admin).toBeDefined();
     expect(admin?.username).toBe("admin");
+  });
+
+  it("has one admin_entreprise user", () => {
+    const adminEnt = TEST_USERS.find((u) => u.role === "admin_entreprise");
+    expect(adminEnt).toBeDefined();
+    expect(adminEnt?.companyId).toBe("c1");
   });
 
   it("all users have password 'test'", () => {

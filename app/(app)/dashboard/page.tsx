@@ -101,7 +101,12 @@ export default function DashboardPage() {
   const bridge = engine.quarterlyBridge(filteredData);
 
   const goToLevers = (params: Record<string, string>) => {
-    const qs = new URLSearchParams(params).toString();
+    const globalParams: Record<string, string> = {};
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) globalParams[key] = value;
+    });
+    const merged = { ...globalParams, ...params };
+    const qs = new URLSearchParams(merged).toString();
     router.push(`/levers${qs ? `?${qs}` : ""}`);
   };
   const goToStage = (status: LeverStatus) => goToLevers({ f_status: STATUS_LABEL[status] });

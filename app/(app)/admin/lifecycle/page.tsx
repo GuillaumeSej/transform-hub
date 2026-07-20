@@ -5,8 +5,11 @@ import { Workflow, Save, RotateCcw, ChevronUp, ChevronDown } from "lucide-react"
 import type { Company, LifecycleStage, LeverStatus } from "@/types";
 import { DEFAULT_LIFECYCLE_STAGES, STATUS_LEVEL } from "@/lib/status-config";
 import { subscribeCompanies, subscribeLifecycleConfig, saveLifecycleConfig } from "@/lib/firestore/admin";
+import { useRole } from "@/lib/hooks/useRole";
 
 export default function AdminLifecyclePage() {
+  const { role, user } = useRole();
+  const isEntAdmin = role === "admin_entreprise";
   const [companies, setCompanies] = useState<Company[]>([]);
   const [stages, setStages] = useState<LifecycleStage[]>(structuredClone(DEFAULT_LIFECYCLE_STAGES));
   const [selectedCompany, setSelectedCompany] = useState("");
@@ -14,13 +17,17 @@ export default function AdminLifecyclePage() {
   useEffect(() => {
     const unsub = subscribeCompanies((list) => {
       setCompanies(list);
-      if (!selectedCompany && list.length > 0) {
-        setSelectedCompany(list[0].id);
+      if (!selectedCompany) {
+        if (isEntAdmin && user?.companyId) {
+          setSelectedCompany(user.companyId);
+        } else if (list.length > 0) {
+          setSelectedCompany(list[0].id);
+        }
       }
     });
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isEntAdmin, user?.companyId]);
 
   useEffect(() => {
     if (!selectedCompany) return;
@@ -62,15 +69,21 @@ export default function AdminLifecyclePage() {
 
       <div className="flex items-center gap-3">
         <label className="text-sm font-medium text-text-secondary">Entreprise :</label>
-        <select
-          value={selectedCompany}
-          onChange={(e) => setSelectedCompany(e.target.value)}
-          className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-        >
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+        {isEntAdmin ? (
+          <span className="text-sm font-medium text-text-primary">
+            {companies.find((c) => c.id === user?.companyId)?.name ?? user?.companyId}
+          </span>
+        ) : (
+          <select
+            value={selectedCompany}
+            onChange={(e) => setSelectedCompany(e.target.value)}
+            className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+          >
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="rounded-xl border border-border overflow-hidden">

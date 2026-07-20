@@ -1,4 +1,4 @@
-export type Role = "admin" | "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
+export type Role = "admin" | "admin_entreprise" | "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
 
 /** Compte de test (voir lib/auth.ts) — login réel par identifiant/mot de passe, mais toujours
  * des comptes de démo (mot de passe unique "test" pour les 6 + admin). */
@@ -294,6 +294,9 @@ export type Company = {
   industry: string;
   logoUrl?: string;
   createdAt: string;
+  /** Configuration temporelle du programme pour cette entreprise */
+  fyStart: string;  // ISO date "YYYY-01-01"
+  fyEnd: string;    // ISO date "YYYY-12-31"
 };
 
 export type Project = {

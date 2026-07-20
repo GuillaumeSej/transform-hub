@@ -13,6 +13,15 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "dashboard", icon: "PieChart", label: "Executive Dashboard" },
     ],
   },
+  admin_entreprise: {
+    label: "Admin Entreprise",
+    short: "Admin ENT",
+    nav: [
+      { id: "admin-users", icon: "Users", label: "Utilisateurs" },
+      { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
+      { id: "dashboard", icon: "PieChart", label: "Executive Dashboard" },
+    ],
+  },
   cto: {
     label: "Chief Transformation Officer",
     short: "CTO",

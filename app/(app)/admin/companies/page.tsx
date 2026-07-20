@@ -13,18 +13,18 @@ export default function AdminCompaniesPage() {
     return unsub;
   }, []);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", industry: "" });
+  const [form, setForm] = useState({ name: "", industry: "", fyStart: "2026-01-01", fyEnd: "2026-12-31" });
   const [showForm, setShowForm] = useState(false);
 
   const startCreate = () => {
     setEditId(null);
-    setForm({ name: "", industry: "" });
+    setForm({ name: "", industry: "", fyStart: "2026-01-01", fyEnd: "2026-12-31" });
     setShowForm(true);
   };
 
   const startEdit = (c: Company) => {
     setEditId(c.id);
-    setForm({ name: c.name, industry: c.industry });
+    setForm({ name: c.name, industry: c.industry, fyStart: c.fyStart, fyEnd: c.fyEnd });
     setShowForm(true);
   };
 
@@ -33,11 +33,11 @@ export default function AdminCompaniesPage() {
     if (editId) {
       const existing = companies.find((c) => c.id === editId);
       if (existing) {
-        await saveCompany({ ...existing, name: form.name, industry: form.industry });
+        await saveCompany({ ...existing, name: form.name, industry: form.industry, fyStart: form.fyStart, fyEnd: form.fyEnd });
       }
     } else {
       const id = `c${Date.now()}`;
-      await saveCompany({ id, name: form.name, industry: form.industry, createdAt: new Date().toISOString().slice(0, 10) });
+      await saveCompany({ id, name: form.name, industry: form.industry, createdAt: new Date().toISOString().slice(0, 10), fyStart: form.fyStart, fyEnd: form.fyEnd });
     }
     setShowForm(false);
   };
@@ -83,6 +83,24 @@ export default function AdminCompaniesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                 placeholder="Industrie / Secteur"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-text-secondary">Début exercice</label>
+              <input
+                type="date"
+                value={form.fyStart}
+                onChange={(e) => setForm((f) => ({ ...f, fyStart: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-text-secondary">Fin exercice</label>
+              <input
+                type="date"
+                value={form.fyEnd}
+                onChange={(e) => setForm((f) => ({ ...f, fyEnd: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
               />
             </div>
           </div>

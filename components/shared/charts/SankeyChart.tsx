@@ -12,6 +12,7 @@ const NODE_COLORS = ["#806659", "#FF3C47", "#FFB1B5", "#421799", "#320300", "#42
 const CHRONO_COLORS = [
   "#806659", "#FF3C47", "#FFB1B5", "#421799", "#320300", "#421799",
   "#E87D5F", "#D4A574", "#C49B6A", "#B8956F", "#A68960", "#4CAF50",
+  "#F0A090",
 ];
 
 /** Flux "tous les leviers" -> étape atteinte (L1..L5, Annulé) — clic sur un nœud pour creuser. */

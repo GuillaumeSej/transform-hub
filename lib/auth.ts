@@ -8,6 +8,7 @@ import type { AuthUser } from "@/types";
  */
 export const TEST_USERS: AuthUser[] = [
   { username: "admin", password: "test", role: "admin", name: "Admin BeTrack", companyId: null },
+  { username: "admin.c1", password: "test", role: "admin_entreprise", name: "Admin Acme", companyId: "c1" },
   { username: "test.cto", password: "test", role: "cto", name: "Test CTO", companyId: "c1" },
   { username: "test.sponsor", password: "test", role: "sponsor", name: "Test Sponsor", companyId: "c1" },
   { username: "test.lever", password: "test", role: "lever", name: "Test Lever Owner", companyId: "c1" },

@@ -19,9 +19,8 @@ import type { LeverStatus } from "@/types";
  * Fonctions pures : prennent les données en paramètre plutôt que de lire un état global mutable.
  */
 
-// Date de référence du scénario démo (le programme se termine le 2026-12-31) — figée pour rendre
-// underperformers() déterministe, comme dans le prototype d'origine.
-const DEMO_NOW = new Date("2026-06-22").getTime();
+// Date de référence courante — utilisée par underperformers() pour calculer l'avancement attendu.
+const DEMO_NOW = Date.now();
 
 export function modSavings(lever: Lever, data: BeTrackData): number {
   const sc = data.scenarios.find((s) => s.id === data.activeScenario);
@@ -414,85 +413,66 @@ export type SankeyChronoLink = { source: number; target: number; value: number }
  * Chaque "out" représente les leviers qui ne progressent pas au-delà de cette étape.
  */
 export function sankeyChronology(data: BeTrackData): { nodes: SankeyChronoNode[]; links: SankeyChronoLink[] } {
-  const active = data.levers.filter((l) => l.status !== "cancelled");
-  const cancelled = data.levers.filter((l) => l.status === "cancelled");
-
-  // Build nodes: Tous les leviers, L1..L5, then "Annulé après L1"..."Annulé après L5"
   const nodes: SankeyChronoNode[] = [{ name: "Tous les leviers" }];
 
-  // L1..L5 main nodes (indices 1..5)
   STATUS_CYCLE.forEach((status) => {
     nodes.push({ name: STATUS_SHORT_LABEL[status] });
   });
 
-  // "Arrêté après LX" exit nodes (indices 6..10)
   STATUS_CYCLE.forEach((status) => {
-    nodes.push({ name: `Arrêté après ${STATUS_SHORT_LABEL[status]}` });
+    nodes.push({ name: `Annulé après ${STATUS_SHORT_LABEL[status]}` });
   });
 
-  // "Réalisé" exit node (index 11)
   nodes.push({ name: "Réalisé" });
 
-  // Count active levers at each stage
   const activeByStage = new Map<LeverStatus, number>();
   STATUS_CYCLE.forEach((s) => activeByStage.set(s, 0));
-  active.forEach((l) => {
+  data.levers.filter((l) => l.status !== "cancelled").forEach((l) => {
     activeByStage.set(l.status, (activeByStage.get(l.status) ?? 0) + 1);
   });
 
-  // Count cancelled levers — infer "last known stage" from progress or just use current status mapping
-  // Since cancelled can come from any stage, distribute them proportionally based on progress
-  const cancelledByStage = new Map<number, number>();
-  STATUS_CYCLE.forEach((_, i) => cancelledByStage.set(i, 0));
-
-  cancelled.forEach((l) => {
-    // Estimate which stage the lever was at when cancelled based on progress percentage
-    const progressPct = l.progress;
+  const cancelledByStageIdx = new Map<number, number>();
+  STATUS_CYCLE.forEach((_, i) => cancelledByStageIdx.set(i, 0));
+  data.levers.filter((l) => l.status === "cancelled").forEach((l) => {
+    const p = l.progress;
     let stageIdx: number;
-    if (progressPct <= 10) stageIdx = 0;       // was at L1
-    else if (progressPct <= 30) stageIdx = 1;  // was at L2
-    else if (progressPct <= 55) stageIdx = 2;  // was at L3
-    else if (progressPct <= 80) stageIdx = 3;  // was at L4
-    else stageIdx = 4;                          // was at L5
-    cancelledByStage.set(stageIdx, (cancelledByStage.get(stageIdx) ?? 0) + 1);
+    if (p <= 10) stageIdx = 0;
+    else if (p <= 30) stageIdx = 1;
+    else if (p <= 55) stageIdx = 2;
+    else if (p <= 80) stageIdx = 3;
+    else stageIdx = 4;
+    cancelledByStageIdx.set(stageIdx, (cancelledByStageIdx.get(stageIdx) ?? 0) + 1);
   });
 
   const links: SankeyChronoLink[] = [];
-
-  // Flow from "Tous" to L1 (total lever count)
   const totalLevers = data.levers.length;
   if (totalLevers > 0) {
     links.push({ source: 0, target: 1, value: totalLevers });
   }
 
-  // Flow between stages L1→L2→L3→L4→L5 and exit links
-  let runningTotal = totalLevers;
-  STATUS_CYCLE.forEach((status, i) => {
-    const nodeIdx = i + 1;         // L1=1, L2=2, ...
-    const exitIdx = i + 6;         // exit node for stage i
-    const cancelledHere = cancelledByStage.get(i) ?? 0;
-    const activeHere = activeByStage.get(status) ?? 0;
+  let cumulative = totalLevers;
+  for (let i = 0; i < STATUS_CYCLE.length; i++) {
+    const nodeIdx = i + 1;
+    const exitIdx = i + 6;
+    const cancelledHere = cancelledByStageIdx.get(i) ?? 0;
+    const activeHere = activeByStage.get(STATUS_CYCLE[i]) ?? 0;
+
+    if (cancelledHere > 0) {
+      links.push({ source: nodeIdx, target: exitIdx, value: cancelledHere });
+    }
 
     if (i < STATUS_CYCLE.length - 1) {
-      // Link to next stage
-      const toNext = runningTotal - cancelledHere - activeHere;
-      if (cancelledHere > 0) {
-        links.push({ source: nodeIdx, target: exitIdx, value: cancelledHere });
-      }
-      if (toNext > 0 && i < STATUS_CYCLE.length - 1) {
+      const toNext = cumulative - cancelledHere - activeHere;
+      if (toNext > 0) {
         links.push({ source: nodeIdx, target: nodeIdx + 1, value: toNext });
       }
-      runningTotal = toNext;
+      cumulative = toNext;
     } else {
-      // Last stage (L5): active = realized, cancelled = exit
-      if (cancelledHere > 0) {
-        links.push({ source: nodeIdx, target: exitIdx, value: cancelledHere });
-      }
       if (activeHere > 0) {
         links.push({ source: nodeIdx, target: nodes.length - 1, value: activeHere });
       }
     }
-  });
+  }
 
   const keptIndices = nodes
     .map((_, i) => i)
@@ -565,7 +545,14 @@ export function sCurve3(data: BeTrackData) {
     .reduce((s, l) => s + realizedSavings(l, data), 0);
 
   const curve = [0.05, 0.1, 0.18, 0.28, 0.4, 0.52, 0.62, 0.72, 0.81, 0.88, 0.94, 1.0];
-  const actualCurve = [0.04, 0.09, 0.15, 0.24, 0.34, 0.44, 0.53, 0.62, 0.71, null, null, null];
+  const actualCurveBase = [0.04, 0.09, 0.15, 0.24, 0.34, 0.44, 0.53, 0.62, 0.71, 0.78, 0.86, 0.93];
+
+  const now = new Date();
+  const fyStart = new Date(data.program.fyStart);
+  const currentMonthIdx = Math.min(11, Math.max(0,
+    (now.getFullYear() - fyStart.getFullYear()) * 12 + now.getMonth() - fyStart.getMonth()
+  ));
+  const actualCurve = actualCurveBase.map((v, i) => (i <= currentMonthIdx ? v : null));
 
   return months.map((label, i) => ({
     month: label,

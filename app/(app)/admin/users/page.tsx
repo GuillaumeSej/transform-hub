@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Users, Plus, Pencil, Trash2 } from "lucide-react";
-import type { AuthUser, Role } from "@/types";
-import { subscribeUsers, saveUser, deleteUser } from "@/lib/firestore/admin";
+import type { AuthUser, Role, Company } from "@/types";
+import { subscribeUsers, saveUser, deleteUser, subscribeCompanies } from "@/lib/firestore/admin";
+import { useRole } from "@/lib/hooks/useRole";
 
 const ROLES: { value: Role; label: string }[] = [
   { value: "admin", label: "Administrator" },
+  { value: "admin_entreprise", label: "Admin Entreprise" },
   { value: "cto", label: "CTO" },
   { value: "sponsor", label: "Sponsor" },
   { value: "lever", label: "Lever Owner" },
@@ -16,25 +18,36 @@ const ROLES: { value: Role; label: string }[] = [
 ];
 
 export default function AdminUsersPage() {
+  const { role, user } = useRole();
+  const isEntAdmin = role === "admin_entreprise";
   const [users, setUsers] = useState<AuthUser[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
 
   useEffect(() => {
-    const unsub = subscribeUsers(setUsers);
+    const unsub = subscribeCompanies(setCompanies);
     return unsub;
   }, []);
+
+  useEffect(() => {
+    const unsub = subscribeUsers((list) => {
+      setUsers(isEntAdmin && user?.companyId ? list.filter((u) => u.companyId === user.companyId) : list);
+    });
+    return unsub;
+  }, [isEntAdmin, user?.companyId]);
+
   const [editIdx, setEditIdx] = useState<number | null>(null);
-  const [form, setForm] = useState({ username: "", name: "", role: "cto" as Role, companyId: "c1" });
+  const [form, setForm] = useState({ username: "", name: "", role: "cto" as Role, companyId: "c1", password: "test" });
   const [showForm, setShowForm] = useState(false);
 
   const startCreate = () => {
     setEditIdx(null);
-    setForm({ username: "", name: "", role: "cto", companyId: "c1" });
+    setForm({ username: "", name: "", role: "cto", companyId: isEntAdmin && user?.companyId ? user.companyId : "c1", password: "test" });
     setShowForm(true);
   };
 
   const startEdit = (u: AuthUser, idx: number) => {
     setEditIdx(idx);
-    setForm({ username: u.username, name: u.name, role: u.role, companyId: u.companyId ?? "c1" });
+    setForm({ username: u.username, name: u.name, role: u.role, companyId: u.companyId ?? "c1", password: u.password });
     setShowForm(true);
   };
 
@@ -42,10 +55,10 @@ export default function AdminUsersPage() {
     if (!form.username.trim() || !form.name.trim()) return;
     const newUser: AuthUser = {
       username: form.username,
-      password: "test",
+      password: form.password,
       role: form.role,
       name: form.name,
-      companyId: form.role === "admin" ? null : form.companyId,
+      companyId: form.role === "admin" ? null : isEntAdmin && user?.companyId ? user.companyId : form.companyId,
     };
     await saveUser(newUser);
     setShowForm(false);
@@ -95,6 +108,15 @@ export default function AdminUsersPage() {
               />
             </div>
             <div>
+              <label className="text-xs font-medium text-text-secondary">Mot de passe</label>
+              <input
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                placeholder="test"
+              />
+            </div>
+            <div>
               <label className="text-xs font-medium text-text-secondary">Rôle</label>
               <select
                 value={form.role}
@@ -106,7 +128,7 @@ export default function AdminUsersPage() {
                 ))}
               </select>
             </div>
-            {form.role !== "admin" && (
+            {form.role !== "admin" && !isEntAdmin && (
               <div>
                 <label className="text-xs font-medium text-text-secondary">Entreprise</label>
                 <select
@@ -114,9 +136,9 @@ export default function AdminUsersPage() {
                   onChange={(e) => setForm((f) => ({ ...f, companyId: e.target.value }))}
                   className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                 >
-                  <option value="c1">Acme Corp</option>
-                  <option value="c2">GlobalTech</option>
-                  <option value="c3">EuroFinance</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
                 </select>
               </div>
             )}
