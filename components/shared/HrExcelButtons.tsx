@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { FileSpreadsheet, Upload } from "lucide-react";
+import { FileSpreadsheet, Download, Upload } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/lib/hooks/useToast";
@@ -26,12 +26,15 @@ type Preview = {
 /**
  * Export/Import Excel de la base ETP — workbook à deux feuilles ("Base ETP" + "Mouvements"),
  * ré-importable tel quel. L'import upsert les employés par matricule et les mouvements par id
- * (id vide = création), après prévisualisation.
+ * (id vide = création), après prévisualisation. Inclut aussi le téléchargement d'un template vide.
  */
 export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackData> }) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
+
+  const EMP_HEADERS = ["Matricule", "Nom", "Département", "Direction", "Pays", "Fonction", "Niveau", "ETP", "Salaire (€)", "RH local"];
+  const MOV_HEADERS = ["ID", "Matricule", "Nom", "Type", "ETP", "Département", "Départ. arrival", "Pays", "RH local", "Date prévue", "Date réelle", "Statut", "Validé RH", "PSE", "Impact salarial (€)", "Économies (€)", "Coût (€)", "Levier", "Commentaire"];
 
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
@@ -51,6 +54,16 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
       `${data.workforce.employees.length} employés · ${data.workforce.movements.length} mouvements`,
       "success"
     );
+  };
+
+  const downloadTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    const empSheet = XLSX.utils.aoa_to_sheet([EMP_HEADERS]);
+    XLSX.utils.book_append_sheet(wb, empSheet, "Base ETP");
+    const movSheet = XLSX.utils.aoa_to_sheet([MOV_HEADERS]);
+    XLSX.utils.book_append_sheet(wb, movSheet, "Mouvements");
+    XLSX.writeFile(wb, `template_base_etp.xlsx`);
+    showToast("Template téléchargé", "Remplissez les colonnes puis importez le fichier", "success");
   };
 
   const handleFile = async (file: File) => {
@@ -124,6 +137,9 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
 
   return (
     <>
+      <Button variant="outline" onClick={downloadTemplate}>
+        <Download size={13} /> Template Excel
+      </Button>
       <Button variant="outline" onClick={exportExcel}>
         <FileSpreadsheet size={13} /> Exporter Excel
       </Button>

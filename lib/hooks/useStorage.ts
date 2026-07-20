@@ -52,13 +52,16 @@ function workforceSeed(): workforceDb.WorkforceSeed {
  * `lib/firestore/levers.ts` directement, afin que les composants abonnés se re-rendent après
  * chaque mutation.
  *
+ * Multi-tenancy : le hook accepte un `companyId` optionnel. Les subscribers Firestore filtrent
+ * les données par companyId. Un admin (companyId null) voit toutes les données.
+ *
  * Le périmètre "leviers" (levers, subLevers, comments, audit) vit dans Firestore et est
  * partagé en temps réel entre utilisateurs via `onSnapshot` : chaque mutation met à jour l'état
  * local de façon optimiste (retour synchrone immédiat, comme avant) puis persiste dans Firestore
  * en tâche de fond. Le reste (program, workstreams, workforce, operations, alerts, scenarios)
  * reste sur localStorage, voir lib/storage.ts.
  */
-export function useBeTrackData() {
+export function useBeTrackData(companyId?: string | null) {
   const [version, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -98,8 +101,8 @@ export function useBeTrackData() {
       .catch((err) => console.error("[betrack] échec du seed Firestore workforce :", err));
 
     const unsubscribers = [
-      leversDb.subscribeLevers((l) => !cancelled && setLevers(l)),
-      leversDb.subscribeSubLevers((s) => !cancelled && setSubLevers(s)),
+      leversDb.subscribeLevers((l) => !cancelled && setLevers(l), companyId),
+      leversDb.subscribeSubLevers((s) => !cancelled && setSubLevers(s), companyId),
       leversDb.subscribeComments((c) => !cancelled && setComments(c)),
       leversDb.subscribeAuditLog((a) => !cancelled && setAudit(a)),
       workforceDb.subscribeEmployees((e) => !cancelled && setEmployees(e)),
@@ -110,7 +113,7 @@ export function useBeTrackData() {
       cancelled = true;
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, []);
+  }, [companyId]);
 
   const persistAudit = useCallback((entries: AuditEntry[]) => {
     if (entries.length === 0) return;

@@ -14,12 +14,15 @@ import { Toaster } from "@/components/shared/Toaster";
  * Coquille de l'app (sidebar + topbar) + garde d'authentification : redirige vers /login si
  * aucun profil n'a été choisi. Le choix de profil est verrouillé pour la session (voir useRole) —
  * pas de sélecteur ici, seulement un bouton de déconnexion dans le Topbar.
+ *
+ * Multi-tenancy : companyId de l'utilisateur connecté est passé à useBeTrackData pour filtrer
+ * les données Firestore. Un admin (companyId null) voit toutes les données.
  */
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role } = useRole();
+  const { role, user } = useRole();
   const router = useRouter();
   const pathname = usePathname();
-  const data = useBeTrackData();
+  const data = useBeTrackData(user?.companyId ?? null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {

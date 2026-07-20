@@ -2,6 +2,17 @@ import type { Role, RoleDefinition } from "@/types";
 
 /** Portage fidèle de `roles` (legacy/index.html) — nav différente par persona. */
 export const roles: Record<Role, RoleDefinition> = {
+  admin: {
+    label: "Administrator",
+    short: "Admin",
+    nav: [
+      { id: "admin-companies", icon: "Building2", label: "Entreprises" },
+      { id: "admin-projects", icon: "FolderKanban", label: "Projets" },
+      { id: "admin-users", icon: "Users", label: "Utilisateurs" },
+      { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
+      { id: "dashboard", icon: "PieChart", label: "Executive Dashboard" },
+    ],
+  },
   cto: {
     label: "Chief Transformation Officer",
     short: "CTO",
@@ -58,4 +69,8 @@ export const PAGE_ROUTES: Record<string, string> = {
   hr: "/hr",
   "hr-etp": "/hr/etp",
   operations: "/operations",
+  "admin-companies": "/admin/companies",
+  "admin-projects": "/admin/projects",
+  "admin-users": "/admin/users",
+  "admin-lifecycle": "/admin/lifecycle",
 };

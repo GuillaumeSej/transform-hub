@@ -17,11 +17,15 @@ import type { AuditEntry, Comment, Lever, LeverDependency, SubLever } from "@/ty
  * d'audit) : c'est la donnée que plusieurs personnes doivent voir à jour en même temps, donc
  * elle sort de localStorage. Le reste (program, workstreams, workforce, operations, alerts,
  * scenarios) reste sur localStorage pour l'instant, voir lib/storage.ts.
+ *
+ * Multi-tenancy : chaque lever/subLever porte un champ optionnel `companyId`. Les subscribers
+ * filtrent par companyId pour n'exposer que les données de l'entreprise courante. Un admin
+ * (companyId null) voit tout.
  */
 
 // Incrémenter force un reseed complet de la BDD (schéma de données modifié) — même logique
 // que SCHEMA_VERSION dans lib/storage.ts.
-const SCHEMA_VERSION = "2";
+const SCHEMA_VERSION = "3";
 
 const leversCol = () => collection(db, "levers");
 const subLeversCol = () => collection(db, "subLevers");
@@ -50,25 +54,37 @@ function normalizeDependencies(deps: unknown): LeverDependency[] {
     .filter((d): d is LeverDependency => d !== null);
 }
 
-export function subscribeLevers(cb: (levers: Lever[]) => void): Unsubscribe {
+/** Filter items by companyId — null companyId = admin (sees everything). */
+function byCompany<T extends { companyId?: string | null }>(items: T[], companyId?: string | null): T[] {
+  if (!companyId) return items;
+  return items.filter((item) => !item.companyId || item.companyId === companyId);
+}
+
+/** Subscribe to levers, optionally filtered by companyId. */
+export function subscribeLevers(
+  cb: (levers: Lever[]) => void,
+  companyId?: string | null
+): Unsubscribe {
   return onSnapshot(leversCol(), (snap) => {
-    cb(
-      snap.docs.map((d) => {
-        const lever = d.data() as Lever;
-        return { ...lever, dependencies: normalizeDependencies(lever.dependencies) };
-      })
-    );
+    const all = snap.docs.map((d) => {
+      const lever = d.data() as Lever;
+      return { ...lever, dependencies: normalizeDependencies(lever.dependencies) };
+    });
+    cb(byCompany(all, companyId));
   });
 }
 
-export function subscribeSubLevers(cb: (subLevers: SubLever[]) => void): Unsubscribe {
+/** Subscribe to subLevers, optionally filtered by companyId. */
+export function subscribeSubLevers(
+  cb: (subLevers: SubLever[]) => void,
+  companyId?: string | null
+): Unsubscribe {
   return onSnapshot(subLeversCol(), (snap) => {
-    cb(
-      snap.docs.map((d) => {
-        const subLever = d.data() as SubLever;
-        return { ...subLever, dependencies: normalizeDependencies(subLever.dependencies) };
-      })
-    );
+    const all = snap.docs.map((d) => {
+      const subLever = d.data() as SubLever;
+      return { ...subLever, dependencies: normalizeDependencies(subLever.dependencies) };
+    });
+    cb(byCompany(all, companyId));
   });
 }
 

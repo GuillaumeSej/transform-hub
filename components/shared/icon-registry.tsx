@@ -1,7 +1,9 @@
 import {
   BarChart3,
+  Building2,
   Factory,
   FlaskConical,
+  FolderKanban,
   History,
   Layers,
   ListChecks,
@@ -10,6 +12,7 @@ import {
   Target,
   TriangleAlert,
   Users,
+  Workflow,
   LineChart,
   type LucideIcon,
 } from "lucide-react";
@@ -28,4 +31,7 @@ export const ICON_REGISTRY: Record<string, LucideIcon> = {
   History,
   Users,
   Factory,
+  Building2,
+  FolderKanban,
+  Workflow,
 };

@@ -398,6 +398,108 @@ export function sankeyData(data: BeTrackData) {
   return { nodes, links };
 }
 
+export type SankeyChronoNode = { name: string };
+export type SankeyChronoLink = { source: number; target: number; value: number };
+
+/**
+ * Sankey chronologique : montre à quelle étape chaque levier a été "abandonné" (annulé ou encore
+ * en cours). Les leviers actifs (non annulés) coulent jusqu'à leur étape actuelle. Les leviers
+ * annulés (cancelled) s'écoulent à l'étape où ils se trouvaient avant annulation, créant un flux
+ * de "sortie" à chaque niveau.
+ *
+ * Structure de flux :
+ *   Tous → [L1] → [L2] → [L3] → [L4] → [L5 Réalisé]
+ *         ↘ out  ↘ out  ↘ out  ↘ out
+ *
+ * Chaque "out" représente les leviers qui ne progressent pas au-delà de cette étape.
+ */
+export function sankeyChronology(data: BeTrackData): { nodes: SankeyChronoNode[]; links: SankeyChronoLink[] } {
+  const active = data.levers.filter((l) => l.status !== "cancelled");
+  const cancelled = data.levers.filter((l) => l.status === "cancelled");
+
+  // Build nodes: Tous les leviers, L1..L5, then "Annulé après L1"..."Annulé après L5"
+  const nodes: SankeyChronoNode[] = [{ name: "Tous les leviers" }];
+
+  // L1..L5 main nodes (indices 1..5)
+  STATUS_CYCLE.forEach((status) => {
+    nodes.push({ name: STATUS_SHORT_LABEL[status] });
+  });
+
+  // "Arrêté après LX" exit nodes (indices 6..10)
+  STATUS_CYCLE.forEach((status) => {
+    nodes.push({ name: `Arrêté après ${STATUS_SHORT_LABEL[status]}` });
+  });
+
+  // "Réalisé" exit node (index 11)
+  nodes.push({ name: "Réalisé" });
+
+  // Count active levers at each stage
+  const activeByStage = new Map<LeverStatus, number>();
+  STATUS_CYCLE.forEach((s) => activeByStage.set(s, 0));
+  active.forEach((l) => {
+    activeByStage.set(l.status, (activeByStage.get(l.status) ?? 0) + 1);
+  });
+
+  // Count cancelled levers — infer "last known stage" from progress or just use current status mapping
+  // Since cancelled can come from any stage, distribute them proportionally based on progress
+  const cancelledByStage = new Map<number, number>();
+  STATUS_CYCLE.forEach((_, i) => cancelledByStage.set(i, 0));
+
+  cancelled.forEach((l) => {
+    // Estimate which stage the lever was at when cancelled based on progress percentage
+    const progressPct = l.progress;
+    let stageIdx: number;
+    if (progressPct <= 10) stageIdx = 0;       // was at L1
+    else if (progressPct <= 30) stageIdx = 1;  // was at L2
+    else if (progressPct <= 55) stageIdx = 2;  // was at L3
+    else if (progressPct <= 80) stageIdx = 3;  // was at L4
+    else stageIdx = 4;                          // was at L5
+    cancelledByStage.set(stageIdx, (cancelledByStage.get(stageIdx) ?? 0) + 1);
+  });
+
+  const links: SankeyChronoLink[] = [];
+
+  // Flow from "Tous" to L1 (total lever count)
+  const totalLevers = data.levers.length;
+  if (totalLevers > 0) {
+    links.push({ source: 0, target: 1, value: totalLevers });
+  }
+
+  // Flow between stages L1→L2→L3→L4→L5 and exit links
+  let runningTotal = totalLevers;
+  STATUS_CYCLE.forEach((status, i) => {
+    const nodeIdx = i + 1;         // L1=1, L2=2, ...
+    const exitIdx = i + 6;         // exit node for stage i
+    const cancelledHere = cancelledByStage.get(i) ?? 0;
+    const activeHere = activeByStage.get(status) ?? 0;
+
+    if (i < STATUS_CYCLE.length - 1) {
+      // Link to next stage
+      const toNext = runningTotal - cancelledHere - activeHere;
+      if (cancelledHere > 0) {
+        links.push({ source: nodeIdx, target: exitIdx, value: cancelledHere });
+      }
+      if (toNext > 0 && i < STATUS_CYCLE.length - 1) {
+        links.push({ source: nodeIdx, target: nodeIdx + 1, value: toNext });
+      }
+      runningTotal = toNext;
+    } else {
+      // Last stage (L5): active = realized, cancelled = exit
+      if (cancelledHere > 0) {
+        links.push({ source: nodeIdx, target: exitIdx, value: cancelledHere });
+      }
+      if (activeHere > 0) {
+        links.push({ source: nodeIdx, target: nodes.length - 1, value: activeHere });
+      }
+    }
+  });
+
+  return {
+    nodes: nodes.filter((_, i) => links.some((l) => l.source === i || l.target === i)),
+    links: links.filter((l) => l.value > 0),
+  };
+}
+
 function financialTotal(data: BeTrackData, pick: (l: Lever) => number): number {
   return (
     Math.round(

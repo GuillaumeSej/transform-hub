@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const sCurve = engine.sCurve3(data);
   const stages = engine.stageCounts(data);
   const sankey = engine.sankeyData(data);
+  const sankeyChrono = engine.sankeyChronology(data);
   const mekko = engine.marimekko(data);
   const bridge = engine.quarterlyBridge(data);
 
@@ -178,7 +179,7 @@ export default function DashboardPage() {
         <Card className="mb-0">
           <CardHeader title="Flux des leviers par étape (Sankey)" />
           <CardBody>
-            <SankeyChart data={sankey} height={300} onNodeClick={goToStageLabel} />
+            <SankeyChart data={sankey} chronologyData={sankeyChrono} height={300} onNodeClick={goToStageLabel} />
           </CardBody>
         </Card>
         <Card className="mb-0">

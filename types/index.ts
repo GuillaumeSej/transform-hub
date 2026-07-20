@@ -1,12 +1,15 @@
-export type Role = "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
+export type Role = "admin" | "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
 
 /** Compte de test (voir lib/auth.ts) — login réel par identifiant/mot de passe, mais toujours
- * des comptes de démo (mot de passe unique "test" pour les 6). */
+ * des comptes de démo (mot de passe unique "test" pour les 6 + admin). */
 export type AuthUser = {
   username: string;
   password: string;
   role: Role;
   name: string; // nom affiché + utilisé pour filtrer "mes leviers" (Lever.owner)
+  /** Identifiant de l'entreprise (client) à laquelle cet utilisateur appartient.
+   *  null = admin global (voit toutes les entreprises). */
+  companyId?: string | null;
 };
 
 // Cycle de vie unique d'un levier, affiché partout en L1-L5 (voir lib/status-config.ts) :
@@ -279,6 +282,44 @@ export type Scenario = {
     riskDelay?: number;
     savingsMultiplier?: number;
   };
+};
+
+// ─── Multi-tenant: Company / Project / Lifecycle Configuration ───────────────
+
+export type Company = {
+  id: string;
+  name: string;
+  industry: string;
+  logoUrl?: string;
+  createdAt: string;
+};
+
+export type Project = {
+  id: string;
+  companyId: string;
+  name: string;
+  sponsor: string;
+  target: number;
+  currency: string;
+  fyStart: string;
+  fyEnd: string;
+  baselineEBIT: number;
+  revenue: number;
+  createdAt: string;
+};
+
+/** Configuration du cycle de vie par entreprise — chaque client peut personnaliser le
+ *  nombre d'étapes, leur nom, et les étapes de validation requises. */
+export type LifecycleStage = {
+  key: LeverStatus;
+  label: string;
+  /** true = étape de validation formelle (gate) */
+  validationRequired: boolean;
+};
+
+export type LifecycleConfig = {
+  companyId: string;
+  stages: LifecycleStage[];
 };
 
 export type BeTrackData = {
