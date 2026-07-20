@@ -222,11 +222,11 @@ export default function BaseEtpPage() {
   );
 
   const etpActiveFilters: ActiveFilters = useMemo(() => {
-    const entries: [string, string][] = [];
+    const result: ActiveFilters = {};
     searchParams.forEach((value, key) => {
-      if (key.startsWith("f_")) entries.push([key, value]);
+      if (key.startsWith("f_")) result[key] = value.split(",").filter(Boolean);
     });
-    return Object.fromEntries(entries);
+    return result;
   }, [searchParams]);
 
   const setFilters = (next: ActiveFilters) => {
@@ -234,24 +234,26 @@ export default function BaseEtpPage() {
     Array.from(params.keys())
       .filter((k) => k.startsWith("f_"))
       .forEach((k) => params.delete(k));
-    Object.entries(next).forEach(([k, v]) => params.set(k, v));
+    Object.entries(next).forEach(([k, v]) => {
+      if (v.length > 0) params.set(k, v.join(","));
+    });
     router.replace(`/hr/etp?${params.toString()}`);
   };
 
   const movementActiveFilters: ActiveFilters = useMemo(() => {
-    const entries: [string, string][] = [];
+    const result: ActiveFilters = {};
     searchParams.forEach((value, key) => {
-      if (key.startsWith("f_")) entries.push([key, value]);
+      if (key.startsWith("f_")) result[key] = value.split(",").filter(Boolean);
     });
-    return Object.fromEntries(entries);
+    return result;
   }, [searchParams]);
 
   const filteredEmployees = useMemo(
     () =>
       employeeRows.filter((row) =>
-        Object.entries(etpActiveFilters).every(([key, value]) => {
+        Object.entries(etpActiveFilters).every(([key, values]) => {
           const def = etpFilterDefs.find((d) => d.key === key);
-          return !def || def.getValue(row) === value;
+          return !def || values.length === 0 || values.includes(def.getValue(row));
         })
       ),
     [employeeRows, etpActiveFilters, etpFilterDefs]
@@ -260,9 +262,9 @@ export default function BaseEtpPage() {
   const filteredMovements = useMemo(
     () =>
       movementRows.filter((row) =>
-        Object.entries(movementActiveFilters).every(([key, value]) => {
+        Object.entries(movementActiveFilters).every(([key, values]) => {
           const def = movementFilterDefs.find((d) => d.key === key);
-          return !def || def.getValue(row) === value;
+          return !def || values.length === 0 || values.includes(def.getValue(row));
         })
       ),
     [movementRows, movementActiveFilters, movementFilterDefs]
@@ -281,19 +283,41 @@ export default function BaseEtpPage() {
       field === "direction" ||
       field === "country" ||
       field === "func" ||
-      field === "hrOwner"
+      field === "hrOwner" ||
+      field === "department" ||
+      field === "level"
     ) {
-      patch[field] = String(value);
+      patch[field] = String(value) as never;
+    } else if (field === "matricule") {
+      patch.id = String(value);
     } else return;
     data.upsertEmployee({ ...row.employee, ...patch });
     showToast("Employé mis à jour", row.employee.name, "success");
   };
+
+  const departmentOptions = useMemo(() =>
+    Array.from(new Set(wf.departments.map((d) => d.name))).sort(),
+    [wf.departments]
+  );
+  const directionOptions = useMemo(() =>
+    Array.from(new Set(wf.employees.map((e) => e.direction))).filter(Boolean).sort(),
+    [wf.employees]
+  );
+  const countryOptions = useMemo(() =>
+    Array.from(new Set(wf.employees.map((e) => e.country))).filter(Boolean).sort(),
+    [wf.employees]
+  );
+  const funcOptions = useMemo(() =>
+    Array.from(new Set(wf.employees.map((e) => e.func))).filter(Boolean).sort(),
+    [wf.employees]
+  );
 
   const etpColumns: ColumnDef<EtpRow>[] = [
     {
       key: "matricule",
       label: "Matricule",
       width: "110px",
+      editable: true,
       render: (r) => (
         <span className="inline-flex items-center gap-1 font-mono text-[11px] text-secondary">
           {(r.alertKind === "overdue" || r.alertKind === "leverMismatch") && (
@@ -305,11 +329,40 @@ export default function BaseEtpPage() {
       ),
     },
     { key: "name", label: "Nom", editable: true, render: (r) => <strong>{r.name}</strong> },
-    { key: "department", label: "Département" },
-    { key: "direction", label: "Direction", editable: true },
-    { key: "country", label: "Pays", editable: true },
-    { key: "func", label: "Fonction", editable: true },
-    { key: "level", label: "Niveau" },
+    {
+      key: "department",
+      label: "Département",
+      editable: true,
+      options: departmentOptions,
+      allowCustom: true,
+    },
+    {
+      key: "direction",
+      label: "Direction",
+      editable: true,
+      options: directionOptions,
+      allowCustom: true,
+    },
+    {
+      key: "country",
+      label: "Pays",
+      editable: true,
+      options: countryOptions,
+      allowCustom: true,
+    },
+    {
+      key: "func",
+      label: "Fonction",
+      editable: true,
+      options: funcOptions,
+      allowCustom: true,
+    },
+    {
+      key: "level",
+      label: "Niveau",
+      editable: true,
+      options: ["Global", "Régional", "Local"],
+    },
     { key: "fte", label: "ETP", align: "right", editable: true, type: "number" },
     {
       key: "salary",

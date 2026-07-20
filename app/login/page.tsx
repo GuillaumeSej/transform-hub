@@ -94,11 +94,14 @@ export default function LoginPage() {
           <p className="mb-2 font-semibold uppercase tracking-[0.14em] text-white/50">
             Comptes de démo (mot de passe : test)
           </p>
+          <p className="mb-2 text-white/50">
+            Tous les comptes de démo (sauf admin) sont rattachés à l&apos;entreprise Acme Corp.
+          </p>
           <ul className="space-y-0.5">
             {TEST_USERS.map((u) => (
               <li key={u.username} className="flex justify-between gap-3">
                 <span className="font-mono text-white/60">{u.username}</span>
-                <span>{roles[u.role].short}</span>
+                <span>{roles[u.role].short} · {u.companyId === "c1" ? "Acme Corp" : "Global"}</span>
               </li>
             ))}
           </ul>

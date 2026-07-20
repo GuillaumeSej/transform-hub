@@ -97,6 +97,20 @@ export const TEST_COMPANY: Company = {
   fyEnd: "2026-12-31",
 };
 
+export const TEST_PROJECT: Project = {
+  id: "p1",
+  companyId: "c1",
+  name: "Transformation Acme 2026",
+  sponsor: "Marie Martin",
+  target: 15.0,
+  currency: "€M",
+  fyStart: "2026-01-01",
+  fyEnd: "2026-12-31",
+  baselineEBIT: 45.0,
+  revenue: 320.0,
+  createdAt: "2026-01-15",
+};
+
 let adminSeeded = false;
 
 export async function ensureAdminSeeded(): Promise<void> {
@@ -107,6 +121,12 @@ export async function ensureAdminSeeded(): Promise<void> {
   const companiesSnap = await getDocs(companiesCol());
   if (companiesSnap.empty) {
     await setDoc(doc(companiesCol(), TEST_COMPANY.id), TEST_COMPANY);
+  }
+
+  // Seed test project if missing
+  const projectsSnap = await getDocs(projectsCol());
+  if (projectsSnap.empty) {
+    await setDoc(doc(projectsCol(), TEST_PROJECT.id), TEST_PROJECT);
   }
 
   // Seed test users if missing

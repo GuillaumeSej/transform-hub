@@ -127,11 +127,11 @@ export default function LeversPage() {
   );
 
   const activeFilters: ActiveFilters = useMemo(() => {
-    const entries: [string, string][] = [];
+    const result: ActiveFilters = {};
     searchParams.forEach((value, key) => {
-      if (key.startsWith("f_")) entries.push([key, value]);
+      if (key.startsWith("f_")) result[key] = value.split(",").filter(Boolean);
     });
-    return Object.fromEntries(entries);
+    return result;
   }, [searchParams]);
 
   const setFilters = (next: ActiveFilters) => {
@@ -139,7 +139,9 @@ export default function LeversPage() {
     Array.from(params.keys())
       .filter((k) => k.startsWith("f_"))
       .forEach((k) => params.delete(k));
-    Object.entries(next).forEach(([k, v]) => params.set(k, v));
+    Object.entries(next).forEach(([k, v]) => {
+      if (v.length > 0) params.set(k, v.join(","));
+    });
     router.replace(`/levers?${params.toString()}`);
   };
 
@@ -152,9 +154,9 @@ export default function LeversPage() {
 
   const filteredLevers = useMemo(() => {
     return scopedLevers.filter((lever) =>
-      Object.entries(activeFilters).every(([key, value]) => {
+      Object.entries(activeFilters).every(([key, values]) => {
         const def = filterDefs.find((d) => d.key === key);
-        return !def || def.getValue(lever) === value;
+        return !def || values.length === 0 || values.includes(def.getValue(lever));
       })
     );
   }, [scopedLevers, activeFilters, filterDefs]);

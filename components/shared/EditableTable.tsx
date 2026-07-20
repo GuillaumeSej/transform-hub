@@ -10,6 +10,7 @@ export type ColumnDef<T> = {
   type?: "text" | "number" | "select" | "readonly";
   editable?: boolean;
   options?: string[];
+  allowCustom?: boolean;
   sortable?: boolean;
   align?: "left" | "right" | "center";
   render?: (row: T) => React.ReactNode;
@@ -48,6 +49,7 @@ export function EditableTable<T extends { id: string }>({
   const [sort, setSort] = useState(defaultSort ?? null);
   const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
   const [draftValue, setDraftValue] = useState("");
+  const [isCustomMode, setIsCustomMode] = useState(false);
 
   const filterableColumns = columns.filter((c) => c.options && c.options.length > 0);
 
@@ -92,6 +94,12 @@ export function EditableTable<T extends { id: string }>({
   const startEdit = (rowId: string, field: string, current: unknown) => {
     setEditingCell({ rowId, field });
     setDraftValue(String(current ?? ""));
+    const col = columns.find((c) => c.key === field);
+    if (col?.allowCustom && col.options && !col.options.includes(String(current ?? ""))) {
+      setIsCustomMode(true);
+    } else {
+      setIsCustomMode(false);
+    }
   };
 
   const commitEdit = (row: T, col: ColumnDef<T>) => {
@@ -102,6 +110,7 @@ export function EditableTable<T extends { id: string }>({
       }
     }
     setEditingCell(null);
+    setIsCustomMode(false);
   };
 
   const resetFilters = () => {
@@ -224,24 +233,34 @@ export function EditableTable<T extends { id: string }>({
                       )}
                     >
                       {isEditing ? (
-                        c.type === "select" ? (
+                        (c.options && c.options.length > 0 && !isCustomMode) ? (
                           <select
                             autoFocus
-                            value={draftValue}
-                            onChange={(e) => setDraftValue(e.target.value)}
-                            onBlur={() => commitEdit(row, c)}
+                            value={c.options.includes(draftValue) ? draftValue : "__custom__"}
+                            onChange={(e) => {
+                              if (e.target.value === "__custom__") {
+                                setIsCustomMode(true);
+                                setDraftValue("");
+                              } else {
+                                setDraftValue(e.target.value);
+                              }
+                            }}
+                            onBlur={() => {
+                              if (!isCustomMode) commitEdit(row, c);
+                            }}
                             onKeyDown={(e) => {
-                              if (e.key === "Escape") setEditingCell(null);
+                              if (e.key === "Escape") { setIsCustomMode(false); setEditingCell(null); }
                               if (e.key === "Enter") commitEdit(row, c);
                             }}
                             onClick={(e) => e.stopPropagation()}
                             className="w-full rounded-sm border-[1.5px] border-bp-coral px-1.5 py-0.5 text-xs"
                           >
-                            {c.options?.map((opt) => (
+                            {c.options.map((opt) => (
                               <option key={opt} value={opt}>
                                 {opt}
                               </option>
                             ))}
+                            {c.allowCustom && <option value="__custom__">Autre...</option>}
                           </select>
                         ) : (
                           <input
@@ -252,9 +271,10 @@ export function EditableTable<T extends { id: string }>({
                             onBlur={() => commitEdit(row, c)}
                             onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => {
-                              if (e.key === "Escape") setEditingCell(null);
+                              if (e.key === "Escape") { setIsCustomMode(false); setEditingCell(null); }
                               if (e.key === "Enter") commitEdit(row, c);
                             }}
+                            placeholder={isCustomMode ? "Saisir une nouvelle valeur..." : undefined}
                             className="w-full rounded-sm border-[1.5px] border-bp-coral px-1.5 py-0.5 text-xs"
                           />
                         )

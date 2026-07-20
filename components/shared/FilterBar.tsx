@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo } from "react";
 import { X } from "lucide-react";
 
 export type FilterDef<T> = {
@@ -9,13 +9,8 @@ export type FilterDef<T> = {
   getValue: (item: T) => string;
 };
 
-export type ActiveFilters = Record<string, string>;
+export type ActiveFilters = Record<string, string[]>;
 
-/**
- * Barre de filtres générique : "+ Filtre" → choix d'une propriété → choix d'une valeur (options
- * dérivées des valeurs distinctes présentes dans les données). Les filtres actifs s'affichent en
- * chips supprimables. Contrôlé : l'état vit chez l'appelant (URL params sur la page leviers).
- */
 export function FilterBar<T>({
   items,
   defs,
@@ -27,86 +22,106 @@ export function FilterBar<T>({
   active: ActiveFilters;
   onChange: (next: ActiveFilters) => void;
 }) {
-  const [pendingKey, setPendingKey] = useState<string>("");
+  const optionsMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const def of defs) {
+      map[def.key] = Array.from(
+        new Set(items.map((i) => def.getValue(i)).filter(Boolean))
+      ).sort();
+    }
+    return map;
+  }, [items, defs]);
 
-  const availableDefs = defs.filter((d) => !(d.key in active));
-  const pendingDef = defs.find((d) => d.key === pendingKey);
-  const pendingOptions = pendingDef
-    ? Array.from(new Set(items.map((i) => pendingDef.getValue(i)).filter(Boolean))).sort()
-    : [];
+  const activeKeys = new Set(Object.keys(active));
+
+  const toggleFilter = (key: string) => {
+    if (activeKeys.has(key)) {
+      const next = { ...active };
+      delete next[key];
+      onChange(next);
+    } else {
+      onChange({ ...active, [key]: optionsMap[key] ?? [] });
+    }
+  };
+
+  const toggleValue = (key: string, value: string) => {
+    const current = active[key] ?? [];
+    const next = current.includes(value)
+      ? current.filter((v) => v !== value)
+      : [...current, value];
+    if (next.length === 0) {
+      const updated = { ...active };
+      delete updated[key];
+      onChange(updated);
+    } else {
+      onChange({ ...active, [key]: next });
+    }
+  };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {Object.entries(active).map(([key, value]) => {
-        const def = defs.find((d) => d.key === key);
-        if (!def) return null;
-        return (
-          <span
-            key={key}
-            className="inline-flex items-center gap-1.5 rounded-full border border-bp-coral/40 bg-bp-coral/[0.07] py-1 pl-3 pr-1.5 text-xs font-medium text-primary"
-          >
-            <span className="text-tertiary">{def.label} :</span> {value}
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {defs.map((def) => {
+          const isActive = activeKeys.has(def.key);
+          return (
             <button
-              onClick={() => {
-                const next = { ...active };
-                delete next[key];
-                onChange(next);
-              }}
-              className="rounded-full p-0.5 text-tertiary hover:bg-bp-coral hover:text-white"
-              aria-label={`Retirer le filtre ${def.label}`}
+              key={def.key}
+              onClick={() => toggleFilter(def.key)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                isActive
+                  ? "border-bp-coral bg-bp-coral text-white"
+                  : "border-border bg-white text-secondary hover:border-black"
+              }`}
             >
-              <X size={11} />
+              {def.label}
             </button>
-          </span>
-        );
-      })}
+          );
+        })}
 
-      {pendingDef ? (
-        <span className="inline-flex items-center gap-1.5">
-          <select
-            autoFocus
-            defaultValue=""
-            onChange={(e) => {
-              if (e.target.value) onChange({ ...active, [pendingKey]: e.target.value });
-              setPendingKey("");
-            }}
-            onBlur={() => setPendingKey("")}
-            className="rounded-full border border-bp-coral px-2.5 py-1 text-xs focus:outline-none"
+        {activeKeys.size > 0 && (
+          <button
+            onClick={() => onChange({})}
+            className="text-xs font-medium text-bp-coral hover:underline"
           >
-            <option value="">{pendingDef.label} — choisir…</option>
-            {pendingOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </span>
-      ) : (
-        availableDefs.length > 0 && (
-          <select
-            value=""
-            onChange={(e) => setPendingKey(e.target.value)}
-            className="rounded-full border border-dashed border-border-strong bg-white px-2.5 py-1 text-xs font-medium text-secondary hover:border-black focus:outline-none"
-          >
-            <option value="">＋ Filtre…</option>
-            {availableDefs.map((d) => (
-              <option key={d.key} value={d.key}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-        )
-      )}
+            Tout effacer
+          </button>
+        )}
+      </div>
 
-      {Object.keys(active).length > 0 && (
-        <button
-          onClick={() => onChange({})}
-          className="text-xs font-medium text-bp-coral hover:underline"
-        >
-          Tout effacer
-        </button>
+      {activeKeys.size > 0 && (
+        <div className="space-y-2 border-t border-border pt-2">
+          {defs
+            .filter((def) => activeKeys.has(def.key))
+            .map((def) => {
+              const selected = active[def.key] ?? [];
+              const options = optionsMap[def.key] ?? [];
+              return (
+                <div key={def.key} className="flex flex-wrap items-center gap-1.5">
+                  <span className="min-w-[90px] text-xs font-medium text-tertiary">
+                    {def.label} :
+                  </span>
+                  {options.map((opt) => {
+                    const isSelected = selected.includes(opt);
+                    return (
+                      <button
+                        key={opt}
+                        onClick={() => toggleValue(def.key, opt)}
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                          isSelected
+                            ? "border-bp-coral/40 bg-bp-coral/[0.07] text-primary font-medium"
+                            : "border-border bg-white text-secondary hover:border-black"
+                        }`}
+                      >
+                        {opt}
+                        {isSelected && <X size={10} className="text-tertiary" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+        </div>
       )}
     </div>
   );
 }
-

@@ -6,7 +6,7 @@ import type { AuthUser, Role, Company } from "@/types";
 import { subscribeUsers, saveUser, deleteUser, subscribeCompanies } from "@/lib/firestore/admin";
 import { useRole } from "@/lib/hooks/useRole";
 
-const ROLES: { value: Role; label: string }[] = [
+const ALL_ROLES: { value: Role; label: string }[] = [
   { value: "admin", label: "Administrator" },
   { value: "admin_entreprise", label: "Admin Entreprise" },
   { value: "cto", label: "CTO" },
@@ -17,9 +17,14 @@ const ROLES: { value: Role; label: string }[] = [
   { value: "ops", label: "Ops" },
 ];
 
+const OPERATIONAL_ROLES = ALL_ROLES.filter(
+  (r) => r.value !== "admin" && r.value !== "admin_entreprise"
+);
+
 export default function AdminUsersPage() {
   const { role, user } = useRole();
   const isEntAdmin = role === "admin_entreprise";
+  const availableRoles = isEntAdmin ? OPERATIONAL_ROLES : ALL_ROLES;
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
 
@@ -36,28 +41,30 @@ export default function AdminUsersPage() {
   }, [isEntAdmin, user?.companyId]);
 
   const [editIdx, setEditIdx] = useState<number | null>(null);
-  const [form, setForm] = useState({ username: "", name: "", role: "cto" as Role, companyId: "c1", password: "test" });
+  const [form, setForm] = useState({ username: "", firstName: "", lastName: "", name: "", role: "cto" as Role, companyId: "c1", password: "test" });
   const [showForm, setShowForm] = useState(false);
 
   const startCreate = () => {
     setEditIdx(null);
-    setForm({ username: "", name: "", role: "cto", companyId: isEntAdmin && user?.companyId ? user.companyId : "c1", password: "test" });
+    setForm({ username: "", firstName: "", lastName: "", name: "", role: "cto", companyId: isEntAdmin && user?.companyId ? user.companyId : "c1", password: "test" });
     setShowForm(true);
   };
 
   const startEdit = (u: AuthUser, idx: number) => {
     setEditIdx(idx);
-    setForm({ username: u.username, name: u.name, role: u.role, companyId: u.companyId ?? "c1", password: u.password });
+    setForm({ username: u.username, firstName: u.firstName ?? "", lastName: u.lastName ?? "", name: u.name, role: u.role, companyId: u.companyId ?? "c1", password: u.password });
     setShowForm(true);
   };
 
   const save = async () => {
-    if (!form.username.trim() || !form.name.trim()) return;
+    if (!form.username.trim() || (!form.name.trim() && !(`${form.firstName} ${form.lastName}`.trim()))) return;
     const newUser: AuthUser = {
       username: form.username,
       password: form.password,
       role: form.role,
-      name: form.name,
+      firstName: form.firstName,
+      lastName: form.lastName,
+      name: form.name || `${form.firstName} ${form.lastName}`.trim(),
       companyId: form.role === "admin" ? null : isEntAdmin && user?.companyId ? user.companyId : form.companyId,
     };
     await saveUser(newUser);
@@ -99,6 +106,24 @@ export default function AdminUsersPage() {
               />
             </div>
             <div>
+              <label className="text-xs font-medium text-text-secondary">Prénom</label>
+              <input
+                value={form.firstName}
+                onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                placeholder="Prénom"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-text-secondary">Nom</label>
+              <input
+                value={form.lastName}
+                onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                placeholder="Nom"
+              />
+            </div>
+            <div>
               <label className="text-xs font-medium text-text-secondary">Nom affiché</label>
               <input
                 value={form.name}
@@ -123,7 +148,7 @@ export default function AdminUsersPage() {
                 onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
               >
-                {ROLES.map((r) => (
+                {availableRoles.map((r) => (
                   <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
@@ -159,6 +184,7 @@ export default function AdminUsersPage() {
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Identifiant</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Prénom</th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Nom</th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Rôle</th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Entreprise</th>
@@ -169,13 +195,14 @@ export default function AdminUsersPage() {
             {users.map((u, idx) => (
               <tr key={u.username} className="border-b border-border hover:bg-bg-elevated/50">
                 <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{u.username}</td>
-                <td className="px-4 py-2.5 font-medium text-text-primary">{u.name}</td>
+                <td className="px-4 py-2.5 font-medium text-text-primary">{u.firstName}</td>
+                <td className="px-4 py-2.5 font-medium text-text-primary">{u.lastName}</td>
                 <td className="px-4 py-2.5">
                   <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral">
-                    {ROLES.find((r) => r.value === u.role)?.label ?? u.role}
+                    {ALL_ROLES.find((r) => r.value === u.role)?.label ?? u.role}
                   </span>
                 </td>
-                <td className="px-4 py-2.5 text-text-secondary">{u.companyId ?? "—"}</td>
+                <td className="px-4 py-2.5 text-text-secondary">{companies.find((c) => c.id === u.companyId)?.name ?? u.companyId ?? "—"}</td>
                 <td className="px-4 py-2.5 text-right">
                   <button onClick={() => startEdit(u, idx)} className="mr-2 text-text-secondary hover:text-bp-coral">
                     <Pencil size={14} />

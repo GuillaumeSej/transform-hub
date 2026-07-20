@@ -19,7 +19,7 @@ export const roles: Record<Role, RoleDefinition> = {
     nav: [
       { id: "admin-users", icon: "Users", label: "Utilisateurs" },
       { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
-      { id: "dashboard", icon: "PieChart", label: "Executive Dashboard" },
+      { id: "admin-history", icon: "History", label: "Historique" },
     ],
   },
   cto: {
@@ -82,4 +82,5 @@ export const PAGE_ROUTES: Record<string, string> = {
   "admin-projects": "/admin/projects",
   "admin-users": "/admin/users",
   "admin-lifecycle": "/admin/lifecycle",
+  "admin-history": "/admin/history",
 };

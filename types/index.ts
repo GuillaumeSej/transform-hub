@@ -6,6 +6,8 @@ export type AuthUser = {
   username: string;
   password: string;
   role: Role;
+  firstName: string;
+  lastName: string;
   name: string; // nom affiché + utilisé pour filtrer "mes leviers" (Lever.owner)
   /** Identifiant de l'entreprise (client) à laquelle cet utilisateur appartient.
    *  null = admin global (voit toutes les entreprises). */

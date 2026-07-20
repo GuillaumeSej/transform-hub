@@ -76,15 +76,21 @@ export function matchesGlobalFilters(
   lever: { status: string; ws: string; function: string; geography: string; country: string; owner: string; type: string; priority: string; risk: string; end: string },
   filters: GlobalFilters
 ): boolean {
-  if (filters.f_status && lever.status !== filters.f_status) return false;
-  if (filters.f_ws && lever.ws !== filters.f_ws) return false;
-  if (filters.f_function && lever.function !== filters.f_function) return false;
-  if (filters.f_geography && lever.geography !== filters.f_geography) return false;
-  if (filters.f_country && lever.country !== filters.f_country) return false;
-  if (filters.f_owner && lever.owner !== filters.f_owner) return false;
-  if (filters.f_type && lever.type !== filters.f_type) return false;
-  if (filters.f_priority && lever.priority !== filters.f_priority) return false;
-  if (filters.f_risk && lever.risk !== filters.f_risk) return false;
+  const check = (filterVal: string, leverVal: string) => {
+    if (!filterVal) return true;
+    const values = filterVal.split(",").filter(Boolean);
+    return values.length === 0 || values.includes(leverVal);
+  };
+
+  if (!check(filters.f_status, lever.status)) return false;
+  if (!check(filters.f_ws, lever.ws)) return false;
+  if (!check(filters.f_function, lever.function)) return false;
+  if (!check(filters.f_geography, lever.geography)) return false;
+  if (!check(filters.f_country, lever.country)) return false;
+  if (!check(filters.f_owner, lever.owner)) return false;
+  if (!check(filters.f_type, lever.type)) return false;
+  if (!check(filters.f_priority, lever.priority)) return false;
+  if (!check(filters.f_risk, lever.risk)) return false;
 
   if (filters.f_endMonth || filters.f_endQuarter) {
     const d = new Date(lever.end);
@@ -92,8 +98,8 @@ export function matchesGlobalFilters(
     const monthLabel = `${monthLabels[d.getMonth()]} ${d.getFullYear()}`;
     const quarterLabel = `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
 
-    if (filters.f_endMonth && monthLabel !== filters.f_endMonth) return false;
-    if (filters.f_endQuarter && quarterLabel !== filters.f_endQuarter) return false;
+    if (!check(filters.f_endMonth, monthLabel)) return false;
+    if (!check(filters.f_endQuarter, quarterLabel)) return false;
   }
 
   return true;

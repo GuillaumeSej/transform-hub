@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, LogOut } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
+
 import { roles } from "@/lib/nav-config";
 import { ResetDemoButton } from "@/components/shared/ResetDemoButton";
 import type { Role } from "@/types";
@@ -15,6 +16,10 @@ const CRUMBS: Record<string, string> = {
   "/hr": "Dashboard RH",
   "/hr/etp": "Base ETP",
   "/operations": "Operations Module",
+};
+
+const COMPANY_LABELS: Record<string, string> = {
+  c1: "Acme Corp",
 };
 
 /** Barre supérieure — porté depuis `.topbar` du prototype legacy. Le profil est verrouillé pour
@@ -34,6 +39,10 @@ export function Topbar({
   const isLeverDetail = pathname.startsWith("/levers/") && pathname !== "/levers";
   const label = isLeverDetail ? "Détail du levier" : (CRUMBS[pathname] ?? "BeTrack");
 
+  const companyLabel = user?.companyId
+    ? COMPANY_LABELS[user.companyId] ?? user.companyId
+    : "Global";
+
   return (
     <header className="flex h-[60px] min-h-[60px] items-center justify-between border-b border-border bg-white px-6">
       <div className="flex items-center gap-2 text-xs text-secondary">
@@ -41,7 +50,7 @@ export function Topbar({
       </div>
       <div className="flex items-center gap-2">
         <span className="rounded-md border border-border bg-neutral-50 px-3 py-1.5 text-xs font-medium text-primary">
-          {user?.name ?? roles[role].label}
+          {user?.name ?? roles[role].label} · {companyLabel}
         </span>
         <button
           className="relative flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black"

@@ -45,12 +45,12 @@ export default function DashboardPage() {
 
   const activeForBar: ActiveFilters = useMemo(() => {
     const result: ActiveFilters = {};
-    if (filters.f_status) result.status = filters.f_status;
-    if (filters.f_ws) result.ws = filters.f_ws;
-    if (filters.f_owner) result.owner = filters.f_owner;
-    if (filters.f_geography) result.geography = filters.f_geography;
-    if (filters.f_function) result.function = filters.f_function;
-    if (filters.f_type) result.type = filters.f_type;
+    if (filters.f_status) result.status = filters.f_status.split(",").filter(Boolean);
+    if (filters.f_ws) result.ws = filters.f_ws.split(",").filter(Boolean);
+    if (filters.f_owner) result.owner = filters.f_owner.split(",").filter(Boolean);
+    if (filters.f_geography) result.geography = filters.f_geography.split(",").filter(Boolean);
+    if (filters.f_function) result.function = filters.f_function.split(",").filter(Boolean);
+    if (filters.f_type) result.type = filters.f_type.split(",").filter(Boolean);
     return result;
   }, [filters]);
 
@@ -64,9 +64,9 @@ export default function DashboardPage() {
       function: "f_function",
       type: "f_type",
     };
-    Object.entries(next).forEach(([key, value]) => {
+    Object.entries(next).forEach(([key, values]) => {
       const globalKey = map[key];
-      if (globalKey) setFilter(globalKey, value);
+      if (globalKey && values.length > 0) setFilter(globalKey, values.join(","));
     });
   };
 
