@@ -97,6 +97,24 @@ export const TEST_COMPANY: Company = {
   fyEnd: "2026-12-31",
 };
 
+export const TEST_COMPANY_2: Company = {
+  id: "c2",
+  name: "GlobalTech",
+  industry: "Technologie / IT",
+  createdAt: "2026-01-15",
+  fyStart: "2026-01-01",
+  fyEnd: "2026-12-31",
+};
+
+export const TEST_COMPANY_3: Company = {
+  id: "c3",
+  name: "EuroFinance",
+  industry: "Finance / Banking",
+  createdAt: "2026-01-15",
+  fyStart: "2026-01-01",
+  fyEnd: "2026-12-31",
+};
+
 export const TEST_PROJECT: Project = {
   id: "p1",
   companyId: "c1",
@@ -111,22 +129,54 @@ export const TEST_PROJECT: Project = {
   createdAt: "2026-01-15",
 };
 
+export const TEST_PROJECT_2: Project = {
+  id: "p2",
+  companyId: "c2",
+  name: "Digital Shift GlobalTech",
+  sponsor: "Sophie Chen",
+  target: 22.0,
+  currency: "€M",
+  fyStart: "2026-01-01",
+  fyEnd: "2026-12-31",
+  baselineEBIT: 60.0,
+  revenue: 480.0,
+  createdAt: "2026-01-15",
+};
+
+export const TEST_PROJECT_3: Project = {
+  id: "p3",
+  companyId: "c3",
+  name: "Fusion EuroFinance 2026",
+  sponsor: "Lucas Bernard",
+  target: 10.0,
+  currency: "€M",
+  fyStart: "2026-01-01",
+  fyEnd: "2026-12-31",
+  baselineEBIT: 35.0,
+  revenue: 270.0,
+  createdAt: "2026-01-15",
+};
+
 let adminSeeded = false;
 
 export async function ensureAdminSeeded(): Promise<void> {
   if (adminSeeded) return;
   adminSeeded = true;
 
-  // Seed test company if missing
+  // Seed test companies if missing
   const companiesSnap = await getDocs(companiesCol());
   if (companiesSnap.empty) {
     await setDoc(doc(companiesCol(), TEST_COMPANY.id), TEST_COMPANY);
+    await setDoc(doc(companiesCol(), TEST_COMPANY_2.id), TEST_COMPANY_2);
+    await setDoc(doc(companiesCol(), TEST_COMPANY_3.id), TEST_COMPANY_3);
   }
 
-  // Seed test project if missing
+  // Seed test projects if missing
   const projectsSnap = await getDocs(projectsCol());
   if (projectsSnap.empty) {
     await setDoc(doc(projectsCol(), TEST_PROJECT.id), TEST_PROJECT);
+    await setDoc(doc(projectsCol(), TEST_PROJECT_2.id), TEST_PROJECT_2);
+    await setDoc(doc(projectsCol(), TEST_PROJECT_3.id), TEST_PROJECT_3);
   }
 
   // Seed test users if missing

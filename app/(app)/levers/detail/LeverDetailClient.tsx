@@ -16,6 +16,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import * as engine from "@/lib/engine";
 import type { CascadeResult } from "@/lib/engine";
@@ -56,7 +57,8 @@ const TAB_LABELS: Record<Tab, string> = {
 type CascadeProposal = CascadeResult & { checked: Record<string, boolean> };
 
 export default function LeverDetailClient() {
-  const data = useBeTrackData();
+  const { user } = useRole();
+  const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = searchParams.get("id") ?? "";

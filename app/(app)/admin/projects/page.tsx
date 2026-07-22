@@ -2,23 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { FolderKanban, Plus, Pencil, Trash2 } from "lucide-react";
-import type { Project } from "@/types";
-import { subscribeProjects, saveProject, deleteProject } from "@/lib/firestore/admin";
+import type { Company, Project } from "@/types";
+import { subscribeCompanies, subscribeProjects, saveProject, deleteProject } from "@/lib/firestore/admin";
 
 export default function AdminProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeCompanies(setCompanies);
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const unsub = subscribeProjects(setProjects);
     return unsub;
   }, []);
+
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ companyId: "c1", name: "", sponsor: "", target: "" });
+  const [form, setForm] = useState({ companyId: "", name: "", sponsor: "", target: "" });
   const [showForm, setShowForm] = useState(false);
 
   const startCreate = () => {
     setEditId(null);
-    setForm({ companyId: "c1", name: "", sponsor: "", target: "" });
+    setForm({ companyId: companies[0]?.id ?? "", name: "", sponsor: "", target: "" });
     setShowForm(true);
   };
 
@@ -75,9 +82,9 @@ export default function AdminProjectsPage() {
                 onChange={(e) => setForm((f) => ({ ...f, companyId: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
               >
-                <option value="c1">Acme Corp</option>
-                <option value="c2">GlobalTech</option>
-                <option value="c3">EuroFinance</option>
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
               </select>
             </div>
             <div>

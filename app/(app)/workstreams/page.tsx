@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useRole } from "@/lib/hooks/useRole";
 import * as engine from "@/lib/engine";
 import { STATUS_LABEL } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
@@ -19,7 +20,8 @@ type Row = Lever & { realized: number; wsName: string; statusLabel: string };
  * owner, contrairement au Lever Owner), avec un bandeau d'indicateurs de suivi au-dessus.
  */
 export default function WorkstreamsPage() {
-  const data = useBeTrackData();
+  const { user } = useRole();
+  const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
   const summary = engine.programSummary(data);
 

@@ -2,11 +2,13 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useRole } from "@/lib/hooks/useRole";
 
 import { roles } from "@/lib/nav-config";
 import { ResetDemoButton } from "@/components/shared/ResetDemoButton";
-import type { Role } from "@/types";
+import type { Company, Role } from "@/types";
+import { subscribeCompanies } from "@/lib/firestore/admin";
 
 const CRUMBS: Record<string, string> = {
   "/dashboard": "Executive Dashboard",
@@ -16,10 +18,6 @@ const CRUMBS: Record<string, string> = {
   "/hr": "Dashboard RH",
   "/hr/etp": "Base ETP",
   "/operations": "Operations Module",
-};
-
-const COMPANY_LABELS: Record<string, string> = {
-  c1: "Acme Corp",
 };
 
 /** Barre supérieure — porté depuis `.topbar` du prototype legacy. Le profil est verrouillé pour
@@ -33,6 +31,13 @@ export function Topbar({
   role: Role;
   onReset: () => void;
 }) {
+  const [companies, setCompanies] = useState<Company[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeCompanies(setCompanies);
+    return unsub;
+  }, []);
+
   const pathname = usePathname();
   const router = useRouter();
   const { logout, user } = useRole();
@@ -40,7 +45,7 @@ export function Topbar({
   const label = isLeverDetail ? "Détail du levier" : (CRUMBS[pathname] ?? "BeTrack");
 
   const companyLabel = user?.companyId
-    ? COMPANY_LABELS[user.companyId] ?? user.companyId
+    ? companies.find((c) => c.id === user.companyId)?.name ?? user.companyId
     : "Global";
 
   return (

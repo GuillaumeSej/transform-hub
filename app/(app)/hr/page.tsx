@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Banknote, TriangleAlert, Users, Wallet } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useRole } from "@/lib/hooks/useRole";
 import * as hr from "@/lib/hrEngine";
 import { fmtCurr } from "@/lib/engine";
 import { STATUS_LABEL } from "@/lib/status-config";
@@ -37,7 +38,8 @@ const ALERT_LABELS: Record<MovementAlertKind, string> = {
  * Base ETP (/hr/etp).
  */
 export default function HrDashboardPage() {
-  const data = useBeTrackData();
+  const { user } = useRole();
+  const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
   const [granularity, setGranularity] = useState<"month" | "quarter">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);

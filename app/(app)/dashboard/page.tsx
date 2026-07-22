@@ -6,6 +6,7 @@ import { useGlobalFilters, matchesGlobalFilters } from "@/lib/hooks/useGlobalFil
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Banknote, CircleCheck, TriangleAlert, TrendingUp, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useRole } from "@/lib/hooks/useRole";
 import * as engine from "@/lib/engine";
 import { STATUS_LABEL } from "@/lib/status-config";
 import { KPICard } from "@/components/shared/KPICard";
@@ -27,7 +28,8 @@ import { QuarterlyBridgeChart } from "@/components/shared/charts/QuarterlyBridge
 import type { Lever, LeverStatus } from "@/types";
 
 export default function DashboardPage() {
-  const data = useBeTrackData();
+  const { user } = useRole();
+  const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
   const { filters, setFilter, resetFilters } = useGlobalFilters();
 

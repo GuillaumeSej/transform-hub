@@ -32,8 +32,8 @@ type LeverRow = Lever & {
 };
 
 export default function LeversPage() {
-  const data = useBeTrackData();
   const { role, user } = useRole();
+  const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
   const { showToast } = useToast();
   const searchParams = useSearchParams();

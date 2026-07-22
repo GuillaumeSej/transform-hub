@@ -1,0 +1,434 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const XLSX = require("xlsx");
+const path = require("path");
+const fs = require("fs");
+
+const DEMO_DIR = path.resolve(__dirname, "..", "demo");
+if (!fs.existsSync(DEMO_DIR)) fs.mkdirSync(DEMO_DIR, { recursive: true });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File 1: leviers_demo.xlsx — Lever import template
+// Columns match lib/leverExcel.ts leverToExcelRow() export format
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LEVER_HEADERS = [
+  "Code",
+  "Type de levier",
+  "Nom du levier",
+  "Workstream",
+  "Owner",
+  "Owner (initiales)",
+  "Sponsor",
+  "Sponsor (initiales)",
+  "Géographie",
+  "Pays",
+  "Entité",
+  "Fonction",
+  "Centre de coût",
+  "Compte P&L impacté",
+  "Date de départ",
+  "Date de fin estimée",
+  "Statut",
+  "Progression (%)",
+  "Priorité",
+  "Risque",
+  "Impact estimé brut (€M)",
+  "Impact estimé net (€M)",
+  "Impact estimé (ETP)",
+  "Population impactée",
+  "CAPEX (€M)",
+  "OPEX one-off (€M)",
+  "OPEX récurrent (€M/an)",
+  "Dépendances (ID:type, séparées par ;)",
+  "Description",
+];
+
+const LEVER_ROWS = [
+  [
+    "AC-001",
+    "Sourcing & Achats",
+    "Regroupement fournisseurs packaging",
+    "Procurement Excellence",
+    "Isabelle Roy",
+    "IR",
+    "CEO Office",
+    "CEO",
+    "Europe",
+    "France",
+    "BU Industrie",
+    "Procurement",
+    "CC-PROC-001",
+    "Cost of Goods Sold",
+    "2026-02-01",
+    "2026-09-30",
+    "L3 · Validé",
+    35,
+    "high",
+    "medium",
+    4.2,
+    3.8,
+    -3,
+    120,
+    0.1,
+    0.3,
+    0,
+    "",
+    "Rationalisation de la base fournisseurs packaging de 42 à 18 fournisseurs, avec mise en concurrence et standardisation des formats.",
+  ],
+  [
+    "AC-002",
+    "Excellence Opérationnelle",
+    "Réduction temps d'arrêt lignes B",
+    "Operational Efficiency",
+    "Thomas Petit",
+    "TP",
+    "Directeur Industriel",
+    "DI",
+    "France",
+    "France",
+    "BU Industrie",
+    "Operations",
+    "CC-OPS-012",
+    "Cost of Goods Sold",
+    "2026-03-15",
+    "2026-12-31",
+    "L4 · Planifié",
+    20,
+    "high",
+    "high",
+    2.8,
+    2.5,
+    -5,
+    340,
+    0.8,
+    0.2,
+    0,
+    "AC-001:SS",
+    "Programme de maintenance prédictive sur les lignes de production B1-B4, réduction des MTTR de 35%.",
+  ],
+  [
+    "AC-003",
+    "Digitalisation & Automatisation",
+    "Automatisation back-office finance",
+    "Digital Transformation",
+    "Claire Bernard",
+    "CB",
+    "DSI",
+    "DSI",
+    "Global",
+    "France",
+    "Corporate",
+    "IT",
+    "CC-FIN-005",
+    "General & Admin",
+    "2026-01-15",
+    "2026-08-31",
+    "L2 · Qualifié",
+    10,
+    "medium",
+    "low",
+    1.5,
+    1.2,
+    -4,
+    45,
+    0.5,
+    0.4,
+    0,
+    "",
+    "Déploiement de RPA pour les processus comptables répétitifs (rapprochements, lettrages, déclarations TVA).",
+  ],
+  [
+    "AC-004",
+    "Réorganisation & Effectifs",
+    "Fusion équipes supply chain France-Allemagne",
+    "Org & Ways of Working",
+    "Pierre Lefevre",
+    "PL",
+    "DRH",
+    "DRH",
+    "Europe",
+    "France",
+    "BU Industrie",
+    "Supply Chain",
+    "CC-SC-003",
+    "Selling & Marketing",
+    "2026-04-01",
+    "2026-11-30",
+    "L1 · Idée",
+    0,
+    "medium",
+    "high",
+    1.8,
+    1.5,
+    -8,
+    65,
+    0,
+    0.1,
+    0,
+    "",
+    "Consolidation des fonctions planification et achats logistique entre les entités française et allemande.",
+  ],
+  [
+    "AC-005",
+    "Pricing & Revenue Management",
+    "Revue tarifaire produits premium",
+    "Commercial Effectiveness",
+    "Sophie Martin",
+    "SM",
+    "Directeur Commercial",
+    "DC",
+    "Global",
+    "France",
+    "BU Services",
+    "Sales",
+    "CC-SALES-001",
+    "Revenue",
+    "2026-02-15",
+    "2026-06-30",
+    "L5 · Réalisé",
+    100,
+    "critical",
+    "low",
+    3.5,
+    3.5,
+    0,
+    0,
+    0,
+    0,
+    0,
+    "",
+    "Ajustement de la politique tarifaire sur la gamme premium (+3.2% moyenne), terminé avec impact validé.",
+  ],
+  [
+    "AC-006",
+    "Supply Chain & Logistique",
+    "Optimisation réseau entrepôts EMEA",
+    "Supply Chain Optimization",
+    "Marc Dubois",
+    "MD",
+    "Thomas Petit",
+    "TP",
+    "Europe",
+    "Germany",
+    "GmbH",
+    "Supply Chain",
+    "CC-LOG-008",
+    "Cost of Goods Sold",
+    "2026-05-01",
+    "2026-12-31",
+    "L3 · Validé",
+    0,
+    "high",
+    "critical",
+    2.1,
+    1.8,
+    -6,
+    280,
+    1.2,
+    0.5,
+    0,
+    "AC-002:FS",
+    "Fermeture de l'entrepôt de Mannheim et transfert des activités vers le hub de Rotterdam.",
+  ],
+  [
+    "AC-007",
+    "Excellence Opérationnelle",
+    "Programme qualité production Belgique",
+    "Operational Efficiency",
+    "Nathan Garnier",
+    "NG",
+    "Jean Dupont",
+    "JD",
+    "Europe",
+    "Belgium",
+    "NV",
+    "Operations",
+    "CC-OPS-015",
+    "Cost of Goods Sold",
+    "2026-06-01",
+    "2026-12-31",
+    "L2 · Qualifié",
+    5,
+    "medium",
+    "medium",
+    0.9,
+    0.7,
+    -2,
+    90,
+    0.3,
+    0.1,
+    0,
+    "",
+    "Réduction du taux de rebut de 4.2% à 1.8% sur l'unité de production de Gand via Six Sigma.",
+  ],
+];
+
+const leverData = [LEVER_HEADERS, ...LEVER_ROWS];
+const leverSheet = XLSX.utils.aoa_to_sheet(leverData);
+
+// Set column widths for readability
+leverSheet["!cols"] = LEVER_HEADERS.map((h) => ({ wch: Math.max(h.length + 2, 14) }));
+
+const leverWb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(leverWb, leverSheet, "Leviers");
+XLSX.writeFile(leverWb, path.join(DEMO_DIR, "leviers_demo.xlsx"));
+console.log("✓ leviers_demo.xlsx créé (7 leviers)");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File 2: base_etp_demo.xlsx — Workforce import (2 sheets)
+// Columns match lib/hrExcel.ts employeeToExcelRow / movementToExcelRow
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EMP_HEADERS = [
+  "Matricule",
+  "Nom",
+  "Département",
+  "Direction",
+  "RH local",
+  "Région",
+  "Pays",
+  "Fonction",
+  "Équipe",
+  "BU",
+  "Entité",
+  "Niveau",
+  "ETP",
+  "Salaire brut annuel (€)",
+  "Date d'entrée",
+  "Départ retraite",
+];
+
+const EMP_ROWS = [
+  ["EMP001", "Marc Dupont", "Production", "Direction Industrielle", "Nadia Benali", "Europe", "France", "Chef d'équipe", "Atelier A1", "BU Industrie", "SAS", "Local", 1, 45000, "2018-03-12", "2035-06-30"],
+  ["EMP002", "Léa Moreau", "Production", "Direction Industrielle", "Nadia Benali", "Europe", "France", "Opérateur ligne", "Atelier A1", "BU Industrie", "SAS", "Local", 1, 36000, "2020-09-01", "2042-11-15"],
+  ["EMP003", "Alex Roussel", "Commercial & Marketing", "Direction Commerciale", "Nadia Benali", "Europe", "France", "Account Manager", "Grands comptes", "BU Services", "SAS", "Régional", 1, 58000, "2017-01-15", "2038-08-20"],
+  ["EMP004", "Anaïs Petit", "R&D / Innovation", "Direction Innovation", "Nadia Benali", "Europe", "France", "Ingénieur R&D", "Labo central", "Corporate", "SAS", "Régional", 1, 62000, "2019-06-01", "2045-03-10"],
+  ["EMP005", "Claire Bernard", "Support (IT/Finance/HR)", "Direction Fonctions Support", "Nadia Benali", "Europe", "France", "Analyste financier", "Contrôle de gestion", "Corporate", "SAS", "Local", 1, 52000, "2021-02-15", "2040-07-25"],
+  ["EMP006", "Jean Martin", "Supply Chain", "Direction Supply Chain", "Nadia Benali", "Europe", "France", "Planificateur", "Planification", "BU Industrie", "SAS", "Local", 1, 44000, "2016-11-01", "2033-09-30"],
+  ["EMP007", "Sophie Lambert", "Production", "Direction Industrielle", "Petra Schmidt", "Europe", "Germany", "Technicien maintenance", "Atelier B2", "BU Industrie", "GmbH", "Local", 1, 42000, "2019-04-10", "2039-01-15"],
+  ["EMP008", "Pierre Faure", "Commercial & Marketing", "Direction Commerciale", "Nadia Benali", "Europe", "France", "Business Developer", "Nouveaux marchés", "BU Services", "SAS", "Local", 1, 50000, "2022-07-01", "2043-05-20"],
+  ["EMP009", "Thomas Henry", "Production", "Direction Industrielle", "Nadia Benali", "Europe", "France", "Ingénieur process", "Atelier A2", "BU Industrie", "SAS", "Régional", 1, 55000, "2015-08-20", "2036-12-31"],
+  ["EMP010", "Nicolas Chevalier", "Support (IT/Finance/HR)", "Direction Fonctions Support", "Nadia Benali", "Europe", "France", "Administrateur SI", "Infrastructure", "Corporate", "SAS", "Local", 1, 48000, "2020-01-15", "2041-10-01"],
+  ["EMP011", "Lucas Masson", "Supply Chain", "Direction Supply Chain", "Nadia Benali", "Europe", "France", "Responsable entrepôt", "Entrepôt Lyon", "BU Industrie", "SAS", "Local", 1, 46000, "2018-06-01", "2037-04-15"],
+  ["EMP012", "Emma Weber", "Production", "Direction Industrielle", "Petra Schmidt", "Europe", "Germany", "Responsable atelier", "Atelier B1", "BU Industrie", "GmbH", "Régional", 1, 56000, "2014-10-01", "2035-08-30"],
+  ["EMP013", "Hugo Schneider", "R&D / Innovation", "Direction Innovation", "Nadia Benali", "Europe", "France", "Data Scientist", "Analytics", "Corporate", "SAS", "Local", 1, 65000, "2023-03-01", "2050-02-28"],
+  ["EMP014", "Chloé Rossi", "Commercial & Marketing", "Direction Commerciale", "Nadia Benali", "Europe", "France", "Chargé de marketing", "Digital marketing", "BU Services", "SAS", "Local", 1, 47000, "2021-09-15", "2044-06-10"],
+  ["EMP015", "Louis Ferrari", "Supply Chain", "Direction Supply Chain", "Nadia Benali", "Europe", "France", "Coordinateur logistique", "Transport", "BU Industrie", "SAS", "Local", 1, 40000, "2022-04-01", "2046-07-20"],
+  ["EMP016", "Camille Garcia", "Production", "Direction Industrielle", "Nadia Benali", "Europe", "France", "Opérateur ligne", "Atelier A3", "BU Industrie", "SAS", "Local", 1, 35000, "2023-01-10", "2052-12-15"],
+  ["EMP017", "Nathan Lopez", "Support (IT/Finance/HR)", "Direction Fonctions Support", "Petra Schmidt", "Europe", "Germany", "Gestionnaire paie", "RH Allemagne", "Corporate", "GmbH", "Local", 1, 43000, "2019-11-01", "2038-03-25"],
+  ["EMP018", "Sarah Smith", "R&D / Innovation", "Direction Innovation", "Nadia Benali", "Europe", "France", "Chef de projet innovation", "InnovationLab", "Corporate", "SAS", "Régional", 1, 60000, "2018-07-15", "2040-09-30"],
+];
+
+const empData = [EMP_HEADERS, ...EMP_ROWS];
+const empSheet = XLSX.utils.aoa_to_sheet(empData);
+empSheet["!cols"] = EMP_HEADERS.map((h) => ({ wch: Math.max(h.length + 2, 14) }));
+
+const MOV_HEADERS = [
+  "ID mouvement",
+  "Matricule",
+  "Employé / Poste",
+  "Type",
+  "ETP concernés",
+  "Département",
+  "Département d'arrivée",
+  "Pays",
+  "RH local",
+  "Levier (code)",
+  "Date planifiée",
+  "Date réalisée",
+  "Statut",
+  "Validé RH",
+  "PSE",
+  "Impact masse salariale (€/an)",
+  "Économies (€)",
+  "Coût one-off (€)",
+  "Commentaire",
+];
+
+const MOV_ROWS = [
+  ["MV001", "EMP002", "Léa Moreau", "Redéploiement", 1, "Production", "Supply Chain", "France", "Nadia Benali", "AC-001", "2026-04-15", "2026-04-15", "Réalisé", "Oui", "Non", 0, 0, 8000, "Transfert vers planification supply chain après formation"],
+  ["MV002", "EMP008", "Pierre Faure", "Suppression", 1, "Commercial & Marketing", "", "France", "Nadia Benali", "AC-004", "2026-06-01", "", "Planifié", "Non", "Non", -50000, 50000, 25000, "Poste supprimé dans le cadre de la fusion des équipes SC"],
+  ["MV003", "", "Data Analyst Senior", "Recrutement", 1, "Support (IT/Finance/HR)", "", "France", "Nadia Benali", "AC-003", "2026-05-01", "", "Planifié", "Non", "Non", 65000, 0, 20000, "Profil nécessaire pour piloter l'automatisation RPA"],
+  ["MV004", "EMP015", "Louis Ferrari", "Reconversion", 1, "Supply Chain", "Production", "France", "Nadia Benali", "AC-006", "2026-07-01", "", "En cours", "Non", "Non", -4000, 4000, 15000, "Reconversion opérateur → coordinateur atelier Rotterdam"],
+  ["MV005", "EMP007", "Sophie Lambert", "Redéploiement", 1, "Production", "R&D / Innovation", "Germany", "Petra Schmidt", "AC-002", "2026-05-15", "2026-05-15", "Réalisé", "Oui", "Non", 0, 0, 8000, "Affectation au pôle maintenance prédictive"],
+  ["MV006", "", "Responsable Qualité", "Recrutement", 1, "Production", "", "Belgium", "Nadia Benali", "AC-007", "2026-06-15", "", "Planifié", "Non", "Non", 58000, 0, 22000, "Recrutement pour piloter le programme Six Sigma Belgique"],
+  ["MV007", "EMP016", "Camille Garcia", "Suppression", 1, "Production", "", "France", "Nadia Benali", "AC-002", "2026-08-01", "", "Planifié", "Non", "Non", -35000, 35000, 18000, "Poste rendu obsolète par l'automatisation de la ligne A3"],
+  ["MV008", "EMP012", "Emma Weber", "Reconversion", 1, "Production", "Support (IT/Finance/HR)", "Germany", "Petra Schmidt", "AC-003", "2026-09-01", "", "Planifié", "Non", "Non", -5600, 5600, 15000, "Reconversion vers chef de projet digital manufacturing"],
+  ["MV009", "EMP009", "Thomas Henry", "Redéploiement", 1, "Production", "R&D / Innovation", "France", "Nadia Benali", "AC-003", "2026-04-01", "2026-04-01", "Réalisé", "Oui", "Non", 0, 0, 8000, "Expert process transféré pour accompagner l'automatisation"],
+];
+
+const movData = [MOV_HEADERS, ...MOV_ROWS];
+const movSheet = XLSX.utils.aoa_to_sheet(movData);
+movSheet["!cols"] = MOV_HEADERS.map((h) => ({ wch: Math.max(h.length + 2, 14) }));
+
+const hrWb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(hrWb, empSheet, "Base ETP");
+XLSX.utils.book_append_sheet(hrWb, movSheet, "Mouvements");
+XLSX.writeFile(hrWb, path.join(DEMO_DIR, "base_etp_demo.xlsx"));
+console.log("✓ base_etp_demo.xlsx créé (18 employés + 9 mouvements)");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File 3: entreprises_projets.xlsx — Company & Project setup
+// Columns match Admin > Entreprises / Admin > Projets forms
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COMPANY_HEADERS = ["ID", "Nom", "Secteur", "Début exercice", "Fin exercice"];
+const COMPANY_ROWS = [
+  ["demo-acme", "Acme Corp", "Industrie Manufacturière", "2026-01-01", "2026-12-31"],
+  ["demo-gtech", "GlobalTech", "Technologies & Services", "2026-01-01", "2026-12-31"],
+  ["demo-efin", "EuroFinance", "Services Financiers", "2026-01-01", "2026-12-31"],
+];
+
+const companyData = [COMPANY_HEADERS, ...COMPANY_ROWS];
+const companySheet = XLSX.utils.aoa_to_sheet(companyData);
+companySheet["!cols"] = COMPANY_HEADERS.map((h) => ({ wch: Math.max(h.length + 2, 16) }));
+
+const PROJECT_HEADERS = ["ID", "Entreprise ID", "Nom du projet", "Sponsor", "Cible (€M)"];
+const PROJECT_ROWS = [
+  ["proj-acme-01", "demo-acme", "Transformation Excellence 2026", "CEO Office", 50],
+  ["proj-acme-02", "demo-acme", "Programme Digital Factory", "CTO Office", 15],
+  ["proj-gtech-01", "demo-gtech", "Optimisation Coûts IT", "DSI", 35],
+  ["proj-gtech-02", "demo-gtech", "M&A Integration", "Directeur Stratégie", 20],
+  ["proj-efin-01", "demo-efin", "Rationalisation Back-Office", "COO", 40],
+];
+
+const projectData = [PROJECT_HEADERS, ...PROJECT_ROWS];
+const projectSheet = XLSX.utils.aoa_to_sheet(projectData);
+projectSheet["!cols"] = PROJECT_HEADERS.map((h) => ({ wch: Math.max(h.length + 2, 16) }));
+
+const cpWb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(cpWb, companySheet, "Entreprises");
+XLSX.utils.book_append_sheet(cpWb, projectSheet, "Projets");
+XLSX.writeFile(cpWb, path.join(DEMO_DIR, "entreprises_projets.xlsx"));
+console.log("✓ entreprises_projets.xlsx créé (3 entreprises + 5 projets)");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File 4: utilisateurs.xlsx — User setup
+// Columns match Admin > Utilisateurs form fields
+// ─────────────────────────────────────────────────────────────────────────────
+
+const USER_HEADERS = ["Identifiant", "Prénom", "Nom", "Nom affiché", "Rôle", "Mot de passe", "Entreprise ID"];
+const USER_ROWS = [
+  ["demo-admin", "Admin", "Global", "Admin Global", "admin", "test", ""],
+  ["demo.ent-acme", "Julien", "Martin", "Julien Martin", "admin_entreprise", "test", "demo-acme"],
+  ["demo.cto-acme", "Marie", "Durand", "Marie Durand", "cto", "test", "demo-acme"],
+  ["demo.spo-acme", "Jean", "Dupont", "Jean Dupont", "sponsor", "test", "demo-acme"],
+  ["demo.lev-acme", "Marc", "Dubois", "Marc Dubois", "lever", "test", "demo-acme"],
+  ["demo.fin-acme", "Claire", "Bernard", "Claire Bernard", "finance", "test", "demo-acme"],
+  ["demo.hr-acme", "Nadia", "Benali", "Nadia Benali", "hr", "test", "demo-acme"],
+  ["demo.ops-acme", "Thomas", "Petit", "Thomas Petit", "ops", "test", "demo-acme"],
+  ["demo.cto-gtech", "Sophie", "Martin", "Sophie Martin", "cto", "test", "demo-gtech"],
+  ["demo.hr-gtech", "Petra", "Schmidt", "Petra Schmidt", "hr", "test", "demo-gtech"],
+  ["demo.cto-efin", "Pierre", "Lefevre", "Pierre Lefevre", "cto", "test", "demo-efin"],
+];
+
+const userData = [USER_HEADERS, ...USER_ROWS];
+const userSheet = XLSX.utils.aoa_to_sheet(userData);
+userSheet["!cols"] = USER_HEADERS.map((h) => ({ wch: Math.max(h.length + 2, 16) }));
+
+const userWb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(userWb, userSheet, "Utilisateurs");
+XLSX.writeFile(userWb, path.join(DEMO_DIR, "utilisateurs.xlsx"));
+console.log("✓ utilisateurs.xlsx créé (11 utilisateurs, tous rôles couverts)");
+
+console.log("\n✅ Tous les fichiers de démo ont été générés dans le dossier demo/");

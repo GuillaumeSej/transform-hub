@@ -41,18 +41,18 @@ export default function AdminUsersPage() {
   }, [isEntAdmin, user?.companyId]);
 
   const [editIdx, setEditIdx] = useState<number | null>(null);
-  const [form, setForm] = useState({ username: "", firstName: "", lastName: "", name: "", role: "cto" as Role, companyId: "c1", password: "test" });
+  const [form, setForm] = useState({ username: "", firstName: "", lastName: "", name: "", role: "cto" as Role, companyId: "", password: "test" });
   const [showForm, setShowForm] = useState(false);
 
   const startCreate = () => {
     setEditIdx(null);
-    setForm({ username: "", firstName: "", lastName: "", name: "", role: "cto", companyId: isEntAdmin && user?.companyId ? user.companyId : "c1", password: "test" });
+    setForm({ username: "", firstName: "", lastName: "", name: "", role: "cto", companyId: isEntAdmin && user?.companyId ? user.companyId : (companies[0]?.id ?? ""), password: "test" });
     setShowForm(true);
   };
 
   const startEdit = (u: AuthUser, idx: number) => {
     setEditIdx(idx);
-    setForm({ username: u.username, firstName: u.firstName ?? "", lastName: u.lastName ?? "", name: u.name, role: u.role, companyId: u.companyId ?? "c1", password: u.password });
+    setForm({ username: u.username, firstName: u.firstName ?? "", lastName: u.lastName ?? "", name: u.name, role: u.role, companyId: u.companyId ?? (companies[0]?.id ?? ""), password: u.password });
     setShowForm(true);
   };
 

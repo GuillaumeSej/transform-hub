@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Plus, TriangleAlert, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import * as hr from "@/lib/hrEngine";
 import { Button } from "@/components/shared/Button";
@@ -58,7 +59,8 @@ type MovementRow = {
 };
 
 export default function BaseEtpPage() {
-  const data = useBeTrackData();
+  const { user } = useRole();
+  const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
