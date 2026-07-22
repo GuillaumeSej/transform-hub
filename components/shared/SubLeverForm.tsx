@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { DependencyEditor } from "@/components/shared/DependencyEditor";
 import { STATUS_LABEL, STATUS_ORDER } from "@/lib/status-config";
-import type { BeTrackData, FinancialSnapshot, LeverStatus, SubLever } from "@/types";
+import type { BeTrackData, FinancialSnapshot, LeverStatus, PriorityLevel, RiskLevel, SubLever } from "@/types";
 
 const inputClass =
   "w-full rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none";
@@ -63,6 +63,8 @@ export function SubLeverForm({
     start: parentLever?.start ?? today,
     end: parentLever?.end ?? today,
     status: "idea",
+    priority: "medium",
+    risk: "low",
     dependencies: [],
     actions: [],
     ...initialValues,
@@ -176,6 +178,32 @@ export function SubLeverForm({
             {data.leverStatuses.map((s) => (
               <option key={s} value={s}>
                 {STATUS_LABEL[s]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Priorité">
+          <select
+            className={inputClass}
+            value={values.priority}
+            onChange={(e) => set("priority", e.target.value as PriorityLevel)}
+          >
+            {data.priorityLevels.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Risque">
+          <select
+            className={inputClass}
+            value={values.risk}
+            onChange={(e) => set("risk", e.target.value as RiskLevel)}
+          >
+            {data.riskLevels.map((r) => (
+              <option key={r} value={r}>
+                {r}
               </option>
             ))}
           </select>

@@ -40,6 +40,7 @@ export default function AdminUsersPage() {
     return unsub;
   }, [isEntAdmin, user?.companyId]);
 
+  const [companyFilter, setCompanyFilter] = useState<string>("all");
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [form, setForm] = useState({ username: "", firstName: "", lastName: "", name: "", role: "cto" as Role, companyId: "", password: "test" });
   const [showForm, setShowForm] = useState(false);
@@ -179,6 +180,25 @@ export default function AdminUsersPage() {
         </div>
       )}
 
+      {!isEntAdmin && companies.length > 0 && (
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-semibold text-text-secondary">Filtrer par entreprise</label>
+          <select
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
+            className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+          >
+            <option value="all">Toutes les entreprises</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <span className="text-xs text-text-secondary">
+            {users.filter((u) => companyFilter === "all" || u.companyId === companyFilter).length} utilisateur(s)
+          </span>
+        </div>
+      )}
+
       <div className="rounded-xl border border-border overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -192,7 +212,9 @@ export default function AdminUsersPage() {
             </tr>
           </thead>
           <tbody>
-            {users.map((u, idx) => (
+            {users
+              .filter((u) => companyFilter === "all" || u.companyId === companyFilter)
+              .map((u, idx) => (
               <tr key={u.username} className="border-b border-border hover:bg-bg-elevated/50">
                 <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{u.username}</td>
                 <td className="px-4 py-2.5 font-medium text-text-primary">{u.firstName}</td>

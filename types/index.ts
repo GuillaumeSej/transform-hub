@@ -152,6 +152,8 @@ export type SubLever = {
   start: string; // ISO date
   end: string; // ISO date
   status: LeverStatus;
+  priority: PriorityLevel;
+  risk: RiskLevel;
   lockedPlan?: FinancialSnapshot;
   reforecast?: FinancialSnapshot;
   companyId?: string | null;

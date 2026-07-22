@@ -1019,6 +1019,8 @@ export const mockData: BeTrackData = {
       start: "2026-01-15",
       end: "2026-06-30",
       status: "in_progress",
+      priority: "critical",
+      risk: "medium",
       dependencies: [],
       actions: [
         {
@@ -1067,6 +1069,8 @@ export const mockData: BeTrackData = {
       start: "2026-03-01",
       end: "2026-09-30",
       status: "in_progress",
+      priority: "critical",
+      risk: "low",
       dependencies: [{ targetId: "SL001", type: "FS" }],
       actions: [
         {
@@ -1115,6 +1119,8 @@ export const mockData: BeTrackData = {
       start: "2026-02-01",
       end: "2026-06-30",
       status: "in_progress",
+      priority: "high",
+      risk: "high",
       dependencies: [],
       actions: [
         {
@@ -1163,6 +1169,8 @@ export const mockData: BeTrackData = {
       start: "2026-05-01",
       end: "2026-09-30",
       status: "in_progress",
+      priority: "critical",
+      risk: "high",
       dependencies: [{ targetId: "SL003", type: "FS" }],
       actions: [
         {
@@ -1209,6 +1217,8 @@ export const mockData: BeTrackData = {
       start: "2026-08-01",
       end: "2026-12-31",
       status: "qualified",
+      priority: "medium",
+      risk: "medium",
       dependencies: [{ targetId: "SL004", type: "FS" }],
       actions: [
         {
@@ -1257,6 +1267,8 @@ export const mockData: BeTrackData = {
       start: "2026-01-01",
       end: "2026-06-30",
       status: "in_progress",
+      priority: "critical",
+      risk: "low",
       dependencies: [],
       actions: [
         {
@@ -1305,6 +1317,8 @@ export const mockData: BeTrackData = {
       start: "2026-04-01",
       end: "2026-09-30",
       status: "validated",
+      priority: "high",
+      risk: "medium",
       dependencies: [{ targetId: "SL006", type: "FS" }],
       actions: [
         {
@@ -1353,6 +1367,8 @@ export const mockData: BeTrackData = {
       start: "2026-01-15",
       end: "2026-06-30",
       status: "in_progress",
+      priority: "medium",
+      risk: "medium",
       dependencies: [],
       actions: [
         {
@@ -1399,6 +1415,8 @@ export const mockData: BeTrackData = {
       start: "2026-05-01",
       end: "2026-09-30",
       status: "qualified",
+      priority: "medium",
+      risk: "low",
       dependencies: [{ targetId: "SL008", type: "FS" }],
       actions: [
         {
@@ -1448,6 +1466,8 @@ export const mockData: BeTrackData = {
       start: "2026-03-01",
       end: "2026-08-31",
       status: "in_progress",
+      priority: "high",
+      risk: "medium",
       dependencies: [{ targetId: "SL003", type: "FS" }],
       actions: [
         {
@@ -1496,6 +1516,8 @@ export const mockData: BeTrackData = {
       start: "2026-05-01",
       end: "2026-10-31",
       status: "qualified",
+      priority: "high",
+      risk: "low",
       dependencies: [{ targetId: "SL010", type: "FS" }],
       actions: [
         {
@@ -1542,6 +1564,8 @@ export const mockData: BeTrackData = {
       start: "2026-07-01",
       end: "2026-12-31",
       status: "idea",
+      priority: "medium",
+      risk: "low",
       dependencies: [{ targetId: "SL011", type: "FS" }],
       actions: [
         {

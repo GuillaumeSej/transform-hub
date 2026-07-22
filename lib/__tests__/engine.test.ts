@@ -229,6 +229,8 @@ describe("engine — recomputeLeverProgress", () => {
         start: "2026-01-01",
         end: "2026-12-31",
         status: "in_progress",
+        priority: "medium",
+        risk: "low",
         dependencies: [],
         actions: [
           { id: "a1", name: "A1", start: "", end: "", cost: 0, status: "done" },

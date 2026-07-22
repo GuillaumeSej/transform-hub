@@ -271,8 +271,17 @@ leverSheet["!cols"] = LEVER_HEADERS.map((h) => ({ wch: Math.max(h.length + 2, 14
 
 const leverWb = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(leverWb, leverSheet, "Leviers");
+XLSX.utils.book_append_sheet(leverWb, XLSX.utils.aoa_to_sheet([
+  ["Levier Code", "Nom sous-levier", "Poste de dépense", "BU", "Compte P&L", "Impact brut (€M)", "Impact net (€M)"],
+  ["AC-001", "Rationalisation fournisseurs packaging – Europe", "COGS Packaging", "BU Industrie", "Cost of Goods Sold", 2.5, 2.2],
+  ["AC-001", "Rationalisation fournisseurs packaging – Asie", "COGS Packaging APAC", "BU Industrie", "Cost of Goods Sold", 1.7, 1.6],
+  ["AC-002", "Maintenance prédictive lignes B1-B4", "COGS Maintenance", "BU Industrie", "Cost of Goods Sold", 2.8, 2.5],
+  ["AC-003", "RPA processus comptables", "G&A Finance", "Corporate", "General & Admin", 1.0, 0.8],
+  ["AC-003", "Automatisation déclarations TVA", "G&A Tax", "Corporate", "General & Admin", 0.5, 0.4],
+  ["AC-006", "Transfert activités Mannheim → Rotterdam", "COGS Logistique EMEA", "BU Industrie", "Cost of Goods Sold", 2.1, 1.8],
+]), "Sous-leviers");
 XLSX.writeFile(leverWb, path.join(DEMO_DIR, "leviers_demo.xlsx"));
-console.log("✓ leviers_demo.xlsx créé (7 leviers)");
+console.log("✓ leviers_demo.xlsx créé (7 leviers + feuille Sous-leviers)");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // File 2: base_etp_demo.xlsx — Workforce import (2 sheets)

@@ -4,7 +4,7 @@ import { FileSpreadsheet, FileText } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
-import { leverToExcelRow } from "@/lib/leverExcel";
+import { leverToExcelRow, subLeverToExcelRow } from "@/lib/leverExcel";
 import type { BeTrackData } from "@/types";
 
 /**
@@ -27,8 +27,21 @@ export function ExportButton({
     const sheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "Leviers");
+
+    const subLeverRows: Record<string, string | number>[] = [];
+    d.levers.forEach((l) => {
+      const subs = d.subLevers.filter((s) => s.leverId === l.id);
+      subs.forEach((s) => {
+        subLeverRows.push(subLeverToExcelRow(s, l.code, d));
+      });
+    });
+    if (subLeverRows.length > 0) {
+      const slSheet = XLSX.utils.json_to_sheet(subLeverRows);
+      XLSX.utils.book_append_sheet(workbook, slSheet, "Sous-leviers");
+    }
+
     XLSX.writeFile(workbook, `leviers_${d.program.id}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    showToast("Export Excel généré", `${rows.length} leviers exportés`, "success");
+    showToast("Export Excel généré", `${rows.length} leviers${subLeverRows.length > 0 ? ` · ${subLeverRows.length} sous-leviers` : ""} exportés`, "success");
   };
 
   return (
