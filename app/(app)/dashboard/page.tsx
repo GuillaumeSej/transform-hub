@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGlobalFilters, matchesGlobalFilters } from "@/lib/hooks/useGlobalFilters";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
-import { Banknote, CircleCheck, TriangleAlert, TrendingUp, Users } from "lucide-react";
+import { Banknote, CircleCheck, ShieldCheck, TriangleAlert, TrendingUp, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
+import { subscribeBestPracticeRules } from "@/lib/firestore/admin";
+import type { BestPracticeRule } from "@/types";
 import * as engine from "@/lib/engine";
 import { STATUS_LABEL } from "@/lib/status-config";
 import { KPICard } from "@/components/shared/KPICard";
@@ -33,16 +35,36 @@ export default function DashboardPage() {
   const router = useRouter();
   const { filters, setFilter, resetFilters } = useGlobalFilters();
 
+  // Règles "bonnes pratiques" de l'entreprise — concept distinct des `Alert` manuelles
+  // (voir la carte "Alerts & Notifications" plus bas) : ici on signale les catégories de
+  // leviers attendues qui n'ont aucune couverture actuellement.
+  const [bestPracticeRules, setBestPracticeRules] = useState<BestPracticeRule[]>([]);
+  useEffect(() => {
+    if (!user?.companyId) {
+      setBestPracticeRules([]);
+      return;
+    }
+    const unsub = subscribeBestPracticeRules(user.companyId, setBestPracticeRules);
+    return unsub;
+  }, [user?.companyId]);
+  const bestPracticeGaps = engine
+    .bestPracticeGaps(data, bestPracticeRules)
+    .filter((g) => !g.hasMatch);
+
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
       { key: "status", label: "Statut", getValue: (l) => STATUS_LABEL[l.status] },
-      { key: "ws", label: "Workstream", getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws },
+      {
+        key: "ws",
+        label: "Workstream",
+        getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
+      },
       { key: "owner", label: "Owner", getValue: (l) => l.owner },
       { key: "geography", label: "Géographie", getValue: (l) => l.geography },
       { key: "function", label: "Fonction", getValue: (l) => l.function },
       { key: "type", label: "Type", getValue: (l) => l.type },
     ],
-    [data.workstreams],
+    [data.workstreams]
   );
 
   const activeForBar: ActiveFilters = useMemo(() => {
@@ -87,8 +109,8 @@ export default function DashboardPage() {
           risk: l.risk,
           end: l.end,
         },
-        filters,
-      ),
+        filters
+      )
     );
   }, [data.levers, data.workstreams, filters]);
 
@@ -239,6 +261,31 @@ export default function DashboardPage() {
       </div>
 
       <Card className="mb-4">
+        <CardHeader title="Bonnes pratiques" />
+        <CardBody>
+          <div className="grid grid-cols-2 gap-x-6 max-[900px]:grid-cols-1">
+            {bestPracticeGaps.map(({ rule }) => (
+              <div key={rule.id} className="flex gap-3 border-b border-border py-3 last:border-b-0">
+                <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-sm bg-rag-amber-light text-rag-amber">
+                  <ShieldCheck size={14} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12.5px] font-semibold text-primary">{rule.label}</div>
+                  <div className="mt-0.5 text-[11.5px] text-secondary">{rule.description}</div>
+                  <div className="mt-1 text-[10.5px] text-tertiary">
+                    Aucun levier ne couvre ce point — est-ce normal ?
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {bestPracticeGaps.length === 0 && (
+            <p className="py-6 text-center text-sm text-tertiary">Aucun manquement détecté</p>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card className="mb-4">
         <CardHeader title="S-Curve — Plan initial / Réalisé / Réactualisé" />
         <CardBody>
           <SCurveChart data={sCurve} height={360} onPointClick={goToMonth} />
@@ -261,7 +308,12 @@ export default function DashboardPage() {
         <Card className="mb-0">
           <CardHeader title="Flux des leviers par étape (Sankey)" />
           <CardBody>
-            <SankeyChart data={sankey} chronologyData={sankeyChrono} height={300} onNodeClick={goToStageLabel} />
+            <SankeyChart
+              data={sankey}
+              chronologyData={sankeyChrono}
+              height={300}
+              onNodeClick={goToStageLabel}
+            />
           </CardBody>
         </Card>
         <Card className="mb-0">
