@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/shared/Button";
@@ -13,7 +13,8 @@ import {
   type SubLeverImportInput,
 } from "@/lib/leverExcel";
 import type { useBeTrackData } from "@/lib/hooks/useStorage";
-import type { Lever } from "@/types";
+import type { Lever, Company } from "@/types";
+import { subscribeCompanies } from "@/lib/firestore/admin";
 
 type PreviewRow = { rowNumber: number; values: LeverImportInput | null; warnings: string[] };
 type SubLeverPreviewRow = {
@@ -27,11 +28,25 @@ type PreviewData = {
   subLeverRows: SubLeverPreviewRow[];
 };
 
-export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof useBeTrackData>; companyId?: string | null }) {
+export function ExcelUploadButton({
+  data,
+  companyId,
+}: {
+  data: ReturnType<typeof useBeTrackData>;
+  companyId?: string | null;
+}) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [fileName, setFileName] = useState("");
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+
+  useEffect(() => {
+    if (companyId) return;
+    const unsubscribe = subscribeCompanies(setCompanies);
+    return unsubscribe;
+  }, [companyId]);
 
   const handleFile = async (file: File) => {
     const workbook = file.name.toLowerCase().endsWith(".csv")
@@ -45,7 +60,8 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
     );
     const parsedLevers = leverRows.map((row, i) => {
       const { values, warnings } = parseLeverExcelRow(row, data, i + 2);
-      const withCompany = values && companyId ? { ...values, companyId } as LeverImportInput : values;
+      const withCompany =
+        values && companyId ? ({ ...values, companyId } as LeverImportInput) : values;
       return { rowNumber: i + 2, values: withCompany, warnings };
     });
 
@@ -72,6 +88,7 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
     }
 
     setFileName(file.name);
+    setSelectedCompanyId("");
     setPreview({ leverRows: parsedLevers, subLeverRows: parsedSubLevers });
   };
 
@@ -86,12 +103,17 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
 
   const confirmImport = () => {
     if (!preview) return;
+    const effectiveCompanyId = companyId || selectedCompanyId;
     let created = 0;
     let updated = 0;
     const upsertedLevers = new Map<string, Lever>();
     preview.leverRows.forEach((row) => {
       if (!row.values) return;
-      const { lever, created: wasCreated } = data.upsertLeverByCode(row.values as LeverImportInput);
+      const values =
+        !companyId && effectiveCompanyId
+          ? ({ ...row.values, companyId: effectiveCompanyId } as LeverImportInput)
+          : (row.values as LeverImportInput);
+      const { lever, created: wasCreated } = data.upsertLeverByCode(values);
       upsertedLevers.set(lever.code.toLowerCase(), lever);
       if (wasCreated) created += 1;
       else updated += 1;
@@ -203,7 +225,11 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
             <Button variant="ghost" onClick={() => setPreview(null)}>
               Annuler
             </Button>
-            <Button variant="primary" disabled={totalValid === 0} onClick={confirmImport}>
+            <Button
+              variant="primary"
+              disabled={totalValid === 0 || (!companyId && !selectedCompanyId)}
+              onClick={confirmImport}
+            >
               Confirmer l&apos;import ({totalValid})
             </Button>
           </>
@@ -211,7 +237,8 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
       >
         <div className="mb-3 flex flex-wrap gap-4 text-[13px]">
           <span>
-            <strong className="text-rag-green-dark">{validLevers.length}</strong> levier(s) valide(s)
+            <strong className="text-rag-green-dark">{validLevers.length}</strong> levier(s)
+            valide(s)
           </span>
           <span>
             <strong className="text-rag-red">{invalidLevers.length}</strong> levier(s) ignoré(s)
@@ -219,10 +246,12 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
           {preview && preview.subLeverRows.length > 0 && (
             <>
               <span>
-                <strong className="text-rag-green-dark">{validSubLevers.length}</strong> sous-levier(s) valide(s)
+                <strong className="text-rag-green-dark">{validSubLevers.length}</strong>{" "}
+                sous-levier(s) valide(s)
               </span>
               <span>
-                <strong className="text-rag-red">{invalidSubLevers.length}</strong> sous-levier(s) ignoré(s)
+                <strong className="text-rag-red">{invalidSubLevers.length}</strong> sous-levier(s)
+                ignoré(s)
               </span>
             </>
           )}
@@ -230,6 +259,25 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
             <strong className="text-rag-amber">{warningCount}</strong> avertissement(s)
           </span>
         </div>
+        {!companyId && (
+          <div className="mb-3">
+            <label className="text-xs font-medium text-secondary">Entreprise de destination</label>
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral"
+            >
+              <option value="" disabled>
+                Sélectionner une entreprise…
+              </option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="max-h-[320px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
           {preview &&
           preview.leverRows.every((r) => r.warnings.length === 0) &&
