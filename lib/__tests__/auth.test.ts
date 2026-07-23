@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TEST_USERS, findUser } from "@/lib/auth";
+import { TEST_USERS, findUser, normalizeUsername } from "@/lib/auth";
 
 describe("auth — TEST_USERS", () => {
   it("has 8 test users (admin + admin_entreprise + 6 roles)", () => {
@@ -62,5 +62,19 @@ describe("auth — findUser", () => {
     const user = findUser("admin", "test");
     expect(user).not.toBeNull();
     expect(user?.role).toBe("admin");
+  });
+});
+
+describe("auth — normalizeUsername", () => {
+  it("lowercases and trims username", () => {
+    expect(normalizeUsername("  MonUser  ")).toBe("monuser");
+  });
+
+  it("leaves already-lowercase unchanged", () => {
+    expect(normalizeUsername("test.cto")).toBe("test.cto");
+  });
+
+  it("handles empty string", () => {
+    expect(normalizeUsername("")).toBe("");
   });
 });

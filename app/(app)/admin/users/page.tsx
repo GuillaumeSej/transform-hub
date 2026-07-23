@@ -59,8 +59,9 @@ export default function AdminUsersPage() {
 
   const save = async () => {
     if (!form.username.trim() || (!form.name.trim() && !(`${form.firstName} ${form.lastName}`.trim()))) return;
+    const normalizedUsername = form.username.trim().toLowerCase();
     const newUser: AuthUser = {
-      username: form.username,
+      username: normalizedUsername,
       password: form.password,
       role: form.role,
       firstName: form.firstName,

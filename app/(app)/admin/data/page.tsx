@@ -6,6 +6,7 @@ import type { Company, AuthUser, Project, Lever, SubLever, Employee, WorkforceMo
 import { subscribeCompanies, subscribeUsers, subscribeProjects } from "@/lib/firestore/admin";
 import { subscribeLevers, subscribeSubLevers } from "@/lib/firestore/levers";
 import { subscribeEmployees, subscribeMovements } from "@/lib/firestore/workforce";
+import { useRole } from "@/lib/hooks/useRole";
 
 function StatusDot({ filled }: { filled: boolean }) {
   return (
@@ -26,6 +27,8 @@ type CompanyStats = {
 };
 
 export default function AdminDataPage() {
+  const { user } = useRole();
+  const companyId = user?.companyId ?? null;
   const [companies, setCompanies] = useState<Company[]>([]);
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -42,10 +45,10 @@ export default function AdminDataPage() {
   }, []);
 
   useEffect(() => {
-    const unsub1 = subscribeLevers(setLevers);
-    const unsub2 = subscribeSubLevers(setSubLevers);
+    const unsub1 = subscribeLevers(setLevers, companyId);
+    const unsub2 = subscribeSubLevers(setSubLevers, companyId);
     return () => { unsub1(); unsub2(); };
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     const unsub1 = subscribeEmployees(setEmployees);
@@ -53,9 +56,13 @@ export default function AdminDataPage() {
     return () => { unsub1(); unsub2(); };
   }, []);
 
-  const companyStats: CompanyStats[] = companies.map((c) => {
-    const cUsers = users.filter((u) => u.companyId === c.id);
-    const cProjects = projects.filter((p) => p.companyId === c.id);
+  const visibleCompanies = companyId ? companies.filter((c) => c.id === companyId) : companies;
+  const visibleUsers = companyId ? users.filter((u) => u.companyId === companyId) : users;
+  const visibleProjects = companyId ? projects.filter((p) => p.companyId === companyId) : projects;
+
+  const companyStats: CompanyStats[] = visibleCompanies.map((c) => {
+    const cUsers = visibleUsers.filter((u) => u.companyId === c.id);
+    const cProjects = visibleProjects.filter((p) => p.companyId === c.id);
     const cLevers = levers.filter((l) => l.companyId === c.id);
     const cSubLevers = subLevers.filter((s) => s.companyId === c.id);
 
@@ -78,7 +85,7 @@ export default function AdminDataPage() {
   });
 
   const globalUserRoles: Record<string, number> = {};
-  users.forEach((u) => {
+  visibleUsers.forEach((u) => {
     globalUserRoles[u.role] = (globalUserRoles[u.role] || 0) + 1;
   });
 
@@ -97,14 +104,14 @@ export default function AdminDataPage() {
               <Building2 size={14} />
               <span className="text-xs font-semibold">Entreprises</span>
             </div>
-            <div className="text-2xl font-bold text-text-primary">{companies.length}</div>
+            <div className="text-2xl font-bold text-text-primary">{visibleCompanies.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Users size={14} />
               <span className="text-xs font-semibold">Utilisateurs</span>
             </div>
-            <div className="text-2xl font-bold text-text-primary">{users.length}</div>
+            <div className="text-2xl font-bold text-text-primary">{visibleUsers.length}</div>
             <div className="flex flex-wrap gap-1">
               {Object.entries(globalUserRoles).map(([role, count]) => (
                 <span key={role} className="rounded-full bg-bg-surface px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">
@@ -118,7 +125,7 @@ export default function AdminDataPage() {
               <Briefcase size={14} />
               <span className="text-xs font-semibold">Projets</span>
             </div>
-            <div className="text-2xl font-bold text-text-primary">{projects.length}</div>
+            <div className="text-2xl font-bold text-text-primary">{visibleProjects.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
@@ -153,7 +160,7 @@ export default function AdminDataPage() {
 
       <div className="space-y-4">
         <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Par entreprise</h2>
-        {companyStats.length === 0 && (
+        {visibleCompanies.length === 0 && (
           <div className="rounded-xl border border-border bg-bg-elevated p-8 text-center text-sm text-text-secondary">
             Aucune entreprise enregistrée.
           </div>

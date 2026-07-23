@@ -19,6 +19,7 @@ export const roles: Record<Role, RoleDefinition> = {
     short: "Admin ENT",
     nav: [
       { id: "admin-users", icon: "Users", label: "Utilisateurs" },
+      { id: "admin-data", icon: "BarChart3", label: "Données" },
       { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
       { id: "admin-history", icon: "History", label: "Historique" },
     ],

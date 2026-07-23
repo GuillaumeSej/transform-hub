@@ -79,7 +79,8 @@ export function subscribeUsers(cb: (users: AuthUser[]) => void): Unsubscribe {
 }
 
 export async function saveUser(user: AuthUser): Promise<void> {
-  await setDoc(doc(usersCol(), user.username), user);
+  const normalized = { ...user, username: user.username.trim().toLowerCase() };
+  await setDoc(doc(usersCol(), normalized.username), normalized);
 }
 
 export async function deleteUser(username: string): Promise<void> {
