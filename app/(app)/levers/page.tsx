@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutGrid, Plus, Table2, TriangleAlert } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
@@ -8,6 +8,8 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import * as engine from "@/lib/engine";
 import { STATUS_LABEL } from "@/lib/status-config";
+import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { ExportButton } from "@/components/shared/ExportButton";
@@ -21,7 +23,14 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
-import type { Lever, LeverStatus, PriorityLevel, RiskLevel } from "@/types";
+import type {
+  HierarchyLevelDef,
+  HierarchyNode,
+  Lever,
+  LeverStatus,
+  PriorityLevel,
+  RiskLevel,
+} from "@/types";
 
 type LeverRow = Lever & {
   realized: number;
@@ -41,6 +50,34 @@ export default function LeversPage() {
     (searchParams.get("view") as "table" | "kanban") ?? "table"
   );
   const [newLeverOpen, setNewLeverOpen] = useState(false);
+
+  // Arborescence financière (optionnelle) de l'entreprise courante — n'affiche des colonnes
+  // supplémentaires que si l'entreprise a explicitement configuré des hierarchyLevels ; sinon la
+  // colonne historique "Centre de coût / Poste de dépense" reste seule affichée (non-régressif).
+  const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      const company = companies.find((c) => c.id === user?.companyId);
+      setHierarchyLevels(company?.hierarchyLevels ?? []);
+    });
+    return unsub;
+  }, [user?.companyId]);
+
+  useEffect(() => {
+    if (!user?.companyId || hierarchyLevels.length === 0) {
+      setHierarchyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setHierarchyNodes);
+    return unsub;
+  }, [user?.companyId, hierarchyLevels.length]);
+
+  const sortedHierarchyLevels = useMemo(
+    () => [...hierarchyLevels].sort((a, b) => a.order - b.order),
+    [hierarchyLevels]
+  );
 
   // Le Lever Owner ne voit que ses propres leviers (owner === son nom de compte de test). Les
   // autres rôles (CTO, Sponsor, ...) voient toute la bibliothèque.
@@ -161,6 +198,8 @@ export default function LeversPage() {
     );
   }, [scopedLevers, activeFilters, filterDefs]);
 
+  const hasHierarchy = sortedHierarchyLevels.length > 0;
+
   const rows: LeverRow[] = filteredLevers.map((l) => ({
     ...l,
     realized: engine.realizedSavings(l, data),
@@ -172,6 +211,24 @@ export default function LeversPage() {
     })(),
     hasAlert: alertedLeverIds.has(l.id),
   }));
+
+  /** Une colonne par niveau configuré (ordre macro -> fin), affichant le libellé résolu pour ce
+   *  levier via hierarchyLeafId. N'existe que si l'entreprise a activé l'arborescence. */
+  const hierarchyColumns: ColumnDef<LeverRow>[] = hasHierarchy
+    ? sortedHierarchyLevels.map((level) => ({
+        key: `hierarchy_${level.key}` as keyof LeverRow,
+        label: level.label,
+        render: (r: LeverRow) => {
+          const path = resolveHierarchyPath(
+            r.hierarchyLeafId ?? "",
+            hierarchyNodes,
+            sortedHierarchyLevels
+          );
+          const entry = path.find((p) => p.levelKey === level.key);
+          return <span>{entry?.label ?? "—"}</span>;
+        },
+      }))
+    : [];
 
   const totalNet = filteredLevers.reduce((s, l) => s + l.netSavings, 0);
   const totalReal = filteredLevers.reduce((s, l) => s + engine.realizedSavings(l, data), 0);
@@ -240,7 +297,14 @@ export default function LeversPage() {
     { key: "sponsor", label: "Sponsor", editable: true },
     { key: "geography", label: "Géo", editable: true },
     { key: "country", label: "Pays", editable: true },
-    { key: "costCenterLabel", label: "Centre de coût / Poste de dépense" },
+    ...(hasHierarchy
+      ? hierarchyColumns
+      : [
+          {
+            key: "costCenterLabel",
+            label: "Centre de coût / Poste de dépense",
+          } as ColumnDef<LeverRow>,
+        ]),
     { key: "start", label: "Début", editable: true },
     { key: "end", label: "Fin", editable: true },
     {
@@ -316,6 +380,7 @@ export default function LeversPage() {
       >
         <LeverForm
           data={data}
+          companyId={user?.companyId}
           submitLabel="Créer le levier"
           onCancel={() => setNewLeverOpen(false)}
           onSubmit={(values: LeverFormValues) => {

@@ -242,6 +242,7 @@ export default function LeverDetailClient() {
       <Modal open={editOpen} onOpenChange={setEditOpen} title="Modifier le levier" maxWidth="760px">
         <LeverForm
           data={data}
+          companyId={user?.companyId}
           initialValues={lever}
           submitLabel="Enregistrer les modifications"
           onCancel={() => setEditOpen(false)}
@@ -1058,7 +1059,9 @@ function Stat({
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
         {label}
       </div>
-      <div className={`mt-1 text-sm font-semibold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}>
+      <div
+        className={`mt-1 text-sm font-semibold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}
+      >
         {children}
       </div>
     </div>
@@ -1079,7 +1082,9 @@ function BigStat({
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
         {label}
       </div>
-      <div className={`mt-1 text-xl font-bold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}>
+      <div
+        className={`mt-1 text-xl font-bold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}
+      >
         {value}
       </div>
     </div>

@@ -10,6 +10,7 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "admin-projects", icon: "FolderKanban", label: "Projets" },
       { id: "admin-users", icon: "Users", label: "Utilisateurs" },
       { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
+      { id: "admin-hierarchy", icon: "Network", label: "Arborescence financière" },
       { id: "admin-data", icon: "BarChart3", label: "Données" },
       { id: "dashboard", icon: "PieChart", label: "Executive Dashboard" },
     ],
@@ -21,6 +22,7 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "admin-users", icon: "Users", label: "Utilisateurs" },
       { id: "admin-data", icon: "BarChart3", label: "Données" },
       { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
+      { id: "admin-hierarchy", icon: "Network", label: "Arborescence financière" },
       { id: "admin-history", icon: "History", label: "Historique" },
     ],
   },
@@ -84,6 +86,7 @@ export const PAGE_ROUTES: Record<string, string> = {
   "admin-projects": "/admin/projects",
   "admin-users": "/admin/users",
   "admin-lifecycle": "/admin/lifecycle",
+  "admin-hierarchy": "/admin/hierarchy",
   "admin-data": "/admin/data",
   "admin-history": "/admin/history",
 };

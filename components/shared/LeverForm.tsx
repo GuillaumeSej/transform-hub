@@ -1,9 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { STATUS_LABEL } from "@/lib/status-config";
-import type { BeTrackData, Lever, LeverStatus, PriorityLevel, RiskLevel } from "@/types";
+import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
+import type {
+  BeTrackData,
+  HierarchyLevelDef,
+  HierarchyNode,
+  Lever,
+  LeverStatus,
+  PriorityLevel,
+  RiskLevel,
+} from "@/types";
 
 export type LeverFormValues = Omit<Lever, "id" | "createdAt" | "lastUpdate" | "dependencies">;
 
@@ -64,12 +73,17 @@ function emptyValues(data: BeTrackData): LeverFormValues {
 /** Formulaire complet des paramètres d'un levier — réutilisé pour la création et l'édition. */
 export function LeverForm({
   data,
+  companyId,
   initialValues,
   onSubmit,
   onCancel,
   submitLabel = "Enregistrer",
 }: {
   data: BeTrackData;
+  /** Entreprise courante — si elle a configuré `hierarchyLevels`, le champ "Centre de coût" texte
+   *  libre est remplacé par un select des HierarchyNode de maille la plus fine. Omis/absent =
+   *  comportement historique inchangé (champ texte libre). */
+  companyId?: string | null;
   initialValues?: Partial<LeverFormValues>;
   onSubmit: (values: LeverFormValues) => void;
   onCancel: () => void;
@@ -79,6 +93,43 @@ export function LeverForm({
     ...emptyValues(data),
     ...initialValues,
   });
+
+  const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [leafNodes, setLeafNodes] = useState<HierarchyNode[]>([]);
+
+  useEffect(() => {
+    if (!companyId) {
+      setHierarchyLevels([]);
+      setLeafNodes([]);
+      return;
+    }
+    let cancelled = false;
+    let unsubNodes: (() => void) | null = null;
+    const unsubCompanies = subscribeCompanies((companies) => {
+      if (cancelled) return;
+      const company = companies.find((c) => c.id === companyId);
+      const levels = company?.hierarchyLevels ?? [];
+      setHierarchyLevels(levels);
+      unsubNodes?.();
+      unsubNodes = null;
+      if (levels.length === 0) {
+        setLeafNodes([]);
+        return;
+      }
+      const finestLevelKey = [...levels].sort((a, b) => b.order - a.order)[0].key;
+      unsubNodes = subscribeHierarchyNodes(companyId, (nodes) => {
+        if (cancelled) return;
+        setLeafNodes(nodes.filter((n) => n.levelKey === finestLevelKey));
+      });
+    });
+    return () => {
+      cancelled = true;
+      unsubNodes?.();
+      unsubCompanies();
+    };
+  }, [companyId]);
+
+  const hasHierarchy = hierarchyLevels.length > 0;
 
   const set = <K extends keyof LeverFormValues>(key: K, value: LeverFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -224,13 +275,30 @@ export function LeverForm({
             ))}
           </select>
         </Field>
-        <Field label="Centre de coût">
-          <input
-            className={inputClass}
-            value={values.costCenter}
-            onChange={(e) => set("costCenter", e.target.value)}
-          />
-        </Field>
+        {hasHierarchy ? (
+          <Field label="Maille financière (Centre de coût)">
+            <select
+              className={inputClass}
+              value={values.hierarchyLeafId ?? ""}
+              onChange={(e) => set("hierarchyLeafId", e.target.value || undefined)}
+            >
+              <option value="">Sélectionner…</option>
+              {leafNodes.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.label} ({n.code})
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : (
+          <Field label="Centre de coût">
+            <input
+              className={inputClass}
+              value={values.costCenter}
+              onChange={(e) => set("costCenter", e.target.value)}
+            />
+          </Field>
+        )}
         <Field label="Compte P&L impacté">
           <select
             className={inputClass}

@@ -8,6 +8,7 @@ import {
   Layers,
   ListChecks,
   MessageCircle,
+  Network,
   PieChart,
   Target,
   TriangleAlert,
@@ -34,4 +35,5 @@ export const ICON_REGISTRY: Record<string, LucideIcon> = {
   Building2,
   FolderKanban,
   Workflow,
+  Network,
 };
