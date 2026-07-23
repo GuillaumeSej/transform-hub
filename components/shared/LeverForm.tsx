@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { STATUS_LABEL } from "@/lib/status-config";
 import type { LifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
-import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
+import {
+  subscribeCompanies,
+  subscribeHierarchyNodes,
+  subscribeProjects,
+} from "@/lib/firestore/admin";
 import type {
   BeTrackData,
   HierarchyLevelDef,
@@ -12,6 +16,7 @@ import type {
   Lever,
   LeverStatus,
   PriorityLevel,
+  Project,
   RiskLevel,
 } from "@/types";
 
@@ -139,6 +144,18 @@ export function LeverForm({
 
   const hasHierarchy = hierarchyLevels.length > 0;
 
+  const [projects, setProjects] = useState<Project[]>([]);
+  useEffect(() => {
+    if (!companyId) {
+      setProjects([]);
+      return;
+    }
+    const unsub = subscribeProjects((all) =>
+      setProjects(all.filter((p) => p.companyId === companyId))
+    );
+    return unsub;
+  }, [companyId]);
+
   const set = <K extends keyof LeverFormValues>(key: K, value: LeverFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
 
@@ -190,6 +207,22 @@ export function LeverForm({
             ))}
           </select>
         </Field>
+        {projects.length > 0 && (
+          <Field label="Projet">
+            <select
+              className={inputClass}
+              value={values.projectId ?? ""}
+              onChange={(e) => set("projectId", e.target.value || undefined)}
+            >
+              <option value="">Non assigné</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <div className="col-span-3">
           <Field label="Nom du levier">
             <input

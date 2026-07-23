@@ -11,6 +11,8 @@ import {
   pnlImpact,
   byGeo,
   byFunction,
+  byCountry,
+  byProject,
   bestPracticeGaps,
   sCurve3,
   financialBridge,
@@ -19,7 +21,7 @@ import {
   fmtInt,
 } from "@/lib/engine";
 import { STATUS_SHORT_LABEL } from "@/lib/status-config";
-import type { BestPracticeRule, BeTrackData, Lever, SubLever, LeverStatus } from "@/types";
+import type { BestPracticeRule, BeTrackData, Lever, Project, SubLever, LeverStatus } from "@/types";
 
 const baseLever: Lever = {
   id: "L001",
@@ -437,5 +439,47 @@ describe("engine — financialBridge granularity", () => {
     });
     const result = financialBridge(data, "month");
     expect(result.map((r) => r.quarter)).toEqual(["Feb 2026", "May 2026"]);
+  });
+});
+
+describe("engine — byCountry / byProject", () => {
+  it("aggregates by country", () => {
+    const data = makeData({
+      levers: [
+        { ...baseLever, country: "France", netSavings: 5, progress: 100 },
+        { ...baseLever, id: "L002", country: "France", netSavings: 3, progress: 100 },
+        { ...baseLever, id: "L003", country: "Germany", netSavings: 2, progress: 100 },
+      ],
+    });
+    const result = byCountry(data);
+    expect(result["France"]).toBe(8);
+    expect(result["Germany"]).toBe(2);
+  });
+
+  it("aggregates by project, grouping unassigned levers under 'Non assigné'", () => {
+    const projects: Project[] = [
+      {
+        id: "p1",
+        companyId: "c1",
+        name: "Projet A",
+        sponsor: "CEO",
+        target: 10,
+        currency: "€M",
+        fyStart: "2026-01-01",
+        fyEnd: "2026-12-31",
+        baselineEBIT: 0,
+        revenue: 0,
+        createdAt: "2026-01-01",
+      },
+    ];
+    const data = makeData({
+      levers: [
+        { ...baseLever, projectId: "p1", netSavings: 5, progress: 100 },
+        { ...baseLever, id: "L002", netSavings: 3, progress: 100 },
+      ],
+    });
+    const result = byProject(data, projects);
+    expect(result["Projet A"]).toBe(5);
+    expect(result["Non assigné"]).toBe(3);
   });
 });

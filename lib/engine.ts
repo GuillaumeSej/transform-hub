@@ -7,6 +7,7 @@ import type {
   LeverAction,
   LeverDependency,
   ProgramSummary,
+  Project,
   RiskLevel,
   SubLever,
   WorkstreamSummary,
@@ -116,6 +117,31 @@ export function byFunction(data: BeTrackData): Record<string, number> {
     .filter((l) => l.status !== "cancelled")
     .forEach((l) => {
       map[l.function] = (map[l.function] || 0) + realizedSavings(l, data);
+    });
+  return map;
+}
+
+export function byCountry(data: BeTrackData): Record<string, number> {
+  const map: Record<string, number> = {};
+  data.levers
+    .filter((l) => l.status !== "cancelled")
+    .forEach((l) => {
+      map[l.country] = (map[l.country] || 0) + realizedSavings(l, data);
+    });
+  return map;
+}
+
+/** Répartition des savings par projet (Lever.projectId) — pendant de `workstreamSummary` mais
+ * pour la dimension "projet" plutôt que "workstream". Les leviers sans projet assigné sont
+ * regroupés sous "Non assigné" plutôt qu'exclus, pour que le total reste cohérent avec les autres
+ * vues. */
+export function byProject(data: BeTrackData, projects: Project[]): Record<string, number> {
+  const map: Record<string, number> = {};
+  data.levers
+    .filter((l) => l.status !== "cancelled")
+    .forEach((l) => {
+      const label = projects.find((p) => p.id === l.projectId)?.name ?? "Non assigné";
+      map[label] = (map[label] || 0) + realizedSavings(l, data);
     });
   return map;
 }
