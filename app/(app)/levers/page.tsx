@@ -301,7 +301,7 @@ export default function LeversPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ExportButton type="excel" data={data} />
-          <ExcelUploadButton data={data} />
+          <ExcelUploadButton data={data} companyId={user?.companyId ?? null} />
           <Button variant="primary" onClick={() => setNewLeverOpen(true)}>
             <Plus size={13} /> New lever
           </Button>

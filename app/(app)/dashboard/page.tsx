@@ -157,7 +157,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ExcelUploadButton data={data} />
+          <ExcelUploadButton data={data} companyId={user?.companyId ?? null} />
           <ExportButton type="pptx" />
           <select
             value={data.activeScenario}

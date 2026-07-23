@@ -33,8 +33,7 @@ export async function findUserFromFirestore(username: string, password: string):
 
     const q = query(
       collection(db, "adminUsers"),
-      where("username", "==", normalizeUsername(username)),
-      where("password", "==", password)
+      where("username", "==", normalizeUsername(username))
     );
 
     const snapshot = await getDocs(q);
@@ -42,6 +41,8 @@ export async function findUserFromFirestore(username: string, password: string):
 
     const doc = snapshot.docs[0];
     const data = doc.data();
+    if (data.password !== password) return null;
+
     return {
       username: data.username,
       password: data.password,

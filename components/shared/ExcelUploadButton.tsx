@@ -26,7 +26,7 @@ type PreviewData = {
   subLeverRows: SubLeverPreviewRow[];
 };
 
-export function ExcelUploadButton({ data }: { data: ReturnType<typeof useBeTrackData> }) {
+export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof useBeTrackData>; companyId?: string | null }) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
@@ -44,7 +44,8 @@ export function ExcelUploadButton({ data }: { data: ReturnType<typeof useBeTrack
     );
     const parsedLevers = leverRows.map((row, i) => {
       const { values, warnings } = parseLeverExcelRow(row, data, i + 2);
-      return { rowNumber: i + 2, values, warnings };
+      const withCompany = values && companyId ? { ...values, companyId } as LeverImportInput : values;
+      return { rowNumber: i + 2, values: withCompany, warnings };
     });
 
     const slSheetName = workbook.SheetNames.find((n) => n.toLowerCase().includes("sous-levier"));
