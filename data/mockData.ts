@@ -12,13 +12,52 @@ import type { BeTrackData, Employee, WorkforceMovement } from "@/types";
 // ---------------------------------------------------------------------------
 
 const FIRST_NAMES = [
-  "Marc", "Léa", "Alex", "Anaïs", "Claire", "Jean", "Sophie", "Pierre", "Thomas", "Nicolas",
-  "Lucas", "Emma", "Hugo", "Chloé", "Louis", "Camille", "Nathan", "Sarah", "Paul", "Julie",
+  "Marc",
+  "Léa",
+  "Alex",
+  "Anaïs",
+  "Claire",
+  "Jean",
+  "Sophie",
+  "Pierre",
+  "Thomas",
+  "Nicolas",
+  "Lucas",
+  "Emma",
+  "Hugo",
+  "Chloé",
+  "Louis",
+  "Camille",
+  "Nathan",
+  "Sarah",
+  "Paul",
+  "Julie",
 ];
 const LAST_NAMES = [
-  "Dubois", "Moreau", "Roussel", "Petit", "Bernard", "Dupont", "Martin", "Lefevre", "Fournier",
-  "Lambert", "Garnier", "Faure", "Mercier", "Blanc", "Henry", "Chevalier", "Masson", "Weber",
-  "Schneider", "Rossi", "Ferrari", "Garcia", "Lopez", "Smith",
+  "Dubois",
+  "Moreau",
+  "Roussel",
+  "Petit",
+  "Bernard",
+  "Dupont",
+  "Martin",
+  "Lefevre",
+  "Fournier",
+  "Lambert",
+  "Garnier",
+  "Faure",
+  "Mercier",
+  "Blanc",
+  "Henry",
+  "Chevalier",
+  "Masson",
+  "Weber",
+  "Schneider",
+  "Rossi",
+  "Ferrari",
+  "Garcia",
+  "Lopez",
+  "Smith",
 ];
 
 type DeptSpec = {
@@ -36,7 +75,13 @@ const DEPT_SPECS: DeptSpec[] = [
     direction: "Direction Industrielle",
     bu: "BU Industrie",
     count: 56,
-    funcs: ["Opérateur ligne", "Technicien maintenance", "Chef d'équipe", "Ingénieur process", "Responsable atelier"],
+    funcs: [
+      "Opérateur ligne",
+      "Technicien maintenance",
+      "Chef d'équipe",
+      "Ingénieur process",
+      "Responsable atelier",
+    ],
     baseSalary: 38000,
   },
   {
@@ -44,7 +89,13 @@ const DEPT_SPECS: DeptSpec[] = [
     direction: "Direction Commerciale",
     bu: "BU Services",
     count: 32,
-    funcs: ["Account Manager", "Chargé de marketing", "Business Developer", "Responsable grands comptes", "Analyste pricing"],
+    funcs: [
+      "Account Manager",
+      "Chargé de marketing",
+      "Business Developer",
+      "Responsable grands comptes",
+      "Analyste pricing",
+    ],
     baseSalary: 52000,
   },
   {
@@ -60,7 +111,14 @@ const DEPT_SPECS: DeptSpec[] = [
     direction: "Direction Fonctions Support",
     bu: "Corporate",
     count: 26,
-    funcs: ["Comptable", "Analyste financier", "Gestionnaire paie", "Administrateur SI", "Acheteur", "Category Manager"],
+    funcs: [
+      "Comptable",
+      "Analyste financier",
+      "Gestionnaire paie",
+      "Administrateur SI",
+      "Acheteur",
+      "Category Manager",
+    ],
     baseSalary: 46000,
   },
   {
@@ -86,7 +144,18 @@ const COUNTRY_POOL: { country: string; region: string; entity: string; hrOwner: 
   { country: "USA", region: "Americas", entity: "Inc", hrOwner: "Emily Clarke" },
 ];
 
-const LEVELS: Employee["level"][] = ["Local", "Local", "Local", "Régional", "Local", "Local", "Régional", "Local", "Global", "Local"];
+const LEVELS: Employee["level"][] = [
+  "Local",
+  "Local",
+  "Local",
+  "Régional",
+  "Local",
+  "Local",
+  "Régional",
+  "Local",
+  "Global",
+  "Local",
+];
 
 function generateEmployees(): Employee[] {
   const employees: Employee[] = [];
@@ -141,28 +210,150 @@ const MOVEMENT_PLAN: {
   pse: boolean;
   startMonth: number; // mois de la 1ère échéance (2026)
 }[] = [
-  { leverId: "L007", dept: "Production", suppressions: 8, redeploy: 3, toDept: "Supply Chain", reconversions: 2, pse: true, startMonth: 3 },
-  { leverId: "L001", dept: "Support (IT/Finance/HR)", suppressions: 4, redeploy: 2, toDept: "Commercial & Marketing", reconversions: 1, pse: true, startMonth: 2 },
-  { leverId: "L014", dept: "Commercial & Marketing", suppressions: 3, redeploy: 1, toDept: "Support (IT/Finance/HR)", reconversions: 0, pse: false, startMonth: 2 },
-  { leverId: "L008", dept: "Production", suppressions: 3, redeploy: 2, toDept: "Production", reconversions: 1, pse: true, startMonth: 4 },
-  { leverId: "L015", dept: "Support (IT/Finance/HR)", suppressions: 3, redeploy: 1, toDept: "R&D / Innovation", reconversions: 1, pse: false, startMonth: 5 },
-  { leverId: "L013", dept: "Commercial & Marketing", suppressions: 2, redeploy: 1, toDept: "Commercial & Marketing", reconversions: 0, pse: false, startMonth: 1 },
-  { leverId: "L017", dept: "Supply Chain", suppressions: 2, redeploy: 2, toDept: "Production", reconversions: 1, pse: false, startMonth: 6 },
+  {
+    leverId: "L007",
+    dept: "Production",
+    suppressions: 8,
+    redeploy: 3,
+    toDept: "Supply Chain",
+    reconversions: 2,
+    pse: true,
+    startMonth: 3,
+  },
+  {
+    leverId: "L001",
+    dept: "Support (IT/Finance/HR)",
+    suppressions: 4,
+    redeploy: 2,
+    toDept: "Commercial & Marketing",
+    reconversions: 1,
+    pse: true,
+    startMonth: 2,
+  },
+  {
+    leverId: "L014",
+    dept: "Commercial & Marketing",
+    suppressions: 3,
+    redeploy: 1,
+    toDept: "Support (IT/Finance/HR)",
+    reconversions: 0,
+    pse: false,
+    startMonth: 2,
+  },
+  {
+    leverId: "L008",
+    dept: "Production",
+    suppressions: 3,
+    redeploy: 2,
+    toDept: "Production",
+    reconversions: 1,
+    pse: true,
+    startMonth: 4,
+  },
+  {
+    leverId: "L015",
+    dept: "Support (IT/Finance/HR)",
+    suppressions: 3,
+    redeploy: 1,
+    toDept: "R&D / Innovation",
+    reconversions: 1,
+    pse: false,
+    startMonth: 5,
+  },
+  {
+    leverId: "L013",
+    dept: "Commercial & Marketing",
+    suppressions: 2,
+    redeploy: 1,
+    toDept: "Commercial & Marketing",
+    reconversions: 0,
+    pse: false,
+    startMonth: 1,
+  },
+  {
+    leverId: "L017",
+    dept: "Supply Chain",
+    suppressions: 2,
+    redeploy: 2,
+    toDept: "Production",
+    reconversions: 1,
+    pse: false,
+    startMonth: 6,
+  },
 ];
 
-const RECRUITMENTS: { label: string; dept: string; country: string; leverId: string; fte: number; salary: number; month: number }[] = [
-  { label: "Data Engineer (poste créé)", dept: "R&D / Innovation", country: "France", leverId: "L015", fte: 1, salary: 65000, month: 4 },
-  { label: "Data Engineer (poste créé)", dept: "R&D / Innovation", country: "France", leverId: "L015", fte: 1, salary: 65000, month: 6 },
-  { label: "Expert e-procurement", dept: "Support (IT/Finance/HR)", country: "Germany", leverId: "L004", fte: 1, salary: 72000, month: 5 },
-  { label: "Pricing Analyst", dept: "Commercial & Marketing", country: "USA", leverId: "L010", fte: 1, salary: 78000, month: 7 },
-  { label: "Automaticien senior", dept: "Production", country: "France", leverId: "L007", fte: 1, salary: 55000, month: 8 },
-  { label: "Chef de projet supply", dept: "Supply Chain", country: "Italy", leverId: "L017", fte: 1, salary: 60000, month: 9 },
+const RECRUITMENTS: {
+  label: string;
+  dept: string;
+  country: string;
+  leverId: string;
+  fte: number;
+  salary: number;
+  month: number;
+}[] = [
+  {
+    label: "Data Engineer (poste créé)",
+    dept: "R&D / Innovation",
+    country: "France",
+    leverId: "L015",
+    fte: 1,
+    salary: 65000,
+    month: 4,
+  },
+  {
+    label: "Data Engineer (poste créé)",
+    dept: "R&D / Innovation",
+    country: "France",
+    leverId: "L015",
+    fte: 1,
+    salary: 65000,
+    month: 6,
+  },
+  {
+    label: "Expert e-procurement",
+    dept: "Support (IT/Finance/HR)",
+    country: "Germany",
+    leverId: "L004",
+    fte: 1,
+    salary: 72000,
+    month: 5,
+  },
+  {
+    label: "Pricing Analyst",
+    dept: "Commercial & Marketing",
+    country: "USA",
+    leverId: "L010",
+    fte: 1,
+    salary: 78000,
+    month: 7,
+  },
+  {
+    label: "Automaticien senior",
+    dept: "Production",
+    country: "France",
+    leverId: "L007",
+    fte: 1,
+    salary: 55000,
+    month: 8,
+  },
+  {
+    label: "Chef de projet supply",
+    dept: "Supply Chain",
+    country: "Italy",
+    leverId: "L017",
+    fte: 1,
+    salary: 60000,
+    month: 9,
+  },
 ];
 
 // Référence temporelle du scénario démo (voir DEMO_NOW dans lib/engine.ts) : 2026-06-22.
 // Les statuts sont dérivés de la date planifiée pour produire un mix réaliste : réalisés
 // (dont certains non validés RH), en cours, planifiés, et quelques retards non traités.
-function movementStatus(plannedMonth: number, seq: number): { status: WorkforceMovement["status"]; actual: boolean; validated: boolean } {
+function movementStatus(
+  plannedMonth: number,
+  seq: number
+): { status: WorkforceMovement["status"]; actual: boolean; validated: boolean } {
   if (plannedMonth <= 4) {
     // Échéance passée : majoritairement réalisés, validés pour la plupart
     if (seq % 5 === 0) return { status: "En cours", actual: false, validated: false }; // retard non résorbé
@@ -256,11 +447,19 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
   }
 
   for (const rec of RECRUITMENTS) {
-    push(null, rec.label, { leverId: rec.leverId, dept: rec.dept, country: rec.country }, "Recrutement", rec.fte, rec.month, {
-      salaryImpact: rec.salary,
-      savings: 0,
-      cost: 20000,
-    });
+    push(
+      null,
+      rec.label,
+      { leverId: rec.leverId, dept: rec.dept, country: rec.country },
+      "Recrutement",
+      rec.fte,
+      rec.month,
+      {
+        salaryImpact: rec.salary,
+        savings: 0,
+        cost: 20000,
+      }
+    );
   }
 
   return movements;
@@ -470,6 +669,7 @@ export const mockData: BeTrackData = {
       start: "2026-02-01",
       end: "2026-10-31",
       status: "cancelled",
+      cancelledAtStage: "validated",
       progress: 40,
       priority: "high",
       risk: "medium",
@@ -572,6 +772,7 @@ export const mockData: BeTrackData = {
       start: "2026-04-01",
       end: "2026-12-31",
       status: "cancelled",
+      cancelledAtStage: "qualified",
       progress: 15,
       priority: "critical",
       risk: "critical",
@@ -912,6 +1113,7 @@ export const mockData: BeTrackData = {
       start: "2026-02-01",
       end: "2026-12-31",
       status: "cancelled",
+      cancelledAtStage: "in_progress",
       progress: 65,
       priority: "critical",
       risk: "critical",

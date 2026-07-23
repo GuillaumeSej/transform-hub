@@ -4,7 +4,15 @@ import { useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { DependencyEditor } from "@/components/shared/DependencyEditor";
 import { STATUS_LABEL, STATUS_ORDER } from "@/lib/status-config";
-import type { BeTrackData, FinancialSnapshot, LeverStatus, PriorityLevel, RiskLevel, SubLever } from "@/types";
+import type { LifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
+import type {
+  BeTrackData,
+  FinancialSnapshot,
+  LeverStatus,
+  PriorityLevel,
+  RiskLevel,
+  SubLever,
+} from "@/types";
 
 const inputClass =
   "w-full rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none";
@@ -26,6 +34,7 @@ export type SubLeverFormValues = Omit<SubLever, "id">;
 export function SubLeverForm({
   data,
   leverId,
+  lifecycle,
   excludeSubLeverId,
   initialValues,
   onSubmit,
@@ -35,6 +44,9 @@ export function SubLeverForm({
 }: {
   data: BeTrackData;
   leverId: string;
+  /** Résolution des libellés de statut selon le référentiel de l'entreprise (facultatif, retombe
+   * sur STATUS_LABEL si absent). */
+  lifecycle?: LifecycleLabels;
   /** id du sous-levier en cours d'édition, exclu de la liste de dépendances possibles */
   excludeSubLeverId?: string;
   initialValues?: Partial<SubLeverFormValues>;
@@ -75,8 +87,8 @@ export function SubLeverForm({
 
   const num = (v: string) => (v === "" ? 0 : Number(v));
 
-  // Plan initial figé dès L3 · Validé : les chiffres d'origine ne sont plus modifiables, seule la
-  // réactualisation (à partir de L4 · Planifié) l'est encore, dans un bloc séparé.
+  // Plan initial figé dès l'étape "validated" (décision de lancement) : les chiffres d'origine ne sont plus modifiables, seule la
+  // réactualisation (à partir de l'étape "in_progress") l'est encore, dans un bloc séparé.
   const isLocked = Boolean(values.lockedPlan);
   const canReforecast = STATUS_ORDER[values.status] >= STATUS_ORDER.in_progress;
   const setReforecast = (key: keyof FinancialSnapshot, value: number) =>
@@ -169,7 +181,7 @@ export function SubLeverForm({
             onChange={(e) => set("end", e.target.value)}
           />
         </Field>
-        <Field label="Niveau d'avancement (L1-L5)">
+        <Field label="Niveau d'avancement">
           <select
             className={inputClass}
             value={values.status}
@@ -177,7 +189,7 @@ export function SubLeverForm({
           >
             {data.leverStatuses.map((s) => (
               <option key={s} value={s}>
-                {STATUS_LABEL[s]}
+                {lifecycle ? lifecycle.label(s) : STATUS_LABEL[s]}
               </option>
             ))}
           </select>
@@ -210,8 +222,10 @@ export function SubLeverForm({
         </Field>
         {isLocked && (
           <div className="col-span-2 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
-            Plan initial figé au passage en L3 · Validé. Les valeurs ci-dessous sont en lecture
-            seule — utilisez le bloc « Réactualisation » plus bas pour ajuster la projection.
+            Plan initial figé au passage en «{" "}
+            {lifecycle ? lifecycle.label("validated") : STATUS_LABEL.validated} ». Les valeurs
+            ci-dessous sont en lecture seule — utilisez le bloc « Réactualisation » plus bas pour
+            ajuster la projection.
           </div>
         )}
         <Field label="Impact estimé brut (€M)">

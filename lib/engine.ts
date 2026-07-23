@@ -366,12 +366,14 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
   return alerts;
 }
 
-// ---------- Avancement L1-L5, Sankey, S-curve 3 courbes, Marimekko, waterfall trimestriel ----------
+// ---------- Avancement du cycle de vie, Sankey, S-curve 3 courbes, Marimekko, waterfall trimestriel ----------
 
 export type StageCount = { status: LeverStatus; level: string; label: string; count: number };
 
-/** Nombre de leviers par étape L1-L5 (+ Annulé, hors cycle), pour le bandeau d'avancement et le
- * diagramme Sankey de l'Executive Dashboard. */
+/** Nombre de leviers par étape du cycle de vie (+ Annulé, hors cycle), pour le bandeau
+ * d'avancement et le diagramme Sankey de l'Executive Dashboard. Fonction pure sans contexte
+ * entreprise : utilise les libellés par défaut (STATUS_LEVEL/STATUS_SHORT_LABEL), pas le
+ * référentiel personnalisé — voir `useLifecycleLabels` pour les vues user-facing. */
 export function stageCounts(data: BeTrackData): StageCount[] {
   const statuses: LeverStatus[] = [...STATUS_CYCLE, "cancelled"];
   return statuses.map((status) => ({
@@ -412,7 +414,10 @@ export type SankeyChronoLink = { source: number; target: number; value: number }
  *
  * Chaque "out" représente les leviers qui ne progressent pas au-delà de cette étape.
  */
-export function sankeyChronology(data: BeTrackData): { nodes: SankeyChronoNode[]; links: SankeyChronoLink[] } {
+export function sankeyChronology(data: BeTrackData): {
+  nodes: SankeyChronoNode[];
+  links: SankeyChronoLink[];
+} {
   const nodes: SankeyChronoNode[] = [{ name: "Tous les leviers" }];
 
   STATUS_CYCLE.forEach((status) => {
@@ -427,22 +432,36 @@ export function sankeyChronology(data: BeTrackData): { nodes: SankeyChronoNode[]
 
   const activeByStage = new Map<LeverStatus, number>();
   STATUS_CYCLE.forEach((s) => activeByStage.set(s, 0));
-  data.levers.filter((l) => l.status !== "cancelled").forEach((l) => {
-    activeByStage.set(l.status, (activeByStage.get(l.status) ?? 0) + 1);
-  });
+  data.levers
+    .filter((l) => l.status !== "cancelled")
+    .forEach((l) => {
+      activeByStage.set(l.status, (activeByStage.get(l.status) ?? 0) + 1);
+    });
 
   const cancelledByStageIdx = new Map<number, number>();
   STATUS_CYCLE.forEach((_, i) => cancelledByStageIdx.set(i, 0));
-  data.levers.filter((l) => l.status === "cancelled").forEach((l) => {
-    const p = l.progress;
-    let stageIdx: number;
-    if (p <= 10) stageIdx = 0;
-    else if (p <= 30) stageIdx = 1;
-    else if (p <= 55) stageIdx = 2;
-    else if (p <= 80) stageIdx = 3;
-    else stageIdx = 4;
-    cancelledByStageIdx.set(stageIdx, (cancelledByStageIdx.get(stageIdx) ?? 0) + 1);
-  });
+  data.levers
+    .filter((l) => l.status === "cancelled")
+    .forEach((l) => {
+      // Étape quittée à l'annulation : lue directement depuis `cancelledAtStage` quand disponible
+      // (levers annulés depuis ce correctif) ; repli sur l'ancienne heuristique par `progress` pour
+      // les leviers legacy annulés avant que le champ n'existe.
+      let stageIdx: number;
+      const cancelledStageCycleIdx = l.cancelledAtStage
+        ? STATUS_CYCLE.indexOf(l.cancelledAtStage)
+        : -1;
+      if (cancelledStageCycleIdx !== -1) {
+        stageIdx = cancelledStageCycleIdx;
+      } else {
+        const p = l.progress;
+        if (p <= 10) stageIdx = 0;
+        else if (p <= 30) stageIdx = 1;
+        else if (p <= 55) stageIdx = 2;
+        else if (p <= 80) stageIdx = 3;
+        else stageIdx = 4;
+      }
+      cancelledByStageIdx.set(stageIdx, (cancelledByStageIdx.get(stageIdx) ?? 0) + 1);
+    });
 
   const links: SankeyChronoLink[] = [];
   const totalLevers = data.levers.length;
@@ -549,9 +568,13 @@ export function sCurve3(data: BeTrackData) {
 
   const now = new Date();
   const fyStart = new Date(data.program.fyStart);
-  const currentMonthIdx = Math.min(11, Math.max(0,
-    (now.getFullYear() - fyStart.getFullYear()) * 12 + now.getMonth() - fyStart.getMonth()
-  ));
+  const currentMonthIdx = Math.min(
+    11,
+    Math.max(
+      0,
+      (now.getFullYear() - fyStart.getFullYear()) * 12 + now.getMonth() - fyStart.getMonth()
+    )
+  );
   const actualCurve = actualCurveBase.map((v, i) => (i <= currentMonthIdx ? v : null));
 
   return months.map((label, i) => ({

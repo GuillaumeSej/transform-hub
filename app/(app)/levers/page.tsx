@@ -6,8 +6,8 @@ import { LayoutGrid, Plus, Table2, TriangleAlert } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
+import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as engine from "@/lib/engine";
-import { STATUS_LABEL } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { ExportButton } from "@/components/shared/ExportButton";
@@ -21,7 +21,7 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
-import type { Lever, LeverStatus, PriorityLevel, RiskLevel } from "@/types";
+import type { Lever, PriorityLevel, RiskLevel } from "@/types";
 
 type LeverRow = Lever & {
   realized: number;
@@ -34,6 +34,7 @@ type LeverRow = Lever & {
 export default function LeversPage() {
   const { role, user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
+  const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
@@ -78,7 +79,7 @@ export default function LeversPage() {
         label: "Workstream",
         getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       },
-      { key: "f_status", label: "Niveau (L1-L5)", getValue: (l) => STATUS_LABEL[l.status] },
+      { key: "f_status", label: "Niveau", getValue: (l) => lifecycle.label(l.status) },
       { key: "f_owner", label: "Owner", getValue: (l) => l.owner },
       { key: "f_sponsor", label: "Sponsor", getValue: (l) => l.sponsor },
       { key: "f_geography", label: "Géographie", getValue: (l) => l.geography },
@@ -123,7 +124,7 @@ export default function LeversPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.workstreams, data.subLevers, data.pnlAccounts, alertedLeverIds]
+    [data.workstreams, data.subLevers, data.pnlAccounts, alertedLeverIds, lifecycle]
   );
 
   const activeFilters: ActiveFilters = useMemo(() => {
@@ -165,7 +166,7 @@ export default function LeversPage() {
     ...l,
     realized: engine.realizedSavings(l, data),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
-    statusLabel: STATUS_LABEL[l.status],
+    statusLabel: lifecycle.label(l.status),
     costCenterLabel: (() => {
       const subs = data.subLevers.filter((s) => s.leverId === l.id);
       return subs.length ? subs.map((s) => s.expensePost).join(", ") : l.costCenter;
@@ -181,9 +182,7 @@ export default function LeversPage() {
   const handleCellUpdate = (rowId: string, field: keyof LeverRow, value: string | number) => {
     const patch: Partial<Lever> = {};
     if (field === "statusLabel") {
-      const status = (Object.keys(STATUS_LABEL) as LeverStatus[]).find(
-        (s) => STATUS_LABEL[s] === value
-      );
+      const status = data.leverStatuses.find((s) => lifecycle.label(s) === value);
       if (status) patch.status = status;
     } else if (field === "priority") {
       patch.priority = value as PriorityLevel;
@@ -281,8 +280,8 @@ export default function LeversPage() {
       label: "Niveau",
       editable: true,
       type: "select",
-      options: data.leverStatuses.map((s) => STATUS_LABEL[s]),
-      render: (r) => <StageBadge status={r.status} />,
+      options: data.leverStatuses.map((s) => lifecycle.label(s)),
+      render: (r) => <StageBadge status={r.status} label={lifecycle.label(r.status)} />,
     },
   ];
 
@@ -316,6 +315,7 @@ export default function LeversPage() {
       >
         <LeverForm
           data={data}
+          lifecycle={lifecycle}
           submitLabel="Créer le levier"
           onCancel={() => setNewLeverOpen(false)}
           onSubmit={(values: LeverFormValues) => {
@@ -374,6 +374,8 @@ export default function LeversPage() {
         <Kanban
           levers={filteredLevers}
           onCardClick={(id) => router.push(`/levers/detail?id=${id}`)}
+          stageOrder={lifecycle.activeCycle}
+          stageLabel={lifecycle.shortLabel}
         />
       )}
     </div>

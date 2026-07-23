@@ -2,7 +2,7 @@
 
 import type { StageCount } from "@/lib/engine";
 
-/** Avancement des leviers par étape L1-L5 (+ Annulé) — clic pour creuser vers la liste filtrée. */
+/** Avancement des leviers par étape du cycle de vie (+ Annulé) — clic pour creuser vers la liste filtrée. */
 export function StageFunnel({
   data,
   onStageClick,

@@ -25,8 +25,8 @@ function snapshot(entity: PlanLockable): FinancialSnapshot {
   };
 }
 
-/** Fige le plan initial dès le passage en L3 · Validé (une seule fois), puis initialise la
- * réactualisation dès le passage en L4 · Planifié (une seule fois, sur la base du plan figé). Ne
+/** Fige le plan initial dès le passage à l'étape "validated" (une seule fois), puis initialise la
+ * réactualisation dès le passage à l'étape "in_progress" (une seule fois, sur la base du plan figé). Ne
  * fait rien si déjà figé/initialisé, ou si le statut n'atteint pas ces paliers. */
 export function applyPlanLock<T extends PlanLockable>(entity: T): T {
   let next = entity;
@@ -134,7 +134,18 @@ export function updateLever(
         capex: before.capex,
       }
     : patch;
-  const after: Lever = applyPlanLock({ ...before, ...safePatch, lastUpdate: nowDate() });
+  // Annulation : on capture l'étape du cycle de vie quittée, pour que le Sankey chronologique
+  // puisse brancher le levier sans avoir à deviner l'étape via une heuristique sur `progress`.
+  const cancelledPatch: Partial<Lever> =
+    safePatch.status === "cancelled" && before.status !== "cancelled"
+      ? { cancelledAtStage: before.status }
+      : {};
+  const after: Lever = applyPlanLock({
+    ...before,
+    ...safePatch,
+    ...cancelledPatch,
+    lastUpdate: nowDate(),
+  });
   const nextLevers = [...levers];
   nextLevers[idx] = after;
 

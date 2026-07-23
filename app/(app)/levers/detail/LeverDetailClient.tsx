@@ -18,15 +18,13 @@ import {
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
+import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as engine from "@/lib/engine";
 import type { CascadeResult } from "@/lib/engine";
 import {
   DEPENDENCY_TYPE_DESCRIPTION,
   DEPENDENCY_TYPE_LABEL,
-  STATUS_CYCLE,
-  STATUS_LEVEL,
   STATUS_ORDER,
-  STATUS_SHORT_LABEL,
 } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -59,6 +57,7 @@ type CascadeProposal = CascadeResult & { checked: Record<string, boolean> };
 export default function LeverDetailClient() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
+  const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = searchParams.get("id") ?? "";
@@ -164,19 +163,22 @@ export default function LeverDetailClient() {
           <h1 className="mt-0.5 text-xl font-bold text-primary">{lever.name}</h1>
         </div>
         <div className="flex items-center gap-2">
-          {lever.status === "cancelled" && <StageBadge status="cancelled" />}
+          {lever.status === "cancelled" && (
+            <StageBadge status="cancelled" label={lifecycle.label("cancelled")} />
+          )}
           <Button variant="outline" onClick={() => setEditOpen(true)}>
             <Pencil size={13} /> Modifier le levier
           </Button>
         </div>
       </div>
 
-      {/* Stepper du cycle de vie L1→L5 — clic pour changer de niveau (L5 automatique à 100 % du
-          plan d'action, non cliquable). */}
+      {/* Stepper du cycle de vie — clic pour changer d'étape (la dernière étape "delivered" est
+          atteinte automatiquement à 100 % du plan d'action, non cliquable). Les étapes et leurs
+          libellés viennent du référentiel de l'entreprise (`useLifecycleLabels`). */}
       {lever.status !== "cancelled" && (
         <div className="mb-4 rounded-lg border border-border bg-white px-4 py-3">
           <div className="flex items-center gap-1">
-            {STATUS_CYCLE.map((s, i) => {
+            {lifecycle.activeCycle.map((s, i) => {
               const isCurrent = lever.status === s;
               const isPast = STATUS_ORDER[lever.status] > STATUS_ORDER[s];
               const isAuto = s === "delivered";
@@ -188,15 +190,15 @@ export default function LeverDetailClient() {
                       data.updateLever(lever.id, { status: s });
                       showToast(
                         "Niveau mis à jour",
-                        `${lever.name} : ${STATUS_LEVEL[s]} · ${STATUS_SHORT_LABEL[s]}`,
+                        `${lever.name} : ${lifecycle.shortLabel(s)}`,
                         "success"
                       );
                     }}
                     disabled={isAuto}
                     title={
                       isAuto
-                        ? "L5 est atteint automatiquement quand le plan d'action est à 100 %"
-                        : `Passer en ${STATUS_LEVEL[s]} · ${STATUS_SHORT_LABEL[s]}`
+                        ? "Cette étape est atteinte automatiquement quand le plan d'action est à 100 %"
+                        : `Passer en « ${lifecycle.shortLabel(s)} »`
                     }
                     className={`flex flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 transition ${
                       isCurrent
@@ -206,12 +208,12 @@ export default function LeverDetailClient() {
                           : "border-border bg-neutral-50 text-secondary"
                     } ${isAuto ? "cursor-not-allowed opacity-80" : "hover:border-black"}`}
                   >
-                    <span className="text-[13px] font-bold">{STATUS_LEVEL[s]}</span>
+                    <span className="text-[13px] font-bold">{i + 1}</span>
                     <span className="text-[10px] font-semibold uppercase tracking-wide">
-                      {STATUS_SHORT_LABEL[s]}
+                      {lifecycle.shortLabel(s)}
                     </span>
                   </button>
-                  {i < STATUS_CYCLE.length - 1 && (
+                  {i < lifecycle.activeCycle.length - 1 && (
                     <ArrowRight size={12} className="shrink-0 text-tertiary" />
                   )}
                 </div>
@@ -221,18 +223,22 @@ export default function LeverDetailClient() {
           {hasAnyActions && STATUS_ORDER[lever.status] < STATUS_ORDER.in_progress && (
             <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
               <span className="flex items-center gap-1.5 text-xs text-info-blue">
-                <Info size={13} /> Des actions sont planifiées sur ce levier — il peut passer en L4
-                · Planifié.
+                <Info size={13} /> Des actions sont planifiées sur ce levier — il peut passer en «{" "}
+                {lifecycle.shortLabel("in_progress")} ».
               </span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   data.updateLever(lever.id, { status: "in_progress" });
-                  showToast("Niveau mis à jour", `${lever.name} : L4 · Planifié`, "success");
+                  showToast(
+                    "Niveau mis à jour",
+                    `${lever.name} : ${lifecycle.shortLabel("in_progress")}`,
+                    "success"
+                  );
                 }}
               >
-                Passer en L4
+                Passer en « {lifecycle.shortLabel("in_progress")} »
               </Button>
             </div>
           )}
@@ -242,6 +248,7 @@ export default function LeverDetailClient() {
       <Modal open={editOpen} onOpenChange={setEditOpen} title="Modifier le levier" maxWidth="760px">
         <LeverForm
           data={data}
+          lifecycle={lifecycle}
           initialValues={lever}
           submitLabel="Enregistrer les modifications"
           onCancel={() => setEditOpen(false)}
@@ -264,6 +271,7 @@ export default function LeverDetailClient() {
         {subLeverModal && (
           <SubLeverForm
             data={data}
+            lifecycle={lifecycle}
             leverId={lever.id}
             excludeSubLeverId={subLeverModal.sub?.id}
             initialValues={subLeverModal.sub}
@@ -503,7 +511,10 @@ export default function LeverDetailClient() {
               <div className="flex flex-1 flex-wrap gap-x-8 gap-y-4">
                 <BigStat label="Réalisé à date" value={engine.fmtCurr(real)} accent />
                 <BigStat label="Net savings visé" value={engine.fmtCurr(lever.netSavings)} />
-                <BigStat label="Niveau" value={<StageBadge status={lever.status} />} />
+                <BigStat
+                  label="Niveau"
+                  value={<StageBadge status={lever.status} label={lifecycle.label(lever.status)} />}
+                />
                 <BigStat label="Risque" value={<StatusBadge risk={lever.risk} />} />
               </div>
             </div>
@@ -522,7 +533,7 @@ export default function LeverDetailClient() {
                 <Avatar initials={lever.sponsorInit} /> {lever.sponsor}
               </Stat>
               <Stat label="Status">
-                <StageBadge status={lever.status} />
+                <StageBadge status={lever.status} label={lifecycle.label(lever.status)} />
               </Stat>
               <Stat label="Géographie">
                 {lever.geography} · {lever.country}
@@ -612,7 +623,7 @@ export default function LeverDetailClient() {
                         className="flex cursor-pointer flex-col items-center gap-2 rounded-md border border-border bg-white p-3 text-center transition hover:border-black hover:shadow-md"
                       >
                         <div className="flex w-full items-center justify-between gap-1">
-                          <StageBadge status={s.status} />
+                          <StageBadge status={s.status} label={lifecycle.label(s.status)} />
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -784,7 +795,7 @@ export default function LeverDetailClient() {
                             : "bg-neutral-100 text-secondary"
                         }`}
                       >
-                        {STATUS_LEVEL[s.status]}
+                        {lifecycle.activeCycle.indexOf(s.status) + 1 || "—"}
                       </span>
                       <span
                         className={activeSubLever?.id === s.id ? "text-white/80" : "text-tertiary"}
@@ -882,13 +893,17 @@ export default function LeverDetailClient() {
                   pnlAccountName={(pnlId) =>
                     data.pnlAccounts.find((p) => p.id === pnlId)?.name ?? pnlId
                   }
+                  statusLabel={lifecycle.label}
                 />
               </>
             ) : (
               <>
                 <SectionTitle first>Impact financier</SectionTitle>
                 <div className="grid grid-cols-3 gap-4">
-                  <Stat label="Plan initial (net, figé à L3)" accent>
+                  <Stat
+                    label={`Plan initial (net, figé à « ${lifecycle.label("validated")} »)`}
+                    accent
+                  >
                     {lever.lockedPlan ? engine.fmtCurr(lever.lockedPlan.netSavings) : "—"}
                   </Stat>
                   <Stat label="Réalisé à date (€)">{engine.fmtCurr(real)}</Stat>
@@ -970,10 +985,12 @@ function SubLeverImpactTable({
   subLevers,
   fallbackOwner,
   pnlAccountName,
+  statusLabel,
 }: {
   subLevers: SubLever[];
   fallbackOwner: { owner: string; ownerInit: string };
   pnlAccountName: (id: string) => string;
+  statusLabel: (status: SubLever["status"]) => string;
 }) {
   type Row = SubLever & { pnlName: string; progressPct: number; ownerName: string };
   const rows: Row[] = subLevers.map((s) => ({
@@ -1016,7 +1033,11 @@ function SubLeverImpactTable({
       label: "Progression",
       render: (r) => <ProgressBar pct={r.progressPct} />,
     },
-    { key: "status", label: "Statut", render: (r) => <StageBadge status={r.status} /> },
+    {
+      key: "status",
+      label: "Statut",
+      render: (r) => <StageBadge status={r.status} label={statusLabel(r.status)} />,
+    },
   ];
 
   return (
@@ -1058,7 +1079,9 @@ function Stat({
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
         {label}
       </div>
-      <div className={`mt-1 text-sm font-semibold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}>
+      <div
+        className={`mt-1 text-sm font-semibold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}
+      >
         {children}
       </div>
     </div>
@@ -1079,7 +1102,9 @@ function BigStat({
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
         {label}
       </div>
-      <div className={`mt-1 text-xl font-bold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}>
+      <div
+        className={`mt-1 text-xl font-bold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}
+      >
         {value}
       </div>
     </div>

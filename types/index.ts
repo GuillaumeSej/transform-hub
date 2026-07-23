@@ -63,7 +63,8 @@ export type PnlAccount = {
 };
 
 /** Instantané des chiffres financiers d'un levier/sous-levier, utilisé pour figer le plan initial
- * (à L3 · Validé) et pour la réactualisation (à partir de L4 · Planifié). */
+ * (à l'étape "validated" — décision de lancement) et pour la réactualisation (à partir de
+ * l'étape "in_progress" — déploiement). */
 export type FinancialSnapshot = {
   grossSavings: number; // €M
   netSavings: number; // €M
@@ -104,10 +105,10 @@ export type Lever = {
   capex: number; // €M
   fteImpact: number; // positive = hires, negative = departures
   popImpacted: number;
-  // Plan initial figé automatiquement au passage en L3 · Validé — plus jamais modifiable ensuite.
+  // Plan initial figé automatiquement au passage à l'étape "validated" — plus jamais modifiable ensuite.
   lockedPlan?: FinancialSnapshot;
-  // Prévisions réactualisées, éditables uniquement à partir de L4 · Planifié (initialisées à
-  // lockedPlan à l'entrée en L4, puis ajustables librement).
+  // Prévisions réactualisées, éditables uniquement à partir de l'étape "in_progress" (initialisées
+  // à lockedPlan à l'entrée dans cette étape, puis ajustables librement).
   reforecast?: FinancialSnapshot;
   companyId?: string | null;
   dependencies: LeverDependency[]; // suivies + alertées, jamais décalées automatiquement

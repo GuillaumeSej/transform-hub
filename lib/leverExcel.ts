@@ -1,5 +1,5 @@
 import * as engine from "@/lib/engine";
-import { STATUS_LABEL } from "@/lib/status-config";
+import { STATUS_LABEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type {
   BeTrackData,
   DependencyType,
@@ -19,7 +19,14 @@ import type {
 export type LeverImportInput = Omit<Lever, "id" | "createdAt" | "lastUpdate">;
 
 const ENUM_LISTS = {
-  status: ["idea", "qualified", "validated", "in_progress", "delivered", "cancelled"] as LeverStatus[],
+  status: [
+    "idea",
+    "qualified",
+    "validated",
+    "in_progress",
+    "delivered",
+    "cancelled",
+  ] as LeverStatus[],
   risk: ["low", "medium", "high", "critical"] as RiskLevel[],
   priority: ["low", "medium", "high", "critical"] as PriorityLevel[],
 };
@@ -41,14 +48,18 @@ function parseDependencies(raw: string): LeverDependency[] {
     .filter((d) => d.targetId.length > 0);
 }
 
-/** Statut accepté sous forme de clé ("in_progress") ou de label L1-L5 ("L4 · Planifié", "L4",
- * "Planifié"). */
+/** Statut accepté sous forme de clé ("in_progress"), de libellé complet ("Déploiement en cours")
+ * ou de libellé court ("Déploiement") — utile car un import peut avoir été réexporté d'un fichier
+ * généré avant un changement du référentiel par défaut. Note : ce mapping ne connaît que les
+ * libellés par défaut, pas le référentiel personnalisé d'une entreprise (fonction pure, sans accès
+ * au contexte entreprise) — un import généré depuis un libellé personnalisé doit utiliser la clé
+ * technique du statut ("idea", "qualified", ...). */
 function parseStatus(raw: string): LeverStatus | undefined {
   const s = raw.toLowerCase();
   return ENUM_LISTS.status.find((st) => {
-    const label = STATUS_LABEL[st].toLowerCase();
-    const [level, name] = label.split(" · ");
-    return st === s || label === s || level === s || name === s;
+    return (
+      st === s || STATUS_LABEL[st].toLowerCase() === s || STATUS_SHORT_LABEL[st].toLowerCase() === s
+    );
   });
 }
 
@@ -187,7 +198,9 @@ export function parseLeverExcelRow(
       if (!raw) return "idea";
       const parsed = parseStatus(raw);
       if (!parsed) {
-        warnings.push(`Ligne ${rowNumber} : statut "${raw}" inconnu — "L1 · Idée" utilisé`);
+        warnings.push(
+          `Ligne ${rowNumber} : statut "${raw}" inconnu — "${STATUS_LABEL.idea}" utilisé`
+        );
         return "idea";
       }
       return parsed;
@@ -233,13 +246,13 @@ export function subLeverToExcelRow(
     "OPEX one-off (€M)": subLever.opexOneOff,
     "OPEX récurrent (€M/an)": subLever.opexRec,
     "CAPEX (€M)": subLever.capex,
-    "ETP": subLever.fteImpact,
+    ETP: subLever.fteImpact,
     "Population impactée": subLever.popImpacted,
     "Date de départ": subLever.start,
     "Date de fin": subLever.end,
     Statut: STATUS_LABEL[subLever.status],
-    "Priorité": subLever.priority,
-    "Risque": subLever.risk,
+    Priorité: subLever.priority,
+    Risque: subLever.risk,
     Dépendances: subLever.dependencies.map((d) => `${d.targetId}:${d.type}`).join("; "),
     Description: "",
   };
@@ -280,14 +293,18 @@ export function parseSubLeverExcelRow(
   if (!leverCode || !name) {
     return {
       values: null,
-      warnings: [`Sous-levier ligne ${rowNumber} ignorée : "Code levier" et "Nom sous-levier" obligatoires`],
+      warnings: [
+        `Sous-levier ligne ${rowNumber} ignorée : "Code levier" et "Nom sous-levier" obligatoires`,
+      ],
     };
   }
   const lever = data.levers.find((l) => l.code.toLowerCase() === leverCode.toLowerCase());
   if (!lever) {
     return {
       values: null,
-      warnings: [`Sous-levier ligne ${rowNumber} : levier "${leverCode}" introuvable — ligne ignorée`],
+      warnings: [
+        `Sous-levier ligne ${rowNumber} : levier "${leverCode}" introuvable — ligne ignorée`,
+      ],
     };
   }
 
@@ -313,8 +330,20 @@ export function parseSubLeverExcelRow(
       start: str(row["Date de départ"]) || today,
       end: str(row["Date de fin"]) || today,
       status: parseStatus(str(row["Statut"])) ?? "idea",
-      priority: enumOr(row["Priorité"], ENUM_LISTS.priority, "medium", warnings, `SL ligne ${rowNumber}: priorité`),
-      risk: enumOr(row["Risque"], ENUM_LISTS.risk, "low", warnings, `SL ligne ${rowNumber}: risque`),
+      priority: enumOr(
+        row["Priorité"],
+        ENUM_LISTS.priority,
+        "medium",
+        warnings,
+        `SL ligne ${rowNumber}: priorité`
+      ),
+      risk: enumOr(
+        row["Risque"],
+        ENUM_LISTS.risk,
+        "low",
+        warnings,
+        `SL ligne ${rowNumber}: risque`
+      ),
       dependencies: parseDependencies(str(row["Dépendances"])),
     },
     warnings,

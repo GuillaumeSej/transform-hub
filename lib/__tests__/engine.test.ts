@@ -15,6 +15,7 @@ import {
   fmtPct,
   fmtInt,
 } from "@/lib/engine";
+import { STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type { BeTrackData, Lever, SubLever, LeverStatus } from "@/types";
 
 const baseLever: Lever = {
@@ -191,6 +192,28 @@ describe("engine — sankeyChronology", () => {
     const chrono = sankeyChronology(data);
     expect(chrono.nodes.length).toBeGreaterThan(5);
     expect(chrono.links.length).toBeGreaterThan(0);
+  });
+
+  it("branches a cancelled lever using cancelledAtStage rather than the progress heuristic", () => {
+    // progress=95 would map to the "delivered" stage under the old heuristic, but cancelledAtStage
+    // says it was actually cancelled while still at "idea" — the explicit field must win.
+    const data = makeData({
+      levers: [{ ...baseLever, status: "cancelled", progress: 95, cancelledAtStage: "idea" }],
+    });
+    const chrono = sankeyChronology(data);
+    const ideaExitLabel = `Annulé après ${STATUS_SHORT_LABEL.idea}`;
+    const deliveredExitLabel = `Annulé après ${STATUS_SHORT_LABEL.delivered}`;
+    expect(chrono.nodes.some((n) => n.name === ideaExitLabel)).toBe(true);
+    expect(chrono.nodes.some((n) => n.name === deliveredExitLabel)).toBe(false);
+  });
+
+  it("falls back to the progress heuristic for legacy levers without cancelledAtStage", () => {
+    const data = makeData({
+      levers: [{ ...baseLever, status: "cancelled", progress: 95 }],
+    });
+    const chrono = sankeyChronology(data);
+    const deliveredExitLabel = `Annulé après ${STATUS_SHORT_LABEL.delivered}`;
+    expect(chrono.nodes.some((n) => n.name === deliveredExitLabel)).toBe(true);
   });
 });
 

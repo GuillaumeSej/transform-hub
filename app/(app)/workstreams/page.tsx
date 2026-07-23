@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
+import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as engine from "@/lib/engine";
-import { STATUS_LABEL } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
 import { StageBadge } from "@/components/shared/StageBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -22,6 +22,7 @@ type Row = Lever & { realized: number; wsName: string; statusLabel: string };
 export default function WorkstreamsPage() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
+  const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const summary = engine.programSummary(data);
 
@@ -29,7 +30,7 @@ export default function WorkstreamsPage() {
     ...l,
     realized: engine.realizedSavings(l, data),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
-    statusLabel: STATUS_LABEL[l.status],
+    statusLabel: lifecycle.label(l.status),
   }));
 
   const columns: ColumnDef<Row>[] = [
@@ -55,7 +56,11 @@ export default function WorkstreamsPage() {
     { key: "realized", label: "Réalisé", align: "right", render: (r) => r.realized.toFixed(1) },
     { key: "progress", label: "Progress", render: (r) => <ProgressBar pct={r.progress} /> },
     { key: "risk", label: "Risque", render: (r) => <StatusBadge risk={r.risk} /> },
-    { key: "statusLabel", label: "Niveau", render: (r) => <StageBadge status={r.status} /> },
+    {
+      key: "statusLabel",
+      label: "Niveau",
+      render: (r) => <StageBadge status={r.status} label={lifecycle.label(r.status)} />,
+    },
   ];
 
   return (
