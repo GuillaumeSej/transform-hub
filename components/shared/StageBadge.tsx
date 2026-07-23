@@ -11,8 +11,18 @@ const STYLES: Record<LeverStatus, string> = {
   cancelled: "bg-rag-red-light text-rag-red",
 };
 
-/** Badge du niveau d'avancement L1-L5 du levier (labels dans lib/status-config.ts). */
-export function StageBadge({ status, className }: { status: LeverStatus; className?: string }) {
+/** Badge du niveau d'avancement du cycle de vie du levier. Le libellé par défaut vient de
+ * `STATUS_LABEL` (lib/status-config.ts) ; les appelants avec accès à `useLifecycleLabels` peuvent
+ * passer `label` pour refléter la config entreprise. */
+export function StageBadge({
+  status,
+  label,
+  className,
+}: {
+  status: LeverStatus;
+  label?: string;
+  className?: string;
+}) {
   return (
     <span
       className={cn(
@@ -21,7 +31,7 @@ export function StageBadge({ status, className }: { status: LeverStatus; classNa
         className
       )}
     >
-      {STATUS_LABEL[status]}
+      {label ?? STATUS_LABEL[status]}
     </span>
   );
 }

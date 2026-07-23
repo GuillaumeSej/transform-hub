@@ -1,5 +1,5 @@
 import * as engine from "@/lib/engine";
-import { STATUS_LABEL } from "@/lib/status-config";
+import { STATUS_LABEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type {
   BeTrackData,
   DependencyType,
@@ -49,14 +49,18 @@ function parseDependencies(raw: string): LeverDependency[] {
     .filter((d) => d.targetId.length > 0);
 }
 
-/** Statut accepté sous forme de clé ("in_progress") ou de label L1-L5 ("L4 · Planifié", "L4",
- * "Planifié"). */
+/** Statut accepté sous forme de clé ("in_progress"), de libellé complet ("Déploiement en cours")
+ * ou de libellé court ("Déploiement") — utile car un import peut avoir été réexporté d'un fichier
+ * généré avant un changement du référentiel par défaut. Note : ce mapping ne connaît que les
+ * libellés par défaut, pas le référentiel personnalisé d'une entreprise (fonction pure, sans accès
+ * au contexte entreprise) — un import généré depuis un libellé personnalisé doit utiliser la clé
+ * technique du statut ("idea", "qualified", ...). */
 function parseStatus(raw: string): LeverStatus | undefined {
   const s = raw.toLowerCase();
   return ENUM_LISTS.status.find((st) => {
-    const label = STATUS_LABEL[st].toLowerCase();
-    const [level, name] = label.split(" · ");
-    return st === s || label === s || level === s || name === s;
+    return (
+      st === s || STATUS_LABEL[st].toLowerCase() === s || STATUS_SHORT_LABEL[st].toLowerCase() === s
+    );
   });
 }
 
@@ -203,7 +207,9 @@ export function parseLeverExcelRow(
       if (!raw) return "idea";
       const parsed = parseStatus(raw);
       if (!parsed) {
-        warnings.push(`Ligne ${rowNumber} : statut "${raw}" inconnu — "L1 · Idée" utilisé`);
+        warnings.push(
+          `Ligne ${rowNumber} : statut "${raw}" inconnu — "${STATUS_LABEL.idea}" utilisé`
+        );
         return "idea";
       }
       return parsed;

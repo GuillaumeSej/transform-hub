@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  applyPlanLock,
-  createLever,
-  updateLever,
-  deleteSubLever,
-} from "@/lib/leversLogic";
+import { applyPlanLock, createLever, updateLever, deleteSubLever } from "@/lib/leversLogic";
 import type { Lever, LeverStatus, SubLever } from "@/types";
 
 const baseLever: Lever = {
@@ -148,7 +143,10 @@ describe("leversLogic — createLever", () => {
   });
 
   it("generates sequential ids", () => {
-    const existing = [{ ...baseLever, id: "L001" }, { ...baseLever, id: "L003" }];
+    const existing = [
+      { ...baseLever, id: "L001" },
+      { ...baseLever, id: "L003" },
+    ];
     const result = createLever(existing as Lever[], omitBaseLever(), "user");
     expect(result.lever.id).toBe("L004");
   });
@@ -201,6 +199,25 @@ describe("leversLogic — updateLever (status change & plan lock triggering)", (
     expect(() => updateLever([], "L999", { status: "qualified" }, "user")).toThrow(
       'Lever "L999" introuvable'
     );
+  });
+
+  it("captures cancelledAtStage with the status left when cancelling", () => {
+    const levers = [makeLever("in_progress")];
+    const result = updateLever(levers, "L001", { status: "cancelled" }, "user");
+    expect(result.lever.status).toBe("cancelled");
+    expect(result.lever.cancelledAtStage).toBe("in_progress");
+  });
+
+  it("does not set cancelledAtStage on non-cancelling updates", () => {
+    const levers = [makeLever("idea")];
+    const result = updateLever(levers, "L001", { status: "qualified" }, "user");
+    expect(result.lever.cancelledAtStage).toBeUndefined();
+  });
+
+  it("does not overwrite cancelledAtStage on further updates once cancelled", () => {
+    const levers = [makeLever("cancelled", { cancelledAtStage: "validated" })];
+    const result = updateLever(levers, "L001", { priority: "high" }, "user");
+    expect(result.lever.cancelledAtStage).toBe("validated");
   });
 });
 

@@ -7,19 +7,25 @@ import { fmtCurr } from "@/lib/engine";
 import { STATUS_CYCLE, STATUS_LABEL } from "@/lib/status-config";
 import type { Lever, LeverStatus } from "@/types";
 
-const COLUMNS: { status: LeverStatus; label: string }[] = STATUS_CYCLE.map((status) => ({
-  status,
-  label: STATUS_LABEL[status],
-}));
-
-/** Vue kanban du pipeline de leviers par statut — porté depuis `.kanban`/`.kcard` du prototype legacy. */
+/** Vue kanban du pipeline de leviers par statut — porté depuis `.kanban`/`.kcard` du prototype legacy.
+ * `stageOrder`/`stageLabel` permettent de refléter le référentiel de cycle de vie de l'entreprise
+ * (via `useLifecycleLabels`) ; par défaut, retombe sur le cycle et les libellés codés en dur. */
 export function Kanban({
   levers,
   onCardClick,
+  stageOrder = STATUS_CYCLE,
+  stageLabel = (status: LeverStatus) => STATUS_LABEL[status],
 }: {
   levers: Lever[];
   onCardClick: (id: string) => void;
+  stageOrder?: LeverStatus[];
+  stageLabel?: (status: LeverStatus) => string;
 }) {
+  const COLUMNS: { status: LeverStatus; label: string }[] = stageOrder.map((status) => ({
+    status,
+    label: stageLabel(status),
+  }));
+
   return (
     <div className="grid grid-cols-5 gap-3 max-[1100px]:grid-cols-2">
       {COLUMNS.map((col) => {

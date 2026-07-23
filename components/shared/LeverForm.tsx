@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { STATUS_LABEL } from "@/lib/status-config";
+import type { LifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import type {
   BeTrackData,
@@ -73,6 +74,7 @@ function emptyValues(data: BeTrackData): LeverFormValues {
 /** Formulaire complet des paramètres d'un levier — réutilisé pour la création et l'édition. */
 export function LeverForm({
   data,
+  lifecycle,
   companyId,
   initialValues,
   onSubmit,
@@ -80,6 +82,9 @@ export function LeverForm({
   submitLabel = "Enregistrer",
 }: {
   data: BeTrackData;
+  /** Résolution des libellés de statut selon le référentiel de l'entreprise (facultatif, retombe
+   * sur STATUS_LABEL si absent). */
+  lifecycle?: LifecycleLabels;
   /** Entreprise courante — si elle a configuré `hierarchyLevels`, le champ "Centre de coût" texte
    *  libre est remplacé par un select des HierarchyNode de maille la plus fine. Omis/absent =
    *  comportement historique inchangé (champ texte libre). */
@@ -332,7 +337,7 @@ export function LeverForm({
             onChange={(e) => set("end", e.target.value)}
           />
         </Field>
-        <Field label="Niveau d'avancement (L1-L5)">
+        <Field label="Niveau d'avancement">
           <select
             className={inputClass}
             value={values.status}
@@ -340,7 +345,7 @@ export function LeverForm({
           >
             {data.leverStatuses.map((s) => (
               <option key={s} value={s}>
-                {STATUS_LABEL[s]}
+                {lifecycle ? lifecycle.label(s) : STATUS_LABEL[s]}
               </option>
             ))}
           </select>
@@ -386,8 +391,9 @@ export function LeverForm({
       <SectionTitle>Impact financier (€M)</SectionTitle>
       {isLocked && (
         <p className="mb-3 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
-          Plan initial figé au passage en L3 · Validé — lecture seule. Utilisez la réactualisation
-          (onglet Impact du levier) pour ajuster la projection.
+          Plan initial figé au passage en «{" "}
+          {lifecycle ? lifecycle.label("validated") : STATUS_LABEL.validated} » — lecture seule.
+          Utilisez la réactualisation (onglet Impact du levier) pour ajuster la projection.
         </p>
       )}
       <div className="grid grid-cols-3 gap-3">

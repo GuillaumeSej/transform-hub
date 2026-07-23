@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { Banknote, TriangleAlert, Users, Wallet } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
+import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as hr from "@/lib/hrEngine";
 import { fmtCurr } from "@/lib/engine";
-import { STATUS_LABEL } from "@/lib/status-config";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { KPICard } from "@/components/shared/KPICard";
 import { RadialProgress } from "@/components/shared/RadialProgress";
@@ -40,6 +40,7 @@ const ALERT_LABELS: Record<MovementAlertKind, string> = {
 export default function HrDashboardPage() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
+  const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const [granularity, setGranularity] = useState<"month" | "quarter">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
@@ -58,8 +59,7 @@ export default function HrDashboardPage() {
   const landing = hr.plannedFTE(wf);
   const reductionGoal = wf.totalFTE - target;
   const reductionDone = wf.totalFTE - current;
-  const goalPct =
-    reductionGoal > 0 ? Math.round((reductionDone / reductionGoal) * 100) : 100;
+  const goalPct = reductionGoal > 0 ? Math.round((reductionDone / reductionGoal) * 100) : 100;
 
   const alertCounts = (Object.keys(ALERT_LABELS) as MovementAlertKind[])
     .map((kind) => ({ kind, count: alerts.filter((a) => a.kind === kind).length }))
@@ -137,7 +137,12 @@ export default function HrDashboardPage() {
       {/* KPIs */}
       <div className="mb-4 grid grid-cols-[auto_1fr_1fr_1fr_1fr] gap-3.5 max-[1100px]:grid-cols-2">
         <div className="flex items-center justify-center rounded-lg border border-border bg-white px-5 shadow-sm">
-          <RadialProgress pct={goalPct} size={104} label={`${goalPct}%`} sublabel="objectif réalisé" />
+          <RadialProgress
+            pct={goalPct}
+            size={104}
+            label={`${goalPct}%`}
+            sublabel="objectif réalisé"
+          />
         </div>
         <KPICard
           label="Effectif actuel"
@@ -316,7 +321,9 @@ export default function HrDashboardPage() {
                     <td className="px-3 py-2.5 tabular-nums">
                       {d.fteTarget.toLocaleString("fr-FR")}
                     </td>
-                    <td className="px-3 py-2.5 tabular-nums">{d.landing.toLocaleString("fr-FR")}</td>
+                    <td className="px-3 py-2.5 tabular-nums">
+                      {d.landing.toLocaleString("fr-FR")}
+                    </td>
                     <td
                       className={`px-3 py-2.5 font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
                     >
@@ -362,16 +369,14 @@ export default function HrDashboardPage() {
                       <span className="font-mono text-[10px] text-tertiary">{entry.leverCode}</span>{" "}
                       {entry.leverName}
                     </button>
-                    <span
-                      className={`text-sm font-bold text-primary`}
-                    >
+                    <span className={`text-sm font-bold text-primary`}>
                       {entry.fte > 0 ? "+" : ""}
                       {entry.fte} ETP
                     </span>
                   </div>
                   {lever && (
                     <div className="mt-0.5 text-[10.5px] text-tertiary">
-                      {STATUS_LABEL[lever.status]} · fin prévue {lever.end}
+                      {lifecycle.label(lever.status)} · fin prévue {lever.end}
                     </div>
                   )}
                   <div className="mt-2 space-y-1">

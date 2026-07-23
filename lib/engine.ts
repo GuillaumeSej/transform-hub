@@ -393,12 +393,14 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
   return alerts;
 }
 
-// ---------- Avancement L1-L5, Sankey, S-curve 3 courbes, Marimekko, waterfall trimestriel ----------
+// ---------- Avancement du cycle de vie, Sankey, S-curve 3 courbes, Marimekko, waterfall trimestriel ----------
 
 export type StageCount = { status: LeverStatus; level: string; label: string; count: number };
 
-/** Nombre de leviers par étape L1-L5 (+ Annulé, hors cycle), pour le bandeau d'avancement et le
- * diagramme Sankey de l'Executive Dashboard. */
+/** Nombre de leviers par étape du cycle de vie (+ Annulé, hors cycle), pour le bandeau
+ * d'avancement et le diagramme Sankey de l'Executive Dashboard. Fonction pure sans contexte
+ * entreprise : utilise les libellés par défaut (STATUS_LEVEL/STATUS_SHORT_LABEL), pas le
+ * référentiel personnalisé — voir `useLifecycleLabels` pour les vues user-facing. */
 export function stageCounts(data: BeTrackData): StageCount[] {
   const statuses: LeverStatus[] = [...STATUS_CYCLE, "cancelled"];
   return statuses.map((status) => ({
@@ -468,13 +470,23 @@ export function sankeyChronology(data: BeTrackData): {
   data.levers
     .filter((l) => l.status === "cancelled")
     .forEach((l) => {
-      const p = l.progress;
+      // Étape quittée à l'annulation : lue directement depuis `cancelledAtStage` quand disponible
+      // (levers annulés depuis ce correctif) ; repli sur l'ancienne heuristique par `progress` pour
+      // les leviers legacy annulés avant que le champ n'existe.
       let stageIdx: number;
-      if (p <= 10) stageIdx = 0;
-      else if (p <= 30) stageIdx = 1;
-      else if (p <= 55) stageIdx = 2;
-      else if (p <= 80) stageIdx = 3;
-      else stageIdx = 4;
+      const cancelledStageCycleIdx = l.cancelledAtStage
+        ? STATUS_CYCLE.indexOf(l.cancelledAtStage)
+        : -1;
+      if (cancelledStageCycleIdx !== -1) {
+        stageIdx = cancelledStageCycleIdx;
+      } else {
+        const p = l.progress;
+        if (p <= 10) stageIdx = 0;
+        else if (p <= 30) stageIdx = 1;
+        else if (p <= 55) stageIdx = 2;
+        else if (p <= 80) stageIdx = 3;
+        else stageIdx = 4;
+      }
       cancelledByStageIdx.set(stageIdx, (cancelledByStageIdx.get(stageIdx) ?? 0) + 1);
     });
 

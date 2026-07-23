@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   STATUS_LEVEL,
+  STATUS_LABEL,
+  STATUS_SHORT_LABEL,
   STATUS_CYCLE,
   STATUS_ORDER,
   DEFAULT_LIFECYCLE_STAGES,
@@ -12,13 +14,14 @@ import {
 } from "@/lib/status-config";
 
 describe("status-config — STATUS_LEVEL", () => {
-  it("maps all statuses to correct L-levels", () => {
-    expect(STATUS_LEVEL.idea).toBe("L1");
-    expect(STATUS_LEVEL.qualified).toBe("L2");
-    expect(STATUS_LEVEL.validated).toBe("L3");
-    expect(STATUS_LEVEL.in_progress).toBe("L4");
-    expect(STATUS_LEVEL.delivered).toBe("L5");
+  it("maps all statuses to a plain step number, without the old L-prefix convention", () => {
+    expect(STATUS_LEVEL.idea).toBe("1");
+    expect(STATUS_LEVEL.qualified).toBe("2");
+    expect(STATUS_LEVEL.validated).toBe("3");
+    expect(STATUS_LEVEL.in_progress).toBe("4");
+    expect(STATUS_LEVEL.delivered).toBe("5");
     expect(STATUS_LEVEL.cancelled).toBe("—");
+    Object.values(STATUS_LEVEL).forEach((v) => expect(v.startsWith("L")).toBe(false));
   });
 });
 
@@ -42,11 +45,11 @@ describe("status-config — STATUS_ORDER", () => {
 
 describe("status-config — resolveStatusLabel", () => {
   it("uses default label without lifecycle override", () => {
-    expect(resolveStatusLabel("idea")).toBe("L1 · Idée");
+    expect(resolveStatusLabel("idea")).toBe(STATUS_LABEL.idea);
     expect(resolveStatusLabel("cancelled")).toBe("Annulé");
   });
 
-  it("uses lifecycle override when provided", () => {
+  it("uses lifecycle override verbatim when provided (no numeric prefix)", () => {
     const stages = [
       { key: "idea" as const, label: "Proposition", validationRequired: false },
       { key: "qualified" as const, label: "Analyse", validationRequired: true },
@@ -54,14 +57,14 @@ describe("status-config — resolveStatusLabel", () => {
       { key: "in_progress" as const, label: "En cours", validationRequired: false },
       { key: "delivered" as const, label: "Terminé", validationRequired: false },
     ];
-    expect(resolveStatusLabel("idea", stages)).toBe("L1 · Proposition");
-    expect(resolveStatusLabel("qualified", stages)).toBe("L2 · Analyse");
+    expect(resolveStatusLabel("idea", stages)).toBe("Proposition");
+    expect(resolveStatusLabel("qualified", stages)).toBe("Analyse");
   });
 });
 
 describe("status-config — resolveStatusShortLabel", () => {
   it("uses default without lifecycle", () => {
-    expect(resolveStatusShortLabel("validated")).toBe("Validé");
+    expect(resolveStatusShortLabel("validated")).toBe(STATUS_SHORT_LABEL.validated);
   });
 
   it("uses lifecycle override", () => {

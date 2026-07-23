@@ -7,10 +7,10 @@ import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shar
 import { Banknote, CircleCheck, ShieldCheck, TriangleAlert, TrendingUp, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
+import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { subscribeBestPracticeRules } from "@/lib/firestore/admin";
 import type { BestPracticeRule } from "@/types";
 import * as engine from "@/lib/engine";
-import { STATUS_LABEL } from "@/lib/status-config";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { AlertItem } from "@/components/shared/AlertItem";
@@ -32,6 +32,7 @@ import type { Lever, LeverStatus } from "@/types";
 export default function DashboardPage() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
+  const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const { filters, setFilter, resetFilters } = useGlobalFilters();
 
@@ -53,7 +54,7 @@ export default function DashboardPage() {
 
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
-      { key: "status", label: "Statut", getValue: (l) => STATUS_LABEL[l.status] },
+      { key: "status", label: "Statut", getValue: (l) => lifecycle.label(l.status) },
       {
         key: "ws",
         label: "Workstream",
@@ -64,7 +65,7 @@ export default function DashboardPage() {
       { key: "function", label: "Fonction", getValue: (l) => l.function },
       { key: "type", label: "Type", getValue: (l) => l.type },
     ],
-    [data.workstreams]
+    [data.workstreams, lifecycle]
   );
 
   const activeForBar: ActiveFilters = useMemo(() => {
@@ -98,7 +99,7 @@ export default function DashboardPage() {
     return data.levers.filter((l) =>
       matchesGlobalFilters(
         {
-          status: STATUS_LABEL[l.status],
+          status: lifecycle.label(l.status),
           ws: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
           function: l.function,
           geography: l.geography,
@@ -112,7 +113,7 @@ export default function DashboardPage() {
         filters
       )
     );
-  }, [data.levers, data.workstreams, filters]);
+  }, [data.levers, data.workstreams, filters, lifecycle]);
 
   const filteredData = useMemo(() => ({ ...data, levers: filteredLevers }), [data, filteredLevers]);
 
@@ -133,7 +134,7 @@ export default function DashboardPage() {
     const qs = new URLSearchParams(merged).toString();
     router.push(`/levers${qs ? `?${qs}` : ""}`);
   };
-  const goToStage = (status: LeverStatus) => goToLevers({ f_status: STATUS_LABEL[status] });
+  const goToStage = (status: LeverStatus) => goToLevers({ f_status: lifecycle.label(status) });
   const goToStageLabel = (label: string) => {
     const stage = stages.find((s) => s.label === label);
     if (stage) goToStage(stage.status);
@@ -242,7 +243,7 @@ export default function DashboardPage() {
 
       <div className="mb-4 grid grid-cols-[1.4fr_1fr] gap-4 max-[1100px]:grid-cols-1">
         <Card className="mb-0">
-          <CardHeader title="Avancement des leviers (L1 → L5)" />
+          <CardHeader title="Avancement des leviers par étape du cycle de vie" />
           <CardBody>
             <StageFunnel data={stages} onStageClick={goToStage} />
           </CardBody>
