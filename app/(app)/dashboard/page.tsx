@@ -143,12 +143,14 @@ export default function DashboardPage() {
   const filteredData = useMemo(() => ({ ...data, levers: filteredLevers }), [data, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
-  const sCurve = engine.sCurve3(visibleData);
+  const [sCurveGranularity, setSCurveGranularity] = useState<engine.TimeGranularity>("month");
+  const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
+  const sCurve = engine.sCurve3(visibleData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
   const sankey = engine.sankeyData(filteredData);
   const sankeyChrono = engine.sankeyChronology(filteredData);
   const mekko = engine.marimekko(filteredData);
-  const bridge = engine.quarterlyBridge(filteredData);
+  const bridge = engine.financialBridge(filteredData, bridgeGranularity);
 
   const goToLevers = (params: Record<string, string>) => {
     const globalParams: Record<string, string> = {};
@@ -176,7 +178,14 @@ export default function DashboardPage() {
   };
   const currentYear = new Date(data.program.fyStart).getFullYear();
   const goToMonth = (month: string) => goToLevers({ f_endMonth: `${month} ${currentYear}` });
-  const goToQuarter = (quarter: string) => goToLevers({ f_endQuarter: quarter });
+  const goToBridgePeriod = (period: string) =>
+    bridgeGranularity === "quarter"
+      ? goToLevers({ f_endQuarter: period })
+      : goToLevers({ f_endMonth: period });
+  const goToSCurvePoint = (label: string) =>
+    sCurveGranularity === "quarter"
+      ? goToLevers({ f_endQuarter: `${label} ${currentYear}` })
+      : goToMonth(label);
 
   const wsBars = data.workstreams.map((w) => ({
     label: w.name.split(" ")[0],
@@ -320,20 +329,30 @@ export default function DashboardPage() {
       </Card>
 
       <Card className="mb-4">
-        <CardHeader title="S-Curve — Plan initial / Réalisé / Réactualisé" />
+        <CardHeader
+          title="S-Curve — Plan initial / Réalisé / Réactualisé"
+          actions={<GranularityToggle value={sCurveGranularity} onChange={setSCurveGranularity} />}
+        />
         <CardBody>
-          <SCurveChart data={sCurve} height={360} onPointClick={goToMonth} />
+          <SCurveChart data={sCurve} height={360} onPointClick={goToSCurvePoint} />
         </CardBody>
       </Card>
 
       <Card className="mb-4">
-        <CardHeader title="Économies par trimestre → cible" />
+        <CardHeader
+          title={
+            bridgeGranularity === "quarter"
+              ? "Économies par trimestre → cible"
+              : "Économies par mois → cible"
+          }
+          actions={<GranularityToggle value={bridgeGranularity} onChange={setBridgeGranularity} />}
+        />
         <CardBody>
           <QuarterlyBridgeChart
             data={bridge}
             target={summary.target}
             height={340}
-            onBarClick={goToQuarter}
+            onBarClick={goToBridgePeriod}
           />
         </CardBody>
       </Card>
@@ -482,6 +501,31 @@ export default function DashboardPage() {
           </CardBody>
         </Card>
       </div>
+    </div>
+  );
+}
+
+/** Sélecteur mois/trimestre réutilisé par les graphiques temporels du dashboard exécutif. */
+function GranularityToggle({
+  value,
+  onChange,
+}: {
+  value: engine.TimeGranularity;
+  onChange: (g: engine.TimeGranularity) => void;
+}) {
+  return (
+    <div className="flex rounded-md border border-border-strong p-0.5 text-[11px] font-semibold">
+      {(["month", "quarter"] as const).map((g) => (
+        <button
+          key={g}
+          onClick={() => onChange(g)}
+          className={`rounded px-2 py-1 transition ${
+            value === g ? "bg-bp-coral text-white" : "text-secondary hover:text-primary"
+          }`}
+        >
+          {g === "month" ? "Mois" : "Trimestre"}
+        </button>
+      ))}
     </div>
   );
 }
