@@ -579,8 +579,7 @@ export function leverEndQuarterLabel(lever: Lever): string {
  * à date (inchangé, calculé depuis la progression), Réactualisé (dernière prévision, ou plan
  * initial/valeur courante tant que non réactualisé à L4). Même forme de courbe mensuelle que
  * l'ancien planned/actual — seule la valeur totale distribuée diffère par série. */
-export function sCurve3(data: BeTrackData) {
-  const months = MONTH_LABELS;
+export function sCurve3(data: BeTrackData, granularity: TimeGranularity = "month") {
   const plannedTotal = financialTotal(data, (l) => l.lockedPlan?.netSavings ?? l.netSavings);
   const reforecastTotal = financialTotal(
     data,
@@ -604,7 +603,7 @@ export function sCurve3(data: BeTrackData) {
   );
   const actualCurve = actualCurveBase.map((v, i) => (i <= currentMonthIdx ? v : null));
 
-  return months.map((label, i) => ({
+  const monthlyPoints = MONTH_LABELS.map((label, i) => ({
     month: label,
     planned: Math.round(curve[i] * plannedTotal * 10) / 10,
     reforecast: Math.round(curve[i] * reforecastTotal * 10) / 10,
@@ -612,6 +611,18 @@ export function sCurve3(data: BeTrackData) {
       actualCurve[i] === null
         ? null
         : Math.round((actualCurve[i] as number) * actualTotal * 10) / 10,
+  }));
+
+  if (granularity === "month") return monthlyPoints;
+
+  // Vue trimestrielle : point de fin de chaque trimestre (mois 3/6/9/12) — cohérent avec la vue
+  // mensuelle puisque ce sont des courbes cumulatives (le dernier mois du trimestre porte déjà le
+  // cumul des mois précédents).
+  return [2, 5, 8, 11].map((endMonthIdx, qIdx) => ({
+    month: `Q${qIdx + 1}`,
+    planned: monthlyPoints[endMonthIdx].planned,
+    reforecast: monthlyPoints[endMonthIdx].reforecast,
+    actual: monthlyPoints[endMonthIdx].actual,
   }));
 }
 
@@ -653,22 +664,46 @@ export function marimekko(data: BeTrackData): MarimekkoSegment[] {
 }
 
 export type QuarterBridge = { quarter: string; delta: number; cumulative: number };
+export type TimeGranularity = "month" | "quarter";
 
-/** Économies réalisées par trimestre (date de fin du levier), cumulées jusqu'à la cible du
- * programme — sert au graphique en pont trimestriel de l'Executive Dashboard. */
-export function quarterlyBridge(data: BeTrackData): QuarterBridge[] {
+/** Clé de tri chronologique "YYYY-Q" / "YYYY-MM" pour un libellé "Qn AAAA" ou "Mon AAAA" — le tri
+ * lexicographique direct sur le libellé affiché casserait l'ordre entre années (ex. "Q4 2025" >
+ * "Q1 2026" alphabétiquement). */
+function periodSortKey(d: Date, granularity: TimeGranularity): string {
+  return granularity === "quarter"
+    ? `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`
+    : `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+}
+
+function periodLabel(sortKey: string, granularity: TimeGranularity): string {
+  const [year, part] = sortKey.split(granularity === "quarter" ? "-Q" : "-");
+  return granularity === "quarter" ? `Q${part} ${year}` : `${MONTH_LABELS[Number(part)]} ${year}`;
+}
+
+/** Économies réalisées par mois ou par trimestre (date de fin du levier), cumulées jusqu'à la
+ * cible du programme — sert au graphique en pont de l'Executive Dashboard, dans les deux
+ * granularités proposées par le sélecteur mois/trimestre. */
+export function financialBridge(
+  data: BeTrackData,
+  granularity: TimeGranularity = "quarter"
+): QuarterBridge[] {
   const active = data.levers.filter((l) => l.status !== "cancelled");
-  const byQuarter = new Map<string, number>();
+  const byPeriod = new Map<string, number>();
   active.forEach((l) => {
     const d = new Date(l.end);
-    const q = `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
-    byQuarter.set(q, (byQuarter.get(q) ?? 0) + realizedSavings(l, data));
+    const key = periodSortKey(d, granularity);
+    byPeriod.set(key, (byPeriod.get(key) ?? 0) + realizedSavings(l, data));
   });
-  const quarters = Array.from(byQuarter.keys()).sort();
+  const sortedKeys = Array.from(byPeriod.keys()).sort();
   let cumulative = 0;
-  return quarters.map((quarter) => {
-    const delta = Math.round((byQuarter.get(quarter) ?? 0) * 10) / 10;
+  return sortedKeys.map((key) => {
+    const delta = Math.round((byPeriod.get(key) ?? 0) * 10) / 10;
     cumulative = Math.round((cumulative + delta) * 10) / 10;
-    return { quarter, delta, cumulative };
+    return { quarter: periodLabel(key, granularity), delta, cumulative };
   });
+}
+
+/** @deprecated conservé pour compat — utiliser `financialBridge(data, "quarter")`. */
+export function quarterlyBridge(data: BeTrackData): QuarterBridge[] {
+  return financialBridge(data, "quarter");
 }

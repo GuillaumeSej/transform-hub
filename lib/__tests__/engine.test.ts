@@ -12,6 +12,8 @@ import {
   byGeo,
   byFunction,
   bestPracticeGaps,
+  sCurve3,
+  financialBridge,
   fmtCurr,
   fmtPct,
   fmtInt,
@@ -389,5 +391,51 @@ describe("engine — bestPracticeGaps", () => {
     const data = makeData({ levers: [{ ...baseLever, function: "IT" }] });
     const rules: BestPracticeRule[] = [{ ...baseRule, active: false, matchFunction: "R&D" }];
     expect(bestPracticeGaps(data, rules)).toHaveLength(0);
+  });
+});
+
+describe("engine — sCurve3 granularity", () => {
+  it("returns 12 monthly points by default", () => {
+    const data = makeData({ levers: [baseLever] });
+    expect(sCurve3(data)).toHaveLength(12);
+  });
+
+  it("returns 4 quarterly points when granularity is quarter", () => {
+    const data = makeData({ levers: [baseLever] });
+    const points = sCurve3(data, "quarter");
+    expect(points).toHaveLength(4);
+    expect(points.map((p) => p.month)).toEqual(["Q1", "Q2", "Q3", "Q4"]);
+  });
+
+  it("quarterly points match the monthly end-of-quarter values", () => {
+    const data = makeData({ levers: [baseLever] });
+    const monthly = sCurve3(data, "month");
+    const quarterly = sCurve3(data, "quarter");
+    expect(quarterly[0].planned).toBe(monthly[2].planned);
+    expect(quarterly[3].planned).toBe(monthly[11].planned);
+  });
+});
+
+describe("engine — financialBridge granularity", () => {
+  it("groups by quarter by default, matching legacy quarterlyBridge shape", () => {
+    const data = makeData({
+      levers: [
+        { ...baseLever, id: "L001", end: "2026-02-15", status: "in_progress" as LeverStatus },
+        { ...baseLever, id: "L002", end: "2026-05-20", status: "in_progress" as LeverStatus },
+      ],
+    });
+    const result = financialBridge(data, "quarter");
+    expect(result.map((r) => r.quarter)).toEqual(["Q1 2026", "Q2 2026"]);
+  });
+
+  it("groups by month when granularity is month", () => {
+    const data = makeData({
+      levers: [
+        { ...baseLever, id: "L001", end: "2026-02-15", status: "in_progress" as LeverStatus },
+        { ...baseLever, id: "L002", end: "2026-05-20", status: "in_progress" as LeverStatus },
+      ],
+    });
+    const result = financialBridge(data, "month");
+    expect(result.map((r) => r.quarter)).toEqual(["Feb 2026", "May 2026"]);
   });
 });
