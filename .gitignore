@@ -39,3 +39,6 @@ nul
 demo/~$*.xlsx
 demo/entreprises_projets.xlsx
 demo/utilisateurs.xlsx
+
+# agent worktrees (nested under the repo root by the harness)
+/.claude/worktrees/
