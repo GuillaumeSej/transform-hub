@@ -11,6 +11,7 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "admin-users", icon: "Users", label: "Utilisateurs" },
       { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
       { id: "admin-hierarchy", icon: "Network", label: "Arborescence financière" },
+      { id: "admin-best-practices", icon: "ShieldCheck", label: "Bonnes pratiques" },
       { id: "admin-data", icon: "BarChart3", label: "Données" },
       { id: "dashboard", icon: "PieChart", label: "Executive Dashboard" },
     ],
@@ -23,6 +24,7 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "admin-data", icon: "BarChart3", label: "Données" },
       { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
       { id: "admin-hierarchy", icon: "Network", label: "Arborescence financière" },
+      { id: "admin-best-practices", icon: "ShieldCheck", label: "Bonnes pratiques" },
       { id: "admin-history", icon: "History", label: "Historique" },
     ],
   },
@@ -87,6 +89,7 @@ export const PAGE_ROUTES: Record<string, string> = {
   "admin-users": "/admin/users",
   "admin-lifecycle": "/admin/lifecycle",
   "admin-hierarchy": "/admin/hierarchy",
+  "admin-best-practices": "/admin/best-practices",
   "admin-data": "/admin/data",
   "admin-history": "/admin/history",
 };

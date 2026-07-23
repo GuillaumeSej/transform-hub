@@ -15,6 +15,7 @@ import {
   Users,
   Workflow,
   LineChart,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,4 +37,5 @@ export const ICON_REGISTRY: Record<string, LucideIcon> = {
   FolderKanban,
   Workflow,
   Network,
+  ShieldCheck,
 };
