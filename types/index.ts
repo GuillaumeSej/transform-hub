@@ -1,4 +1,5 @@
-export type Role = "admin" | "admin_entreprise" | "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
+export type Role =
+  "admin" | "admin_entreprise" | "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
 
 /** Compte de test (voir lib/auth.ts) — login réel par identifiant/mot de passe, mais toujours
  * des comptes de démo (mot de passe unique "test" pour les 6 + admin). */
@@ -117,6 +118,22 @@ export type Lever = {
   // centre de coût unique). Les leviers à impacts multiples ont leurs actions sur chaque SubLever
   // (voir BeTrackData.subLevers, filtré par leverId — pas de nesting ici).
   actions?: LeverAction[];
+  /** Niveau de confidentialité (doit correspondre à une valeur de Company.confidentialityLevels).
+   *  Non défini = visible par tous les rôles de l'entreprise. */
+  confidentialityLevel?: string;
+  /** Statut juste avant le passage à "cancelled", capturé automatiquement par updateLever — sert
+   *  à brancher précisément l'annulation à la bonne étape dans le Sankey chronologique, sans
+   *  reconstituer l'étape à partir de `progress` (imprécis). Non défini si le levier n'a jamais
+   *  été annulé. */
+  cancelledAtStage?: LeverStatus;
+  /** Id du HierarchyNode (maille la plus fine, ex. Cost Center) — dérive tous les niveaux
+   *  intermédiaires de Company.hierarchyLevels par remontée de parentId. Coexiste avec l'ancien
+   *  `costCenter` (texte libre, conservé pour compat) : quand hierarchyLeafId est défini, c'est
+   *  lui qui fait foi pour l'affichage de l'arborescence complète. */
+  hierarchyLeafId?: string;
+  /** Id du Project (voir types Project) auquel ce levier est rattaché, pour la ventilation
+   *  "par projet" (en plus de la ventilation existante "par workstream"). */
+  projectId?: string;
 };
 
 export type LeverAction = {
@@ -299,8 +316,49 @@ export type Company = {
   logoUrl?: string;
   createdAt: string;
   /** Configuration temporelle du programme pour cette entreprise */
-  fyStart: string;  // ISO date "YYYY-01-01"
-  fyEnd: string;    // ISO date "YYYY-12-31"
+  fyStart: string; // ISO date "YYYY-01-01"
+  fyEnd: string; // ISO date "YYYY-12-31"
+  /** Budget CAPEX total alloué au programme (optionnel — souvent déjà cadré ailleurs en amont
+   *  de la mission). Si renseigné, le KPI "CAPEX engagé" du dashboard exécutif l'affiche en
+   *  regard ("X€M engagés / Y€M budgétés"). */
+  capexBudget?: number; // €M
+  /** Si false, le module "Plan d'action" (onglet Kanban/Gantt) est désactivé pour cette
+   *  entreprise — les utilisateurs voient un message "Module non activé" à la place.
+   *  undefined = activé (comportement historique, avant l'introduction du toggle). */
+  actionPlanEnabled?: boolean;
+  /** Échelle de confidentialité propre à l'entreprise, ordonnée du niveau le moins au plus
+   *  restreint (ex. ["Public", "Restreint", "Confidentiel", "Secret"]). Un levier sans
+   *  confidentialityLevel n'est restreint pour personne. */
+  confidentialityLevels?: string[];
+  /** Pour chaque rôle, la liste des niveaux de confidentialityLevels auxquels il a accès
+   *  (en plus des leviers sans niveau défini, toujours visibles). admin/admin_entreprise ne
+   *  sont jamais filtrés (accès total) — pas besoin de les lister ici. */
+  roleClearance?: Partial<Record<Role, string[]>>;
+  /** Arborescence de maille financière configurée en début de mission, du plus macro (proche du
+   *  compte P&L) au plus fin. Les leviers/sous-leviers ne renseignent que la maille la plus fine
+   *  (voir Lever.hierarchyLeafId) ; les niveaux intermédiaires sont dérivés via HierarchyNode. */
+  hierarchyLevels?: HierarchyLevelDef[];
+};
+
+/** Un niveau de l'arborescence financière P&L → Cost Center, configuré par entreprise.
+ *  `order` 0 = le plus macro (juste sous le compte P&L), le plus grand = la maille la plus fine
+ *  (celle effectivement saisie dans le fichier des leviers). */
+export type HierarchyLevelDef = {
+  key: string; // slug stable, ex. "business_unit", "cost_center"
+  label: string; // libellé affiché, ex. "Business Unit", "Centre de coût"
+  order: number;
+};
+
+/** Un nœud concret de l'arborescence (ex. le Cost Center "CC-PROC-001", enfant de la Business
+ *  Unit "BU Industrie"). La chaîne de parentId permet de remonter jusqu'au niveau le plus macro
+ *  à partir d'une seule maille fine saisie sur un levier. */
+export type HierarchyNode = {
+  id: string;
+  companyId: string;
+  levelKey: string; // HierarchyLevelDef.key
+  code: string; // code saisi tel quel dans le fichier des leviers pour la maille la plus fine
+  label: string;
+  parentId: string | null;
 };
 
 export type Project = {
