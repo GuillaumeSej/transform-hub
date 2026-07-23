@@ -8,12 +8,14 @@ import {
   Layers,
   ListChecks,
   MessageCircle,
+  Network,
   PieChart,
   Target,
   TriangleAlert,
   Users,
   Workflow,
   LineChart,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -34,4 +36,6 @@ export const ICON_REGISTRY: Record<string, LucideIcon> = {
   Building2,
   FolderKanban,
   Workflow,
+  Network,
+  ShieldCheck,
 };

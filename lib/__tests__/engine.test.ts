@@ -11,12 +11,13 @@ import {
   pnlImpact,
   byGeo,
   byFunction,
+  bestPracticeGaps,
   fmtCurr,
   fmtPct,
   fmtInt,
 } from "@/lib/engine";
 import { STATUS_SHORT_LABEL } from "@/lib/status-config";
-import type { BeTrackData, Lever, SubLever, LeverStatus } from "@/types";
+import type { BestPracticeRule, BeTrackData, Lever, SubLever, LeverStatus } from "@/types";
 
 const baseLever: Lever = {
   id: "L001",
@@ -337,5 +338,56 @@ describe("engine — byGeo / byFunction / pnlImpact", () => {
     });
     const pnl = pnlImpact(data);
     expect(pnl["PNL01"]).toBeGreaterThan(0);
+  });
+});
+
+describe("engine — bestPracticeGaps", () => {
+  const baseRule: BestPracticeRule = {
+    id: "bpr-1",
+    companyId: "c1",
+    label: "Test rule",
+    description: "Test description",
+    active: true,
+  };
+
+  it("flags a rule with zero matching non-cancelled levers as a gap", () => {
+    const data = makeData({
+      levers: [{ ...baseLever, function: "IT" }],
+    });
+    const rules: BestPracticeRule[] = [{ ...baseRule, matchFunction: "R&D" }];
+    const result = bestPracticeGaps(data, rules);
+    expect(result).toHaveLength(1);
+    expect(result[0].hasMatch).toBe(false);
+  });
+
+  it("marks a rule matched when a non-cancelled lever satisfies all criteria", () => {
+    const data = makeData({
+      levers: [{ ...baseLever, function: "Procurement", ws: "WS-PROC", type: "Sourcing & Achats" }],
+    });
+    const rules: BestPracticeRule[] = [
+      {
+        ...baseRule,
+        matchFunction: "Procurement",
+        matchWorkstreamId: "WS-PROC",
+        matchType: "Sourcing & Achats",
+      },
+    ];
+    const result = bestPracticeGaps(data, rules);
+    expect(result[0].hasMatch).toBe(true);
+  });
+
+  it("ignores cancelled levers when checking for a match", () => {
+    const data = makeData({
+      levers: [{ ...baseLever, function: "HR", status: "cancelled" as LeverStatus }],
+    });
+    const rules: BestPracticeRule[] = [{ ...baseRule, matchFunction: "HR" }];
+    const result = bestPracticeGaps(data, rules);
+    expect(result[0].hasMatch).toBe(false);
+  });
+
+  it("skips inactive rules entirely", () => {
+    const data = makeData({ levers: [{ ...baseLever, function: "IT" }] });
+    const rules: BestPracticeRule[] = [{ ...baseRule, active: false, matchFunction: "R&D" }];
+    expect(bestPracticeGaps(data, rules)).toHaveLength(0);
   });
 });

@@ -249,6 +249,7 @@ export default function LeverDetailClient() {
         <LeverForm
           data={data}
           lifecycle={lifecycle}
+          companyId={user?.companyId}
           initialValues={lever}
           submitLabel="Enregistrer les modifications"
           onCancel={() => setEditOpen(false)}

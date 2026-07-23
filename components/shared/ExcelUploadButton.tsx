@@ -13,8 +13,8 @@ import {
   type SubLeverImportInput,
 } from "@/lib/leverExcel";
 import type { useBeTrackData } from "@/lib/hooks/useStorage";
-import type { Lever, Company } from "@/types";
-import { subscribeCompanies } from "@/lib/firestore/admin";
+import type { Lever, Company, HierarchyNode } from "@/types";
+import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 
 type PreviewRow = { rowNumber: number; values: LeverImportInput | null; warnings: string[] };
 type SubLeverPreviewRow = {
@@ -41,11 +41,45 @@ export function ExcelUploadButton({
   const [fileName, setFileName] = useState("");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+  // Arborescence financière de l'entreprise courante (si companyId connu et configurée) — permet
+  // de résoudre la colonne "Code maille" vers un hierarchyLeafId sans passer par un gros refactor
+  // de BeTrackData. Vide/non utilisée pour les entreprises qui n'ont pas activé cette fonctionnalité.
+  const [leafNodes, setLeafNodes] = useState<HierarchyNode[]>([]);
 
   useEffect(() => {
     if (companyId) return;
     const unsubscribe = subscribeCompanies(setCompanies);
     return unsubscribe;
+  }, [companyId]);
+
+  useEffect(() => {
+    if (!companyId) {
+      setLeafNodes([]);
+      return;
+    }
+    let cancelled = false;
+    let unsubNodes: (() => void) | null = null;
+    const unsubCompanies = subscribeCompanies((list) => {
+      if (cancelled) return;
+      const company = list.find((c) => c.id === companyId);
+      const levels = company?.hierarchyLevels ?? [];
+      unsubNodes?.();
+      unsubNodes = null;
+      if (levels.length === 0) {
+        setLeafNodes([]);
+        return;
+      }
+      const finestLevelKey = [...levels].sort((a, b) => b.order - a.order)[0].key;
+      unsubNodes = subscribeHierarchyNodes(companyId, (nodes) => {
+        if (cancelled) return;
+        setLeafNodes(nodes.filter((n) => n.levelKey === finestLevelKey));
+      });
+    });
+    return () => {
+      cancelled = true;
+      unsubNodes?.();
+      unsubCompanies();
+    };
   }, [companyId]);
 
   const handleFile = async (file: File) => {
@@ -59,7 +93,7 @@ export function ExcelUploadButton({
       { defval: "" }
     );
     const parsedLevers = leverRows.map((row, i) => {
-      const { values, warnings } = parseLeverExcelRow(row, data, i + 2);
+      const { values, warnings } = parseLeverExcelRow(row, data, i + 2, leafNodes);
       const withCompany =
         values && companyId ? ({ ...values, companyId } as LeverImportInput) : values;
       return { rowNumber: i + 2, values: withCompany, warnings };

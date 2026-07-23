@@ -3,6 +3,7 @@ import { STATUS_LABEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type {
   BeTrackData,
   DependencyType,
+  HierarchyNode,
   Lever,
   LeverDependency,
   LeverStatus,
@@ -136,11 +137,19 @@ function enumOr<T extends string>(
 
 export type ParsedLeverRow = { values: LeverImportInput | null; warnings: string[] };
 
-/** Parse une ligne issue de `XLSX.utils.sheet_to_json` (colonnes = headers de `leverToExcelRow`). */
+/** Parse une ligne issue de `XLSX.utils.sheet_to_json` (colonnes = headers de `leverToExcelRow`).
+ *
+ * `hierarchyNodes` est optionnel et n'est utilisé que si l'entreprise a configuré une
+ * arborescence financière (`Company.hierarchyLevels`) : dans ce cas, la colonne "Code maille"
+ * est lue et résolue vers l'id du `HierarchyNode` correspondant (maille la plus fine),
+ * renseigné sur `hierarchyLeafId`. Si `hierarchyNodes` est omis/vide, le comportement est
+ * strictement identique à avant (fallback `costCenter` texte libre) — non-régressif pour les
+ * entreprises qui n'ont pas activé cette fonctionnalité. */
 export function parseLeverExcelRow(
   row: Record<string, unknown>,
   data: BeTrackData,
-  rowNumber: number
+  rowNumber: number,
+  hierarchyNodes?: HierarchyNode[]
 ): ParsedLeverRow {
   const warnings: string[] = [];
   const code = str(row["Code"]);
@@ -224,6 +233,22 @@ export function parseLeverExcelRow(
     dependencies,
     description: str(row["Description"]),
   };
+
+  // Arborescence financière (optionnelle) : ne s'applique que si l'entreprise a configuré des
+  // HierarchyNode (maille la plus fine) — sinon `costCenter` ci-dessus reste seul utilisé.
+  if (hierarchyNodes && hierarchyNodes.length > 0) {
+    const leafCode = str(row["Code maille"]);
+    if (leafCode) {
+      const node = hierarchyNodes.find((n) => n.code.toLowerCase() === leafCode.toLowerCase());
+      if (node) {
+        values.hierarchyLeafId = node.id;
+      } else {
+        warnings.push(
+          `Ligne ${rowNumber} : code de maille "${leafCode}" introuvable dans l'arborescence financière`
+        );
+      }
+    }
+  }
 
   return { values, warnings };
 }

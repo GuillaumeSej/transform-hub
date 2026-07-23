@@ -449,3 +449,24 @@ export type WorkstreamSummary = {
   avgProgress: number;
   worstRisk: RiskLevel;
 };
+
+// ─── Bonnes pratiques — règles de couverture attendue ─────────────────────────
+
+/** Règle "bonnes pratiques" configurée par entreprise : décrit une catégorie de leviers qu'un
+ *  programme de transformation bien mené est censé couvrir (ex. "au moins un levier Sourcing &
+ *  Achats"). Distincte des `Alert` manuelles et des alertes calculées de `lib/engine.ts`
+ *  (underperformers/dependencyAlerts) : ici on vérifie une simple présence/absence de
+ *  couverture, pas un problème détecté sur un levier existant. */
+export type BestPracticeRule = {
+  id: string;
+  companyId: string;
+  label: string; // ex. "Levier Sourcing & Achats"
+  description: string; // affiché comme explication de l'alerte
+  // La règle est satisfaite si au moins un levier non-annulé répond à TOUS les critères
+  // (non-vides) ci-dessous. Volontairement simple/plat — c'est un contrôle de couverture,
+  // pas un moteur de règles général.
+  matchFunction?: string; // Lever.function à matcher, vide/undefined = n'importe laquelle
+  matchWorkstreamId?: string; // Lever.ws à matcher, vide/undefined = n'importe lequel
+  matchType?: string; // Lever.type à matcher, vide/undefined = n'importe lequel
+  active: boolean;
+};
