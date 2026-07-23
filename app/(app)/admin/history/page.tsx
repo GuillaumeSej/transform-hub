@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { History } from "lucide-react";
-import type { AuditEntry } from "@/types";
-import { subscribeAuditLog } from "@/lib/firestore/levers";
+import type { AuditEntry, Lever } from "@/types";
+import { subscribeAuditLog, subscribeLevers, filterAuditByCompany } from "@/lib/firestore/levers";
+import { useRole } from "@/lib/hooks/useRole";
 
 const ACTION_COLORS: Record<string, string> = {
   created: "bg-green-100 text-green-700",
@@ -23,7 +24,6 @@ const ACTION_LABELS: Record<string, string> = {
   commented: "Commentaire",
 };
 
-
 function formatTimestamp(ts: string): string {
   try {
     const d = new Date(ts);
@@ -40,7 +40,10 @@ function formatTimestamp(ts: string): string {
 }
 
 export default function AdminHistoryPage() {
+  const { user } = useRole();
+  const companyId = user?.companyId ?? null;
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [levers, setLevers] = useState<Lever[]>([]);
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [entityFilter, setEntityFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -50,7 +53,14 @@ export default function AdminHistoryPage() {
     return unsub;
   }, []);
 
-  const filtered = audit.filter((entry) => {
+  useEffect(() => {
+    const unsub = subscribeLevers(setLevers, companyId);
+    return unsub;
+  }, [companyId]);
+
+  const scopedAudit = filterAuditByCompany(audit, levers, companyId);
+
+  const filtered = scopedAudit.filter((entry) => {
     if (actionFilter !== "all" && entry.action !== actionFilter) return false;
     if (entityFilter !== "all") {
       const e = entry.entity.toLowerCase();
@@ -61,7 +71,8 @@ export default function AdminHistoryPage() {
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      const haystack = `${entry.user} ${entry.entity} ${entry.field} ${entry.old} ${entry.new}`.toLowerCase();
+      const haystack =
+        `${entry.user} ${entry.entity} ${entry.field} ${entry.old} ${entry.new}`.toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;
@@ -114,13 +125,27 @@ export default function AdminHistoryPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Date</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Utilisateur</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Action</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Entité</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Champ</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Ancien</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Nouveau</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Date
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Utilisateur
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Action
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Entité
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Champ
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Ancien
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Nouveau
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -131,16 +156,26 @@ export default function AdminHistoryPage() {
                 </td>
                 <td className="px-4 py-2.5 font-medium text-text-primary">{entry.user}</td>
                 <td className="px-4 py-2.5">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ACTION_COLORS[entry.action] ?? "bg-gray-100 text-gray-600"}`}>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ACTION_COLORS[entry.action] ?? "bg-gray-100 text-gray-600"}`}
+                  >
                     {ACTION_LABELS[entry.action] ?? entry.action}
                   </span>
                 </td>
-                <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{entry.entity}</td>
+                <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">
+                  {entry.entity}
+                </td>
                 <td className="px-4 py-2.5 text-text-secondary">{entry.field}</td>
-                <td className="px-4 py-2.5 text-text-secondary max-w-[120px] truncate" title={String(entry.old)}>
+                <td
+                  className="px-4 py-2.5 text-text-secondary max-w-[120px] truncate"
+                  title={String(entry.old)}
+                >
                   {String(entry.old)}
                 </td>
-                <td className="px-4 py-2.5 text-text-secondary max-w-[120px] truncate" title={String(entry.new)}>
+                <td
+                  className="px-4 py-2.5 text-text-secondary max-w-[120px] truncate"
+                  title={String(entry.new)}
+                >
                   {String(entry.new)}
                 </td>
               </tr>

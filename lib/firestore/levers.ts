@@ -55,7 +55,10 @@ function normalizeDependencies(deps: unknown): LeverDependency[] {
 }
 
 /** Filter items by companyId — null companyId = admin (sees everything). */
-function byCompany<T extends { companyId?: string | null }>(items: T[], companyId?: string | null): T[] {
+function byCompany<T extends { companyId?: string | null }>(
+  items: T[],
+  companyId?: string | null
+): T[] {
   if (!companyId) return items;
   return items.filter((item) => !item.companyId || item.companyId === companyId);
 }
@@ -97,6 +100,27 @@ export function subscribeComments(cb: (comments: Record<string, Comment[]>) => v
 export function subscribeAuditLog(cb: (audit: AuditEntry[]) => void): Unsubscribe {
   return onSnapshot(auditDoc(), (snap) => {
     cb((snap.data()?.entries as AuditEntry[]) ?? []);
+  });
+}
+
+/** Filtre le journal d'audit pour un admin d'entreprise : ne garde que les entrées dont
+ * l'entité (un id de levier, ou l'id de levier parent pour un sous-levier/commentaire) appartient
+ * à `companyId`. Les entrées sans lien avec un levier connu (ex. mouvements RH, employés — pas
+ * encore multi-tenant) restent visibles telles quelles. `companyId` null = aucun filtrage (super-admin). */
+export function filterAuditByCompany(
+  audit: AuditEntry[],
+  levers: Lever[],
+  companyId: string | null
+): AuditEntry[] {
+  if (!companyId) return audit;
+  const leverIds = new Set(
+    levers.filter((l) => !l.companyId || l.companyId === companyId).map((l) => l.id)
+  );
+  return audit.filter((entry) => {
+    const entity = entry.entity;
+    const isLeverEntity = /^L\d+$/i.test(entity) || /^SL\d+$/i.test(entity);
+    if (!isLeverEntity) return true;
+    return leverIds.has(entity);
   });
 }
 
@@ -159,7 +183,10 @@ const MIGRATION_COMPANY_ID_KEY = "betrack_company_migration_v1";
 /** One-time migration: attach existing levers/subLevers to a company when they have no companyId. */
 export async function migrateCompanyIds(targetCompanyId: string): Promise<void> {
   if (typeof window !== "undefined" && localStorage.getItem(MIGRATION_COMPANY_ID_KEY)) return;
-  const [leverSnap, subLeverSnap] = await Promise.all([getDocs(leversCol()), getDocs(subLeversCol())]);
+  const [leverSnap, subLeverSnap] = await Promise.all([
+    getDocs(leversCol()),
+    getDocs(subLeversCol()),
+  ]);
   const batch = writeBatch(db);
   let count = 0;
   leverSnap.docs.forEach((d) => {
@@ -178,7 +205,9 @@ export async function migrateCompanyIds(targetCompanyId: string): Promise<void> 
   });
   if (count > 0) {
     await batch.commit();
-    console.log(`[betrack] migration: ${count} document(s) rattaché(s) à l'entreprise ${targetCompanyId}`);
+    console.log(
+      `[betrack] migration: ${count} document(s) rattaché(s) à l'entreprise ${targetCompanyId}`
+    );
   }
   if (typeof window !== "undefined") localStorage.setItem(MIGRATION_COMPANY_ID_KEY, "done");
 }
