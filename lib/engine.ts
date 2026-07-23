@@ -1,5 +1,6 @@
 import type {
   ActionStatus,
+  BestPracticeRule,
   BeTrackData,
   DependencyType,
   Lever,
@@ -133,6 +134,32 @@ export function underperformers(data: BeTrackData, wsId?: string) {
     })
     .filter((x) => x.gap > 10)
     .sort((a, b) => b.gap - a.gap);
+}
+
+/**
+ * Contrôle de couverture "bonnes pratiques" : pour chaque règle active, vérifie si au moins un
+ * levier non-annulé répond à TOUS ses critères définis (matchFunction/matchWorkstreamId/
+ * matchType). Distinct de `underperformers`/`dependencyAlerts` : ceux-ci détectent un problème
+ * sur un levier existant, alors qu'ici on détecte l'ABSENCE de levier dans une catégorie censée
+ * être couverte. Fonction pure — ne filtre pas elle-même les manquements : c'est à l'appelant de
+ * ne garder que `!hasMatch` s'il ne veut afficher que les manquements.
+ */
+export function bestPracticeGaps(
+  data: BeTrackData,
+  rules: BestPracticeRule[]
+): { rule: BestPracticeRule; hasMatch: boolean }[] {
+  const activeLevers = data.levers.filter((l) => l.status !== "cancelled");
+  return rules
+    .filter((r) => r.active)
+    .map((rule) => {
+      const hasMatch = activeLevers.some((l) => {
+        if (rule.matchFunction && l.function !== rule.matchFunction) return false;
+        if (rule.matchWorkstreamId && l.ws !== rule.matchWorkstreamId) return false;
+        if (rule.matchType && l.type !== rule.matchType) return false;
+        return true;
+      });
+      return { rule, hasMatch };
+    });
 }
 
 export function fmtCurr(v: number | null | undefined, dec = 1): string {
@@ -412,7 +439,10 @@ export type SankeyChronoLink = { source: number; target: number; value: number }
  *
  * Chaque "out" représente les leviers qui ne progressent pas au-delà de cette étape.
  */
-export function sankeyChronology(data: BeTrackData): { nodes: SankeyChronoNode[]; links: SankeyChronoLink[] } {
+export function sankeyChronology(data: BeTrackData): {
+  nodes: SankeyChronoNode[];
+  links: SankeyChronoLink[];
+} {
   const nodes: SankeyChronoNode[] = [{ name: "Tous les leviers" }];
 
   STATUS_CYCLE.forEach((status) => {
@@ -427,22 +457,26 @@ export function sankeyChronology(data: BeTrackData): { nodes: SankeyChronoNode[]
 
   const activeByStage = new Map<LeverStatus, number>();
   STATUS_CYCLE.forEach((s) => activeByStage.set(s, 0));
-  data.levers.filter((l) => l.status !== "cancelled").forEach((l) => {
-    activeByStage.set(l.status, (activeByStage.get(l.status) ?? 0) + 1);
-  });
+  data.levers
+    .filter((l) => l.status !== "cancelled")
+    .forEach((l) => {
+      activeByStage.set(l.status, (activeByStage.get(l.status) ?? 0) + 1);
+    });
 
   const cancelledByStageIdx = new Map<number, number>();
   STATUS_CYCLE.forEach((_, i) => cancelledByStageIdx.set(i, 0));
-  data.levers.filter((l) => l.status === "cancelled").forEach((l) => {
-    const p = l.progress;
-    let stageIdx: number;
-    if (p <= 10) stageIdx = 0;
-    else if (p <= 30) stageIdx = 1;
-    else if (p <= 55) stageIdx = 2;
-    else if (p <= 80) stageIdx = 3;
-    else stageIdx = 4;
-    cancelledByStageIdx.set(stageIdx, (cancelledByStageIdx.get(stageIdx) ?? 0) + 1);
-  });
+  data.levers
+    .filter((l) => l.status === "cancelled")
+    .forEach((l) => {
+      const p = l.progress;
+      let stageIdx: number;
+      if (p <= 10) stageIdx = 0;
+      else if (p <= 30) stageIdx = 1;
+      else if (p <= 55) stageIdx = 2;
+      else if (p <= 80) stageIdx = 3;
+      else stageIdx = 4;
+      cancelledByStageIdx.set(stageIdx, (cancelledByStageIdx.get(stageIdx) ?? 0) + 1);
+    });
 
   const links: SankeyChronoLink[] = [];
   const totalLevers = data.levers.length;
@@ -549,9 +583,13 @@ export function sCurve3(data: BeTrackData) {
 
   const now = new Date();
   const fyStart = new Date(data.program.fyStart);
-  const currentMonthIdx = Math.min(11, Math.max(0,
-    (now.getFullYear() - fyStart.getFullYear()) * 12 + now.getMonth() - fyStart.getMonth()
-  ));
+  const currentMonthIdx = Math.min(
+    11,
+    Math.max(
+      0,
+      (now.getFullYear() - fyStart.getFullYear()) * 12 + now.getMonth() - fyStart.getMonth()
+    )
+  );
   const actualCurve = actualCurveBase.map((v, i) => (i <= currentMonthIdx ? v : null));
 
   return months.map((label, i) => ({

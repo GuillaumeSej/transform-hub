@@ -6,7 +6,7 @@ import * as leversLogic from "@/lib/leversLogic";
 import * as leversDb from "@/lib/firestore/levers";
 import * as workforceLogic from "@/lib/workforceLogic";
 import * as workforceDb from "@/lib/firestore/workforce";
-import { ensureAdminSeeded } from "@/lib/firestore/admin";
+import { ensureAdminSeeded, ensureBestPracticeRulesSeeded } from "@/lib/firestore/admin";
 import type { CascadeShift } from "@/lib/engine";
 import { mockData } from "@/data/mockData";
 import type {
@@ -27,8 +27,12 @@ const DEMO_USER = "Utilisateur démo";
  * qu'on ne les modifie pas manuellement. */
 function lockedSeed() {
   return {
-    levers: mockData.levers.map((l) => leversLogic.applyPlanLock({ ...l, companyId: l.companyId ?? "c1" })),
-    subLevers: mockData.subLevers.map((s) => leversLogic.applyPlanLock({ ...s, companyId: s.companyId ?? "c1" })),
+    levers: mockData.levers.map((l) =>
+      leversLogic.applyPlanLock({ ...l, companyId: l.companyId ?? "c1" })
+    ),
+    subLevers: mockData.subLevers.map((s) =>
+      leversLogic.applyPlanLock({ ...s, companyId: s.companyId ?? "c1" })
+    ),
     comments: mockData.comments,
     audit: mockData.audit,
   };
@@ -100,8 +104,12 @@ export function useBeTrackData(companyId?: string | null) {
     workforceDb
       .ensureWorkforceSeeded(workforceSeed())
       .catch((err) => console.error("[betrack] échec du seed Firestore workforce :", err));
-    ensureAdminSeeded()
-      .catch((err) => console.error("[betrack] échec du seed Firestore admin :", err));
+    ensureAdminSeeded().catch((err) =>
+      console.error("[betrack] échec du seed Firestore admin :", err)
+    );
+    ensureBestPracticeRulesSeeded().catch((err) =>
+      console.error("[betrack] échec du seed des règles bonnes pratiques :", err)
+    );
 
     if (companyId) {
       leversDb
@@ -484,22 +492,19 @@ export function useBeTrackData(companyId?: string | null) {
     [persistAudit]
   );
 
-  const updateDepartment = useCallback(
-    (name: string, patch: Partial<Department>) => {
-      const currentMeta = workforceMetaRef.current ?? workforceSeed().meta;
-      const departments = currentMeta.departments.map((d) =>
-        d.name === name ? { ...d, ...patch } : d
-      );
-      const nextMeta = { ...currentMeta, departments };
-      workforceMetaRef.current = nextMeta;
-      setWorkforceMeta(nextMeta);
-      workforceDb
-        .saveWorkforceMeta(nextMeta)
-        .catch((err) => console.error("[betrack] workforce meta :", err));
-      return departments.find((d) => d.name === name)!;
-    },
-    []
-  );
+  const updateDepartment = useCallback((name: string, patch: Partial<Department>) => {
+    const currentMeta = workforceMetaRef.current ?? workforceSeed().meta;
+    const departments = currentMeta.departments.map((d) =>
+      d.name === name ? { ...d, ...patch } : d
+    );
+    const nextMeta = { ...currentMeta, departments };
+    workforceMetaRef.current = nextMeta;
+    setWorkforceMeta(nextMeta);
+    workforceDb
+      .saveWorkforceMeta(nextMeta)
+      .catch((err) => console.error("[betrack] workforce meta :", err));
+    return departments.find((d) => d.name === name)!;
+  }, []);
 
   const setActiveScenario = useCallback(
     (scenarioId: string) => {
