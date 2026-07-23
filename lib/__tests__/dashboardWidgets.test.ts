@@ -63,12 +63,23 @@ describe("dashboardWidgets — addWidget / removeWidget / setWidgetSpan", () => 
   it("adds a widget not already present, at the end, with its default span", () => {
     const layout = removeWidget(buildDefaultLayout(), "pnl");
     const next = addWidget(layout, "pnl");
-    expect(next[next.length - 1]).toEqual({ instanceId: "pnl", type: "pnl", span: "M" });
+    const added = next[next.length - 1];
+    expect(added.type).toBe("pnl");
+    expect(added.span).toBe("M");
   });
 
-  it("does not add a duplicate of an already-present type", () => {
+  it("allows adding a duplicate of an already-present type, with a distinct instanceId", () => {
     const layout = buildDefaultLayout();
-    expect(addWidget(layout, "pnl")).toBe(layout);
+    const next = addWidget(layout, "pnl");
+    expect(next).toHaveLength(layout.length + 1);
+    const pnlInstances = next.filter((w) => w.type === "pnl");
+    expect(pnlInstances).toHaveLength(2);
+    expect(pnlInstances[0].instanceId).not.toBe(pnlInstances[1].instanceId);
+  });
+
+  it("returns the same array reference for an unknown widget type", () => {
+    const layout = buildDefaultLayout();
+    expect(addWidget(layout, "not-a-real-type" as never)).toBe(layout);
   });
 
   it("removeWidget filters by instanceId", () => {

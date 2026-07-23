@@ -277,9 +277,9 @@ export default function DashboardPage() {
     saveDashboardLayout(next);
   };
 
-  const availableToAdd = DASHBOARD_WIDGET_REGISTRY.filter(
-    (def) => !layout.some((w) => w.type === def.type)
-  );
+  // Tous les types de widgets restent toujours proposés — les doublons sont autorisés (comparer
+  // deux fois le même graphique avec des filtres différents, à l'image d'un outil type PowerBI).
+  const availableToAdd = DASHBOARD_WIDGET_REGISTRY;
 
   const handleDrop = (targetInstanceId: string) => {
     if (dragInstanceId && dragInstanceId !== targetInstanceId) {
@@ -778,7 +778,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-4">
+      {/* grid-flow-row-dense : comble automatiquement les trous laissés par un widget large suivi
+          d'un widget étroit, sans avoir à réordonner manuellement le layout. */}
+      <div className="grid grid-cols-4 grid-flow-row-dense gap-4">
         {layout.map((instance) => renderWidget(instance))}
       </div>
     </div>

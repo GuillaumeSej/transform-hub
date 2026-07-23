@@ -24,7 +24,6 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "admin-data", icon: "BarChart3", label: "Données" },
       { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
       { id: "admin-hierarchy", icon: "Network", label: "Arborescence financière" },
-      { id: "admin-best-practices", icon: "ShieldCheck", label: "Bonnes pratiques" },
       { id: "admin-history", icon: "History", label: "Historique" },
     ],
   },
