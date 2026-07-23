@@ -36,5 +36,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 nul
-demo/*.xlsx
 demo/~$*.xlsx
+demo/entreprises_projets.xlsx
+demo/utilisateurs.xlsx
