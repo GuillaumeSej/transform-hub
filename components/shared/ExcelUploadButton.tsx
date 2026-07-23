@@ -13,6 +13,7 @@ import {
   type SubLeverImportInput,
 } from "@/lib/leverExcel";
 import type { useBeTrackData } from "@/lib/hooks/useStorage";
+import type { Lever } from "@/types";
 
 type PreviewRow = { rowNumber: number; values: LeverImportInput | null; warnings: string[] };
 type SubLeverPreviewRow = {
@@ -55,8 +56,17 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
         workbook.Sheets[slSheetName],
         { defval: "" }
       );
+      const validParsedLevers = parsedLevers.filter((r) => r.values !== null);
+      const virtualLeversForPreview = validParsedLevers.map((r, idx) => {
+        const v = r.values!;
+        return { ...v, id: `__preview_${idx}`, createdAt: "", lastUpdate: "" } as Lever;
+      });
+      const dataWithVirtualLevers = {
+        ...data,
+        levers: [...data.levers, ...virtualLeversForPreview],
+      };
       parsedSubLevers = slRows.map((row, i) => {
-        const { values, warnings } = parseSubLeverExcelRow(row, data, i + 2);
+        const { values, warnings } = parseSubLeverExcelRow(row, dataWithVirtualLevers, i + 2);
         return { rowNumber: i + 2, values, warnings };
       });
     }
@@ -78,9 +88,11 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
     if (!preview) return;
     let created = 0;
     let updated = 0;
+    const upsertedLevers = new Map<string, Lever>();
     preview.leverRows.forEach((row) => {
       if (!row.values) return;
-      const { created: wasCreated } = data.upsertLeverByCode(row.values as LeverImportInput);
+      const { lever, created: wasCreated } = data.upsertLeverByCode(row.values as LeverImportInput);
+      upsertedLevers.set(lever.code.toLowerCase(), lever);
       if (wasCreated) created += 1;
       else updated += 1;
     });
@@ -89,7 +101,9 @@ export function ExcelUploadButton({ data, companyId }: { data: ReturnType<typeof
     preview.subLeverRows.forEach((row) => {
       if (!row.values) return;
       const sl = row.values;
-      const lever = data.levers.find((l) => l.code.toLowerCase() === sl.leverCode.toLowerCase());
+      const lever =
+        upsertedLevers.get(sl.leverCode.toLowerCase()) ??
+        data.levers.find((l) => l.code.toLowerCase() === sl.leverCode.toLowerCase());
       if (!lever) return;
       const existing = data.subLevers.find(
         (s) => s.leverId === lever.id && s.name.toLowerCase() === sl.name.toLowerCase()
