@@ -101,11 +101,13 @@ export function LeverForm({
 
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
   const [leafNodes, setLeafNodes] = useState<HierarchyNode[]>([]);
+  const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
 
   useEffect(() => {
     if (!companyId) {
       setHierarchyLevels([]);
       setLeafNodes([]);
+      setConfidentialityLevels([]);
       return;
     }
     let cancelled = false;
@@ -115,6 +117,7 @@ export function LeverForm({
       const company = companies.find((c) => c.id === companyId);
       const levels = company?.hierarchyLevels ?? [];
       setHierarchyLevels(levels);
+      setConfidentialityLevels(company?.confidentialityLevels ?? []);
       unsubNodes?.();
       unsubNodes = null;
       if (levels.length === 0) {
@@ -197,6 +200,24 @@ export function LeverForm({
             />
           </Field>
         </div>
+        {confidentialityLevels.length > 0 && (
+          <div className="col-span-3">
+            <Field label="Niveau de confidentialité">
+              <select
+                className={inputClass}
+                value={values.confidentialityLevel ?? ""}
+                onChange={(e) => set("confidentialityLevel", e.target.value || undefined)}
+              >
+                <option value="">Aucun (visible par tous les profils)</option>
+                {confidentialityLevels.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
       </div>
 
       <SectionTitle>Ownership</SectionTitle>

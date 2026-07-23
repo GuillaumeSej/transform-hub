@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { subscribeCompanies } from "@/lib/firestore/admin";
 import {
   ArrowLeft,
   ArrowRight,
@@ -55,8 +56,19 @@ const TAB_LABELS: Record<Tab, string> = {
 type CascadeProposal = CascadeResult & { checked: Record<string, boolean> };
 
 export default function LeverDetailClient() {
-  const { user } = useRole();
+  const { role, user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
+  const [roleClearance, setRoleClearance] = useState<string[]>([]);
+  const [actionPlanEnabled, setActionPlanEnabled] = useState(true);
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      const company = companies.find((c) => c.id === user?.companyId);
+      setRoleClearance((user && company?.roleClearance?.[user.role]) ?? []);
+      setActionPlanEnabled(company?.actionPlanEnabled ?? true);
+    });
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, user?.role]);
   const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -85,6 +97,27 @@ export default function LeverDetailClient() {
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
         Levier introuvable.{" "}
+        <button
+          onClick={() => router.push("/levers")}
+          className="font-medium text-bp-coral hover:underline"
+        >
+          Retour au pipeline
+        </button>
+      </div>
+    );
+  }
+
+  const canView =
+    !lever.confidentialityLevel ||
+    role === "admin" ||
+    role === "admin_entreprise" ||
+    roleClearance.includes(lever.confidentialityLevel);
+
+  if (!canView) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
+        Accès restreint — ce levier est classé « {lever.confidentialityLevel} », un niveau de
+        confidentialité auquel votre profil n&apos;est pas habilité.{" "}
         <button
           onClick={() => router.push("/levers")}
           className="font-medium text-bp-coral hover:underline"
@@ -770,7 +803,18 @@ export default function LeverDetailClient() {
         </Card>
       )}
 
-      {tab === "plan" && (
+      {tab === "plan" && !actionPlanEnabled && (
+        <Card>
+          <CardBody>
+            <div className="rounded-lg border border-dashed border-border bg-bg-surface p-10 text-center text-secondary">
+              Module non activé — le Plan d&apos;action a été désactivé pour votre entreprise
+              (paramétrable dans Admin &gt; Entreprises).
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {tab === "plan" && actionPlanEnabled && (
         <Card>
           <CardBody>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
