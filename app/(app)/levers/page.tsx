@@ -50,14 +50,17 @@ export default function LeversPage() {
   // colonne historique "Centre de coût / Poste de dépense" reste seule affichée (non-régressif).
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
   const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
+  const [roleClearance, setRoleClearance] = useState<string[]>([]);
 
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
       setHierarchyLevels(company?.hierarchyLevels ?? []);
+      setRoleClearance((user && company?.roleClearance?.[user.role]) ?? []);
     });
     return unsub;
-  }, [user?.companyId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, user?.role]);
 
   useEffect(() => {
     if (!user?.companyId || hierarchyLevels.length === 0) {
@@ -74,12 +77,20 @@ export default function LeversPage() {
   );
 
   // Le Lever Owner ne voit que ses propres leviers (owner === son nom de compte de test). Les
-  // autres rôles (CTO, Sponsor, ...) voient toute la bibliothèque.
-  const scopedLevers = useMemo(
-    () =>
-      role === "lever" && user ? data.levers.filter((l) => l.owner === user.name) : data.levers,
-    [data.levers, role, user]
-  );
+  // autres rôles (CTO, Sponsor, ...) voient toute la bibliothèque. Les leviers confidentiels sont
+  // en plus masqués aux profils non habilités (voir Company.roleClearance) — admin/admin_entreprise
+  // voient toujours tout.
+  const scopedLevers = useMemo(() => {
+    const ownerScoped =
+      role === "lever" && user ? data.levers.filter((l) => l.owner === user.name) : data.levers;
+    return ownerScoped.filter(
+      (l) =>
+        !l.confidentialityLevel ||
+        role === "admin" ||
+        role === "admin_entreprise" ||
+        roleClearance.includes(l.confidentialityLevel)
+    );
+  }, [data.levers, role, user, roleClearance]);
 
   // Leviers/sous-leviers avec au moins une contrainte de dépendance violée (colonne ⚠ + filtre)
   const alertedLeverIds = useMemo(() => {

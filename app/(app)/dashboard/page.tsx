@@ -8,8 +8,8 @@ import { Banknote, CircleCheck, ShieldCheck, TriangleAlert, TrendingUp, Users } 
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
-import { subscribeBestPracticeRules } from "@/lib/firestore/admin";
-import type { BestPracticeRule } from "@/types";
+import { subscribeBestPracticeRules, subscribeCompanies } from "@/lib/firestore/admin";
+import type { BestPracticeRule, Company } from "@/types";
 import * as engine from "@/lib/engine";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -51,6 +51,31 @@ export default function DashboardPage() {
   const bestPracticeGaps = engine
     .bestPracticeGaps(data, bestPracticeRules)
     .filter((g) => !g.hasMatch);
+
+  // Société courante — utilisée pour le budget CAPEX de référence (KPI ci-dessous) et
+  // l'habilitation de confidentialité (filtrage des leviers visibles par profil).
+  const [company, setCompany] = useState<Company | null>(null);
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      setCompany(companies.find((c) => c.id === user?.companyId) ?? null);
+    });
+    return unsub;
+  }, [user?.companyId]);
+
+  const clearance = user ? (company?.roleClearance?.[user.role] ?? []) : [];
+  const visibleLevers = useMemo(
+    () =>
+      data.levers.filter(
+        (l) =>
+          !l.confidentialityLevel ||
+          user?.role === "admin" ||
+          user?.role === "admin_entreprise" ||
+          clearance.includes(l.confidentialityLevel)
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.levers, user?.role, company?.roleClearance]
+  );
+  const visibleData = useMemo(() => ({ ...data, levers: visibleLevers }), [data, visibleLevers]);
 
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
@@ -96,7 +121,7 @@ export default function DashboardPage() {
   };
 
   const filteredLevers = useMemo(() => {
-    return data.levers.filter((l) =>
+    return visibleLevers.filter((l) =>
       matchesGlobalFilters(
         {
           status: lifecycle.label(l.status),
@@ -113,12 +138,12 @@ export default function DashboardPage() {
         filters
       )
     );
-  }, [data.levers, data.workstreams, filters, lifecycle]);
+  }, [visibleLevers, data.workstreams, filters, lifecycle]);
 
   const filteredData = useMemo(() => ({ ...data, levers: filteredLevers }), [data, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
-  const sCurve = engine.sCurve3(data);
+  const sCurve = engine.sCurve3(visibleData);
   const stages = engine.stageCounts(filteredData);
   const sankey = engine.sankeyData(filteredData);
   const sankeyChrono = engine.sankeyChronology(filteredData);
@@ -155,7 +180,7 @@ export default function DashboardPage() {
 
   const wsBars = data.workstreams.map((w) => ({
     label: w.name.split(" ")[0],
-    realized: engine.workstreamSummary(data, w.id).realized,
+    realized: engine.workstreamSummary(visibleData, w.id).realized,
     target: w.target,
   }));
   const geoMap = engine.byGeo(filteredData);
@@ -198,7 +223,7 @@ export default function DashboardPage() {
 
       <div className="mb-4">
         <FilterBar
-          items={data.levers}
+          items={visibleLevers}
           defs={filterDefs}
           active={activeForBar}
           onChange={handleFilterChange}
@@ -228,10 +253,18 @@ export default function DashboardPage() {
         />
         <KPICard
           label="CAPEX engagé"
-          value={engine.fmtCurr(summary.capex)}
+          value={
+            company?.capexBudget != null
+              ? `${engine.fmtCurr(summary.capex)} / ${engine.fmtCurr(company.capexBudget)}`
+              : engine.fmtCurr(summary.capex)
+          }
           icon={TrendingUp}
           accent="brown"
-          sub={`+ ${engine.fmtCurr(summary.opex)} OPEX`}
+          sub={
+            company?.capexBudget != null
+              ? `+ ${engine.fmtCurr(summary.opex)} OPEX`
+              : `+ ${engine.fmtCurr(summary.opex)} OPEX · budget non renseigné (voir Finance)`
+          }
         />
         <KPICard
           label="ETP impactés"
@@ -372,7 +405,7 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {data.workstreams.map((ws) => {
-                  const ss = engine.workstreamSummary(data, ws.id);
+                  const ss = engine.workstreamSummary(visibleData, ws.id);
                   return (
                     <tr
                       key={ws.id}
@@ -416,7 +449,7 @@ export default function DashboardPage() {
         <Card className="mb-0">
           <CardHeader title="Dépendances inter-leviers (top 5)" />
           <CardBody>
-            {data.levers
+            {visibleLevers
               .filter((l) => l.dependencies.length)
               .slice(0, 5)
               .map((l) => (
