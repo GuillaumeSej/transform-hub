@@ -27,8 +27,8 @@ const DEMO_USER = "Utilisateur démo";
  * qu'on ne les modifie pas manuellement. */
 function lockedSeed() {
   return {
-    levers: mockData.levers.map((l) => leversLogic.applyPlanLock(l)),
-    subLevers: mockData.subLevers.map((s) => leversLogic.applyPlanLock(s)),
+    levers: mockData.levers.map((l) => leversLogic.applyPlanLock({ ...l, companyId: l.companyId ?? "c1" })),
+    subLevers: mockData.subLevers.map((s) => leversLogic.applyPlanLock({ ...s, companyId: s.companyId ?? "c1" })),
     comments: mockData.comments,
     audit: mockData.audit,
   };
@@ -102,6 +102,12 @@ export function useBeTrackData(companyId?: string | null) {
       .catch((err) => console.error("[betrack] échec du seed Firestore workforce :", err));
     ensureAdminSeeded()
       .catch((err) => console.error("[betrack] échec du seed Firestore admin :", err));
+
+    if (companyId) {
+      leversDb
+        .migrateCompanyIds(companyId)
+        .catch((err) => console.error("[betrack] échec de la migration companyId :", err));
+    }
 
     const unsubscribers = [
       leversDb.subscribeLevers((l) => !cancelled && setLevers(l), companyId),

@@ -153,3 +153,32 @@ export async function ensureLeversSeeded(seed: LeversSeed): Promise<void> {
   if (meta.exists() && meta.data().schemaVersion === SCHEMA_VERSION) return;
   await forceReseedLevers(seed);
 }
+
+const MIGRATION_COMPANY_ID_KEY = "betrack_company_migration_v1";
+
+/** One-time migration: attach existing levers/subLevers to a company when they have no companyId. */
+export async function migrateCompanyIds(targetCompanyId: string): Promise<void> {
+  if (typeof window !== "undefined" && localStorage.getItem(MIGRATION_COMPANY_ID_KEY)) return;
+  const [leverSnap, subLeverSnap] = await Promise.all([getDocs(leversCol()), getDocs(subLeversCol())]);
+  const batch = writeBatch(db);
+  let count = 0;
+  leverSnap.docs.forEach((d) => {
+    const data = d.data() as Lever;
+    if (!data.companyId) {
+      batch.update(d.ref, { companyId: targetCompanyId });
+      count++;
+    }
+  });
+  subLeverSnap.docs.forEach((d) => {
+    const data = d.data() as SubLever;
+    if (!data.companyId) {
+      batch.update(d.ref, { companyId: targetCompanyId });
+      count++;
+    }
+  });
+  if (count > 0) {
+    await batch.commit();
+    console.log(`[betrack] migration: ${count} document(s) rattaché(s) à l'entreprise ${targetCompanyId}`);
+  }
+  if (typeof window !== "undefined") localStorage.setItem(MIGRATION_COMPANY_ID_KEY, "done");
+}
