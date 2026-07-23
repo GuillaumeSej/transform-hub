@@ -8,8 +8,12 @@ import { Banknote, CircleCheck, ShieldCheck, TriangleAlert, TrendingUp, Users } 
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
-import { subscribeBestPracticeRules, subscribeCompanies } from "@/lib/firestore/admin";
-import type { BestPracticeRule, Company } from "@/types";
+import {
+  subscribeBestPracticeRules,
+  subscribeCompanies,
+  subscribeProjects,
+} from "@/lib/firestore/admin";
+import type { BestPracticeRule, Company, Project } from "@/types";
 import * as engine from "@/lib/engine";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -76,6 +80,15 @@ export default function DashboardPage() {
     [data.levers, user?.role, company?.roleClearance]
   );
   const visibleData = useMemo(() => ({ ...data, levers: visibleLevers }), [data, visibleLevers]);
+
+  // Projets de l'entreprise — pour la ventilation "par projet" (en plus de "par workstream").
+  const [projects, setProjects] = useState<Project[]>([]);
+  useEffect(() => {
+    const unsub = subscribeProjects((all) =>
+      setProjects(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all)
+    );
+    return unsub;
+  }, [user?.companyId]);
 
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
@@ -187,12 +200,27 @@ export default function DashboardPage() {
       ? goToLevers({ f_endQuarter: `${label} ${currentYear}` })
       : goToMonth(label);
 
+  const [wsDimension, setWsDimension] = useState<"workstream" | "project">("workstream");
   const wsBars = data.workstreams.map((w) => ({
     label: w.name.split(" ")[0],
     realized: engine.workstreamSummary(visibleData, w.id).realized,
     target: w.target,
   }));
-  const geoMap = engine.byGeo(filteredData);
+  const projectMap = engine.byProject(visibleData, projects);
+  const projectBars = [
+    ...projects.map((p) => ({
+      label: p.name.split(" ")[0],
+      realized: projectMap[p.name] ?? 0,
+      target: p.target,
+    })),
+    ...(projectMap["Non assigné"]
+      ? [{ label: "Non assigné", realized: projectMap["Non assigné"], target: 0 }]
+      : []),
+  ];
+
+  const [geoDimension, setGeoDimension] = useState<"country" | "function">("country");
+  const geoMap =
+    geoDimension === "country" ? engine.byCountry(filteredData) : engine.byFunction(filteredData);
   const geoData = Object.entries(geoMap).map(([name, value]) => ({ name, value }));
   const pnlMap = engine.pnlImpact(filteredData);
   const pnlData = Object.entries(pnlMap).map(([id, impact]) => ({
@@ -383,13 +411,37 @@ export default function DashboardPage() {
 
       <div className="mb-4 grid grid-cols-2 gap-4 max-[1100px]:grid-cols-1">
         <Card className="mb-0">
-          <CardHeader title="Savings par Workstream" />
+          <CardHeader
+            title={wsDimension === "workstream" ? "Savings par Workstream" : "Savings par Projet"}
+            actions={
+              <DimensionToggle
+                options={[
+                  { value: "workstream", label: "Workstream" },
+                  { value: "project", label: "Projet" },
+                ]}
+                value={wsDimension}
+                onChange={setWsDimension}
+              />
+            }
+          />
           <CardBody>
-            <WorkstreamBarChart data={wsBars} />
+            <WorkstreamBarChart data={wsDimension === "workstream" ? wsBars : projectBars} />
           </CardBody>
         </Card>
         <Card className="mb-0">
-          <CardHeader title="Savings par Géographie" />
+          <CardHeader
+            title={geoDimension === "country" ? "Savings par Pays" : "Savings par Fonction"}
+            actions={
+              <DimensionToggle
+                options={[
+                  { value: "country", label: "Pays" },
+                  { value: "function", label: "Fonction" },
+                ]}
+                value={geoDimension}
+                onChange={setGeoDimension}
+              />
+            }
+          />
           <CardBody>
             <GeoDonutChart data={geoData} />
           </CardBody>
@@ -524,6 +576,33 @@ function GranularityToggle({
           }`}
         >
           {g === "month" ? "Mois" : "Trimestre"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Sélecteur générique d'axe de ventilation (pays/fonction, workstream/projet, ...). */
+function DimensionToggle<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex rounded-md border border-border-strong p-0.5 text-[11px] font-semibold">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={`rounded px-2 py-1 transition ${
+            value === o.value ? "bg-bp-coral text-white" : "text-secondary hover:text-primary"
+          }`}
+        >
+          {o.label}
         </button>
       ))}
     </div>
