@@ -8,7 +8,14 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { AuthUser, BestPracticeRule, Company, LifecycleStage, Project } from "@/types";
+import type {
+  AuthUser,
+  BestPracticeRule,
+  Company,
+  HierarchyNode,
+  LifecycleStage,
+  Project,
+} from "@/types";
 import { TEST_USERS } from "@/lib/auth";
 
 // --- Companies ---
@@ -66,6 +73,29 @@ export async function saveLifecycleConfig(
   stages: LifecycleStage[]
 ): Promise<void> {
   await setDoc(doc(lifecycleCol(), companyId), { companyId, stages });
+}
+
+// --- Hierarchy Nodes (arborescence financière P&L -> maille la plus fine) ---
+
+const hierarchyNodesCol = () => collection(db, "hierarchyNodes");
+
+/** Abonnement filtré côté client par companyId, comme subscribeLevers/subscribeSubLevers. */
+export function subscribeHierarchyNodes(
+  companyId: string,
+  cb: (nodes: HierarchyNode[]) => void
+): Unsubscribe {
+  return onSnapshot(hierarchyNodesCol(), (snap) => {
+    const all = snap.docs.map((d) => d.data() as HierarchyNode);
+    cb(all.filter((n) => n.companyId === companyId));
+  });
+}
+
+export async function saveHierarchyNode(node: HierarchyNode): Promise<void> {
+  await setDoc(doc(hierarchyNodesCol(), node.id), node);
+}
+
+export async function deleteHierarchyNode(id: string): Promise<void> {
+  await deleteDoc(doc(hierarchyNodesCol(), id));
 }
 
 // --- Best Practice Rules ---
