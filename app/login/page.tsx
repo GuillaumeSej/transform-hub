@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
-import { findUser, TEST_USERS } from "@/lib/auth";
+import { findUser, findUserFromFirestore, TEST_USERS } from "@/lib/auth";
 import { roles } from "@/lib/nav-config";
 
 /**
@@ -18,9 +18,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const user = findUser(username, password);
+    setError(null);
+    let user = findUser(username, password);
+    if (!user) {
+      user = await findUserFromFirestore(username, password);
+    }
     if (!user) {
       setError("Identifiant ou mot de passe incorrect.");
       return;

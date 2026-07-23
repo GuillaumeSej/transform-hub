@@ -21,3 +21,29 @@ export function findUser(username: string, password: string): AuthUser | null {
   const u = username.trim().toLowerCase();
   return TEST_USERS.find((t) => t.username.toLowerCase() === u && t.password === password) ?? null;
 }
+
+export async function findUserFromFirestore(username: string, password: string): Promise<AuthUser | null> {
+  const { collection, getDocs, query, where } = await import("firebase/firestore");
+  const { db } = await import("@/lib/firebase");
+
+  const q = query(
+    collection(db, "adminUsers"),
+    where("username", "==", username.trim().toLowerCase()),
+    where("password", "==", password)
+  );
+
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+
+  const doc = snapshot.docs[0];
+  const data = doc.data();
+  return {
+    username: data.username,
+    password: data.password,
+    role: data.role,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    name: data.name ?? `${data.firstName} ${data.lastName}`,
+    companyId: data.companyId ?? null,
+  };
+}
