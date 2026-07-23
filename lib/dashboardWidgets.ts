@@ -52,9 +52,9 @@ export interface DashboardWidgetDef {
   allowedSpans: WidgetSpan[];
 }
 
-/** Une instance de widget posée sur le dashboard (un même type pourrait, à terme, être dupliqué —
- * d'où l'instanceId distinct du type — même si l'UI actuelle n'autorise qu'un seul exemplaire par
- * type pour rester simple). */
+/** Une instance de widget posée sur le dashboard — un même type peut être ajouté plusieurs fois
+ * (ex. comparer le même graphique Sankey filtré différemment), d'où l'instanceId distinct du
+ * type. */
 export interface DashboardWidgetInstance {
   instanceId: string;
   type: DashboardWidgetType;
@@ -192,14 +192,25 @@ export function removeWidget(
   return layout.filter((w) => w.instanceId !== instanceId);
 }
 
+let instanceCounter = 0;
+
+/** Génère un instanceId unique pour une nouvelle instance de widget — plusieurs instances du même
+ * type doivent rester distinguables (déplacement, redimensionnement, suppression individuels). */
+function nextInstanceId(type: DashboardWidgetType): string {
+  instanceCounter += 1;
+  return `${type}-${instanceCounter}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Ajoute une nouvelle instance du widget `type` en fin de layout — les doublons sont autorisés
+ * (ex. comparer deux fois le même graphique avec des filtres différents), à l'image d'un outil
+ * type PowerBI. */
 export function addWidget(
   layout: DashboardWidgetInstance[],
   type: DashboardWidgetType
 ): DashboardWidgetInstance[] {
   const def = getWidgetDef(type);
   if (!def) return layout;
-  if (layout.some((w) => w.type === type)) return layout;
-  return [...layout, { instanceId: def.type, type: def.type, span: def.defaultSpan }];
+  return [...layout, { instanceId: nextInstanceId(type), type: def.type, span: def.defaultSpan }];
 }
 
 export function setWidgetSpan(
