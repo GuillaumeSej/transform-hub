@@ -1,25 +1,32 @@
 import {
   BarChart3,
+  Bell,
   Building2,
+  Columns3,
   Factory,
   FlaskConical,
   FolderKanban,
+  GitBranch,
   History,
   Layers,
+  Link2,
   ListChecks,
   MessageCircle,
   Network,
   PieChart,
+  Table2,
   Target,
   TriangleAlert,
   Users,
   Workflow,
+  LayoutGrid,
   LineChart,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
-/** Registre d'icônes utilisé par la nav (lib/nav-config.ts référence ces noms en string). */
+/** Registre d'icônes utilisé par la nav (lib/nav-config.ts référence ces noms en string) et par le
+ * sélecteur de widgets du dashboard exécutif (lib/dashboardWidgets.ts, champ `icon`). */
 export const ICON_REGISTRY: Record<string, LucideIcon> = {
   PieChart,
   Layers,
@@ -38,4 +45,10 @@ export const ICON_REGISTRY: Record<string, LucideIcon> = {
   Workflow,
   Network,
   ShieldCheck,
+  Bell,
+  Columns3,
+  GitBranch,
+  Link2,
+  Table2,
+  LayoutGrid,
 };

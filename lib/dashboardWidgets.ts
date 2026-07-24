@@ -43,22 +43,44 @@ export type DashboardWidgetType =
   | "dependencies"
   | "pnl";
 
+/** Une option d'indicateur/dimension pour un type de widget "configurable" (voir plus bas) — ex.
+ * pour le Marimekko, la paire de dimensions "Fonction × Pays" vs "Workstream × Projet". */
+export interface WidgetViewOption {
+  key: string;
+  /** Clé i18n du libellé (résolue via t() au point de consommation). */
+  labelKey: string;
+}
+
 export interface DashboardWidgetDef {
   type: DashboardWidgetType;
-  /** Libellé humain (français) affiché dans le menu "Ajouter un widget". */
+  /** Clé i18n du libellé affiché dans le menu "Ajouter un widget" (fallback = libellé FR brut). */
   label: string;
+  /** Nom d'icône lucide-react utilisé comme illustration dans le sélecteur de widgets. */
+  icon: string;
   defaultSpan: WidgetSpan;
   /** Tailles autorisées pour ce widget — certains graphiques n'ont pas de sens trop étroits. */
   allowedSpans: WidgetSpan[];
+  /** Widget "configurable" : le TYPE de graphique (ex. Marimekko) est distinct de l'INDICATEUR/
+   *  dimension affiché (ex. Fonction×Pays vs Workstream×Projet) — l'utilisateur choisit d'abord le
+   *  graphique, puis peut basculer entre les vues possibles via un sélecteur intégré au widget,
+   *  sans avoir à ajouter un nouveau bloc. Non configurable = graphique à contenu fixe (S-Curve,
+   *  Sankey, alertes...). */
+  viewOptions?: WidgetViewOption[];
+  /** Vue active par défaut à la création d'une instance — première entrée de `viewOptions` si
+   *  omis. */
+  defaultView?: string;
 }
 
 /** Une instance de widget posée sur le dashboard — un même type peut être ajouté plusieurs fois
- * (ex. comparer le même graphique Sankey filtré différemment), d'où l'instanceId distinct du
- * type. */
+ * (ex. deux blocs Sankey séparés), d'où l'instanceId distinct du type. `view` porte la vue active
+ * pour les widgets configurables (ex. quelle paire de dimensions du Marimekko) — elle vit sur
+ * l'INSTANCE, pas sur un état de page partagé, pour que deux instances du même type puissent
+ * chacune afficher une vue différente sans interférer l'une avec l'autre. */
 export interface DashboardWidgetInstance {
   instanceId: string;
   type: DashboardWidgetType;
   span: WidgetSpan;
+  view?: string;
 }
 
 /** Registre de tous les widgets disponibles, dans leur ordre d'apparition par défaut. */
@@ -66,72 +88,101 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   {
     type: "stage-funnel",
     label: "Avancement par étape du cycle de vie",
+    icon: "Workflow",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "alerts",
     label: "Alerts & Notifications",
+    icon: "Bell",
     defaultSpan: "M",
     allowedSpans: ["S", "M", "L", "XL"],
   },
   {
     type: "best-practices",
     label: "Bonnes pratiques",
+    icon: "ShieldCheck",
     defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "s-curve",
     label: "S-Curve — Plan initial / Réalisé / Réactualisé",
+    icon: "TrendingUp",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
   },
   {
     type: "bridge",
     label: "Économies par période → cible",
+    icon: "BarChart3",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
   },
   {
     type: "sankey",
     label: "Flux des leviers par étape (Sankey)",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
+    icon: "GitBranch",
+    // XL par défaut : ce flux chronologique a beaucoup plus de colonnes qu'un Sankey classique à
+    // 2 niveaux — en dessous de "L" les libellés des différentes étapes se chevauchent.
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
   },
   {
     type: "marimekko",
-    label: "Savings par fonction (Marimekko)",
+    label: "Marimekko",
+    icon: "LayoutGrid",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+    viewOptions: [
+      { key: "function-country", labelKey: "dashboard.widgetView.functionCountry" },
+      { key: "workstream-project", labelKey: "dashboard.widgetView.workstreamProject" },
+    ],
+    defaultView: "function-country",
   },
   {
     type: "workstream-breakdown",
     label: "Savings par Workstream / Projet",
+    icon: "Columns3",
     defaultSpan: "M",
     allowedSpans: ["S", "M", "L", "XL"],
+    viewOptions: [
+      { key: "workstream", labelKey: "dashboard.workstream" },
+      { key: "project", labelKey: "dashboard.project" },
+    ],
+    defaultView: "workstream",
   },
   {
     type: "geo-breakdown",
     label: "Savings par Pays / Fonction",
+    icon: "PieChart",
     defaultSpan: "M",
     allowedSpans: ["S", "M", "L", "XL"],
+    viewOptions: [
+      { key: "country", labelKey: "dashboard.country" },
+      { key: "function", labelKey: "dashboard.function" },
+    ],
+    defaultView: "country",
   },
   {
     type: "workstream-table",
     label: "Synthèse des Workstreams",
+    icon: "Table2",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
   },
   {
     type: "dependencies",
     label: "Dépendances inter-leviers",
+    icon: "Link2",
     defaultSpan: "M",
     allowedSpans: ["S", "M", "L", "XL"],
   },
   {
     type: "pnl",
     label: "Impact P&L par compte",
+    icon: "LineChart",
     defaultSpan: "M",
     allowedSpans: ["S", "M", "L", "XL"],
   },
@@ -148,6 +199,7 @@ export function buildDefaultLayout(): DashboardWidgetInstance[] {
     instanceId: def.type,
     type: def.type,
     span: def.defaultSpan,
+    ...(def.viewOptions ? { view: def.defaultView ?? def.viewOptions[0].key } : {}),
   }));
 }
 
@@ -202,15 +254,25 @@ function nextInstanceId(type: DashboardWidgetType): string {
 }
 
 /** Ajoute une nouvelle instance du widget `type` en fin de layout — les doublons sont autorisés
- * (ex. comparer deux fois le même graphique avec des filtres différents), à l'image d'un outil
- * type PowerBI. */
+ * (ex. deux blocs Sankey séparés), à l'image d'un outil type PowerBI. `view` force la vue initiale
+ * d'un widget configurable (ex. l'autre paire de dimensions du Marimekko, pour la distinguer visuellement
+ * d'un doublon déjà présent) — sinon retombe sur `defaultView`. */
 export function addWidget(
   layout: DashboardWidgetInstance[],
-  type: DashboardWidgetType
+  type: DashboardWidgetType,
+  view?: string
 ): DashboardWidgetInstance[] {
   const def = getWidgetDef(type);
   if (!def) return layout;
-  return [...layout, { instanceId: nextInstanceId(type), type: def.type, span: def.defaultSpan }];
+  return [
+    ...layout,
+    {
+      instanceId: nextInstanceId(type),
+      type: def.type,
+      span: def.defaultSpan,
+      ...(def.viewOptions ? { view: view ?? def.defaultView ?? def.viewOptions[0].key } : {}),
+    },
+  ];
 }
 
 export function setWidgetSpan(
@@ -219,6 +281,17 @@ export function setWidgetSpan(
   span: WidgetSpan
 ): DashboardWidgetInstance[] {
   return layout.map((w) => (w.instanceId === instanceId ? { ...w, span } : w));
+}
+
+/** Change la vue active d'une instance de widget configurable (ex. bascule Fonction×Pays <->
+ * Workstream×Projet sur un Marimekko) — n'affecte que cette instance, jamais les autres du même
+ * type. */
+export function setWidgetView(
+  layout: DashboardWidgetInstance[],
+  instanceId: string,
+  view: string
+): DashboardWidgetInstance[] {
+  return layout.map((w) => (w.instanceId === instanceId ? { ...w, view } : w));
 }
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
