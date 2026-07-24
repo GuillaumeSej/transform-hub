@@ -31,9 +31,6 @@ service cloud.firestore {
     match /adminUsers/{docId} {
       allow read, write: if true;
     }
-    match /bestPracticeRules/{docId} {
-      allow read, write: if true;
-    }
     match /hierarchyNodes/{docId} {
       allow read, write: if true;
     }

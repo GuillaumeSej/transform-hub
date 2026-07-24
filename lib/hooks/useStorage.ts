@@ -6,7 +6,7 @@ import * as leversLogic from "@/lib/leversLogic";
 import * as leversDb from "@/lib/firestore/levers";
 import * as workforceLogic from "@/lib/workforceLogic";
 import * as workforceDb from "@/lib/firestore/workforce";
-import { ensureAdminSeeded, ensureBestPracticeRulesSeeded } from "@/lib/firestore/admin";
+import { ensureAdminSeeded } from "@/lib/firestore/admin";
 import type { CascadeShift } from "@/lib/engine";
 import { mockData } from "@/data/mockData";
 import type {
@@ -106,9 +106,6 @@ export function useBeTrackData(companyId?: string | null) {
       .catch((err) => console.error("[betrack] échec du seed Firestore workforce :", err));
     ensureAdminSeeded().catch((err) =>
       console.error("[betrack] échec du seed Firestore admin :", err)
-    );
-    ensureBestPracticeRulesSeeded().catch((err) =>
-      console.error("[betrack] échec du seed des règles bonnes pratiques :", err)
     );
 
     if (companyId) {

@@ -1,6 +1,5 @@
 import type {
   ActionStatus,
-  BestPracticeRule,
   BeTrackData,
   DependencyType,
   Lever,
@@ -152,32 +151,6 @@ export function underperformers(data: BeTrackData, wsId?: string) {
     })
     .filter((x) => x.gap > 10)
     .sort((a, b) => b.gap - a.gap);
-}
-
-/**
- * Contrôle de couverture "bonnes pratiques" : pour chaque règle active, vérifie si au moins un
- * levier non-annulé répond à TOUS ses critères définis (matchFunction/matchWorkstreamId/
- * matchType). Distinct de `underperformers`/`dependencyAlerts` : ceux-ci détectent un problème
- * sur un levier existant, alors qu'ici on détecte l'ABSENCE de levier dans une catégorie censée
- * être couverte. Fonction pure — ne filtre pas elle-même les manquements : c'est à l'appelant de
- * ne garder que `!hasMatch` s'il ne veut afficher que les manquements.
- */
-export function bestPracticeGaps(
-  data: BeTrackData,
-  rules: BestPracticeRule[]
-): { rule: BestPracticeRule; hasMatch: boolean }[] {
-  const activeLevers = data.levers.filter((l) => l.status !== "cancelled");
-  return rules
-    .filter((r) => r.active)
-    .map((rule) => {
-      const hasMatch = activeLevers.some((l) => {
-        if (rule.matchFunction && l.function !== rule.matchFunction) return false;
-        if (rule.matchWorkstreamId && l.ws !== rule.matchWorkstreamId) return false;
-        if (rule.matchType && l.type !== rule.matchType) return false;
-        return true;
-      });
-      return { rule, hasMatch };
-    });
 }
 
 export function fmtCurr(v: number | null | undefined, dec = 1): string {

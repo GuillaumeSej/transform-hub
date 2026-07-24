@@ -8,14 +8,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type {
-  AuthUser,
-  BestPracticeRule,
-  Company,
-  HierarchyNode,
-  LifecycleStage,
-  Project,
-} from "@/types";
+import type { AuthUser, Company, HierarchyNode, LifecycleStage, Project } from "@/types";
 import { TEST_USERS } from "@/lib/auth";
 
 // --- Companies ---
@@ -96,30 +89,6 @@ export async function saveHierarchyNode(node: HierarchyNode): Promise<void> {
 
 export async function deleteHierarchyNode(id: string): Promise<void> {
   await deleteDoc(doc(hierarchyNodesCol(), id));
-}
-
-// --- Best Practice Rules ---
-
-const bestPracticeRulesCol = () => collection(db, "bestPracticeRules");
-
-/** Abonnement filtré par entreprise (filtrage côté client, comme pour les leviers — voir
- *  lib/firestore/levers.ts::byCompany). */
-export function subscribeBestPracticeRules(
-  companyId: string,
-  cb: (rules: BestPracticeRule[]) => void
-): Unsubscribe {
-  return onSnapshot(bestPracticeRulesCol(), (snap) => {
-    const all = snap.docs.map((d) => d.data() as BestPracticeRule);
-    cb(all.filter((r) => r.companyId === companyId));
-  });
-}
-
-export async function saveBestPracticeRule(rule: BestPracticeRule): Promise<void> {
-  await setDoc(doc(bestPracticeRulesCol(), rule.id), rule);
-}
-
-export async function deleteBestPracticeRule(id: string): Promise<void> {
-  await deleteDoc(doc(bestPracticeRulesCol(), id));
 }
 
 // --- Users (admin-managed) ---
@@ -211,71 +180,6 @@ export const TEST_PROJECT_3: Project = {
   revenue: 270.0,
   createdAt: "2026-01-15",
 };
-
-// Règles de démo pour c1 (Acme Corp) — voir data/mockData.ts pour les leviers réels de c1.
-// Les deux dernières sont volontairement NON couvertes par les leviers de démo actuels
-// (aucun levier de fonction "R&D" ni "Marketing"), afin que la carte "Bonnes pratiques" du
-// dashboard affiche un manquement dès la première ouverture.
-export const TEST_BEST_PRACTICE_RULES: BestPracticeRule[] = [
-  {
-    id: "bpr-c1-sourcing",
-    companyId: "c1",
-    label: "Levier Sourcing & Achats",
-    description: "Le programme devrait comporter au moins un levier de type Sourcing & Achats.",
-    matchType: "Sourcing & Achats",
-    active: true,
-  },
-  {
-    id: "bpr-c1-hr-reorg",
-    companyId: "c1",
-    label: "Réorganisation RH",
-    description: "La fonction RH devrait porter au moins un levier de réorganisation/effectifs.",
-    matchFunction: "HR",
-    active: true,
-  },
-  {
-    id: "bpr-c1-digital-commercial",
-    companyId: "c1",
-    label: "Digitalisation du commercial",
-    description:
-      "Le workstream Commercial Effectiveness devrait comporter au moins un levier de digitalisation.",
-    matchWorkstreamId: "WS-COM",
-    matchType: "Digitalisation & Automatisation",
-    active: true,
-  },
-  {
-    id: "bpr-c1-rd",
-    companyId: "c1",
-    label: "Couverture R&D",
-    description: "Aucun levier ne porte actuellement sur la fonction R&D — est-ce normal ?",
-    matchFunction: "R&D",
-    active: true,
-  },
-  {
-    id: "bpr-c1-marketing",
-    companyId: "c1",
-    label: "Couverture Marketing",
-    description: "Aucun levier ne porte actuellement sur la fonction Marketing — est-ce normal ?",
-    matchFunction: "Marketing",
-    active: true,
-  },
-];
-
-let bestPracticeRulesSeeded = false;
-
-/** Seed idempotent des règles "bonnes pratiques" de démo pour c1 — suit le même schéma que
- *  `ensureAdminSeeded` ci-dessous (n'écrit rien si la collection contient déjà des données). */
-export async function ensureBestPracticeRulesSeeded(): Promise<void> {
-  if (bestPracticeRulesSeeded) return;
-  bestPracticeRulesSeeded = true;
-
-  const snap = await getDocs(bestPracticeRulesCol());
-  if (snap.empty) {
-    await Promise.all(
-      TEST_BEST_PRACTICE_RULES.map((r) => setDoc(doc(bestPracticeRulesCol(), r.id), r))
-    );
-  }
-}
 
 let adminSeeded = false;
 

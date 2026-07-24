@@ -4,11 +4,11 @@
  * donnée d'entreprise : elle vit en localStorage, suivant le même pattern que `lib/storage.ts`
  * (clé préfixée `betrack_`, JSON-sérialisée, lecture/écriture protégées par `isBrowser()`).
  *
- * Décision de scope : la ligne de KPI, l'en-tête (titre, import/export Excel, sélecteur de
- * scénario) et la barre de filtres restent EN DEHORS de ce système — ce sont des éléments de
- * chrome fixes, pas des "graphiques" repositionnables. Tout le reste de l'ancien layout fixe du
- * dashboard (funnel, alertes, bonnes pratiques, S-Curve, bridge, sankey, marimekko, ventilations,
- * table de synthèse, dépendances, P&L) devient un widget de ce registre.
+ * Décision de scope : la ligne de KPI, l'en-tête (titre, export) et la barre de filtres restent EN
+ * DEHORS de ce système — ce sont des éléments de chrome fixes, pas des "graphiques"
+ * repositionnables. Tout le reste de l'ancien layout fixe du dashboard (funnel, alertes, S-Curve,
+ * bridge, sankey, marimekko, ventilations, table de synthèse, dépendances, P&L) devient un widget
+ * de ce registre.
  *
  * Grille de base : 4 colonnes (`grid-cols-4`). Un widget occupe S=1 / M=2 / L=3 / XL=4 colonnes.
  * La grille CSS native reflow automatiquement les widgets suivants sur la ligne suivante dès qu'un
@@ -32,7 +32,6 @@ export const SPAN_COL_CLASS: Record<WidgetSpan, string> = {
 export type DashboardWidgetType =
   | "stage-funnel"
   | "alerts"
-  | "best-practices"
   | "s-curve"
   | "bridge"
   | "sankey"
@@ -134,13 +133,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "Bell",
     defaultSpan: "M",
     allowedSpans: ["S", "M", "L", "XL"],
-  },
-  {
-    type: "best-practices",
-    label: "Bonnes pratiques",
-    icon: "ShieldCheck",
-    defaultSpan: "XL",
-    allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "s-curve",

@@ -14,7 +14,6 @@ import {
   Maximize2,
   Plus,
   RotateCcw,
-  ShieldCheck,
   TriangleAlert,
   TrendingUp,
   Users,
@@ -25,12 +24,11 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
-  subscribeBestPracticeRules,
   subscribeCompanies,
   subscribeHierarchyNodes,
   subscribeProjects,
 } from "@/lib/firestore/admin";
-import type { BestPracticeRule, Company, HierarchyLevelDef, HierarchyNode, Project } from "@/types";
+import type { Company, HierarchyLevelDef, HierarchyNode, Project } from "@/types";
 import * as engine from "@/lib/engine";
 import {
   METRIC_REGISTRY,
@@ -115,22 +113,6 @@ export default function DashboardPage() {
   const { t } = useTranslation();
   const router = useRouter();
   const { filters, setFilter, resetFilters } = useGlobalFilters();
-
-  // Règles "bonnes pratiques" de l'entreprise — concept distinct des `Alert` manuelles
-  // (voir la carte "Alerts & Notifications" plus bas) : ici on signale les catégories de
-  // leviers attendues qui n'ont aucune couverture actuellement.
-  const [bestPracticeRules, setBestPracticeRules] = useState<BestPracticeRule[]>([]);
-  useEffect(() => {
-    if (!user?.companyId) {
-      setBestPracticeRules([]);
-      return;
-    }
-    const unsub = subscribeBestPracticeRules(user.companyId, setBestPracticeRules);
-    return unsub;
-  }, [user?.companyId]);
-  const bestPracticeGaps = engine
-    .bestPracticeGaps(data, bestPracticeRules)
-    .filter((g) => !g.hasMatch);
 
   // Société courante — utilisée pour le budget CAPEX de référence (KPI ci-dessous) et
   // l'habilitation de confidentialité (filtrage des leviers visibles par profil).
@@ -559,39 +541,6 @@ export default function DashboardPage() {
               {data.alerts.length === 0 && (
                 <p className="py-6 text-center text-sm text-tertiary">
                   {t("dashboard.widgets.noAlerts")}
-                </p>
-              )}
-            </CardBody>
-          </Card>
-        );
-      case "best-practices":
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader title={t("dashboard.widgets.bestPractices")} />
-            <CardBody>
-              <div className="grid grid-cols-2 gap-x-6 max-[900px]:grid-cols-1">
-                {bestPracticeGaps.map(({ rule }) => (
-                  <div
-                    key={rule.id}
-                    className="flex gap-3 border-b border-border py-3 last:border-b-0"
-                  >
-                    <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-sm bg-rag-amber-light text-rag-amber">
-                      <ShieldCheck size={14} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[12.5px] font-semibold text-primary">{rule.label}</div>
-                      <div className="mt-0.5 text-[11.5px] text-secondary">{rule.description}</div>
-                      <div className="mt-1 text-[10.5px] text-tertiary">
-                        Aucun levier ne couvre ce point — est-ce normal ?
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {bestPracticeGaps.length === 0 && (
-                <p className="py-6 text-center text-sm text-tertiary">
-                  {t("dashboard.widgets.noBestPracticeGap")}
                 </p>
               )}
             </CardBody>
