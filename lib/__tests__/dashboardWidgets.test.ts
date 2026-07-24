@@ -5,10 +5,15 @@ import {
   moveWidget,
   cycleSpan,
   addWidget,
+  addWidgetWithCustomView,
+  addCustomViewToInstance,
   removeWidget,
   setWidgetSpan,
   setWidgetView,
   getWidgetDef,
+  resolveCustomViews,
+  resolveActiveCustomView,
+  type DashboardWidgetInstance,
 } from "@/lib/dashboardWidgets";
 
 describe("dashboardWidgets — buildDefaultLayout", () => {
@@ -128,6 +133,88 @@ describe("dashboardWidgets — configurable widgets (view)", () => {
     expect(next.find((w) => w.instanceId === "geo-breakdown")?.view).toBe(
       layout.find((w) => w.instanceId === "geo-breakdown")?.view
     );
+  });
+});
+
+describe("dashboardWidgets — builder générique (customViews)", () => {
+  it("buildDefaultLayout seeds defaultCustomViews for builder widget types", () => {
+    const layout = buildDefaultLayout();
+    const marimekko = layout.find((w) => w.type === "marimekko")!;
+    expect(marimekko.customViews).toHaveLength(2);
+    expect(marimekko.customViews?.map((v) => v.id)).toEqual([
+      "function-country",
+      "workstream-project",
+    ]);
+    const pnl = layout.find((w) => w.type === "pnl")!;
+    expect(pnl.customViews).toHaveLength(1);
+    expect(pnl.view).toBe("account");
+  });
+
+  it("non-builder widgets have no customViews field", () => {
+    const layout = buildDefaultLayout();
+    expect(layout.find((w) => w.type === "sankey")?.customViews).toBeUndefined();
+  });
+
+  it("addWidgetWithCustomView creates a fresh instance with exactly the requested view", () => {
+    const layout = buildDefaultLayout();
+    const next = addWidgetWithCustomView(layout, "marimekko", {
+      metric: "fteImpact",
+      dimensions: ["type", "risk"],
+      label: "Impact ETP par type × risque",
+    });
+    const added = next[next.length - 1];
+    expect(added.type).toBe("marimekko");
+    expect(added.customViews).toHaveLength(1);
+    expect(added.customViews?.[0].metric).toBe("fteImpact");
+    expect(added.customViews?.[0].dimensions).toEqual(["type", "risk"]);
+    expect(added.view).toBe(added.customViews?.[0].id);
+  });
+
+  it("addCustomViewToInstance appends a view to an existing instance and switches to it", () => {
+    const layout = buildDefaultLayout();
+    const marimekkoId = layout.find((w) => w.type === "marimekko")!.instanceId;
+    const next = addCustomViewToInstance(layout, marimekkoId, {
+      metric: "leverCount",
+      dimensions: ["owner", "sponsor"],
+    });
+    const updated = next.find((w) => w.instanceId === marimekkoId)!;
+    expect(updated.customViews).toHaveLength(3);
+    expect(updated.view).toBe(updated.customViews?.[2].id);
+    // Les autres instances ne sont pas affectées.
+    const geo = next.find((w) => w.type === "geo-breakdown")!;
+    expect(geo.customViews).toHaveLength(2);
+  });
+
+  it("addCustomViewToInstance materializes legacy defaultCustomViews first if the instance had none", () => {
+    const layout: DashboardWidgetInstance[] = [
+      { instanceId: "marimekko", type: "marimekko", span: "M", view: "function-country" },
+    ];
+    const next = addCustomViewToInstance(layout, "marimekko", {
+      metric: "capex",
+      dimensions: ["country", "function"],
+    });
+    const updated = next[0];
+    expect(updated.customViews).toHaveLength(3);
+    expect(updated.customViews?.[0].id).toBe("function-country");
+    expect(updated.view).toBe(updated.customViews?.[2].id);
+  });
+
+  it("resolveCustomViews falls back to registry defaults when the instance has none", () => {
+    const instance: DashboardWidgetInstance = {
+      instanceId: "geo-breakdown",
+      type: "geo-breakdown",
+      span: "M",
+      view: "country",
+    };
+    expect(resolveCustomViews(instance)).toHaveLength(2);
+  });
+
+  it("resolveActiveCustomView resolves by id, falling back to the first available view", () => {
+    const layout = buildDefaultLayout();
+    const marimekko = layout.find((w) => w.type === "marimekko")!;
+    expect(resolveActiveCustomView(marimekko)?.id).toBe("function-country");
+    const unknownView = { ...marimekko, view: "does-not-exist" };
+    expect(resolveActiveCustomView(unknownView)?.id).toBe("function-country");
   });
 });
 
