@@ -141,7 +141,11 @@ export function Topbar({
             <span className="absolute right-1.5 top-1.5 h-[7px] w-[7px] rounded-full border-2 border-white bg-bp-coral" />
           )}
         </button>
-        <ResetDemoButton onReset={onReset} />
+        {/* Réservé au global admin : ce bouton réinitialise TOUTES les entreprises, pas
+            seulement celle de l'utilisateur courant — le rendre visible à tous les rôles était
+            un oubli (voir composant CompanyDatabasePanel pour l'équivalent scopé à une seule
+            entreprise, réservé lui aussi à l'admin global). */}
+        {role === "admin" && <ResetDemoButton onReset={onReset} />}
         <button
           onClick={() => {
             logout();
