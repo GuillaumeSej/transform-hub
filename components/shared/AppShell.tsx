@@ -42,7 +42,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     // n'est jamais dans la sidebar). Le Lever Owner en particulier n'a pas accès à un dashboard.
     const allowedRoutes = new Set(roles[role].nav.map((item) => PAGE_ROUTES[item.id]));
     const isLeverDetail = pathname.startsWith("/levers/");
-    if (!isLeverDetail && !allowedRoutes.has(pathname)) {
+    // Hub de détail entreprise (/admin/companies/detail?id=...) : jamais dans la nav (on y accède
+    // en cliquant "Gérer" depuis la liste, comme pour /levers/detail ci-dessus) et réservé au
+    // global admin — les autres rôles n'ont pas /admin/companies dans leur nav, donc
+    // allowedRoutes.has() suffirait déjà à les bloquer, mais on le rend explicite ici.
+    const isCompanyDetail = pathname === "/admin/companies/detail";
+    const companyDetailAllowed = isCompanyDetail && role === "admin";
+    if (!isLeverDetail && !companyDetailAllowed && !allowedRoutes.has(pathname)) {
       router.replace(PAGE_ROUTES[roles[role].nav[0]?.id] ?? "/levers");
       return;
     }
