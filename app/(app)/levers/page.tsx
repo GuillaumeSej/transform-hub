@@ -15,7 +15,6 @@ import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/adm
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { ExportButton } from "@/components/shared/ExportButton";
-import { ExcelUploadButton } from "@/components/shared/ExcelUploadButton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { StageBadge } from "@/components/shared/StageBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
@@ -209,7 +208,7 @@ export default function LeversPage() {
 
   const rows: LeverRow[] = filteredLevers.map((l) => ({
     ...l,
-    realized: engine.realizedSavings(l, data),
+    realized: engine.realizedSavings(l),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
     statusLabel: lifecycle.label(l.status),
     costCenterLabel: (() => {
@@ -239,7 +238,7 @@ export default function LeversPage() {
     : [];
 
   const totalNet = filteredLevers.reduce((s, l) => s + l.netSavings, 0);
-  const totalReal = filteredLevers.reduce((s, l) => s + engine.realizedSavings(l, data), 0);
+  const totalReal = filteredLevers.reduce((s, l) => s + engine.realizedSavings(l), 0);
 
   /** Édition inline (double-clic) : les colonnes marquées editable écrivent directement sur le
    * levier. Les selects (statut/priorité/risque) passent par un mapping label → valeur interne. */
@@ -416,8 +415,7 @@ export default function LeversPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ExportButton type="excel" data={data} />
-          <ExcelUploadButton data={data} companyId={user?.companyId ?? null} />
+          <ExportButton data={data} />
           <Button variant="primary" onClick={() => setNewLeverOpen(true)}>
             <Plus size={13} /> {t("levers.newLever")}
           </Button>
