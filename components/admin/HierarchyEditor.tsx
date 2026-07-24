@@ -1,19 +1,53 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Plus, Save, Trash2, ChevronUp, ChevronDown } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
+import {
+  Plus,
+  Save,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  Download,
+  Upload,
+  FileSpreadsheet,
+} from "lucide-react";
 import type { Company, HierarchyLevelDef, HierarchyNode } from "@/types";
 import {
   saveCompany,
   subscribeHierarchyNodes,
   saveHierarchyNode,
+  saveHierarchyNodesBatch,
   deleteHierarchyNode,
 } from "@/lib/firestore/admin";
+import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import {
+  HIERARCHY_EXCEL_HEADERS,
+  hierarchyNodeToExcelRow,
+  validateHierarchyImportRows,
+  type HierarchyImportPreview,
+} from "@/lib/hierarchyExcel";
+import { Modal } from "@/components/shared/Modal";
+import { Button } from "@/components/shared/Button";
+import { useToast } from "@/lib/hooks/useToast";
 
 let nodeSeq = 0;
 function nextNodeId() {
   nodeSeq += 1;
   return `HN-${Date.now()}-${nodeSeq}`;
+}
+
+/** Chemin complet "Macro › … › maille" d'un nœud, utilisé pour désambiguïser le sélecteur de
+ *  parent et l'affichage des nœuds dès que l'arbre a 3+ niveaux — sans ça, deux nœuds de même
+ *  libellé sous des branches différentes (ex. deux "Procurement" sous deux BU distinctes) sont
+ *  indiscernables dans une simple liste plate. */
+function ancestryLabel(
+  nodeId: string,
+  nodes: HierarchyNode[],
+  levels: HierarchyLevelDef[]
+): string {
+  const path = resolveHierarchyPath(nodeId, nodes, levels);
+  return path.map((p) => p.label).join(" › ");
 }
 
 /**
@@ -29,11 +63,16 @@ export function HierarchyEditor({
   companies: Company[];
   companyId: string;
 }) {
+  const { showToast } = useToast();
   const [levels, setLevels] = useState<HierarchyLevelDef[]>([]);
   const [nodes, setNodes] = useState<HierarchyNode[]>([]);
   const [nodeForm, setNodeForm] = useState<
     Record<string, { code: string; label: string; parentId: string }>
   >({});
+  const [importPreview, setImportPreview] = useState<HierarchyImportPreview | null>(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const company = companies.find((c) => c.id === companyId);
@@ -121,6 +160,60 @@ export function HierarchyEditor({
 
   const parentLevel = (level: HierarchyLevelDef): HierarchyLevelDef | undefined =>
     sortedLevels.find((l) => l.order === level.order - 1);
+
+  // --- Import / export Excel de l'arborescence (construction en masse) ---
+
+  const downloadTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([[...HIERARCHY_EXCEL_HEADERS]]);
+    XLSX.utils.book_append_sheet(wb, sheet, "Arborescence");
+    XLSX.writeFile(wb, "template_arborescence.xlsx");
+    showToast(
+      "Template téléchargé",
+      'Une ligne par nœud : "Niveau" (libellé ou clé configuré(e)), "Code", "Libellé", "Code parent" (vide pour le niveau macro).',
+      "success"
+    );
+  };
+
+  const exportTree = () => {
+    const nodesById = new Map(nodes.map((n) => [n.id, n]));
+    const rows = nodes.map((n) => hierarchyNodeToExcelRow(n, sortedLevels, nodesById));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Arborescence");
+    const company = companies.find((c) => c.id === companyId);
+    XLSX.writeFile(wb, `arborescence_${company?.name ?? companyId}.xlsx`);
+    showToast("Export Excel généré", `${rows.length} nœud(s) exporté(s)`, "success");
+  };
+
+  const handleImportFile = async (file: File) => {
+    if (sortedLevels.length === 0) return;
+    const workbook = file.name.toLowerCase().endsWith(".csv")
+      ? XLSX.read(await file.text(), { type: "string" })
+      : XLSX.read(await file.arrayBuffer(), { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
+      defval: "",
+    });
+    const preview = validateHierarchyImportRows(rawRows, sortedLevels, nodes, companyId);
+    setImportFileName(file.name);
+    setImportPreview(preview);
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview || importPreview.toCreate.length === 0) return;
+    setImporting(true);
+    try {
+      await saveHierarchyNodesBatch(importPreview.toCreate);
+      showToast(
+        "Import Excel terminé",
+        `${importPreview.toCreate.length} nœud(s) créé(s)${importPreview.errors.length > 0 ? ` · ${importPreview.errors.length} ligne(s) ignorée(s)` : ""}`,
+        "success"
+      );
+      setImportPreview(null);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -283,7 +376,40 @@ export function HierarchyEditor({
       {/* Section 2 : nœuds */}
       {sortedLevels.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-sm font-bold text-text-primary">2. Valeurs de l&apos;arborescence</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-bold text-text-primary">
+              2. Valeurs de l&apos;arborescence
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={downloadTemplate}>
+                <Download size={13} /> Template Excel
+              </Button>
+              <Button variant="outline" onClick={exportTree} disabled={nodes.length === 0}>
+                <FileSpreadsheet size={13} /> Exporter l&apos;arborescence
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) void handleImportFile(file);
+                }}
+              />
+              <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                <Upload size={13} /> Importer un fichier
+              </Button>
+            </div>
+          </div>
+          <p className="max-w-2xl text-xs text-text-secondary">
+            Le fichier contient une ligne par nœud avec les colonnes &quot;Niveau&quot; (libellé ou
+            clé d&apos;un niveau configuré ci-dessus), &quot;Code&quot;, &quot;Libellé&quot; et
+            &quot;Code parent&quot; (code d&apos;un nœud du niveau immédiatement au-dessus — vide
+            pour le niveau macro). L&apos;ordre des lignes importe peu : les parents sont résolus
+            par code, quel que soit l&apos;ordre du fichier.
+          </p>
           {sortedLevels.map((level) => {
             const pLevel = parentLevel(level);
             const parentOptions = pLevel ? (nodesByLevel.get(pLevel.key) ?? []) : [];
@@ -331,7 +457,7 @@ export function HierarchyEditor({
                           <td className="px-4 py-2 text-text-primary">{n.label}</td>
                           {pLevel && (
                             <td className="px-4 py-2 text-text-secondary">
-                              {parentOptions.find((p) => p.id === n.parentId)?.label ?? "—"}
+                              {n.parentId ? ancestryLabel(n.parentId, nodes, sortedLevels) : "—"}
                             </td>
                           )}
                           <td className="px-4 py-2 text-center">
@@ -371,7 +497,7 @@ export function HierarchyEditor({
                               <option value="">Sélectionner…</option>
                               {parentOptions.map((p) => (
                                 <option key={p.id} value={p.id}>
-                                  {p.label} ({p.code})
+                                  {ancestryLabel(p.id, nodes, sortedLevels)} ({p.code})
                                 </option>
                               ))}
                             </select>
@@ -413,7 +539,8 @@ export function HierarchyEditor({
                         </div>
                         {pLevel && (
                           <div className="mt-0.5 text-xs text-text-secondary">
-                            Parent : {parentOptions.find((p) => p.id === n.parentId)?.label ?? "—"}
+                            Parent :{" "}
+                            {n.parentId ? ancestryLabel(n.parentId, nodes, sortedLevels) : "—"}
                           </div>
                         )}
                       </div>
@@ -452,7 +579,7 @@ export function HierarchyEditor({
                         <option value="">Sélectionner…</option>
                         {parentOptions.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.label} ({p.code})
+                            {ancestryLabel(p.id, nodes, sortedLevels)} ({p.code})
                           </option>
                         ))}
                       </select>
@@ -470,6 +597,49 @@ export function HierarchyEditor({
           })}
         </section>
       )}
+
+      <Modal
+        open={importPreview !== null}
+        onOpenChange={(open) => !open && setImportPreview(null)}
+        title={`Prévisualisation de l'import — ${importFileName}`}
+        maxWidth="640px"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setImportPreview(null)}>
+              Annuler
+            </Button>
+            <Button
+              variant="primary"
+              disabled={importing || (importPreview?.toCreate.length ?? 0) === 0}
+              onClick={() => void confirmImport()}
+            >
+              Confirmer l&apos;import
+            </Button>
+          </>
+        }
+      >
+        <div className="mb-3 flex flex-wrap gap-4 text-[13px]">
+          <span>
+            <strong className="text-rag-green-dark">{importPreview?.toCreate.length ?? 0}</strong>{" "}
+            nœud(s) prêt(s) à créer
+          </span>
+          <span>
+            <strong className="text-rag-red">{importPreview?.errors.length ?? 0}</strong> ligne(s)
+            en erreur
+          </span>
+        </div>
+        <div className="max-h-[320px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
+          {importPreview?.errors.length === 0 ? (
+            <p className="text-tertiary">Aucune anomalie détectée.</p>
+          ) : (
+            importPreview?.errors.map((e, i) => (
+              <div key={i} className="text-secondary">
+                Ligne {e.rowNumber} : {e.reason}
+              </div>
+            ))
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
