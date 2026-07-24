@@ -22,6 +22,7 @@ import {
   LayoutGrid,
   LineChart,
   ShieldCheck,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,4 +52,5 @@ export const ICON_REGISTRY: Record<string, LucideIcon> = {
   Link2,
   Table2,
   LayoutGrid,
+  TrendingUp,
 };
