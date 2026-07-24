@@ -4,7 +4,7 @@ import type { AuditEntry, Comment, Lever, SubLever } from "@/types";
 import { planCompanyScopedReset, type CompanyResetPlan } from "@/lib/companyResetLogic";
 
 /**
- * I/O Firestore pour le reset "scopé entreprise" du hub `/admin/companies/[id]` (onglet Base de
+ * I/O Firestore pour le reset "scopé entreprise" du hub `/admin/companies/detail` (onglet Base de
  * données). Fichier séparé de `lib/firestore/levers.ts` (qui reste focalisé sur le CRUD
  * temps réel) pour ne pas l'alourdir davantage. Voir `lib/companyResetLogic.ts` pour la logique
  * pure de planification (ce qui est/n'est pas supprimé) et le commentaire sur la limite de

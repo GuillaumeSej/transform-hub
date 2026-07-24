@@ -32,7 +32,7 @@ function clearanceModeOf(clearance: AuthUser["confidentialityClearance"]): Clear
 
 /**
  * Gestion des utilisateurs — extrait de `admin/users/page.tsx` pour être réutilisable tel quel
- * par le hub `/admin/companies/[id]` (onglet Utilisateurs), pré-filtré sur une entreprise donnée
+ * par le hub `/admin/companies/detail` (onglet Utilisateurs), pré-filtré sur une entreprise donnée
  * via `scopeCompanyId`. Sans ce prop, se comporte exactement comme avant (page globale
  * `/admin/users`, avec son propre filtre entreprise et sa scop admin_entreprise). Seule source de
  * vérité pour ce CRUD — ne pas dupliquer la logique ailleurs.

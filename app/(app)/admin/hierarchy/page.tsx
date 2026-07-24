@@ -9,7 +9,7 @@ import { HierarchyEditor } from "@/components/admin/HierarchyEditor";
 
 /** Page globale de configuration de l'arborescence financière — garde son propre sélecteur
  * d'entreprise ; la logique d'édition (niveaux + valeurs) vit dans HierarchyEditor, partagée avec
- * l'onglet "Hiérarchie" du hub `/admin/companies/[id]` (déjà scopé sur une entreprise). Réservé au
+ * l'onglet "Hiérarchie" du hub `/admin/companies/detail` (déjà scopé sur une entreprise). Réservé au
  * global admin (voir AppShell — retiré de la nav admin_entreprise). */
 export default function AdminHierarchyPage() {
   const { role, user } = useRole();

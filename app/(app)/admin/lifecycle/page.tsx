@@ -9,7 +9,7 @@ import { LifecycleEditor } from "@/components/admin/LifecycleEditor";
 
 /** Page globale de configuration du cycle de vie — garde son propre sélecteur d'entreprise ; la
  * logique d'édition vit dans LifecycleEditor, partagée avec l'onglet "Cycle de vie" du hub
- * `/admin/companies/[id]`. Reste accessible à admin ET admin_entreprise (inchangé). */
+ * `/admin/companies/detail`. Reste accessible à admin ET admin_entreprise (inchangé). */
 export default function AdminLifecyclePage() {
   const { role, user } = useRole();
   const isEntAdmin = role === "admin_entreprise";

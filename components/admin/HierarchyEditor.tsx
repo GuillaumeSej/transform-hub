@@ -19,7 +19,7 @@ function nextNodeId() {
 /**
  * Édition de l'arborescence financière (niveaux + valeurs) pour UNE entreprise déjà sélectionnée.
  * Extrait de `admin/hierarchy/page.tsx` — cette page garde son propre sélecteur d'entreprise et
- * rend ce composant scopé ; le hub `/admin/companies/[id]` le rend directement avec l'entreprise
+ * rend ce composant scopé ; le hub `/admin/companies/detail` le rend directement avec l'entreprise
  * du hub, sans sélecteur. Seule source de vérité pour ce CRUD.
  */
 export function HierarchyEditor({

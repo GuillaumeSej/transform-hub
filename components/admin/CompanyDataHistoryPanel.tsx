@@ -46,7 +46,7 @@ function formatTimestamp(ts: string): string {
 }
 
 /**
- * Onglet "Données & Historique" du hub `/admin/companies/[id]` : combine la carte de statistiques
+ * Onglet "Données & Historique" du hub `/admin/companies/detail` : combine la carte de statistiques
  * par entreprise de `admin/data/page.tsx` et le tableau d'audit de `admin/history/page.tsx`,
  * scopés sur une seule entreprise (`companyId`). Réutilise les mêmes abonnements/helpers
  * Firestore que les deux pages globales, qui restent inchangées et continuent de fonctionner de

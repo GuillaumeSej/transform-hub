@@ -38,7 +38,7 @@ export const DEFAULT_COMPANY_FORM: CompanyFormState = {
 /**
  * Formulaire d'édition des paramètres d'une entreprise (identité, exercice fiscal, CAPEX, module
  * Plan d'action, échelle de confidentialité + matrice d'habilitation par profil). Extrait de
- * `admin/companies/page.tsx` pour être réutilisé tel quel par le hub `/admin/companies/[id]`
+ * `admin/companies/page.tsx` pour être réutilisé tel quel par le hub `/admin/companies/detail`
  * (onglet Paramètres) — seule source de vérité pour ces champs, ne pas dupliquer.
  */
 export function CompanyFieldsEditor({

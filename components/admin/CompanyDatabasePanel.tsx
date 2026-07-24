@@ -11,7 +11,7 @@ import { planCompanyReset, resetCompanyData } from "@/lib/firestore/companyReset
 import type { CompanyResetPlan } from "@/lib/companyResetLogic";
 
 /**
- * Onglet "Base de données" du hub `/admin/companies/[id]` (global admin uniquement) : permet un
+ * Onglet "Base de données" du hub `/admin/companies/detail` (global admin uniquement) : permet un
  * reset SCOPÉ à cette seule entreprise (leviers, sous-leviers, nœuds de hiérarchie, et les
  * entrées de commentaires/audit qui leur sont rattachées), avec confirmation obligatoire listant
  * précisément ce qui va être supprimé. Garde aussi une "zone de danger" globale (reset TOUTES les

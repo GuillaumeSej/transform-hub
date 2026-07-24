@@ -9,7 +9,7 @@ import { subscribeLifecycleConfig, saveLifecycleConfig } from "@/lib/firestore/a
 /**
  * Édition des étapes du cycle de vie pour UNE entreprise déjà sélectionnée. Extrait de
  * `admin/lifecycle/page.tsx` — cette page garde son propre sélecteur d'entreprise et rend ce
- * composant scopé ; le hub `/admin/companies/[id]` le rend directement, sans sélecteur. Seule
+ * composant scopé ; le hub `/admin/companies/detail` le rend directement, sans sélecteur. Seule
  * source de vérité pour ce CRUD.
  */
 export function LifecycleEditor({ companyId }: { companyId: string }) {
