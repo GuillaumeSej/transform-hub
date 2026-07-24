@@ -87,7 +87,6 @@ const fr: Record<string, string> = {
   "dashboard.title": "Tableau de bord exécutif",
   "dashboard.program": "Programme",
   "dashboard.leversActive": "leviers actifs",
-  "dashboard.scenario": "Scénario",
   "dashboard.customize": "Personnaliser",
   "dashboard.done": "Terminer",
   "dashboard.addWidget": "Ajouter un widget",

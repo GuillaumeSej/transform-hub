@@ -1,6 +1,6 @@
 "use client";
 
-import { FileSpreadsheet, FileText } from "lucide-react";
+import { FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
@@ -8,19 +8,13 @@ import { leverToExcelRow, subLeverToExcelRow } from "@/lib/leverExcel";
 import type { BeTrackData } from "@/types";
 
 /**
- * Export Excel réel pour les leviers (via `data`) ; reste un stub avec toast pour "Export COPIL
- * deck" (PPTX), non couvert par cette passe.
+ * Export Excel réel des leviers/sous-leviers (via `data`), utilisé sur la page Leviers.
+ * L'export PowerPoint du dashboard exécutif vit désormais dans son propre composant
+ * `DashboardExportButton` (capture DOM des widgets + génération .pptx via pptxgenjs), distinct de
+ * celui-ci car sa logique n'a rien à voir avec l'export Excel tabulaire.
  */
-export function ExportButton({
-  type = "excel",
-  data,
-}: {
-  type?: "excel" | "pptx";
-  data?: BeTrackData;
-}) {
+export function ExportButton({ data }: { data: BeTrackData }) {
   const { showToast } = useToast();
-  const label = type === "excel" ? "Export Excel" : "Export COPIL deck";
-  const Icon = type === "excel" ? FileSpreadsheet : FileText;
 
   const exportExcel = (d: BeTrackData) => {
     const rows = d.levers.map((l) => leverToExcelRow(l, d));
@@ -40,27 +34,20 @@ export function ExportButton({
       XLSX.utils.book_append_sheet(workbook, slSheet, "Sous-leviers");
     }
 
-    XLSX.writeFile(workbook, `leviers_${d.program.id}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    showToast("Export Excel généré", `${rows.length} leviers${subLeverRows.length > 0 ? ` · ${subLeverRows.length} sous-leviers` : ""} exportés`, "success");
+    XLSX.writeFile(
+      workbook,
+      `leviers_${d.program.id}_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+    showToast(
+      "Export Excel généré",
+      `${rows.length} leviers${subLeverRows.length > 0 ? ` · ${subLeverRows.length} sous-leviers` : ""} exportés`,
+      "success"
+    );
   };
 
   return (
-    <Button
-      variant="outline"
-      onClick={() => {
-        if (type === "excel" && data) {
-          exportExcel(data);
-          return;
-        }
-        showToast(
-          "Export en cours de préparation",
-          type === "excel"
-            ? "Génération du fichier Excel..."
-            : "Génération du support PowerPoint..."
-        );
-      }}
-    >
-      <Icon size={13} /> {label}
+    <Button variant="outline" onClick={() => exportExcel(data)}>
+      <FileSpreadsheet size={13} /> Export Excel
     </Button>
   );
 }

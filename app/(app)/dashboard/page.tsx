@@ -41,8 +41,7 @@ import { AlertItem } from "@/components/shared/AlertItem";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
-import { ExcelUploadButton } from "@/components/shared/ExcelUploadButton";
-import { ExportButton } from "@/components/shared/ExportButton";
+import { DashboardExportButton } from "@/components/shared/DashboardExportButton";
 import { SCurveChart } from "@/components/shared/charts/SCurveChart";
 import { WorkstreamBarChart } from "@/components/shared/charts/WorkstreamBarChart";
 import { GeoDonutChart } from "@/components/shared/charts/GeoDonutChart";
@@ -261,8 +260,6 @@ export default function DashboardPage() {
     account: data.pnlAccounts.find((a) => a.id === id)?.name ?? id,
     impact,
   }));
-  const activeScenario = data.scenarios.find((s) => s.id === data.activeScenario);
-
   // ─── Layout du dashboard (widgets) ────────────────────────────────────────────────────────
   // Personnalisation d'affichage purement locale (localStorage, par navigateur) — voir
   // lib/dashboardWidgets.ts. Le layout par défaut reproduit exactement l'ancien ordre/tailles
@@ -344,6 +341,11 @@ export default function DashboardPage() {
     return (
       <div
         key={instance.instanceId}
+        data-widget-id={instance.instanceId}
+        data-widget-title={t(
+          `dashboard.widgets.${instance.type.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}`,
+          def.label
+        )}
         className={`relative ${SPAN_COL_CLASS[instance.span]} ${
           isDragOver ? "outline outline-2 outline-offset-2 outline-bp-coral" : ""
         }`}
@@ -763,12 +765,11 @@ export default function DashboardPage() {
           </h1>
           <div className="mt-2.5 text-[13px] text-secondary">
             {t("dashboard.program")} <strong>{data.program.name}</strong> · {summary.leverCount}{" "}
-            {t("dashboard.leversActive")} · {t("dashboard.scenario")} : {activeScenario?.name}
+            {t("dashboard.leversActive")}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ExcelUploadButton data={data} companyId={user?.companyId ?? null} />
-          <ExportButton type="pptx" />
+          {!editMode && <DashboardExportButton layout={layout} />}
           <Button
             variant={editMode ? "dark" : "outline"}
             size="md"
@@ -777,17 +778,6 @@ export default function DashboardPage() {
             <LayoutGrid size={14} />
             {editMode ? t("dashboard.done") : t("dashboard.customize")}
           </Button>
-          <select
-            value={data.activeScenario}
-            onChange={(e) => data.setActiveScenario(e.target.value)}
-            className="rounded-md border border-border-strong bg-white px-3 py-2 text-[13px] font-semibold text-primary"
-          >
-            {data.scenarios.map((sc) => (
-              <option key={sc.id} value={sc.id}>
-                {t("dashboard.scenario")} : {sc.name}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
@@ -845,8 +835,12 @@ export default function DashboardPage() {
       </div>
 
       {editMode && (
-        <div className="mb-4 rounded-lg border-2 border-bp-coral/30 bg-bp-coral/[0.04] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-4 rounded-lg border-2 border-bp-coral/30 bg-bp-coral/[0.04]">
+          {/* Barre d'outils collante — reste visible en haut de l'écran pendant le scroll, pour ne
+              jamais avoir à remonter en haut de page pour cliquer "Terminer" après être descendu
+              choisir un widget à ajouter (pain point signalé : scroller en bas pour ajouter, puis
+              tout en haut pour terminer). */}
+          <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-t-lg border-b border-bp-coral/20 bg-white/95 p-4 shadow-sm backdrop-blur">
             <div>
               <div className="text-[13px] font-bold text-primary">
                 {t("dashboard.editModeTitle")}
@@ -870,11 +864,15 @@ export default function DashboardPage() {
                 <RotateCcw size={13} />
                 {t("dashboard.reset")}
               </Button>
+              <Button variant="dark" size="sm" onClick={() => setEditMode(false)}>
+                <LayoutGrid size={13} />
+                {t("dashboard.done")}
+              </Button>
             </div>
           </div>
 
           {addPanelOpen && (
-            <div className="mt-3.5 grid grid-cols-2 gap-2 border-t border-bp-coral/20 pt-3.5 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 p-4 pt-3.5 sm:grid-cols-3 lg:grid-cols-4">
               {availableToAdd.map((def) => {
                 const Icon = ICON_REGISTRY[def.icon] ?? LayoutGrid;
                 const alreadyPresent = layout.some((w) => w.type === def.type);
@@ -930,7 +928,10 @@ export default function DashboardPage() {
           dessous de `lg`/`sm` (breakpoints Tailwind standards) — les classes col-span-* des widgets
           (SPAN_COL_CLASS) restent valides à toute largeur de grille (un col-span-4 sur une grille à
           1 colonne se contente d'occuper l'unique colonne disponible, sans débordement). */}
-      <div className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        data-dashboard-widget-grid
+        className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
         {layout.map((instance) => renderWidget(instance))}
       </div>
     </div>

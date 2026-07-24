@@ -79,7 +79,6 @@ const en: Record<string, string> = {
   "dashboard.title": "Executive Dashboard",
   "dashboard.program": "Program",
   "dashboard.leversActive": "active initiatives",
-  "dashboard.scenario": "Scenario",
   "dashboard.customize": "Customize",
   "dashboard.done": "Done",
   "dashboard.addWidget": "Add a widget",

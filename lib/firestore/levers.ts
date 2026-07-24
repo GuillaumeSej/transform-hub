@@ -15,8 +15,8 @@ import type { AuditEntry, Comment, Lever, LeverDependency, SubLever } from "@/ty
 /**
  * Couche Firestore pour le périmètre "leviers" (levers, sous-leviers, commentaires, journal
  * d'audit) : c'est la donnée que plusieurs personnes doivent voir à jour en même temps, donc
- * elle sort de localStorage. Le reste (program, workstreams, workforce, operations, alerts,
- * scenarios) reste sur localStorage pour l'instant, voir lib/storage.ts.
+ * elle sort de localStorage. Le reste (program, workstreams, workforce, operations, alerts)
+ * reste sur localStorage pour l'instant, voir lib/storage.ts.
  *
  * Multi-tenancy : chaque lever/subLever porte un champ optionnel `companyId`. Les subscribers
  * filtrent par companyId pour n'exposer que les données de l'entreprise courante. Un admin
