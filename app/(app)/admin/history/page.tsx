@@ -121,7 +121,10 @@ export default function AdminHistoryPage() {
         <span className="text-xs text-text-secondary">{sorted.length} entrée(s)</span>
       </div>
 
-      <div className="rounded-xl border border-border overflow-x-auto">
+      {/* Desktop/tablette (>= sm) : tableau complet. En dessous de sm, 7 colonnes (dont
+       * anciennes/nouvelles valeurs) ne peuvent pas tenir sans troncature illisible — remplacé
+       * par des cartes empilées verticalement (voir ci-dessous). */}
+      <div className="hidden rounded-xl border border-border overflow-x-auto sm:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
@@ -189,6 +192,39 @@ export default function AdminHistoryPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile (< sm) : une carte par entrée, tout le contenu empilé verticalement. */}
+      <div className="divide-y divide-border rounded-xl border border-border sm:hidden">
+        {sorted.map((entry, idx) => (
+          <div key={idx} className="p-3">
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <span className="font-mono text-[11px] text-text-secondary">
+                {formatTimestamp(entry.ts)}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${ACTION_COLORS[entry.action] ?? "bg-gray-100 text-gray-600"}`}
+              >
+                {ACTION_LABELS[entry.action] ?? entry.action}
+              </span>
+            </div>
+            <div className="mb-1.5 text-[13px] font-medium text-text-primary">
+              {entry.user} ·{" "}
+              <span className="font-mono text-[11px] text-text-secondary">{entry.entity}</span>
+            </div>
+            <div className="text-xs text-text-secondary">
+              <span className="font-semibold text-text-primary">{entry.field}</span> :{" "}
+              <span className="break-words">{String(entry.old)}</span>
+              {" → "}
+              <span className="break-words font-medium text-text-primary">{String(entry.new)}</span>
+            </div>
+          </div>
+        ))}
+        {sorted.length === 0 && (
+          <div className="px-4 py-8 text-center text-sm text-text-secondary">
+            Aucune entrée dans l&apos;historique.
+          </div>
+        )}
       </div>
     </div>
   );

@@ -176,7 +176,10 @@ export default function AdminHierarchyPage() {
       {/* Section 1 : niveaux */}
       <section className="space-y-3">
         <h2 className="text-sm font-bold text-text-primary">1. Niveaux de l&apos;arborescence</h2>
-        <div className="rounded-xl border border-border overflow-x-auto">
+        {/* Desktop/tablette (>= sm). En dessous de sm, remplacé par des cartes (voir plus bas) —
+         * l'input libellé + la clé + les boutons de réordre/suppression ne tiennent pas sur une
+         * ligne à 375px sans scroll horizontal. */}
+        <div className="hidden rounded-xl border border-border overflow-x-auto sm:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-bg-elevated border-b border-border">
@@ -252,6 +255,55 @@ export default function AdminHierarchyPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile (< sm) : une carte par niveau. */}
+        <div className="divide-y divide-border rounded-xl border border-border sm:hidden">
+          {sortedLevels.map((level, idx) => (
+            <div key={level.key} className="p-3">
+              <div className="mb-2 flex items-center justify-between gap-2 text-xs text-text-secondary">
+                <span className="font-mono">
+                  {idx === 0 ? "Macro" : idx === sortedLevels.length - 1 ? "Fin" : level.order}
+                </span>
+                <code className="rounded bg-bg-surface px-1.5 py-0.5">{level.key}</code>
+              </div>
+              <input
+                value={level.label}
+                onChange={(e) => renameLevel(level.key, e.target.value)}
+                className="mb-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
+              />
+              <div className="flex items-center justify-between">
+                <div>
+                  <button
+                    onClick={() => moveLevel(level.key, "up")}
+                    disabled={idx === 0}
+                    className="mr-1 text-text-secondary hover:text-bp-coral disabled:opacity-30"
+                  >
+                    <ChevronUp size={16} />
+                  </button>
+                  <button
+                    onClick={() => moveLevel(level.key, "down")}
+                    disabled={idx === sortedLevels.length - 1}
+                    className="text-text-secondary hover:text-bp-coral disabled:opacity-30"
+                  >
+                    <ChevronDown size={16} />
+                  </button>
+                </div>
+                <button
+                  onClick={() => removeLevel(level.key)}
+                  className="text-text-secondary hover:text-red-500"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {sortedLevels.length === 0 && (
+            <div className="px-4 py-6 text-center text-sm text-text-secondary">
+              Aucun niveau configuré — l&apos;entreprise utilise le champ texte libre &quot;Centre
+              de coût&quot; historique.
+            </div>
+          )}
+        </div>
         <div className="flex gap-3">
           <button
             onClick={addLevel}
@@ -279,7 +331,7 @@ export default function AdminHierarchyPage() {
             const levelNodes = nodesByLevel.get(level.key) ?? [];
             const form = nodeForm[level.key] ?? { code: "", label: "", parentId: "" };
             return (
-              <div key={level.key} className="rounded-xl border border-border overflow-x-auto">
+              <div key={level.key} className="rounded-xl border border-border">
                 <div className="bg-bg-elevated border-b border-border px-4 py-2 text-xs font-semibold text-text-secondary">
                   {level.label}{" "}
                   {pLevel && (
@@ -288,101 +340,172 @@ export default function AdminHierarchyPage() {
                     </span>
                   )}
                 </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
-                        Code
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
-                        Libellé
-                      </th>
-                      {pLevel && (
+
+                {/* Desktop/tablette (>= sm) : tableau. En dessous de sm, cartes (voir plus bas) —
+                 * code + libellé + sélecteur parent + action ne tiennent pas sur une ligne étroite. */}
+                <div className="hidden overflow-x-auto sm:block">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
                         <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
-                          Parent ({pLevel.label})
+                          Code
                         </th>
-                      )}
-                      <th className="px-4 py-2 text-center text-xs font-semibold text-text-secondary">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {levelNodes.map((n) => (
-                      <tr key={n.id} className="border-b border-border hover:bg-bg-elevated/50">
-                        <td className="px-4 py-2 font-mono text-xs text-text-secondary">
-                          {n.code}
-                        </td>
-                        <td className="px-4 py-2 text-text-primary">{n.label}</td>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
+                          Libellé
+                        </th>
                         {pLevel && (
-                          <td className="px-4 py-2 text-text-secondary">
-                            {parentOptions.find((p) => p.id === n.parentId)?.label ?? "—"}
+                          <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
+                            Parent ({pLevel.label})
+                          </th>
+                        )}
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-text-secondary">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {levelNodes.map((n) => (
+                        <tr key={n.id} className="border-b border-border hover:bg-bg-elevated/50">
+                          <td className="px-4 py-2 font-mono text-xs text-text-secondary">
+                            {n.code}
+                          </td>
+                          <td className="px-4 py-2 text-text-primary">{n.label}</td>
+                          {pLevel && (
+                            <td className="px-4 py-2 text-text-secondary">
+                              {parentOptions.find((p) => p.id === n.parentId)?.label ?? "—"}
+                            </td>
+                          )}
+                          <td className="px-4 py-2 text-center">
+                            <button
+                              onClick={() => removeNode(n.id)}
+                              className="text-text-secondary hover:text-red-500"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td className="px-4 py-2">
+                          <input
+                            value={form.code}
+                            onChange={(e) => setFormField(level.key, "code", e.target.value)}
+                            placeholder="Code"
+                            className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            value={form.label}
+                            onChange={(e) => setFormField(level.key, "label", e.target.value)}
+                            placeholder="Libellé"
+                            className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
+                          />
+                        </td>
+                        {pLevel && (
+                          <td className="px-4 py-2">
+                            <select
+                              value={form.parentId}
+                              onChange={(e) => setFormField(level.key, "parentId", e.target.value)}
+                              className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
+                            >
+                              <option value="">Sélectionner…</option>
+                              {parentOptions.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.label} ({p.code})
+                                </option>
+                              ))}
+                            </select>
                           </td>
                         )}
                         <td className="px-4 py-2 text-center">
                           <button
-                            onClick={() => removeNode(n.id)}
-                            className="text-text-secondary hover:text-red-500"
+                            onClick={() => addNode(level)}
+                            className="rounded-lg bg-bp-coral px-2.5 py-1 text-xs font-semibold text-white hover:bg-bp-coral/90"
                           >
-                            <Trash2 size={14} />
+                            <Plus size={12} className="inline" /> Ajouter
                           </button>
                         </td>
                       </tr>
-                    ))}
-                    <tr>
-                      <td className="px-4 py-2">
-                        <input
-                          value={form.code}
-                          onChange={(e) => setFormField(level.key, "code", e.target.value)}
-                          placeholder="Code"
-                          className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          value={form.label}
-                          onChange={(e) => setFormField(level.key, "label", e.target.value)}
-                          placeholder="Libellé"
-                          className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
-                        />
-                      </td>
-                      {pLevel && (
-                        <td className="px-4 py-2">
-                          <select
-                            value={form.parentId}
-                            onChange={(e) => setFormField(level.key, "parentId", e.target.value)}
-                            className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
+                      {levelNodes.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={pLevel ? 4 : 3}
+                            className="px-4 py-3 text-center text-xs text-text-secondary"
                           >
-                            <option value="">Sélectionner…</option>
-                            {parentOptions.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.label} ({p.code})
-                              </option>
-                            ))}
-                          </select>
-                        </td>
+                            Aucune valeur pour ce niveau pour le moment.
+                          </td>
+                        </tr>
                       )}
-                      <td className="px-4 py-2 text-center">
-                        <button
-                          onClick={() => addNode(level)}
-                          className="rounded-lg bg-bp-coral px-2.5 py-1 text-xs font-semibold text-white hover:bg-bp-coral/90"
-                        >
-                          <Plus size={12} className="inline" /> Ajouter
-                        </button>
-                      </td>
-                    </tr>
-                    {levelNodes.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={pLevel ? 4 : 3}
-                          className="px-4 py-3 text-center text-xs text-text-secondary"
-                        >
-                          Aucune valeur pour ce niveau pour le moment.
-                        </td>
-                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile (< sm) : cartes empilées + formulaire d'ajout en pleine largeur. */}
+                <div className="divide-y divide-border sm:hidden">
+                  {levelNodes.map((n) => (
+                    <div key={n.id} className="flex items-center justify-between gap-2 p-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <code className="rounded bg-bg-surface px-1.5 py-0.5 text-xs text-text-secondary">
+                            {n.code}
+                          </code>
+                          <span className="truncate text-sm text-text-primary">{n.label}</span>
+                        </div>
+                        {pLevel && (
+                          <div className="mt-0.5 text-xs text-text-secondary">
+                            Parent : {parentOptions.find((p) => p.id === n.parentId)?.label ?? "—"}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => removeNode(n.id)}
+                        className="shrink-0 text-text-secondary hover:text-red-500"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  {levelNodes.length === 0 && (
+                    <div className="px-4 py-3 text-center text-xs text-text-secondary">
+                      Aucune valeur pour ce niveau pour le moment.
+                    </div>
+                  )}
+                  <div className="space-y-2 p-3">
+                    <input
+                      value={form.code}
+                      onChange={(e) => setFormField(level.key, "code", e.target.value)}
+                      placeholder="Code"
+                      className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
+                    />
+                    <input
+                      value={form.label}
+                      onChange={(e) => setFormField(level.key, "label", e.target.value)}
+                      placeholder="Libellé"
+                      className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
+                    />
+                    {pLevel && (
+                      <select
+                        value={form.parentId}
+                        onChange={(e) => setFormField(level.key, "parentId", e.target.value)}
+                        className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
+                      >
+                        <option value="">Sélectionner…</option>
+                        {parentOptions.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label} ({p.code})
+                          </option>
+                        ))}
+                      </select>
                     )}
-                  </tbody>
-                </table>
+                    <button
+                      onClick={() => addNode(level)}
+                      className="w-full rounded-lg bg-bp-coral px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
+                    >
+                      <Plus size={12} className="inline" /> Ajouter
+                    </button>
+                  </div>
+                </div>
               </div>
             );
           })}

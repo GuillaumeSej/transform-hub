@@ -246,7 +246,9 @@ export default function AdminBestPracticesPage() {
         </div>
       )}
 
-      <div className="rounded-xl border border-border overflow-x-auto">
+      {/* Desktop/tablette (>= sm). En dessous de sm, remplacé par des cartes (voir plus bas) — les
+       * critères en texte libre ne tiennent pas dans une colonne étroite sans être coupés. */}
+      <div className="hidden rounded-xl border border-border overflow-x-auto sm:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
@@ -318,6 +320,56 @@ export default function AdminBestPracticesPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile (< sm) : une carte par règle. */}
+      <div className="divide-y divide-border rounded-xl border border-border sm:hidden">
+        {rules.map((r) => (
+          <div key={r.id} className="p-3">
+            <div className="mb-1 flex items-start justify-between gap-2">
+              <div className="font-medium text-text-primary">{r.label}</div>
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                  r.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                {r.active ? "Active" : "Inactive"}
+              </span>
+            </div>
+            {r.description && (
+              <div className="mb-1.5 text-xs text-text-secondary">{r.description}</div>
+            )}
+            <div className="mb-2 text-xs text-text-secondary">
+              {[
+                r.matchFunction && `Fonction: ${r.matchFunction}`,
+                r.matchWorkstreamId &&
+                  `Workstream: ${data.workstreams.find((w) => w.id === r.matchWorkstreamId)?.name ?? r.matchWorkstreamId}`,
+                r.matchType && `Type: ${r.matchType}`,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "Aucun critère (toute couverture)"}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => startEdit(r)}
+                className="flex items-center gap-1 text-xs font-medium text-text-secondary hover:text-bp-coral"
+              >
+                <Pencil size={14} /> Modifier
+              </button>
+              <button
+                onClick={() => remove(r.id)}
+                className="flex items-center gap-1 text-xs font-medium text-text-secondary hover:text-red-500"
+              >
+                <Trash2 size={14} /> Supprimer
+              </button>
+            </div>
+          </div>
+        ))}
+        {rules.length === 0 && (
+          <div className="px-4 py-6 text-center text-sm text-text-secondary">
+            Aucune règle configurée pour cette entreprise.
+          </div>
+        )}
       </div>
     </div>
   );

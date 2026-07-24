@@ -190,16 +190,16 @@ export default function AdminProjectsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 ID
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
                 Projet
               </th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 Entreprise
               </th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 Sponsor
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
@@ -215,12 +215,16 @@ export default function AdminProjectsPage() {
               .filter((p) => companyFilter === "all" || p.companyId === companyFilter)
               .map((p) => (
                 <tr key={p.id} className="border-b border-border hover:bg-bg-elevated/50">
-                  <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{p.id}</td>
+                  <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary sm:table-cell">
+                    {p.id}
+                  </td>
                   <td className="px-4 py-2.5 font-medium text-text-primary">{p.name}</td>
-                  <td className="px-4 py-2.5 text-text-secondary">
+                  <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
                     {companies.find((c) => c.id === p.companyId)?.name ?? p.companyId}
                   </td>
-                  <td className="px-4 py-2.5 text-text-secondary">{p.sponsor}</td>
+                  <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
+                    {p.sponsor}
+                  </td>
                   <td className="px-4 py-2.5 text-right font-medium text-text-primary">
                     €{p.target}M
                   </td>

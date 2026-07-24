@@ -15,6 +15,12 @@ export type ColumnDef<T> = {
   align?: "left" | "right" | "center";
   render?: (row: T) => React.ReactNode;
   width?: string;
+  /** Rôle de la colonne dans la vue carte mobile (< sm) qui remplace le tableau : "primary" pour
+   * les champs mis en avant en tête de carte (titre, badges clés), "hide" pour l'exclure de la
+   * carte (champ secondaire consultable en détail), défaut ("secondary" implicite) = listé en
+   * paire libellé/valeur sous l'en-tête. Sans configuration explicite, la 1ère colonne sert de
+   * titre et le reste est listé — pertinent pour les tableaux à peu de colonnes. */
+  mobile?: "primary" | "secondary" | "hide";
 };
 
 export type EditableTableProps<T extends { id: string }> = {
@@ -118,6 +124,20 @@ export function EditableTable<T extends { id: string }>({
     setColumnFilters({});
   };
 
+  // Vue carte mobile (< sm) : sans configuration explicite via `mobile`, la 1ère colonne sert de
+  // titre de carte et les suivantes sont listées en paire libellé/valeur — aucune colonne n'est
+  // jamais coupée horizontalement.
+  const hasExplicitMobileRoles = columns.some((c) => c.mobile);
+  const mobilePrimaryCols = hasExplicitMobileRoles
+    ? columns.filter((c) => c.mobile === "primary")
+    : columns.slice(0, 1);
+  const mobileSecondaryCols = hasExplicitMobileRoles
+    ? columns.filter((c) => c.mobile !== "primary" && c.mobile !== "hide")
+    : columns.slice(1);
+
+  const cellContent = (row: T, c: ColumnDef<T>) =>
+    c.render ? c.render(row) : String(row[c.key] ?? "");
+
   return (
     <div className={className}>
       <div className="mb-3.5 flex flex-wrap items-center gap-2 rounded-md border border-border bg-white p-3">
@@ -157,7 +177,10 @@ export function EditableTable<T extends { id: string }>({
         </span>
       </div>
 
-      <div className="overflow-auto rounded-lg border border-border bg-white">
+      {/* Vue tableau — desktop/tablette uniquement (>= sm) : le scroll horizontal contenu dans
+       * cette boîte reste un swipe latéral, interdit sur mobile. En dessous de sm, la vue carte
+       * ci-après prend le relais avec un empilement 100% vertical. */}
+      <div className="hidden overflow-auto rounded-lg border border-border bg-white sm:block">
         <table className="w-full border-collapse text-[12.5px]">
           <thead>
             <tr>
@@ -233,7 +256,7 @@ export function EditableTable<T extends { id: string }>({
                       )}
                     >
                       {isEditing ? (
-                        (c.options && c.options.length > 0 && !isCustomMode) ? (
+                        c.options && c.options.length > 0 && !isCustomMode ? (
                           <select
                             autoFocus
                             value={c.options.includes(draftValue) ? draftValue : "__custom__"}
@@ -249,7 +272,10 @@ export function EditableTable<T extends { id: string }>({
                               if (!isCustomMode) commitEdit(row, c);
                             }}
                             onKeyDown={(e) => {
-                              if (e.key === "Escape") { setIsCustomMode(false); setEditingCell(null); }
+                              if (e.key === "Escape") {
+                                setIsCustomMode(false);
+                                setEditingCell(null);
+                              }
                               if (e.key === "Enter") commitEdit(row, c);
                             }}
                             onClick={(e) => e.stopPropagation()}
@@ -271,7 +297,10 @@ export function EditableTable<T extends { id: string }>({
                             onBlur={() => commitEdit(row, c)}
                             onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => {
-                              if (e.key === "Escape") { setIsCustomMode(false); setEditingCell(null); }
+                              if (e.key === "Escape") {
+                                setIsCustomMode(false);
+                                setEditingCell(null);
+                              }
                               if (e.key === "Enter") commitEdit(row, c);
                             }}
                             placeholder={isCustomMode ? "Saisir une nouvelle valeur..." : undefined}
@@ -304,6 +333,53 @@ export function EditableTable<T extends { id: string }>({
             </tfoot>
           )}
         </table>
+      </div>
+
+      {/* Vue carte — mobile uniquement (< sm), remplace le tableau : chaque ligne devient une
+       * carte empilée verticalement (titre + paires libellé/valeur), aucun scroll horizontal. */}
+      <div className="divide-y divide-border rounded-lg border border-border bg-white sm:hidden">
+        {filtered.length === 0 && (
+          <div className="px-3 py-10 text-center text-sm text-tertiary">
+            Aucun résultat pour ces filtres.{" "}
+            <button onClick={resetFilters} className="font-medium text-bp-coral hover:underline">
+              Réinitialiser
+            </button>
+          </div>
+        )}
+        {filtered.map((row) => (
+          <div
+            key={row.id}
+            onClick={() => onRowClick?.(row)}
+            className={cn("p-3", onRowClick && "cursor-pointer active:bg-neutral-50")}
+          >
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {mobilePrimaryCols.map((c) => (
+                <span key={c.key} className="text-[13px] font-semibold text-primary">
+                  {cellContent(row, c)}
+                </span>
+              ))}
+            </div>
+            {mobileSecondaryCols.length > 0 && (
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                {mobileSecondaryCols.map((c) => (
+                  <div key={c.key} className="min-w-0">
+                    <dt className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                      {c.label}
+                    </dt>
+                    <dd
+                      className={cn(
+                        "truncate text-[12px] text-primary",
+                        c.align === "right" && "text-right tabular-nums"
+                      )}
+                    >
+                      {cellContent(row, c)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -343,10 +343,10 @@ export default function AdminUsersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 Identifiant
               </th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 Prénom
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
@@ -355,7 +355,7 @@ export default function AdminUsersPage() {
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
                 Rôle
               </th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 Entreprise
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
@@ -368,17 +368,19 @@ export default function AdminUsersPage() {
               .filter((u) => companyFilter === "all" || u.companyId === companyFilter)
               .map((u, idx) => (
                 <tr key={u.username} className="border-b border-border hover:bg-bg-elevated/50">
-                  <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">
+                  <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary sm:table-cell">
                     {u.username}
                   </td>
-                  <td className="px-4 py-2.5 font-medium text-text-primary">{u.firstName}</td>
+                  <td className="hidden px-4 py-2.5 font-medium text-text-primary sm:table-cell">
+                    {u.firstName}
+                  </td>
                   <td className="px-4 py-2.5 font-medium text-text-primary">{u.lastName}</td>
                   <td className="px-4 py-2.5">
                     <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral">
                       {ALL_ROLES.find((r) => r.value === u.role)?.label ?? u.role}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-text-secondary">
+                  <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
                     {companies.find((c) => c.id === u.companyId)?.name ?? u.companyId ?? "—"}
                   </td>
                   <td className="px-4 py-2.5 text-right">

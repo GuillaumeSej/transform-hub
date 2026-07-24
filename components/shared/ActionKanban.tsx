@@ -24,7 +24,7 @@ export function ActionKanban({
   onCardClick: (action: LeverAction) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-3 max-[900px]:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 min-[901px]:grid-cols-4">
       {COLUMNS.map((col) => {
         const list = actions.filter((a) => a.status === col.status);
         return (

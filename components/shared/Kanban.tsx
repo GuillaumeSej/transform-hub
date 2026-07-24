@@ -27,7 +27,7 @@ export function Kanban({
   }));
 
   return (
-    <div className="grid grid-cols-5 gap-3 max-[1100px]:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 min-[1101px]:grid-cols-5">
       {COLUMNS.map((col) => {
         const list = levers.filter((l) => l.status === col.status);
         return (
