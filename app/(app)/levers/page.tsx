@@ -225,6 +225,7 @@ export default function LeversPage() {
     ? sortedHierarchyLevels.map((level) => ({
         key: `hierarchy_${level.key}` as keyof LeverRow,
         label: level.label,
+        width: "140px",
         render: (r: LeverRow) => {
           const path = resolveHierarchyPath(
             r.hierarchyLeafId ?? "",
@@ -292,24 +293,38 @@ export default function LeversPage() {
       label: t("levers.columnName"),
       editable: true,
       mobile: "primary",
+      width: "220px",
       render: (r) => <strong>{r.name}</strong>,
     },
-    { key: "type", label: "Type", mobile: "hide" },
-    { key: "wsName", label: t("leverForm.workstream"), mobile: "hide" },
+    { key: "type", label: "Type", mobile: "hide", width: "100px" },
+    { key: "wsName", label: t("leverForm.workstream"), mobile: "hide", width: "150px" },
     {
       key: "owner",
       label: t("leverForm.owner"),
       editable: true,
       mobile: "primary",
+      width: "150px",
       render: (r) => (
         <span className="inline-flex items-center gap-1.5">
           <Avatar initials={r.ownerInit} size="sm" /> {r.owner}
         </span>
       ),
     },
-    { key: "sponsor", label: t("leverForm.sponsor"), editable: true, mobile: "hide" },
-    { key: "geography", label: "Géo", editable: true, mobile: "hide" },
-    { key: "country", label: t("leverForm.country"), editable: true, mobile: "hide" },
+    {
+      key: "sponsor",
+      label: t("leverForm.sponsor"),
+      editable: true,
+      mobile: "hide",
+      width: "150px",
+    },
+    { key: "geography", label: "Géo", editable: true, mobile: "hide", width: "110px" },
+    {
+      key: "country",
+      label: t("leverForm.country"),
+      editable: true,
+      mobile: "hide",
+      width: "110px",
+    },
     ...(hasHierarchy
       ? hierarchyColumns.map((c) => ({ ...c, mobile: "hide" as const }))
       : [
@@ -319,8 +334,8 @@ export default function LeversPage() {
             mobile: "hide" as const,
           } as ColumnDef<LeverRow>,
         ]),
-    { key: "start", label: "Début", editable: true, mobile: "hide" },
-    { key: "end", label: "Fin", editable: true, mobile: "hide" },
+    { key: "start", label: "Début", editable: true, mobile: "hide", width: "100px" },
+    { key: "end", label: "Fin", editable: true, mobile: "hide", width: "100px" },
     {
       key: "netSavings",
       label: "Net €M",
@@ -328,6 +343,7 @@ export default function LeversPage() {
       editable: true,
       type: "number",
       mobile: "secondary",
+      width: "90px",
       render: (r) => r.netSavings.toFixed(1),
     },
     {
@@ -335,12 +351,14 @@ export default function LeversPage() {
       label: "Réalisé",
       align: "right",
       mobile: "hide",
+      width: "90px",
       render: (r) => r.realized.toFixed(1),
     },
     {
       key: "progress",
       label: "Progress",
       mobile: "secondary",
+      width: "120px",
       render: (r) => <ProgressBar pct={r.progress} />,
     },
     {
@@ -350,6 +368,7 @@ export default function LeversPage() {
       editable: true,
       type: "number",
       mobile: "hide",
+      width: "80px",
     },
     {
       key: "priority",
@@ -358,6 +377,7 @@ export default function LeversPage() {
       type: "select",
       options: data.priorityLevels,
       mobile: "secondary",
+      width: "110px",
       render: (r) => <StatusBadge risk={r.priority} />,
     },
     {
@@ -367,6 +387,7 @@ export default function LeversPage() {
       type: "select",
       options: data.riskLevels,
       mobile: "secondary",
+      width: "110px",
       render: (r) => <StatusBadge risk={r.risk} />,
     },
     {
@@ -376,6 +397,7 @@ export default function LeversPage() {
       type: "select",
       options: data.leverStatuses.map((s) => lifecycle.label(s)),
       mobile: "secondary",
+      width: "130px",
       render: (r) => <StageBadge status={r.status} label={lifecycle.label(r.status)} />,
     },
   ];

@@ -189,7 +189,7 @@ export function EditableTable<T extends { id: string }>({
                   key={c.key}
                   onClick={() => c.sortable !== false && toggleSort(c.key)}
                   className={cn(
-                    "sticky top-0 z-10 border-b border-border bg-neutral-50 px-3 py-2.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-secondary",
+                    "sticky top-0 z-10 whitespace-nowrap border-b border-border bg-neutral-50 px-3 py-2.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-secondary",
                     c.sortable !== false && "cursor-pointer select-none",
                     c.align === "right" && "text-right",
                     c.align === "center" && "text-center"
@@ -250,10 +250,15 @@ export function EditableTable<T extends { id: string }>({
                         startEdit(row.id, c.key, row[c.key]);
                       }}
                       className={cn(
-                        "px-3 py-2.5 align-middle text-primary",
+                        "max-w-[260px] truncate whitespace-nowrap px-3 py-2.5 align-middle text-primary",
                         c.align === "right" && "text-right tabular-nums",
                         c.align === "center" && "text-center"
                       )}
+                      title={
+                        typeof row[c.key] === "string" || typeof row[c.key] === "number"
+                          ? String(row[c.key])
+                          : undefined
+                      }
                     >
                       {isEditing ? (
                         c.options && c.options.length > 0 && !isCustomMode ? (

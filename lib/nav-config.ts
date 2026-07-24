@@ -13,13 +13,8 @@ export const roles: Record<Role, RoleDefinition> = {
     short: "roles.admin.short",
     nav: [
       { id: "admin-companies", icon: "Building2", label: "nav.companies" },
-      { id: "admin-projects", icon: "FolderKanban", label: "nav.projects" },
-      { id: "admin-users", icon: "Users", label: "nav.users" },
       { id: "admin-lifecycle", icon: "Workflow", label: "nav.lifecycle" },
-      { id: "admin-hierarchy", icon: "Network", label: "nav.hierarchy" },
       { id: "admin-best-practices", icon: "ShieldCheck", label: "nav.bestPractices" },
-      { id: "admin-data", icon: "BarChart3", label: "nav.data" },
-      { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
     ],
   },
   admin_entreprise: {
@@ -28,7 +23,6 @@ export const roles: Record<Role, RoleDefinition> = {
     nav: [
       { id: "admin-users", icon: "Users", label: "nav.users" },
       { id: "admin-data", icon: "BarChart3", label: "nav.data" },
-      { id: "admin-lifecycle", icon: "Workflow", label: "nav.lifecycle" },
       { id: "admin-history", icon: "History", label: "nav.history" },
     ],
   },
@@ -92,7 +86,6 @@ export const PAGE_ROUTES: Record<string, string> = {
   "admin-projects": "/admin/projects",
   "admin-users": "/admin/users",
   "admin-lifecycle": "/admin/lifecycle",
-  "admin-hierarchy": "/admin/hierarchy",
   "admin-best-practices": "/admin/best-practices",
   "admin-data": "/admin/data",
   "admin-history": "/admin/history",
