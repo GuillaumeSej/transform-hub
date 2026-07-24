@@ -14,8 +14,8 @@ describe("translate", () => {
     expect(translate("en", "roles.lever.label")).toBe("Initiative Leader");
     expect(translate("en", "roles.sponsor.label")).toBe("Workstream Leader");
     // French must NOT be affected by the English terminology swap.
-    expect(translate("fr", "nav.leverLibrary")).toBe("Lever Library");
-    expect(translate("fr", "roles.lever.label")).toBe("Lever Owner");
+    expect(translate("fr", "nav.leverLibrary")).toBe("Bibliothèque des leviers");
+    expect(translate("fr", "roles.lever.label")).toBe("Responsable de levier");
   });
 
   it("falls back to French when a key is missing in the target locale", () => {
