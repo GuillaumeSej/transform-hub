@@ -2225,33 +2225,4 @@ export const mockData: BeTrackData = {
       },
     ],
   },
-
-  scenarios: [
-    { id: "base", name: "Baseline", description: "Plan initial validé en comité", modifiers: {} },
-    {
-      id: "accel",
-      name: "Accelerated Q4",
-      description: "+15% progress sur leviers in_progress",
-      modifiers: { progressBoost: 15 },
-    },
-    {
-      id: "delay",
-      name: "Conservative",
-      description: "-2 mois sur leviers à risque (high/critical)",
-      modifiers: { riskDelay: 60 },
-    },
-    {
-      id: "best",
-      name: "Best case",
-      description: "+10% net savings, recrutements remplacés",
-      modifiers: { savingsMultiplier: 1.1 },
-    },
-    {
-      id: "worst",
-      name: "Worst case",
-      description: "-20% net savings, départs anticipés",
-      modifiers: { savingsMultiplier: 0.8 },
-    },
-  ],
-  activeScenario: "base",
 };

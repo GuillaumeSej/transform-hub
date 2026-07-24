@@ -100,8 +100,6 @@ function makeData(overrides?: Partial<BeTrackData>): BeTrackData {
     alerts: [],
     audit: [],
     comments: {},
-    scenarios: [],
-    activeScenario: "",
     ...overrides,
   };
 }
@@ -109,17 +107,17 @@ function makeData(overrides?: Partial<BeTrackData>): BeTrackData {
 describe("engine — realizedSavings", () => {
   it("returns 0 for cancelled levers", () => {
     const lever = { ...baseLever, status: "cancelled" as LeverStatus };
-    expect(realizedSavings(lever, makeData())).toBe(0);
+    expect(realizedSavings(lever)).toBe(0);
   });
 
   it("computes netSavings × progress%", () => {
     const lever = { ...baseLever, netSavings: 10, progress: 40 };
-    expect(realizedSavings(lever, makeData())).toBe(4);
+    expect(realizedSavings(lever)).toBe(4);
   });
 
   it("rounds to 2 decimals", () => {
     const lever = { ...baseLever, netSavings: 3.33, progress: 33 };
-    expect(realizedSavings(lever, makeData())).toBe(1.1);
+    expect(realizedSavings(lever)).toBe(1.1);
   });
 });
 

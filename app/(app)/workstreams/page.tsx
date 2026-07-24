@@ -28,7 +28,7 @@ export default function WorkstreamsPage() {
 
   const rows: Row[] = data.levers.map((l) => ({
     ...l,
-    realized: engine.realizedSavings(l, data),
+    realized: engine.realizedSavings(l),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
     statusLabel: lifecycle.label(l.status),
   }));

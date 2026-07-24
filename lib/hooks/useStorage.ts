@@ -63,8 +63,8 @@ function workforceSeed(): workforceDb.WorkforceSeed {
  * Le périmètre "leviers" (levers, subLevers, comments, audit) vit dans Firestore et est
  * partagé en temps réel entre utilisateurs via `onSnapshot` : chaque mutation met à jour l'état
  * local de façon optimiste (retour synchrone immédiat, comme avant) puis persiste dans Firestore
- * en tâche de fond. Le reste (program, workstreams, workforce, operations, alerts, scenarios)
- * reste sur localStorage, voir lib/storage.ts.
+ * en tâche de fond. Le reste (program, workstreams, workforce, operations, alerts) reste sur
+ * localStorage, voir lib/storage.ts.
  */
 export function useBeTrackData(companyId?: string | null) {
   const [version, setVersion] = useState(0);
@@ -160,8 +160,6 @@ export function useBeTrackData(companyId?: string | null) {
       alerts: storage.getAlerts(),
       audit,
       comments,
-      scenarios: storage.getScenarios(),
-      activeScenario: storage.getActiveScenario(),
       // Référentiels statiques (jamais mutés, pas besoin de passer par une BDD)
       leverStatuses: mockData.leverStatuses,
       riskLevels: mockData.riskLevels,
@@ -506,14 +504,6 @@ export function useBeTrackData(companyId?: string | null) {
     return departments.find((d) => d.name === name)!;
   }, []);
 
-  const setActiveScenario = useCallback(
-    (scenarioId: string) => {
-      storage.setActiveScenario(scenarioId);
-      bump();
-    },
-    [bump]
-  );
-
   const resetToMockData = useCallback(() => {
     storage.resetToMockData();
     leversDb
@@ -548,7 +538,6 @@ export function useBeTrackData(companyId?: string | null) {
     deleteWorkforceMovement,
     upsertEmployee,
     updateDepartment,
-    setActiveScenario,
     resetToMockData,
   };
 }

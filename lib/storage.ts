@@ -1,16 +1,9 @@
 import { mockData } from "@/data/mockData";
-import type {
-  Alert,
-  Operations,
-  ProductionLine,
-  ProgramConfig,
-  Scenario,
-  Workstream,
-} from "@/types";
+import type { Alert, Operations, ProductionLine, ProgramConfig, Workstream } from "@/types";
 
 /**
  * Couche de persistance localStorage pour tout ce qui n'est PAS partagé en temps réel
- * (program, workstreams, operations, alerts, scenarios). Les leviers/sous-leviers/commentaires/
+ * (program, workstreams, operations, alerts). Les leviers/sous-leviers/commentaires/
  * audit ET la base ETP (employees/movements/départements) vivent dans Firestore — voir
  * lib/firestore/levers.ts et lib/firestore/workforce.ts. mockData ne sert QUE de seed initial :
  * une fois `initializeStorage()` exécuté, toute lecture/écriture passe par ce fichier — jamais
@@ -23,8 +16,6 @@ const KEYS = {
   workstreams: "betrack_workstreams",
   operations: "betrack_operations",
   alerts: "betrack_alerts",
-  scenarios: "betrack_scenarios",
-  activeScenario: "betrack_active_scenario",
 } as const;
 
 const isBrowser = () => typeof window !== "undefined";
@@ -50,7 +41,7 @@ function write<T>(key: string, value: T): void {
 
 // Incrémenter cette valeur invalide tout cache existant (schéma de données modifié) et force
 // un reseed propre depuis mockData — évite les crashs sur un localStorage d'une version antérieure.
-const SCHEMA_VERSION = "6";
+const SCHEMA_VERSION = "7";
 
 // Anciennes clés localStorage des périmètres migrés sur Firestore (leviers, puis workforce) —
 // nettoyées au passage pour ne pas laisser traîner de données orphelines dans le navigateur.
@@ -60,6 +51,8 @@ const LEGACY_KEYS = [
   "betrack_audit_log",
   "betrack_comments",
   "betrack_workforce",
+  "betrack_scenarios",
+  "betrack_active_scenario",
 ];
 
 export function initializeStorage(): void {
@@ -69,8 +62,6 @@ export function initializeStorage(): void {
   write(KEYS.workstreams, mockData.workstreams);
   write(KEYS.operations, mockData.operations);
   write(KEYS.alerts, mockData.alerts);
-  write(KEYS.scenarios, mockData.scenarios);
-  write(KEYS.activeScenario, mockData.activeScenario);
   LEGACY_KEYS.forEach((k) => window.localStorage.removeItem(k));
 
   window.localStorage.setItem(KEYS.initialized, SCHEMA_VERSION);
@@ -100,14 +91,6 @@ export function getAlerts(): Alert[] {
   return read(KEYS.alerts, mockData.alerts);
 }
 
-export function getScenarios(): Scenario[] {
-  return read(KEYS.scenarios, mockData.scenarios);
-}
-
-export function getActiveScenario(): string {
-  return read(KEYS.activeScenario, mockData.activeScenario);
-}
-
 // ---------- Setters ----------
 
 export function updateProductionLine(id: string, patch: Partial<ProductionLine>): ProductionLine {
@@ -124,8 +107,4 @@ export function updateProductionLine(id: string, patch: Partial<ProductionLine>)
 export function resolveAlert(alertId: string): void {
   const alerts = getAlerts().filter((a) => a.id !== alertId);
   write(KEYS.alerts, alerts);
-}
-
-export function setActiveScenario(scenarioId: string): void {
-  write(KEYS.activeScenario, scenarioId);
 }

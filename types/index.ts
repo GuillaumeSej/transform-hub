@@ -303,17 +303,6 @@ export type Comment = {
   text: string;
 };
 
-export type Scenario = {
-  id: string;
-  name: string;
-  description: string;
-  modifiers: {
-    progressBoost?: number;
-    riskDelay?: number;
-    savingsMultiplier?: number;
-  };
-};
-
 // ─── Multi-tenant: Company / Project / Lifecycle Configuration ───────────────
 
 export type Company = {
@@ -413,8 +402,6 @@ export type BeTrackData = {
   alerts: Alert[];
   audit: AuditEntry[];
   comments: Record<string, Comment[]>;
-  scenarios: Scenario[];
-  activeScenario: string;
 };
 
 export type NavItem = {

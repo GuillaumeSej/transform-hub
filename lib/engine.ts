@@ -24,17 +24,9 @@ import type { LeverStatus } from "@/types";
 // Date de référence courante — utilisée par underperformers() pour calculer l'avancement attendu.
 const DEMO_NOW = Date.now();
 
-export function modSavings(lever: Lever, data: BeTrackData): number {
-  const sc = data.scenarios.find((s) => s.id === data.activeScenario);
-  if (!sc) return lever.netSavings;
-  let v = lever.netSavings;
-  if (sc.modifiers.savingsMultiplier) v *= sc.modifiers.savingsMultiplier;
-  return Math.round(v * 100) / 100;
-}
-
-export function realizedSavings(lever: Lever, data: BeTrackData): number {
+export function realizedSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
-  return Math.round(modSavings(lever, data) * (lever.progress / 100) * 100) / 100;
+  return Math.round(lever.netSavings * (lever.progress / 100) * 100) / 100;
 }
 
 export function realizedFte(lever: Lever): number {
@@ -50,7 +42,7 @@ export function worstRisk(levers: Lever[]): RiskLevel {
 export function programSummary(data: BeTrackData): ProgramSummary {
   const active = data.levers.filter((l) => l.status !== "cancelled");
   const target = active.reduce((s, l) => s + l.netSavings, 0);
-  const realized = active.reduce((s, l) => s + realizedSavings(l, data), 0);
+  const realized = active.reduce((s, l) => s + realizedSavings(l), 0);
   const capex = active.reduce((s, l) => s + l.capex, 0);
   const opex = active.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
   const fteImpact = active.reduce((s, l) => s + l.fteImpact, 0);
@@ -74,7 +66,7 @@ export function programSummary(data: BeTrackData): ProgramSummary {
 export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSummary {
   const levers = data.levers.filter((l) => l.ws === wsId && l.status !== "cancelled");
   const target = levers.reduce((s, l) => s + l.netSavings, 0);
-  const realized = levers.reduce((s, l) => s + realizedSavings(l, data), 0);
+  const realized = levers.reduce((s, l) => s + realizedSavings(l), 0);
   const capex = levers.reduce((s, l) => s + l.capex, 0);
   const opex = levers.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
   return {
@@ -96,7 +88,7 @@ export function pnlImpact(data: BeTrackData): Record<string, number> {
   data.levers
     .filter((l) => l.status !== "cancelled")
     .forEach((l) => {
-      map[l.pnlMap] = (map[l.pnlMap] || 0) + realizedSavings(l, data);
+      map[l.pnlMap] = (map[l.pnlMap] || 0) + realizedSavings(l);
     });
   return map;
 }
@@ -106,7 +98,7 @@ export function byGeo(data: BeTrackData): Record<string, number> {
   data.levers
     .filter((l) => l.status !== "cancelled")
     .forEach((l) => {
-      map[l.geography] = (map[l.geography] || 0) + realizedSavings(l, data);
+      map[l.geography] = (map[l.geography] || 0) + realizedSavings(l);
     });
   return map;
 }
@@ -116,7 +108,7 @@ export function byFunction(data: BeTrackData): Record<string, number> {
   data.levers
     .filter((l) => l.status !== "cancelled")
     .forEach((l) => {
-      map[l.function] = (map[l.function] || 0) + realizedSavings(l, data);
+      map[l.function] = (map[l.function] || 0) + realizedSavings(l);
     });
   return map;
 }
@@ -126,7 +118,7 @@ export function byCountry(data: BeTrackData): Record<string, number> {
   data.levers
     .filter((l) => l.status !== "cancelled")
     .forEach((l) => {
-      map[l.country] = (map[l.country] || 0) + realizedSavings(l, data);
+      map[l.country] = (map[l.country] || 0) + realizedSavings(l);
     });
   return map;
 }
@@ -141,7 +133,7 @@ export function byProject(data: BeTrackData, projects: Project[]): Record<string
     .filter((l) => l.status !== "cancelled")
     .forEach((l) => {
       const label = projects.find((p) => p.id === l.projectId)?.name ?? "Non assigné";
-      map[label] = (map[label] || 0) + realizedSavings(l, data);
+      map[label] = (map[label] || 0) + realizedSavings(l);
     });
   return map;
 }
@@ -613,7 +605,7 @@ export function sCurve3(data: BeTrackData, granularity: TimeGranularity = "month
   );
   const actualTotal = data.levers
     .filter((l) => l.status !== "cancelled")
-    .reduce((s, l) => s + realizedSavings(l, data), 0);
+    .reduce((s, l) => s + realizedSavings(l), 0);
 
   const curve = [0.05, 0.1, 0.18, 0.28, 0.4, 0.52, 0.62, 0.72, 0.81, 0.88, 0.94, 1.0];
   const actualCurveBase = [0.04, 0.09, 0.15, 0.24, 0.34, 0.44, 0.53, 0.62, 0.71, 0.78, 0.86, 0.93];
@@ -767,7 +759,7 @@ export function financialBridge(
   active.forEach((l) => {
     const d = new Date(l.end);
     const key = periodSortKey(d, granularity);
-    byPeriod.set(key, (byPeriod.get(key) ?? 0) + realizedSavings(l, data));
+    byPeriod.set(key, (byPeriod.get(key) ?? 0) + realizedSavings(l));
   });
   const sortedKeys = Array.from(byPeriod.keys()).sort();
   let cumulative = 0;

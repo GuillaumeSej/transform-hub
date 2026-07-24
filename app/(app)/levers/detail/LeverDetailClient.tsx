@@ -129,7 +129,7 @@ export default function LeverDetailClient() {
   }
 
   const ws = data.workstreams.find((w) => w.id === lever.ws);
-  const real = engine.realizedSavings(lever, data);
+  const real = engine.realizedSavings(lever);
   const realFte = engine.realizedFte(lever);
   const comments = data.getComments(lever.id);
   const subLevers = data.getSubLeversForLever(lever.id);
