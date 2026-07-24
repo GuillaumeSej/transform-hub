@@ -35,30 +35,60 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     const unsub = subscribeUsers((list) => {
-      setUsers(isEntAdmin && user?.companyId ? list.filter((u) => u.companyId === user.companyId) : list);
+      setUsers(
+        isEntAdmin && user?.companyId ? list.filter((u) => u.companyId === user.companyId) : list
+      );
     });
     return unsub;
   }, [isEntAdmin, user?.companyId]);
 
   const [companyFilter, setCompanyFilter] = useState<string>("all");
   const [editIdx, setEditIdx] = useState<number | null>(null);
-  const [form, setForm] = useState({ username: "", firstName: "", lastName: "", name: "", role: "cto" as Role, companyId: "", password: "test" });
+  const [form, setForm] = useState({
+    username: "",
+    firstName: "",
+    lastName: "",
+    name: "",
+    role: "cto" as Role,
+    companyId: "",
+    password: "test",
+  });
   const [showForm, setShowForm] = useState(false);
 
   const startCreate = () => {
     setEditIdx(null);
-    setForm({ username: "", firstName: "", lastName: "", name: "", role: "cto", companyId: isEntAdmin && user?.companyId ? user.companyId : (companies[0]?.id ?? ""), password: "test" });
+    setForm({
+      username: "",
+      firstName: "",
+      lastName: "",
+      name: "",
+      role: "cto",
+      companyId: isEntAdmin && user?.companyId ? user.companyId : (companies[0]?.id ?? ""),
+      password: "test",
+    });
     setShowForm(true);
   };
 
   const startEdit = (u: AuthUser, idx: number) => {
     setEditIdx(idx);
-    setForm({ username: u.username, firstName: u.firstName ?? "", lastName: u.lastName ?? "", name: u.name, role: u.role, companyId: u.companyId ?? (companies[0]?.id ?? ""), password: u.password });
+    setForm({
+      username: u.username,
+      firstName: u.firstName ?? "",
+      lastName: u.lastName ?? "",
+      name: u.name,
+      role: u.role,
+      companyId: u.companyId ?? companies[0]?.id ?? "",
+      password: u.password,
+    });
     setShowForm(true);
   };
 
   const save = async () => {
-    if (!form.username.trim() || (!form.name.trim() && !(`${form.firstName} ${form.lastName}`.trim()))) return;
+    if (
+      !form.username.trim() ||
+      (!form.name.trim() && !`${form.firstName} ${form.lastName}`.trim())
+    )
+      return;
     const normalizedUsername = form.username.trim().toLowerCase();
     const newUser: AuthUser = {
       username: normalizedUsername,
@@ -67,7 +97,12 @@ export default function AdminUsersPage() {
       firstName: form.firstName,
       lastName: form.lastName,
       name: form.name || `${form.firstName} ${form.lastName}`.trim(),
-      companyId: form.role === "admin" ? null : isEntAdmin && user?.companyId ? user.companyId : form.companyId,
+      companyId:
+        form.role === "admin"
+          ? null
+          : isEntAdmin && user?.companyId
+            ? user.companyId
+            : form.companyId,
     };
     await saveUser(newUser);
     setShowForm(false);
@@ -151,7 +186,9 @@ export default function AdminUsersPage() {
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
               >
                 {availableRoles.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -164,17 +201,25 @@ export default function AdminUsersPage() {
                   className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                 >
                   {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
                 </select>
               </div>
             )}
           </div>
           <div className="flex gap-2">
-            <button onClick={save} className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90">
+            <button
+              onClick={save}
+              className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
+            >
               Enregistrer
             </button>
-            <button onClick={() => setShowForm(false)} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface">
+            <button
+              onClick={() => setShowForm(false)}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
+            >
               Annuler
             </button>
           </div>
@@ -183,7 +228,9 @@ export default function AdminUsersPage() {
 
       {!isEntAdmin && companies.length > 0 && (
         <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold text-text-secondary">Filtrer par entreprise</label>
+          <label className="text-xs font-semibold text-text-secondary">
+            Filtrer par entreprise
+          </label>
           <select
             value={companyFilter}
             onChange={(e) => setCompanyFilter(e.target.value)}
@@ -191,51 +238,76 @@ export default function AdminUsersPage() {
           >
             <option value="all">Toutes les entreprises</option>
             {companies.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </select>
           <span className="text-xs text-text-secondary">
-            {users.filter((u) => companyFilter === "all" || u.companyId === companyFilter).length} utilisateur(s)
+            {users.filter((u) => companyFilter === "all" || u.companyId === companyFilter).length}{" "}
+            utilisateur(s)
           </span>
         </div>
       )}
 
-      <div className="rounded-xl border border-border overflow-hidden">
+      <div className="rounded-xl border border-border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Identifiant</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Prénom</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Nom</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Rôle</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Entreprise</th>
-              <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">Actions</th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Identifiant
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Prénom
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Nom
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Rôle
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Entreprise
+              </th>
+              <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {users
               .filter((u) => companyFilter === "all" || u.companyId === companyFilter)
               .map((u, idx) => (
-              <tr key={u.username} className="border-b border-border hover:bg-bg-elevated/50">
-                <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{u.username}</td>
-                <td className="px-4 py-2.5 font-medium text-text-primary">{u.firstName}</td>
-                <td className="px-4 py-2.5 font-medium text-text-primary">{u.lastName}</td>
-                <td className="px-4 py-2.5">
-                  <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral">
-                    {ALL_ROLES.find((r) => r.value === u.role)?.label ?? u.role}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-text-secondary">{companies.find((c) => c.id === u.companyId)?.name ?? u.companyId ?? "—"}</td>
-                <td className="px-4 py-2.5 text-right">
-                  <button onClick={() => startEdit(u, idx)} className="mr-2 text-text-secondary hover:text-bp-coral">
-                    <Pencil size={14} />
-                  </button>
-                  <button onClick={() => remove(u.username)} className="text-text-secondary hover:text-red-500">
-                    <Trash2 size={14} />
-                  </button>
-                </td>
-              </tr>
-            ))}
+                <tr key={u.username} className="border-b border-border hover:bg-bg-elevated/50">
+                  <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">
+                    {u.username}
+                  </td>
+                  <td className="px-4 py-2.5 font-medium text-text-primary">{u.firstName}</td>
+                  <td className="px-4 py-2.5 font-medium text-text-primary">{u.lastName}</td>
+                  <td className="px-4 py-2.5">
+                    <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral">
+                      {ALL_ROLES.find((r) => r.value === u.role)?.label ?? u.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-text-secondary">
+                    {companies.find((c) => c.id === u.companyId)?.name ?? u.companyId ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button
+                      onClick={() => startEdit(u, idx)}
+                      className="mr-2 text-text-secondary hover:text-bp-coral"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => remove(u.username)}
+                      className="text-text-secondary hover:text-red-500"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>

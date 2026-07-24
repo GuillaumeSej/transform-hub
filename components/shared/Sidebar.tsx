@@ -12,15 +12,34 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Role } from "@/types";
 
 /** Sidebar noire fixe — brand BearingPoint : wordmark officiel blanc sur noir, item actif
- * marqué par un filet rouge (accent graphique) avec texte blanc (jamais de texte coloré). */
-export function Sidebar({ alertCount, role }: { alertCount: number; role: Role }) {
+ * marqué par un filet rouge (accent graphique) avec texte blanc (jamais de texte coloré).
+ *
+ * Réutilisée telle quelle à l'intérieur du drawer mobile (voir AppShell.tsx) — `onNavigate` est
+ * fourni dans ce contexte pour refermer le drawer au clic sur un lien de nav ; `className` permet
+ * au drawer de remplacer `h-screen` par `h-full` (hauteur du panneau, pas du viewport). */
+export function Sidebar({
+  alertCount,
+  role,
+  onNavigate,
+  className,
+}: {
+  alertCount: number;
+  role: Role;
+  onNavigate?: () => void;
+  className?: string;
+}) {
   const pathname = usePathname();
   const { user } = useRole();
   const { t } = useTranslation();
   const nav = roles[role].nav;
 
   return (
-    <aside className="flex h-screen w-[248px] min-w-[248px] flex-col bg-black text-white">
+    <aside
+      className={cn(
+        "flex h-screen w-[248px] min-w-[248px] flex-col bg-black text-white",
+        className
+      )}
+    >
       <div className="border-b border-white/[0.12] px-[18px] pb-4 pt-5">
         <Image
           src="/brand/logo-wordmark-white.png"
@@ -47,6 +66,7 @@ export function Sidebar({ alertCount, role }: { alertCount: number; role: Role }
             <Link
               key={item.id}
               href={href}
+              onClick={onNavigate}
               className={cn(
                 "my-0.5 flex items-center gap-2.5 border-l-2 border-transparent px-3 py-2.5 text-[13px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white",
                 active && "border-bp-coral bg-white/[0.08] font-semibold text-white"

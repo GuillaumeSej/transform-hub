@@ -70,6 +70,7 @@ const de: Record<string, string> = {
   "topbar.logout": "Abmelden",
   "topbar.global": "Global",
   "topbar.language": "Sprache",
+  "topbar.menu": "Menü",
 
   // ─── dashboard ────────────────────────────────────────────────────────────
   "dashboard.title": "Executive Dashboard",
