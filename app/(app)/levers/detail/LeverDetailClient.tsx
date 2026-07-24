@@ -210,13 +210,20 @@ export default function LeverDetailClient() {
           libellés viennent du référentiel de l'entreprise (`useLifecycleLabels`). */}
       {lever.status !== "cancelled" && (
         <div className="mb-4 rounded-lg border border-border bg-white px-4 py-3">
-          <div className="flex items-center gap-1">
+          {/* min-w-0 sur les conteneurs flex-1 : sans lui, le min-width automatique des items flex
+              se cale sur la largeur du texte non coupé ("DÉCISION DE LANCEMENT"...) et force un
+              débordement horizontal à 375px. Avec min-w-0, le texte peut s'enrouler sur plusieurs
+              lignes et toute la barre reste 100% verticale, sans swipe latéral. */}
+          <div className="flex flex-wrap items-center gap-1 sm:flex-nowrap">
             {lifecycle.activeCycle.map((s, i) => {
               const isCurrent = lever.status === s;
               const isPast = STATUS_ORDER[lever.status] > STATUS_ORDER[s];
               const isAuto = s === "delivered";
               return (
-                <div key={s} className="flex flex-1 items-center gap-1">
+                <div
+                  key={s}
+                  className="flex min-w-0 flex-1 basis-[30%] items-center gap-1 sm:basis-auto"
+                >
                   <button
                     onClick={() => {
                       if (isAuto || isCurrent) return;
@@ -233,7 +240,7 @@ export default function LeverDetailClient() {
                         ? "Cette étape est atteinte automatiquement quand le plan d'action est à 100 %"
                         : `Passer en « ${lifecycle.shortLabel(s)} »`
                     }
-                    className={`flex flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 transition ${
+                    className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 transition ${
                       isCurrent
                         ? "border-bp-coral bg-black text-white"
                         : isPast
@@ -242,12 +249,12 @@ export default function LeverDetailClient() {
                     } ${isAuto ? "cursor-not-allowed opacity-80" : "hover:border-black"}`}
                   >
                     <span className="text-[13px] font-bold">{i + 1}</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide">
+                    <span className="w-full text-center text-[10px] font-semibold uppercase tracking-wide">
                       {lifecycle.shortLabel(s)}
                     </span>
                   </button>
                   {i < lifecycle.activeCycle.length - 1 && (
-                    <ArrowRight size={12} className="shrink-0 text-tertiary" />
+                    <ArrowRight size={12} className="hidden shrink-0 text-tertiary sm:block" />
                   )}
                 </div>
               );
@@ -515,7 +522,7 @@ export default function LeverDetailClient() {
         )}
       </Modal>
 
-      <div className="mb-4 flex gap-0 rounded-t-lg border-b-[1.5px] border-border bg-white px-4">
+      <div className="mb-4 flex flex-wrap gap-0 rounded-t-lg border-b-[1.5px] border-border bg-white px-4">
         {TABS.map((t) => (
           <button
             key={t}

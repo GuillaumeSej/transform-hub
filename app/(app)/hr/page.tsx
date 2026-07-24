@@ -286,7 +286,9 @@ export default function HrDashboardPage() {
       <Card>
         <CardHeader title="Effectifs par département — actuel vs cible vs atterrissage" />
         <CardBody flush>
-          <div className="overflow-x-auto">
+          {/* Desktop/tablette (>= sm) : tableau classique. Le scroll horizontal contenu ici
+           * resterait un swipe latéral, interdit sur mobile — remplacé ci-dessous par des cartes. */}
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full border-collapse text-[12.5px]">
               <thead>
                 <tr>
@@ -339,6 +341,45 @@ export default function HrDashboardPage() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile (< sm) : une carte empilée par département, 100% verticale. */}
+          <div className="divide-y divide-border sm:hidden">
+            {deptDeltas.map((d) => {
+              const toDo = d.fte - d.fteTarget;
+              const done = d.fte - d.landing;
+              const pct = toDo !== 0 ? Math.round((done / toDo) * 100) : 100;
+              return (
+                <div key={d.name} className="p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold text-primary">{d.name}</span>
+                    <span
+                      className={`text-[12px] font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
+                    >
+                      {d.gapToTarget > 0 ? "+" : ""}
+                      {d.gapToTarget.toLocaleString("fr-FR")} vs cible
+                    </span>
+                  </div>
+                  <dl className="mb-2 grid grid-cols-3 gap-x-3 gap-y-1.5">
+                    {[
+                      { label: "Actuel", value: d.fte },
+                      { label: "Cible", value: d.fteTarget },
+                      { label: "Atterrissage", value: d.landing },
+                    ].map((item) => (
+                      <div key={item.label}>
+                        <dt className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                          {item.label}
+                        </dt>
+                        <dd className="text-[12px] tabular-nums text-primary">
+                          {item.value.toLocaleString("fr-FR")}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <ProgressBar pct={Math.max(0, Math.min(100, pct))} />
+                </div>
+              );
+            })}
           </div>
         </CardBody>
       </Card>

@@ -6,6 +6,8 @@ import { useGlobalFilters, matchesGlobalFilters } from "@/lib/hooks/useGlobalFil
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import {
   Banknote,
+  ChevronDown,
+  ChevronUp,
   CircleCheck,
   GripVertical,
   LayoutGrid,
@@ -309,6 +311,17 @@ export default function DashboardPage() {
     setPendingDuplicateType(null);
   };
 
+  // Réordonnancement mobile via boutons haut/bas — le drag-and-drop HTML5 natif (draggable=) ne
+  // se déclenche jamais sur écran tactile (iOS Safari / Chrome Android), donc en dessous de `sm`
+  // la barre d'outils du widget affiche ces boutons à la place de la poignée de glisser.
+  const moveWidgetBy = (instanceId: string, direction: "up" | "down") => {
+    const fromIndex = layout.findIndex((w) => w.instanceId === instanceId);
+    if (fromIndex === -1) return;
+    const toIndex = direction === "up" ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= layout.length) return;
+    updateLayout(moveWidget(layout, fromIndex, toIndex));
+  };
+
   const handleDrop = (targetInstanceId: string) => {
     if (dragInstanceId && dragInstanceId !== targetInstanceId) {
       const fromIndex = layout.findIndex((w) => w.instanceId === dragInstanceId);
@@ -352,12 +365,34 @@ export default function DashboardPage() {
       >
         {editMode && (
           <div className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md border border-border-strong bg-white/95 px-1.5 py-1 text-[11px] font-semibold text-secondary shadow-sm">
+            {/* Glisser-déposer — desktop/tablette (>= sm) uniquement : le drag HTML5 natif ne
+             * fonctionne pas au toucher, remplacé sur mobile par les boutons haut/bas ci-dessous. */}
             <span
-              className="cursor-grab px-0.5 text-tertiary active:cursor-grabbing"
+              className="hidden cursor-grab px-0.5 text-tertiary active:cursor-grabbing sm:inline-flex"
               title="Glisser pour réordonner"
             >
               <GripVertical size={14} />
             </span>
+            <div className="flex items-center sm:hidden">
+              <button
+                type="button"
+                onClick={() => moveWidgetBy(instance.instanceId, "up")}
+                className="rounded p-0.5 text-tertiary hover:bg-neutral-100 hover:text-primary"
+                title="Monter"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => moveWidgetBy(instance.instanceId, "down")}
+                className="rounded p-0.5 text-tertiary hover:bg-neutral-100 hover:text-primary"
+                title="Descendre"
+              >
+                <ChevronDown size={14} />
+              </button>
+            </div>
+            {/* Cycle de taille — desktop/tablette uniquement : simplification "sans PowerBI" sur
+             * mobile, où chaque widget garde une taille fixe raisonnable (1 colonne). */}
             <button
               type="button"
               onClick={() =>
@@ -369,7 +404,7 @@ export default function DashboardPage() {
                   )
                 )
               }
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-neutral-100 hover:text-primary"
+              className="hidden items-center gap-1 rounded px-1.5 py-0.5 hover:bg-neutral-100 hover:text-primary sm:flex"
               title="Changer la taille"
             >
               <Maximize2 size={12} />

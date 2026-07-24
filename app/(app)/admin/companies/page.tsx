@@ -317,16 +317,16 @@ export default function AdminCompaniesPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 ID
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
                 Nom
               </th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 Secteur
               </th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 Créé le
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
@@ -337,10 +337,16 @@ export default function AdminCompaniesPage() {
           <tbody>
             {companies.map((c) => (
               <tr key={c.id} className="border-b border-border hover:bg-bg-elevated/50">
-                <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{c.id}</td>
+                <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary sm:table-cell">
+                  {c.id}
+                </td>
                 <td className="px-4 py-2.5 font-medium text-text-primary">{c.name}</td>
-                <td className="px-4 py-2.5 text-text-secondary">{c.industry}</td>
-                <td className="px-4 py-2.5 text-text-secondary">{c.createdAt}</td>
+                <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
+                  {c.industry}
+                </td>
+                <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
+                  {c.createdAt}
+                </td>
                 <td className="px-4 py-2.5 text-right">
                   <button
                     onClick={() => startEdit(c)}

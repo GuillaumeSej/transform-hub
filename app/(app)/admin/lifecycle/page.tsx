@@ -92,7 +92,10 @@ export default function AdminLifecyclePage() {
         )}
       </div>
 
-      <div className="rounded-xl border border-border overflow-x-auto">
+      {/* Desktop/tablette (>= sm). En dessous de sm, remplacé par des cartes empilées
+       * verticalement (voir plus bas) — l'input libellé + le toggle + les boutons de réordre ne
+       * tiennent pas sur une seule ligne à 375px sans scroll horizontal. */}
+      <div className="hidden rounded-xl border border-border overflow-x-auto sm:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
@@ -165,6 +168,53 @@ export default function AdminLifecyclePage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile (< sm) : une carte par étape, tout empilé verticalement. */}
+      <div className="divide-y divide-border rounded-xl border border-border sm:hidden">
+        {stages.map((stage, idx) => (
+          <div key={stage.key} className="p-3">
+            <div className="mb-2 flex items-center gap-2 text-xs text-text-secondary">
+              <span className="font-mono">#{STATUS_LEVEL[stage.key]}</span>
+              <code className="rounded bg-bg-surface px-1.5 py-0.5">{stage.key}</code>
+            </div>
+            <input
+              value={stage.label}
+              onChange={(e) => updateStage(stage.key, { label: e.target.value })}
+              className="mb-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() =>
+                  updateStage(stage.key, { validationRequired: !stage.validationRequired })
+                }
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  stage.validationRequired
+                    ? "bg-green-100 text-green-700 hover:bg-green-200"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}
+              >
+                Validation : {stage.validationRequired ? "Oui" : "Non"}
+              </button>
+              <div>
+                <button
+                  onClick={() => moveStage(stage.key, "up")}
+                  disabled={idx === 0}
+                  className="mr-1 text-text-secondary hover:text-bp-coral disabled:opacity-30"
+                >
+                  <ChevronUp size={16} />
+                </button>
+                <button
+                  onClick={() => moveStage(stage.key, "down")}
+                  disabled={idx === stages.length - 1}
+                  className="text-text-secondary hover:text-bp-coral disabled:opacity-30"
+                >
+                  <ChevronDown size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="flex gap-3">
