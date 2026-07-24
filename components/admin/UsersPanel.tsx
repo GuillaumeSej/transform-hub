@@ -5,6 +5,7 @@ import { Users, Plus, Pencil, Trash2 } from "lucide-react";
 import type { AuthUser, Role, Company } from "@/types";
 import { subscribeUsers, saveUser, deleteUser, subscribeCompanies } from "@/lib/firestore/admin";
 import { useRole } from "@/lib/hooks/useRole";
+import { useToast } from "@/lib/hooks/useToast";
 
 const ALL_ROLES: { value: Role; label: string }[] = [
   { value: "admin", label: "Administrator" },
@@ -31,6 +32,28 @@ function clearanceModeOf(clearance: AuthUser["confidentialityClearance"]): Clear
 }
 
 /**
+ * Traduit le contrôle 4-états du formulaire en le patch à fusionner sur AuthUser avant
+ * saveUser(). Fonction pure (testable sans React/Firestore) — extraite pour deux raisons :
+ *  1. admin/admin_entreprise ont un accès total, ce contrôle n'a pas d'effet pour ces rôles.
+ *  2. En mode "inherit", la clé `confidentialityClearance` est OMISE (jamais mise à `undefined`) :
+ *     Firestore setDoc() rejette toute valeur de champ explicitement `undefined`. L'omettre
+ *     produit le même résultat sémantique (repli sur Company.roleClearance[role]) tout en étant
+ *     accepté par setDoc, qui remplace le document entier — donc repasser en "Hérite du rôle"
+ *     efface bien un override individuel précédemment enregistré.
+ */
+export function buildClearancePatch(
+  role: Role,
+  clearanceMode: ClearanceMode,
+  clearanceLevels: string[]
+): Pick<AuthUser, "confidentialityClearance"> | Record<string, never> {
+  if (role === "admin" || role === "admin_entreprise") return {};
+  if (clearanceMode === "all") return { confidentialityClearance: "all" };
+  if (clearanceMode === "none") return { confidentialityClearance: [] };
+  if (clearanceMode === "custom") return { confidentialityClearance: clearanceLevels };
+  return {};
+}
+
+/**
  * Gestion des utilisateurs — extrait de `admin/users/page.tsx` pour être réutilisable tel quel
  * par le hub `/admin/companies/detail` (onglet Utilisateurs), pré-filtré sur une entreprise donnée
  * via `scopeCompanyId`. Sans ce prop, se comporte exactement comme avant (page globale
@@ -39,6 +62,7 @@ function clearanceModeOf(clearance: AuthUser["confidentialityClearance"]): Clear
  */
 export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {}) {
   const { role, user } = useRole();
+  const { showToast } = useToast();
   const isEntAdmin = role === "admin_entreprise";
   // companyId effectif imposé à ce panneau : soit le scope explicite du hub (global admin gérant
   // une entreprise précise), soit — sans scope — celui d'un admin_entreprise limité à sa propre
@@ -115,13 +139,6 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     )
       return;
     const normalizedUsername = form.username.trim().toLowerCase();
-    let confidentialityClearance: AuthUser["confidentialityClearance"];
-    if (form.role !== "admin" && form.role !== "admin_entreprise") {
-      if (form.clearanceMode === "all") confidentialityClearance = "all";
-      else if (form.clearanceMode === "none") confidentialityClearance = [];
-      else if (form.clearanceMode === "custom") confidentialityClearance = form.clearanceLevels;
-      // "inherit" -> undefined (repli sur Company.roleClearance[role])
-    }
     const newUser: AuthUser = {
       username: normalizedUsername,
       password: form.password,
@@ -130,10 +147,18 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       lastName: form.lastName,
       name: form.name || `${form.firstName} ${form.lastName}`.trim(),
       companyId: form.role === "admin" ? null : (fixedCompanyId ?? form.companyId),
-      confidentialityClearance,
+      ...buildClearancePatch(form.role, form.clearanceMode, form.clearanceLevels),
     };
-    await saveUser(newUser);
-    setShowForm(false);
+    try {
+      await saveUser(newUser);
+      setShowForm(false);
+    } catch (err) {
+      showToast(
+        "Échec de l'enregistrement",
+        err instanceof Error ? err.message : "Erreur inconnue",
+        "error"
+      );
+    }
   };
 
   const toggleClearanceLevel = (level: string) => {
@@ -260,6 +285,13 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               <label className="text-xs font-medium text-text-secondary">
                 Habilitation de confidentialité (individuelle)
               </label>
+              <p className="mt-1 text-xs text-text-secondary">
+                Remplace l&apos;habilitation par défaut du rôle pour ce seul utilisateur — dans les
+                deux sens : « Accès personnalisé » ou « Tous les niveaux » peuvent aussi bien
+                restreindre qu&apos;étendre l&apos;accès au-delà de ce que son rôle donne
+                normalement (ex. donner à un profil « Lever Owner » l&apos;accès à un niveau
+                confidentiel réservé au CTO).
+              </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {(
                   [

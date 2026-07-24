@@ -367,6 +367,25 @@ describe("leversLogic — resolveConfidentialityClearance", () => {
     expect(resolveConfidentialityClearance(userCustom, { cto: ["public"] })).toEqual(["secret"]);
   });
 
+  it(
+    "grants MORE access than the role default when the individual override says so — the " +
+      "'additional access from the Users page' use case (e.g. a 'lever' role, which has no " +
+      "roleClearance entry at all, given an explicit clearance including a level its role never sees)",
+    () => {
+      const user = { role: "lever" as const, confidentialityClearance: ["executive-only"] };
+      // roleClearance has no entry for "lever" at all -> role default would be [] (see next test).
+      expect(resolveConfidentialityClearance(user, { cto: ["public"] })).toEqual([
+        "executive-only",
+      ]);
+
+      // Same idea but via the "all" override: broader than any role's configured levels.
+      const userAll = { role: "lever" as const, confidentialityClearance: "all" as const };
+      expect(resolveConfidentialityClearance(userAll, { cto: ["public"], lever: ["public"] })).toBe(
+        "all"
+      );
+    }
+  );
+
   it("falls back to Company.roleClearance[role] when the override is undefined", () => {
     const user = { role: "cto" as const, confidentialityClearance: undefined };
     expect(resolveConfidentialityClearance(user, { cto: ["public", "secret"] })).toEqual([
@@ -397,4 +416,30 @@ describe("leversLogic — isLeverVisibleForClearance", () => {
     expect(isLeverVisibleForClearance("secret", ["public", "secret"])).toBe(true);
     expect(isLeverVisibleForClearance("secret", [])).toBe(false);
   });
+
+  it(
+    "end-to-end: an individual override that grants MORE than the role default actually " +
+      "unlocks a lever the role would otherwise never see",
+    () => {
+      const roleClearance = { lever: ["public"] };
+      const restrictedLever = { confidentialityLevel: "executive-only" };
+
+      // Without an override, the "lever" role only sees "public" -> this lever stays hidden.
+      const defaultUser = { role: "lever" as const, confidentialityClearance: undefined };
+      const defaultClearance = resolveConfidentialityClearance(defaultUser, roleClearance);
+      expect(
+        isLeverVisibleForClearance(restrictedLever.confidentialityLevel, defaultClearance)
+      ).toBe(false);
+
+      // With an individual override granting the extra level, the same lever becomes visible.
+      const upgradedUser = {
+        role: "lever" as const,
+        confidentialityClearance: ["public", "executive-only"],
+      };
+      const upgradedClearance = resolveConfidentialityClearance(upgradedUser, roleClearance);
+      expect(
+        isLeverVisibleForClearance(restrictedLever.confidentialityLevel, upgradedClearance)
+      ).toBe(true);
+    }
+  );
 });
