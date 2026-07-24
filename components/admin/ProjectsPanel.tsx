@@ -2,42 +2,39 @@
 
 import { useEffect, useState } from "react";
 import { FolderKanban, Plus, Pencil, Trash2 } from "lucide-react";
-import type { Company, Project } from "@/types";
-import {
-  subscribeCompanies,
-  subscribeProjects,
-  saveProject,
-  deleteProject,
-} from "@/lib/firestore/admin";
+import type { Project } from "@/types";
+import { subscribeProjects, saveProject, deleteProject } from "@/lib/firestore/admin";
 
-export default function AdminProjectsPage() {
+/**
+ * Gestion des projets pour UNE entreprise déjà sélectionnée. Extrait de
+ * `admin/projects/page.tsx` (route supprimée — orpheline après le retrait de `admin-projects` de
+ * la nav, voir lib/nav-config.ts) — le hub `/admin/companies/detail` le rend directement, scopé via
+ * `companyId`, sans sélecteur ni filtre entreprise (contrairement à l'ancienne page globale). Seule
+ * source de vérité pour ce CRUD.
+ */
+export function ProjectsPanel({ companyId }: { companyId: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
 
   useEffect(() => {
-    const unsub = subscribeCompanies(setCompanies);
+    const unsub = subscribeProjects((all) =>
+      setProjects(all.filter((p) => p.companyId === companyId))
+    );
     return unsub;
-  }, []);
-
-  useEffect(() => {
-    const unsub = subscribeProjects(setProjects);
-    return unsub;
-  }, []);
+  }, [companyId]);
 
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ companyId: "", name: "", sponsor: "", target: "" });
+  const [form, setForm] = useState({ name: "", sponsor: "", target: "" });
   const [showForm, setShowForm] = useState(false);
-  const [companyFilter, setCompanyFilter] = useState<string>("all");
 
   const startCreate = () => {
     setEditId(null);
-    setForm({ companyId: companies[0]?.id ?? "", name: "", sponsor: "", target: "" });
+    setForm({ name: "", sponsor: "", target: "" });
     setShowForm(true);
   };
 
   const startEdit = (p: Project) => {
     setEditId(p.id);
-    setForm({ companyId: p.companyId, name: p.name, sponsor: p.sponsor, target: String(p.target) });
+    setForm({ name: p.name, sponsor: p.sponsor, target: String(p.target) });
     setShowForm(true);
   };
 
@@ -52,14 +49,13 @@ export default function AdminProjectsPage() {
           name: form.name,
           sponsor: form.sponsor,
           target,
-          companyId: form.companyId,
         });
       }
     } else {
       const id = `p${Date.now()}`;
       await saveProject({
         id,
-        companyId: form.companyId,
+        companyId,
         name: form.name,
         sponsor: form.sponsor,
         target,
@@ -99,20 +95,6 @@ export default function AdminProjectsPage() {
             {editId ? "Modifier le projet" : "Nouveau projet"}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-text-secondary">Entreprise</label>
-              <select
-                value={form.companyId}
-                onChange={(e) => setForm((f) => ({ ...f, companyId: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              >
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div>
               <label className="text-xs font-medium text-text-secondary">Nom du projet</label>
               <input
@@ -159,47 +141,22 @@ export default function AdminProjectsPage() {
         </div>
       )}
 
-      {companies.length > 0 && (
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold text-text-secondary">
-            Filtrer par entreprise
-          </label>
-          <select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-          >
-            <option value="all">Toutes les entreprises</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <span className="text-xs text-text-secondary">
-            {
-              projects.filter((p) => companyFilter === "all" || p.companyId === companyFilter)
-                .length
-            }{" "}
-            projet(s)
-          </span>
-        </div>
-      )}
+      <div className="text-xs text-text-secondary">{projects.length} projet(s)</div>
 
-      <div className="rounded-xl border border-border overflow-x-auto">
+      {/* Desktop/tablette (>= sm). En dessous de sm, remplacé par des cartes empilées
+       * verticalement — même pattern que LifecycleEditor/UsersPanel pour éviter tout scroll
+       * horizontal à 375px. */}
+      <div className="hidden rounded-xl border border-border overflow-x-auto sm:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
-              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
+              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary md:table-cell">
                 ID
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
                 Projet
               </th>
-              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
-                Entreprise
-              </th>
-              <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
                 Sponsor
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
@@ -211,41 +168,77 @@ export default function AdminProjectsPage() {
             </tr>
           </thead>
           <tbody>
-            {projects
-              .filter((p) => companyFilter === "all" || p.companyId === companyFilter)
-              .map((p) => (
-                <tr key={p.id} className="border-b border-border hover:bg-bg-elevated/50">
-                  <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary sm:table-cell">
-                    {p.id}
-                  </td>
-                  <td className="px-4 py-2.5 font-medium text-text-primary">{p.name}</td>
-                  <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
-                    {companies.find((c) => c.id === p.companyId)?.name ?? p.companyId}
-                  </td>
-                  <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
-                    {p.sponsor}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-medium text-text-primary">
-                    €{p.target}M
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button
-                      onClick={() => startEdit(p)}
-                      className="mr-2 text-text-secondary hover:text-bp-coral"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => remove(p.id)}
-                      className="text-text-secondary hover:text-red-500"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+            {projects.map((p) => (
+              <tr key={p.id} className="border-b border-border hover:bg-bg-elevated/50">
+                <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary md:table-cell">
+                  {p.id}
+                </td>
+                <td className="px-4 py-2.5 font-medium text-text-primary">{p.name}</td>
+                <td className="px-4 py-2.5 text-text-secondary">{p.sponsor}</td>
+                <td className="px-4 py-2.5 text-right font-medium text-text-primary">
+                  €{p.target}M
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  <button
+                    onClick={() => startEdit(p)}
+                    className="mr-2 text-text-secondary hover:text-bp-coral"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => remove(p.id)}
+                    className="text-text-secondary hover:text-red-500"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {projects.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-center text-sm text-text-secondary">
+                  Aucun projet pour cette entreprise.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile (< sm) : une carte par projet. */}
+      <div className="divide-y divide-border rounded-xl border border-border sm:hidden">
+        {projects.map((p) => (
+          <div key={p.id} className="p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="font-medium text-text-primary">{p.name}</div>
+                <div className="text-xs text-text-secondary">{p.sponsor}</div>
+              </div>
+              <div className="text-right">
+                <div className="font-medium text-text-primary">€{p.target}M</div>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center justify-end gap-3">
+              <button
+                onClick={() => startEdit(p)}
+                className="text-text-secondary hover:text-bp-coral"
+              >
+                <Pencil size={16} />
+              </button>
+              <button
+                onClick={() => remove(p.id)}
+                className="text-text-secondary hover:text-red-500"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {projects.length === 0 && (
+          <div className="p-4 text-center text-sm text-text-secondary">
+            Aucun projet pour cette entreprise.
+          </div>
+        )}
       </div>
     </div>
   );

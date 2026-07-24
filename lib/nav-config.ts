@@ -83,7 +83,6 @@ export const PAGE_ROUTES: Record<string, string> = {
   "hr-etp": "/hr/etp",
   operations: "/operations",
   "admin-companies": "/admin/companies",
-  "admin-projects": "/admin/projects",
   "admin-users": "/admin/users",
   "admin-lifecycle": "/admin/lifecycle",
   "admin-best-practices": "/admin/best-practices",

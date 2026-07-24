@@ -3,7 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Building2, Users, Network, Workflow, Database, BarChart3 } from "lucide-react";
+import {
+  ArrowLeft,
+  Building2,
+  Users,
+  Network,
+  Workflow,
+  Database,
+  BarChart3,
+  FolderKanban,
+} from "lucide-react";
 import type { Company } from "@/types";
 import { subscribeCompanies, saveCompany } from "@/lib/firestore/admin";
 import { useRole } from "@/lib/hooks/useRole";
@@ -15,15 +24,17 @@ import {
 import { UsersPanel } from "@/components/admin/UsersPanel";
 import { HierarchyEditor } from "@/components/admin/HierarchyEditor";
 import { LifecycleEditor } from "@/components/admin/LifecycleEditor";
+import { ProjectsPanel } from "@/components/admin/ProjectsPanel";
 import { CompanyDataHistoryPanel } from "@/components/admin/CompanyDataHistoryPanel";
 import { CompanyDatabasePanel } from "@/components/admin/CompanyDatabasePanel";
 
-type TabId = "settings" | "users" | "hierarchy" | "lifecycle" | "data" | "database";
+type TabId = "settings" | "users" | "hierarchy" | "projects" | "lifecycle" | "data" | "database";
 
 const TABS: { id: TabId; label: string; icon: typeof Building2 }[] = [
   { id: "settings", label: "Paramètres", icon: Building2 },
   { id: "users", label: "Utilisateurs", icon: Users },
   { id: "hierarchy", label: "Hiérarchie", icon: Network },
+  { id: "projects", label: "Projets", icon: FolderKanban },
   { id: "lifecycle", label: "Cycle de vie", icon: Workflow },
   { id: "data", label: "Données & Historique", icon: BarChart3 },
   { id: "database", label: "Base de données", icon: Database },
@@ -34,7 +45,8 @@ const TABS: { id: TabId; label: string; icon: typeof Building2 }[] = [
  * components/shared/AppShell.tsx, qui spécial-case cette route comme il le fait déjà pour
  * `/levers/detail`). Regroupe en un seul endroit, via des onglets, tout ce qui était auparavant
  * réparti entre plusieurs pages top-level indépendantes (admin/users, admin/hierarchy,
- * admin/lifecycle, admin/data, admin/history) — chacune gardait son propre sélecteur d'entreprise.
+ * admin/lifecycle, admin/data, admin/history, admin/projects) — chacune gardait son propre
+ * sélecteur d'entreprise.
  * Chaque onglet réutilise le composant partagé de la page globale correspondante, pré-scopé sur
  * cette entreprise ; aucune logique CRUD n'est dupliquée ici.
  */
@@ -198,6 +210,7 @@ export default function CompanyDetailClient() {
           )}
           {tab === "users" && <UsersPanel scopeCompanyId={company.id} />}
           {tab === "hierarchy" && <HierarchyEditor companies={companies} companyId={company.id} />}
+          {tab === "projects" && <ProjectsPanel companyId={company.id} />}
           {tab === "lifecycle" && <LifecycleEditor companyId={company.id} />}
           {tab === "data" && <CompanyDataHistoryPanel company={company} />}
           {tab === "database" && <CompanyDatabasePanel company={company} />}

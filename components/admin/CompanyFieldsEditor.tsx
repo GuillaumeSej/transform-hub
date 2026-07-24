@@ -150,6 +150,13 @@ export function CompanyFieldsEditor({
           <label className="text-xs font-medium text-text-secondary">
             Niveaux de confidentialité (du moins au plus restreint)
           </label>
+          {value.confidentialityLevels.length === 0 && (
+            <p className="mt-1 rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
+              La confidentialité n&apos;est pas encore activée pour cette entreprise. Ajoutez un
+              premier niveau ci-dessous (ex. Public, Confidentiel) pour pouvoir restreindre
+              l&apos;accès à certains leviers par rôle ou par utilisateur.
+            </p>
+          )}
           <div className="mt-1 flex flex-wrap gap-2">
             {value.confidentialityLevels.map((level) => (
               <span

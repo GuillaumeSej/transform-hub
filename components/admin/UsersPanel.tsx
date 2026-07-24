@@ -148,10 +148,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   // Contrôle affiché seulement si l'entreprise ciblée a activé une échelle de confidentialité et
   // que le rôle sélectionné n'est pas admin/admin_entreprise (accès total, contrôle sans effet).
   const formCompany = companies.find((c) => c.id === form.companyId);
-  const showClearanceControl =
-    form.role !== "admin" &&
-    form.role !== "admin_entreprise" &&
-    (formCompany?.confidentialityLevels?.length ?? 0) > 0;
+  const eligibleRole = form.role !== "admin" && form.role !== "admin_entreprise";
+  const companyHasLevels = (formCompany?.confidentialityLevels?.length ?? 0) > 0;
+  const showClearanceControl = eligibleRole && companyHasLevels;
+  const showClearanceHint = eligibleRole && !companyHasLevels;
 
   const remove = async (username: string) => {
     await deleteUser(username);
@@ -301,6 +301,13 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 </div>
               )}
             </div>
+          )}
+
+          {showClearanceHint && (
+            <p className="rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
+              Configurez d&apos;abord des niveaux de confidentialité dans l&apos;onglet Paramètres
+              de cette entreprise pour activer ce contrôle.
+            </p>
           )}
 
           <div className="flex gap-2">
