@@ -652,38 +652,87 @@ export function sCurve3(data: BeTrackData, granularity: TimeGranularity = "month
   }));
 }
 
-export type MarimekkoSegment = {
-  function: string;
-  totalSavings: number;
-  widthPct: number;
-  levers: { id: string; name: string; netSavings: number; risk: RiskLevel; status: LeverStatus }[];
+export type MarimekkoPairKey = "function-country" | "workstream-project";
+
+export type Marimekko2DSegment = {
+  key: string;
+  label: string;
+  /** Hauteur du segment en % de la colonne (dimension secondaire) — pas en % du total du
+   *  programme, comme un vrai Marimekko : chaque colonne est une barre empilée à 100%. */
+  heightPct: number;
+  value: number;
+  count: number;
 };
 
-/** Répartition Marimekko par fonction : largeur proportionnelle au poids (net savings) de la
- * fonction dans le total du programme. */
-export function marimekko(data: BeTrackData): MarimekkoSegment[] {
+export type Marimekko2DColumn = {
+  key: string;
+  label: string;
+  /** Largeur de la colonne en % du total du programme (dimension primaire). */
+  widthPct: number;
+  totalSavings: number;
+  segments: Marimekko2DSegment[];
+};
+
+/** Répartition Marimekko à deux dimensions : la largeur des colonnes reflète le poids de la
+ * dimension primaire (fonction ou workstream) dans le programme, chaque colonne se décompose
+ * ensuite en segments empilés selon la dimension secondaire (pays ou projet). Remplace l'ancienne
+ * version à une seule dimension (toujours "par fonction") — le TYPE de graphique (Marimekko) est
+ * maintenant indépendant du COUPLE d'indicateurs affiché, choisi via `pairKey`. */
+export function marimekko2D(
+  data: BeTrackData,
+  pairKey: MarimekkoPairKey,
+  projects: Project[] = []
+): Marimekko2DColumn[] {
   const active = data.levers.filter((l) => l.status !== "cancelled");
-  const total = active.reduce((s, l) => s + Math.abs(l.netSavings), 0) || 1;
-  const byFunc = new Map<string, Lever[]>();
+  const totalWeight = active.reduce((s, l) => s + Math.abs(l.netSavings), 0) || 1;
+
+  const primaryOf = (l: Lever): string =>
+    pairKey === "function-country"
+      ? l.function
+      : (data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws);
+  const secondaryOf = (l: Lever): string =>
+    pairKey === "function-country"
+      ? l.country || "—"
+      : (projects.find((p) => p.id === l.projectId)?.name ?? "Non assigné");
+
+  const byPrimary = new Map<string, Lever[]>();
   active.forEach((l) => {
-    if (!byFunc.has(l.function)) byFunc.set(l.function, []);
-    byFunc.get(l.function)!.push(l);
+    const key = primaryOf(l);
+    if (!byPrimary.has(key)) byPrimary.set(key, []);
+    byPrimary.get(key)!.push(l);
   });
-  return Array.from(byFunc.entries())
-    .map(([func, levers]) => {
+
+  return Array.from(byPrimary.entries())
+    .map(([primaryKey, levers]) => {
+      const colWeight = levers.reduce((s, l) => s + Math.abs(l.netSavings), 0) || 1;
       const totalSavings = levers.reduce((s, l) => s + l.netSavings, 0);
-      const weight = levers.reduce((s, l) => s + Math.abs(l.netSavings), 0);
+
+      const bySecondary = new Map<string, Lever[]>();
+      levers.forEach((l) => {
+        const key = secondaryOf(l);
+        if (!bySecondary.has(key)) bySecondary.set(key, []);
+        bySecondary.get(key)!.push(l);
+      });
+
+      const segments: Marimekko2DSegment[] = Array.from(bySecondary.entries())
+        .map(([secondaryKey, segLevers]) => {
+          const segWeight = segLevers.reduce((s, l) => s + Math.abs(l.netSavings), 0);
+          return {
+            key: secondaryKey,
+            label: secondaryKey,
+            heightPct: Math.round((segWeight / colWeight) * 1000) / 10,
+            value: Math.round(segLevers.reduce((s, l) => s + l.netSavings, 0) * 10) / 10,
+            count: segLevers.length,
+          };
+        })
+        .sort((a, b) => b.value - a.value);
+
       return {
-        function: func,
+        key: primaryKey,
+        label: primaryKey,
+        widthPct: Math.round((colWeight / totalWeight) * 1000) / 10,
         totalSavings: Math.round(totalSavings * 10) / 10,
-        widthPct: Math.round((weight / total) * 1000) / 10,
-        levers: levers.map((l) => ({
-          id: l.id,
-          name: l.name,
-          netSavings: l.netSavings,
-          risk: l.risk,
-          status: l.status,
-        })),
+        segments,
       };
     })
     .sort((a, b) => b.totalSavings - a.totalSavings);

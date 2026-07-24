@@ -32,6 +32,8 @@ import * as engine from "@/lib/engine";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
+import { Modal } from "@/components/shared/Modal";
+import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { AlertItem } from "@/components/shared/AlertItem";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
@@ -59,6 +61,7 @@ import {
   removeWidget,
   saveDashboardLayout,
   setWidgetSpan,
+  setWidgetView,
   type DashboardWidgetInstance,
   type DashboardWidgetType,
 } from "@/lib/dashboardWidgets";
@@ -191,9 +194,7 @@ export default function DashboardPage() {
   const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
   const sCurve = engine.sCurve3(visibleData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
-  const sankey = engine.sankeyData(filteredData);
   const sankeyChrono = engine.sankeyChronology(filteredData);
-  const mekko = engine.marimekko(filteredData);
   const bridge = engine.financialBridge(filteredData, bridgeGranularity);
 
   const goToLevers = (params: Record<string, string>) => {
@@ -231,7 +232,6 @@ export default function DashboardPage() {
       ? goToLevers({ f_endQuarter: `${label} ${currentYear}` })
       : goToMonth(label);
 
-  const [wsDimension, setWsDimension] = useState<"workstream" | "project">("workstream");
   const wsBars = data.workstreams.map((w) => ({
     label: w.name.split(" ")[0],
     realized: engine.workstreamSummary(visibleData, w.id).realized,
@@ -249,10 +249,11 @@ export default function DashboardPage() {
       : []),
   ];
 
-  const [geoDimension, setGeoDimension] = useState<"country" | "function">("country");
-  const geoMap =
-    geoDimension === "country" ? engine.byCountry(filteredData) : engine.byFunction(filteredData);
-  const geoData = Object.entries(geoMap).map(([name, value]) => ({ name, value }));
+  const geoDataFor = (dimension: string) => {
+    const map =
+      dimension === "function" ? engine.byFunction(filteredData) : engine.byCountry(filteredData);
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
+  };
   const pnlMap = engine.pnlImpact(filteredData);
   const pnlData = Object.entries(pnlMap).map(([id, impact]) => ({
     account: data.pnlAccounts.find((a) => a.id === id)?.name ?? id,
@@ -268,7 +269,14 @@ export default function DashboardPage() {
   const [layout, setLayout] = useState<DashboardWidgetInstance[]>(buildDefaultLayout);
   const [dragInstanceId, setDragInstanceId] = useState<string | null>(null);
   const [dragOverInstanceId, setDragOverInstanceId] = useState<string | null>(null);
-  const [addWidgetChoice, setAddWidgetChoice] = useState("");
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+  // Widget "configurable" (Marimekko, ventilations...) déjà présent qu'on tente de rajouter — on
+  // demande alors explicitement si c'est un nouveau bloc séparé ou si le bloc existant (qui
+  // propose déjà un sélecteur de vue interne) suffit, plutôt que dupliquer silencieusement un
+  // widget qui peut déjà tout afficher via son propre toggle.
+  const [pendingDuplicateType, setPendingDuplicateType] = useState<DashboardWidgetType | null>(
+    null
+  );
 
   useEffect(() => {
     setLayout(loadDashboardLayout());
@@ -282,6 +290,24 @@ export default function DashboardPage() {
   // Tous les types de widgets restent toujours proposés — les doublons sont autorisés (comparer
   // deux fois le même graphique avec des filtres différents, à l'image d'un outil type PowerBI).
   const availableToAdd = DASHBOARD_WIDGET_REGISTRY;
+
+  /** Point d'entrée unique pour ajouter un widget depuis le panneau — si le type est déjà présent
+   * ET propose un sélecteur de vue interne (Marimekko, ventilations...), on demande confirmation
+   * plutôt que de dupliquer silencieusement un bloc qui peut déjà tout afficher via son toggle. */
+  const requestAddWidget = (type: DashboardWidgetType) => {
+    const def = getWidgetDef(type);
+    const alreadyPresent = layout.some((w) => w.type === type);
+    if (alreadyPresent && def?.viewOptions) {
+      setPendingDuplicateType(type);
+      return;
+    }
+    updateLayout(addWidget(layout, type));
+  };
+
+  const confirmAddDuplicate = () => {
+    if (pendingDuplicateType) updateLayout(addWidget(layout, pendingDuplicateType));
+    setPendingDuplicateType(null);
+  };
 
   const handleDrop = (targetInstanceId: string) => {
     if (dragInstanceId && dragInstanceId !== targetInstanceId) {
@@ -471,36 +497,56 @@ export default function DashboardPage() {
           <Card className="mb-0 h-full">
             <CardHeader title={t("dashboard.widgets.sankey")} />
             <CardBody>
-              <SankeyChart
-                data={sankey}
-                chronologyData={sankeyChrono}
-                height={300}
-                onNodeClick={goToStageLabel}
-              />
+              <SankeyChart data={sankeyChrono} height={340} onNodeClick={goToStageLabel} />
             </CardBody>
           </Card>
         );
-      case "marimekko":
+      case "marimekko": {
+        const view = (instance.view ?? "function-country") as engine.MarimekkoPairKey;
+        const mekko2D = engine.marimekko2D(filteredData, view, projects);
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title={t("dashboard.widgets.marimekko")} />
+            <CardHeader
+              title={t("dashboard.widgets.marimekko")}
+              actions={
+                <DimensionToggle
+                  options={[
+                    { value: "function-country", label: t("dashboard.widgetView.functionCountry") },
+                    {
+                      value: "workstream-project",
+                      label: t("dashboard.widgetView.workstreamProject"),
+                    },
+                  ]}
+                  value={view}
+                  onChange={(next) =>
+                    updateLayout(setWidgetView(layout, instance.instanceId, next))
+                  }
+                />
+              }
+            />
             <CardBody>
               <MarimekkoChart
-                data={mekko}
+                data={mekko2D}
                 height={300}
-                onSegmentClick={(func) => goToLevers({ f_function: func })}
+                onSegmentClick={(primaryKey) =>
+                  goToLevers(
+                    view === "function-country" ? { f_function: primaryKey } : { f_ws: primaryKey }
+                  )
+                }
               />
             </CardBody>
           </Card>
         );
-      case "workstream-breakdown":
+      }
+      case "workstream-breakdown": {
+        const view = instance.view ?? "workstream";
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
               title={
-                wsDimension === "workstream"
+                view === "workstream"
                   ? t("dashboard.widgets.workstreamSavings")
                   : t("dashboard.widgets.projectSavings")
               }
@@ -510,23 +556,27 @@ export default function DashboardPage() {
                     { value: "workstream", label: t("dashboard.workstream") },
                     { value: "project", label: t("dashboard.project") },
                   ]}
-                  value={wsDimension}
-                  onChange={setWsDimension}
+                  value={view}
+                  onChange={(next) =>
+                    updateLayout(setWidgetView(layout, instance.instanceId, next))
+                  }
                 />
               }
             />
             <CardBody>
-              <WorkstreamBarChart data={wsDimension === "workstream" ? wsBars : projectBars} />
+              <WorkstreamBarChart data={view === "workstream" ? wsBars : projectBars} />
             </CardBody>
           </Card>
         );
-      case "geo-breakdown":
+      }
+      case "geo-breakdown": {
+        const view = instance.view ?? "country";
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
               title={
-                geoDimension === "country"
+                view === "country"
                   ? t("dashboard.widgets.countrySavings")
                   : t("dashboard.widgets.functionSavings")
               }
@@ -536,16 +586,19 @@ export default function DashboardPage() {
                     { value: "country", label: t("dashboard.country") },
                     { value: "function", label: t("dashboard.function") },
                   ]}
-                  value={geoDimension}
-                  onChange={setGeoDimension}
+                  value={view}
+                  onChange={(next) =>
+                    updateLayout(setWidgetView(layout, instance.instanceId, next))
+                  }
                 />
               }
             />
             <CardBody>
-              <GeoDonutChart data={geoData} />
+              <GeoDonutChart data={geoDataFor(view)} />
             </CardBody>
           </Card>
         );
+      }
       case "workstream-table":
         return renderWidgetShell(
           instance,
@@ -757,40 +810,85 @@ export default function DashboardPage() {
       </div>
 
       {editMode && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border-strong bg-neutral-50 p-3">
-          <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-secondary">
-            <Plus size={14} /> {t("dashboard.addWidget")}
-          </span>
-          <select
-            value={addWidgetChoice}
-            onChange={(e) => {
-              const type = e.target.value as DashboardWidgetType;
-              if (type) updateLayout(addWidget(layout, type));
-              setAddWidgetChoice("");
-            }}
-            className="rounded-md border border-border-strong bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-primary disabled:opacity-50"
-            disabled={availableToAdd.length === 0}
-          >
-            <option value="">
-              {availableToAdd.length === 0 ? t("dashboard.allWidgetsAdded") : t("common.choose")}
-            </option>
-            {availableToAdd.map((def) => (
-              <option key={def.type} value={def.type}>
-                {def.label}
-              </option>
-            ))}
-          </select>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => updateLayout(buildDefaultLayout())}
-            className="ml-auto"
-          >
-            <RotateCcw size={13} />
-            {t("dashboard.reset")}
-          </Button>
+        <div className="mb-4 rounded-lg border-2 border-bp-coral/30 bg-bp-coral/[0.04] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-[13px] font-bold text-primary">
+                {t("dashboard.editModeTitle")}
+              </div>
+              <div className="text-[11.5px] text-secondary">{t("dashboard.editModeHint")}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={addPanelOpen ? "dark" : "primary"}
+                size="sm"
+                onClick={() => setAddPanelOpen((v) => !v)}
+              >
+                <Plus size={13} />
+                {t("dashboard.addWidget")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => updateLayout(buildDefaultLayout())}
+              >
+                <RotateCcw size={13} />
+                {t("dashboard.reset")}
+              </Button>
+            </div>
+          </div>
+
+          {addPanelOpen && (
+            <div className="mt-3.5 grid grid-cols-2 gap-2 border-t border-bp-coral/20 pt-3.5 sm:grid-cols-3 lg:grid-cols-4">
+              {availableToAdd.map((def) => {
+                const Icon = ICON_REGISTRY[def.icon] ?? LayoutGrid;
+                const alreadyPresent = layout.some((w) => w.type === def.type);
+                return (
+                  <button
+                    key={def.type}
+                    type="button"
+                    onClick={() => requestAddWidget(def.type)}
+                    className="flex flex-col items-start gap-2 rounded-md border border-border-strong bg-white p-3 text-left transition hover:border-bp-coral hover:shadow-sm"
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-md bg-neutral-100 text-primary">
+                      <Icon size={16} />
+                    </span>
+                    <span className="text-[12px] font-semibold leading-tight text-primary">
+                      {t(
+                        `dashboard.widgets.${def.type.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}`,
+                        def.label
+                      )}
+                    </span>
+                    {alreadyPresent && (
+                      <span className="text-[10px] font-medium text-tertiary">
+                        {t("dashboard.alreadyOnBoard")}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
+
+      <Modal
+        open={pendingDuplicateType !== null}
+        onOpenChange={(open) => !open && setPendingDuplicateType(null)}
+        title={t("dashboard.duplicateWidgetTitle")}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setPendingDuplicateType(null)}>
+              {t("dashboard.keepSingleBlock")}
+            </Button>
+            <Button variant="primary" onClick={confirmAddDuplicate}>
+              {t("dashboard.addNewBlock")}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-secondary">{t("dashboard.duplicateWidgetHint")}</p>
+      </Modal>
 
       {/* grid-flow-row-dense : comble automatiquement les trous laissés par un widget large suivi
           d'un widget étroit, sans avoir à réordonner manuellement le layout. Colonnes réduites en

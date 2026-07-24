@@ -7,6 +7,7 @@ import {
   addWidget,
   removeWidget,
   setWidgetSpan,
+  setWidgetView,
   getWidgetDef,
 } from "@/lib/dashboardWidgets";
 
@@ -95,6 +96,37 @@ describe("dashboardWidgets — addWidget / removeWidget / setWidgetSpan", () => 
     expect(next.find((w) => w.instanceId === "pnl")?.span).toBe("XL");
     expect(next.find((w) => w.instanceId === "alerts")?.span).toBe(
       layout.find((w) => w.instanceId === "alerts")?.span
+    );
+  });
+});
+
+describe("dashboardWidgets — configurable widgets (view)", () => {
+  it("buildDefaultLayout sets the default view for configurable widgets", () => {
+    const layout = buildDefaultLayout();
+    expect(layout.find((w) => w.type === "marimekko")?.view).toBe("function-country");
+    expect(layout.find((w) => w.type === "geo-breakdown")?.view).toBe("country");
+    expect(layout.find((w) => w.type === "workstream-breakdown")?.view).toBe("workstream");
+  });
+
+  it("non-configurable widgets have no view field", () => {
+    const layout = buildDefaultLayout();
+    expect(layout.find((w) => w.type === "sankey")?.view).toBeUndefined();
+  });
+
+  it("addWidget sets the requested view, or the default when omitted", () => {
+    const layout = buildDefaultLayout();
+    const withDefault = addWidget(layout, "marimekko");
+    expect(withDefault[withDefault.length - 1].view).toBe("function-country");
+    const withExplicit = addWidget(layout, "marimekko", "workstream-project");
+    expect(withExplicit[withExplicit.length - 1].view).toBe("workstream-project");
+  });
+
+  it("setWidgetView updates only the targeted instance", () => {
+    const layout = buildDefaultLayout();
+    const next = setWidgetView(layout, "marimekko", "workstream-project");
+    expect(next.find((w) => w.instanceId === "marimekko")?.view).toBe("workstream-project");
+    expect(next.find((w) => w.instanceId === "geo-breakdown")?.view).toBe(
+      layout.find((w) => w.instanceId === "geo-breakdown")?.view
     );
   });
 });

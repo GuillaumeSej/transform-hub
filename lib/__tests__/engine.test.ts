@@ -13,6 +13,7 @@ import {
   byFunction,
   byCountry,
   byProject,
+  marimekko2D,
   bestPracticeGaps,
   sCurve3,
   financialBridge,
@@ -481,5 +482,89 @@ describe("engine — byCountry / byProject", () => {
     const result = byProject(data, projects);
     expect(result["Projet A"]).toBe(5);
     expect(result["Non assigné"]).toBe(3);
+  });
+});
+
+describe("engine — marimekko2D", () => {
+  it("groups by function then by country (function-country pair)", () => {
+    const data = makeData({
+      levers: [
+        {
+          ...baseLever,
+          id: "L001",
+          function: "IT",
+          country: "France",
+          netSavings: 6,
+          progress: 100,
+        },
+        {
+          ...baseLever,
+          id: "L002",
+          function: "IT",
+          country: "Germany",
+          netSavings: 2,
+          progress: 100,
+        },
+        {
+          ...baseLever,
+          id: "L003",
+          function: "HR",
+          country: "France",
+          netSavings: 4,
+          progress: 100,
+        },
+      ],
+    });
+    const columns = marimekko2D(data, "function-country");
+    const it = columns.find((c) => c.key === "IT")!;
+    const hr = columns.find((c) => c.key === "HR")!;
+    expect(it.totalSavings).toBe(8);
+    expect(hr.totalSavings).toBe(4);
+    // Colonnes triées par totalSavings décroissant.
+    expect(columns[0].key).toBe("IT");
+    const franceSeg = it.segments.find((s) => s.key === "France")!;
+    const germanySeg = it.segments.find((s) => s.key === "Germany")!;
+    expect(franceSeg.value).toBe(6);
+    expect(germanySeg.value).toBe(2);
+    // Les segments d'une colonne s'empilent à 100% (poids relatif à la colonne, pas au total).
+    expect(Math.round(franceSeg.heightPct + germanySeg.heightPct)).toBe(100);
+  });
+
+  it("groups by workstream then by project (workstream-project pair), unassigned levers bucketed", () => {
+    const projects: Project[] = [
+      {
+        id: "p1",
+        companyId: "c1",
+        name: "Projet A",
+        sponsor: "CEO",
+        target: 10,
+        currency: "€M",
+        fyStart: "2026-01-01",
+        fyEnd: "2026-12-31",
+        baselineEBIT: 0,
+        revenue: 0,
+        createdAt: "2026-01-01",
+      },
+    ];
+    const data = makeData({
+      levers: [
+        { ...baseLever, id: "L001", ws: "WS-01", projectId: "p1", netSavings: 5, progress: 100 },
+        { ...baseLever, id: "L002", ws: "WS-01", netSavings: 3, progress: 100 },
+      ],
+    });
+    const columns = marimekko2D(data, "workstream-project", projects);
+    expect(columns).toHaveLength(1);
+    const segments = columns[0].segments;
+    expect(segments.find((s) => s.key === "Projet A")?.value).toBe(5);
+    expect(segments.find((s) => s.key === "Non assigné")?.value).toBe(3);
+  });
+
+  it("excludes cancelled levers", () => {
+    const data = makeData({
+      levers: [
+        { ...baseLever, function: "IT", status: "cancelled" as LeverStatus, netSavings: 10 },
+      ],
+    });
+    expect(marimekko2D(data, "function-country")).toHaveLength(0);
   });
 });
