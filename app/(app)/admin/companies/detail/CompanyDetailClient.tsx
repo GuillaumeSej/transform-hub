@@ -83,6 +83,10 @@ export default function CompanyDetailClient() {
       fyEnd: company.fyEnd,
       capexBudget: company.capexBudget != null ? String(company.capexBudget) : "",
       actionPlanEnabled: company.actionPlanEnabled ?? true,
+      socialChargesRate:
+        company.socialChargesRate != null
+          ? String(Math.round(company.socialChargesRate * 100))
+          : "",
       confidentialityLevels: company.confidentialityLevels ?? [],
       roleClearance: company.roleClearance ?? {},
     });
@@ -100,13 +104,15 @@ export default function CompanyDetailClient() {
     if (!company || !form.name.trim()) return;
     setSaving(true);
     try {
-      // Ne jamais assigner `capexBudget: undefined` explicitement — Firestore `setDoc` rejette
-      // toute clé valant `undefined` (voir le bug identique corrigé sur
-      // AuthUser.confidentialityClearance dans UsersPanel.tsx) : on omet la clé plutôt que de
+      // Ne jamais assigner `capexBudget`/`socialChargesRate` à `undefined` explicitement —
+      // Firestore `setDoc` rejette toute clé valant `undefined` (voir le bug identique corrigé
+      // sur AuthUser.confidentialityClearance dans UsersPanel.tsx) : on omet la clé plutôt que de
       // la mettre à `undefined` quand le champ est vidé, ce qui l'efface bien du document.
       const trimmedCapex = form.capexBudget.trim();
+      const trimmedCharges = form.socialChargesRate.trim();
       const rest = { ...company };
       delete rest.capexBudget;
+      delete rest.socialChargesRate;
       await saveCompany({
         ...rest,
         name: form.name,
@@ -115,6 +121,7 @@ export default function CompanyDetailClient() {
         fyEnd: form.fyEnd,
         ...(trimmedCapex !== "" ? { capexBudget: Number(trimmedCapex) } : {}),
         actionPlanEnabled: form.actionPlanEnabled,
+        ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
         confidentialityLevels: form.confidentialityLevels,
         roleClearance: form.roleClearance,
       });

@@ -41,6 +41,8 @@ export default function AdminCompaniesPage() {
       fyEnd: c.fyEnd,
       capexBudget: c.capexBudget != null ? String(c.capexBudget) : "",
       actionPlanEnabled: c.actionPlanEnabled ?? true,
+      socialChargesRate:
+        c.socialChargesRate != null ? String(Math.round(c.socialChargesRate * 100)) : "",
       confidentialityLevels: c.confidentialityLevels ?? [],
       roleClearance: c.roleClearance ?? {},
     });
@@ -49,11 +51,13 @@ export default function AdminCompaniesPage() {
 
   const save = async () => {
     if (!form.name.trim()) return;
-    // Ne jamais assigner `capexBudget: undefined` explicitement — Firestore `setDoc` rejette
-    // toute clé valant `undefined` (même bug corrigé sur AuthUser.confidentialityClearance dans
-    // UsersPanel.tsx et sur ce même champ dans CompanyDetailClient.tsx) : on omet la clé plutôt
-    // que de la mettre à `undefined` quand le champ est vidé.
+    // Ne jamais assigner `capexBudget`/`socialChargesRate` à `undefined` explicitement — Firestore
+    // `setDoc` rejette toute clé valant `undefined` (même bug corrigé sur
+    // AuthUser.confidentialityClearance dans UsersPanel.tsx et sur capexBudget dans
+    // CompanyDetailClient.tsx) : on omet la clé plutôt que de la mettre à `undefined` quand le
+    // champ est vidé.
     const trimmedCapex = form.capexBudget.trim();
+    const trimmedCharges = form.socialChargesRate.trim();
     const common = {
       name: form.name,
       industry: form.industry,
@@ -61,6 +65,7 @@ export default function AdminCompaniesPage() {
       fyEnd: form.fyEnd,
       ...(trimmedCapex !== "" ? { capexBudget: Number(trimmedCapex) } : {}),
       actionPlanEnabled: form.actionPlanEnabled,
+      ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
       confidentialityLevels: form.confidentialityLevels,
       roleClearance: form.roleClearance,
     };
@@ -70,6 +75,7 @@ export default function AdminCompaniesPage() {
         if (existing) {
           const rest = { ...existing };
           delete rest.capexBudget;
+          delete rest.socialChargesRate;
           await saveCompany({ ...rest, ...common });
         }
       } else {
