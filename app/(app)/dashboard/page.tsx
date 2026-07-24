@@ -27,10 +27,19 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   subscribeBestPracticeRules,
   subscribeCompanies,
+  subscribeHierarchyNodes,
   subscribeProjects,
 } from "@/lib/firestore/admin";
-import type { BestPracticeRule, Company, Project } from "@/types";
+import type { BestPracticeRule, Company, HierarchyLevelDef, HierarchyNode, Project } from "@/types";
 import * as engine from "@/lib/engine";
+import {
+  METRIC_REGISTRY,
+  getAvailableDimensions,
+  getDimensionDef,
+  getMetricDef,
+  pivotByDimensions,
+  type PivotRow,
+} from "@/lib/dashboardPivot";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -54,19 +63,50 @@ import type { Lever, LeverStatus } from "@/types";
 import {
   DASHBOARD_WIDGET_REGISTRY,
   SPAN_COL_CLASS,
+  addCustomViewToInstance,
   addWidget,
+  addWidgetWithCustomView,
   buildDefaultLayout,
   cycleSpan,
   getWidgetDef,
   loadDashboardLayout,
   moveWidget,
   removeWidget,
+  resolveActiveCustomView,
+  resolveCustomViews,
   saveDashboardLayout,
   setWidgetSpan,
   setWidgetView,
+  type CustomViewConfig,
   type DashboardWidgetInstance,
   type DashboardWidgetType,
 } from "@/lib/dashboardWidgets";
+
+/** Libellé lisible d'une vue construite (builder générique) — `label` explicite si fourni par
+ * l'utilisateur, sinon généré à partir des libellés de la métrique et des dimensions choisies
+ * (ex. "Économies réalisées par Fonction × Pays"). */
+function describeCustomView(view: CustomViewConfig, hierarchyLevels: HierarchyLevelDef[]): string {
+  if (view.label) return view.label;
+  const metricLabel = getMetricDef(view.metric)?.label ?? view.metric;
+  const dimLabels = view.dimensions
+    .map((d) => getDimensionDef(d, hierarchyLevels)?.label ?? d)
+    .join(" × ");
+  return `${metricLabel} par ${dimLabels}`;
+}
+
+/** Correspondance dimension → paramètre de filtre global existant (voir `useGlobalFilters`), pour
+ * le clic de drill-down depuis un graphique du builder générique vers la liste des leviers.
+ * Uniquement les dimensions qui ont un équivalent dans la barre de filtres du dashboard — les
+ * autres dimensions (ex. sponsor, risque, projet) naviguent simplement sans filtre additionnel
+ * plutôt que d'échouer. */
+const FILTER_PARAM_BY_DIMENSION: Partial<Record<string, string>> = {
+  function: "f_function",
+  ws: "f_ws",
+  owner: "f_owner",
+  geography: "f_geography",
+  type: "f_type",
+  status: "f_status",
+};
 
 export default function DashboardPage() {
   const { user } = useRole();
@@ -124,6 +164,24 @@ export default function DashboardPage() {
     );
     return unsub;
   }, [user?.companyId]);
+
+  // Arborescence financière (optionnelle) de l'entreprise — n'ajoute des dimensions "hiérarchie"
+  // au builder générique que si l'entreprise a explicitement configuré des hierarchyLevels (voir
+  // lib/dashboardPivot.ts, même pattern défensif que app/(app)/levers/page.tsx).
+  const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
+  useEffect(() => {
+    setHierarchyLevels(company?.hierarchyLevels ?? []);
+  }, [company]);
+  useEffect(() => {
+    if (!user?.companyId || hierarchyLevels.length === 0) {
+      setHierarchyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setHierarchyNodes);
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, hierarchyLevels.length]);
 
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
@@ -207,6 +265,13 @@ export default function DashboardPage() {
     const qs = new URLSearchParams(merged).toString();
     router.push(`/levers${qs ? `?${qs}` : ""}`);
   };
+  /** Drill-down générique depuis un graphique du builder (Marimekko/ventilations/P&L) : navigue
+   * filtré si la dimension cliquée a un équivalent dans la barre de filtres globale, sinon
+   * navigue sans filtre additionnel plutôt que d'échouer silencieusement. */
+  const goToDimensionValue = (dimensionKey: string, value: string) => {
+    const param = FILTER_PARAM_BY_DIMENSION[dimensionKey];
+    goToLevers(param ? { [param]: value } : {});
+  };
   const goToStage = (status: LeverStatus) => goToLevers({ f_status: lifecycle.label(status) });
   const goToStageLabel = (label: string) => {
     const stage = stages.find((s) => s.label === label);
@@ -269,13 +334,19 @@ export default function DashboardPage() {
   const [dragInstanceId, setDragInstanceId] = useState<string | null>(null);
   const [dragOverInstanceId, setDragOverInstanceId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
-  // Widget "configurable" (Marimekko, ventilations...) déjà présent qu'on tente de rajouter — on
-  // demande alors explicitement si c'est un nouveau bloc séparé ou si le bloc existant (qui
-  // propose déjà un sélecteur de vue interne) suffit, plutôt que dupliquer silencieusement un
-  // widget qui peut déjà tout afficher via son propre toggle.
-  const [pendingDuplicateType, setPendingDuplicateType] = useState<DashboardWidgetType | null>(
-    null
-  );
+
+  // ─── Builder générique métrique × dimension(s) ─────────────────────────────────────────────
+  // Widget "builder" (Marimekko, ventilations, P&L — voir `builderDimensionCount` du registre) déjà
+  // présent qu'on tente de rajouter : on demande d'abord explicitement si c'est un nouveau bloc
+  // séparé ou une vue supplémentaire sur un bloc existant, plutôt que de dupliquer silencieusement
+  // un widget qui peut déjà tout afficher via son propre sélecteur de vue.
+  const [builderChoiceType, setBuilderChoiceType] = useState<DashboardWidgetType | null>(null);
+  // Étape de configuration (métrique + dimension(s)) — `builderTargetInstanceId` = null pour une
+  // nouvelle instance, ou l'instanceId d'un bloc existant pour lui ajouter une vue.
+  const [builderConfigType, setBuilderConfigType] = useState<DashboardWidgetType | null>(null);
+  const [builderTargetInstanceId, setBuilderTargetInstanceId] = useState<string | null>(null);
+  const [builderMetric, setBuilderMetric] = useState<string>("");
+  const [builderDims, setBuilderDims] = useState<string[]>(["", ""]);
 
   useEffect(() => {
     setLayout(loadDashboardLayout());
@@ -290,22 +361,59 @@ export default function DashboardPage() {
   // deux fois le même graphique avec des filtres différents, à l'image d'un outil type PowerBI).
   const availableToAdd = DASHBOARD_WIDGET_REGISTRY;
 
-  /** Point d'entrée unique pour ajouter un widget depuis le panneau — si le type est déjà présent
-   * ET propose un sélecteur de vue interne (Marimekko, ventilations...), on demande confirmation
-   * plutôt que de dupliquer silencieusement un bloc qui peut déjà tout afficher via son toggle. */
-  const requestAddWidget = (type: DashboardWidgetType) => {
-    const def = getWidgetDef(type);
-    const alreadyPresent = layout.some((w) => w.type === type);
-    if (alreadyPresent && def?.viewOptions) {
-      setPendingDuplicateType(type);
-      return;
-    }
-    updateLayout(addWidget(layout, type));
+  const openBuilderConfig = (type: DashboardWidgetType, targetInstanceId: string | null) => {
+    setBuilderConfigType(type);
+    setBuilderTargetInstanceId(targetInstanceId);
+    setBuilderMetric("");
+    setBuilderDims(["", ""]);
+    setBuilderChoiceType(null);
   };
 
-  const confirmAddDuplicate = () => {
-    if (pendingDuplicateType) updateLayout(addWidget(layout, pendingDuplicateType));
-    setPendingDuplicateType(null);
+  const closeBuilderConfig = () => {
+    setBuilderConfigType(null);
+    setBuilderTargetInstanceId(null);
+    setBuilderMetric("");
+    setBuilderDims(["", ""]);
+  };
+
+  /** Point d'entrée unique pour ajouter un widget depuis le panneau — les types "builder" (voir
+   * `builderDimensionCount`) ouvrent la configuration métrique + dimension(s) au lieu d'un ajout
+   * immédiat ; s'ils sont déjà présents sur le dashboard, on demande d'abord nouveau bloc vs vue
+   * sur un bloc existant. Les autres types gardent le comportement historique (ajout immédiat). */
+  const requestAddWidget = (type: DashboardWidgetType) => {
+    const def = getWidgetDef(type);
+    if (!def?.builderDimensionCount) {
+      updateLayout(addWidget(layout, type));
+      setAddPanelOpen(false);
+      return;
+    }
+    const alreadyPresent = layout.some((w) => w.type === type);
+    if (alreadyPresent) {
+      setBuilderChoiceType(type);
+    } else {
+      openBuilderConfig(type, null);
+    }
+  };
+
+  const requiredDimCount = builderConfigType
+    ? (getWidgetDef(builderConfigType)?.builderDimensionCount ?? 1)
+    : 1;
+  const selectedDims = builderDims.slice(0, requiredDimCount).filter(Boolean);
+  const builderConfigValid =
+    builderMetric !== "" &&
+    selectedDims.length === requiredDimCount &&
+    new Set(selectedDims).size === selectedDims.length;
+
+  const confirmBuilderConfig = () => {
+    if (!builderConfigType || !builderConfigValid) return;
+    const config = { metric: builderMetric, dimensions: selectedDims };
+    if (builderTargetInstanceId) {
+      updateLayout(addCustomViewToInstance(layout, builderTargetInstanceId, config));
+    } else {
+      updateLayout(addWidgetWithCustomView(layout, builderConfigType, config));
+    }
+    closeBuilderConfig();
+    setAddPanelOpen(false);
   };
 
   // Réordonnancement mobile via boutons haut/bas — le drag-and-drop HTML5 natif (draggable=) ne
@@ -539,99 +647,151 @@ export default function DashboardPage() {
           </Card>
         );
       case "marimekko": {
-        const view = (instance.view ?? "function-country") as engine.MarimekkoPairKey;
-        const mekko2D = engine.marimekko2D(filteredData, view, projects);
+        // Les deux vues historiques ("function-country" / "workstream-project") gardent le calcul
+        // exact d'origine (engine.marimekko2D) pour zéro régression visuelle ; toute vue construite
+        // par l'utilisateur via le builder générique passe par le pivot générique.
+        const activeView = resolveActiveCustomView(instance);
+        const views = resolveCustomViews(instance);
+        const isLegacy =
+          activeView?.id === "function-country" || activeView?.id === "workstream-project";
+        const mekko2D = activeView
+          ? isLegacy
+            ? engine.marimekko2D(filteredData, activeView.id as engine.MarimekkoPairKey, projects)
+            : (pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
+                projects,
+                hierarchyLevels,
+                hierarchyNodes,
+              }) as engine.Marimekko2DColumn[])
+          : [];
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
               title={t("dashboard.widgets.marimekko")}
               actions={
-                <DimensionToggle
-                  options={[
-                    { value: "function-country", label: t("dashboard.widgetView.functionCountry") },
-                    {
-                      value: "workstream-project",
-                      label: t("dashboard.widgetView.workstreamProject"),
-                    },
-                  ]}
-                  value={view}
-                  onChange={(next) =>
-                    updateLayout(setWidgetView(layout, instance.instanceId, next))
-                  }
-                />
+                views.length > 1 && activeView ? (
+                  <DimensionToggle
+                    options={views.map((v) => ({
+                      value: v.id,
+                      label: describeCustomView(v, hierarchyLevels),
+                    }))}
+                    value={activeView.id}
+                    onChange={(next) =>
+                      updateLayout(setWidgetView(layout, instance.instanceId, next))
+                    }
+                  />
+                ) : undefined
               }
             />
             <CardBody>
               <MarimekkoChart
                 data={mekko2D}
                 height={300}
-                onSegmentClick={(primaryKey) =>
-                  goToLevers(
-                    view === "function-country" ? { f_function: primaryKey } : { f_ws: primaryKey }
-                  )
-                }
+                onSegmentClick={(primaryKey) => {
+                  if (!activeView) return;
+                  goToDimensionValue(activeView.dimensions[0], primaryKey);
+                }}
               />
             </CardBody>
           </Card>
         );
       }
       case "workstream-breakdown": {
-        const view = instance.view ?? "workstream";
+        const activeView = resolveActiveCustomView(instance);
+        const views = resolveCustomViews(instance);
+        const isLegacy = activeView?.id === "workstream" || activeView?.id === "project";
+        const barData = activeView
+          ? isLegacy
+            ? activeView.id === "workstream"
+              ? wsBars
+              : projectBars
+            : (
+                pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
+                  projects,
+                  hierarchyLevels,
+                  hierarchyNodes,
+                }) as PivotRow[]
+              ).map((row) => ({ label: row.label, realized: row.value, target: 0 }))
+          : [];
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
               title={
-                view === "workstream"
-                  ? t("dashboard.widgets.workstreamSavings")
-                  : t("dashboard.widgets.projectSavings")
+                activeView
+                  ? isLegacy
+                    ? activeView.id === "workstream"
+                      ? t("dashboard.widgets.workstreamSavings")
+                      : t("dashboard.widgets.projectSavings")
+                    : describeCustomView(activeView, hierarchyLevels)
+                  : t("dashboard.widgets.workstreamBreakdown")
               }
               actions={
-                <DimensionToggle
-                  options={[
-                    { value: "workstream", label: t("dashboard.workstream") },
-                    { value: "project", label: t("dashboard.project") },
-                  ]}
-                  value={view}
-                  onChange={(next) =>
-                    updateLayout(setWidgetView(layout, instance.instanceId, next))
-                  }
-                />
+                views.length > 1 && activeView ? (
+                  <DimensionToggle
+                    options={views.map((v) => ({
+                      value: v.id,
+                      label: describeCustomView(v, hierarchyLevels),
+                    }))}
+                    value={activeView.id}
+                    onChange={(next) =>
+                      updateLayout(setWidgetView(layout, instance.instanceId, next))
+                    }
+                  />
+                ) : undefined
               }
             />
             <CardBody>
-              <WorkstreamBarChart data={view === "workstream" ? wsBars : projectBars} />
+              <WorkstreamBarChart data={barData} />
             </CardBody>
           </Card>
         );
       }
       case "geo-breakdown": {
-        const view = instance.view ?? "country";
+        const activeView = resolveActiveCustomView(instance);
+        const views = resolveCustomViews(instance);
+        const isLegacy = activeView?.id === "country" || activeView?.id === "function";
+        const donutData = activeView
+          ? isLegacy
+            ? geoDataFor(activeView.id)
+            : (
+                pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
+                  projects,
+                  hierarchyLevels,
+                  hierarchyNodes,
+                }) as PivotRow[]
+              ).map((row) => ({ name: row.label, value: row.value }))
+          : [];
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
               title={
-                view === "country"
-                  ? t("dashboard.widgets.countrySavings")
-                  : t("dashboard.widgets.functionSavings")
+                activeView
+                  ? isLegacy
+                    ? activeView.id === "country"
+                      ? t("dashboard.widgets.countrySavings")
+                      : t("dashboard.widgets.functionSavings")
+                    : describeCustomView(activeView, hierarchyLevels)
+                  : t("dashboard.widgets.geoBreakdown")
               }
               actions={
-                <DimensionToggle
-                  options={[
-                    { value: "country", label: t("dashboard.country") },
-                    { value: "function", label: t("dashboard.function") },
-                  ]}
-                  value={view}
-                  onChange={(next) =>
-                    updateLayout(setWidgetView(layout, instance.instanceId, next))
-                  }
-                />
+                views.length > 1 && activeView ? (
+                  <DimensionToggle
+                    options={views.map((v) => ({
+                      value: v.id,
+                      label: describeCustomView(v, hierarchyLevels),
+                    }))}
+                    value={activeView.id}
+                    onChange={(next) =>
+                      updateLayout(setWidgetView(layout, instance.instanceId, next))
+                    }
+                  />
+                ) : undefined
               }
             />
             <CardBody>
-              <GeoDonutChart data={geoDataFor(view)} />
+              <GeoDonutChart data={donutData} />
             </CardBody>
           </Card>
         );
@@ -741,16 +901,51 @@ export default function DashboardPage() {
             </CardBody>
           </Card>
         );
-      case "pnl":
+      case "pnl": {
+        const activeView = resolveActiveCustomView(instance);
+        const views = resolveCustomViews(instance);
+        const isLegacy = activeView?.id === "account";
+        const pnlChartData = activeView
+          ? isLegacy
+            ? pnlData
+            : (
+                pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
+                  projects,
+                  hierarchyLevels,
+                  hierarchyNodes,
+                }) as PivotRow[]
+              ).map((row) => ({ account: row.label, impact: row.value }))
+          : [];
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title={t("dashboard.widgets.pnl")} />
+            <CardHeader
+              title={
+                activeView && !isLegacy
+                  ? describeCustomView(activeView, hierarchyLevels)
+                  : t("dashboard.widgets.pnl")
+              }
+              actions={
+                views.length > 1 && activeView ? (
+                  <DimensionToggle
+                    options={views.map((v) => ({
+                      value: v.id,
+                      label: describeCustomView(v, hierarchyLevels),
+                    }))}
+                    value={activeView.id}
+                    onChange={(next) =>
+                      updateLayout(setWidgetView(layout, instance.instanceId, next))
+                    }
+                  />
+                ) : undefined
+              }
+            />
             <CardBody>
-              <PnlBarChart data={pnlData} />
+              <PnlBarChart data={pnlChartData} />
             </CardBody>
           </Card>
         );
+      }
       default:
         return null;
     }
@@ -905,22 +1100,128 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Étape 1 du builder générique (widgets déjà présents) : nouveau bloc séparé, ou vue
+          supplémentaire ajoutée au sélecteur d'un bloc existant (l'utilisateur choisit LEQUEL
+          s'il y en a plusieurs) — voir requestAddWidget/openBuilderConfig. */}
       <Modal
-        open={pendingDuplicateType !== null}
-        onOpenChange={(open) => !open && setPendingDuplicateType(null)}
-        title={t("dashboard.duplicateWidgetTitle")}
+        open={builderChoiceType !== null}
+        onOpenChange={(open) => !open && setBuilderChoiceType(null)}
+        title="Ce graphique est déjà sur votre dashboard"
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-secondary">
+            Ajoutez-le comme nouveau bloc séparé, ou ajoutez cette vue au sélecteur d&apos;un bloc
+            déjà présent (petit bouton en haut du graphique) plutôt que de dupliquer.
+          </p>
+          <button
+            type="button"
+            onClick={() => builderChoiceType && openBuilderConfig(builderChoiceType, null)}
+            className="w-full rounded-md border border-border-strong p-3 text-left text-[12.5px] font-semibold text-primary transition hover:border-bp-coral"
+          >
+            Ajouter comme nouveau widget
+          </button>
+          <div className="flex flex-col gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+              Ou ajouter une vue à un bloc existant
+            </div>
+            {layout
+              .filter((w) => w.type === builderChoiceType)
+              .map((inst, i) => {
+                const active = resolveActiveCustomView(inst);
+                return (
+                  <button
+                    key={inst.instanceId}
+                    type="button"
+                    onClick={() =>
+                      builderChoiceType && openBuilderConfig(builderChoiceType, inst.instanceId)
+                    }
+                    className="w-full rounded-md border border-border p-2.5 text-left text-[12.5px] transition hover:border-bp-coral"
+                  >
+                    <span className="font-semibold text-primary">Bloc existant n°{i + 1}</span>
+                    {active && (
+                      <span className="mt-0.5 block text-[11px] text-tertiary">
+                        Vue actuelle : {describeCustomView(active, hierarchyLevels)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Étape 2 du builder générique : choix de la métrique + 1 ou 2 dimension(s) selon le type de
+          graphique (voir builderDimensionCount). Empilement vertical simple → aucun scroll
+          horizontal introduit sur mobile (Modal est déjà plein-écran-friendly). */}
+      <Modal
+        open={builderConfigType !== null}
+        onOpenChange={(open) => !open && closeBuilderConfig()}
+        title={builderTargetInstanceId ? "Ajouter une vue" : "Configurer le widget"}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setPendingDuplicateType(null)}>
-              {t("dashboard.keepSingleBlock")}
+            <Button variant="ghost" onClick={closeBuilderConfig}>
+              Annuler
             </Button>
-            <Button variant="primary" onClick={confirmAddDuplicate}>
-              {t("dashboard.addNewBlock")}
+            <Button variant="primary" onClick={confirmBuilderConfig} disabled={!builderConfigValid}>
+              {builderTargetInstanceId ? "Ajouter la vue" : "Ajouter le widget"}
             </Button>
           </>
         }
       >
-        <p className="text-sm text-secondary">{t("dashboard.duplicateWidgetHint")}</p>
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-primary">
+            Indicateur (métrique)
+            <select
+              value={builderMetric}
+              onChange={(e) => setBuilderMetric(e.target.value)}
+              className="rounded-md border border-border-strong px-2.5 py-2 text-[13px] font-normal text-primary"
+            >
+              <option value="">— Choisir —</option>
+              {METRIC_REGISTRY.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {Array.from({ length: requiredDimCount }).map((_, i) => (
+            <label
+              key={i}
+              className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-primary"
+            >
+              {requiredDimCount === 2
+                ? i === 0
+                  ? "Dimension primaire"
+                  : "Dimension secondaire"
+                : "Dimension"}
+              <select
+                value={builderDims[i] ?? ""}
+                onChange={(e) => {
+                  const next = [...builderDims];
+                  next[i] = e.target.value;
+                  setBuilderDims(next);
+                }}
+                className="rounded-md border border-border-strong px-2.5 py-2 text-[13px] font-normal text-primary"
+              >
+                <option value="">— Choisir —</option>
+                {getAvailableDimensions(hierarchyLevels).map((d) => (
+                  <option key={d.key} value={d.key}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          {!builderConfigValid && (
+            <p className="text-[11.5px] text-tertiary">
+              {builderMetric === ""
+                ? "Choisissez un indicateur pour continuer."
+                : selectedDims.length < requiredDimCount
+                  ? `Choisissez encore ${requiredDimCount - selectedDims.length} dimension(s).`
+                  : "Les dimensions choisies doivent être différentes."}
+            </p>
+          )}
+        </div>
       </Modal>
 
       {/* grid-flow-row-dense : comble automatiquement les trous laissés par un widget large suivi
