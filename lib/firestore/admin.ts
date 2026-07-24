@@ -5,6 +5,7 @@ import {
   getDocs,
   onSnapshot,
   setDoc,
+  writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -89,6 +90,22 @@ export async function saveHierarchyNode(node: HierarchyNode): Promise<void> {
 
 export async function deleteHierarchyNode(id: string): Promise<void> {
   await deleteDoc(doc(hierarchyNodesCol(), id));
+}
+
+/** Création en masse (import Excel) — un seul writeBatch, jusqu'à 500 écritures par lot Firestore
+ *  (largement suffisant ici : un import d'arborescence dépasse rarement quelques centaines de
+ *  nœuds ; à découper en plusieurs lots le jour où ce ne serait plus le cas). */
+export async function saveHierarchyNodesBatch(nodes: HierarchyNode[]): Promise<void> {
+  if (nodes.length === 0) return;
+  const col = hierarchyNodesCol();
+  const CHUNK = 500;
+  for (let i = 0; i < nodes.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    for (const node of nodes.slice(i, i + CHUNK)) {
+      batch.set(doc(col, node.id), node);
+    }
+    await batch.commit();
+  }
 }
 
 // --- Users (admin-managed) ---
