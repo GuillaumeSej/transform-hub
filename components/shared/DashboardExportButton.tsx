@@ -6,15 +6,17 @@ import { toPng } from "html-to-image";
 import pptxgen from "pptxgenjs";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
-import type { DashboardWidgetInstance } from "@/lib/dashboardWidgets";
 
 /** Sélecteur du conteneur de grille (voir `app/(app)/dashboard/page.tsx`) et des widgets qu'il
  * contient — ne référence AUCUN type de widget précis : que ce soit un widget du registre actuel
  * ou un widget ajouté plus tard par le futur "custom widget builder", tant qu'il respecte ce
  * contrat d'attributs (posé par `renderWidgetShell`), il est automatiquement inclus dans l'export.
  * C'est ce qui garantit "si on ajoute un nouveau graphique, il doit se retrouver dans l'export"
- * sans jamais retoucher ce fichier. */
-const GRID_SELECTOR = "[data-dashboard-widget-grid]";
+ * sans jamais retoucher ce fichier. Personnalisable via la prop `gridSelector` (voir plus bas) pour
+ * que le Dashboard RH puisse réutiliser ce même composant sur SON conteneur de grille
+ * (`data-hr-dashboard-widget-grid`) sans dupliquer la logique de capture/génération PPTX.
+ * `DEFAULT_GRID_SELECTOR` reste le comportement historique du dashboard exécutif, inchangé. */
+const DEFAULT_GRID_SELECTOR = "[data-dashboard-widget-grid]";
 const WIDGET_SELECTOR = "[data-widget-id]";
 
 const SLIDE_WIDTH_IN = 13.333;
@@ -67,7 +69,22 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
  * un widget ajouté plus tard (custom widget builder à venir) apparaît dans l'export sans y
  * toucher.
  */
-export function DashboardExportButton({ layout }: { layout: DashboardWidgetInstance[] }) {
+export function DashboardExportButton({
+  layout,
+  gridSelector = DEFAULT_GRID_SELECTOR,
+  coverTitle = "BeTrack — Executive Dashboard",
+  fileNamePrefix = "betrack_dashboard",
+}: {
+  /** Layout actuellement affiché — seul `.length` est utilisé (désactive l'export si vide) ; type
+   *  élargi à `{ length: number }` pour rester utilisable tel quel avec `HrWidgetInstance[]` (voir
+   *  `app/(app)/hr/page.tsx`) sans coupler ce composant partagé à un type de widget précis. */
+  layout: { length: number };
+  /** Conteneur de grille à scanner pour les nœuds `[data-widget-id]` — par défaut celui du
+   *  dashboard exécutif, inchangé pour son propre usage. */
+  gridSelector?: string;
+  coverTitle?: string;
+  fileNamePrefix?: string;
+}) {
   const { showToast } = useToast();
   const [exporting, setExporting] = useState(false);
   const disabled = exporting || layout.length === 0;
@@ -75,7 +92,7 @@ export function DashboardExportButton({ layout }: { layout: DashboardWidgetInsta
   const handleExport = async () => {
     if (disabled) return;
 
-    const grid = document.querySelector<HTMLElement>(GRID_SELECTOR);
+    const grid = document.querySelector<HTMLElement>(gridSelector);
     const nodes = grid ? Array.from(grid.querySelectorAll<HTMLElement>(WIDGET_SELECTOR)) : [];
     if (nodes.length === 0) {
       showToast(
@@ -94,7 +111,7 @@ export function DashboardExportButton({ layout }: { layout: DashboardWidgetInsta
 
       const cover = pptx.addSlide();
       cover.background = { color: "111111" };
-      cover.addText("BeTrack — Executive Dashboard", {
+      cover.addText(coverTitle, {
         x: 0.6,
         y: 3.0,
         w: SLIDE_WIDTH_IN - 1.2,
@@ -156,7 +173,7 @@ export function DashboardExportButton({ layout }: { layout: DashboardWidgetInsta
       }
 
       await pptx.writeFile({
-        fileName: `betrack_dashboard_${new Date().toISOString().slice(0, 10)}.pptx`,
+        fileName: `${fileNamePrefix}_${new Date().toISOString().slice(0, 10)}.pptx`,
       });
 
       if (failures > 0) {

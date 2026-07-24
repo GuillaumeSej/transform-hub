@@ -62,15 +62,22 @@ export function DepartmentMovementsChart({
   );
 }
 
-/** Donut générique ETP (mouvements par pays) — palette catégorielle validée, ordre fixe. */
+const defaultFteFormat = (v: number) => `${v.toLocaleString("fr-FR")} ETP`;
+
+/** Donut générique (mouvements par pays par défaut) — palette catégorielle validée, ordre fixe.
+ * `formatValue` permet de réutiliser ce composant pour n'importe quelle métrique du builder
+ * générique RH (voir `lib/hrDashboardPivot.ts`) — défaut = suffixe "ETP" inchangé pour l'usage
+ * historique (ventilation par pays). */
 export function HrDonutChart({
   data,
   height = 240,
   onSliceClick,
+  formatValue = defaultFteFormat,
 }: {
   data: { name: string; value: number }[];
   height?: number;
   onSliceClick?: (name: string) => void;
+  formatValue?: (value: number) => string;
 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -92,7 +99,7 @@ export function HrDonutChart({
             <Cell key={entry.name} fill={HR_CATEGORICAL[i % HR_CATEGORICAL.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(value) => `${Number(value).toLocaleString("fr-FR")} ETP`} />
+        <Tooltip formatter={(value) => formatValue(Number(value))} />
         <Legend
           wrapperStyle={{ fontSize: 11 }}
           layout="vertical"
@@ -100,6 +107,42 @@ export function HrDonutChart({
           align="right"
         />
       </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Barre simple générique (une seule série) pour les vues construites par l'utilisateur via le
+ * builder générique RH — une métrique croisée avec une dimension (voir `lib/hrDashboardPivot.ts`),
+ * contrairement à `DepartmentMovementsChart` qui est câblé en dur sur 3 séries fixes. */
+export function HrPivotBarChart({
+  data,
+  height = 260,
+  formatValue = defaultFteFormat,
+  onBarClick,
+}: {
+  data: { label: string; value: number }[];
+  height?: number;
+  formatValue?: (value: number) => string;
+  onBarClick?: (label: string) => void;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+        <Tooltip formatter={(value) => formatValue(Number(value))} />
+        <Bar
+          dataKey="value"
+          fill={HR_CATEGORICAL[0]}
+          radius={[3, 3, 0, 0]}
+          onClick={(d) => {
+            const label = (d as { label?: string })?.label;
+            if (label) onBarClick?.(label);
+          }}
+          cursor={onBarClick ? "pointer" : undefined}
+        />
+      </BarChart>
     </ResponsiveContainer>
   );
 }
