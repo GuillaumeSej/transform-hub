@@ -13,6 +13,12 @@ export type AuthUser = {
   /** Identifiant de l'entreprise (client) à laquelle cet utilisateur appartient.
    *  null = admin global (voit toutes les entreprises). */
   companyId?: string | null;
+  /** Habilitation de confidentialité INDIVIDUELLE, surcharge Company.roleClearance[role] quand
+   *  définie (voir Company.confidentialityLevels). Non défini = hérite du niveau de son rôle.
+   *  "all" = accès à tous les niveaux de confidentialité de l'entreprise, quel que soit le rôle.
+   *  string[] (peut être vide = "aucun") = liste explicite des niveaux autorisés pour CET
+   *  utilisateur. Sans effet pour admin/admin_entreprise (toujours accès total). */
+  confidentialityClearance?: "all" | string[];
 };
 
 // Cycle de vie unique d'un levier, affiché partout en L1-L5 (voir lib/status-config.ts) :
