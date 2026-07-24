@@ -7,6 +7,7 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import * as engine from "@/lib/engine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
@@ -37,6 +38,7 @@ export default function LeversPage() {
   const { role, user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
   const lifecycle = useLifecycleLabels(user?.companyId);
+  const { t } = useTranslation();
   const router = useRouter();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
@@ -267,7 +269,7 @@ export default function LeversPage() {
       return;
     }
     data.updateLever(rowId, patch);
-    showToast("Levier mis à jour", "", "success");
+    showToast(t("leverForm.updated"), "", "success");
   };
 
   const columns: ColumnDef<LeverRow>[] = [
@@ -284,12 +286,17 @@ export default function LeversPage() {
         </span>
       ),
     },
-    { key: "name", label: "Levier", editable: true, render: (r) => <strong>{r.name}</strong> },
+    {
+      key: "name",
+      label: t("levers.columnName"),
+      editable: true,
+      render: (r) => <strong>{r.name}</strong>,
+    },
     { key: "type", label: "Type" },
-    { key: "wsName", label: "Workstream" },
+    { key: "wsName", label: t("leverForm.workstream") },
     {
       key: "owner",
-      label: "Owner",
+      label: t("leverForm.owner"),
       editable: true,
       render: (r) => (
         <span className="inline-flex items-center gap-1.5">
@@ -297,15 +304,15 @@ export default function LeversPage() {
         </span>
       ),
     },
-    { key: "sponsor", label: "Sponsor", editable: true },
+    { key: "sponsor", label: t("leverForm.sponsor"), editable: true },
     { key: "geography", label: "Géo", editable: true },
-    { key: "country", label: "Pays", editable: true },
+    { key: "country", label: t("leverForm.country"), editable: true },
     ...(hasHierarchy
       ? hierarchyColumns
       : [
           {
             key: "costCenterLabel",
-            label: "Centre de coût / Poste de dépense",
+            label: t("leverForm.costCenter"),
           } as ColumnDef<LeverRow>,
         ]),
     { key: "start", label: "Début", editable: true },
@@ -345,7 +352,7 @@ export default function LeversPage() {
     },
     {
       key: "statusLabel",
-      label: "Niveau",
+      label: t("levers.columnStatus"),
       editable: true,
       type: "select",
       options: data.leverStatuses.map((s) => lifecycle.label(s)),
@@ -358,11 +365,11 @@ export default function LeversPage() {
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
         <div>
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            {role === "lever" ? "Mes leviers" : "Lever Library"}
+            {role === "lever" ? t("levers.title.mine") : t("levers.title.library")}
           </h1>
           <div className="mt-2.5 text-[13px] text-secondary">
-            {filteredLevers.length} leviers · Net savings affiché :{" "}
-            <strong>{engine.fmtCurr(totalNet)}</strong> · Réalisé :{" "}
+            {filteredLevers.length} {t("levers.count")} · {t("levers.netSavingsShown")} :{" "}
+            <strong>{engine.fmtCurr(totalNet)}</strong> · {t("levers.realized")} :{" "}
             <strong>{engine.fmtCurr(totalReal)}</strong>
           </div>
         </div>
@@ -370,7 +377,7 @@ export default function LeversPage() {
           <ExportButton type="excel" data={data} />
           <ExcelUploadButton data={data} companyId={user?.companyId ?? null} />
           <Button variant="primary" onClick={() => setNewLeverOpen(true)}>
-            <Plus size={13} /> New lever
+            <Plus size={13} /> {t("levers.newLever")}
           </Button>
         </div>
       </div>
@@ -378,19 +385,19 @@ export default function LeversPage() {
       <Modal
         open={newLeverOpen}
         onOpenChange={setNewLeverOpen}
-        title="Nouveau levier"
+        title={t("levers.newLeverModalTitle")}
         maxWidth="760px"
       >
         <LeverForm
           data={data}
           lifecycle={lifecycle}
           companyId={user?.companyId}
-          submitLabel="Créer le levier"
+          submitLabel={t("levers.createLever")}
           onCancel={() => setNewLeverOpen(false)}
           onSubmit={(values: LeverFormValues) => {
             const created = data.createLever({ ...values, dependencies: [] });
             setNewLeverOpen(false);
-            showToast("Levier créé", created.name, "success");
+            showToast(t("leverForm.created"), created.name, "success");
             router.push(`/levers/detail?id=${created.id}`);
           }}
         />
@@ -414,7 +421,7 @@ export default function LeversPage() {
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${view === "table" ? "bg-black text-white" : "bg-white text-secondary"}`}
               >
-                <Table2 size={13} /> Table
+                <Table2 size={13} /> {t("levers.table")}
               </button>
               <button
                 onClick={() => {
@@ -423,7 +430,7 @@ export default function LeversPage() {
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${view === "kanban" ? "bg-black text-white" : "bg-white text-secondary"}`}
               >
-                <LayoutGrid size={13} /> Kanban
+                <LayoutGrid size={13} /> {t("levers.kanban")}
               </button>
             </div>
           </div>
@@ -436,7 +443,7 @@ export default function LeversPage() {
           columns={columns}
           onCellUpdate={handleCellUpdate}
           onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
-          searchPlaceholder="Rechercher (nom, code, owner...)"
+          searchPlaceholder={t("levers.searchPlaceholder")}
           defaultSort={{ key: "risk", direction: "desc" }}
         />
       ) : (

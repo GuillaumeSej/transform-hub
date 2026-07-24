@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Avatar } from "@/components/shared/Avatar";
 import { useRole } from "@/lib/hooks/useRole";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Role } from "@/types";
 
 /** Sidebar noire fixe — brand BearingPoint : wordmark officiel blanc sur noir, item actif
@@ -15,6 +16,7 @@ import type { Role } from "@/types";
 export function Sidebar({ alertCount, role }: { alertCount: number; role: Role }) {
   const pathname = usePathname();
   const { user } = useRole();
+  const { t } = useTranslation();
   const nav = roles[role].nav;
 
   return (
@@ -35,7 +37,7 @@ export function Sidebar({ alertCount, role }: { alertCount: number; role: Role }
 
       <nav className="flex-1 overflow-y-auto px-2.5 py-3">
         <div className="px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
-          Navigation
+          {t("nav.sectionLabel")}
         </div>
         {nav.map((item) => {
           const Icon = ICON_REGISTRY[item.icon];
@@ -51,7 +53,7 @@ export function Sidebar({ alertCount, role }: { alertCount: number; role: Role }
               )}
             >
               {Icon && <Icon size={15} className="w-4 text-center" />}
-              <span>{item.label}</span>
+              <span>{t(item.label)}</span>
               {item.badge === "alerts" && alertCount > 0 && (
                 <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
                   {alertCount}
@@ -63,12 +65,12 @@ export function Sidebar({ alertCount, role }: { alertCount: number; role: Role }
       </nav>
 
       <div className="flex items-center gap-2.5 border-t border-white/[0.08] px-4 py-3.5">
-        <Avatar initials={roles[role].short.slice(0, 2).toUpperCase()} variant="coral" />
+        <Avatar initials={t(roles[role].short).slice(0, 2).toUpperCase()} variant="coral" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-semibold text-white">
-            {user?.name ?? roles[role].label}
+            {user?.name ?? t(roles[role].label)}
           </div>
-          <div className="text-[10px] text-white/50">{roles[role].label}</div>
+          <div className="text-[10px] text-white/50">{t(roles[role].label)}</div>
         </div>
       </div>
     </aside>
