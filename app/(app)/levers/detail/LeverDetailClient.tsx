@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { subscribeCompanies } from "@/lib/firestore/admin";
+import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import {
   ArrowLeft,
   ArrowRight,
@@ -58,17 +59,17 @@ type CascadeProposal = CascadeResult & { checked: Record<string, boolean> };
 export default function LeverDetailClient() {
   const { role, user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
-  const [roleClearance, setRoleClearance] = useState<string[]>([]);
+  const [clearance, setClearance] = useState<"all" | string[]>([]);
   const [actionPlanEnabled, setActionPlanEnabled] = useState(true);
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
-      setRoleClearance((user && company?.roleClearance?.[user.role]) ?? []);
+      setClearance(resolveConfidentialityClearance(user, company?.roleClearance));
       setActionPlanEnabled(company?.actionPlanEnabled ?? true);
     });
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.companyId, user?.role]);
+  }, [user?.companyId, user?.role, user?.confidentialityClearance]);
   const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -108,10 +109,9 @@ export default function LeverDetailClient() {
   }
 
   const canView =
-    !lever.confidentialityLevel ||
     role === "admin" ||
     role === "admin_entreprise" ||
-    roleClearance.includes(lever.confidentialityLevel);
+    isLeverVisibleForClearance(lever.confidentialityLevel, clearance);
 
   if (!canView) {
     return (

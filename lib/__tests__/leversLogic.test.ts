@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { applyPlanLock, createLever, updateLever, deleteSubLever } from "@/lib/leversLogic";
+import {
+  applyPlanLock,
+  createLever,
+  updateLever,
+  deleteSubLever,
+  resolveConfidentialityClearance,
+  isLeverVisibleForClearance,
+} from "@/lib/leversLogic";
 import type { Lever, LeverStatus, SubLever } from "@/types";
 
 const baseLever: Lever = {
@@ -338,5 +345,56 @@ describe("leversLogic — deleteSubLever", () => {
     expect(result.subLevers).toHaveLength(1);
     expect(result.deletedId).toBe("SL999");
     expect(result.auditEntries).toHaveLength(0);
+  });
+});
+
+describe("leversLogic — resolveConfidentialityClearance", () => {
+  it("returns [] for a null/undefined user", () => {
+    expect(resolveConfidentialityClearance(null, { cto: ["public"] })).toEqual([]);
+    expect(resolveConfidentialityClearance(undefined, { cto: ["public"] })).toEqual([]);
+  });
+
+  it('returns "all" when the individual override is "all"', () => {
+    const user = { role: "cto" as const, confidentialityClearance: "all" as const };
+    expect(resolveConfidentialityClearance(user, { cto: ["public"] })).toBe("all");
+  });
+
+  it("returns the individual override array (even empty) when defined, ignoring roleClearance", () => {
+    const userEmpty = { role: "cto" as const, confidentialityClearance: [] as string[] };
+    expect(resolveConfidentialityClearance(userEmpty, { cto: ["public", "secret"] })).toEqual([]);
+
+    const userCustom = { role: "cto" as const, confidentialityClearance: ["secret"] };
+    expect(resolveConfidentialityClearance(userCustom, { cto: ["public"] })).toEqual(["secret"]);
+  });
+
+  it("falls back to Company.roleClearance[role] when the override is undefined", () => {
+    const user = { role: "cto" as const, confidentialityClearance: undefined };
+    expect(resolveConfidentialityClearance(user, { cto: ["public", "secret"] })).toEqual([
+      "public",
+      "secret",
+    ]);
+  });
+
+  it("falls back to [] when roleClearance has no entry for the role", () => {
+    const user = { role: "hr" as const, confidentialityClearance: undefined };
+    expect(resolveConfidentialityClearance(user, { cto: ["public"] })).toEqual([]);
+    expect(resolveConfidentialityClearance(user, undefined)).toEqual([]);
+  });
+});
+
+describe("leversLogic — isLeverVisibleForClearance", () => {
+  it("is always visible when the lever has no confidentiality level", () => {
+    expect(isLeverVisibleForClearance(undefined, [])).toBe(true);
+    expect(isLeverVisibleForClearance(undefined, "all")).toBe(true);
+  });
+
+  it('is visible for any level when clearance is "all"', () => {
+    expect(isLeverVisibleForClearance("secret", "all")).toBe(true);
+  });
+
+  it("is visible only if the level is included in the array clearance", () => {
+    expect(isLeverVisibleForClearance("secret", ["public"])).toBe(false);
+    expect(isLeverVisibleForClearance("secret", ["public", "secret"])).toBe(true);
+    expect(isLeverVisibleForClearance("secret", [])).toBe(false);
   });
 });

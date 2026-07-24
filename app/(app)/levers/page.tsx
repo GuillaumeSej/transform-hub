@@ -10,6 +10,7 @@ import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import * as engine from "@/lib/engine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -52,17 +53,17 @@ export default function LeversPage() {
   // colonne historique "Centre de coût / Poste de dépense" reste seule affichée (non-régressif).
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
   const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
-  const [roleClearance, setRoleClearance] = useState<string[]>([]);
+  const [clearance, setClearance] = useState<"all" | string[]>([]);
 
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
       setHierarchyLevels(company?.hierarchyLevels ?? []);
-      setRoleClearance((user && company?.roleClearance?.[user.role]) ?? []);
+      setClearance(resolveConfidentialityClearance(user, company?.roleClearance));
     });
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.companyId, user?.role]);
+  }, [user?.companyId, user?.role, user?.confidentialityClearance]);
 
   useEffect(() => {
     if (!user?.companyId || hierarchyLevels.length === 0) {
@@ -87,12 +88,11 @@ export default function LeversPage() {
       role === "lever" && user ? data.levers.filter((l) => l.owner === user.name) : data.levers;
     return ownerScoped.filter(
       (l) =>
-        !l.confidentialityLevel ||
         role === "admin" ||
         role === "admin_entreprise" ||
-        roleClearance.includes(l.confidentialityLevel)
+        isLeverVisibleForClearance(l.confidentialityLevel, clearance)
     );
-  }, [data.levers, role, user, roleClearance]);
+  }, [data.levers, role, user, clearance]);
 
   // Leviers/sous-leviers avec au moins une contrainte de dépendance violée (colonne ⚠ + filtre)
   const alertedLeverIds = useMemo(() => {
