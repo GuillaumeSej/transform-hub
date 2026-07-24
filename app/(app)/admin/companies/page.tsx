@@ -1,29 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, Plus, Pencil, Trash2, X } from "lucide-react";
-import type { Company, Role } from "@/types";
+import Link from "next/link";
+import { Building2, Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
+import type { Company } from "@/types";
 import { subscribeCompanies, saveCompany, deleteCompany } from "@/lib/firestore/admin";
+import {
+  CompanyFieldsEditor,
+  DEFAULT_COMPANY_FORM,
+  type CompanyFormState,
+} from "@/components/admin/CompanyFieldsEditor";
 
-const OPERATIONAL_ROLES: { value: Role; label: string }[] = [
-  { value: "cto", label: "CTO" },
-  { value: "sponsor", label: "Sponsor" },
-  { value: "lever", label: "Lever Owner" },
-  { value: "finance", label: "Finance" },
-  { value: "hr", label: "HR" },
-  { value: "ops", label: "Ops" },
-];
-
-const DEFAULT_FORM = {
-  name: "",
-  industry: "",
-  fyStart: "2026-01-01",
-  fyEnd: "2026-12-31",
-  capexBudget: "",
-  actionPlanEnabled: true,
-  confidentialityLevels: [] as string[],
-  roleClearance: {} as Partial<Record<Role, string[]>>,
-};
+const DEFAULT_FORM: CompanyFormState = DEFAULT_COMPANY_FORM;
 
 export default function AdminCompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -34,7 +22,6 @@ export default function AdminCompaniesPage() {
   }, []);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(DEFAULT_FORM);
-  const [newLevel, setNewLevel] = useState("");
   const [showForm, setShowForm] = useState(false);
 
   const startCreate = () => {
@@ -56,36 +43,6 @@ export default function AdminCompaniesPage() {
       roleClearance: c.roleClearance ?? {},
     });
     setShowForm(true);
-  };
-
-  const addLevel = () => {
-    const level = newLevel.trim();
-    if (!level || form.confidentialityLevels.includes(level)) return;
-    setForm((f) => ({ ...f, confidentialityLevels: [...f.confidentialityLevels, level] }));
-    setNewLevel("");
-  };
-
-  const removeLevel = (level: string) => {
-    setForm((f) => ({
-      ...f,
-      confidentialityLevels: f.confidentialityLevels.filter((l) => l !== level),
-      roleClearance: Object.fromEntries(
-        Object.entries(f.roleClearance).map(([role, levels]) => [
-          role,
-          (levels ?? []).filter((l) => l !== level),
-        ])
-      ),
-    }));
-  };
-
-  const toggleClearance = (role: Role, level: string) => {
-    setForm((f) => {
-      const current = f.roleClearance[role] ?? [];
-      const next = current.includes(level)
-        ? current.filter((l) => l !== level)
-        : [...current, level];
-      return { ...f, roleClearance: { ...f.roleClearance, [role]: next } };
-    });
   };
 
   const save = async () => {
@@ -137,164 +94,10 @@ export default function AdminCompaniesPage() {
           <div className="text-sm font-semibold text-text-primary">
             {editId ? "Modifier l'entreprise" : "Nouvelle entreprise"}
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-text-secondary">Nom</label>
-              <input
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder="Nom de l'entreprise"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-text-secondary">Secteur</label>
-              <input
-                value={form.industry}
-                onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder="Industrie / Secteur"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-text-secondary">Début exercice</label>
-              <input
-                type="date"
-                value={form.fyStart}
-                onChange={(e) => setForm((f) => ({ ...f, fyStart: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-text-secondary">Fin exercice</label>
-              <input
-                type="date"
-                value={form.fyEnd}
-                onChange={(e) => setForm((f) => ({ ...f, fyEnd: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              />
-            </div>
-          </div>
-
-          <div className="border-t border-border pt-3 space-y-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-              Paramètres avancés
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-text-secondary">
-                  Budget CAPEX total (€M) — optionnel
-                </label>
-                <input
-                  type="number"
-                  value={form.capexBudget}
-                  onChange={(e) => setForm((f) => ({ ...f, capexBudget: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                  placeholder="Non renseigné"
-                />
-              </div>
-              <div className="flex items-end pb-2">
-                <label className="flex items-center gap-2 text-sm text-text-primary">
-                  <input
-                    type="checkbox"
-                    checked={form.actionPlanEnabled}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, actionPlanEnabled: e.target.checked }))
-                    }
-                    className="h-4 w-4 rounded border-border accent-bp-coral"
-                  />
-                  Module &quot;Plan d&apos;action&quot; activé
-                </label>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-text-secondary">
-                Niveaux de confidentialité (du moins au plus restreint)
-              </label>
-              <div className="mt-1 flex flex-wrap gap-2">
-                {form.confidentialityLevels.map((level) => (
-                  <span
-                    key={level}
-                    className="flex items-center gap-1 rounded-full bg-bg-surface border border-border px-2.5 py-1 text-xs text-text-primary"
-                  >
-                    {level}
-                    <button
-                      onClick={() => removeLevel(level)}
-                      className="text-text-secondary hover:text-red-500"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="mt-2 flex gap-2">
-                <input
-                  value={newLevel}
-                  onChange={(e) => setNewLevel(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addLevel();
-                    }
-                  }}
-                  placeholder="Ex : Confidentiel"
-                  className="w-full max-w-xs rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                />
-                <button
-                  onClick={addLevel}
-                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
-                >
-                  Ajouter le niveau
-                </button>
-              </div>
-            </div>
-
-            {form.confidentialityLevels.length > 0 && (
-              <div>
-                <label className="text-xs font-medium text-text-secondary">
-                  Habilitations par profil — un levier au niveau X n&apos;est visible que par les
-                  profils habilités pour X (un levier sans niveau reste visible par tous)
-                </label>
-                <div className="mt-2 overflow-x-auto rounded-lg border border-border">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-bg-surface border-b border-border">
-                        <th className="px-3 py-2 text-left font-semibold text-text-secondary">
-                          Profil
-                        </th>
-                        {form.confidentialityLevels.map((level) => (
-                          <th
-                            key={level}
-                            className="px-3 py-2 text-center font-semibold text-text-secondary"
-                          >
-                            {level}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {OPERATIONAL_ROLES.map((r) => (
-                        <tr key={r.value} className="border-b border-border last:border-0">
-                          <td className="px-3 py-2 font-medium text-text-primary">{r.label}</td>
-                          {form.confidentialityLevels.map((level) => (
-                            <td key={level} className="px-3 py-2 text-center">
-                              <input
-                                type="checkbox"
-                                checked={(form.roleClearance[r.value] ?? []).includes(level)}
-                                onChange={() => toggleClearance(r.value, level)}
-                                className="h-4 w-4 rounded border-border accent-bp-coral"
-                              />
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
+          <CompanyFieldsEditor
+            value={form}
+            onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+          />
 
           <div className="flex gap-2">
             <button
@@ -342,9 +145,17 @@ export default function AdminCompaniesPage() {
                 <td className="px-4 py-2.5 text-text-secondary">{c.industry}</td>
                 <td className="px-4 py-2.5 text-text-secondary">{c.createdAt}</td>
                 <td className="px-4 py-2.5 text-right">
+                  <Link
+                    href={`/admin/companies/detail?id=${c.id}`}
+                    className="mr-3 inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-secondary hover:border-bp-coral hover:text-bp-coral"
+                    title="Voir le détail complet de l'entreprise"
+                  >
+                    <ExternalLink size={12} /> Gérer
+                  </Link>
                   <button
                     onClick={() => startEdit(c)}
                     className="mr-2 text-text-secondary hover:text-bp-coral"
+                    title="Modification rapide"
                   >
                     <Pencil size={14} />
                   </button>
