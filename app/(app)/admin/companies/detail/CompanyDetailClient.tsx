@@ -16,6 +16,7 @@ import {
 import type { Company } from "@/types";
 import { subscribeCompanies, saveCompany } from "@/lib/firestore/admin";
 import { useRole } from "@/lib/hooks/useRole";
+import { useToast } from "@/lib/hooks/useToast";
 import {
   CompanyFieldsEditor,
   DEFAULT_COMPANY_FORM,
@@ -54,6 +55,7 @@ export default function CompanyDetailClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { role } = useRole();
+  const { showToast } = useToast();
   const companyId = searchParams.get("id") ?? "";
 
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -98,18 +100,31 @@ export default function CompanyDetailClient() {
     if (!company || !form.name.trim()) return;
     setSaving(true);
     try {
-      const capexBudget = form.capexBudget.trim() === "" ? undefined : Number(form.capexBudget);
+      // Ne jamais assigner `capexBudget: undefined` explicitement — Firestore `setDoc` rejette
+      // toute clé valant `undefined` (voir le bug identique corrigé sur
+      // AuthUser.confidentialityClearance dans UsersPanel.tsx) : on omet la clé plutôt que de
+      // la mettre à `undefined` quand le champ est vidé, ce qui l'efface bien du document.
+      const trimmedCapex = form.capexBudget.trim();
+      const rest = { ...company };
+      delete rest.capexBudget;
       await saveCompany({
-        ...company,
+        ...rest,
         name: form.name,
         industry: form.industry,
         fyStart: form.fyStart,
         fyEnd: form.fyEnd,
-        capexBudget,
+        ...(trimmedCapex !== "" ? { capexBudget: Number(trimmedCapex) } : {}),
         actionPlanEnabled: form.actionPlanEnabled,
         confidentialityLevels: form.confidentialityLevels,
         roleClearance: form.roleClearance,
       });
+    } catch (err) {
+      console.error("[betrack] échec de l'enregistrement des paramètres entreprise :", err);
+      showToast(
+        "Échec de l'enregistrement",
+        "Les paramètres n'ont pas pu être sauvegardés.",
+        "error"
+      );
     } finally {
       setSaving(false);
     }

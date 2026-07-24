@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Building2, Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
 import type { Company } from "@/types";
 import { subscribeCompanies, saveCompany, deleteCompany } from "@/lib/firestore/admin";
+import { useToast } from "@/lib/hooks/useToast";
 import {
   CompanyFieldsEditor,
   DEFAULT_COMPANY_FORM,
@@ -14,6 +15,7 @@ import {
 const DEFAULT_FORM: CompanyFormState = DEFAULT_COMPANY_FORM;
 
 export default function AdminCompaniesPage() {
+  const { showToast } = useToast();
   const [companies, setCompanies] = useState<Company[]>([]);
 
   useEffect(() => {
@@ -47,27 +49,38 @@ export default function AdminCompaniesPage() {
 
   const save = async () => {
     if (!form.name.trim()) return;
-    const capexBudget = form.capexBudget.trim() === "" ? undefined : Number(form.capexBudget);
+    // Ne jamais assigner `capexBudget: undefined` explicitement — Firestore `setDoc` rejette
+    // toute clé valant `undefined` (même bug corrigé sur AuthUser.confidentialityClearance dans
+    // UsersPanel.tsx et sur ce même champ dans CompanyDetailClient.tsx) : on omet la clé plutôt
+    // que de la mettre à `undefined` quand le champ est vidé.
+    const trimmedCapex = form.capexBudget.trim();
     const common = {
       name: form.name,
       industry: form.industry,
       fyStart: form.fyStart,
       fyEnd: form.fyEnd,
-      capexBudget,
+      ...(trimmedCapex !== "" ? { capexBudget: Number(trimmedCapex) } : {}),
       actionPlanEnabled: form.actionPlanEnabled,
       confidentialityLevels: form.confidentialityLevels,
       roleClearance: form.roleClearance,
     };
-    if (editId) {
-      const existing = companies.find((c) => c.id === editId);
-      if (existing) {
-        await saveCompany({ ...existing, ...common });
+    try {
+      if (editId) {
+        const existing = companies.find((c) => c.id === editId);
+        if (existing) {
+          const rest = { ...existing };
+          delete rest.capexBudget;
+          await saveCompany({ ...rest, ...common });
+        }
+      } else {
+        const id = `c${Date.now()}`;
+        await saveCompany({ id, ...common, createdAt: new Date().toISOString().slice(0, 10) });
       }
-    } else {
-      const id = `c${Date.now()}`;
-      await saveCompany({ id, ...common, createdAt: new Date().toISOString().slice(0, 10) });
+      setShowForm(false);
+    } catch (err) {
+      console.error("[betrack] échec de l'enregistrement de l'entreprise :", err);
+      showToast("Échec de l'enregistrement", "L'entreprise n'a pas pu être sauvegardée.", "error");
     }
-    setShowForm(false);
   };
 
   const remove = async (id: string) => {
