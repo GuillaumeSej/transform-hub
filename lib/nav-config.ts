@@ -1,76 +1,82 @@
 import type { Role, RoleDefinition } from "@/types";
 
-/** Portage fidèle de `roles` (legacy/index.html) — nav différente par persona. */
+/** Portage fidèle de `roles` (legacy/index.html) — nav différente par persona.
+ *
+ * i18n : `label`/`short` (au niveau du rôle) et chaque `nav[].label` sont désormais des CLÉS de
+ * traduction (voir `lib/i18n/dictionaries/*.ts`), pas des libellés littéraux — ce fichier reste la
+ * seule source de vérité pour la structure de nav par rôle, résolue via `t()` au point de
+ * consommation (Sidebar.tsx, Topbar.tsx, AppShell.tsx, login/page.tsx). Les `id` restent des
+ * identifiants internes stables, jamais traduits. */
 export const roles: Record<Role, RoleDefinition> = {
   admin: {
-    label: "Administrator",
-    short: "Admin",
+    label: "roles.admin.label",
+    short: "roles.admin.short",
     nav: [
-      { id: "admin-companies", icon: "Building2", label: "Entreprises" },
-      { id: "admin-projects", icon: "FolderKanban", label: "Projets" },
-      { id: "admin-users", icon: "Users", label: "Utilisateurs" },
-      { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
-      { id: "admin-hierarchy", icon: "Network", label: "Arborescence financière" },
-      { id: "admin-best-practices", icon: "ShieldCheck", label: "Bonnes pratiques" },
-      { id: "admin-data", icon: "BarChart3", label: "Données" },
-      { id: "dashboard", icon: "PieChart", label: "Executive Dashboard" },
+      { id: "admin-companies", icon: "Building2", label: "nav.companies" },
+      { id: "admin-projects", icon: "FolderKanban", label: "nav.projects" },
+      { id: "admin-users", icon: "Users", label: "nav.users" },
+      { id: "admin-lifecycle", icon: "Workflow", label: "nav.lifecycle" },
+      { id: "admin-hierarchy", icon: "Network", label: "nav.hierarchy" },
+      { id: "admin-best-practices", icon: "ShieldCheck", label: "nav.bestPractices" },
+      { id: "admin-data", icon: "BarChart3", label: "nav.data" },
+      { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
     ],
   },
   admin_entreprise: {
-    label: "Admin Entreprise",
-    short: "Admin ENT",
+    label: "roles.admin_entreprise.label",
+    short: "roles.admin_entreprise.short",
     nav: [
-      { id: "admin-users", icon: "Users", label: "Utilisateurs" },
-      { id: "admin-data", icon: "BarChart3", label: "Données" },
-      { id: "admin-lifecycle", icon: "Workflow", label: "Cycle de vie" },
-      { id: "admin-hierarchy", icon: "Network", label: "Arborescence financière" },
-      { id: "admin-history", icon: "History", label: "Historique" },
+      { id: "admin-users", icon: "Users", label: "nav.users" },
+      { id: "admin-data", icon: "BarChart3", label: "nav.data" },
+      { id: "admin-lifecycle", icon: "Workflow", label: "nav.lifecycle" },
+      { id: "admin-hierarchy", icon: "Network", label: "nav.hierarchy" },
+      { id: "admin-history", icon: "History", label: "nav.history" },
     ],
   },
   cto: {
-    label: "Chief Transformation Officer",
-    short: "CTO",
+    label: "roles.cto.label",
+    short: "roles.cto.short",
     nav: [
-      { id: "dashboard", icon: "PieChart", label: "Executive Dashboard" },
-      { id: "levers", icon: "Target", label: "Lever Library" },
+      { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
+      { id: "levers", icon: "Target", label: "nav.leverLibrary" },
     ],
   },
   sponsor: {
-    label: "Workstream Sponsor",
-    short: "Sponsor",
+    label: "roles.sponsor.label",
+    short: "roles.sponsor.short",
     nav: [
-      { id: "workstreams", icon: "Layers", label: "Workstream Dashboard" },
-      { id: "levers", icon: "Target", label: "Lever Pipeline" },
+      { id: "workstreams", icon: "Layers", label: "nav.workstreamDashboard" },
+      { id: "levers", icon: "Target", label: "nav.leverPipeline" },
     ],
   },
   lever: {
-    label: "Lever Owner",
-    short: "PM",
-    nav: [{ id: "levers", icon: "Target", label: "My Levers" }],
+    label: "roles.lever.label",
+    short: "roles.lever.short",
+    nav: [{ id: "levers", icon: "Target", label: "nav.myLevers" }],
   },
   finance: {
-    label: "Finance Controller",
-    short: "Finance",
+    label: "roles.finance.label",
+    short: "roles.finance.short",
     nav: [
-      { id: "finance", icon: "LineChart", label: "Finance Module" },
-      { id: "levers", icon: "Target", label: "Lever Library" },
+      { id: "finance", icon: "LineChart", label: "nav.financeModule" },
+      { id: "levers", icon: "Target", label: "nav.leverLibrary" },
     ],
   },
   hr: {
-    label: "HR Director",
-    short: "HR",
+    label: "roles.hr.label",
+    short: "roles.hr.short",
     nav: [
-      { id: "hr", icon: "PieChart", label: "Dashboard RH" },
-      { id: "hr-etp", icon: "Users", label: "Base ETP" },
-      { id: "levers", icon: "Target", label: "Lever Library" },
+      { id: "hr", icon: "PieChart", label: "nav.hrDashboard" },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
+      { id: "levers", icon: "Target", label: "nav.leverLibrary" },
     ],
   },
   ops: {
-    label: "Operations Manager",
-    short: "Ops",
+    label: "roles.ops.label",
+    short: "roles.ops.short",
     nav: [
-      { id: "operations", icon: "Factory", label: "Operations Module" },
-      { id: "levers", icon: "Target", label: "Linked Levers" },
+      { id: "operations", icon: "Factory", label: "nav.operationsModule" },
+      { id: "levers", icon: "Target", label: "nav.linkedLevers" },
     ],
   },
 };

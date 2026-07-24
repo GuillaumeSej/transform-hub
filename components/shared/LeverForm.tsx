@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/shared/Button";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import { STATUS_LABEL } from "@/lib/status-config";
 import type { LifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import {
@@ -84,7 +85,7 @@ export function LeverForm({
   initialValues,
   onSubmit,
   onCancel,
-  submitLabel = "Enregistrer",
+  submitLabel,
 }: {
   data: BeTrackData;
   /** Résolution des libellés de statut selon le référentiel de l'entreprise (facultatif, retombe
@@ -99,6 +100,7 @@ export function LeverForm({
   onCancel: () => void;
   submitLabel?: string;
 }) {
+  const { t } = useTranslation();
   const [values, setValues] = useState<LeverFormValues>({
     ...emptyValues(data),
     ...initialValues,
@@ -171,9 +173,9 @@ export function LeverForm({
         onSubmit(values);
       }}
     >
-      <SectionTitle>Identification</SectionTitle>
+      <SectionTitle>{t("leverForm.sectionIdentification")}</SectionTitle>
       <div className="grid grid-cols-3 gap-3">
-        <Field label="Code du levier">
+        <Field label={t("leverForm.code")}>
           <input
             required
             className={inputClass}
@@ -181,20 +183,20 @@ export function LeverForm({
             onChange={(e) => set("code", e.target.value)}
           />
         </Field>
-        <Field label="Type de levier">
+        <Field label={t("leverForm.type")}>
           <select
             className={inputClass}
             value={values.type}
             onChange={(e) => set("type", e.target.value)}
           >
-            {data.leverTypes.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {data.leverTypes.map((lt) => (
+              <option key={lt} value={lt}>
+                {lt}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Workstream">
+        <Field label={t("leverForm.workstream")}>
           <select
             className={inputClass}
             value={values.ws}
@@ -208,13 +210,13 @@ export function LeverForm({
           </select>
         </Field>
         {projects.length > 0 && (
-          <Field label="Projet">
+          <Field label={t("leverForm.project")}>
             <select
               className={inputClass}
               value={values.projectId ?? ""}
               onChange={(e) => set("projectId", e.target.value || undefined)}
             >
-              <option value="">Non assigné</option>
+              <option value="">{t("leverForm.notAssigned")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -224,7 +226,7 @@ export function LeverForm({
           </Field>
         )}
         <div className="col-span-3">
-          <Field label="Nom du levier">
+          <Field label={t("leverForm.name")}>
             <input
               required
               className={inputClass}
@@ -235,13 +237,13 @@ export function LeverForm({
         </div>
         {confidentialityLevels.length > 0 && (
           <div className="col-span-3">
-            <Field label="Niveau de confidentialité">
+            <Field label={t("leverForm.confidentiality")}>
               <select
                 className={inputClass}
                 value={values.confidentialityLevel ?? ""}
                 onChange={(e) => set("confidentialityLevel", e.target.value || undefined)}
               >
-                <option value="">Aucun (visible par tous les profils)</option>
+                <option value="">{t("leverForm.confidentialityNone")}</option>
                 {confidentialityLevels.map((level) => (
                   <option key={level} value={level}>
                     {level}
@@ -253,10 +255,10 @@ export function LeverForm({
         )}
       </div>
 
-      <SectionTitle>Ownership</SectionTitle>
+      <SectionTitle>{t("leverForm.sectionOwnership")}</SectionTitle>
       <div className="grid grid-cols-4 gap-3">
         <div className="col-span-2">
-          <Field label="Owner">
+          <Field label={t("leverForm.owner")}>
             <input
               className={inputClass}
               value={values.owner}
@@ -264,7 +266,7 @@ export function LeverForm({
             />
           </Field>
         </div>
-        <Field label="Initiales">
+        <Field label={t("leverForm.initials")}>
           <input
             className={inputClass}
             maxLength={3}
@@ -274,7 +276,7 @@ export function LeverForm({
         </Field>
         <div />
         <div className="col-span-2">
-          <Field label="Sponsor">
+          <Field label={t("leverForm.sponsor")}>
             <input
               className={inputClass}
               value={values.sponsor}
@@ -282,7 +284,7 @@ export function LeverForm({
             />
           </Field>
         </div>
-        <Field label="Initiales">
+        <Field label={t("leverForm.initials")}>
           <input
             className={inputClass}
             maxLength={3}
@@ -292,9 +294,9 @@ export function LeverForm({
         </Field>
       </div>
 
-      <SectionTitle>Localisation & mapping</SectionTitle>
+      <SectionTitle>{t("leverForm.sectionLocation")}</SectionTitle>
       <div className="grid grid-cols-3 gap-3">
-        <Field label="Géographie">
+        <Field label={t("leverForm.geography")}>
           <select
             className={inputClass}
             value={values.geography}
@@ -307,21 +309,21 @@ export function LeverForm({
             ))}
           </select>
         </Field>
-        <Field label="Pays">
+        <Field label={t("leverForm.country")}>
           <input
             className={inputClass}
             value={values.country}
             onChange={(e) => set("country", e.target.value)}
           />
         </Field>
-        <Field label="Entité">
+        <Field label={t("leverForm.entity")}>
           <input
             className={inputClass}
             value={values.entity}
             onChange={(e) => set("entity", e.target.value)}
           />
         </Field>
-        <Field label="Fonction">
+        <Field label={t("leverForm.function")}>
           <select
             className={inputClass}
             value={values.function}
@@ -335,13 +337,13 @@ export function LeverForm({
           </select>
         </Field>
         {hasHierarchy ? (
-          <Field label="Maille financière (Centre de coût)">
+          <Field label={t("leverForm.financialMesh")}>
             <select
               className={inputClass}
               value={values.hierarchyLeafId ?? ""}
               onChange={(e) => set("hierarchyLeafId", e.target.value || undefined)}
             >
-              <option value="">Sélectionner…</option>
+              <option value="">{t("leverForm.selectPlaceholder")}</option>
               {leafNodes.map((n) => (
                 <option key={n.id} value={n.id}>
                   {n.label} ({n.code})
@@ -350,7 +352,7 @@ export function LeverForm({
             </select>
           </Field>
         ) : (
-          <Field label="Centre de coût">
+          <Field label={t("leverForm.costCenter")}>
             <input
               className={inputClass}
               value={values.costCenter}
@@ -358,7 +360,7 @@ export function LeverForm({
             />
           </Field>
         )}
-        <Field label="Compte P&L impacté">
+        <Field label={t("leverForm.pnlAccount")}>
           <select
             className={inputClass}
             value={values.pnlMap}
@@ -373,9 +375,9 @@ export function LeverForm({
         </Field>
       </div>
 
-      <SectionTitle>Statut & avancement</SectionTitle>
+      <SectionTitle>{t("leverForm.sectionStatus")}</SectionTitle>
       <div className="grid grid-cols-3 gap-3">
-        <Field label="Date de départ">
+        <Field label={t("leverForm.startDate")}>
           <input
             type="date"
             className={inputClass}
@@ -383,7 +385,7 @@ export function LeverForm({
             onChange={(e) => set("start", e.target.value)}
           />
         </Field>
-        <Field label="Date de fin estimée">
+        <Field label={t("leverForm.endDate")}>
           <input
             type="date"
             className={inputClass}
@@ -391,7 +393,7 @@ export function LeverForm({
             onChange={(e) => set("end", e.target.value)}
           />
         </Field>
-        <Field label="Niveau d'avancement">
+        <Field label={t("leverForm.status")}>
           <select
             className={inputClass}
             value={values.status}
@@ -404,7 +406,7 @@ export function LeverForm({
             ))}
           </select>
         </Field>
-        <Field label="Progression (%)">
+        <Field label={t("leverForm.progress")}>
           <input
             type="number"
             min={0}
@@ -414,7 +416,7 @@ export function LeverForm({
             onChange={(e) => set("progress", num(e.target.value))}
           />
         </Field>
-        <Field label="Priorité">
+        <Field label={t("leverForm.priority")}>
           <select
             className={inputClass}
             value={values.priority}
@@ -427,7 +429,7 @@ export function LeverForm({
             ))}
           </select>
         </Field>
-        <Field label="Risque">
+        <Field label={t("leverForm.risk")}>
           <select
             className={inputClass}
             value={values.risk}
@@ -442,16 +444,16 @@ export function LeverForm({
         </Field>
       </div>
 
-      <SectionTitle>Impact financier (€M)</SectionTitle>
+      <SectionTitle>{t("leverForm.sectionFinancial")}</SectionTitle>
       {isLocked && (
         <p className="mb-3 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
-          Plan initial figé au passage en «{" "}
-          {lifecycle ? lifecycle.label("validated") : STATUS_LABEL.validated} » — lecture seule.
-          Utilisez la réactualisation (onglet Impact du levier) pour ajuster la projection.
+          {t("leverForm.lockedPlanNotice")}{" "}
+          {lifecycle ? lifecycle.label("validated") : STATUS_LABEL.validated}{" "}
+          {t("leverForm.lockedPlanNoticeEnd")}
         </p>
       )}
       <div className="grid grid-cols-3 gap-3">
-        <Field label="Impact brut estimé">
+        <Field label={t("leverForm.grossSavings")}>
           <input
             type="number"
             step="0.1"
@@ -461,7 +463,7 @@ export function LeverForm({
             onChange={(e) => set("grossSavings", num(e.target.value))}
           />
         </Field>
-        <Field label="Impact net estimé">
+        <Field label={t("leverForm.netSavings")}>
           <input
             type="number"
             step="0.1"
@@ -472,7 +474,7 @@ export function LeverForm({
           />
         </Field>
         <div />
-        <Field label="CAPEX">
+        <Field label={t("leverForm.capex")}>
           <input
             type="number"
             step="0.1"
@@ -482,7 +484,7 @@ export function LeverForm({
             onChange={(e) => set("capex", num(e.target.value))}
           />
         </Field>
-        <Field label="OPEX one-off">
+        <Field label={t("leverForm.opexOneOff")}>
           <input
             type="number"
             step="0.1"
@@ -492,7 +494,7 @@ export function LeverForm({
             onChange={(e) => set("opexOneOff", num(e.target.value))}
           />
         </Field>
-        <Field label="OPEX récurrent /an">
+        <Field label={t("leverForm.opexRec")}>
           <input
             type="number"
             step="0.1"
@@ -504,9 +506,9 @@ export function LeverForm({
         </Field>
       </div>
 
-      <SectionTitle>Impact RH</SectionTitle>
+      <SectionTitle>{t("leverForm.sectionHr")}</SectionTitle>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Impact estimé (ETP)">
+        <Field label={t("leverForm.fteImpact")}>
           <input
             type="number"
             className={inputClass}
@@ -514,7 +516,7 @@ export function LeverForm({
             onChange={(e) => set("fteImpact", num(e.target.value))}
           />
         </Field>
-        <Field label="Population impactée">
+        <Field label={t("leverForm.popImpacted")}>
           <input
             type="number"
             min={0}
@@ -525,7 +527,7 @@ export function LeverForm({
         </Field>
       </div>
 
-      <SectionTitle>Description</SectionTitle>
+      <SectionTitle>{t("leverForm.sectionDescription")}</SectionTitle>
       <textarea
         rows={3}
         className={inputClass}
@@ -535,10 +537,10 @@ export function LeverForm({
 
       <div className="mt-6 flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
-          Annuler
+          {t("common.cancel")}
         </Button>
         <Button type="submit" variant="primary">
-          {submitLabel}
+          {submitLabel ?? t("common.save")}
         </Button>
       </div>
     </form>

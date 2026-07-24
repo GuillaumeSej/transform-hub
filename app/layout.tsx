@@ -4,6 +4,7 @@ import "./globals.css";
 import { RoleProvider } from "@/lib/hooks/useRole";
 import { ToastProvider } from "@/lib/hooks/useToast";
 import { FilterProvider } from "@/lib/hooks/useGlobalFilters";
+import { I18nProvider } from "@/lib/i18n/useTranslation";
 
 // Typographies du BearingPoint Design System : Hanken Grotesk (substitut documenté de la
 // police corporate propriétaire) + Spline Sans Mono pour les données/chiffres.
@@ -25,11 +26,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="fr">
       <body className={`${hanken.variable} ${splineMono.variable} font-sans antialiased`}>
-        <RoleProvider>
-          <ToastProvider>
-            <FilterProvider>{children}</FilterProvider>
-          </ToastProvider>
-        </RoleProvider>
+        <I18nProvider>
+          <RoleProvider>
+            <ToastProvider>
+              <FilterProvider>{children}</FilterProvider>
+            </ToastProvider>
+          </RoleProvider>
+        </I18nProvider>
       </body>
     </html>
   );

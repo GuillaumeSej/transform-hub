@@ -21,6 +21,7 @@ import {
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   subscribeBestPracticeRules,
   subscribeCompanies,
@@ -66,6 +67,7 @@ export default function DashboardPage() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
   const lifecycle = useLifecycleLabels(user?.companyId);
+  const { t } = useTranslation();
   const router = useRouter();
   const { filters, setFilter, resetFilters } = useGlobalFilters();
 
@@ -368,7 +370,7 @@ export default function DashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Avancement des leviers par étape du cycle de vie" />
+            <CardHeader title={t("dashboard.widgets.stageFunnelFull")} />
             <CardBody>
               <StageFunnel data={stages} onStageClick={goToStage} />
             </CardBody>
@@ -378,13 +380,15 @@ export default function DashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Alerts & Notifications" />
+            <CardHeader title={t("dashboard.widgets.alerts")} />
             <CardBody>
               {data.alerts.slice(0, 5).map((a) => (
                 <AlertItem key={a.id} alert={a} onClick={() => goToAlert(a)} />
               ))}
               {data.alerts.length === 0 && (
-                <p className="py-6 text-center text-sm text-tertiary">Aucune alerte active</p>
+                <p className="py-6 text-center text-sm text-tertiary">
+                  {t("dashboard.widgets.noAlerts")}
+                </p>
               )}
             </CardBody>
           </Card>
@@ -393,7 +397,7 @@ export default function DashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Bonnes pratiques" />
+            <CardHeader title={t("dashboard.widgets.bestPractices")} />
             <CardBody>
               <div className="grid grid-cols-2 gap-x-6 max-[900px]:grid-cols-1">
                 {bestPracticeGaps.map(({ rule }) => (
@@ -415,7 +419,9 @@ export default function DashboardPage() {
                 ))}
               </div>
               {bestPracticeGaps.length === 0 && (
-                <p className="py-6 text-center text-sm text-tertiary">Aucun manquement détecté</p>
+                <p className="py-6 text-center text-sm text-tertiary">
+                  {t("dashboard.widgets.noBestPracticeGap")}
+                </p>
               )}
             </CardBody>
           </Card>
@@ -425,7 +431,7 @@ export default function DashboardPage() {
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title="S-Curve — Plan initial / Réalisé / Réactualisé"
+              title={t("dashboard.widgets.sCurve")}
               actions={
                 <GranularityToggle value={sCurveGranularity} onChange={setSCurveGranularity} />
               }
@@ -442,8 +448,8 @@ export default function DashboardPage() {
             <CardHeader
               title={
                 bridgeGranularity === "quarter"
-                  ? "Économies par trimestre → cible"
-                  : "Économies par mois → cible"
+                  ? t("dashboard.widgets.bridgeQuarter")
+                  : t("dashboard.widgets.bridgeMonth")
               }
               actions={
                 <GranularityToggle value={bridgeGranularity} onChange={setBridgeGranularity} />
@@ -463,7 +469,7 @@ export default function DashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Flux des leviers par étape (Sankey)" />
+            <CardHeader title={t("dashboard.widgets.sankey")} />
             <CardBody>
               <SankeyChart
                 data={sankey}
@@ -478,7 +484,7 @@ export default function DashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Savings par fonction (Marimekko)" />
+            <CardHeader title={t("dashboard.widgets.marimekko")} />
             <CardBody>
               <MarimekkoChart
                 data={mekko}
@@ -493,12 +499,16 @@ export default function DashboardPage() {
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title={wsDimension === "workstream" ? "Savings par Workstream" : "Savings par Projet"}
+              title={
+                wsDimension === "workstream"
+                  ? t("dashboard.widgets.workstreamSavings")
+                  : t("dashboard.widgets.projectSavings")
+              }
               actions={
                 <DimensionToggle
                   options={[
-                    { value: "workstream", label: "Workstream" },
-                    { value: "project", label: "Projet" },
+                    { value: "workstream", label: t("dashboard.workstream") },
+                    { value: "project", label: t("dashboard.project") },
                   ]}
                   value={wsDimension}
                   onChange={setWsDimension}
@@ -515,12 +525,16 @@ export default function DashboardPage() {
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title={geoDimension === "country" ? "Savings par Pays" : "Savings par Fonction"}
+              title={
+                geoDimension === "country"
+                  ? t("dashboard.widgets.countrySavings")
+                  : t("dashboard.widgets.functionSavings")
+              }
               actions={
                 <DimensionToggle
                   options={[
-                    { value: "country", label: "Pays" },
-                    { value: "function", label: "Fonction" },
+                    { value: "country", label: t("dashboard.country") },
+                    { value: "function", label: t("dashboard.function") },
                   ]}
                   value={geoDimension}
                   onChange={setGeoDimension}
@@ -536,7 +550,7 @@ export default function DashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Synthèse des Workstreams" />
+            <CardHeader title={t("dashboard.widgets.workstreamTable")} />
             <CardBody flush>
               <div className="overflow-auto">
                 <table className="w-full border-collapse text-[12.5px]">
@@ -608,7 +622,7 @@ export default function DashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Dépendances inter-leviers (top 5)" />
+            <CardHeader title={t("dashboard.widgets.dependencies")} />
             <CardBody>
               {visibleLevers
                 .filter((l) => l.dependencies.length)
@@ -641,7 +655,7 @@ export default function DashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Impact P&L par compte" />
+            <CardHeader title={t("dashboard.widgets.pnl")} />
             <CardBody>
               <PnlBarChart data={pnlData} />
             </CardBody>
@@ -657,11 +671,11 @@ export default function DashboardPage() {
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
         <div>
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            Executive Dashboard
+            {t("dashboard.title")}
           </h1>
           <div className="mt-2.5 text-[13px] text-secondary">
-            Programme <strong>{data.program.name}</strong> · {summary.leverCount} leviers actifs ·
-            Scénario : {activeScenario?.name}
+            {t("dashboard.program")} <strong>{data.program.name}</strong> · {summary.leverCount}{" "}
+            {t("dashboard.leversActive")} · {t("dashboard.scenario")} : {activeScenario?.name}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -673,7 +687,7 @@ export default function DashboardPage() {
             onClick={() => setEditMode((v) => !v)}
           >
             <LayoutGrid size={14} />
-            {editMode ? "Terminer" : "Personnaliser"}
+            {editMode ? t("dashboard.done") : t("dashboard.customize")}
           </Button>
           <select
             value={data.activeScenario}
@@ -682,7 +696,7 @@ export default function DashboardPage() {
           >
             {data.scenarios.map((sc) => (
               <option key={sc.id} value={sc.id}>
-                Scénario : {sc.name}
+                {t("dashboard.scenario")} : {sc.name}
               </option>
             ))}
           </select>
@@ -700,27 +714,27 @@ export default function DashboardPage() {
 
       <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2">
         <KPICard
-          label="Savings réalisés YTD"
+          label={t("dashboard.kpi.savingsRealized")}
           value={engine.fmtCurr(summary.realized)}
           icon={Banknote}
           sub={`vs. cible ${engine.fmtCurr(summary.target)} · ${summary.progressPct}%`}
           barPct={summary.progressPct}
         />
         <KPICard
-          label="Leviers Delivered"
+          label={t("dashboard.kpi.leversDelivered")}
           value={`${summary.delivered} / ${summary.leverCount}`}
           icon={CircleCheck}
           accent="green"
         />
         <KPICard
-          label="Leviers At Risk"
+          label={t("dashboard.kpi.leversAtRisk")}
           value={String(summary.atRisk)}
           icon={TriangleAlert}
           accent="amber"
           sub={`${summary.critical} critiques · à surveiller`}
         />
         <KPICard
-          label="CAPEX engagé"
+          label={t("dashboard.kpi.capexEngaged")}
           value={
             company?.capexBudget != null
               ? `${engine.fmtCurr(summary.capex)} / ${engine.fmtCurr(company.capexBudget)}`
@@ -735,7 +749,7 @@ export default function DashboardPage() {
           }
         />
         <KPICard
-          label="ETP impactés"
+          label={t("dashboard.kpi.fteImpacted")}
           value={String(summary.fteImpact)}
           icon={Users}
           sub={`${engine.fmtInt(summary.popImpacted)} pers. concernées`}
@@ -745,7 +759,7 @@ export default function DashboardPage() {
       {editMode && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border-strong bg-neutral-50 p-3">
           <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-secondary">
-            <Plus size={14} /> Ajouter un widget :
+            <Plus size={14} /> {t("dashboard.addWidget")}
           </span>
           <select
             value={addWidgetChoice}
@@ -758,7 +772,7 @@ export default function DashboardPage() {
             disabled={availableToAdd.length === 0}
           >
             <option value="">
-              {availableToAdd.length === 0 ? "Tous les widgets sont déjà affichés" : "Choisir…"}
+              {availableToAdd.length === 0 ? t("dashboard.allWidgetsAdded") : t("common.choose")}
             </option>
             {availableToAdd.map((def) => (
               <option key={def.type} value={def.type}>
@@ -773,7 +787,7 @@ export default function DashboardPage() {
             className="ml-auto"
           >
             <RotateCcw size={13} />
-            Réinitialiser
+            {t("dashboard.reset")}
           </Button>
         </div>
       )}
@@ -795,6 +809,7 @@ function GranularityToggle({
   value: engine.TimeGranularity;
   onChange: (g: engine.TimeGranularity) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex rounded-md border border-border-strong p-0.5 text-[11px] font-semibold">
       {(["month", "quarter"] as const).map((g) => (
@@ -805,7 +820,7 @@ function GranularityToggle({
             value === g ? "bg-bp-coral text-white" : "text-secondary hover:text-primary"
           }`}
         >
-          {g === "month" ? "Mois" : "Trimestre"}
+          {g === "month" ? t("dashboard.month") : t("dashboard.quarter")}
         </button>
       ))}
     </div>
