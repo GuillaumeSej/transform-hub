@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { Workflow, Save, RotateCcw, ChevronUp, ChevronDown } from "lucide-react";
 import type { Company, LifecycleStage, LeverStatus } from "@/types";
 import { DEFAULT_LIFECYCLE_STAGES, STATUS_LEVEL } from "@/lib/status-config";
-import { subscribeCompanies, subscribeLifecycleConfig, saveLifecycleConfig } from "@/lib/firestore/admin";
+import {
+  subscribeCompanies,
+  subscribeLifecycleConfig,
+  saveLifecycleConfig,
+} from "@/lib/firestore/admin";
 import { useRole } from "@/lib/hooks/useRole";
 
 export default function AdminLifecyclePage() {
@@ -80,21 +84,33 @@ export default function AdminLifecyclePage() {
             className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
           >
             {companies.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </select>
         )}
       </div>
 
-      <div className="rounded-xl border border-border overflow-hidden">
+      <div className="rounded-xl border border-border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
-              <th className="px-4 py-2.5 w-12 text-center text-xs font-semibold text-text-secondary">Ordre</th>
-              <th className="px-4 py-2.5 w-16 text-center text-xs font-semibold text-text-secondary">Clé</th>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">Libellé</th>
-              <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">Validation (gate)</th>
-              <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">Ordre</th>
+              <th className="px-4 py-2.5 w-12 text-center text-xs font-semibold text-text-secondary">
+                Ordre
+              </th>
+              <th className="px-4 py-2.5 w-16 text-center text-xs font-semibold text-text-secondary">
+                Clé
+              </th>
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                Libellé
+              </th>
+              <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
+                Validation (gate)
+              </th>
+              <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
+                Ordre
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -117,7 +133,9 @@ export default function AdminLifecyclePage() {
                 </td>
                 <td className="px-4 py-2.5 text-center">
                   <button
-                    onClick={() => updateStage(stage.key, { validationRequired: !stage.validationRequired })}
+                    onClick={() =>
+                      updateStage(stage.key, { validationRequired: !stage.validationRequired })
+                    }
                     className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                       stage.validationRequired
                         ? "bg-green-100 text-green-700 hover:bg-green-200"

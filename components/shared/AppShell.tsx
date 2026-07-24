@@ -24,6 +24,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const data = useBeTrackData(user?.companyId ?? null);
   const [ready, setReady] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Le drawer mobile ne doit jamais rester ouvert après une navigation (changement de page) — au
+  // cas où la fermeture au clic sur un lien de nav (via Sidebar.onNavigate) n'aurait pas suffi
+  // (ex. navigation programmatique).
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!role) {
@@ -46,7 +54,28 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen">
-      <Sidebar alertCount={data.alerts.length} role={role} />
+      {/* Sidebar fixe — visible seulement à partir de `lg` (1024px). En dessous, remplacée par le
+          bouton hamburger du Topbar + ce drawer coulissant. */}
+      <div className="hidden lg:flex">
+        <Sidebar alertCount={data.alerts.length} role={role} />
+      </div>
+
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-40 flex lg:hidden">
+          <div
+            className="fixed inset-0 bg-black/50"
+            aria-hidden="true"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <Sidebar
+            alertCount={data.alerts.length}
+            role={role}
+            onNavigate={() => setMobileNavOpen(false)}
+            className="relative z-10 h-full w-[248px] min-w-[248px] shadow-xl"
+          />
+        </div>
+      )}
+
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
           alertCount={data.alerts.length}
@@ -55,8 +84,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             data.resetToMockData();
             window.location.reload();
           }}
+          onMenuClick={() => setMobileNavOpen((v) => !v)}
         />
-        <main className="flex-1 overflow-y-auto px-6 pb-10 pt-5">{children}</main>
+        <main className="flex-1 overflow-y-auto px-4 pb-10 pt-5 sm:px-6">{children}</main>
       </div>
       <Toaster />
     </div>

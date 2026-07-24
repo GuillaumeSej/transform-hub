@@ -712,7 +712,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2">
+      <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2 max-[500px]:grid-cols-1">
         <KPICard
           label={t("dashboard.kpi.savingsRealized")}
           value={engine.fmtCurr(summary.realized)}
@@ -793,8 +793,11 @@ export default function DashboardPage() {
       )}
 
       {/* grid-flow-row-dense : comble automatiquement les trous laissés par un widget large suivi
-          d'un widget étroit, sans avoir à réordonner manuellement le layout. */}
-      <div className="grid grid-cols-4 grid-flow-row-dense gap-4">
+          d'un widget étroit, sans avoir à réordonner manuellement le layout. Colonnes réduites en
+          dessous de `lg`/`sm` (breakpoints Tailwind standards) — les classes col-span-* des widgets
+          (SPAN_COL_CLASS) restent valides à toute largeur de grille (un col-span-4 sur une grille à
+          1 colonne se contente d'occuper l'unique colonne disponible, sans débordement). */}
+      <div className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {layout.map((instance) => renderWidget(instance))}
       </div>
     </div>

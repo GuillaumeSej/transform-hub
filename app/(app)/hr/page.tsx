@@ -135,7 +135,7 @@ export default function HrDashboardPage() {
       )}
 
       {/* KPIs */}
-      <div className="mb-4 grid grid-cols-[auto_1fr_1fr_1fr_1fr] gap-3.5 max-[1100px]:grid-cols-2">
+      <div className="mb-4 grid grid-cols-[auto_1fr_1fr_1fr_1fr] gap-3.5 max-[1100px]:grid-cols-2 max-[500px]:grid-cols-1">
         <div className="flex items-center justify-center rounded-lg border border-border bg-white px-5 shadow-sm">
           <RadialProgress
             pct={goalPct}
@@ -286,58 +286,60 @@ export default function HrDashboardPage() {
       <Card>
         <CardHeader title="Effectifs par département — actuel vs cible vs atterrissage" />
         <CardBody flush>
-          <table className="w-full border-collapse text-[12.5px]">
-            <thead>
-              <tr>
-                {[
-                  "Département",
-                  "Actuel",
-                  "Cible",
-                  "Atterrissage plan",
-                  "Écart vs cible",
-                  "Avancement",
-                ].map((h) => (
-                  <th
-                    key={h}
-                    className="border-b border-border bg-neutral-50 px-3 py-2.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-secondary"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {deptDeltas.map((d) => {
-                const toDo = d.fte - d.fteTarget;
-                const done = d.fte - d.landing;
-                const pct = toDo !== 0 ? Math.round((done / toDo) * 100) : 100;
-                return (
-                  <tr
-                    key={d.name}
-                    className="border-b border-border last:border-b-0 hover:bg-neutral-50"
-                  >
-                    <td className="px-3 py-2.5 font-semibold text-primary">{d.name}</td>
-                    <td className="px-3 py-2.5 tabular-nums">{d.fte.toLocaleString("fr-FR")}</td>
-                    <td className="px-3 py-2.5 tabular-nums">
-                      {d.fteTarget.toLocaleString("fr-FR")}
-                    </td>
-                    <td className="px-3 py-2.5 tabular-nums">
-                      {d.landing.toLocaleString("fr-FR")}
-                    </td>
-                    <td
-                      className={`px-3 py-2.5 font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[12.5px]">
+              <thead>
+                <tr>
+                  {[
+                    "Département",
+                    "Actuel",
+                    "Cible",
+                    "Atterrissage plan",
+                    "Écart vs cible",
+                    "Avancement",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="border-b border-border bg-neutral-50 px-3 py-2.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-secondary"
                     >
-                      {d.gapToTarget > 0 ? "+" : ""}
-                      {d.gapToTarget.toLocaleString("fr-FR")}
-                    </td>
-                    <td className="w-[180px] px-3 py-2.5">
-                      <ProgressBar pct={Math.max(0, Math.min(100, pct))} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {deptDeltas.map((d) => {
+                  const toDo = d.fte - d.fteTarget;
+                  const done = d.fte - d.landing;
+                  const pct = toDo !== 0 ? Math.round((done / toDo) * 100) : 100;
+                  return (
+                    <tr
+                      key={d.name}
+                      className="border-b border-border last:border-b-0 hover:bg-neutral-50"
+                    >
+                      <td className="px-3 py-2.5 font-semibold text-primary">{d.name}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{d.fte.toLocaleString("fr-FR")}</td>
+                      <td className="px-3 py-2.5 tabular-nums">
+                        {d.fteTarget.toLocaleString("fr-FR")}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums">
+                        {d.landing.toLocaleString("fr-FR")}
+                      </td>
+                      <td
+                        className={`px-3 py-2.5 font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
+                      >
+                        {d.gapToTarget > 0 ? "+" : ""}
+                        {d.gapToTarget.toLocaleString("fr-FR")}
+                      </td>
+                      <td className="w-[180px] px-3 py-2.5">
+                        <ProgressBar pct={Math.max(0, Math.min(100, pct))} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </CardBody>
       </Card>
 

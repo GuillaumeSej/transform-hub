@@ -176,7 +176,7 @@ export default function AdminHierarchyPage() {
       {/* Section 1 : niveaux */}
       <section className="space-y-3">
         <h2 className="text-sm font-bold text-text-primary">1. Niveaux de l&apos;arborescence</h2>
-        <div className="rounded-xl border border-border overflow-hidden">
+        <div className="rounded-xl border border-border overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-bg-elevated border-b border-border">
@@ -279,7 +279,7 @@ export default function AdminHierarchyPage() {
             const levelNodes = nodesByLevel.get(level.key) ?? [];
             const form = nodeForm[level.key] ?? { code: "", label: "", parentId: "" };
             return (
-              <div key={level.key} className="rounded-xl border border-border overflow-hidden">
+              <div key={level.key} className="rounded-xl border border-border overflow-x-auto">
                 <div className="bg-bg-elevated border-b border-border px-4 py-2 text-xs font-semibold text-text-secondary">
                   {level.label}{" "}
                   {pLevel && (

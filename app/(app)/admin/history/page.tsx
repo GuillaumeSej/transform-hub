@@ -121,7 +121,7 @@ export default function AdminHistoryPage() {
         <span className="text-xs text-text-secondary">{sorted.length} entrée(s)</span>
       </div>
 
-      <div className="rounded-xl border border-border overflow-hidden">
+      <div className="rounded-xl border border-border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
