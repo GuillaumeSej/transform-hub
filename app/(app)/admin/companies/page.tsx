@@ -39,6 +39,8 @@ export default function AdminCompaniesPage() {
       fyEnd: c.fyEnd,
       capexBudget: c.capexBudget != null ? String(c.capexBudget) : "",
       actionPlanEnabled: c.actionPlanEnabled ?? true,
+      socialChargesRate:
+        c.socialChargesRate != null ? String(Math.round(c.socialChargesRate * 100)) : "",
       confidentialityLevels: c.confidentialityLevels ?? [],
       roleClearance: c.roleClearance ?? {},
     });
@@ -48,6 +50,8 @@ export default function AdminCompaniesPage() {
   const save = async () => {
     if (!form.name.trim()) return;
     const capexBudget = form.capexBudget.trim() === "" ? undefined : Number(form.capexBudget);
+    const socialChargesRate =
+      form.socialChargesRate.trim() === "" ? undefined : Number(form.socialChargesRate) / 100;
     const common = {
       name: form.name,
       industry: form.industry,
@@ -55,6 +59,7 @@ export default function AdminCompaniesPage() {
       fyEnd: form.fyEnd,
       capexBudget,
       actionPlanEnabled: form.actionPlanEnabled,
+      socialChargesRate,
       confidentialityLevels: form.confidentialityLevels,
       roleClearance: form.roleClearance,
     };

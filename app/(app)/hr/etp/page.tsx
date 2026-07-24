@@ -7,6 +7,7 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import * as hr from "@/lib/hrEngine";
+import { fmtCurr } from "@/lib/engine";
 import { Button } from "@/components/shared/Button";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
@@ -55,6 +56,15 @@ type MovementRow = {
   leverCode: string;
   leverId: string | null;
   alertKind: hr.MovementAlertKind | null;
+  /** € économie de masse salariale chargée en régime annuel (>= 0), 0 si le mécanisme n'est pas
+   *  une réduction nette d'ETP (voir WorkforceMovement.savings et lib/hrFinancials.ts). */
+  savings: number;
+  /** € impact masse salariale annuel signé (négatif = économie) — WorkforceMovement.salaryImpact. */
+  salaryImpact: number;
+  /** € coût social one-off associé au mécanisme — WorkforceMovement.cost. */
+  cost: number;
+  /** € impact net la 1ère année = salaryImpact + cost (vision cash court terme). */
+  netImpact: number;
   movement: WorkforceMovement;
 };
 
@@ -162,6 +172,10 @@ export default function BaseEtpPage() {
           leverCode: lever?.code ?? "—",
           leverId: lever?.id ?? null,
           alertKind: alertByMovement.get(m.id) ?? null,
+          savings: m.savings,
+          salaryImpact: m.salaryImpact,
+          cost: m.cost,
+          netImpact: m.salaryImpact + m.cost,
           movement: m,
         };
       }),
@@ -203,7 +217,11 @@ export default function BaseEtpPage() {
       { key: "f_department", label: "Département", getValue: (r) => r.department },
       { key: "f_country", label: "Pays", getValue: (r) => r.country },
       { key: "f_status", label: "Statut", getValue: (r) => r.status },
-      { key: "f_hrValidated", label: "Validé RH", getValue: (r) => (r.hrValidated ? "Oui" : "Non") },
+      {
+        key: "f_hrValidated",
+        label: "Validé RH",
+        getValue: (r) => (r.hrValidated ? "Oui" : "Non"),
+      },
       { key: "f_lever", label: "Levier lié", getValue: (r) => r.leverCode },
       {
         key: "f_alert",
@@ -297,20 +315,29 @@ export default function BaseEtpPage() {
     showToast("Employé mis à jour", row.employee.name, "success");
   };
 
-  const departmentOptions = useMemo(() =>
-    Array.from(new Set(wf.departments.map((d) => d.name))).sort(),
+  const departmentOptions = useMemo(
+    () => Array.from(new Set(wf.departments.map((d) => d.name))).sort(),
     [wf.departments]
   );
-  const directionOptions = useMemo(() =>
-    Array.from(new Set(wf.employees.map((e) => e.direction))).filter(Boolean).sort(),
+  const directionOptions = useMemo(
+    () =>
+      Array.from(new Set(wf.employees.map((e) => e.direction)))
+        .filter(Boolean)
+        .sort(),
     [wf.employees]
   );
-  const countryOptions = useMemo(() =>
-    Array.from(new Set(wf.employees.map((e) => e.country))).filter(Boolean).sort(),
+  const countryOptions = useMemo(
+    () =>
+      Array.from(new Set(wf.employees.map((e) => e.country)))
+        .filter(Boolean)
+        .sort(),
     [wf.employees]
   );
-  const funcOptions = useMemo(() =>
-    Array.from(new Set(wf.employees.map((e) => e.func))).filter(Boolean).sort(),
+  const funcOptions = useMemo(
+    () =>
+      Array.from(new Set(wf.employees.map((e) => e.func)))
+        .filter(Boolean)
+        .sort(),
     [wf.employees]
   );
 
@@ -378,7 +405,12 @@ export default function BaseEtpPage() {
   ];
 
   const movementColumns: ColumnDef<MovementRow>[] = [
-    { key: "id", label: "ID", width: "100px", render: (r) => <span className="font-mono text-[11px] text-secondary">{r.id}</span> },
+    {
+      key: "id",
+      label: "ID",
+      width: "100px",
+      render: (r) => <span className="font-mono text-[11px] text-secondary">{r.id}</span>,
+    },
     {
       key: "label",
       label: "Libellé",
@@ -445,12 +477,49 @@ export default function BaseEtpPage() {
       key: "alertKind",
       label: "Alerte",
       render: (r) => {
-        if (r.alertKind === "overdue") return <span className="text-[11px] text-rag-red">En retard</span>;
-        if (r.alertKind === "due") return <span className="text-[11px] text-rag-amber">Échéance proche</span>;
-        if (r.alertKind === "toValidate") return <span className="text-[11px] text-rag-amber">À valider</span>;
-        if (r.alertKind === "leverMismatch") return <span className="text-[11px] text-rag-red">Désynchronisé levier</span>;
+        if (r.alertKind === "overdue")
+          return <span className="text-[11px] text-rag-red">En retard</span>;
+        if (r.alertKind === "due")
+          return <span className="text-[11px] text-rag-amber">Échéance proche</span>;
+        if (r.alertKind === "toValidate")
+          return <span className="text-[11px] text-rag-amber">À valider</span>;
+        if (r.alertKind === "leverMismatch")
+          return <span className="text-[11px] text-rag-red">Désynchronisé levier</span>;
         return <span className="text-[11px] text-tertiary">—</span>;
       },
+    },
+    {
+      key: "savings",
+      label: "Économie salaire chargé",
+      align: "right",
+      render: (r) =>
+        r.savings > 0 ? (
+          <span className="font-semibold text-rag-green-dark">
+            {fmtCurr(r.savings / 1_000_000)}
+          </span>
+        ) : (
+          <span className="text-tertiary">
+            {r.salaryImpact !== 0 ? fmtCurr(r.salaryImpact / 1_000_000) : "—"}
+          </span>
+        ),
+    },
+    {
+      key: "cost",
+      label: "Coûts sociaux associés",
+      align: "right",
+      render: (r) => <span className="text-rag-amber">{fmtCurr(r.cost / 1_000_000)}</span>,
+    },
+    {
+      key: "netImpact",
+      label: "Impact net 1ère année",
+      align: "right",
+      render: (r) => (
+        <span
+          className={`font-semibold ${r.netImpact <= 0 ? "text-rag-green-dark" : "text-primary"}`}
+        >
+          {fmtCurr(r.netImpact / 1_000_000)}
+        </span>
+      ),
     },
   ];
 
@@ -462,8 +531,8 @@ export default function BaseEtpPage() {
             Base ETP
           </h1>
           <div className="mt-2.5 text-[13px] text-secondary">
-            {wf.employees.length} employés sur le périmètre transformation ·{" "}
-            {wf.movements.length} mouvements suivis
+            {wf.employees.length} employés sur le périmètre transformation · {wf.movements.length}{" "}
+            mouvements suivis
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -475,7 +544,11 @@ export default function BaseEtpPage() {
       </div>
 
       <div className="mb-5 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2">
-        <KPICard label="Effectif actuel" value={hr.currentFTE(wf).toLocaleString("fr-FR")} icon={Users} />
+        <KPICard
+          label="Effectif actuel"
+          value={hr.currentFTE(wf).toLocaleString("fr-FR")}
+          icon={Users}
+        />
         <KPICard
           label="Effectif cible"
           value={hr.targetFTE(wf).toLocaleString("fr-FR")}
@@ -489,7 +562,12 @@ export default function BaseEtpPage() {
           accent="brown"
           sub={`écart cible : ${(hr.plannedFTE(wf) - hr.targetFTE(wf)).toLocaleString("fr-FR")} ETP`}
         />
-        <KPICard label="Mouvements à venir" value={String(plannedCount)} icon={Users} accent="amber" />
+        <KPICard
+          label="Mouvements à venir"
+          value={String(plannedCount)}
+          icon={Users}
+          accent="amber"
+        />
         <KPICard
           label="À valider RH"
           value={String(toValidateCount)}
@@ -524,7 +602,12 @@ export default function BaseEtpPage() {
       {tab === "etp" && (
         <>
           <div className="mb-3.5 rounded-md border border-border bg-white p-3">
-            <FilterBar items={employeeRows} defs={etpFilterDefs} active={etpActiveFilters} onChange={setFilters} />
+            <FilterBar
+              items={employeeRows}
+              defs={etpFilterDefs}
+              active={etpActiveFilters}
+              onChange={setFilters}
+            />
           </div>
           <EditableTable
             data={filteredEmployees}
@@ -539,7 +622,12 @@ export default function BaseEtpPage() {
       {tab === "mouvements" && (
         <>
           <div className="mb-3.5 rounded-md border border-border bg-white p-3">
-            <FilterBar items={movementRows} defs={movementFilterDefs} active={movementActiveFilters} onChange={setFilters} />
+            <FilterBar
+              items={movementRows}
+              defs={movementFilterDefs}
+              active={movementActiveFilters}
+              onChange={setFilters}
+            />
           </div>
           <EditableTable
             data={filteredMovements}
@@ -559,6 +647,7 @@ export default function BaseEtpPage() {
         {movementModal && (
           <MovementForm
             data={data}
+            companyId={user?.companyId}
             initialValues={movementModal.movement}
             submitLabel={movementModal.movement ? "Enregistrer" : "Créer le mouvement"}
             onCancel={() => setMovementModal(null)}

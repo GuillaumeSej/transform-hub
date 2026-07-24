@@ -334,6 +334,12 @@ export type Company = {
    *  compte P&L) au plus fin. Les leviers/sous-leviers ne renseignent que la maille la plus fine
    *  (voir Lever.hierarchyLeafId) ; les niveaux intermédiaires sont dérivés via HierarchyNode. */
   hierarchyLevels?: HierarchyLevelDef[];
+  /** Taux de charges sociales patronales appliqué au salaire brut pour obtenir le "salaire
+   *  chargé" utilisé dans le calcul EUR mécanisme-dépendant des mouvements RH (voir
+   *  lib/hrFinancials.ts). Varie fortement selon pays/statut/convention collective — ASSUMPTION :
+   *  non défini = valeur par défaut ~45% (ordre de grandeur France, cadre), à ajuster projet par
+   *  projet selon la politique RH réelle du client. */
+  socialChargesRate?: number;
 };
 
 /** Un niveau de l'arborescence financière P&L → Cost Center, configuré par entreprise.

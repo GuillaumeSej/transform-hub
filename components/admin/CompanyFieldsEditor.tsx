@@ -20,6 +20,10 @@ export type CompanyFormState = {
   fyEnd: string;
   capexBudget: string;
   actionPlanEnabled: boolean;
+  /** Taux de charges sociales patronales, saisi en % (ex. "45") — converti en fraction (0.45)
+   *  côté sauvegarde. Vide = pas de surcharge, la valeur par défaut de lib/hrFinancials.ts
+   *  s'applique (voir Company.socialChargesRate). */
+  socialChargesRate: string;
   confidentialityLevels: string[];
   roleClearance: Partial<Record<Role, string[]>>;
 };
@@ -31,6 +35,7 @@ export const DEFAULT_COMPANY_FORM: CompanyFormState = {
   fyEnd: "2026-12-31",
   capexBudget: "",
   actionPlanEnabled: true,
+  socialChargesRate: "",
   confidentialityLevels: [],
   roleClearance: {},
 };
@@ -143,6 +148,26 @@ export function CompanyFieldsEditor({
               />
               Module &quot;Plan d&apos;action&quot; activé
             </label>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-text-secondary">
+              Taux de charges sociales patronales (%) — optionnel
+            </label>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              max="200"
+              value={value.socialChargesRate}
+              onChange={(e) => onChange({ socialChargesRate: e.target.value })}
+              className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+              placeholder="Défaut : 45%"
+            />
+            <p className="mt-1 text-[11px] text-text-secondary">
+              Utilisé pour le &quot;salaire chargé&quot; (brut + charges) dans le calcul EUR des
+              mouvements RH (Vision mouvement). Non renseigné = 45% par défaut (ordre de grandeur
+              France, cadre) — à ajuster selon la politique RH réelle du client.
+            </p>
           </div>
         </div>
 

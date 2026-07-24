@@ -81,6 +81,10 @@ export default function CompanyDetailClient() {
       fyEnd: company.fyEnd,
       capexBudget: company.capexBudget != null ? String(company.capexBudget) : "",
       actionPlanEnabled: company.actionPlanEnabled ?? true,
+      socialChargesRate:
+        company.socialChargesRate != null
+          ? String(Math.round(company.socialChargesRate * 100))
+          : "",
       confidentialityLevels: company.confidentialityLevels ?? [],
       roleClearance: company.roleClearance ?? {},
     });
@@ -99,6 +103,8 @@ export default function CompanyDetailClient() {
     setSaving(true);
     try {
       const capexBudget = form.capexBudget.trim() === "" ? undefined : Number(form.capexBudget);
+      const socialChargesRate =
+        form.socialChargesRate.trim() === "" ? undefined : Number(form.socialChargesRate) / 100;
       await saveCompany({
         ...company,
         name: form.name,
@@ -107,6 +113,7 @@ export default function CompanyDetailClient() {
         fyEnd: form.fyEnd,
         capexBudget,
         actionPlanEnabled: form.actionPlanEnabled,
+        socialChargesRate,
         confidentialityLevels: form.confidentialityLevels,
         roleClearance: form.roleClearance,
       });
