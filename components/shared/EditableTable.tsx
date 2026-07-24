@@ -108,9 +108,14 @@ export function EditableTable<T extends { id: string }>({
     }
   };
 
-  const commitEdit = (row: T, col: ColumnDef<T>) => {
+  // `rawValue` permet de committer une valeur qui vient tout juste d'être choisie (ex. option de
+  // select cliquée) sans dépendre de `draftValue`, qui n'a pas encore été mis à jour par React au
+  // moment où l'event handler appelant s'exécute (setState est asynchrone) — lire `draftValue` ici
+  // dans ce cas donnerait l'ancienne valeur et l'édition semblerait ne "pas s'appliquer".
+  const commitEdit = (row: T, col: ColumnDef<T>, rawValue?: string) => {
+    const source = rawValue !== undefined ? rawValue : draftValue;
     if (onCellUpdate) {
-      const value = col.type === "number" ? Number(draftValue) : draftValue;
+      const value = col.type === "number" ? Number(source) : source;
       if (!(col.type === "number" && Number.isNaN(value))) {
         onCellUpdate(row.id, col.key, value);
       }
@@ -266,15 +271,29 @@ export function EditableTable<T extends { id: string }>({
                             autoFocus
                             value={c.options.includes(draftValue) ? draftValue : "__custom__"}
                             onChange={(e) => {
-                              if (e.target.value === "__custom__") {
+                              const nextValue = e.target.value;
+                              if (nextValue === "__custom__") {
                                 setIsCustomMode(true);
                                 setDraftValue("");
                               } else {
-                                setDraftValue(e.target.value);
+                                // Commit immédiat au choix d'une option — un <select> natif ne
+                                // déclenche pas forcément `blur` juste après un clic sur une
+                                // option (le select garde le focus), donc attendre `onBlur` ici
+                                // pouvait laisser l'édition "en l'air" tant que l'utilisateur ne
+                                // cliquait pas ailleurs. On committe directement la valeur choisie
+                                // (sans dépendre de `draftValue`, pas encore à jour à ce point).
+                                setDraftValue(nextValue);
+                                commitEdit(row, c, nextValue);
                               }
                             }}
                             onBlur={() => {
-                              if (!isCustomMode) commitEdit(row, c);
+                              if (
+                                !isCustomMode &&
+                                editingCell?.rowId === row.id &&
+                                editingCell?.field === c.key
+                              ) {
+                                commitEdit(row, c);
+                              }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === "Escape") {
