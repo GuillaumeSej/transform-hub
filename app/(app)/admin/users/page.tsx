@@ -21,6 +21,15 @@ const OPERATIONAL_ROLES = ALL_ROLES.filter(
   (r) => r.value !== "admin" && r.value !== "admin_entreprise"
 );
 
+/** Les 4 états sémantiques de AuthUser.confidentialityClearance (voir types/index.ts) : */
+type ClearanceMode = "inherit" | "none" | "custom" | "all";
+
+function clearanceModeOf(clearance: AuthUser["confidentialityClearance"]): ClearanceMode {
+  if (clearance === undefined) return "inherit";
+  if (clearance === "all") return "all";
+  return clearance.length === 0 ? "none" : "custom";
+}
+
 export default function AdminUsersPage() {
   const { role, user } = useRole();
   const isEntAdmin = role === "admin_entreprise";
@@ -52,6 +61,8 @@ export default function AdminUsersPage() {
     role: "cto" as Role,
     companyId: "",
     password: "test",
+    clearanceMode: "inherit" as ClearanceMode,
+    clearanceLevels: [] as string[],
   });
   const [showForm, setShowForm] = useState(false);
 
@@ -65,6 +76,8 @@ export default function AdminUsersPage() {
       role: "cto",
       companyId: isEntAdmin && user?.companyId ? user.companyId : (companies[0]?.id ?? ""),
       password: "test",
+      clearanceMode: "inherit",
+      clearanceLevels: [],
     });
     setShowForm(true);
   };
@@ -79,6 +92,8 @@ export default function AdminUsersPage() {
       role: u.role,
       companyId: u.companyId ?? companies[0]?.id ?? "",
       password: u.password,
+      clearanceMode: clearanceModeOf(u.confidentialityClearance),
+      clearanceLevels: Array.isArray(u.confidentialityClearance) ? u.confidentialityClearance : [],
     });
     setShowForm(true);
   };
@@ -90,6 +105,13 @@ export default function AdminUsersPage() {
     )
       return;
     const normalizedUsername = form.username.trim().toLowerCase();
+    let confidentialityClearance: AuthUser["confidentialityClearance"];
+    if (form.role !== "admin" && form.role !== "admin_entreprise") {
+      if (form.clearanceMode === "all") confidentialityClearance = "all";
+      else if (form.clearanceMode === "none") confidentialityClearance = [];
+      else if (form.clearanceMode === "custom") confidentialityClearance = form.clearanceLevels;
+      // "inherit" -> undefined (repli sur Company.roleClearance[role])
+    }
     const newUser: AuthUser = {
       username: normalizedUsername,
       password: form.password,
@@ -103,10 +125,28 @@ export default function AdminUsersPage() {
           : isEntAdmin && user?.companyId
             ? user.companyId
             : form.companyId,
+      confidentialityClearance,
     };
     await saveUser(newUser);
     setShowForm(false);
   };
+
+  const toggleClearanceLevel = (level: string) => {
+    setForm((f) => ({
+      ...f,
+      clearanceLevels: f.clearanceLevels.includes(level)
+        ? f.clearanceLevels.filter((l) => l !== level)
+        : [...f.clearanceLevels, level],
+    }));
+  };
+
+  // Contrôle affiché seulement si l'entreprise ciblée a activé une échelle de confidentialité et
+  // que le rôle sélectionné n'est pas admin/admin_entreprise (accès total, contrôle sans effet).
+  const formCompany = companies.find((c) => c.id === form.companyId);
+  const showClearanceControl =
+    form.role !== "admin" &&
+    form.role !== "admin_entreprise" &&
+    (formCompany?.confidentialityLevels?.length ?? 0) > 0;
 
   const remove = async (username: string) => {
     await deleteUser(username);
@@ -209,6 +249,55 @@ export default function AdminUsersPage() {
               </div>
             )}
           </div>
+
+          {showClearanceControl && (
+            <div className="rounded-lg border border-border bg-bg-surface p-3">
+              <label className="text-xs font-medium text-text-secondary">
+                Habilitation de confidentialité (individuelle)
+              </label>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(
+                  [
+                    { value: "inherit", label: "Hérite du rôle" },
+                    { value: "none", label: "Aucun accès" },
+                    { value: "custom", label: "Accès personnalisé" },
+                    { value: "all", label: "Tous les niveaux" },
+                  ] as { value: ClearanceMode; label: string }[]
+                ).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, clearanceMode: opt.value }))}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      form.clearanceMode === opt.value
+                        ? "bg-bp-coral text-white"
+                        : "border border-border text-text-secondary hover:bg-bg-elevated"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {form.clearanceMode === "custom" && (
+                <div className="mt-3 flex flex-wrap gap-3">
+                  {(formCompany?.confidentialityLevels ?? []).map((level) => (
+                    <label
+                      key={level}
+                      className="flex items-center gap-1.5 text-xs text-text-primary"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.clearanceLevels.includes(level)}
+                        onChange={() => toggleClearanceLevel(level)}
+                      />
+                      {level}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button
               onClick={save}

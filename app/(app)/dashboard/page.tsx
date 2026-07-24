@@ -29,6 +29,7 @@ import {
 } from "@/lib/firestore/admin";
 import type { BestPracticeRule, Company, Project } from "@/types";
 import * as engine from "@/lib/engine";
+import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -100,18 +101,17 @@ export default function DashboardPage() {
     return unsub;
   }, [user?.companyId]);
 
-  const clearance = user ? (company?.roleClearance?.[user.role] ?? []) : [];
+  const clearance = resolveConfidentialityClearance(user, company?.roleClearance);
   const visibleLevers = useMemo(
     () =>
       data.levers.filter(
         (l) =>
-          !l.confidentialityLevel ||
           user?.role === "admin" ||
           user?.role === "admin_entreprise" ||
-          clearance.includes(l.confidentialityLevel)
+          isLeverVisibleForClearance(l.confidentialityLevel, clearance)
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.levers, user?.role, company?.roleClearance]
+    [data.levers, user?.role, company?.roleClearance, user?.confidentialityClearance]
   );
   const visibleData = useMemo(() => ({ ...data, levers: visibleLevers }), [data, visibleLevers]);
 

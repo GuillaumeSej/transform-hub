@@ -1,7 +1,46 @@
 import * as engine from "@/lib/engine";
 import type { CascadeShift } from "@/lib/engine";
 import { STATUS_ORDER } from "@/lib/status-config";
-import type { AuditEntry, Comment, FinancialSnapshot, Lever, LeverAction, SubLever } from "@/types";
+import type {
+  AuditEntry,
+  AuthUser,
+  Comment,
+  FinancialSnapshot,
+  Lever,
+  LeverAction,
+  Role,
+  SubLever,
+} from "@/types";
+
+/**
+ * Résout la liste des niveaux de confidentialité auxquels un utilisateur non-admin a accès,
+ * en appliquant la précédence : habilitation INDIVIDUELLE (AuthUser.confidentialityClearance)
+ * prioritaire quand définie, sinon repli sur l'habilitation de son rôle (Company.roleClearance).
+ * Ne s'applique pas à admin/admin_entreprise (accès total, géré par l'appelant en amont).
+ *  - user.confidentialityClearance === "all"  -> accès à tous les niveaux
+ *  - user.confidentialityClearance: string[]  -> exactement cette liste (même vide = aucun accès)
+ *  - user.confidentialityClearance === undefined -> repli sur roleClearance[user.role] (ou [])
+ */
+export function resolveConfidentialityClearance(
+  user: Pick<AuthUser, "role" | "confidentialityClearance"> | null | undefined,
+  roleClearance: Partial<Record<Role, string[]>> | undefined
+): "all" | string[] {
+  if (!user) return [];
+  if (user.confidentialityClearance === "all") return "all";
+  if (Array.isArray(user.confidentialityClearance)) return user.confidentialityClearance;
+  return roleClearance?.[user.role] ?? [];
+}
+
+/** Un levier confidentiel est-il visible pour cette habilitation (résolue via
+ * resolveConfidentialityClearance) ? Un niveau non défini sur le levier est toujours visible. */
+export function isLeverVisibleForClearance(
+  confidentialityLevel: string | undefined,
+  clearance: "all" | string[]
+): boolean {
+  if (!confidentialityLevel) return true;
+  if (clearance === "all") return true;
+  return clearance.includes(confidentialityLevel);
+}
 
 type PlanLockable = Pick<
   Lever,
