@@ -60,10 +60,8 @@ import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
 import { QuarterlyBridgeChart } from "@/components/shared/charts/QuarterlyBridgeChart";
 import type { Lever, LeverStatus } from "@/types";
 import {
-  DASHBOARD_TABS,
   DASHBOARD_WIDGET_REGISTRY,
   SPAN_COL_CLASS,
-  WIDGET_DEFAULT_TAB,
   addCustomViewToInstance,
   addWidget,
   addWidgetWithCustomView,
@@ -1073,11 +1071,7 @@ export default function DashboardPage() {
           icon={TriangleAlert}
           accent="amber"
           sub={`${summary.critical} critiques · à surveiller`}
-          onClick={() =>
-            document
-              .getElementById("section-prioritization")
-              ?.scrollIntoView({ behavior: "smooth" })
-          }
+          onClick={() => goToLevers({})}
         />
         <KPICard
           label={t("dashboard.kpi.capexEngaged")}
@@ -1299,42 +1293,13 @@ export default function DashboardPage() {
         </div>
       </Modal>
 
-      {/* ── Widgets groupés par section (page unique scrollable) ─────────── */}
-      {editMode ? (
-        <div
-          data-dashboard-widget-grid
-          className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          {layout.map((instance) => renderWidget(instance))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-6">
-          {DASHBOARD_TABS.map((tab) => {
-            const Icon = ICON_REGISTRY[tab.icon] ?? LayoutGrid;
-            const sectionWidgets = layout.filter((w) => WIDGET_DEFAULT_TAB[w.type] === tab.key);
-            if (sectionWidgets.length === 0) return null;
-            return (
-              <section key={tab.key} id={`section-${tab.key}`}>
-                <div className="mb-3 flex items-center gap-2.5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-bp-coral/10 text-bp-coral">
-                    <Icon size={14} />
-                  </div>
-                  <h2 className="text-[14px] font-bold tracking-tight text-primary">
-                    {t(tab.labelKey)}
-                  </h2>
-                  <div className="ml-1 h-px flex-1 bg-border" />
-                </div>
-                <div
-                  data-dashboard-widget-grid
-                  className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
-                >
-                  {sectionWidgets.map((instance) => renderWidget(instance))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      )}
+      {/* Grille unique — tous les widgets sur la même page, sans onglets ni sections */}
+      <div
+        data-dashboard-widget-grid
+        className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        {layout.map((instance) => renderWidget(instance))}
+      </div>
     </div>
   );
 }
