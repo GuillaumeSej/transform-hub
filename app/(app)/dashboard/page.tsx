@@ -527,11 +527,40 @@ export default function DashboardPage() {
     () => ({ ...filteredData, levers: pnlFilteredLevers }),
     [filteredData, pnlFilteredLevers]
   );
-  const pnlMap = engine.pnlImpact(pnlFilteredData);
-  const pnlData = Object.entries(pnlMap).map(([id, impact]) => ({
-    account: data.pnlAccounts.find((a) => a.id === id)?.name ?? id,
-    impact,
+
+  // ── Filtre temporel P&L (cascade Année → Trimestre → Mois) ──
+  const fyYear = new Date(data.program.fyStart).getFullYear().toString();
+  const [pnlYear, setPnlYear] = useState(fyYear);
+  const [pnlQuarter, setPnlQuarter] = useState("");
+  const [pnlMonth, setPnlMonth] = useState("");
+
+  const pnlPeriodFilter: engine.PnlPeriodFilter | undefined = useMemo(() => {
+    if (!pnlYear) return undefined;
+    return {
+      year: pnlYear,
+      ...(pnlQuarter ? { quarter: pnlQuarter } : {}),
+      ...(pnlMonth ? { month: pnlMonth } : {}),
+    };
+  }, [pnlYear, pnlQuarter, pnlMonth]);
+
+  const pnlQuarterMonths: string[] = useMemo(() => {
+    if (!pnlQuarter) return engine.MONTH_LABELS;
+    const qIdx = parseInt(pnlQuarter.replace("Q", "")) - 1;
+    return engine.MONTH_LABELS.slice(qIdx * 3, qIdx * 3 + 3);
+  }, [pnlQuarter]);
+
+  const pnlDetailedData = useMemo(
+    () => engine.pnlImpactDetailed(pnlFilteredData, pnlPeriodFilter),
+    [pnlFilteredData, pnlPeriodFilter]
+  );
+  const pnlData = pnlDetailedData.map((d) => ({
+    account: d.accountName,
+    plan: d.plan,
+    realized: d.realized,
   }));
+
+  // Legacy pnlMap kept for non-dashboard consumers (finance page, etc.)
+  // const pnlMap = engine.pnlImpact(pnlFilteredData);
   // ─── Layout du dashboard (widgets) ────────────────────────────────────────────────────────
   // Personnalisation d'affichage purement locale (localStorage, par navigateur) — voir
   // lib/dashboardWidgets.ts. Le layout par défaut reproduit exactement l'ancien ordre/tailles
@@ -1289,17 +1318,6 @@ export default function DashboardPage() {
         const activeView = resolveActiveCustomView(instance);
         const views = resolveCustomViews(instance);
         const isLegacy = activeView?.id === "account";
-        const pnlChartData = activeView
-          ? isLegacy
-            ? pnlData
-            : (
-                pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
-                  projects,
-                  hierarchyLevels,
-                  hierarchyNodes,
-                }) as PivotRow[]
-              ).map((row) => ({ account: row.label, impact: row.value }))
-          : [];
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
@@ -1366,11 +1384,57 @@ export default function DashboardPage() {
                       </option>
                     ))}
                   </select>
+                  {/* Filtres temporels : Année → Trimestre → Mois */}
+                  <span className="mx-1 text-[10px] text-tertiary">|</span>
+                  <select
+                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                    value={pnlYear}
+                    onChange={(e) => {
+                      setPnlYear(e.target.value);
+                      setPnlQuarter("");
+                      setPnlMonth("");
+                    }}
+                  >
+                    <option value={fyYear}>{fyYear}</option>
+                  </select>
+                  <select
+                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                    value={pnlQuarter}
+                    onChange={(e) => {
+                      setPnlQuarter(e.target.value);
+                      setPnlMonth("");
+                    }}
+                  >
+                    <option value="">{t("pnl.allQuarters")}</option>
+                    {["Q1", "Q2", "Q3", "Q4"].map((q) => (
+                      <option key={q} value={q}>
+                        {q}
+                      </option>
+                    ))}
+                  </select>
+                  {pnlQuarter && (
+                    <select
+                      className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                      value={pnlMonth}
+                      onChange={(e) => setPnlMonth(e.target.value)}
+                    >
+                      <option value="">{t("pnl.allMonths")}</option>
+                      {pnlQuarterMonths.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               }
             />
             <CardBody>
-              <PnlBarChart data={pnlChartData} />
+              <PnlBarChart
+                data={pnlData}
+                labelPlan={t("chart.pnl.plan")}
+                labelRealized={t("chart.pnl.realized")}
+              />
             </CardBody>
           </Card>
         );

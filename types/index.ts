@@ -130,6 +130,9 @@ export type Lever = {
   /** Niveau de confidentialité (doit correspondre à une valeur de Company.confidentialityLevels).
    *  Non défini = visible par tous les rôles de l'entreprise. */
   confidentialityLevel?: string;
+  /** Date de passage en M5 (delivered), renseignée automatiquement. Sert à ventiler les gains
+   *  réalisés par période dans le P&L. Non définie si le levier n'a jamais atteint M5. */
+  deliveredDate?: string;
   /** Statut juste avant le passage à "cancelled", capturé automatiquement par updateLever — sert
    *  à brancher précisément l'annulation à la bonne étape dans le Sankey chronologique, sans
    *  reconstituer l'étape à partir de `progress` (imprécis). Non défini si le levier n'a jamais
@@ -178,6 +181,8 @@ export type SubLever = {
   start: string; // ISO date
   end: string; // ISO date
   status: LeverStatus;
+  /** Date de passage en M5 (delivered), renseignée automatiquement. */
+  deliveredDate?: string;
   priority: PriorityLevel;
   risk: RiskLevel;
   lockedPlan?: FinancialSnapshot;

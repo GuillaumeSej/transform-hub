@@ -147,6 +147,111 @@ export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSu
   };
 }
 
+// ─── P&L Impact détaillé (plan vs réalisé, ventilé par période) ──────────────
+
+export type PnlDetailedPoint = {
+  accountId: string;
+  accountName: string;
+  plan: number;
+  realized: number;
+};
+
+/** Période : mois ("Jan 2026"), trimestre ("Q2 2026"), ou année ("2026"). */
+export type PnlPeriodFilter = {
+  year: string;
+  quarter?: string; // "Q1" | "Q2" | "Q3" | "Q4"
+  month?: string; // "Jan" | "Feb" | ... | "Dec"
+};
+
+function dateMatchesPeriod(dateStr: string | undefined, filter: PnlPeriodFilter): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return false;
+  const year = String(d.getFullYear());
+  if (year !== filter.year) return false;
+  if (filter.quarter) {
+    const q = `Q${Math.floor(d.getMonth() / 3) + 1}`;
+    if (q !== filter.quarter) return false;
+  }
+  if (filter.month) {
+    if (MONTH_LABELS[d.getMonth()] !== filter.month) return false;
+  }
+  return true;
+}
+
+/** Impact P&L détaillé : plan vs réalisé par compte, ventilé par période.
+ *
+ *  - **Plan** : pour chaque levier/sous-levier, `lockedPlan.netSavings ?? netSavings` est
+ *    comptabilisé au mois de sa date de fin prévue (`end`). Si le levier a des sous-leviers,
+ *    chaque sous-levier est ventilé séparément (sur sa propre date de fin).
+ *  - **Réalisé** : pour chaque levier/sous-levier en M5 (delivered), `netSavings` est
+ *    comptabilisé au mois de `deliveredDate` (date de passage en M5). Les leviers non M5
+ *    ne comptent pas dans le réalisé P&L.
+ *  - Si aucun filtre de période, les totaux couvrent tout l'exercice. */
+export function pnlImpactDetailed(
+  data: BeTrackData,
+  periodFilter?: PnlPeriodFilter
+): PnlDetailedPoint[] {
+  const active = data.levers.filter((l) => l.status !== "cancelled");
+  const map = new Map<string, { plan: number; realized: number }>();
+
+  const addPlan = (pnlMap: string, amount: number) => {
+    const e = map.get(pnlMap) ?? { plan: 0, realized: 0 };
+    e.plan += amount;
+    map.set(pnlMap, e);
+  };
+  const addRealized = (pnlMap: string, amount: number) => {
+    const e = map.get(pnlMap) ?? { plan: 0, realized: 0 };
+    e.realized += amount;
+    map.set(pnlMap, e);
+  };
+
+  for (const lever of active) {
+    const subs = data.subLevers?.filter((s) => s.leverId === lever.id) ?? [];
+    const hasSubLevers = subs.length > 0;
+
+    if (hasSubLevers) {
+      // Ventiler par sous-levier (chacun a sa propre date de fin et potentiellement son propre M5)
+      for (const sub of subs) {
+        if (sub.status === "cancelled") continue;
+        const planAmount = sub.lockedPlan?.netSavings ?? sub.netSavings;
+        const planDate = sub.end; // date de fin prévue du sous-levier
+        if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) {
+          addPlan(sub.pnlMap || lever.pnlMap, planAmount);
+        }
+        if (sub.status === "delivered") {
+          const realDate = sub.deliveredDate ?? sub.end; // fallback sur end si deliveredDate absent
+          if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
+            addRealized(sub.pnlMap || lever.pnlMap, sub.netSavings);
+          }
+        }
+      }
+    } else {
+      // Levier simple (pas de sous-leviers) : traité comme un bloc unique
+      const planAmount = lever.lockedPlan?.netSavings ?? lever.netSavings;
+      const planDate = lever.end;
+      if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) {
+        addPlan(lever.pnlMap, planAmount);
+      }
+      if (lever.status === "delivered") {
+        const realDate = lever.deliveredDate ?? lever.end;
+        if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
+          addRealized(lever.pnlMap, lever.netSavings);
+        }
+      }
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([id, vals]) => ({
+      accountId: id,
+      accountName: data.pnlAccounts.find((a) => a.id === id)?.name ?? id,
+      plan: Math.round(vals.plan * 10) / 10,
+      realized: Math.round(vals.realized * 10) / 10,
+    }))
+    .sort((a, b) => b.plan - a.plan);
+}
+
 export function pnlImpact(data: BeTrackData): Record<string, number> {
   const map: Record<string, number> = {};
   data.levers
