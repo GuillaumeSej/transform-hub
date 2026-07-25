@@ -12,30 +12,30 @@ import type { DependencyType, LifecycleStage, LeverStatus } from "@/types";
  */
 
 export const STATUS_LEVEL: Record<LeverStatus, string> = {
-  idea: "1",
-  qualified: "2",
-  validated: "3",
-  in_progress: "4",
-  delivered: "5",
+  idea: "M1",
+  qualified: "M2",
+  validated: "M3",
+  in_progress: "M4",
+  delivered: "M5",
   cancelled: "—",
 };
 
 export const STATUS_SHORT_LABEL: Record<LeverStatus, string> = {
-  idea: "Repérage",
-  qualified: "Chiffrage",
-  validated: "Décision",
-  in_progress: "Déploiement",
-  delivered: "Clôture",
-  cancelled: "Annulé",
+  idea: "Identifié",
+  qualified: "Validé",
+  validated: "Planifié",
+  in_progress: "Exécuté",
+  delivered: "Réalisé",
+  cancelled: "Abandonné",
 };
 
 export const STATUS_LABEL: Record<LeverStatus, string> = {
-  idea: "Piste repérée",
-  qualified: "Business case chiffré",
-  validated: "Décision de lancement",
-  in_progress: "Déploiement en cours",
-  delivered: "Valeur livrée",
-  cancelled: "Annulé",
+  idea: "Levier identifié",
+  qualified: "Business case validé",
+  validated: "Implémentation planifiée",
+  in_progress: "En cours d'exécution",
+  delivered: "Valeur réalisée",
+  cancelled: "Levier abandonné",
 };
 
 /** Cycle de vie par défaut, dans l'ordre (cancelled hors cycle). */
@@ -60,11 +60,11 @@ export const STATUS_ORDER: Record<LeverStatus, number> = {
 
 /** Référentiel de cycle de vie par défaut (5 étapes, seule la décision de lancement est une gate). */
 export const DEFAULT_LIFECYCLE_STAGES: LifecycleStage[] = [
-  { key: "idea", label: "Repérage", validationRequired: false },
-  { key: "qualified", label: "Chiffrage", validationRequired: false },
-  { key: "validated", label: "Décision de lancement", validationRequired: true },
-  { key: "in_progress", label: "Déploiement", validationRequired: false },
-  { key: "delivered", label: "Clôture", validationRequired: false },
+  { key: "idea", label: "Identifié", validationRequired: false },
+  { key: "qualified", label: "Validé", validationRequired: false },
+  { key: "validated", label: "Planifié", validationRequired: true },
+  { key: "in_progress", label: "Exécuté", validationRequired: false },
+  { key: "delivered", label: "Réalisé", validationRequired: false },
 ];
 
 /** Resolve label for a status, with optional per-company lifecycle override. When an override is

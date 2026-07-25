@@ -46,6 +46,7 @@ import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { AlertItem } from "@/components/shared/AlertItem";
+import { Tooltip } from "@/components/shared/Tooltip";
 import { generateAlerts } from "@/lib/alertEngine";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -611,7 +612,7 @@ export default function DashboardPage() {
               title={t("dashboard.widgets.alerts")}
               actions={
                 <div className="flex items-center gap-2">
-                  {/* Compteurs par sévérité (cliquables pour filtrer) */}
+                  {/* Compteurs par sévérité (cliquables pour filtrer, avec tooltip) */}
                   {(["red", "amber", "green", "blue"] as const).map((type) => {
                     const count = alertCounts[type];
                     if (count === 0) return null;
@@ -629,13 +630,16 @@ export default function DashboardPage() {
                         : "bg-info-blue-light text-info-blue",
                     };
                     return (
-                      <button
-                        key={type}
-                        onClick={() => setAlertTypeFilter((prev) => (prev === type ? "all" : type))}
-                        className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold transition ${colors[type]}`}
-                      >
-                        {count}
-                      </button>
+                      <Tooltip key={type} text={t(`alerts.tooltip.${type}`)} position="bottom">
+                        <button
+                          onClick={() =>
+                            setAlertTypeFilter((prev) => (prev === type ? "all" : type))
+                          }
+                          className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold transition ${colors[type]}`}
+                        >
+                          {count}
+                        </button>
+                      </Tooltip>
                     );
                   })}
                   {/* Toggle résolu / à traiter */}
@@ -675,6 +679,11 @@ export default function DashboardPage() {
                       onClick={() => goToAlert(a)}
                       onToggleResolved={() => toggleAlertResolved(a.id)}
                       scopeLabel={resolveScopeLabel(a.scope)}
+                      tooltips={{
+                        severity: t(`alerts.tooltip.severity.${a.type}`),
+                        impact: t("alerts.tooltip.impact"),
+                        auto: t("alerts.tooltip.auto"),
+                      }}
                     />
                   ))}
                   {/* Pagination */}

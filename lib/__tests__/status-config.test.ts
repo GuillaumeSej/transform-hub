@@ -14,12 +14,12 @@ import {
 } from "@/lib/status-config";
 
 describe("status-config — STATUS_LEVEL", () => {
-  it("maps all statuses to a plain step number, without the old L-prefix convention", () => {
-    expect(STATUS_LEVEL.idea).toBe("1");
-    expect(STATUS_LEVEL.qualified).toBe("2");
-    expect(STATUS_LEVEL.validated).toBe("3");
-    expect(STATUS_LEVEL.in_progress).toBe("4");
-    expect(STATUS_LEVEL.delivered).toBe("5");
+  it("maps all statuses to M1-M5 maturity codes, without the old L-prefix convention", () => {
+    expect(STATUS_LEVEL.idea).toBe("M1");
+    expect(STATUS_LEVEL.qualified).toBe("M2");
+    expect(STATUS_LEVEL.validated).toBe("M3");
+    expect(STATUS_LEVEL.in_progress).toBe("M4");
+    expect(STATUS_LEVEL.delivered).toBe("M5");
     expect(STATUS_LEVEL.cancelled).toBe("—");
     Object.values(STATUS_LEVEL).forEach((v) => expect(v.startsWith("L")).toBe(false));
   });
@@ -46,7 +46,7 @@ describe("status-config — STATUS_ORDER", () => {
 describe("status-config — resolveStatusLabel", () => {
   it("uses default label without lifecycle override", () => {
     expect(resolveStatusLabel("idea")).toBe(STATUS_LABEL.idea);
-    expect(resolveStatusLabel("cancelled")).toBe("Annulé");
+    expect(resolveStatusLabel("cancelled")).toBe("Levier abandonné");
   });
 
   it("uses lifecycle override verbatim when provided (no numeric prefix)", () => {

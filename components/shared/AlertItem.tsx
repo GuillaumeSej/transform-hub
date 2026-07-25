@@ -1,5 +1,6 @@
 import { CircleAlert, CircleCheck, CircleUser, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/shared/Tooltip";
 import type { Alert } from "@/types";
 
 const ICONS = { red: CircleAlert, amber: TriangleAlert, green: CircleCheck, blue: CircleUser };
@@ -25,6 +26,7 @@ export function AlertItem({
   onClick,
   onToggleResolved,
   scopeLabel,
+  tooltips,
 }: {
   alert: Alert;
   onClick?: () => void;
@@ -32,6 +34,12 @@ export function AlertItem({
   onToggleResolved?: () => void;
   /** Nom lisible du scope (nom du levier ou du workstream) au lieu de l'ID brut. */
   scopeLabel?: string;
+  /** Textes des tooltips (traduits par l'appelant). */
+  tooltips?: {
+    severity?: string;
+    impact?: string;
+    auto?: string;
+  };
 }) {
   const Icon = ICONS[alert.type];
   const resolved = alert.resolved ?? false;
@@ -67,14 +75,16 @@ export function AlertItem({
       )}
 
       {/* Icône sévérité */}
-      <div
-        className={cn(
-          "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-sm",
-          ICON_STYLE[alert.type]
-        )}
-      >
-        <Icon size={14} />
-      </div>
+      <Tooltip text={tooltips?.severity ?? ""} position="bottom">
+        <div
+          className={cn(
+            "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-sm",
+            ICON_STYLE[alert.type]
+          )}
+        >
+          <Icon size={14} />
+        </div>
+      </Tooltip>
 
       {/* Contenu */}
       <div className="min-w-0 flex-1">
@@ -89,16 +99,18 @@ export function AlertItem({
           </div>
           {/* Badge impact € */}
           {alert.impactEur != null && alert.impactEur !== 0 && (
-            <span
-              className={cn(
-                "flex-shrink-0 rounded-sm px-1.5 py-0.5 text-[10.5px] font-bold",
-                alert.impactEur < 0
-                  ? "bg-rag-red-light text-rag-red"
-                  : "bg-rag-green-light text-rag-green-dark"
-              )}
-            >
-              {fmtImpact(alert.impactEur)}
-            </span>
+            <Tooltip text={tooltips?.impact ?? ""}>
+              <span
+                className={cn(
+                  "flex-shrink-0 rounded-sm px-1.5 py-0.5 text-[10.5px] font-bold",
+                  alert.impactEur < 0
+                    ? "bg-rag-red-light text-rag-red"
+                    : "bg-rag-green-light text-rag-green-dark"
+                )}
+              >
+                {fmtImpact(alert.impactEur)}
+              </span>
+            </Tooltip>
           )}
         </div>
         <div className="mt-0.5 text-[11.5px] text-secondary">{alert.desc}</div>
@@ -111,9 +123,11 @@ export function AlertItem({
           {alert.source === "auto" && (
             <>
               <span>·</span>
-              <span className="rounded-sm bg-neutral-100 px-1 py-px text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
-                Auto
-              </span>
+              <Tooltip text={tooltips?.auto ?? ""} position="bottom">
+                <span className="rounded-sm bg-neutral-100 px-1 py-px text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
+                  Auto
+                </span>
+              </Tooltip>
             </>
           )}
         </div>
