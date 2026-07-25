@@ -386,10 +386,16 @@ export type DependencyAlert = {
   sourceId: string;
   sourceName: string;
   sourceKind: "lever" | "subLever";
+  sourceDate: string;
   targetId: string;
   targetName: string;
+  targetDate: string;
   type: DependencyType;
   message: string;
+  /** Nombre de jours de retard ou décalage (toujours positif). */
+  delayDays: number;
+  /** Net savings (€M) du levier bloqué (source) — valeur à risque. */
+  impactEur: number;
 };
 
 /** Tolérance (jours) pour les contraintes de simultanéité SS / FF. */
@@ -405,6 +411,14 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
   const byId = new Map(entities.map((e) => [e.id, e]));
   const alerts: DependencyAlert[] = [];
 
+  // Résoudre le netSavings d'une entité (levier ou sous-levier) pour calculer l'impact €.
+  const entitySavings = (id: string): number => {
+    const lever = data.levers.find((l) => l.id === id);
+    if (lever) return lever.netSavings;
+    const sub = data.subLevers?.find((s) => s.id === id);
+    return sub?.netSavings ?? 0;
+  };
+
   for (const source of entities) {
     for (const dep of source.dependencies) {
       const target = byId.get(dep.targetId);
@@ -412,23 +426,42 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
 
       let violated = false;
       let message = "";
+      let delayDays = 0;
+      let sourceDate = "";
+      let targetDate = "";
+
       switch (dep.type) {
         case "FS":
-          violated = target.end > source.start;
-          message = `"${target.name}" se termine le ${target.end}, après le début prévu (${source.start})`;
+          // Le bloqueur (target) doit finir avant que le bloqué (source) puisse commencer
+          delayDays = daysBetween(source.start, target.end); // positif si target.end > source.start
+          violated = delayDays > 0;
+          sourceDate = source.start;
+          targetDate = target.end;
+          message = `"${target.name}" se termine ${delayDays} jours après le début prévu de "${source.name}"`;
           break;
         case "SS":
-          violated =
-            Math.abs(daysBetween(target.start, source.start)) > SIMULTANEITY_TOLERANCE_DAYS;
-          message = `Débuts désynchronisés : ${target.start} vs ${source.start} (tolérance ${SIMULTANEITY_TOLERANCE_DAYS} j)`;
+          // Les deux doivent démarrer ensemble
+          delayDays = Math.abs(daysBetween(target.start, source.start));
+          violated = delayDays > SIMULTANEITY_TOLERANCE_DAYS;
+          sourceDate = source.start;
+          targetDate = target.start;
+          message = `"${source.name}" et "${target.name}" ont ${delayDays} jours de décalage au démarrage`;
           break;
         case "FF":
-          violated = Math.abs(daysBetween(target.end, source.end)) > SIMULTANEITY_TOLERANCE_DAYS;
-          message = `Fins désynchronisées : ${target.end} vs ${source.end} (tolérance ${SIMULTANEITY_TOLERANCE_DAYS} j)`;
+          // Les deux doivent finir ensemble
+          delayDays = Math.abs(daysBetween(target.end, source.end));
+          violated = delayDays > SIMULTANEITY_TOLERANCE_DAYS;
+          sourceDate = source.end;
+          targetDate = target.end;
+          message = `"${source.name}" et "${target.name}" ont ${delayDays} jours de décalage à la fin`;
           break;
         case "SF":
-          violated = target.start > source.end;
-          message = `"${target.name}" démarre le ${target.start}, après la fin prévue (${source.end})`;
+          // Le bloqueur (target) doit démarrer avant que le bloqué (source) puisse finir
+          delayDays = daysBetween(source.end, target.start); // positif si target.start > source.end
+          violated = delayDays > 0;
+          sourceDate = source.end;
+          targetDate = target.start;
+          message = `"${target.name}" démarre ${delayDays} jours après la fin prévue de "${source.name}"`;
           break;
       }
 
@@ -437,10 +470,14 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
           sourceId: source.id,
           sourceName: source.name,
           sourceKind: source.kind,
+          sourceDate,
           targetId: target.id,
           targetName: target.name,
+          targetDate,
           type: dep.type,
           message,
+          delayDays: Math.abs(delayDays),
+          impactEur: entitySavings(source.id),
         });
       }
     }

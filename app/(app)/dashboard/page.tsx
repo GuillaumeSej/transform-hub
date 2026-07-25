@@ -16,7 +16,6 @@ import {
   RotateCcw,
   TriangleAlert,
   TrendingUp,
-  Unlink,
   Users,
   X,
 } from "lucide-react";
@@ -48,7 +47,14 @@ import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { AlertItem } from "@/components/shared/AlertItem";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { generateAlerts } from "@/lib/alertEngine";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
@@ -1362,7 +1368,26 @@ export default function DashboardPage() {
           </Card>
         );
 
-      case "dependency-alerts":
+      case "dependency-alerts": {
+        const depTypeLabels: Record<string, string> = {
+          FS: t("dep.fs"),
+          SS: t("dep.ss"),
+          FF: t("dep.ff"),
+          SF: t("dep.sf"),
+        };
+        const depTypeTooltips: Record<string, string> = {
+          FS: t("dep.tooltip.fs"),
+          SS: t("dep.tooltip.ss"),
+          FF: t("dep.tooltip.ff"),
+          SF: t("dep.tooltip.sf"),
+        };
+        const depSeverity = (days: number) => {
+          if (days > 30) return { label: t("dep.blocking"), cls: "bg-rag-red-light text-rag-red" };
+          if (days > 7) return { label: t("dep.watch"), cls: "bg-rag-amber-light text-rag-amber" };
+          return { label: t("dep.minor"), cls: "bg-neutral-100 text-secondary" };
+        };
+        const isDirectional = (type: string) => type === "FS" || type === "SF";
+
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
@@ -1380,39 +1405,118 @@ export default function DashboardPage() {
                   {t("dashboard.widgets.noDependencyAlerts")}
                 </p>
               ) : (
-                <div className="flex flex-col gap-0">
-                  {depAlerts.slice(0, 8).map((a, i) => (
-                    <div
-                      key={`${a.sourceId}-${a.targetId}-${i}`}
-                      onClick={() => router.push(`/levers/detail?id=${a.sourceId}`)}
-                      className="flex cursor-pointer items-start gap-3 border-b border-border py-2.5 last:border-b-0 hover:bg-neutral-50"
-                    >
-                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-sm bg-bp-coral/10 text-bp-coral">
-                        <Unlink size={14} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[12.5px] font-semibold text-primary">
-                          {a.sourceName}
-                          <span className="mx-1.5 text-tertiary">→</span>
-                          {a.targetName}
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-secondary">{a.message}</div>
-                        <div className="mt-1 flex gap-2">
-                          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
-                            {a.type}
+                <div className="flex flex-col gap-3">
+                  {depAlerts.slice(0, 6).map((a, i) => {
+                    const sev = depSeverity(a.delayDays);
+                    return (
+                      <div
+                        key={`${a.sourceId}-${a.targetId}-${i}`}
+                        onClick={() => router.push(`/levers/detail?id=${a.sourceId}`)}
+                        className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
+                      >
+                        {/* Layout directionnel (FS, SF) : côte à côte avec flèche */}
+                        {isDirectional(a.type) ? (
+                          <div className="flex items-stretch gap-2">
+                            <div className="flex flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                                {t("dep.blocker")}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                {a.targetName}
+                              </div>
+                              <div className="mt-0.5 text-[10px] text-secondary">
+                                {a.type === "FS"
+                                  ? t("dep.ff").split("=")[0]?.trim()
+                                  : t("dep.fs").split("→")[0]?.trim()}{" "}
+                                : {a.targetDate}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-center justify-center text-tertiary">
+                              <ArrowRight size={14} />
+                              <span className="mt-0.5 text-[8px] font-semibold uppercase">
+                                {depTypeLabels[a.type]}
+                              </span>
+                            </div>
+                            <div className="flex flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                {t("dep.blocked")}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                {a.sourceName}
+                              </div>
+                              <div className="mt-0.5 text-[10px] text-secondary">
+                                {a.type === "FS"
+                                  ? t("dep.fs").split("→")[0]?.trim()
+                                  : t("dep.ff").split("=")[0]?.trim()}{" "}
+                                : {a.sourceDate}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Layout symétrique (SS, FF) : empilé */
+                          <div className="overflow-hidden rounded-md border border-border">
+                            <div className="border-b border-border bg-neutral-50 p-2">
+                              <div className="truncate text-[11px] font-bold text-primary">
+                                {a.sourceName}
+                              </div>
+                              <div className="mt-0.5 text-[10px] text-secondary">
+                                {a.type === "SS"
+                                  ? t("dep.fs").split("→")[0]?.trim()
+                                  : t("dep.ff").split("=")[0]?.trim()}{" "}
+                                : {a.sourceDate}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
+                              <ArrowUpDown size={10} />
+                              {depTypeLabels[a.type]}
+                            </div>
+                            <div className="bg-neutral-50 p-2">
+                              <div className="truncate text-[11px] font-bold text-primary">
+                                {a.targetName}
+                              </div>
+                              <div className="mt-0.5 text-[10px] text-secondary">
+                                {a.type === "SS"
+                                  ? t("dep.fs").split("→")[0]?.trim()
+                                  : t("dep.ff").split("=")[0]?.trim()}{" "}
+                                : {a.targetDate}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {/* Barre de pied : sévérité + retard + type + impact € */}
+                        <div className="mt-2 flex items-center gap-2 text-[10px]">
+                          <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
+                            {sev.label}
                           </span>
-                          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
-                            {a.sourceKind}
+                          <span className="text-secondary">
+                            {a.delayDays}{" "}
+                            {isDirectional(a.type) ? t("dep.delayDays") : t("dep.offsetDays")}
                           </span>
+                          <Tooltip text={depTypeTooltips[a.type]} position="bottom">
+                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
+                              {depTypeLabels[a.type]}
+                            </span>
+                          </Tooltip>
+                          {a.sourceKind === "subLever" && (
+                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
+                              Sous-levier
+                            </span>
+                          )}
+                          {a.impactEur > 0 && (
+                            <span className="ml-auto font-bold text-bp-coral">
+                              {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
+                            </span>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardBody>
           </Card>
         );
+      }
 
       default:
         return null;
