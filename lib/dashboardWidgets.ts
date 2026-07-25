@@ -248,19 +248,21 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   },
   {
     type: "workstream-breakdown",
-    label: "Savings par Workstream / Projet",
+    label: "Économies par dimension",
     icon: "Columns3",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
     viewOptions: [
       { key: "workstream", labelKey: "dashboard.workstream" },
-      { key: "project", labelKey: "dashboard.project" },
+      { key: "country", labelKey: "dashboard.country" },
+      { key: "function", labelKey: "dashboard.function" },
     ],
     defaultView: "workstream",
     builderDimensionCount: 1,
     defaultCustomViews: [
       { id: "workstream", metric: "realizedSavings", dimensions: ["ws"], label: "Workstream" },
-      { id: "project", metric: "realizedSavings", dimensions: ["project"], label: "Projet" },
+      { id: "country", metric: "realizedSavings", dimensions: ["country"], label: "Pays" },
+      { id: "function", metric: "realizedSavings", dimensions: ["function"], label: "Fonction" },
     ],
   },
   {
@@ -538,7 +540,7 @@ export function resolveActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const LAYOUT_KEY = "betrack_dashboard_layout_v6";
+const LAYOUT_KEY = "betrack_dashboard_layout_v7";
 
 const isBrowser = () => typeof window !== "undefined";
 

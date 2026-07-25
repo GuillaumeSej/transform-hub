@@ -394,15 +394,55 @@ export default function DashboardPage() {
       ? goToLevers({ f_endQuarter: `${label} ${currentYear}` })
       : goToMonth(label);
 
-  const wsBars = data.workstreams.map((w) => ({
-    label: w.name.split(" ")[0],
-    realized: engine.workstreamSummary(visibleData, w.id).realized,
-    target: w.target,
-  }));
+  const wsBars = data.workstreams.map((w) => {
+    const levers = filteredData.levers.filter((l) => l.ws === w.id && l.status !== "cancelled");
+    const realized = engine.workstreamSummary(filteredData, w.id).realized;
+    const target = w.target;
+    const reforecast =
+      Math.round(levers.reduce((s, l) => s + (l.reforecast?.netSavings ?? l.netSavings), 0) * 10) /
+      10;
+    return {
+      label: w.name,
+      target,
+      realized,
+      reforecast: Math.abs(reforecast - target) > 0.05 ? reforecast : undefined,
+    };
+  });
+
+  /** Calcule les barres (target/realized/reforecast) groupées par une dimension du levier. */
+  const dimensionBars = (getKey: (l: Lever) => string) => {
+    const active = filteredData.levers.filter((l) => l.status !== "cancelled");
+    const groups = new Map<string, Lever[]>();
+    active.forEach((l) => {
+      const key = getKey(l) || "—";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(l);
+    });
+    return Array.from(groups.entries())
+      .map(([key, levers]) => {
+        const target = Math.round(levers.reduce((s, l) => s + l.netSavings, 0) * 10) / 10;
+        const realized =
+          Math.round(levers.reduce((s, l) => s + engine.realizedSavings(l), 0) * 10) / 10;
+        const reforecast =
+          Math.round(
+            levers.reduce((s, l) => s + (l.reforecast?.netSavings ?? l.netSavings), 0) * 10
+          ) / 10;
+        return {
+          label: key,
+          target,
+          realized,
+          reforecast: Math.abs(reforecast - target) > 0.05 ? reforecast : undefined,
+        };
+      })
+      .sort((a, b) => b.target - a.target);
+  };
+  const countryBars = dimensionBars((l) => l.country);
+  const functionBars = dimensionBars((l) => l.function);
+
   const projectMap = engine.byProject(visibleData, projects);
   const projectBars = [
     ...projects.map((p) => ({
-      label: p.name.split(" ")[0],
+      label: p.name,
       realized: projectMap[p.name] ?? 0,
       target: p.target,
     })),
@@ -963,12 +1003,20 @@ export default function DashboardPage() {
       case "workstream-breakdown": {
         const activeView = resolveActiveCustomView(instance);
         const views = resolveCustomViews(instance);
-        const isLegacy = activeView?.id === "workstream" || activeView?.id === "project";
+        const isLegacy =
+          activeView?.id === "workstream" ||
+          activeView?.id === "country" ||
+          activeView?.id === "function" ||
+          activeView?.id === "project";
         const barData = activeView
           ? isLegacy
             ? activeView.id === "workstream"
               ? wsBars
-              : projectBars
+              : activeView.id === "country"
+                ? countryBars
+                : activeView.id === "function"
+                  ? functionBars
+                  : projectBars
             : (
                 pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
                   projects,
@@ -984,9 +1032,7 @@ export default function DashboardPage() {
               title={
                 activeView
                   ? isLegacy
-                    ? activeView.id === "workstream"
-                      ? t("dashboard.widgets.workstreamSavings")
-                      : t("dashboard.widgets.projectSavings")
+                    ? describeCustomView(activeView, hierarchyLevels)
                     : describeCustomView(activeView, hierarchyLevels)
                   : t("dashboard.widgets.workstreamBreakdown")
               }
@@ -1006,7 +1052,12 @@ export default function DashboardPage() {
               }
             />
             <CardBody>
-              <WorkstreamBarChart data={barData} />
+              <WorkstreamBarChart
+                data={barData}
+                labelTarget={t("chart.bar.target")}
+                labelRealized={t("chart.bar.realized")}
+                labelReforecast={t("chart.bar.reforecast")}
+              />
             </CardBody>
           </Card>
         );
