@@ -55,7 +55,9 @@ export type Workstream = {
   id: string;
   name: string;
   sponsor: string;
-  function: string;
+  /** Thème fonctionnel dominant (informatif, pas contraignant). Un workstream peut impacter
+   *  plusieurs fonctions — la fonction réelle est sur chaque levier (Lever.function). */
+  function?: string;
   color: string;
   target: number; // €M
 };

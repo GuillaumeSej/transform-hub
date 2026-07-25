@@ -225,7 +225,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     allowedSpans: ["M", "L", "XL"],
     viewOptions: [
       { key: "function-country", labelKey: "dashboard.widgetView.functionCountry" },
-      { key: "workstream-project", labelKey: "dashboard.widgetView.workstreamProject" },
+      { key: "workstream-lever", labelKey: "dashboard.widgetView.workstreamLever" },
     ],
     defaultView: "function-country",
     // Marimekko = forme à 2 dimensions (primaire × secondaire) — le builder générique impose donc
@@ -239,10 +239,10 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
         label: "Fonction × Pays",
       },
       {
-        id: "workstream-project",
+        id: "workstream-lever",
         metric: "realizedSavings",
-        dimensions: ["ws", "project"],
-        label: "Workstream × Projet",
+        dimensions: ["ws", "lever"],
+        label: "Workstream × Levier",
       },
     ],
   },
@@ -538,7 +538,7 @@ export function resolveActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const LAYOUT_KEY = "betrack_dashboard_layout_v5";
+const LAYOUT_KEY = "betrack_dashboard_layout_v6";
 
 const isBrowser = () => typeof window !== "undefined";
 

@@ -915,7 +915,9 @@ export default function DashboardPage() {
         const activeView = resolveActiveCustomView(instance);
         const views = resolveCustomViews(instance);
         const isLegacy =
-          activeView?.id === "function-country" || activeView?.id === "workstream-project";
+          activeView?.id === "function-country" ||
+          activeView?.id === "workstream-project" ||
+          activeView?.id === "workstream-lever";
         const mekko2D = activeView
           ? isLegacy
             ? engine.marimekko2D(filteredData, activeView.id as engine.MarimekkoPairKey, projects)

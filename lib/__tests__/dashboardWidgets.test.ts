@@ -153,7 +153,7 @@ describe("dashboardWidgets — builder générique (customViews)", () => {
     expect(marimekko.customViews).toHaveLength(2);
     expect(marimekko.customViews?.map((v) => v.id)).toEqual([
       "function-country",
-      "workstream-project",
+      "workstream-lever",
     ]);
     const pnl = layout.find((w) => w.type === "pnl")!;
     expect(pnl.customViews).toHaveLength(1);

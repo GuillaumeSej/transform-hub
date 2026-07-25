@@ -90,6 +90,8 @@ const es: Record<string, string> = {
   "dashboard.addNewBlock": "Sí, añadir un nuevo bloque",
   "dashboard.widgetView.functionCountry": "Función × País",
   "dashboard.widgetView.workstreamProject": "Workstream × Proyecto",
+  "dashboard.widgetView.workstreamLever": "Workstream × Palanca",
+  "dimension.lever": "Palanca",
   "dashboard.kpi.savingsRealized": "Ahorros realizados",
   "dashboard.kpi.leversDelivered": "Palancas Realizadas",
   "dashboard.kpi.leversAtRisk": "Palancas en Riesgo",

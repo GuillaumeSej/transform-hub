@@ -2,6 +2,7 @@
 
 import * as engine from "@/lib/engine";
 import type { Marimekko2DColumn } from "@/lib/engine";
+import { Tooltip } from "@/components/shared/Tooltip";
 
 const COLORS = [
   "#806659",
@@ -18,7 +19,10 @@ const COLORS = [
 /** Vrai Marimekko à deux dimensions : la largeur des colonnes = poids de la dimension primaire
  * (ex. fonction), chaque colonne se décompose en segments empilés (dimension secondaire, ex.
  * pays) — porté depuis l'ancienne version 1D (largeur seule, "par fonction" figé). Clic sur un
- * segment pour creuser vers les leviers correspondant aux deux dimensions. */
+ * segment pour creuser vers les leviers correspondant aux deux dimensions.
+ *
+ * Les tooltips stylés remplacent le `title` HTML natif pour afficher le nom complet des colonnes
+ * et segments tronqués. */
 export function MarimekkoChart({
   data,
   height = 240,
@@ -40,29 +44,38 @@ export function MarimekkoChart({
           className="flex flex-col overflow-hidden rounded-md"
         >
           {col.segments.map((seg, i) => (
-            <button
+            <Tooltip
               key={seg.key}
-              onClick={() => onSegmentClick?.(col.key, seg.key)}
-              title={`${col.label} — ${seg.label} : ${engine.fmtCurr(seg.value)} (${seg.count} levier(s))`}
-              style={{ height: `${seg.heightPct}%`, backgroundColor: COLORS[i % COLORS.length] }}
-              className="group flex w-full flex-col justify-end p-1.5 text-left text-white transition hover:opacity-90"
+              text={`${col.label} — ${seg.label} : ${engine.fmtCurr(seg.value)} (${seg.count} levier${seg.count > 1 ? "s" : ""})`}
             >
-              {seg.heightPct >= 12 && (
-                <span className="truncate text-[9.5px] font-semibold opacity-85">{seg.label}</span>
-              )}
-              {seg.heightPct >= 20 && (
-                <span className="truncate text-[11px] font-bold">{engine.fmtCurr(seg.value)}</span>
-              )}
-            </button>
+              <button
+                onClick={() => onSegmentClick?.(col.key, seg.key)}
+                style={{ height: `${seg.heightPct}%`, backgroundColor: COLORS[i % COLORS.length] }}
+                className="group flex w-full flex-col justify-end p-1.5 text-left text-white transition hover:opacity-90"
+              >
+                {seg.heightPct >= 12 && (
+                  <span className="truncate text-[9.5px] font-semibold opacity-85">
+                    {seg.label}
+                  </span>
+                )}
+                {seg.heightPct >= 20 && (
+                  <span className="truncate text-[11px] font-bold">
+                    {engine.fmtCurr(seg.value)}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
           ))}
-          <div className="mt-0.5 bg-neutral-100 px-1.5 py-1 text-center">
-            <span className="block truncate text-[10px] font-semibold uppercase tracking-wide text-primary">
-              {col.label}
-            </span>
-            <span className="block text-[10px] text-secondary">
-              {engine.fmtCurr(col.totalSavings)}
-            </span>
-          </div>
+          <Tooltip text={`${col.label} : ${engine.fmtCurr(col.totalSavings)}`} position="bottom">
+            <div className="mt-0.5 bg-neutral-100 px-1.5 py-1 text-center">
+              <span className="block truncate text-[10px] font-semibold uppercase tracking-wide text-primary">
+                {col.label}
+              </span>
+              <span className="block text-[10px] text-secondary">
+                {engine.fmtCurr(col.totalSavings)}
+              </span>
+            </div>
+          </Tooltip>
         </div>
       ))}
     </div>

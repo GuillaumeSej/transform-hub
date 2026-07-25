@@ -138,6 +138,7 @@ const FALLBACK_LABEL = "Non renseigné";
  *  valeur), plus quelques résolutions qui nécessitent un lookup annexe (workstream, projet,
  *  compte P&L, statut). */
 export const DIMENSION_REGISTRY: DimensionDef[] = [
+  { key: "lever", label: "Levier", getValue: (l) => l.name || FALLBACK_LABEL },
   { key: "type", label: "Type de levier", getValue: (l) => l.type || FALLBACK_LABEL },
   {
     key: "ws",

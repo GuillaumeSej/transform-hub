@@ -91,6 +91,8 @@ const de: Record<string, string> = {
   "dashboard.addNewBlock": "Ja, neuen Block hinzufügen",
   "dashboard.widgetView.functionCountry": "Funktion × Land",
   "dashboard.widgetView.workstreamProject": "Workstream × Projekt",
+  "dashboard.widgetView.workstreamLever": "Workstream × Hebel",
+  "dimension.lever": "Hebel",
   "dashboard.kpi.savingsRealized": "Realisierte Einsparungen",
   "dashboard.kpi.leversDelivered": "Abgeschlossene Hebel",
   "dashboard.kpi.leversAtRisk": "Gefährdete Hebel",

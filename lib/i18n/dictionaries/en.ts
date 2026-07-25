@@ -94,6 +94,8 @@ const en: Record<string, string> = {
   "dashboard.addNewBlock": "Yes, add a new block",
   "dashboard.widgetView.functionCountry": "Function × Country",
   "dashboard.widgetView.workstreamProject": "Workstream × Project",
+  "dashboard.widgetView.workstreamLever": "Workstream × Initiative",
+  "dimension.lever": "Initiative",
   "dashboard.kpi.savingsRealized": "Savings realized",
   "dashboard.kpi.leversDelivered": "Initiatives Delivered",
   "dashboard.kpi.leversAtRisk": "Initiatives At Risk",

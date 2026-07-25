@@ -718,7 +718,7 @@ export function sCurve3(data: BeTrackData, granularity: TimeGranularity = "month
   }));
 }
 
-export type MarimekkoPairKey = "function-country" | "workstream-project";
+export type MarimekkoPairKey = "function-country" | "workstream-project" | "workstream-lever";
 
 export type Marimekko2DSegment = {
   key: string;
@@ -756,10 +756,12 @@ export function marimekko2D(
     pairKey === "function-country"
       ? l.function
       : (data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws);
-  const secondaryOf = (l: Lever): string =>
-    pairKey === "function-country"
-      ? l.country || "—"
-      : (projects.find((p) => p.id === l.projectId)?.name ?? "Non assigné");
+  const secondaryOf = (l: Lever): string => {
+    if (pairKey === "function-country") return l.country || "—";
+    if (pairKey === "workstream-lever") return l.name;
+    // fallback legacy workstream-project
+    return projects.find((p) => p.id === l.projectId)?.name ?? "Non assigné";
+  };
 
   const byPrimary = new Map<string, Lever[]>();
   active.forEach((l) => {
