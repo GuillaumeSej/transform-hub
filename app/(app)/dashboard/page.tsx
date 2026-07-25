@@ -16,6 +16,7 @@ import {
   RotateCcw,
   TriangleAlert,
   TrendingUp,
+  Unlink,
   Users,
   X,
 } from "lucide-react";
@@ -59,8 +60,10 @@ import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
 import { QuarterlyBridgeChart } from "@/components/shared/charts/QuarterlyBridgeChart";
 import type { Lever, LeverStatus } from "@/types";
 import {
+  DASHBOARD_TABS,
   DASHBOARD_WIDGET_REGISTRY,
   SPAN_COL_CLASS,
+  WIDGET_DEFAULT_TAB,
   addCustomViewToInstance,
   addWidget,
   addWidgetWithCustomView,
@@ -76,6 +79,7 @@ import {
   setWidgetSpan,
   setWidgetView,
   type CustomViewConfig,
+  type DashboardTab,
   type DashboardWidgetInstance,
   type DashboardWidgetType,
 } from "@/lib/dashboardWidgets";
@@ -231,6 +235,9 @@ export default function DashboardPage() {
   const filteredData = useMemo(() => ({ ...data, levers: filteredLevers }), [data, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
+  const [activeTab, setActiveTab] = useState<DashboardTab>("cockpit");
+  const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
+  const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
   const [sCurveGranularity, setSCurveGranularity] = useState<engine.TimeGranularity>("month");
   const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
   const sCurve = engine.sCurve3(visibleData, sCurveGranularity);
@@ -895,6 +902,118 @@ export default function DashboardPage() {
           </Card>
         );
       }
+      case "underperformers":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title={t("dashboard.widgets.underperformers")}
+              actions={
+                <span className="text-[10.5px] font-semibold text-tertiary">
+                  {underperformingLevers.length}{" "}
+                  {t("dashboard.widgets.underperformers").toLowerCase()}
+                </span>
+              }
+            />
+            <CardBody>
+              {underperformingLevers.length === 0 ? (
+                <p className="py-6 text-center text-sm text-tertiary">
+                  {t("dashboard.widgets.noUnderperformers")}
+                </p>
+              ) : (
+                <div className="flex flex-col gap-0">
+                  {underperformingLevers.slice(0, 8).map((l) => (
+                    <div
+                      key={l.id}
+                      onClick={() => router.push(`/levers/detail?id=${l.id}`)}
+                      className="flex cursor-pointer items-start gap-3 border-b border-border py-2.5 last:border-b-0 hover:bg-neutral-50"
+                    >
+                      <Avatar initials={l.ownerInit} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="truncate text-[12.5px] font-semibold text-primary">
+                            {l.name}
+                          </div>
+                          <span className="flex-shrink-0 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10.5px] font-bold text-bp-coral">
+                            −{l.gap} {t("dashboard.widgets.gapPts")}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-3 text-[11px] text-secondary">
+                          <span>
+                            {t("dashboard.widgets.expectedProgress")} {l.expectedProgress}%
+                          </span>
+                          <span>→</span>
+                          <span>
+                            {t("dashboard.widgets.actualProgress")} {l.progress}%
+                          </span>
+                          <span className="ml-auto font-semibold text-bp-coral">
+                            {engine.fmtCurr(l.netSavings)} {t("dashboard.widgets.atRiskAmount")}
+                          </span>
+                        </div>
+                        <div className="mt-1.5">
+                          <ProgressBar pct={l.progress} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        );
+
+      case "dependency-alerts":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title={t("dashboard.widgets.dependencyAlerts")}
+              actions={
+                <span className="text-[10.5px] font-semibold text-tertiary">
+                  {depAlerts.length} alerte{depAlerts.length !== 1 ? "s" : ""}
+                </span>
+              }
+            />
+            <CardBody>
+              {depAlerts.length === 0 ? (
+                <p className="py-6 text-center text-sm text-tertiary">
+                  {t("dashboard.widgets.noDependencyAlerts")}
+                </p>
+              ) : (
+                <div className="flex flex-col gap-0">
+                  {depAlerts.slice(0, 8).map((a, i) => (
+                    <div
+                      key={`${a.sourceId}-${a.targetId}-${i}`}
+                      onClick={() => router.push(`/levers/detail?id=${a.sourceId}`)}
+                      className="flex cursor-pointer items-start gap-3 border-b border-border py-2.5 last:border-b-0 hover:bg-neutral-50"
+                    >
+                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-sm bg-bp-coral/10 text-bp-coral">
+                        <Unlink size={14} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12.5px] font-semibold text-primary">
+                          {a.sourceName}
+                          <span className="mx-1.5 text-tertiary">→</span>
+                          {a.targetName}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-secondary">{a.message}</div>
+                        <div className="mt-1 flex gap-2">
+                          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
+                            {a.type}
+                          </span>
+                          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
+                            {a.sourceKind}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        );
+
       default:
         return null;
     }
@@ -941,12 +1060,14 @@ export default function DashboardPage() {
           icon={Banknote}
           sub={`vs. cible ${engine.fmtCurr(summary.target)} · ${summary.progressPct}%`}
           barPct={summary.progressPct}
+          onClick={() => goToLevers({})}
         />
         <KPICard
           label={t("dashboard.kpi.leversDelivered")}
           value={`${summary.delivered} / ${summary.leverCount}`}
           icon={CircleCheck}
           accent="green"
+          onClick={() => goToLevers({ f_status: lifecycle.label("delivered") })}
         />
         <KPICard
           label={t("dashboard.kpi.leversAtRisk")}
@@ -954,6 +1075,7 @@ export default function DashboardPage() {
           icon={TriangleAlert}
           accent="amber"
           sub={`${summary.critical} critiques · à surveiller`}
+          onClick={() => setActiveTab("prioritization")}
         />
         <KPICard
           label={t("dashboard.kpi.capexEngaged")}
@@ -969,12 +1091,14 @@ export default function DashboardPage() {
               ? `+ ${engine.fmtCurr(summary.opex)} OPEX`
               : `+ ${engine.fmtCurr(summary.opex)} OPEX · budget non renseigné (voir Finance)`
           }
+          onClick={() => router.push("/finance")}
         />
         <KPICard
           label={t("dashboard.kpi.fteImpacted")}
           value={String(summary.fteImpact)}
           icon={Users}
           sub={`${engine.fmtInt(summary.popImpacted)} pers. concernées`}
+          onClick={() => router.push("/hr")}
         />
       </div>
 
@@ -1173,6 +1297,39 @@ export default function DashboardPage() {
         </div>
       </Modal>
 
+      {/* ── Tab bar (4 onglets CTO) ─────────────────────────────────────── */}
+      {!editMode && (
+        <div className="mb-4 flex gap-0 overflow-x-auto rounded-lg border border-border bg-white">
+          {DASHBOARD_TABS.map((tab) => {
+            const Icon = ICON_REGISTRY[tab.icon] ?? LayoutGrid;
+            const isActive = activeTab === tab.key;
+            const widgetCount = layout.filter((w) => WIDGET_DEFAULT_TAB[w.type] === tab.key).length;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex flex-1 items-center justify-center gap-2 border-b-2 px-4 py-3 text-[12.5px] font-semibold transition ${
+                  isActive
+                    ? "border-bp-coral bg-bp-coral/[0.04] text-bp-coral"
+                    : "border-transparent text-secondary hover:bg-neutral-50 hover:text-primary"
+                }`}
+              >
+                <Icon size={15} />
+                <span className="hidden sm:inline">{t(tab.labelKey)}</span>
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    isActive ? "bg-bp-coral/10 text-bp-coral" : "bg-neutral-100 text-tertiary"
+                  }`}
+                >
+                  {widgetCount}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* grid-flow-row-dense : comble automatiquement les trous laissés par un widget large suivi
           d'un widget étroit, sans avoir à réordonner manuellement le layout. Colonnes réduites en
           dessous de `lg`/`sm` (breakpoints Tailwind standards) — les classes col-span-* des widgets
@@ -1182,7 +1339,9 @@ export default function DashboardPage() {
         data-dashboard-widget-grid
         className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
       >
-        {layout.map((instance) => renderWidget(instance))}
+        {layout
+          .filter((instance) => editMode || WIDGET_DEFAULT_TAB[instance.type] === activeTab)
+          .map((instance) => renderWidget(instance))}
       </div>
     </div>
   );

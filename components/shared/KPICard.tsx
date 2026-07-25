@@ -27,6 +27,7 @@ export function KPICard({
   accent = "default",
   sub,
   barPct,
+  onClick,
 }: {
   label: string;
   value: string;
@@ -34,12 +35,24 @@ export function KPICard({
   accent?: "default" | "green" | "amber" | "red" | "brown";
   sub?: string;
   barPct?: number;
+  onClick?: () => void;
 }) {
   return (
     <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") onClick();
+            }
+          : undefined
+      }
       className={cn(
         "relative overflow-hidden rounded-lg border border-border bg-white p-4 shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
-        ACCENT[accent]
+        ACCENT[accent],
+        onClick && "cursor-pointer transition hover:border-border-strong hover:shadow-md"
       )}
     >
       <div className="mb-1.5 flex items-start justify-between gap-2">

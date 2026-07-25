@@ -40,7 +40,38 @@ export type DashboardWidgetType =
   | "geo-breakdown"
   | "workstream-table"
   | "dependencies"
-  | "pnl";
+  | "pnl"
+  | "underperformers"
+  | "dependency-alerts";
+
+/** Onglets du dashboard CTO — chaque widget est assigné à un onglet par défaut.
+ *  L'onglet actif filtre les widgets affichés dans la grille. */
+export type DashboardTab = "cockpit" | "trajectory" | "prioritization" | "portfolio";
+
+export const DASHBOARD_TABS: { key: DashboardTab; labelKey: string; icon: string }[] = [
+  { key: "cockpit", labelKey: "dashboard.tab.cockpit", icon: "Gauge" },
+  { key: "trajectory", labelKey: "dashboard.tab.trajectory", icon: "TrendingUp" },
+  { key: "prioritization", labelKey: "dashboard.tab.prioritization", icon: "Target" },
+  { key: "portfolio", labelKey: "dashboard.tab.portfolio", icon: "Layers" },
+];
+
+/** Mapping widget type → onglet par défaut. Les widgets hors de cette map apparaissent
+ *  dans tous les onglets (fallback = "cockpit"). */
+export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
+  "stage-funnel": "cockpit",
+  alerts: "cockpit",
+  "s-curve": "trajectory",
+  bridge: "trajectory",
+  sankey: "portfolio",
+  marimekko: "portfolio",
+  "workstream-breakdown": "portfolio",
+  "geo-breakdown": "portfolio",
+  "workstream-table": "portfolio",
+  dependencies: "prioritization",
+  pnl: "portfolio",
+  underperformers: "prioritization",
+  "dependency-alerts": "prioritization",
+};
 
 /** Une option d'indicateur/dimension pour un type de widget "configurable" (voir plus bas) — ex.
  * pour le Marimekko, la paire de dimensions "Fonction × Pays" vs "Workstream × Projet". */
@@ -253,6 +284,20 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
       },
     ],
     defaultView: "account",
+  },
+  {
+    type: "underperformers",
+    label: "Leviers sous-performants",
+    icon: "TrendingDown",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "dependency-alerts",
+    label: "Alertes de dépendances",
+    icon: "Unlink",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
   },
 ];
 
