@@ -442,6 +442,9 @@ export default function DashboardPage() {
         className={`relative ${SPAN_COL_CLASS[instance.span]} ${
           isDragOver ? "outline outline-2 outline-offset-2 outline-bp-coral" : ""
         }`}
+        style={{
+          gridColumn: `span ${instance.span === "XL" ? 4 : instance.span === "L" ? 3 : instance.span === "M" ? 2 : 1} / auto`,
+        }}
         draggable={editMode}
         onDragStart={() => setDragInstanceId(instance.instanceId)}
         onDragOver={(e) => {
