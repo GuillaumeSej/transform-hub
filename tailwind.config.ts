@@ -5,7 +5,9 @@ const config: Config = {
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./lib/**/*.{js,ts}",
   ],
+  safelist: ["col-span-1", "col-span-2", "col-span-3", "col-span-4"],
   theme: {
     extend: {
       // Marque BearingPoint : coins droits par défaut (flat, type-led). Les cartes/tables
