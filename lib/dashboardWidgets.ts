@@ -299,6 +299,20 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     excludeFromDefault: true,
   },
   {
+    type: "underperformers",
+    label: "Leviers sous-performants",
+    icon: "TrendingDown",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "dependency-alerts",
+    label: "Alertes de dépendances",
+    icon: "Unlink",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+  },
+  {
     type: "pnl",
     label: "Impact P&L par compte",
     icon: "LineChart",
@@ -317,20 +331,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
       },
     ],
     defaultView: "account",
-  },
-  {
-    type: "underperformers",
-    label: "Leviers sous-performants",
-    icon: "TrendingDown",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "dependency-alerts",
-    label: "Alertes de dépendances",
-    icon: "Unlink",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
   },
 ];
 
@@ -542,7 +542,7 @@ export function resolveActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const LAYOUT_KEY = "betrack_dashboard_layout_v8";
+const LAYOUT_KEY = "betrack_dashboard_layout_v9";
 
 const isBrowser = () => typeof window !== "undefined";
 
