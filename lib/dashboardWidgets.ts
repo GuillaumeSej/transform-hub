@@ -163,7 +163,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     label: "Alerts & Notifications",
     icon: "Bell",
     defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
+    allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "s-curve",
@@ -222,7 +222,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     label: "Savings par Workstream / Projet",
     icon: "Columns3",
     defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
+    allowedSpans: ["M", "L", "XL"],
     viewOptions: [
       { key: "workstream", labelKey: "dashboard.workstream" },
       { key: "project", labelKey: "dashboard.project" },
@@ -239,7 +239,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     label: "Savings par Pays / Fonction",
     icon: "PieChart",
     defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
+    allowedSpans: ["M", "L", "XL"],
     viewOptions: [
       { key: "country", labelKey: "dashboard.country" },
       { key: "function", labelKey: "dashboard.function" },
@@ -263,14 +263,14 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     label: "Dépendances inter-leviers",
     icon: "Link2",
     defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
+    allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "pnl",
     label: "Impact P&L par compte",
     icon: "LineChart",
     defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
+    allowedSpans: ["M", "L", "XL"],
     // Pas de viewOptions legacy (ce widget n'avait qu'une seule vue câblée en dur avant ce
     // changement) — seul builderDimensionCount + defaultCustomViews existent, donc "configurable"
     // au sens du builder générique mais pas au sens de l'ancien mécanisme viewOptions.
@@ -509,7 +509,7 @@ export function resolveActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const LAYOUT_KEY = "betrack_dashboard_layout_v2";
+const LAYOUT_KEY = "betrack_dashboard_layout_v3";
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -563,6 +563,14 @@ function sanitizeInstance(instance: DashboardWidgetInstance): DashboardWidgetIns
     : { ...instance, customViews: cleaned };
 }
 
+/** Corrige les spans trop étroits : "S" (1/4 de largeur) rend les graphiques illisibles —
+ *  on le remonte à "M" (1/2 largeur, max 2 widgets côte à côte). Appliqué systématiquement
+ *  au chargement pour couvrir les layouts persistés avant cette règle. */
+function migrateSpan(instance: DashboardWidgetInstance): DashboardWidgetInstance {
+  if (instance.span === "S") return { ...instance, span: "M" };
+  return instance;
+}
+
 /** Charge le layout personnalisé depuis localStorage. Retombe sur le layout par défaut si absent,
  * corrompu, ou si son contenu ne correspond plus au registre actuel (ex. widget renommé/retiré).
  * `customViews` de chaque instance est en plus assaini (voir `sanitizeInstance`) — un layout
@@ -577,7 +585,7 @@ export function loadDashboardLayout(): DashboardWidgetInstance[] {
     if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidInstance)) {
       return buildDefaultLayout();
     }
-    return (parsed as DashboardWidgetInstance[]).map(sanitizeInstance);
+    return (parsed as DashboardWidgetInstance[]).map(sanitizeInstance).map(migrateSpan);
   } catch {
     return buildDefaultLayout();
   }
