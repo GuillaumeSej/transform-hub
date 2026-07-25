@@ -4,6 +4,7 @@ import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  Legend,
   Line,
   ResponsiveContainer,
   Tooltip,
@@ -13,26 +14,46 @@ import {
 
 export type QuarterBridgePoint = { quarter: string; delta: number; cumulative: number };
 
-/** Économies par trimestre (barres) cumulées vers la cible (ligne) — clic sur une barre pour
- * creuser vers les leviers qui se terminent ce trimestre-là. */
+/** Économies par période (barres) cumulées vs plan initial (ligne pointillée).
+ *
+ * `plannedCumulative` remplace l'ancienne ligne plate `target` : c'est la courbe du plan initial
+ * cumulé, alignée sur les mêmes périodes que les données du bridge. Si non fournie, la ligne
+ * de plan n'est pas affichée (pas de fallback sur une droite plate).
+ *
+ * `barLabel` et `labelCumulative`/`labelPlanned` sont passables en props pour la traduction. */
 export function QuarterlyBridgeChart({
   data,
-  target,
   height = 240,
   onBarClick,
+  plannedCumulative,
+  barLabel = "Économies de la période",
+  labelCumulative = "Cumulé",
+  labelPlanned = "Plan initial",
 }: {
   data: QuarterBridgePoint[];
-  target: number;
   height?: number;
   onBarClick?: (quarter: string) => void;
+  /** Valeurs cumulées du plan initial, une par période — même longueur que `data`. */
+  plannedCumulative?: number[];
+  /** Label des barres (adapté à la granularité : "du mois" vs "du trimestre"). */
+  barLabel?: string;
+  /** Label de la ligne cumulative. */
+  labelCumulative?: string;
+  /** Label de la ligne plan initial. */
+  labelPlanned?: string;
 }) {
   if (data.length === 0) {
     return <p className="py-10 text-center text-sm text-tertiary">Aucun levier à représenter.</p>;
   }
-  const withTarget = data.map((d) => ({ ...d, target }));
+
+  const chartData = data.map((d, i) => ({
+    ...d,
+    ...(plannedCumulative ? { planned: plannedCumulative[i] ?? 0 } : {}),
+  }));
+
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={withTarget} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+      <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
         <XAxis dataKey="quarter" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <YAxis
@@ -42,9 +63,15 @@ export function QuarterlyBridgeChart({
           tickFormatter={(v) => `€${v}M`}
         />
         <Tooltip formatter={(value) => `€${value}M`} />
+        <Legend
+          verticalAlign="top"
+          align="right"
+          iconType="line"
+          wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
+        />
         <Bar
           dataKey="delta"
-          name="Économies du trimestre (€M)"
+          name={barLabel}
           fill="#FF3C47"
           radius={[3, 3, 0, 0]}
           onClick={(d) => {
@@ -56,20 +83,22 @@ export function QuarterlyBridgeChart({
         <Line
           type="monotone"
           dataKey="cumulative"
-          name="Cumulé (€M)"
+          name={labelCumulative}
           stroke="#806659"
           strokeWidth={2}
           dot={{ r: 3 }}
         />
-        <Line
-          type="monotone"
-          dataKey="target"
-          name="Cible (€M)"
-          stroke="#320300"
-          strokeWidth={1.5}
-          strokeDasharray="4 4"
-          dot={false}
-        />
+        {plannedCumulative && (
+          <Line
+            type="monotone"
+            dataKey="planned"
+            name={labelPlanned}
+            stroke="#320300"
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
+            dot={false}
+          />
+        )}
       </ComposedChart>
     </ResponsiveContainer>
   );

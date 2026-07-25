@@ -2,6 +2,7 @@
 
 import {
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -19,15 +20,23 @@ export type SCurvePoint = {
 
 /** S-Curve à 3 courbes — Plan initial (figé à L3), Réalisé à date, Réactualisé (prévision à jour,
  * éditable à partir de L4). Porté/étendu depuis le chart Chart.js `ch-scurve` du prototype legacy.
- * Clic sur un point (ou son mois) -> creuse vers les leviers qui se terminent ce mois-là. */
+ * Clic sur un point (ou son mois) -> creuse vers les leviers qui se terminent ce mois-là.
+ *
+ * Les labels des courbes sont passables en props pour la traduction (i18n). */
 export function SCurveChart({
   data,
   height = 260,
   onPointClick,
+  labelActual = "Réalisé",
+  labelPlanned = "Plan initial",
+  labelReforecast = "Réactualisé",
 }: {
   data: SCurvePoint[];
   height?: number;
   onPointClick?: (month: string) => void;
+  labelActual?: string;
+  labelPlanned?: string;
+  labelReforecast?: string;
 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -49,10 +58,16 @@ export function SCurveChart({
           tickFormatter={(v) => `€${v}M`}
         />
         <Tooltip formatter={(value, name) => [`€${value}M`, name]} />
+        <Legend
+          verticalAlign="top"
+          align="right"
+          iconType="line"
+          wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
+        />
         <Line
           type="monotone"
           dataKey="actual"
-          name="Réalisé (€M)"
+          name={labelActual}
           stroke="#FF3C47"
           strokeWidth={2.5}
           dot={{ r: 3 }}
@@ -62,7 +77,7 @@ export function SCurveChart({
         <Line
           type="monotone"
           dataKey="planned"
-          name="Plan initial (€M)"
+          name={labelPlanned}
           stroke="#806659"
           strokeWidth={2}
           strokeDasharray="6 4"
@@ -71,7 +86,7 @@ export function SCurveChart({
         <Line
           type="monotone"
           dataKey="reforecast"
-          name="Réactualisé (€M)"
+          name={labelReforecast}
           stroke="#320300"
           strokeWidth={2}
           strokeDasharray="2 3"

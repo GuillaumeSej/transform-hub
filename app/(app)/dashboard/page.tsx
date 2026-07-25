@@ -819,13 +819,27 @@ export default function DashboardPage() {
             />
             <CardBody>
               {trajView === "scurve" ? (
-                <SCurveChart data={trajSCurve} height={360} onPointClick={goToSCurvePoint} />
+                <SCurveChart
+                  data={trajSCurve}
+                  height={360}
+                  onPointClick={goToSCurvePoint}
+                  labelActual={t("chart.scurve.actual")}
+                  labelPlanned={t("chart.scurve.planned")}
+                  labelReforecast={t("chart.scurve.reforecast")}
+                />
               ) : (
                 <QuarterlyBridgeChart
                   data={trajBridge}
-                  target={summary.target}
                   height={340}
                   onBarClick={goToBridgePeriod}
+                  barLabel={
+                    trajGranularity === "month"
+                      ? t("chart.bridge.monthSavings")
+                      : t("chart.bridge.quarterSavings")
+                  }
+                  labelCumulative={t("chart.bridge.cumulative")}
+                  labelPlanned={t("chart.bridge.planned")}
+                  plannedCumulative={trajSCurve.map((p) => p.planned)}
                 />
               )}
             </CardBody>
@@ -842,7 +856,14 @@ export default function DashboardPage() {
               }
             />
             <CardBody>
-              <SCurveChart data={sCurve} height={360} onPointClick={goToSCurvePoint} />
+              <SCurveChart
+                data={sCurve}
+                height={360}
+                onPointClick={goToSCurvePoint}
+                labelActual={t("chart.scurve.actual")}
+                labelPlanned={t("chart.scurve.planned")}
+                labelReforecast={t("chart.scurve.reforecast")}
+              />
             </CardBody>
           </Card>
         );
@@ -863,9 +884,16 @@ export default function DashboardPage() {
             <CardBody>
               <QuarterlyBridgeChart
                 data={bridge}
-                target={summary.target}
                 height={340}
                 onBarClick={goToBridgePeriod}
+                barLabel={
+                  bridgeGranularity === "month"
+                    ? t("chart.bridge.monthSavings")
+                    : t("chart.bridge.quarterSavings")
+                }
+                labelCumulative={t("chart.bridge.cumulative")}
+                labelPlanned={t("chart.bridge.planned")}
+                plannedCumulative={sCurve.map((p) => p.planned)}
               />
             </CardBody>
           </Card>
