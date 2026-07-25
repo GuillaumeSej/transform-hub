@@ -18,11 +18,10 @@ const COLORS = [
 
 /** Vrai Marimekko à deux dimensions : la largeur des colonnes = poids de la dimension primaire
  * (ex. fonction), chaque colonne se décompose en segments empilés (dimension secondaire, ex.
- * pays) — porté depuis l'ancienne version 1D (largeur seule, "par fonction" figé). Clic sur un
- * segment pour creuser vers les leviers correspondant aux deux dimensions.
+ * pays). Clic sur un segment pour creuser vers les leviers correspondant aux deux dimensions.
  *
- * Les tooltips stylés remplacent le `title` HTML natif pour afficher le nom complet des colonnes
- * et segments tronqués. */
+ * Chaque segment et chaque label de colonne est wrappé dans un Tooltip stylé pour afficher le
+ * nom complet au survol (les labels sont souvent tronqués sur les colonnes étroites). */
 export function MarimekkoChart({
   data,
   height = 240,
@@ -47,11 +46,13 @@ export function MarimekkoChart({
             <Tooltip
               key={seg.key}
               text={`${col.label} — ${seg.label} : ${engine.fmtCurr(seg.value)} (${seg.count} levier${seg.count > 1 ? "s" : ""})`}
+              style={{ height: `${seg.heightPct}%` }}
+              className="flex w-full"
             >
               <button
                 onClick={() => onSegmentClick?.(col.key, seg.key)}
-                style={{ height: `${seg.heightPct}%`, backgroundColor: COLORS[i % COLORS.length] }}
-                className="group flex w-full flex-col justify-end p-1.5 text-left text-white transition hover:opacity-90"
+                style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                className="group flex h-full w-full flex-col justify-end p-1.5 text-left text-white transition hover:opacity-90"
               >
                 {seg.heightPct >= 12 && (
                   <span className="truncate text-[9.5px] font-semibold opacity-85">
@@ -66,8 +67,12 @@ export function MarimekkoChart({
               </button>
             </Tooltip>
           ))}
-          <Tooltip text={`${col.label} : ${engine.fmtCurr(col.totalSavings)}`} position="bottom">
-            <div className="mt-0.5 bg-neutral-100 px-1.5 py-1 text-center">
+          <Tooltip
+            text={`${col.label} : ${engine.fmtCurr(col.totalSavings)}`}
+            position="bottom"
+            className="mt-0.5 w-full"
+          >
+            <div className="w-full bg-neutral-100 px-1.5 py-1 text-center">
               <span className="block truncate text-[10px] font-semibold uppercase tracking-wide text-primary">
                 {col.label}
               </span>

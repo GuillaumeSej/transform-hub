@@ -16,14 +16,20 @@ export function Tooltip({
   text,
   position = "top",
   children,
+  className,
+  style,
 }: {
   text: string;
   position?: "top" | "bottom";
   children: ReactNode;
+  /** Classes Tailwind additionnelles sur le wrapper (ex. layout flex dans un Marimekko). */
+  className?: string;
+  /** Style inline sur le wrapper (ex. height en % dans un Marimekko). */
+  style?: React.CSSProperties;
 }) {
   if (!text) return <>{children}</>;
   return (
-    <span className="group/tip relative inline-flex">
+    <span className={cn("group/tip relative inline-flex", className)} style={style}>
       {children}
       <span
         className={cn(
