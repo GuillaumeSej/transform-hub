@@ -30,8 +30,8 @@ function TruncatedYTick(props: any) {
   );
 }
 
-/** Impact P&L par compte — 2 barres groupées horizontales : Plan (gris) vs Réalisé (coral).
- *  L'écart visuel entre les deux barres montre les retards ou sur-performances par ligne P&L. */
+/** Impact P&L par compte — barres horizontales empilées : le réalisé (coral) est superposé
+ *  sur le plan (gris). La portion grise visible = ce qui reste à réaliser pour atteindre le plan. */
 export function PnlBarChart({
   data,
   labelPlan = "Plan",
@@ -44,9 +44,19 @@ export function PnlBarChart({
   if (data.length === 0) {
     return <p className="py-10 text-center text-sm text-tertiary">Aucun impact à afficher.</p>;
   }
+
+  const chartData = data.map((d) => ({
+    ...d,
+    remaining: Math.max(0, Math.round((d.plan - d.realized) * 10) / 10),
+  }));
+
   return (
-    <ResponsiveContainer width="100%" height={Math.max(200, data.length * 48 + 40)}>
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={Math.max(200, data.length * 36 + 40)}>
+      <BarChart
+        data={chartData}
+        layout="vertical"
+        margin={{ top: 4, right: 16, left: 8, bottom: 0 }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" horizontal={false} />
         <XAxis
           type="number"
@@ -65,8 +75,20 @@ export function PnlBarChart({
         />
         <Tooltip formatter={(value) => `€${Number(value).toFixed(1)}M`} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Bar dataKey="plan" name={labelPlan} fill="rgba(168,154,147,0.5)" radius={[0, 4, 4, 0]} />
-        <Bar dataKey="realized" name={labelRealized} fill="#FF3C47" radius={[0, 4, 4, 0]} />
+        <Bar
+          dataKey="realized"
+          name={labelRealized}
+          stackId="a"
+          fill="#FF3C47"
+          radius={[0, 0, 0, 0]}
+        />
+        <Bar
+          dataKey="remaining"
+          name={labelPlan}
+          stackId="a"
+          fill="rgba(168,154,147,0.3)"
+          radius={[0, 4, 4, 0]}
+        />
       </BarChart>
     </ResponsiveContainer>
   );
