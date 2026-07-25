@@ -48,7 +48,8 @@ export type DashboardWidgetType =
   | "pnl"
   | "underperformers"
   | "dependency-alerts"
-  | "portfolio-funnel";
+  | "portfolio-funnel"
+  | "savings-trajectory";
 
 /** Onglets du dashboard CTO — chaque widget est assigné à un onglet par défaut.
  *  L'onglet actif filtre les widgets affichés dans la grille. */
@@ -67,6 +68,7 @@ export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   "portfolio-funnel": "cockpit",
   "stage-funnel": "cockpit",
   alerts: "cockpit",
+  "savings-trajectory": "trajectory",
   "s-curve": "trajectory",
   bridge: "trajectory",
   sankey: "portfolio",
@@ -185,11 +187,19 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     excludeFromDefault: true,
   },
   {
+    type: "savings-trajectory",
+    label: "Trajectoire des économies",
+    icon: "TrendingUp",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+  },
+  {
     type: "s-curve",
     label: "S-Curve — Plan initial / Réalisé / Réactualisé",
     icon: "TrendingUp",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
+    excludeFromDefault: true,
   },
   {
     type: "bridge",
@@ -197,6 +207,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "BarChart3",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
+    excludeFromDefault: true,
   },
   {
     type: "sankey",
@@ -527,7 +538,7 @@ export function resolveActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const LAYOUT_KEY = "betrack_dashboard_layout_v4";
+const LAYOUT_KEY = "betrack_dashboard_layout_v5";
 
 const isBrowser = () => typeof window !== "undefined";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useGlobalFilters, matchesGlobalFilters } from "@/lib/hooks/useGlobalFilters";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
@@ -304,6 +304,48 @@ export default function DashboardPage() {
     };
   }, [allAlerts]);
   const [sCurveGranularity, setSCurveGranularity] = useState<engine.TimeGranularity>("month");
+
+  // ── Trajectoire des économies (widget combiné S-curve + Bridge) ────────
+  const [trajView, setTrajView] = useState<"scurve" | "bridge">("scurve");
+  const [trajGranularity, setTrajGranularity] = useState<engine.TimeGranularity>("month");
+  const [trajRangeStart, setTrajRangeStart] = useState(data.program.fyStart);
+  const [trajRangeEnd, setTrajRangeEnd] = useState(data.program.fyEnd);
+
+  /** Convertit un label de période ("Jan 2026", "Q2 2026") en Date pour le filtrage. */
+  const labelToDate = useCallback(
+    (label: string, granularity: engine.TimeGranularity): Date => {
+      const parts = label.split(" ");
+      const year =
+        parseInt(parts[parts.length - 1]) || new Date(data.program.fyStart).getFullYear();
+      if (granularity === "quarter") {
+        const q = parseInt((parts[0] || "").replace("Q", "")) || 1;
+        return new Date(year, (q - 1) * 3, 1);
+      }
+      const monthIdx = engine.MONTH_LABELS.indexOf(parts[0]);
+      return new Date(year, monthIdx >= 0 ? monthIdx : 0, 1);
+    },
+    [data.program.fyStart]
+  );
+
+  const trajSCurve = useMemo(() => {
+    const full = engine.sCurve3(filteredData, trajGranularity);
+    const start = new Date(trajRangeStart);
+    const end = new Date(trajRangeEnd);
+    return full.filter((p) => {
+      const d = labelToDate(p.month, trajGranularity);
+      return d >= start && d <= end;
+    });
+  }, [filteredData, trajGranularity, trajRangeStart, trajRangeEnd, labelToDate]);
+
+  const trajBridge = useMemo(() => {
+    const full = engine.financialBridge(filteredData, trajGranularity);
+    const start = new Date(trajRangeStart);
+    const end = new Date(trajRangeEnd);
+    return full.filter((p) => {
+      const d = labelToDate(p.quarter, trajGranularity);
+      return d >= start && d <= end;
+    });
+  }, [filteredData, trajGranularity, trajRangeStart, trajRangeEnd, labelToDate]);
   const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
   const sCurve = engine.sCurve3(visibleData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
@@ -723,6 +765,68 @@ export default function DashboardPage() {
                     </div>
                   )}
                 </>
+              )}
+            </CardBody>
+          </Card>
+        );
+      case "savings-trajectory":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title={t("dashboard.widgets.savingsTrajectory")}
+              actions={
+                <div className="flex items-center gap-2">
+                  {/* Toggle S-Curve / Bridge */}
+                  <div className="flex rounded-md border border-border-strong p-0.5 text-[11px] font-semibold">
+                    {(["scurve", "bridge"] as const).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => setTrajView(v)}
+                        className={`rounded px-2 py-1 transition ${
+                          trajView === v
+                            ? "bg-bp-coral text-white"
+                            : "text-secondary hover:text-primary"
+                        }`}
+                      >
+                        {v === "scurve"
+                          ? t("dashboard.widgets.viewSCurve")
+                          : t("dashboard.widgets.viewBridge")}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Granularité Mois / Trimestre */}
+                  <GranularityToggle value={trajGranularity} onChange={setTrajGranularity} />
+                  {/* Range picker libre */}
+                  <div className="flex items-center gap-1 text-[10.5px] text-secondary">
+                    <span className="font-semibold">{t("dashboard.widgets.dateFrom")}</span>
+                    <input
+                      type="date"
+                      value={trajRangeStart}
+                      onChange={(e) => setTrajRangeStart(e.target.value || data.program.fyStart)}
+                      className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] focus:border-bp-coral focus:outline-none"
+                    />
+                    <span className="font-semibold">{t("dashboard.widgets.dateTo")}</span>
+                    <input
+                      type="date"
+                      value={trajRangeEnd}
+                      onChange={(e) => setTrajRangeEnd(e.target.value || data.program.fyEnd)}
+                      className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] focus:border-bp-coral focus:outline-none"
+                    />
+                  </div>
+                </div>
+              }
+            />
+            <CardBody>
+              {trajView === "scurve" ? (
+                <SCurveChart data={trajSCurve} height={360} onPointClick={goToSCurvePoint} />
+              ) : (
+                <QuarterlyBridgeChart
+                  data={trajBridge}
+                  target={summary.target}
+                  height={340}
+                  onBarClick={goToBridgePeriod}
+                />
               )}
             </CardBody>
           </Card>
