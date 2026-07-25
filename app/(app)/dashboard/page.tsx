@@ -48,7 +48,7 @@ import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { AlertItem } from "@/components/shared/AlertItem";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { generateAlerts } from "@/lib/alertEngine";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
@@ -236,6 +236,27 @@ export default function DashboardPage() {
 
   const summary = engine.programSummary(filteredData);
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
+
+  // ── Tri des leviers sous-performants ───────────────────────────────────
+  const [underSort, setUnderSort] = useState<"gap" | "savings">("gap");
+  const [underSortDir, setUnderSortDir] = useState<"asc" | "desc">("desc");
+  const sortedUnderperformers = useMemo(() => {
+    const sorted = [...underperformingLevers];
+    sorted.sort((a, b) => {
+      const va = underSort === "gap" ? a.gap : a.netSavings;
+      const vb = underSort === "gap" ? b.gap : b.netSavings;
+      return underSortDir === "desc" ? vb - va : va - vb;
+    });
+    return sorted;
+  }, [underperformingLevers, underSort, underSortDir]);
+  const toggleUnderSort = (field: "gap" | "savings") => {
+    if (underSort === field) {
+      setUnderSortDir((prev) => (prev === "desc" ? "asc" : "desc"));
+    } else {
+      setUnderSort(field);
+      setUnderSortDir("desc");
+    }
+  };
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
 
   // ── Alertes enrichies (manuelles + auto-générées) ──────────────────────────
@@ -1266,20 +1287,42 @@ export default function DashboardPage() {
             <CardHeader
               title={t("dashboard.widgets.underperformers")}
               actions={
-                <span className="text-[10.5px] font-semibold text-tertiary">
-                  {underperformingLevers.length}{" "}
-                  {t("dashboard.widgets.underperformers").toLowerCase()}
-                </span>
+                <div className="flex items-center gap-2">
+                  {/* Boutons de tri */}
+                  {(["gap", "savings"] as const).map((field) => {
+                    const isActive = underSort === field;
+                    const Icon = isActive && underSortDir === "asc" ? ArrowUp : ArrowDown;
+                    return (
+                      <button
+                        key={field}
+                        onClick={() => toggleUnderSort(field)}
+                        className={`flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10.5px] font-semibold transition ${
+                          isActive
+                            ? "bg-bp-coral/10 text-bp-coral"
+                            : "text-tertiary hover:bg-neutral-100 hover:text-secondary"
+                        }`}
+                      >
+                        <Icon size={11} />
+                        {field === "gap"
+                          ? t("dashboard.widgets.sortByDelay")
+                          : t("dashboard.widgets.sortBySavings")}
+                      </button>
+                    );
+                  })}
+                  <span className="text-[10.5px] font-semibold text-tertiary">
+                    {underperformingLevers.length}
+                  </span>
+                </div>
               }
             />
             <CardBody>
-              {underperformingLevers.length === 0 ? (
+              {sortedUnderperformers.length === 0 ? (
                 <p className="py-6 text-center text-sm text-tertiary">
                   {t("dashboard.widgets.noUnderperformers")}
                 </p>
               ) : (
                 <div className="flex flex-col gap-0">
-                  {underperformingLevers.slice(0, 8).map((l) => (
+                  {sortedUnderperformers.slice(0, 8).map((l) => (
                     <div
                       key={l.id}
                       onClick={() => router.push(`/levers/detail?id=${l.id}`)}

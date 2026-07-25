@@ -174,6 +174,8 @@ const fr: Record<string, string> = {
     "Leviers dont la progression réelle est inférieure de plus de 10 points à la progression attendue",
   "dashboard.widgets.noUnderperformers":
     "Aucun levier en sous-performance — tous les leviers sont dans les clous",
+  "dashboard.widgets.sortByDelay": "Retard",
+  "dashboard.widgets.sortBySavings": "Savings",
   "dashboard.widgets.dependencyAlerts": "Alertes de dépendances",
   "dashboard.widgets.noDependencyAlerts": "Aucun conflit de dépendances détecté",
   "dashboard.widgets.expectedProgress": "Attendu",

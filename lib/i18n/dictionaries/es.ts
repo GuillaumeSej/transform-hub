@@ -143,6 +143,8 @@ const es: Record<string, string> = {
   "alerts.tooltip.severity.amber": "A vigilar — riesgo identificado",
   "alerts.tooltip.severity.green": "Positiva — avance confirmado",
   "alerts.tooltip.severity.blue": "Informativa — actualización",
+  "dashboard.widgets.sortByDelay": "Retraso",
+  "dashboard.widgets.sortBySavings": "Ahorros",
   "dashboard.widgets.sCurve": "Curva S — Plan inicial / Realizado / Reactualizado",
   "dashboard.widgets.bridgeQuarter": "Ahorros por trimestre → objetivo",
   "dashboard.widgets.bridgeMonth": "Ahorros por mes → objetivo",

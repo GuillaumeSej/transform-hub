@@ -165,6 +165,8 @@ const en: Record<string, string> = {
   "dashboard.widgets.underperformersDesc":
     "Initiatives whose actual progress lags expected progress by more than 10 points",
   "dashboard.widgets.noUnderperformers": "No underperformers — all initiatives are on track",
+  "dashboard.widgets.sortByDelay": "Delay",
+  "dashboard.widgets.sortBySavings": "Savings",
   "dashboard.widgets.dependencyAlerts": "Dependency alerts",
   "dashboard.widgets.noDependencyAlerts": "No dependency conflicts detected",
   "dashboard.widgets.expectedProgress": "Expected",
