@@ -63,25 +63,32 @@ export function KPICard({
           : undefined
       }
       className={cn(
-        "relative overflow-hidden rounded-lg border border-border bg-white p-4 shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
+        "relative flex flex-col overflow-hidden rounded-lg border border-border bg-white p-4 shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
         ACCENT[accent],
         onClick && "cursor-pointer transition hover:border-border-strong hover:shadow-md"
       )}
     >
-      <div className="mb-1.5 flex items-start justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-secondary">
-          {label}
-        </span>
-        <div
-          className={cn("flex h-7 w-7 items-center justify-center rounded-sm", ICON_STYLE[accent])}
-        >
-          <Icon size={14} />
+      {/* Contenu textuel — occupe le haut du widget */}
+      <div>
+        <div className="mb-1.5 flex items-start justify-between gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-secondary">
+            {label}
+          </span>
+          <div
+            className={cn(
+              "flex h-7 w-7 items-center justify-center rounded-sm",
+              ICON_STYLE[accent]
+            )}
+          >
+            <Icon size={14} />
+          </div>
         </div>
+        <div className="text-2xl font-bold leading-tight tracking-tight text-primary">{value}</div>
+        {sub && <div className="mt-0.5 text-[11px] text-tertiary">{sub}</div>}
       </div>
-      <div className="text-2xl font-bold leading-tight tracking-tight text-primary">{value}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-tertiary">{sub}</div>}
+      {/* Barre de progression — ancrée en bas du widget via mt-auto */}
       {barSegments && barSegments.length > 0 ? (
-        <div className="mt-2.5 flex h-1.5 overflow-hidden rounded-full bg-neutral-100">
+        <div className="mt-auto flex h-1.5 overflow-hidden rounded-full bg-neutral-100 pt-0">
           {barSegments.map((seg, i) => (
             <div
               key={i}
@@ -92,7 +99,7 @@ export function KPICard({
         </div>
       ) : (
         barPct !== undefined && (
-          <div className="relative mt-2.5 h-1.5 overflow-visible rounded-full bg-neutral-100">
+          <div className="relative mt-auto h-1.5 overflow-visible rounded-full bg-neutral-100">
             <div
               className="h-full rounded-full bg-bp-coral"
               style={{ width: `${Math.min(100, Math.max(0, barPct))}%` }}

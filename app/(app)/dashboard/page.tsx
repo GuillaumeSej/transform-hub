@@ -1207,12 +1207,12 @@ export default function DashboardPage() {
       </div>
 
       <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2 max-[500px]:grid-cols-1">
-        {/* 1. Économies réalisées — cible + reforecast (marqueur sur la barre) */}
+        {/* 1. Économies réalisées — cible + reforecast + % (marqueur sur la barre) */}
         <KPICard
           label={t("dashboard.kpi.savingsRealized")}
           value={engine.fmtCurr(summary.realized)}
           icon={Banknote}
-          sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)}`}
+          sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)} · ${summary.progressPct}%`}
           barPct={summary.progressPct}
           barMarkerPct={
             summary.target > 0
@@ -1221,13 +1221,13 @@ export default function DashboardPage() {
           }
           onClick={() => goToLevers({})}
         />
-        {/* 2. CAPEX & coûts one-off — engagé vs plan, marqueur reforecast */}
+        {/* 2. CAPEX & coûts one-off — engagé vs plan + % + marqueur reforecast */}
         <KPICard
           label={t("dashboard.kpi.implementationCosts")}
           value={engine.fmtCurr(summary.engagedCosts)}
           icon={TrendingUp}
           accent="brown"
-          sub={`${t("dashboard.kpi.plan")} ${engine.fmtCurr(summary.plannedCosts)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastCosts)}`}
+          sub={`${t("dashboard.kpi.plan")} ${engine.fmtCurr(summary.plannedCosts)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastCosts)} · ${summary.plannedCosts > 0 ? Math.round((summary.engagedCosts / summary.plannedCosts) * 100) : 0}%`}
           barPct={
             summary.plannedCosts > 0
               ? Math.round((summary.engagedCosts / summary.plannedCosts) * 100)
@@ -1240,12 +1240,13 @@ export default function DashboardPage() {
           }
           onClick={() => router.push("/finance")}
         />
-        {/* 3. Leviers réalisés — barre delivered/total */}
+        {/* 3. Leviers réalisés — barre delivered/total + % */}
         <KPICard
           label={t("dashboard.kpi.leversDelivered")}
           value={`${summary.delivered} / ${summary.leverCount}`}
           icon={CircleCheck}
           accent="green"
+          sub={`${summary.leverCount > 0 ? Math.round((summary.delivered / summary.leverCount) * 100) : 0}%`}
           barPct={
             summary.leverCount > 0 ? Math.round((summary.delivered / summary.leverCount) * 100) : 0
           }
@@ -1269,12 +1270,12 @@ export default function DashboardPage() {
           })()}
           onClick={() => goToLevers({})}
         />
-        {/* 5. ETP impactés — suppressions réalisées vs prévues */}
+        {/* 5. ETP impactés — fteImpact comme valeur, suppressions comme barre + % */}
         <KPICard
           label={t("dashboard.kpi.fteImpacted")}
           value={String(summary.fteImpact)}
           icon={Users}
-          sub={`${engine.fmtInt(summary.suppressionsRealized)} / ${engine.fmtInt(summary.suppressionsPlanned)} ${t("dashboard.kpi.suppressions")}`}
+          sub={`${engine.fmtInt(summary.suppressionsRealized)} / ${engine.fmtInt(summary.suppressionsPlanned)} ${t("dashboard.kpi.suppressions")} · ${summary.suppressionsPlanned > 0 ? Math.round((summary.suppressionsRealized / summary.suppressionsPlanned) * 100) : 0}%`}
           barPct={
             summary.suppressionsPlanned > 0
               ? Math.round((summary.suppressionsRealized / summary.suppressionsPlanned) * 100)
