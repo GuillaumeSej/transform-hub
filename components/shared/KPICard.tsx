@@ -19,7 +19,16 @@ const ICON_STYLE: Record<string, string> = {
   brown: "bg-neutral-100 text-primary",
 };
 
-/** Carte KPI — porté depuis `.kpi` du prototype legacy (Executive Dashboard). */
+/** Segment coloré d'une barre multi-catégories (ex. répartition des leviers à risque
+ *  par catégorie : délais / surcoûts / savings réduits). `pct` en % de la largeur totale. */
+export type KPIBarSegment = { pct: number; className: string };
+
+/** Carte KPI — porté depuis `.kpi` du prototype legacy (Executive Dashboard).
+ *
+ *  Barres de progression (exclusives, par ordre de priorité) :
+ *  - `barSegments` : barre multi-segments colorés (répartitions par catégorie) ;
+ *  - `barPct` : barre de progression simple, avec en option `barMarkerPct` — un trait
+ *    vertical matérialisant une valeur de référence (ex. reforecast vs cible). */
 export function KPICard({
   label,
   value,
@@ -27,6 +36,8 @@ export function KPICard({
   accent = "default",
   sub,
   barPct,
+  barMarkerPct,
+  barSegments,
   onClick,
 }: {
   label: string;
@@ -35,6 +46,8 @@ export function KPICard({
   accent?: "default" | "green" | "amber" | "red" | "brown";
   sub?: string;
   barPct?: number;
+  barMarkerPct?: number;
+  barSegments?: KPIBarSegment[];
   onClick?: () => void;
 }) {
   return (
@@ -67,13 +80,32 @@ export function KPICard({
       </div>
       <div className="text-2xl font-bold leading-tight tracking-tight text-primary">{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-tertiary">{sub}</div>}
-      {barPct !== undefined && (
-        <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-neutral-100">
-          <div
-            className="h-full rounded-full bg-bp-coral"
-            style={{ width: `${Math.min(100, barPct)}%` }}
-          />
+      {barSegments && barSegments.length > 0 ? (
+        <div className="mt-2.5 flex h-1.5 overflow-hidden rounded-full bg-neutral-100">
+          {barSegments.map((seg, i) => (
+            <div
+              key={i}
+              className={cn("h-full", seg.className)}
+              style={{ width: `${Math.max(0, Math.min(100, seg.pct))}%` }}
+            />
+          ))}
         </div>
+      ) : (
+        barPct !== undefined && (
+          <div className="relative mt-2.5 h-1.5 overflow-visible rounded-full bg-neutral-100">
+            <div
+              className="h-full rounded-full bg-bp-coral"
+              style={{ width: `${Math.min(100, Math.max(0, barPct))}%` }}
+            />
+            {barMarkerPct !== undefined && (
+              <div
+                className="absolute -top-0.5 h-2.5 w-[2px] bg-neutral-700"
+                style={{ left: `${Math.min(100, Math.max(0, barMarkerPct))}%` }}
+                title="Reforecast"
+              />
+            )}
+          </div>
+        )
       )}
     </div>
   );

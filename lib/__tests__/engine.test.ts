@@ -19,6 +19,7 @@ import {
   fmtCurr,
   fmtPct,
   fmtInt,
+  programSummary,
 } from "@/lib/engine";
 import { STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type { BeTrackData, Lever, Project, SubLever, LeverStatus } from "@/types";
@@ -512,5 +513,179 @@ describe("engine — marimekko2D", () => {
       ],
     });
     expect(marimekko2D(data, "function-country")).toHaveLength(0);
+  });
+});
+
+describe("engine — programSummary (reforecast, coûts, risques, suppressions)", () => {
+  it("reforecastTarget falls back netSavings → lockedPlan → reforecast", () => {
+    const data = makeData({
+      levers: [
+        // Pas de plan figé ni reforecast → netSavings courant
+        { ...baseLever, id: "L001", netSavings: 8 },
+        // Plan figé sans reforecast → lockedPlan.netSavings
+        {
+          ...baseLever,
+          id: "L002",
+          netSavings: 6,
+          lockedPlan: { grossSavings: 7, netSavings: 5, opexOneOff: 1, opexRec: 0.5, capex: 2 },
+        },
+        // Reforecast présent → reforecast.netSavings
+        {
+          ...baseLever,
+          id: "L003",
+          netSavings: 4,
+          lockedPlan: { grossSavings: 5, netSavings: 4, opexOneOff: 1, opexRec: 0.5, capex: 1 },
+          reforecast: { grossSavings: 4, netSavings: 3, opexOneOff: 1, opexRec: 0.5, capex: 1 },
+        },
+      ],
+    });
+    const s = programSummary(data);
+    expect(s.reforecastTarget).toBe(8 + 5 + 3);
+  });
+
+  it("plannedCosts uses lockedPlan capex+opexOneOff, engagedCosts scales with progress", () => {
+    const data = makeData({
+      levers: [
+        {
+          ...baseLever,
+          id: "L001",
+          capex: 3,
+          opexOneOff: 1,
+          progress: 50,
+          lockedPlan: { grossSavings: 10, netSavings: 8, opexOneOff: 2, opexRec: 0.5, capex: 4 },
+        },
+      ],
+    });
+    const s = programSummary(data);
+    expect(s.plannedCosts).toBe(6); // lockedPlan: 4 + 2
+    expect(s.engagedCosts).toBe(2); // courant (3+1) × 50%
+  });
+
+  it("engagedCosts counts 100% for delivered levers regardless of progress", () => {
+    const data = makeData({
+      levers: [
+        {
+          ...baseLever,
+          id: "L001",
+          status: "delivered" as LeverStatus,
+          capex: 2,
+          opexOneOff: 1,
+          progress: 90,
+        },
+      ],
+    });
+    expect(programSummary(data).engagedCosts).toBe(3);
+  });
+
+  it("riskCostOverrun and riskSavingsCut compare reforecast vs lockedPlan", () => {
+    const plan = { grossSavings: 10, netSavings: 8, opexOneOff: 1, opexRec: 0.5, capex: 2 };
+    const data = makeData({
+      levers: [
+        // Surcoût : reforecast coûts (5) > plan (3)
+        {
+          ...baseLever,
+          id: "L001",
+          lockedPlan: plan,
+          reforecast: { ...plan, capex: 4 },
+        },
+        // Savings réduits : reforecast net (6) < plan (8)
+        {
+          ...baseLever,
+          id: "L002",
+          lockedPlan: plan,
+          reforecast: { ...plan, netSavings: 6 },
+        },
+        // Ni l'un ni l'autre
+        { ...baseLever, id: "L003", lockedPlan: plan, reforecast: { ...plan } },
+        // Sans reforecast → jamais compté
+        { ...baseLever, id: "L004", lockedPlan: plan },
+      ],
+    });
+    const s = programSummary(data);
+    expect(s.riskCostOverrun).toBe(1);
+    expect(s.riskSavingsCut).toBe(1);
+  });
+
+  it("suppressions aggregate FTE of Suppression movements, realized = status Réalisé", () => {
+    const data = makeData({
+      workforce: {
+        totalFTE: 200,
+        massSalary: 15,
+        budgetSalary: 16,
+        departments: [],
+        employees: [],
+        movements: [
+          {
+            id: "MV1",
+            empId: "EMP1",
+            label: "A",
+            leverId: "L001",
+            type: "Suppression",
+            fte: 3,
+            department: "Prod",
+            country: "France",
+            hrOwner: "HR",
+            plannedDate: "2026-06-30",
+            actualDate: "2026-06-15",
+            status: "Réalisé",
+            hrValidated: true,
+            salaryImpact: -100000,
+            savings: 100000,
+            cost: 20000,
+          },
+          {
+            id: "MV2",
+            empId: "EMP2",
+            label: "B",
+            leverId: "L001",
+            type: "Suppression",
+            fte: 2,
+            department: "Prod",
+            country: "France",
+            hrOwner: "HR",
+            plannedDate: "2026-09-30",
+            actualDate: null,
+            status: "Planifié",
+            hrValidated: false,
+            salaryImpact: -80000,
+            savings: 80000,
+            cost: 15000,
+          },
+          {
+            id: "MV3",
+            empId: "EMP3",
+            label: "C",
+            leverId: "L001",
+            type: "Recrutement",
+            fte: 1,
+            department: "IT",
+            country: "France",
+            hrOwner: "HR",
+            plannedDate: "2026-09-30",
+            actualDate: null,
+            status: "Planifié",
+            hrValidated: false,
+            salaryImpact: 60000,
+            savings: 0,
+            cost: 10000,
+          },
+        ],
+      },
+    });
+    const s = programSummary(data);
+    expect(s.suppressionsPlanned).toBe(5); // 3 + 2, le Recrutement est exclu
+    expect(s.suppressionsRealized).toBe(3);
+  });
+
+  it("cancelled levers are excluded from all cost aggregates", () => {
+    const data = makeData({
+      levers: [
+        { ...baseLever, id: "L001", status: "cancelled" as LeverStatus, capex: 10, opexOneOff: 5 },
+      ],
+    });
+    const s = programSummary(data);
+    expect(s.plannedCosts).toBe(0);
+    expect(s.engagedCosts).toBe(0);
+    expect(s.reforecastCosts).toBe(0);
   });
 });

@@ -38,6 +38,25 @@ export function worstRisk(levers: Lever[]): RiskLevel {
   return levers.reduce<RiskLevel>((w, l) => (order[l.risk] > order[w] ? l.risk : w), "low");
 }
 
+/** Coûts d'implémentation d'un levier (CAPEX + OPEX one-off), hors OPEX récurrent. */
+function implementationCosts(snapshot: { capex: number; opexOneOff: number }): number {
+  return snapshot.capex + snapshot.opexOneOff;
+}
+
+/** Retard planning d'un levier in_progress : écart entre progression attendue (proportion du
+ *  temps écoulé start→end) et progression réelle. Même logique que underperformers(). */
+function scheduleGap(lever: Lever): number {
+  if (lever.status !== "in_progress") return 0;
+  const start = new Date(lever.start).getTime();
+  const end = new Date(lever.end).getTime();
+  if (end <= start) return 0;
+  const expected = Math.min(
+    100,
+    Math.max(0, Math.round(((DEMO_NOW - start) / (end - start)) * 100))
+  );
+  return expected - lever.progress;
+}
+
 export function programSummary(data: BeTrackData): ProgramSummary {
   const active = data.levers.filter((l) => l.status !== "cancelled");
   const target = active.reduce((s, l) => s + l.netSavings, 0);
@@ -46,6 +65,43 @@ export function programSummary(data: BeTrackData): ProgramSummary {
   const opex = active.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
   const fteImpact = active.reduce((s, l) => s + l.fteImpact, 0);
   const popImpacted = active.reduce((s, l) => s + l.popImpacted, 0);
+
+  // Cible réactualisée — même chaîne de repli que la courbe "Réactualisé" de sCurve3.
+  const reforecastTarget = active.reduce(
+    (s, l) => s + (l.reforecast?.netSavings ?? l.lockedPlan?.netSavings ?? l.netSavings),
+    0
+  );
+
+  // Coûts d'implémentation (CAPEX + one-off, jamais l'OPEX récurrent) : plan / engagé / reforecast.
+  const plannedCosts = active.reduce((s, l) => s + implementationCosts(l.lockedPlan ?? l), 0);
+  const engagedCosts = active.reduce(
+    (s, l) => s + implementationCosts(l) * (l.status === "delivered" ? 1 : l.progress / 100),
+    0
+  );
+  const reforecastCosts = active.reduce(
+    (s, l) => s + implementationCosts(l.reforecast ?? l.lockedPlan ?? l),
+    0
+  );
+
+  // Catégories de risque dérivées (un levier peut cumuler plusieurs catégories).
+  const riskDelay = active.filter((l) => scheduleGap(l) > 10).length;
+  const riskCostOverrun = active.filter(
+    (l) =>
+      l.reforecast &&
+      l.lockedPlan &&
+      implementationCosts(l.reforecast) > implementationCosts(l.lockedPlan)
+  ).length;
+  const riskSavingsCut = active.filter(
+    (l) => l.reforecast && l.lockedPlan && l.reforecast.netSavings < l.lockedPlan.netSavings
+  ).length;
+
+  // Suppressions de postes (mouvements RH type "Suppression"), en ETP.
+  const suppressionMoves = data.workforce.movements.filter((m) => m.type === "Suppression");
+  const suppressionsPlanned = suppressionMoves.reduce((s, m) => s + m.fte, 0);
+  const suppressionsRealized = suppressionMoves
+    .filter((m) => m.status === "Réalisé")
+    .reduce((s, m) => s + m.fte, 0);
+
   return {
     target: Math.round(target * 10) / 10,
     realized: Math.round(realized * 10) / 10,
@@ -59,6 +115,15 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     atRisk: active.filter((l) => l.risk === "medium" || l.risk === "high").length,
     critical: active.filter((l) => l.risk === "critical").length,
     delivered: data.levers.filter((l) => l.status === "delivered").length,
+    reforecastTarget: Math.round(reforecastTarget * 10) / 10,
+    plannedCosts: Math.round(plannedCosts * 10) / 10,
+    engagedCosts: Math.round(engagedCosts * 10) / 10,
+    reforecastCosts: Math.round(reforecastCosts * 10) / 10,
+    riskDelay,
+    riskCostOverrun,
+    riskSavingsCut,
+    suppressionsPlanned: Math.round(suppressionsPlanned * 10) / 10,
+    suppressionsRealized: Math.round(suppressionsRealized * 10) / 10,
   };
 }
 

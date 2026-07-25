@@ -1053,50 +1053,79 @@ export default function DashboardPage() {
       </div>
 
       <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2 max-[500px]:grid-cols-1">
+        {/* 1. Économies réalisées — cible + reforecast (marqueur sur la barre) */}
         <KPICard
           label={t("dashboard.kpi.savingsRealized")}
           value={engine.fmtCurr(summary.realized)}
           icon={Banknote}
-          sub={`vs. cible ${engine.fmtCurr(summary.target)} · ${summary.progressPct}%`}
+          sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)}`}
           barPct={summary.progressPct}
+          barMarkerPct={
+            summary.target > 0
+              ? Math.round((summary.reforecastTarget / summary.target) * 100)
+              : undefined
+          }
           onClick={() => goToLevers({})}
         />
+        {/* 2. CAPEX & coûts one-off — engagé vs plan, marqueur reforecast */}
+        <KPICard
+          label={t("dashboard.kpi.implementationCosts")}
+          value={engine.fmtCurr(summary.engagedCosts)}
+          icon={TrendingUp}
+          accent="brown"
+          sub={`${t("dashboard.kpi.plan")} ${engine.fmtCurr(summary.plannedCosts)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastCosts)}`}
+          barPct={
+            summary.plannedCosts > 0
+              ? Math.round((summary.engagedCosts / summary.plannedCosts) * 100)
+              : 0
+          }
+          barMarkerPct={
+            summary.plannedCosts > 0
+              ? Math.round((summary.reforecastCosts / summary.plannedCosts) * 100)
+              : undefined
+          }
+          onClick={() => router.push("/finance")}
+        />
+        {/* 3. Leviers réalisés — barre delivered/total */}
         <KPICard
           label={t("dashboard.kpi.leversDelivered")}
           value={`${summary.delivered} / ${summary.leverCount}`}
           icon={CircleCheck}
           accent="green"
+          barPct={
+            summary.leverCount > 0 ? Math.round((summary.delivered / summary.leverCount) * 100) : 0
+          }
           onClick={() => goToLevers({ f_status: lifecycle.label("delivered") })}
         />
+        {/* 4. Leviers à risque — barre segmentée par catégorie (délais / surcoûts / savings) */}
         <KPICard
           label={t("dashboard.kpi.leversAtRisk")}
-          value={String(summary.atRisk)}
+          value={String(summary.atRisk + summary.critical)}
           icon={TriangleAlert}
           accent="amber"
-          sub={`${summary.critical} critiques · à surveiller`}
+          sub={`${summary.riskDelay} ${t("dashboard.kpi.riskDelay")} · ${summary.riskCostOverrun} ${t("dashboard.kpi.riskCost")} · ${summary.riskSavingsCut} ${t("dashboard.kpi.riskSavings")}`}
+          barSegments={(() => {
+            const totalRisk = summary.riskDelay + summary.riskCostOverrun + summary.riskSavingsCut;
+            if (totalRisk === 0) return [];
+            return [
+              { pct: (summary.riskDelay / totalRisk) * 100, className: "bg-rag-amber" },
+              { pct: (summary.riskCostOverrun / totalRisk) * 100, className: "bg-rag-red" },
+              { pct: (summary.riskSavingsCut / totalRisk) * 100, className: "bg-bp-warm-brown" },
+            ];
+          })()}
           onClick={() => goToLevers({})}
         />
-        <KPICard
-          label={t("dashboard.kpi.capexEngaged")}
-          value={
-            company?.capexBudget != null
-              ? `${engine.fmtCurr(summary.capex)} / ${engine.fmtCurr(company.capexBudget)}`
-              : engine.fmtCurr(summary.capex)
-          }
-          icon={TrendingUp}
-          accent="brown"
-          sub={
-            company?.capexBudget != null
-              ? `+ ${engine.fmtCurr(summary.opex)} OPEX`
-              : `+ ${engine.fmtCurr(summary.opex)} OPEX · budget non renseigné (voir Finance)`
-          }
-          onClick={() => router.push("/finance")}
-        />
+        {/* 5. ETP impactés — suppressions réalisées vs prévues */}
         <KPICard
           label={t("dashboard.kpi.fteImpacted")}
           value={String(summary.fteImpact)}
           icon={Users}
-          sub={`${engine.fmtInt(summary.popImpacted)} pers. concernées`}
+          sub={`${engine.fmtInt(summary.suppressionsRealized)} / ${engine.fmtInt(summary.suppressionsPlanned)} ${t("dashboard.kpi.suppressions")}`}
+          barPct={
+            summary.suppressionsPlanned > 0
+              ? Math.round((summary.suppressionsRealized / summary.suppressionsPlanned) * 100)
+              : 0
+          }
           onClick={() => router.push("/hr")}
         />
       </div>
