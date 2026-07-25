@@ -411,12 +411,20 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
   const byId = new Map(entities.map((e) => [e.id, e]));
   const alerts: DependencyAlert[] = [];
 
-  // Résoudre le netSavings d'une entité (levier ou sous-levier) pour calculer l'impact €.
-  const entitySavings = (id: string): number => {
+  // Résoudre les savings NON RÉALISÉS d'une entité — c'est le montant réellement à risque
+  // (les savings déjà réalisés sont acquis et ne peuvent plus être bloqués).
+  const entityUnrealizedSavings = (id: string): number => {
     const lever = data.levers.find((l) => l.id === id);
-    if (lever) return lever.netSavings;
+    if (lever) return Math.max(0, lever.netSavings - realizedSavings(lever));
     const sub = data.subLevers?.find((s) => s.id === id);
-    return sub?.netSavings ?? 0;
+    if (sub) {
+      // Le sous-levier n'a pas de `progress` propre — on utilise celui du levier parent.
+      const parentLever = data.levers.find((l) => l.id === sub.leverId);
+      const progress = parentLever?.progress ?? 0;
+      const subRealized = sub.netSavings * (progress / 100);
+      return Math.max(0, sub.netSavings - subRealized);
+    }
+    return 0;
   };
 
   for (const source of entities) {
@@ -466,6 +474,14 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
       }
 
       if (violated) {
+        // Impact € = savings non réalisés à risque.
+        // Directionnel (FS/SF) : seul le levier bloqué (source) est à risque.
+        // Symétrique (SS/FF) : les deux leviers sont à risque.
+        const impact =
+          dep.type === "SS" || dep.type === "FF"
+            ? entityUnrealizedSavings(source.id) + entityUnrealizedSavings(target.id)
+            : entityUnrealizedSavings(source.id);
+
         alerts.push({
           sourceId: source.id,
           sourceName: source.name,
@@ -477,7 +493,7 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
           type: dep.type,
           message,
           delayDays: Math.abs(delayDays),
-          impactEur: entitySavings(source.id),
+          impactEur: Math.round(impact * 100) / 100,
         });
       }
     }

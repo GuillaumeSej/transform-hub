@@ -1453,10 +1453,13 @@ export default function DashboardPage() {
                             </div>
                           </div>
                         ) : (
-                          /* Layout symétrique (SS, FF) : empilé */
-                          <div className="overflow-hidden rounded-md border border-border">
-                            <div className="border-b border-border bg-neutral-50 p-2">
-                              <div className="truncate text-[11px] font-bold text-primary">
+                          /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
+                          <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
+                            <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                {t("dep.atRisk")}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
                                 {a.sourceName}
                               </div>
                               <div className="mt-0.5 text-[10px] text-secondary">
@@ -1470,8 +1473,11 @@ export default function DashboardPage() {
                               <ArrowUpDown size={10} />
                               {depTypeLabels[a.type]}
                             </div>
-                            <div className="bg-neutral-50 p-2">
-                              <div className="truncate text-[11px] font-bold text-primary">
+                            <div className="bg-bp-coral/[0.03] p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                {t("dep.atRisk")}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
                                 {a.targetName}
                               </div>
                               <div className="mt-0.5 text-[10px] text-secondary">
