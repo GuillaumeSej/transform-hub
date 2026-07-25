@@ -32,6 +32,7 @@ type LeverRow = Lever & {
   statusLabel: string;
   costCenterLabel: string;
   hasAlert: boolean;
+  roi: number | null;
 };
 
 export default function LeversPage() {
@@ -206,17 +207,21 @@ export default function LeversPage() {
 
   const hasHierarchy = sortedHierarchyLevels.length > 0;
 
-  const rows: LeverRow[] = filteredLevers.map((l) => ({
-    ...l,
-    realized: engine.realizedSavings(l),
-    wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
-    statusLabel: lifecycle.label(l.status),
-    costCenterLabel: (() => {
-      const subs = data.subLevers.filter((s) => s.leverId === l.id);
-      return subs.length ? subs.map((s) => s.expensePost).join(", ") : l.costCenter;
-    })(),
-    hasAlert: alertedLeverIds.has(l.id),
-  }));
+  const rows: LeverRow[] = filteredLevers.map((l) => {
+    const costs = l.capex + l.opexOneOff;
+    return {
+      ...l,
+      realized: engine.realizedSavings(l),
+      wsName: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
+      statusLabel: lifecycle.label(l.status),
+      costCenterLabel: (() => {
+        const subs = data.subLevers.filter((s) => s.leverId === l.id);
+        return subs.length ? subs.map((s) => s.expensePost).join(", ") : l.costCenter;
+      })(),
+      hasAlert: alertedLeverIds.has(l.id),
+      roi: costs > 0 ? Math.round((l.netSavings / costs) * 10) / 10 : null,
+    };
+  });
 
   /** Une colonne par niveau configuré (ordre macro -> fin), affichant le libellé résolu pour ce
    *  levier via hierarchyLeafId. N'existe que si l'entreprise a activé l'arborescence. */
@@ -273,6 +278,7 @@ export default function LeversPage() {
   };
 
   const columns: ColumnDef<LeverRow>[] = [
+    // ── Identification ──
     {
       key: "code",
       label: "Code",
@@ -297,6 +303,7 @@ export default function LeversPage() {
     },
     { key: "type", label: "Type", mobile: "hide", width: "100px" },
     { key: "wsName", label: t("leverForm.workstream"), mobile: "hide", width: "150px" },
+    // ── Responsabilité ──
     {
       key: "owner",
       label: t("leverForm.owner"),
@@ -316,7 +323,15 @@ export default function LeversPage() {
       mobile: "hide",
       width: "150px",
     },
-    { key: "geography", label: "Géo", editable: true, mobile: "hide", width: "110px" },
+    // ── Localisation ──
+    { key: "function", label: t("leverForm.function"), mobile: "hide", width: "130px" },
+    {
+      key: "geography",
+      label: t("leverForm.geography"),
+      editable: true,
+      mobile: "hide",
+      width: "110px",
+    },
     {
       key: "country",
       label: t("leverForm.country"),
@@ -324,25 +339,17 @@ export default function LeversPage() {
       mobile: "hide",
       width: "110px",
     },
-    ...(hasHierarchy
-      ? hierarchyColumns.map((c) => ({ ...c, mobile: "hide" as const }))
-      : [
-          {
-            key: "costCenterLabel",
-            label: t("leverForm.costCenter"),
-            mobile: "hide" as const,
-          } as ColumnDef<LeverRow>,
-        ]),
-    { key: "start", label: "Début", editable: true, mobile: "hide", width: "100px" },
-    { key: "end", label: "Fin", editable: true, mobile: "hide", width: "100px" },
+    { key: "entity", label: t("leverForm.entity"), editable: true, mobile: "hide", width: "150px" },
+    ...(hasHierarchy ? hierarchyColumns.map((c) => ({ ...c, mobile: "hide" as const })) : []),
+    // ── Financier ──
     {
       key: "netSavings",
-      label: "Net €M",
+      label: "Net Savings €M",
       align: "right",
       editable: true,
       type: "number",
       mobile: "secondary",
-      width: "90px",
+      width: "110px",
       render: (r) => r.netSavings.toFixed(1),
     },
     {
@@ -370,6 +377,35 @@ export default function LeversPage() {
       width: "80px",
     },
     {
+      key: "capex",
+      label: "CAPEX",
+      align: "right",
+      editable: true,
+      type: "number",
+      mobile: "hide",
+      width: "90px",
+      render: (r) => r.capex.toFixed(1),
+    },
+    {
+      key: "opexOneOff",
+      label: "One-Off",
+      align: "right",
+      editable: true,
+      type: "number",
+      mobile: "hide",
+      width: "90px",
+      render: (r) => r.opexOneOff.toFixed(1),
+    },
+    {
+      key: "roi",
+      label: "ROI",
+      align: "right",
+      mobile: "hide",
+      width: "80px",
+      render: (r) => (r.roi != null ? `${r.roi}x` : "—"),
+    },
+    // ── Statut ──
+    {
       key: "priority",
       label: "Priorité",
       editable: true,
@@ -380,6 +416,16 @@ export default function LeversPage() {
       render: (r) => <StatusBadge risk={r.priority} />,
     },
     {
+      key: "statusLabel",
+      label: t("levers.columnMaturity"),
+      editable: true,
+      type: "select",
+      options: data.leverStatuses.map((s) => lifecycle.label(s)),
+      mobile: "secondary",
+      width: "130px",
+      render: (r) => <StageBadge status={r.status} label={lifecycle.label(r.status)} />,
+    },
+    {
       key: "risk",
       label: "Risque",
       editable: true,
@@ -388,16 +434,6 @@ export default function LeversPage() {
       mobile: "secondary",
       width: "110px",
       render: (r) => <StatusBadge risk={r.risk} />,
-    },
-    {
-      key: "statusLabel",
-      label: t("levers.columnStatus"),
-      editable: true,
-      type: "select",
-      options: data.leverStatuses.map((s) => lifecycle.label(s)),
-      mobile: "secondary",
-      width: "130px",
-      render: (r) => <StageBadge status={r.status} label={lifecycle.label(r.status)} />,
     },
   ];
 

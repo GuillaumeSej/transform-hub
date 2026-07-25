@@ -316,7 +316,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     type: "pnl",
     label: "Impact P&L par compte",
     icon: "LineChart",
-    defaultSpan: "M",
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
     // Pas de viewOptions legacy (ce widget n'avait qu'une seule vue câblée en dur avant ce
     // changement) — seul builderDimensionCount + defaultCustomViews existent, donc "configurable"
@@ -542,7 +542,7 @@ export function resolveActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const LAYOUT_KEY = "betrack_dashboard_layout_v9";
+const LAYOUT_KEY = "betrack_dashboard_layout_v10";
 
 const isBrowser = () => typeof window !== "undefined";
 

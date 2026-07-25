@@ -576,7 +576,7 @@ export default function LeverDetailClient() {
               <Stat label="Status">
                 <StageBadge status={lever.status} label={lifecycle.label(lever.status)} />
               </Stat>
-              <Stat label="Géographie">
+              <Stat label="Région">
                 {lever.geography} · {lever.country}
               </Stat>
               <Stat label="Function / Entité">

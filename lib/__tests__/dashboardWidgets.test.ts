@@ -81,7 +81,7 @@ describe("dashboardWidgets — addWidget / removeWidget / setWidgetSpan", () => 
     const next = addWidget(layout, "pnl");
     const added = next[next.length - 1];
     expect(added.type).toBe("pnl");
-    expect(added.span).toBe("M");
+    expect(added.span).toBe("XL");
   });
 
   it("allows adding a duplicate of an already-present type, with a distinct instanceId", () => {

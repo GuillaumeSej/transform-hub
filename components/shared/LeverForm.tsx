@@ -310,18 +310,36 @@ export function LeverForm({
           </select>
         </Field>
         <Field label={t("leverForm.country")}>
-          <input
+          <select
             className={inputClass}
             value={values.country}
             onChange={(e) => set("country", e.target.value)}
-          />
+          >
+            <option value="">{t("leverForm.selectPlaceholder")}</option>
+            {Array.from(new Set(data.levers.map((l) => l.country).filter((v): v is string => !!v)))
+              .sort()
+              .map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+          </select>
         </Field>
         <Field label={t("leverForm.entity")}>
-          <input
+          <select
             className={inputClass}
             value={values.entity}
             onChange={(e) => set("entity", e.target.value)}
-          />
+          >
+            <option value="">{t("leverForm.selectPlaceholder")}</option>
+            {Array.from(new Set(data.levers.map((l) => l.entity).filter((v): v is string => !!v)))
+              .sort()
+              .map((ent) => (
+                <option key={ent} value={ent}>
+                  {ent}
+                </option>
+              ))}
+          </select>
         </Field>
         <Field label={t("leverForm.function")}>
           <select

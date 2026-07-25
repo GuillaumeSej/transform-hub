@@ -483,7 +483,51 @@ export default function DashboardPage() {
       dimension === "function" ? engine.byFunction(filteredData) : engine.byCountry(filteredData);
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   };
-  const pnlMap = engine.pnlImpact(filteredData);
+  // ── Filtres géographiques du widget P&L (cascade Région → Pays → Entité) ──
+  const [pnlFilterGeo, setPnlFilterGeo] = useState("");
+  const [pnlFilterCountry, setPnlFilterCountry] = useState("");
+  const [pnlFilterEntity, setPnlFilterEntity] = useState("");
+
+  const pnlFilteredLevers = useMemo(() => {
+    let levers = filteredData.levers.filter((l) => l.status !== "cancelled");
+    if (pnlFilterGeo) levers = levers.filter((l) => l.geography === pnlFilterGeo);
+    if (pnlFilterCountry) levers = levers.filter((l) => l.country === pnlFilterCountry);
+    if (pnlFilterEntity) levers = levers.filter((l) => l.entity === pnlFilterEntity);
+    return levers;
+  }, [filteredData, pnlFilterGeo, pnlFilterCountry, pnlFilterEntity]);
+
+  const pnlGeoOptions = useMemo(() => {
+    const vals = new Set<string>();
+    filteredData.levers.forEach((l) => {
+      if (l.geography) vals.add(l.geography);
+    });
+    return Array.from(vals).sort();
+  }, [filteredData]);
+  const pnlCountryOptions = useMemo(() => {
+    const vals = new Set<string>();
+    filteredData.levers
+      .filter((l) => !pnlFilterGeo || l.geography === pnlFilterGeo)
+      .forEach((l) => {
+        if (l.country) vals.add(l.country);
+      });
+    return Array.from(vals).sort();
+  }, [filteredData, pnlFilterGeo]);
+  const pnlEntityOptions = useMemo(() => {
+    const vals = new Set<string>();
+    filteredData.levers
+      .filter((l) => !pnlFilterGeo || l.geography === pnlFilterGeo)
+      .filter((l) => !pnlFilterCountry || l.country === pnlFilterCountry)
+      .forEach((l) => {
+        if (l.entity) vals.add(l.entity);
+      });
+    return Array.from(vals).sort();
+  }, [filteredData, pnlFilterGeo, pnlFilterCountry]);
+
+  const pnlFilteredData = useMemo(
+    () => ({ ...filteredData, levers: pnlFilteredLevers }),
+    [filteredData, pnlFilteredLevers]
+  );
+  const pnlMap = engine.pnlImpact(pnlFilteredData);
   const pnlData = Object.entries(pnlMap).map(([id, impact]) => ({
     account: data.pnlAccounts.find((a) => a.id === id)?.name ?? id,
     impact,
@@ -1266,18 +1310,63 @@ export default function DashboardPage() {
                   : t("dashboard.widgets.pnl")
               }
               actions={
-                views.length > 1 && activeView ? (
-                  <DimensionToggle
-                    options={views.map((v) => ({
-                      value: v.id,
-                      label: describeCustomView(v, hierarchyLevels),
-                    }))}
-                    value={activeView.id}
-                    onChange={(next) =>
-                      updateLayout(setWidgetView(layout, instance.instanceId, next))
-                    }
-                  />
-                ) : undefined
+                <div className="flex items-center gap-2">
+                  {views.length > 1 && activeView && (
+                    <DimensionToggle
+                      options={views.map((v) => ({
+                        value: v.id,
+                        label: describeCustomView(v, hierarchyLevels),
+                      }))}
+                      value={activeView.id}
+                      onChange={(next) =>
+                        updateLayout(setWidgetView(layout, instance.instanceId, next))
+                      }
+                    />
+                  )}
+                  <select
+                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                    value={pnlFilterGeo}
+                    onChange={(e) => {
+                      setPnlFilterGeo(e.target.value);
+                      setPnlFilterCountry("");
+                      setPnlFilterEntity("");
+                    }}
+                  >
+                    <option value="">{t("pnl.allRegions")}</option>
+                    {pnlGeoOptions.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                    value={pnlFilterCountry}
+                    onChange={(e) => {
+                      setPnlFilterCountry(e.target.value);
+                      setPnlFilterEntity("");
+                    }}
+                  >
+                    <option value="">{t("pnl.allCountries")}</option>
+                    {pnlCountryOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                    value={pnlFilterEntity}
+                    onChange={(e) => setPnlFilterEntity(e.target.value)}
+                  >
+                    <option value="">{t("pnl.allEntities")}</option>
+                    {pnlEntityOptions.map((ent) => (
+                      <option key={ent} value={ent}>
+                        {ent}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               }
             />
             <CardBody>
