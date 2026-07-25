@@ -509,7 +509,7 @@ export function resolveActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const LAYOUT_KEY = "betrack_dashboard_layout_v1";
+const LAYOUT_KEY = "betrack_dashboard_layout_v2";
 
 const isBrowser = () => typeof window !== "undefined";
 
