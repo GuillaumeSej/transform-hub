@@ -79,7 +79,6 @@ import {
   setWidgetSpan,
   setWidgetView,
   type CustomViewConfig,
-  type DashboardTab,
   type DashboardWidgetInstance,
   type DashboardWidgetType,
 } from "@/lib/dashboardWidgets";
@@ -235,7 +234,6 @@ export default function DashboardPage() {
   const filteredData = useMemo(() => ({ ...data, levers: filteredLevers }), [data, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
-  const [activeTab, setActiveTab] = useState<DashboardTab>("cockpit");
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
   const [sCurveGranularity, setSCurveGranularity] = useState<engine.TimeGranularity>("month");
@@ -1075,7 +1073,11 @@ export default function DashboardPage() {
           icon={TriangleAlert}
           accent="amber"
           sub={`${summary.critical} critiques · à surveiller`}
-          onClick={() => setActiveTab("prioritization")}
+          onClick={() =>
+            document
+              .getElementById("section-prioritization")
+              ?.scrollIntoView({ behavior: "smooth" })
+          }
         />
         <KPICard
           label={t("dashboard.kpi.capexEngaged")}
@@ -1297,52 +1299,42 @@ export default function DashboardPage() {
         </div>
       </Modal>
 
-      {/* ── Tab bar (4 onglets CTO) ─────────────────────────────────────── */}
-      {!editMode && (
-        <div className="mb-4 flex gap-0 overflow-x-auto rounded-lg border border-border bg-white">
+      {/* ── Widgets groupés par section (page unique scrollable) ─────────── */}
+      {editMode ? (
+        <div
+          data-dashboard-widget-grid
+          className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          {layout.map((instance) => renderWidget(instance))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-6">
           {DASHBOARD_TABS.map((tab) => {
             const Icon = ICON_REGISTRY[tab.icon] ?? LayoutGrid;
-            const isActive = activeTab === tab.key;
-            const widgetCount = layout.filter((w) => WIDGET_DEFAULT_TAB[w.type] === tab.key).length;
+            const sectionWidgets = layout.filter((w) => WIDGET_DEFAULT_TAB[w.type] === tab.key);
+            if (sectionWidgets.length === 0) return null;
             return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex flex-1 items-center justify-center gap-2 border-b-2 px-4 py-3 text-[12.5px] font-semibold transition ${
-                  isActive
-                    ? "border-bp-coral bg-bp-coral/[0.04] text-bp-coral"
-                    : "border-transparent text-secondary hover:bg-neutral-50 hover:text-primary"
-                }`}
-              >
-                <Icon size={15} />
-                <span className="hidden sm:inline">{t(tab.labelKey)}</span>
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    isActive ? "bg-bp-coral/10 text-bp-coral" : "bg-neutral-100 text-tertiary"
-                  }`}
+              <section key={tab.key} id={`section-${tab.key}`}>
+                <div className="mb-3 flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-bp-coral/10 text-bp-coral">
+                    <Icon size={14} />
+                  </div>
+                  <h2 className="text-[14px] font-bold tracking-tight text-primary">
+                    {t(tab.labelKey)}
+                  </h2>
+                  <div className="ml-1 h-px flex-1 bg-border" />
+                </div>
+                <div
+                  data-dashboard-widget-grid
+                  className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
                 >
-                  {widgetCount}
-                </span>
-              </button>
+                  {sectionWidgets.map((instance) => renderWidget(instance))}
+                </div>
+              </section>
             );
           })}
         </div>
       )}
-
-      {/* grid-flow-row-dense : comble automatiquement les trous laissés par un widget large suivi
-          d'un widget étroit, sans avoir à réordonner manuellement le layout. Colonnes réduites en
-          dessous de `lg`/`sm` (breakpoints Tailwind standards) — les classes col-span-* des widgets
-          (SPAN_COL_CLASS) restent valides à toute largeur de grille (un col-span-4 sur une grille à
-          1 colonne se contente d'occuper l'unique colonne disponible, sans débordement). */}
-      <div
-        data-dashboard-widget-grid
-        className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        {layout
-          .filter((instance) => editMode || WIDGET_DEFAULT_TAB[instance.type] === activeTab)
-          .map((instance) => renderWidget(instance))}
-      </div>
     </div>
   );
 }
