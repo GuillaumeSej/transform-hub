@@ -21,12 +21,17 @@ export type WidgetSpan = "S" | "M" | "L" | "XL";
 export const WIDGET_SPANS: WidgetSpan[] = ["S", "M", "L", "XL"];
 
 /** Classe Tailwind `col-span-*` pour chaque taille — chaînes littérales (pas de template
- * dynamique) pour que le JIT Tailwind les détecte à la compilation. */
+ * dynamique) pour que le JIT Tailwind les détecte à la compilation.
+ *
+ * La grille du dashboard passe de 1 → 2 → 4 colonnes (breakpoints sm / lg). Les widgets
+ * « L » et « XL » doivent toujours occuper toute la largeur, même sur une grille 2-col :
+ *   - `sm:col-span-2` → pleine largeur sur grille 2-col (sm)
+ *   - `lg:col-span-3` / `lg:col-span-4` → pleine ou quasi-pleine sur grille 4-col (lg) */
 export const SPAN_COL_CLASS: Record<WidgetSpan, string> = {
   S: "col-span-1",
-  M: "col-span-2",
-  L: "col-span-3",
-  XL: "col-span-4",
+  M: "col-span-1 sm:col-span-2 lg:col-span-2",
+  L: "col-span-1 sm:col-span-2 lg:col-span-3",
+  XL: "col-span-1 sm:col-span-2 lg:col-span-4",
 };
 
 export type DashboardWidgetType =

@@ -7,7 +7,16 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./lib/**/*.{js,ts}",
   ],
-  safelist: ["col-span-1", "col-span-2", "col-span-3", "col-span-4"],
+  safelist: [
+    "col-span-1",
+    "col-span-2",
+    "col-span-3",
+    "col-span-4",
+    "sm:col-span-2",
+    "lg:col-span-2",
+    "lg:col-span-3",
+    "lg:col-span-4",
+  ],
   theme: {
     extend: {
       // Marque BearingPoint : coins droits par défaut (flat, type-led). Les cartes/tables
