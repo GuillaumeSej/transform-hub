@@ -46,6 +46,8 @@ import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { AlertItem } from "@/components/shared/AlertItem";
+import { generateAlerts } from "@/lib/alertEngine";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
@@ -234,6 +236,72 @@ export default function DashboardPage() {
   const summary = engine.programSummary(filteredData);
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
+
+  // ── Alertes enrichies (manuelles + auto-générées) ──────────────────────────
+  const ALERTS_PER_PAGE = 5;
+  const [alertPage, setAlertPage] = useState(0);
+  const [alertTypeFilter, setAlertTypeFilter] = useState<string>("all");
+  const [alertShowResolved, setAlertShowResolved] = useState(false);
+  const [resolvedAlertIds, setResolvedAlertIds] = useState<Set<string>>(new Set());
+
+  const allAlerts = useMemo(() => {
+    const generated = generateAlerts(filteredData);
+    // Apply resolved state from local toggle
+    return generated.map((a) => ({
+      ...a,
+      resolved: resolvedAlertIds.has(a.id) ? true : (a.resolved ?? false),
+    }));
+  }, [filteredData, resolvedAlertIds]);
+
+  const filteredAlerts = useMemo(() => {
+    let result = allAlerts;
+    if (!alertShowResolved) result = result.filter((a) => !a.resolved);
+    if (alertTypeFilter !== "all") result = result.filter((a) => a.type === alertTypeFilter);
+    return result;
+  }, [allAlerts, alertShowResolved, alertTypeFilter]);
+
+  const alertPageCount = Math.max(1, Math.ceil(filteredAlerts.length / ALERTS_PER_PAGE));
+  const alertPageClamped = Math.min(alertPage, alertPageCount - 1);
+  const alertsOnPage = filteredAlerts.slice(
+    alertPageClamped * ALERTS_PER_PAGE,
+    (alertPageClamped + 1) * ALERTS_PER_PAGE
+  );
+
+  const toggleAlertResolved = (id: string) => {
+    setResolvedAlertIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const markAllResolved = () => {
+    setResolvedAlertIds((prev) => {
+      const next = new Set(prev);
+      filteredAlerts.forEach((a) => next.add(a.id));
+      return next;
+    });
+  };
+
+  /** Résout le scope d'une alerte en nom lisible (lever name ou workstream name). */
+  const resolveScopeLabel = (scope: string): string | undefined => {
+    if (scope.startsWith("WS-")) {
+      return data.workstreams.find((w) => w.id === scope)?.name;
+    }
+    const lever = data.levers.find((l) => l.id === scope);
+    return lever ? `${lever.name} (${lever.code})` : undefined;
+  };
+
+  // Compteurs par sévérité (sur les non-résolus uniquement)
+  const alertCounts = useMemo(() => {
+    const unresolvedAlerts = allAlerts.filter((a) => !a.resolved);
+    return {
+      red: unresolvedAlerts.filter((a) => a.type === "red").length,
+      amber: unresolvedAlerts.filter((a) => a.type === "amber").length,
+      green: unresolvedAlerts.filter((a) => a.type === "green").length,
+      blue: unresolvedAlerts.filter((a) => a.type === "blue").length,
+    };
+  }, [allAlerts]);
   const [sCurveGranularity, setSCurveGranularity] = useState<engine.TimeGranularity>("month");
   const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
   const sCurve = engine.sCurve3(visibleData, sCurveGranularity);
@@ -539,15 +607,101 @@ export default function DashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title={t("dashboard.widgets.alerts")} />
+            <CardHeader
+              title={t("dashboard.widgets.alerts")}
+              actions={
+                <div className="flex items-center gap-2">
+                  {/* Compteurs par sévérité (cliquables pour filtrer) */}
+                  {(["red", "amber", "green", "blue"] as const).map((type) => {
+                    const count = alertCounts[type];
+                    if (count === 0) return null;
+                    const isActive = alertTypeFilter === type;
+                    const colors: Record<string, string> = {
+                      red: isActive ? "bg-rag-red text-white" : "bg-rag-red-light text-rag-red",
+                      amber: isActive
+                        ? "bg-rag-amber text-white"
+                        : "bg-rag-amber-light text-rag-amber",
+                      green: isActive
+                        ? "bg-rag-green-dark text-white"
+                        : "bg-rag-green-light text-rag-green-dark",
+                      blue: isActive
+                        ? "bg-info-blue text-white"
+                        : "bg-info-blue-light text-info-blue",
+                    };
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => setAlertTypeFilter((prev) => (prev === type ? "all" : type))}
+                        className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold transition ${colors[type]}`}
+                      >
+                        {count}
+                      </button>
+                    );
+                  })}
+                  {/* Toggle résolu / à traiter */}
+                  <select
+                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
+                    value={alertShowResolved ? "all" : "todo"}
+                    onChange={(e) => {
+                      setAlertShowResolved(e.target.value === "all");
+                      setAlertPage(0);
+                    }}
+                  >
+                    <option value="todo">{t("alerts.toProcess")}</option>
+                    <option value="all">{t("alerts.showAll")}</option>
+                  </select>
+                  {/* Bouton tout résoudre */}
+                  <button
+                    onClick={markAllResolved}
+                    className="rounded-sm px-1.5 py-0.5 text-[10px] font-semibold text-tertiary transition hover:bg-neutral-100 hover:text-primary"
+                    title={t("alerts.markAllResolved")}
+                  >
+                    ✓ {t("alerts.markAllResolved")}
+                  </button>
+                </div>
+              }
+            />
             <CardBody>
-              {data.alerts.slice(0, 5).map((a) => (
-                <AlertItem key={a.id} alert={a} onClick={() => goToAlert(a)} />
-              ))}
-              {data.alerts.length === 0 && (
+              {alertsOnPage.length === 0 ? (
                 <p className="py-6 text-center text-sm text-tertiary">
                   {t("dashboard.widgets.noAlerts")}
                 </p>
+              ) : (
+                <>
+                  {alertsOnPage.map((a) => (
+                    <AlertItem
+                      key={a.id}
+                      alert={a}
+                      onClick={() => goToAlert(a)}
+                      onToggleResolved={() => toggleAlertResolved(a.id)}
+                      scopeLabel={resolveScopeLabel(a.scope)}
+                    />
+                  ))}
+                  {/* Pagination */}
+                  {alertPageCount > 1 && (
+                    <div className="flex items-center justify-center gap-3 pt-3 mt-2 border-t border-border">
+                      <button
+                        onClick={() => setAlertPage((p) => Math.max(0, p - 1))}
+                        disabled={alertPageClamped === 0}
+                        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <span className="text-[11px] font-semibold text-secondary">
+                        {t("alerts.page", `Page ${alertPageClamped + 1} / ${alertPageCount}`)
+                          .replace("{current}", String(alertPageClamped + 1))
+                          .replace("{total}", String(alertPageCount))}
+                      </span>
+                      <button
+                        onClick={() => setAlertPage((p) => Math.min(alertPageCount - 1, p + 1))}
+                        disabled={alertPageClamped >= alertPageCount - 1}
+                        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </CardBody>
           </Card>

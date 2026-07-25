@@ -285,6 +285,14 @@ export type Alert = {
   title: string;
   desc: string;
   actorRole: string;
+  /** Impact € sur le run-rate (négatif = perte de valeur, positif = gain). */
+  impactEur?: number;
+  /** Nom du responsable associé à l'alerte (lever owner, sponsor...). */
+  owner?: string;
+  /** Origine de l'alerte : saisie manuelle ou auto-générée par le moteur. */
+  source?: "manual" | "auto";
+  /** false = "À traiter" (défaut), true = "Résolu / vu" (coché par le CTO). */
+  resolved?: boolean;
 };
 
 export type AuditEntry = {

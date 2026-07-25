@@ -10,10 +10,31 @@ const ICON_STYLE = {
   blue: "bg-info-blue-light text-info-blue",
 };
 
-/** Ligne d'alerte — porté depuis `.alert-row` du prototype legacy. Clic -> creuse vers le levier
- * ou le workstream concerné (alert.scope). */
-export function AlertItem({ alert, onClick }: { alert: Alert; onClick?: () => void }) {
+function fmtImpact(v: number): string {
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) return `${v > 0 ? "+" : ""}€${(v / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${v > 0 ? "+" : ""}€${Math.round(v / 1_000)}K`;
+  return `${v > 0 ? "+" : ""}€${v}`;
+}
+
+/** Ligne d'alerte enrichie — impact €, owner, checkbox résolu, badge auto.
+ *  Clic sur la ligne -> drill-down vers le levier/workstream (alert.scope).
+ *  Clic sur la checkbox -> toggle résolu/à traiter (sans propager le clic ligne). */
+export function AlertItem({
+  alert,
+  onClick,
+  onToggleResolved,
+  scopeLabel,
+}: {
+  alert: Alert;
+  onClick?: () => void;
+  /** Callback quand le CTO coche/décoche la checkbox "résolu". */
+  onToggleResolved?: () => void;
+  /** Nom lisible du scope (nom du levier ou du workstream) au lieu de l'ID brut. */
+  scopeLabel?: string;
+}) {
   const Icon = ICONS[alert.type];
+  const resolved = alert.resolved ?? false;
   return (
     <div
       role={onClick ? "button" : undefined}
@@ -24,9 +45,28 @@ export function AlertItem({ alert, onClick }: { alert: Alert; onClick?: () => vo
       }}
       className={cn(
         "flex gap-3 border-b border-border py-3 last:border-b-0",
-        onClick && "cursor-pointer rounded-sm px-1.5 -mx-1.5 transition hover:bg-neutral-50"
+        onClick && "cursor-pointer rounded-sm px-1.5 -mx-1.5 transition hover:bg-neutral-50",
+        resolved && "opacity-50"
       )}
     >
+      {/* Checkbox résolu */}
+      {onToggleResolved && (
+        <div className="flex items-start pt-0.5">
+          <input
+            type="checkbox"
+            checked={resolved}
+            onChange={(e) => {
+              e.stopPropagation();
+              onToggleResolved();
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="h-3.5 w-3.5 cursor-pointer accent-bp-coral"
+            title={resolved ? "Résolu / vu" : "À traiter"}
+          />
+        </div>
+      )}
+
+      {/* Icône sévérité */}
       <div
         className={cn(
           "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-sm",
@@ -35,11 +75,47 @@ export function AlertItem({ alert, onClick }: { alert: Alert; onClick?: () => vo
       >
         <Icon size={14} />
       </div>
+
+      {/* Contenu */}
       <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] font-semibold text-primary">{alert.title}</div>
+        <div className="flex items-start justify-between gap-2">
+          <div
+            className={cn(
+              "text-[12.5px] text-primary",
+              resolved ? "font-normal line-through decoration-neutral-300" : "font-semibold"
+            )}
+          >
+            {alert.title}
+          </div>
+          {/* Badge impact € */}
+          {alert.impactEur != null && alert.impactEur !== 0 && (
+            <span
+              className={cn(
+                "flex-shrink-0 rounded-sm px-1.5 py-0.5 text-[10.5px] font-bold",
+                alert.impactEur < 0
+                  ? "bg-rag-red-light text-rag-red"
+                  : "bg-rag-green-light text-rag-green-dark"
+              )}
+            >
+              {fmtImpact(alert.impactEur)}
+            </span>
+          )}
+        </div>
         <div className="mt-0.5 text-[11.5px] text-secondary">{alert.desc}</div>
-        <div className="mt-1 text-[10.5px] text-tertiary">
-          {alert.ts} · {alert.scope}
+        <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-tertiary">
+          {alert.owner && <span className="font-medium text-secondary">{alert.owner}</span>}
+          {alert.owner && <span>·</span>}
+          <span>{alert.ts}</span>
+          <span>·</span>
+          <span>{scopeLabel || alert.scope}</span>
+          {alert.source === "auto" && (
+            <>
+              <span>·</span>
+              <span className="rounded-sm bg-neutral-100 px-1 py-px text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
+                Auto
+              </span>
+            </>
+          )}
         </div>
       </div>
     </div>
