@@ -594,6 +594,18 @@ export default function DashboardPage() {
 
   const renderWidget = (instance: DashboardWidgetInstance): ReactNode => {
     switch (instance.type) {
+      case "portfolio-funnel":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader title={t("dashboard.widgets.portfolioFunnel")} />
+            <CardBody>
+              <StageFunnel data={stages} onStageClick={goToStage} />
+              <div className="my-3 border-t border-border" />
+              <SankeyChart data={sankeyChrono} height={260} onNodeClick={goToStageLabel} />
+            </CardBody>
+          </Card>
+        );
       case "stage-funnel":
         return renderWidgetShell(
           instance,

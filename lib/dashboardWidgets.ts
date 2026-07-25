@@ -47,7 +47,8 @@ export type DashboardWidgetType =
   | "dependencies"
   | "pnl"
   | "underperformers"
-  | "dependency-alerts";
+  | "dependency-alerts"
+  | "portfolio-funnel";
 
 /** Onglets du dashboard CTO — chaque widget est assigné à un onglet par défaut.
  *  L'onglet actif filtre les widgets affichés dans la grille. */
@@ -63,6 +64,7 @@ export const DASHBOARD_TABS: { key: DashboardTab; labelKey: string; icon: string
 /** Mapping widget type → onglet par défaut. Les widgets hors de cette map apparaissent
  *  dans tous les onglets (fallback = "cockpit"). */
 export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
+  "portfolio-funnel": "cockpit",
   "stage-funnel": "cockpit",
   alerts: "cockpit",
   "s-curve": "trajectory",
@@ -135,6 +137,10 @@ export interface DashboardWidgetDef {
    *  `CustomViewConfig` plutôt que de perdre ce choix lors de la migration vers le builder
    *  générique. Uniquement pertinent quand `builderDimensionCount` est défini. */
   defaultCustomViews?: CustomViewConfig[];
+  /** Si true, ce widget est disponible dans le picker mais n'est PAS inclus dans le layout par
+   *  défaut généré par `buildDefaultLayout()`. Utilisé pour les widgets qui sont remplacés par
+   *  un composite (ex. `stage-funnel` et `sankey` remplacés par `portfolio-funnel`). */
+  excludeFromDefault?: boolean;
 }
 
 /** Une instance de widget posée sur le dashboard — un même type peut être ajouté plusieurs fois
@@ -157,9 +163,9 @@ export interface DashboardWidgetInstance {
 /** Registre de tous les widgets disponibles, dans leur ordre d'apparition par défaut. */
 export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   {
-    type: "stage-funnel",
-    label: "Avancement par étape du cycle de vie",
-    icon: "Workflow",
+    type: "portfolio-funnel",
+    label: "Avancement des leviers",
+    icon: "Layers",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
   },
@@ -169,6 +175,14 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "Bell",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "stage-funnel",
+    label: "Avancement par étape du cycle de vie",
+    icon: "Workflow",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+    excludeFromDefault: true,
   },
   {
     type: "s-curve",
@@ -188,10 +202,9 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     type: "sankey",
     label: "Flux des leviers par étape (Sankey)",
     icon: "GitBranch",
-    // XL par défaut : ce flux chronologique a beaucoup plus de colonnes qu'un Sankey classique à
-    // 2 niveaux — en dessous de "L" les libellés des différentes étapes se chevauchent.
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+    excludeFromDefault: true,
   },
   {
     type: "marimekko",
@@ -316,7 +329,7 @@ export function getWidgetDef(type: string): DashboardWidgetDef | undefined {
  * `defaultCustomViews` pré-câblées (ex. Fonction×Pays du Marimekko) — mêmes vues qu'avant,
  * exprimées comme configurations métrique × dimension(s) plutôt que comme clés figées. */
 export function buildDefaultLayout(): DashboardWidgetInstance[] {
-  return DASHBOARD_WIDGET_REGISTRY.map((def) => ({
+  return DASHBOARD_WIDGET_REGISTRY.filter((def) => !def.excludeFromDefault).map((def) => ({
     instanceId: def.type,
     type: def.type,
     span: def.defaultSpan,
@@ -514,7 +527,7 @@ export function resolveActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const LAYOUT_KEY = "betrack_dashboard_layout_v3";
+const LAYOUT_KEY = "betrack_dashboard_layout_v4";
 
 const isBrowser = () => typeof window !== "undefined";
 

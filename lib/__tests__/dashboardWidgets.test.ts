@@ -17,12 +17,22 @@ import {
 } from "@/lib/dashboardWidgets";
 
 describe("dashboardWidgets — buildDefaultLayout", () => {
-  it("has one instance per registry entry, in registry order", () => {
+  it("has one instance per non-excluded registry entry, in registry order", () => {
     const layout = buildDefaultLayout();
-    expect(layout).toHaveLength(DASHBOARD_WIDGET_REGISTRY.length);
+    const includedDefs = DASHBOARD_WIDGET_REGISTRY.filter((d) => !d.excludeFromDefault);
+    expect(layout).toHaveLength(includedDefs.length);
     layout.forEach((w, i) => {
-      expect(w.type).toBe(DASHBOARD_WIDGET_REGISTRY[i].type);
-      expect(w.span).toBe(DASHBOARD_WIDGET_REGISTRY[i].defaultSpan);
+      expect(w.type).toBe(includedDefs[i].type);
+      expect(w.span).toBe(includedDefs[i].defaultSpan);
+    });
+  });
+
+  it("excludeFromDefault widgets are still in the registry (available in picker)", () => {
+    const excluded = DASHBOARD_WIDGET_REGISTRY.filter((d) => d.excludeFromDefault);
+    expect(excluded.length).toBeGreaterThan(0);
+    const layout = buildDefaultLayout();
+    excluded.forEach((d) => {
+      expect(layout.find((w) => w.type === d.type)).toBeUndefined();
     });
   });
 });

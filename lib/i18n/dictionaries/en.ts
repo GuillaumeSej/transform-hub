@@ -107,6 +107,7 @@ const en: Record<string, string> = {
   "dashboard.kpi.riskCost": "cost overruns",
   "dashboard.kpi.riskSavings": "reduced savings",
   "dashboard.kpi.suppressions": "positions eliminated",
+  "dashboard.widgets.portfolioFunnel": "Initiative Progress",
   "dashboard.widgets.stageFunnel": "Progress by lifecycle stage",
   "dashboard.widgets.stageFunnelFull": "Initiative progress by lifecycle stage",
   "dashboard.widgets.alerts": "Alerts & Notifications",

@@ -7,32 +7,36 @@ export type SankeyDatum = {
   links: { source: number; target: number; value: number }[];
 };
 
-const CHRONO_COLORS = [
-  "#806659",
-  "#FF3C47",
-  "#FFB1B5",
-  "#421799",
-  "#320300",
-  "#421799",
-  "#E87D5F",
-  "#D4A574",
-  "#C49B6A",
-  "#B8956F",
-  "#A68960",
-  "#4CAF50",
-  "#F0A090",
-];
+/** Couleurs sémantiques BearingPoint pour le Sankey chronologique.
+ *  Le mapping se fait par préfixe du nom de nœud pour rester découplé des labels i18n. */
+function nodeColor(name: string): string {
+  if (name.startsWith("Tous")) return "#000000";
+  if (name.includes("M1")) return "#F8D5D2";
+  if (name.includes("M2")) return "#F58F89";
+  if (name.includes("M3")) return "#FF3D3D";
+  if (name.includes("M4")) return "#C8281A";
+  if (name.includes("M5") || name.includes("Réalisé")) return "#2E7D32";
+  if (name.includes("Abandonné") || name.includes("Annulé")) return "#E8E2DE";
+  return "#6B5750"; // fallback warm brown
+}
 
-/** Flux chronologique "tous les leviers" -> étape atteinte, avec une branche de sortie ("Annulé
- * après X") à chaque étape — format unique (l'ancienne vue "Distribution" simplifiée faisait
- * doublon avec le funnel "Avancement par étape du cycle de vie" et n'apportait rien de plus).
- * Clic sur un nœud pour creuser.
+/** Couleur du lien : hérite du nœud source, plus clair pour les abandons. */
+function linkColor(sourceName: string, targetName: string): string {
+  if (targetName.includes("Abandonné") || targetName.includes("Annulé")) return "#E8E2DE";
+  return nodeColor(sourceName);
+}
+
+function linkOpacity(targetName: string): number {
+  if (targetName.includes("Abandonné") || targetName.includes("Annulé")) return 0.2;
+  return 0.35;
+}
+
+/** Flux chronologique "tous les leviers" → étapes de maturité M1-M5, avec branches de sortie
+ *  "Abandonné après MX" à chaque étape. Les leviers qui stagnent à une étape sont visibles par
+ *  la différence de largeur entre le flux entrant et les flux sortants du nœud.
  *
- * Ce flux a beaucoup plus de colonnes (une par étape + les sorties "Annulé après X") qu'un Sankey
- * à 2 niveaux classique — dessiner les libellés À CÔTÉ de chaque nœud (comme un Sankey simple)
- * les fait chevaucher la colonne suivante dès que la largeur du widget est modeste. Les libellés
- * sont donc centrés AU-DESSUS de chaque nœud (dans l'empan horizontal de sa propre colonne) plutôt
- * qu'à sa droite, ce qui élimine ce chevauchement inter-colonnes. */
+ *  Les libellés sont centrés au-dessus de chaque nœud (pas à droite) pour éviter les
+ *  chevauchements entre colonnes sur les widgets de largeur modeste. */
 export function SankeyChart({
   data,
   height = 340,
@@ -50,39 +54,76 @@ export function SankeyChart({
     <ResponsiveContainer width="100%" height={height}>
       <Sankey
         data={data}
-        nodePadding={20}
+        nodePadding={24}
         nodeWidth={12}
         margin={{ top: 26, right: 70, bottom: 8, left: 40 }}
-        link={{ stroke: "#E2E2E2" }}
-        node={({ x, y, width, height: nodeHeight, index, payload }) => (
-          <g
-            onClick={() => onNodeClick?.(payload.name)}
-            style={{ cursor: onNodeClick ? "pointer" : "default" }}
-          >
-            <rect
-              x={x}
-              y={y}
-              width={width}
-              height={Math.max(nodeHeight, 2)}
-              fill={CHRONO_COLORS[index % CHRONO_COLORS.length]}
-              rx={2}
+        link={({
+          sourceX,
+          sourceY,
+          sourceControlX,
+          targetX,
+          targetY,
+          targetControlX,
+          linkWidth,
+          index,
+        }) => {
+          const sourceNode = data.nodes[data.links[index].source];
+          const targetNode = data.nodes[data.links[index].target];
+          const color = linkColor(sourceNode.name, targetNode.name);
+          const opacity = linkOpacity(targetNode.name);
+          const halfWidth = linkWidth / 2;
+          return (
+            <path
+              d={`M${sourceX},${sourceY + halfWidth}
+                  C${sourceControlX},${sourceY + halfWidth} ${targetControlX},${targetY + halfWidth} ${targetX},${targetY + halfWidth}
+                  L${targetX},${targetY - halfWidth}
+                  C${targetControlX},${targetY - halfWidth} ${sourceControlX},${sourceY - halfWidth} ${sourceX},${sourceY - halfWidth}
+                  Z`}
+              fill={color}
+              fillOpacity={opacity}
+              stroke="none"
             />
-            <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={9.5} fill="#1A1A1A">
-              {payload.name}
-            </text>
-            <text
-              x={x + width / 2}
-              y={y + nodeHeight / 2}
-              dy={3.5}
-              textAnchor="middle"
-              fontSize={9}
-              fontWeight={600}
-              fill="#fff"
+          );
+        }}
+        node={({ x, y, width, height: nodeHeight, payload }) => {
+          const color = nodeColor(payload.name);
+          return (
+            <g
+              onClick={() => onNodeClick?.(payload.name)}
+              style={{ cursor: onNodeClick ? "pointer" : "default" }}
             >
-              {nodeHeight >= 14 ? payload.value : ""}
-            </text>
-          </g>
-        )}
+              <rect
+                x={x}
+                y={y}
+                width={width}
+                height={Math.max(nodeHeight, 2)}
+                fill={color}
+                rx={2}
+              />
+              <text
+                x={x + width / 2}
+                y={y - 6}
+                textAnchor="middle"
+                fontSize={9.5}
+                fill="#1A1A1A"
+                fontWeight={payload.name.includes("Abandonné") ? 400 : 600}
+              >
+                {payload.name}
+              </text>
+              <text
+                x={x + width / 2}
+                y={y + nodeHeight / 2}
+                dy={3.5}
+                textAnchor="middle"
+                fontSize={9}
+                fontWeight={600}
+                fill={color === "#E8E2DE" || color === "#F8D5D2" ? "#1A1A1A" : "#fff"}
+              >
+                {nodeHeight >= 14 ? payload.value : ""}
+              </text>
+            </g>
+          );
+        }}
       >
         <Tooltip formatter={(value) => [`${value} levier(s)`, ""]} />
       </Sankey>

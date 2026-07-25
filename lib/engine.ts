@@ -486,55 +486,49 @@ export type SankeyChronoNode = { name: string };
 export type SankeyChronoLink = { source: number; target: number; value: number };
 
 /**
- * Sankey chronologique : montre à quelle étape chaque levier a été "abandonné" (annulé ou encore
- * en cours). Les leviers actifs (non annulés) coulent jusqu'à leur étape actuelle. Les leviers
- * annulés (cancelled) s'écoulent à l'étape où ils se trouvaient avant annulation, créant un flux
- * de "sortie" à chaque niveau.
+ * Sankey chronologique : montre le flux de leviers à travers les étapes de maturité M1→M5.
  *
- * Structure de flux :
- *   Tous → [L1] → [L2] → [L3] → [L4] → [L5 Réalisé]
- *         ↘ out  ↘ out  ↘ out  ↘ out
+ * Principe : un levier génère un flux horizontal de l'étape N vers l'étape N+1 **uniquement
+ * s'il a atteint au minimum l'étape N+1**. Un levier encore à l'étape N ne génère aucun flux
+ * sortant — la différence de largeur entre le flux entrant et les flux sortants du nœud rend
+ * visible les leviers qui "stagnent" à cette étape.
  *
- * Chaque "out" représente les leviers qui ne progressent pas au-delà de cette étape.
+ * Les leviers annulés génèrent un flux vers "Abandonné après MX" à l'étape où ils se trouvaient.
+ *
+ * Structure :
+ *   Tous → M1 → M2 → M3 → M4 → M5
+ *           ↘     ↘     ↘     ↘     ↘
+ *         Aband. Aband. Aband. Aband. Aband.
  */
 export function sankeyChronology(data: BeTrackData): {
   nodes: SankeyChronoNode[];
   links: SankeyChronoLink[];
 } {
+  // ── Nœuds : Tous + M1-M5 + Abandonné après M1-M5 ────────────────────────
   const nodes: SankeyChronoNode[] = [{ name: "Tous les leviers" }];
-
   STATUS_CYCLE.forEach((status) => {
-    nodes.push({ name: STATUS_SHORT_LABEL[status] });
+    nodes.push({ name: `${STATUS_LEVEL[status]} ${STATUS_SHORT_LABEL[status]}` });
   });
-
   STATUS_CYCLE.forEach((status) => {
-    nodes.push({ name: `Annulé après ${STATUS_SHORT_LABEL[status]}` });
+    nodes.push({ name: `Abandonné après ${STATUS_LEVEL[status]}` });
   });
+  // Indices : 0 = Tous, 1-5 = M1-M5, 6-10 = Abandonné après M1-M5
 
-  nodes.push({ name: "Réalisé" });
+  // ── Compter les leviers par étape ────────────────────────────────────────
+  // Pour chaque étape, combien de leviers l'ont AU MOINS atteinte ?
+  // Un levier à M4 a traversé M1, M2, M3, M4 (4 étapes).
+  // Un levier annulé à M3 a traversé M1, M2, M3 (3 étapes).
 
-  const activeByStage = new Map<LeverStatus, number>();
-  STATUS_CYCLE.forEach((s) => activeByStage.set(s, 0));
-  data.levers
-    .filter((l) => l.status !== "cancelled")
-    .forEach((l) => {
-      activeByStage.set(l.status, (activeByStage.get(l.status) ?? 0) + 1);
-    });
+  const cancelledAtStageIdx = new Map<number, number>();
+  STATUS_CYCLE.forEach((_, i) => cancelledAtStageIdx.set(i, 0));
 
-  const cancelledByStageIdx = new Map<number, number>();
-  STATUS_CYCLE.forEach((_, i) => cancelledByStageIdx.set(i, 0));
   data.levers
     .filter((l) => l.status === "cancelled")
     .forEach((l) => {
-      // Étape quittée à l'annulation : lue directement depuis `cancelledAtStage` quand disponible
-      // (levers annulés depuis ce correctif) ; repli sur l'ancienne heuristique par `progress` pour
-      // les leviers legacy annulés avant que le champ n'existe.
       let stageIdx: number;
-      const cancelledStageCycleIdx = l.cancelledAtStage
-        ? STATUS_CYCLE.indexOf(l.cancelledAtStage)
-        : -1;
-      if (cancelledStageCycleIdx !== -1) {
-        stageIdx = cancelledStageCycleIdx;
+      const explicit = l.cancelledAtStage ? STATUS_CYCLE.indexOf(l.cancelledAtStage) : -1;
+      if (explicit !== -1) {
+        stageIdx = explicit;
       } else {
         const p = l.progress;
         if (p <= 10) stageIdx = 0;
@@ -543,37 +537,79 @@ export function sankeyChronology(data: BeTrackData): {
         else if (p <= 80) stageIdx = 3;
         else stageIdx = 4;
       }
-      cancelledByStageIdx.set(stageIdx, (cancelledByStageIdx.get(stageIdx) ?? 0) + 1);
+      cancelledAtStageIdx.set(stageIdx, (cancelledAtStageIdx.get(stageIdx) ?? 0) + 1);
     });
 
+  // Pour chaque étape, combien de leviers actifs (non annulés) sont EXACTEMENT à cette étape ?
+  const activeExactly = new Map<number, number>();
+  STATUS_CYCLE.forEach((_, i) => activeExactly.set(i, 0));
+  data.levers
+    .filter((l) => l.status !== "cancelled")
+    .forEach((l) => {
+      const idx = STATUS_CYCLE.indexOf(l.status);
+      if (idx !== -1) activeExactly.set(idx, (activeExactly.get(idx) ?? 0) + 1);
+    });
+
+  // Combien de leviers ont atteint AU MOINS l'étape i ?
+  // = leviers actifs dont STATUS_ORDER >= i+1  +  leviers annulés dont l'étape d'annulation >= i
+  function reachedAtLeast(stageIdx: number): number {
+    let count = 0;
+    // Leviers actifs
+    data.levers
+      .filter((l) => l.status !== "cancelled")
+      .forEach((l) => {
+        const lvlIdx = STATUS_CYCLE.indexOf(l.status);
+        if (lvlIdx >= stageIdx) count++;
+      });
+    // Leviers annulés
+    data.levers
+      .filter((l) => l.status === "cancelled")
+      .forEach((l) => {
+        let cancelIdx: number;
+        const explicit = l.cancelledAtStage ? STATUS_CYCLE.indexOf(l.cancelledAtStage) : -1;
+        if (explicit !== -1) {
+          cancelIdx = explicit;
+        } else {
+          const p = l.progress;
+          if (p <= 10) cancelIdx = 0;
+          else if (p <= 30) cancelIdx = 1;
+          else if (p <= 55) cancelIdx = 2;
+          else if (p <= 80) cancelIdx = 3;
+          else cancelIdx = 4;
+        }
+        if (cancelIdx >= stageIdx) count++;
+      });
+    return count;
+  }
+
+  // ── Construire les liens ─────────────────────────────────────────────────
   const links: SankeyChronoLink[] = [];
   const totalLevers = data.levers.length;
+
   if (totalLevers > 0) {
+    // Tous les leviers → M1 (tout le monde passe par M1)
     links.push({ source: 0, target: 1, value: totalLevers });
   }
 
-  let cumulative = totalLevers;
   for (let i = 0; i < STATUS_CYCLE.length; i++) {
-    const nodeIdx = i + 1;
-    const exitIdx = i + 6;
-    const cancelledHere = cancelledByStageIdx.get(i) ?? 0;
-    const activeHere = activeByStage.get(STATUS_CYCLE[i]) ?? 0;
+    const stageNodeIdx = i + 1; // M1=1, M2=2, ..., M5=5
+    const abandonNodeIdx = i + 6; // Abandonné après M1=6, ..., M5=10
 
-    if (cancelledHere > 0) {
-      links.push({ source: nodeIdx, target: exitIdx, value: cancelledHere });
+    const cancelled = cancelledAtStageIdx.get(i) ?? 0;
+
+    // Flux vers "Abandonné après MX" (si > 0)
+    if (cancelled > 0) {
+      links.push({ source: stageNodeIdx, target: abandonNodeIdx, value: cancelled });
     }
 
+    // Flux vers l'étape suivante = leviers qui ont dépassé cette étape
     if (i < STATUS_CYCLE.length - 1) {
-      const toNext = cumulative - cancelledHere - activeHere;
-      if (toNext > 0) {
-        links.push({ source: nodeIdx, target: nodeIdx + 1, value: toNext });
-      }
-      cumulative = toNext;
-    } else {
-      if (activeHere > 0) {
-        links.push({ source: nodeIdx, target: nodes.length - 1, value: activeHere });
+      const nextReached = reachedAtLeast(i + 1);
+      if (nextReached > 0) {
+        links.push({ source: stageNodeIdx, target: stageNodeIdx + 1, value: nextReached });
       }
     }
+    // Pour M5 (dernière étape) : pas de flux sortant — les leviers "delivered" restent dans M5
   }
 
   const keptIndices = nodes

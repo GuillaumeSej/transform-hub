@@ -21,7 +21,7 @@ import {
   fmtInt,
   programSummary,
 } from "@/lib/engine";
-import { STATUS_SHORT_LABEL } from "@/lib/status-config";
+import { STATUS_LEVEL } from "@/lib/status-config";
 import type { BeTrackData, Lever, Project, SubLever, LeverStatus } from "@/types";
 
 const baseLever: Lever = {
@@ -189,26 +189,47 @@ describe("engine — sankeyChronology", () => {
     const data = makeData({
       levers: [
         { ...baseLever, status: "in_progress", progress: 50 },
-        { ...baseLever, id: "L002", status: "cancelled", progress: 20 },
+        {
+          ...baseLever,
+          id: "L002",
+          status: "cancelled",
+          progress: 20,
+          cancelledAtStage: "qualified",
+        },
         { ...baseLever, id: "L003", status: "delivered", progress: 100 },
       ],
     });
     const chrono = sankeyChronology(data);
+    // Nœuds orphelins (sans lien) sont filtrés — on vérifie juste qu'il y a des nœuds et des liens
     expect(chrono.nodes.length).toBeGreaterThan(5);
     expect(chrono.links.length).toBeGreaterThan(0);
   });
 
-  it("branches a cancelled lever using cancelledAtStage rather than the progress heuristic", () => {
-    // progress=95 would map to the "delivered" stage under the old heuristic, but cancelledAtStage
-    // says it was actually cancelled while still at "idea" — the explicit field must win.
+  it("active levers at an intermediate stage do NOT generate flow to the next stage", () => {
+    // 1 lever at M2 (qualified) → should NOT flow to M3
+    const data = makeData({
+      levers: [{ ...baseLever, status: "qualified" }],
+    });
+    const chrono = sankeyChronology(data);
+    const m2NodeIdx = chrono.nodes.findIndex((n) => n.name.includes("M2"));
+    const m3NodeIdx = chrono.nodes.findIndex((n) => n.name.includes("M3"));
+    // No link from M2 to M3 (the lever is still at M2)
+    const linkToM3 = chrono.links.find((l) => l.source === m2NodeIdx && l.target === m3NodeIdx);
+    expect(linkToM3).toBeUndefined();
+  });
+
+  it("branches a cancelled lever using cancelledAtStage", () => {
     const data = makeData({
       levers: [{ ...baseLever, status: "cancelled", progress: 95, cancelledAtStage: "idea" }],
     });
     const chrono = sankeyChronology(data);
-    const ideaExitLabel = `Annulé après ${STATUS_SHORT_LABEL.idea}`;
-    const deliveredExitLabel = `Annulé après ${STATUS_SHORT_LABEL.delivered}`;
+    const ideaExitLabel = `Abandonné après ${STATUS_LEVEL.idea}`;
+    const deliveredExitLabel = `Abandonné après ${STATUS_LEVEL.delivered}`;
     expect(chrono.nodes.some((n) => n.name === ideaExitLabel)).toBe(true);
-    expect(chrono.nodes.some((n) => n.name === deliveredExitLabel)).toBe(false);
+    // Should NOT have a link to Abandonné après M5
+    const deliveredExitIdx = chrono.nodes.findIndex((n) => n.name === deliveredExitLabel);
+    const linkToDeliveredExit = chrono.links.find((l) => l.target === deliveredExitIdx);
+    expect(linkToDeliveredExit).toBeUndefined();
   });
 
   it("falls back to the progress heuristic for legacy levers without cancelledAtStage", () => {
@@ -216,8 +237,31 @@ describe("engine — sankeyChronology", () => {
       levers: [{ ...baseLever, status: "cancelled", progress: 95 }],
     });
     const chrono = sankeyChronology(data);
-    const deliveredExitLabel = `Annulé après ${STATUS_SHORT_LABEL.delivered}`;
+    const deliveredExitLabel = `Abandonné après ${STATUS_LEVEL.delivered}`;
     expect(chrono.nodes.some((n) => n.name === deliveredExitLabel)).toBe(true);
+    // There should be a link to that exit node
+    const exitIdx = chrono.nodes.findIndex((n) => n.name === deliveredExitLabel);
+    expect(chrono.links.some((l) => l.target === exitIdx && l.value > 0)).toBe(true);
+  });
+
+  it("delivered levers flow through all stages to M5", () => {
+    const data = makeData({
+      levers: [{ ...baseLever, status: "delivered", progress: 100 }],
+    });
+    const chrono = sankeyChronology(data);
+    // Should have links Tous→M1, M1→M2, M2→M3, M3→M4, M4→M5
+    expect(chrono.links.length).toBe(5); // 5 links for 1 delivered lever (no abandons)
+  });
+
+  it("no links with value 0", () => {
+    const data = makeData({
+      levers: [
+        { ...baseLever, status: "in_progress", progress: 50 },
+        { ...baseLever, id: "L002", status: "cancelled", cancelledAtStage: "validated" },
+      ],
+    });
+    const chrono = sankeyChronology(data);
+    chrono.links.forEach((l) => expect(l.value).toBeGreaterThan(0));
   });
 });
 

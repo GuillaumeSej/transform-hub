@@ -103,6 +103,7 @@ const es: Record<string, string> = {
   "dashboard.kpi.riskCost": "sobrecostes",
   "dashboard.kpi.riskSavings": "ahorros reducidos",
   "dashboard.kpi.suppressions": "puestos eliminados",
+  "dashboard.widgets.portfolioFunnel": "Avance de palancas",
   "dashboard.widgets.stageFunnel": "Avance por etapa del ciclo de vida",
   "dashboard.widgets.stageFunnelFull": "Avance de las palancas por etapa del ciclo de vida",
   "dashboard.widgets.alerts": "Alertas y Notificaciones",
