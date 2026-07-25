@@ -1129,7 +1129,6 @@ export default function DashboardPage() {
                         "Progression",
                         "Risque",
                         "CAPEX",
-                        "OPEX/an",
                       ].map((h) => (
                         <th
                           key={h}
@@ -1173,7 +1172,6 @@ export default function DashboardPage() {
                             <StatusBadge risk={ss.worstRisk} />
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">{engine.fmtCurr(ss.capex)}</td>
-                          <td className="px-3 py-2.5 tabular-nums">{engine.fmtCurr(ss.opex)}</td>
                         </tr>
                       );
                     })}

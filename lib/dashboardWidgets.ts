@@ -271,6 +271,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "PieChart",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+    excludeFromDefault: true,
     viewOptions: [
       { key: "country", labelKey: "dashboard.country" },
       { key: "function", labelKey: "dashboard.function" },
@@ -295,6 +296,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "Link2",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+    excludeFromDefault: true,
   },
   {
     type: "pnl",
@@ -540,7 +542,7 @@ export function resolveActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const LAYOUT_KEY = "betrack_dashboard_layout_v7";
+const LAYOUT_KEY = "betrack_dashboard_layout_v8";
 
 const isBrowser = () => typeof window !== "undefined";
 

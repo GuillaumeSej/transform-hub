@@ -119,8 +119,9 @@ describe("dashboardWidgets — configurable widgets (view)", () => {
   it("buildDefaultLayout sets the default view for configurable widgets", () => {
     const layout = buildDefaultLayout();
     expect(layout.find((w) => w.type === "marimekko")?.view).toBe("function-country");
-    expect(layout.find((w) => w.type === "geo-breakdown")?.view).toBe("country");
     expect(layout.find((w) => w.type === "workstream-breakdown")?.view).toBe("workstream");
+    // geo-breakdown is excludeFromDefault — not in default layout but still in registry
+    expect(layout.find((w) => w.type === "geo-breakdown")).toBeUndefined();
   });
 
   it("non-configurable widgets have no view field", () => {
@@ -138,10 +139,11 @@ describe("dashboardWidgets — configurable widgets (view)", () => {
 
   it("setWidgetView updates only the targeted instance", () => {
     const layout = buildDefaultLayout();
-    const next = setWidgetView(layout, "marimekko", "workstream-project");
-    expect(next.find((w) => w.instanceId === "marimekko")?.view).toBe("workstream-project");
-    expect(next.find((w) => w.instanceId === "geo-breakdown")?.view).toBe(
-      layout.find((w) => w.instanceId === "geo-breakdown")?.view
+    const next = setWidgetView(layout, "marimekko", "workstream-lever");
+    expect(next.find((w) => w.instanceId === "marimekko")?.view).toBe("workstream-lever");
+    // Other widgets are unchanged
+    expect(next.find((w) => w.instanceId === "workstream-breakdown")?.view).toBe(
+      layout.find((w) => w.instanceId === "workstream-breakdown")?.view
     );
   });
 });
@@ -191,8 +193,8 @@ describe("dashboardWidgets — builder générique (customViews)", () => {
     expect(updated.customViews).toHaveLength(3);
     expect(updated.view).toBe(updated.customViews?.[2].id);
     // Les autres instances ne sont pas affectées.
-    const geo = next.find((w) => w.type === "geo-breakdown")!;
-    expect(geo.customViews).toHaveLength(2);
+    const ws = next.find((w) => w.type === "workstream-breakdown")!;
+    expect(ws.customViews).toHaveLength(3);
   });
 
   it("addCustomViewToInstance materializes legacy defaultCustomViews first if the instance had none", () => {
