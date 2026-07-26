@@ -41,7 +41,9 @@ import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
 import { SubLeverForm, type SubLeverFormValues } from "@/components/shared/SubLeverForm";
 import { ActionForm, type ActionFormValues } from "@/components/shared/ActionForm";
 import { ActionKanban } from "@/components/shared/ActionKanban";
-import { ActionGantt } from "@/components/shared/ActionGantt";
+import { ActionGantt } from "@/components/shared/charts/ActionGantt";
+import { JCurveChart } from "@/components/shared/charts/JCurveChart";
+import { consolidateLeverFromActions, leverJCurve, leverPayback } from "@/lib/leverConsolidate";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import type { ActionStatus, LeverAction, SubLever } from "@/types";
 
@@ -93,6 +95,17 @@ export default function LeverDetailClient() {
 
   const lever = data.getLeverById(id);
   const allDependencyAlerts = useMemo(() => engine.dependencyAlerts(data), [data]);
+
+  // J-Curve + consolidation — hooks doivent être avant tout return conditionnel
+  const jCurveData = useMemo(
+    () => (lever ? leverJCurve(lever, data.program.fyStart, data.program.fyEnd) : []),
+    [lever, data.program.fyStart, data.program.fyEnd]
+  );
+  const paybackMonth = useMemo(() => leverPayback(jCurveData), [jCurveData]);
+  const consolidatedKPIs = useMemo(
+    () => (lever ? consolidateLeverFromActions(lever) : undefined),
+    [lever]
+  );
 
   if (!lever) {
     return (
@@ -609,6 +622,76 @@ export default function LeverDetailClient() {
               <Stat label="Date de fin estimée">{lever.end}</Stat>
               <Stat label="Dernière mise à jour">{lever.lastUpdate}</Stat>
             </div>
+            {/* ── Courbe en J + Gantt des actions (si le levier a des actions avec impacts) ── */}
+            {(lever.actions ?? []).some((a) => (a.impacts ?? []).length > 0) && (
+              <>
+                <SectionTitle>Courbe en J</SectionTitle>
+                <JCurveChart
+                  data={jCurveData}
+                  paybackMonth={paybackMonth}
+                  labelPlan="Plan"
+                  labelReforecast="Reforecast"
+                  labelActual="Réalisé"
+                />
+                {(lever.actions ?? []).length > 0 && (
+                  <>
+                    <SectionTitle>Timeline des actions</SectionTitle>
+                    <ActionGantt actions={lever.actions ?? []} />
+                  </>
+                )}
+                {consolidatedKPIs && (
+                  <div className="mt-4 grid grid-cols-5 gap-3 rounded-lg border border-border bg-neutral-50 p-3">
+                    <div className="text-center">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
+                        Gain brut
+                      </div>
+                      <div className="mt-0.5 text-[15px] font-bold text-primary">
+                        {engine.fmtCurr(consolidatedKPIs.grossSavings ?? 0)}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
+                        Coût total
+                      </div>
+                      <div className="mt-0.5 text-[15px] font-bold text-bp-coral">
+                        {engine.fmtCurr(
+                          (consolidatedKPIs.capex ?? 0) +
+                            (consolidatedKPIs.opexOneOff ?? 0) +
+                            (consolidatedKPIs.opexRec ?? 0)
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
+                        Gain net
+                      </div>
+                      <div className="mt-0.5 text-[15px] font-bold text-rag-green-dark">
+                        {engine.fmtCurr(consolidatedKPIs.netSavings ?? 0)}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
+                        ROI
+                      </div>
+                      <div className="mt-0.5 text-[15px] font-bold text-primary">
+                        {(consolidatedKPIs.capex ?? 0) + (consolidatedKPIs.opexOneOff ?? 0) > 0
+                          ? `${((consolidatedKPIs.grossSavings ?? 0) / ((consolidatedKPIs.capex ?? 0) + (consolidatedKPIs.opexOneOff ?? 0))).toFixed(1)}x`
+                          : "—"}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
+                        Payback
+                      </div>
+                      <div className="mt-0.5 text-[15px] font-bold text-primary">
+                        {paybackMonth ?? "—"}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
             <SectionTitle>Description</SectionTitle>
             <p className="text-[13px] text-secondary">{lever.description}</p>
 
@@ -918,10 +1001,7 @@ export default function LeverDetailClient() {
                 }
               />
             ) : (
-              <ActionGantt
-                actions={actions}
-                onCardClick={(action) => setActionModal({ mode: "edit", action })}
-              />
+              <ActionGantt actions={actions} />
             )}
 
             <p className="mt-4 flex items-start gap-1.5 text-[11px] text-tertiary">
