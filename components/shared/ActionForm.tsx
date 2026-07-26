@@ -189,9 +189,9 @@ export function ActionForm({
                 <th className="px-2 py-1.5 font-semibold text-secondary">Nature</th>
                 <th className="px-2 py-1.5 font-semibold text-secondary">€M</th>
                 <th className="px-2 py-1.5 font-semibold text-secondary">ETP</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">P&L</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">CC</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Entité</th>
+                <th className="px-2 py-1.5 font-semibold text-secondary">Poste de coût</th>
+                <th className="px-2 py-1.5 font-semibold text-secondary">Centre de coût</th>
+                <th className="px-2 py-1.5 font-semibold text-secondary">Entité (P&L)</th>
                 <th className="w-8 px-1"></th>
               </tr>
             </thead>
@@ -202,9 +202,15 @@ export function ActionForm({
                     <select
                       className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
                       value={imp.type}
-                      onChange={(e) =>
-                        updateImpact(idx, { type: e.target.value as "cost" | "saving" })
-                      }
+                      onChange={(e) => {
+                        const newType = e.target.value as "cost" | "saving";
+                        const patch: Partial<ActionImpact> = { type: newType };
+                        // Si on passe en "saving" et que la nature est "capex" (non valide), basculer vers "oneoff"
+                        if (newType === "saving" && imp.nature === "capex") {
+                          patch.nature = "oneoff";
+                        }
+                        updateImpact(idx, patch);
+                      }}
                     >
                       <option value="cost">Coût</option>
                       <option value="saving">Gain</option>
@@ -228,9 +234,18 @@ export function ActionForm({
                         })
                       }
                     >
-                      <option value="capex">CAPEX</option>
-                      <option value="opex_rec">OPEX réc.</option>
-                      <option value="oneoff">One-off</option>
+                      {imp.type === "cost" ? (
+                        <>
+                          <option value="capex">CAPEX</option>
+                          <option value="opex_rec">OPEX réc.</option>
+                          <option value="oneoff">One-off</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="opex_rec">Récurrent</option>
+                          <option value="oneoff">One-off</option>
+                        </>
+                      )}
                     </select>
                   </td>
                   <td className="px-1 py-1">

@@ -44,11 +44,11 @@ export function consolidateLeverFromActions(lever: Lever): Partial<Lever> | unde
   const fteImpact = sumFTE(actions);
 
   return {
-    grossSavings: Math.round(savings * 10) / 10,
-    netSavings: Math.round((savings - totalCosts) * 10) / 10,
-    capex: Math.round(capex * 10) / 10,
-    opexOneOff: Math.round(opexOneOff * 10) / 10,
-    opexRec: Math.round(opexRec * 10) / 10,
+    grossSavings: Math.round(savings * 100) / 100,
+    netSavings: Math.round((savings - totalCosts) * 100) / 100,
+    capex: Math.round(capex * 100) / 100,
+    opexOneOff: Math.round(opexOneOff * 100) / 100,
+    opexRec: Math.round(opexRec * 100) / 100,
     fteImpact,
   };
 }

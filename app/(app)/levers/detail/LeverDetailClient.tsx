@@ -674,9 +674,15 @@ export default function LeverDetailClient() {
                         ROI
                       </div>
                       <div className="mt-0.5 text-[15px] font-bold text-primary">
-                        {(consolidatedKPIs.capex ?? 0) + (consolidatedKPIs.opexOneOff ?? 0) > 0
-                          ? `${((consolidatedKPIs.grossSavings ?? 0) / ((consolidatedKPIs.capex ?? 0) + (consolidatedKPIs.opexOneOff ?? 0))).toFixed(1)}x`
-                          : "—"}
+                        {(() => {
+                          const totalCosts =
+                            (consolidatedKPIs.capex ?? 0) +
+                            (consolidatedKPIs.opexOneOff ?? 0) +
+                            (consolidatedKPIs.opexRec ?? 0);
+                          return totalCosts > 0
+                            ? `${((consolidatedKPIs.grossSavings ?? 0) / totalCosts).toFixed(1)}x`
+                            : "—";
+                        })()}
                       </div>
                     </div>
                     <div className="text-center">
