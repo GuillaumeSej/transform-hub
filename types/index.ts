@@ -148,13 +148,37 @@ export type Lever = {
   projectId?: string;
 };
 
+/** Ligne d'impact d'une action — décrit UN effet financier/RH sur UN poste de coût.
+ *  Une action peut avoir plusieurs lignes d'impact (ex: consulting fees + licence + réduction ETP).
+ *  Ce sont des attributs de l'action, pas un 3ème niveau de navigation. */
+export type ActionImpact = {
+  id: string;
+  label: string; // "Consulting fees", "Réduction ETP comptables"
+  type: "cost" | "saving";
+  /** Pour les coûts : CAPEX, OPEX récurrent, ou One-off. Ignoré pour les savings. */
+  nature: "capex" | "opex_rec" | "oneoff";
+  amount: number; // €M — toujours positif, le type détermine le signe
+  fteCount?: number; // ETP (négatif = réduction)
+  pnlMap?: string; // compte P&L (hérite du levier si absent)
+  costCenter?: string;
+  entity?: string; // entité légale (hérite du levier si absent)
+};
+
 export type LeverAction = {
   id: string;
   name: string;
+  description?: string;
+  owner?: string;
+  ownerInit?: string;
   start: string; // ISO date
   end: string; // ISO date
-  cost: number; // €K
+  cost: number; // €K — legacy, conservé pour compat
   status: ActionStatus;
+  deliveredDate?: string; // date de passage en "done"
+  /** Lignes d'impact financier (tableau embarqué). Chaque ligne porte son propre
+   *  mapping P&L, centre de coût, et entité. Le levier parent consolide automatiquement
+   *  ses KPIs depuis la somme des impacts de toutes ses actions. */
+  impacts?: ActionImpact[];
 };
 
 /** Un sous-levier = l'impact d'un levier sur UN poste de dépense/BU unique, avec son propre plan

@@ -350,10 +350,11 @@ export default function LeverDetailClient() {
         open={actionModal !== null}
         onOpenChange={(open) => !open && setActionModal(null)}
         title={actionModal?.mode === "edit" ? "Modifier l'action" : "Nouvelle action"}
-        maxWidth="480px"
+        maxWidth="860px"
       >
         {actionModal && (
           <ActionForm
+            data={data}
             initialValues={actionModal.action}
             submitLabel={actionModal.mode === "edit" ? "Enregistrer" : "Créer l'action"}
             onCancel={() => setActionModal(null)}
