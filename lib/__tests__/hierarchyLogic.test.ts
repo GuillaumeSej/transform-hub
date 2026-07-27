@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildHierarchyForest,
+  buildHierarchyNodePayload,
   derivePnlAccounts,
   hierarchyPathValue,
   nodesForDomain,
@@ -92,6 +93,34 @@ describe("hierarchyLogic — resolveHierarchyPath", () => {
 });
 
 describe("hierarchyLogic — domains, tree and P&L", () => {
+  it("builds a Firestore-safe P&L node from a partially edited form", () => {
+    const node = buildHierarchyNodePayload({
+      id: "pnl-1",
+      companyId: "c1",
+      domain: "financial",
+      level: { key: "pnl", label: "P&L", order: 0, semantic: "pnl" },
+      draft: {
+        code: " REV ",
+        label: " Revenue ",
+        parentId: "",
+        baseline: "",
+        sign: "1",
+        selectable: true,
+      },
+    });
+    expect(node).toEqual({
+      id: "pnl-1",
+      companyId: "c1",
+      domain: "financial",
+      levelKey: "pnl",
+      code: "REV",
+      label: "Revenue",
+      parentId: null,
+      financial: { baseline: 0, sign: 1, selectable: true },
+    });
+    expect(JSON.stringify(node)).not.toContain("undefined");
+  });
+
   it("keeps legacy nodes in the financial domain and isolates geography", () => {
     const nodes = [...nodes3, { ...nodes3[0], id: "geo", domain: "geographic" as const }];
     expect(nodesForDomain(nodes, "financial")).toHaveLength(3);

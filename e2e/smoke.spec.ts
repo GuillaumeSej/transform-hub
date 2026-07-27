@@ -63,6 +63,16 @@ test("admin company detail exposes both hierarchy builders", async ({ page }) =>
   await expectNoPageOverflow(page);
 });
 
+test("unsaved hierarchy levels cannot create ghost values", async ({ page }) => {
+  await loginAs(page, users.admin);
+  await page.goto("/admin/companies/detail?id=c1");
+  await page.getByRole("button", { name: /Arborescence financière/ }).click();
+  await page.getByRole("button", { name: "Ajouter un niveau" }).click();
+  await expect(page.getByText(/Enregistrez d'abord la structure/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Ajouter$/ }).last()).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Enregistrer la structure" })).toBeEnabled();
+});
+
 test("finance page renders configured P&L container without mobile overflow", async ({ page }) => {
   await loginAs(page, users.finance);
   await page.goto("/finance");
