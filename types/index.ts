@@ -184,7 +184,9 @@ export type LeverAction = {
   impacts?: ActionImpact[];
 };
 
-/** Un sous-levier = l'impact d'un levier sur UN poste de dépense/BU unique, avec son propre plan
+/** @deprecated Le modèle cible utilise uniquement Levier → Action enrichie. Conservé pour lire
+ * les anciennes données et assurer une migration progressive.
+ * Un sous-levier = l'impact d'un levier sur UN poste de dépense/BU unique, avec son propre plan
  * d'action. Un levier avec plusieurs postes de dépense impactés se décompose en plusieurs
  * sous-leviers ; un levier à impact unique n'en a pas besoin (voir Lever.actions). */
 export type SubLever = {

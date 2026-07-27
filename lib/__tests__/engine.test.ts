@@ -9,6 +9,7 @@ import {
   actionProgress,
   recomputeLeverProgress,
   pnlImpact,
+  pnlImpactDetailed,
   byGeo,
   byFunction,
   byCountry,
@@ -731,5 +732,72 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
     expect(s.plannedCosts).toBe(0);
     expect(s.engagedCosts).toBe(0);
     expect(s.reforecastCosts).toBe(0);
+  });
+});
+
+describe("engine — pnlImpactDetailed from action impacts", () => {
+  it("uses action-level accounts, timing and delivered status", () => {
+    const data = makeData({
+      pnlAccounts: [
+        { id: "GA", name: "General & Admin", baseline: -10, sign: -1 },
+        { id: "COGS", name: "Cost of Goods Sold", baseline: -20, sign: -1 },
+      ],
+      levers: [
+        {
+          ...baseLever,
+          pnlMap: "GA",
+          actions: [
+            {
+              id: "A1",
+              name: "Consulting",
+              start: "2026-01-01",
+              end: "2026-02-28",
+              deliveredDate: "2026-02-15",
+              status: "done",
+              cost: 50,
+              impacts: [
+                {
+                  id: "I1",
+                  label: "Consulting fees",
+                  type: "cost",
+                  nature: "oneoff",
+                  amount: 0.2,
+                  pnlMap: "GA",
+                },
+              ],
+            },
+            {
+              id: "A2",
+              name: "Savings",
+              start: "2026-02-01",
+              end: "2026-03-31",
+              status: "todo",
+              cost: 0,
+              impacts: [
+                {
+                  id: "I2",
+                  label: "Productivity savings",
+                  type: "saving",
+                  nature: "opex_rec",
+                  amount: 1,
+                  pnlMap: "COGS",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      subLevers: [],
+    });
+
+    const feb = pnlImpactDetailed(data, { year: "2026", quarter: "Q1", month: "Feb" });
+    expect(feb).toEqual([
+      { accountId: "GA", accountName: "General & Admin", plan: -0.2, realized: -0.2 },
+    ]);
+
+    const march = pnlImpactDetailed(data, { year: "2026", quarter: "Q1", month: "Mar" });
+    expect(march).toEqual([
+      { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 1, realized: 0 },
+    ]);
   });
 });

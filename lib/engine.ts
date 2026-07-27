@@ -207,6 +207,26 @@ export function pnlImpactDetailed(
   };
 
   for (const lever of active) {
+    const actionImpacts = (lever.actions ?? []).flatMap((action) =>
+      (action.impacts ?? []).map((impact) => ({ action, impact }))
+    );
+    if (actionImpacts.length > 0) {
+      for (const { action, impact } of actionImpacts) {
+        const account = impact.pnlMap || lever.pnlMap;
+        const signedAmount = impact.type === "saving" ? impact.amount : -impact.amount;
+        if (!periodFilter || dateMatchesPeriod(action.end, periodFilter)) {
+          addPlan(account, signedAmount);
+        }
+        if (action.status === "done") {
+          const realDate = action.deliveredDate ?? action.end;
+          if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
+            addRealized(account, signedAmount);
+          }
+        }
+      }
+      continue;
+    }
+
     const subs = data.subLevers?.filter((s) => s.leverId === lever.id) ?? [];
     const hasSubLevers = subs.length > 0;
 
@@ -350,8 +370,19 @@ const ACTION_STATUS_WEIGHT: Record<ActionStatus, number> = {
 /** Progression d'un plan d'action : moyenne pondérée par statut des actions (done=100, in_progress=50). */
 export function actionProgress(actions: LeverAction[]): number {
   if (actions.length === 0) return 0;
-  const total = actions.reduce((s, a) => s + ACTION_STATUS_WEIGHT[a.status], 0);
-  return Math.round(total / actions.length);
+  const weights = actions.map((action) => {
+    const financialWeight = (action.impacts ?? []).reduce(
+      (sum, impact) => sum + Math.abs(impact.amount),
+      0
+    );
+    return financialWeight > 0 ? financialWeight : 1;
+  });
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const total = actions.reduce(
+    (sum, action, index) => sum + ACTION_STATUS_WEIGHT[action.status] * weights[index],
+    0
+  );
+  return Math.round(total / totalWeight);
 }
 
 export function subLeverProgress(subLever: SubLever): number {

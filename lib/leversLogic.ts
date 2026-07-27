@@ -1,4 +1,5 @@
 import * as engine from "@/lib/engine";
+import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
 import type { CascadeShift } from "@/lib/engine";
 import { STATUS_ORDER } from "@/lib/status-config";
 import type {
@@ -123,16 +124,37 @@ function makeAuditEntry(entry: Omit<AuditEntry, "ts">): AuditEntry {
   return { ...entry, ts: nowTs() };
 }
 
-/** Recalcule lever.progress à partir des sous-leviers, en renvoyant le lever mis à jour
- * seulement s'il a changé (sinon undefined) — évite une écriture Firestore inutile. */
+/** Recalcule le levier parent depuis son plan d'action : progression pondérée et agrégats
+ * financiers/RH. Si le plan initial est déjà figé, les chiffres consolidés alimentent le
+ * reforecast ; sinon ils alimentent directement les champs du levier. */
 function recomputeLeverProgress(lever: Lever, subLevers: SubLever[]): Lever | undefined {
   const newProgress = engine.recomputeLeverProgress(lever, subLevers);
-  if (newProgress === lever.progress) return undefined;
-  return {
+  const consolidated = consolidateLeverFromActions(lever);
+  const nextStatus =
+    newProgress >= 100 && lever.status !== "cancelled" ? "delivered" : lever.status;
+  const financialPatch: Partial<Lever> = consolidated
+    ? lever.lockedPlan
+      ? {
+          reforecast: {
+            grossSavings: consolidated.grossSavings ?? lever.grossSavings,
+            netSavings: consolidated.netSavings ?? lever.netSavings,
+            capex: consolidated.capex ?? lever.capex,
+            opexOneOff: consolidated.opexOneOff ?? lever.opexOneOff,
+            opexRec: consolidated.opexRec ?? lever.opexRec,
+          },
+          fteImpact: consolidated.fteImpact ?? lever.fteImpact,
+        }
+      : consolidated
+    : {};
+  const next: Lever = {
     ...lever,
+    ...financialPatch,
     progress: newProgress,
-    status: newProgress >= 100 && lever.status !== "cancelled" ? "delivered" : lever.status,
+    status: nextStatus,
+    ...(nextStatus === "delivered" && !lever.deliveredDate ? { deliveredDate: nowDate() } : {}),
   };
+
+  return JSON.stringify(next) === JSON.stringify(lever) ? undefined : next;
 }
 
 export type LeverMutationResult = {
@@ -440,7 +462,11 @@ export function createAction(
     ...levers.flatMap((l) => l.actions?.map((a) => a.id) ?? []),
     ...subLevers.flatMap((s) => s.actions.map((a) => a.id)),
   ];
-  const action: LeverAction = { ...input, id: nextEntityId("AC", allIds) };
+  const action: LeverAction = {
+    ...input,
+    id: nextEntityId("AC", allIds),
+    ...(input.status === "done" && !input.deliveredDate ? { deliveredDate: nowDate() } : {}),
+  };
   const currentActions = readActions(levers, subLevers, scope);
   const result = writeActions(levers, subLevers, scope, [...currentActions, action]);
 
@@ -469,7 +495,14 @@ export function updateAction(
   const actions = readActions(levers, subLevers, scope);
   const idx = actions.findIndex((a) => a.id === actionId);
   if (idx === -1) throw new Error(`Action "${actionId}" introuvable`);
-  const after = { ...actions[idx], ...patch };
+  const before = actions[idx];
+  const deliveredDatePatch: Partial<LeverAction> =
+    patch.status === "done" && before.status !== "done"
+      ? { deliveredDate: patch.deliveredDate ?? nowDate() }
+      : patch.status && patch.status !== "done"
+        ? { deliveredDate: undefined }
+        : {};
+  const after = { ...before, ...patch, ...deliveredDatePatch };
   const nextActions = [...actions];
   nextActions[idx] = after;
   const result = writeActions(levers, subLevers, scope, nextActions);

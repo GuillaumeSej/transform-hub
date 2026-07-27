@@ -96,22 +96,15 @@ export default function LeversPage() {
     );
   }, [data.levers, role, user, clearance]);
 
-  // Leviers/sous-leviers avec au moins une contrainte de dépendance violée (colonne ⚠ + filtre)
+  // Leviers avec au moins une contrainte de dépendance violée (colonne ⚠ + filtre)
   const alertedLeverIds = useMemo(() => {
     const ids = new Set<string>();
     for (const alert of engine.dependencyAlerts(data)) {
-      for (const entityId of [alert.sourceId, alert.targetId]) {
-        if (entityId.startsWith("SL")) {
-          const parent = data.subLevers.find((s) => s.id === entityId);
-          if (parent) ids.add(parent.leverId);
-        } else {
-          ids.add(entityId);
-        }
-      }
+      for (const entityId of [alert.sourceId, alert.targetId]) ids.add(entityId);
     }
     return ids;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.levers, data.subLevers]);
+  }, [data.levers]);
 
   // Toutes les propriétés catégorielles du levier sont filtrables — les valeurs proposées sont
   // celles réellement présentes dans les données. L'état vit dans l'URL (préfixe f_) pour rester
@@ -124,10 +117,10 @@ export default function LeversPage() {
         label: "Workstream",
         getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       },
-      { key: "f_status", label: "Niveau", getValue: (l) => lifecycle.label(l.status) },
+      { key: "f_status", label: "Maturité", getValue: (l) => lifecycle.label(l.status) },
       { key: "f_owner", label: "Owner", getValue: (l) => l.owner },
       { key: "f_sponsor", label: "Sponsor", getValue: (l) => l.sponsor },
-      { key: "f_geography", label: "Géographie", getValue: (l) => l.geography },
+      { key: "f_geography", label: "Région", getValue: (l) => l.geography },
       { key: "f_country", label: "Pays", getValue: (l) => l.country },
       { key: "f_entity", label: "Entité", getValue: (l) => l.entity },
       { key: "f_function", label: "Fonction", getValue: (l) => l.function },
@@ -135,8 +128,13 @@ export default function LeversPage() {
         key: "f_costCenter",
         label: "Centre de coût / Poste de dépense",
         getValue: (l) => {
-          const subs = data.subLevers.filter((s) => s.leverId === l.id);
-          return subs.length ? subs.map((s) => s.expensePost).join(", ") : l.costCenter;
+          const actionCenters = (l.actions ?? [])
+            .flatMap((action) => action.impacts ?? [])
+            .map((impact) => impact.costCenter)
+            .filter((value): value is string => !!value);
+          return actionCenters.length
+            ? Array.from(new Set(actionCenters)).join(", ")
+            : l.costCenter;
         },
       },
       { key: "f_priority", label: "Priorité", getValue: (l) => l.priority },
@@ -145,12 +143,6 @@ export default function LeversPage() {
         key: "f_pnl",
         label: "Compte P&L",
         getValue: (l) => data.pnlAccounts.find((p) => p.id === l.pnlMap)?.name ?? l.pnlMap,
-      },
-      {
-        key: "f_subLevers",
-        label: "Sous-leviers",
-        getValue: (l) =>
-          data.subLevers.some((s) => s.leverId === l.id) ? "Avec sous-leviers" : "Sans sous-levier",
       },
       {
         key: "f_alerts",
@@ -169,7 +161,7 @@ export default function LeversPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.workstreams, data.subLevers, data.pnlAccounts, alertedLeverIds, lifecycle]
+    [data.workstreams, data.pnlAccounts, alertedLeverIds, lifecycle]
   );
 
   const activeFilters: ActiveFilters = useMemo(() => {
@@ -217,8 +209,11 @@ export default function LeversPage() {
       wsName: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       statusLabel: lifecycle.label(l.status),
       costCenterLabel: (() => {
-        const subs = data.subLevers.filter((s) => s.leverId === l.id);
-        return subs.length ? subs.map((s) => s.expensePost).join(", ") : l.costCenter;
+        const centers = (l.actions ?? [])
+          .flatMap((action) => action.impacts ?? [])
+          .map((impact) => impact.costCenter)
+          .filter((value): value is string => !!value);
+        return centers.length ? Array.from(new Set(centers)).join(", ") : l.costCenter;
       })(),
       hasAlert: alertedLeverIds.has(l.id),
       roi: costs > 0 ? Math.round((l.netSavings / costs) * 10) / 10 : null,

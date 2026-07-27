@@ -86,3 +86,14 @@ test("dashboard widgets stay inside the mobile viewport", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Tableau de bord exécutif/i })).toBeVisible();
   await expectNoPageOverflow(page);
 });
+
+test("migrated lever exposes J-Curve and action-only plan", async ({ page }) => {
+  await loginAs(page, users.cto);
+  await page.goto("/levers/detail?id=L001");
+  await expect(page.getByText("Courbe en J")).toBeVisible();
+  await expect(page.getByText("Timeline des actions")).toBeVisible();
+  await expect(page.getByText("Sous-leviers")).toHaveCount(0);
+  await page.getByRole("button", { name: "Plan d'action" }).click();
+  await expect(page.getByText(/Plan d'action — Optimisation achats indirects/)).toBeVisible();
+  await expectNoPageOverflow(page);
+});

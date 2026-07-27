@@ -41,7 +41,7 @@ function write<T>(key: string, value: T): void {
 
 // Incrémenter cette valeur invalide tout cache existant (schéma de données modifié) et force
 // un reseed propre depuis mockData — évite les crashs sur un localStorage d'une version antérieure.
-const SCHEMA_VERSION = "8";
+const SCHEMA_VERSION = "9";
 
 // Anciennes clés localStorage des périmètres migrés sur Firestore (leviers, puis workforce) —
 // nettoyées au passage pour ne pas laisser traîner de données orphelines dans le navigateur.

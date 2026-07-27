@@ -13,6 +13,7 @@ import {
   subscribeHierarchyNodes,
 } from "@/lib/firestore/admin";
 import { derivePnlAccounts } from "@/lib/hierarchyLogic";
+import { migrateMockLeversToActions } from "@/lib/mockActionMigration";
 import type { CascadeShift } from "@/lib/engine";
 import { mockData } from "@/data/mockData";
 import type {
@@ -38,13 +39,12 @@ const DEMO_USER = "Utilisateur démo";
  * seed mockData : sans ça, les leviers de démo déjà en L3+/L4+ n'auraient pas de plan figé tant
  * qu'on ne les modifie pas manuellement. */
 function lockedSeed() {
+  const migratedLevers = migrateMockLeversToActions(mockData.levers, mockData.subLevers);
   return {
-    levers: mockData.levers.map((l) =>
+    levers: migratedLevers.map((l) =>
       leversLogic.applyPlanLock({ ...l, companyId: l.companyId ?? "c1" })
     ),
-    subLevers: mockData.subLevers.map((s) =>
-      leversLogic.applyPlanLock({ ...s, companyId: s.companyId ?? "c1" })
-    ),
+    subLevers: [],
     comments: mockData.comments,
     audit: mockData.audit,
   };
@@ -114,48 +114,49 @@ export function useBeTrackData(companyId?: string | null) {
 
   useEffect(() => {
     let cancelled = false;
-    leversDb
-      .ensureLeversSeeded(lockedSeed())
-      .catch((err) => console.error("[betrack] échec du seed Firestore des leviers :", err));
-    workforceDb
-      .ensureWorkforceSeeded(workforceSeed())
-      .catch((err) => console.error("[betrack] échec du seed Firestore workforce :", err));
-    ensureAdminSeeded().catch((err) =>
-      console.error("[betrack] échec du seed Firestore admin :", err)
-    );
-    alertsDb
-      .ensureAlertsSeeded()
-      .catch((err) => console.error("[betrack] échec du seed Firestore des alertes :", err));
+    const unsubscribers: (() => void)[] = [];
 
-    if (companyId) {
-      leversDb
-        .migrateCompanyIds(companyId)
-        .catch((err) => console.error("[betrack] échec de la migration companyId :", err));
-    }
+    void (async () => {
+      try {
+        // Le seed doit être terminé avant les subscriptions : lors d'un changement de schéma,
+        // cela évite d'afficher brièvement les anciennes données/sous-leviers.
+        await Promise.all([
+          leversDb.ensureLeversSeeded(lockedSeed()),
+          workforceDb.ensureWorkforceSeeded(workforceSeed()),
+          ensureAdminSeeded(),
+          alertsDb.ensureAlertsSeeded(),
+        ]);
+        if (companyId) await leversDb.migrateCompanyIds(companyId);
+      } catch (err) {
+        console.error("[betrack] échec de l'initialisation Firestore :", err);
+      }
+      if (cancelled) return;
 
-    const unsubscribers = [
-      leversDb.subscribeLevers((l) => !cancelled && setLevers(l), companyId),
-      leversDb.subscribeSubLevers((s) => !cancelled && setSubLevers(s), companyId),
-      leversDb.subscribeComments((c) => !cancelled && setComments(c)),
-      leversDb.subscribeAuditLog((a) => !cancelled && setAudit(a)),
-      workforceDb.subscribeEmployees((e) => !cancelled && setEmployees(e)),
-      workforceDb.subscribeMovements((m) => !cancelled && setMovements(m)),
-      workforceDb.subscribeWorkforceMeta((m) => !cancelled && setWorkforceMeta(m)),
-      alertsDb.subscribeAlerts((a) => !cancelled && setAlerts(a), companyId),
-      alertsDb.subscribeAlertStates((s) => !cancelled && setAlertStates(s), companyId),
-      subscribeCompanies((items) => !cancelled && setCompanies(items)),
-    ];
-    if (companyId) {
       unsubscribers.push(
-        subscribeHierarchyNodes(
-          companyId,
-          (nodes) => !cancelled && setFinancialNodes(nodes),
-          "financial"
-        )
+        leversDb.subscribeLevers((l) => !cancelled && setLevers(l), companyId),
+        leversDb.subscribeSubLevers((s) => !cancelled && setSubLevers(s), companyId),
+        leversDb.subscribeComments((c) => !cancelled && setComments(c)),
+        leversDb.subscribeAuditLog((a) => !cancelled && setAudit(a)),
+        workforceDb.subscribeEmployees((e) => !cancelled && setEmployees(e)),
+        workforceDb.subscribeMovements((m) => !cancelled && setMovements(m)),
+        workforceDb.subscribeWorkforceMeta((m) => !cancelled && setWorkforceMeta(m)),
+        alertsDb.subscribeAlerts((a) => !cancelled && setAlerts(a), companyId),
+        alertsDb.subscribeAlertStates((s) => !cancelled && setAlertStates(s), companyId),
+        subscribeCompanies((items) => !cancelled && setCompanies(items))
       );
-    } else {
-      setFinancialNodes([]);
-    }
+      if (companyId) {
+        unsubscribers.push(
+          subscribeHierarchyNodes(
+            companyId,
+            (nodes) => !cancelled && setFinancialNodes(nodes),
+            "financial"
+          )
+        );
+      } else {
+        setFinancialNodes([]);
+      }
+    })();
+
     return () => {
       cancelled = true;
       unsubscribers.forEach((unsub) => unsub());
@@ -173,11 +174,12 @@ export function useBeTrackData(companyId?: string | null) {
   const data = useMemo(
     () => {
       const company = companies.find((item) => item.id === companyId);
+      const migratedLevers = migrateMockLeversToActions(levers, subLevers);
       return {
         program: storage.getProgram(),
         workstreams: storage.getWorkstreams(),
-        levers,
-        subLevers,
+        levers: migratedLevers,
+        subLevers: [] as SubLever[],
         // Reconstruit au format Workforce historique pour ne pas casser les consommateurs
         // existants — mais la donnée vit désormais dans Firestore (temps réel partagé).
         workforce: {
@@ -204,7 +206,14 @@ export function useBeTrackData(companyId?: string | null) {
           company?.hierarchyLevels ?? [],
           financialNodes,
           mockData.pnlAccounts,
-          [...levers.map((lever) => lever.pnlMap), ...subLevers.map((subLever) => subLever.pnlMap)]
+          [
+            ...migratedLevers.map((lever) => lever.pnlMap),
+            ...migratedLevers.flatMap((lever) =>
+              (lever.actions ?? []).flatMap((action) =>
+                (action.impacts ?? []).map((impact) => impact.pnlMap || lever.pnlMap)
+              )
+            ),
+          ]
         ),
       };
     },

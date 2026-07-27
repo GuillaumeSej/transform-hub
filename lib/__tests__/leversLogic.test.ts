@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   applyPlanLock,
+  createAction,
+  updateAction,
   createLever,
   updateLever,
   deleteSubLever,
@@ -244,6 +246,148 @@ describe("leversLogic — updateLever (status change & plan lock triggering)", (
     const levers = [makeLever("cancelled", { cancelledAtStage: "validated" })];
     const result = updateLever(levers, "L001", { priority: "high" }, "user");
     expect(result.lever.cancelledAtStage).toBe("validated");
+  });
+});
+
+describe("leversLogic — enriched action consolidation", () => {
+  const lockedLever = makeLever("in_progress", {
+    progress: 0,
+    lockedPlan: { grossSavings: 5, netSavings: 4, opexOneOff: 0.2, opexRec: 0, capex: 1 },
+    reforecast: { grossSavings: 5, netSavings: 4, opexOneOff: 0.2, opexRec: 0, capex: 1 },
+    actions: [],
+  });
+
+  it("creates an action and recomputes the parent reforecast and FTE", () => {
+    const result = createAction(
+      [lockedLever],
+      [],
+      { leverId: "L001" },
+      {
+        name: "Déploiement",
+        start: "2026-01-01",
+        end: "2026-03-31",
+        status: "done",
+        cost: 0,
+        impacts: [
+          {
+            id: "I-COST",
+            label: "Licence",
+            type: "cost",
+            nature: "capex",
+            amount: 1,
+          },
+          {
+            id: "I-SAVE",
+            label: "Productivité",
+            type: "saving",
+            nature: "opex_rec",
+            amount: 3,
+            fteCount: -4,
+          },
+        ],
+      },
+      "alice"
+    );
+
+    expect(result.action.deliveredDate).toBeDefined();
+    expect(result.changedLever?.progress).toBe(100);
+    expect(result.changedLever?.status).toBe("delivered");
+    expect(result.changedLever?.reforecast).toEqual({
+      grossSavings: 3,
+      netSavings: 2,
+      capex: 1,
+      opexOneOff: 0,
+      opexRec: 0,
+    });
+    expect(result.changedLever?.fteImpact).toBe(-4);
+  });
+
+  it("weights action progress by financial exposure", () => {
+    const lever = {
+      ...lockedLever,
+      actions: [
+        {
+          id: "A1",
+          name: "Petit coût",
+          start: "2026-01-01",
+          end: "2026-02-01",
+          status: "done" as const,
+          cost: 0,
+          impacts: [
+            {
+              id: "I1",
+              label: "Petit",
+              type: "cost" as const,
+              nature: "oneoff" as const,
+              amount: 1,
+            },
+          ],
+        },
+        {
+          id: "A2",
+          name: "Gros gain",
+          start: "2026-02-01",
+          end: "2026-06-01",
+          status: "todo" as const,
+          cost: 0,
+          impacts: [
+            {
+              id: "I2",
+              label: "Gros",
+              type: "saving" as const,
+              nature: "opex_rec" as const,
+              amount: 9,
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = updateAction(
+      [lever],
+      [],
+      { leverId: "L001" },
+      "A1",
+      { status: "done" },
+      "alice"
+    );
+    expect(result.changedLever?.progress).toBe(10);
+  });
+
+  it("clears deliveredDate when a done action is reopened", () => {
+    const lever = {
+      ...lockedLever,
+      actions: [
+        {
+          id: "A1",
+          name: "Action",
+          start: "2026-01-01",
+          end: "2026-02-01",
+          status: "done" as const,
+          deliveredDate: "2026-02-01",
+          cost: 0,
+          impacts: [
+            {
+              id: "I1",
+              label: "Gain",
+              type: "saving" as const,
+              nature: "opex_rec" as const,
+              amount: 2,
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = updateAction(
+      [lever],
+      [],
+      { leverId: "L001" },
+      "A1",
+      { status: "in_progress" },
+      "alice"
+    );
+    expect(result.action.deliveredDate).toBeUndefined();
   });
 });
 
