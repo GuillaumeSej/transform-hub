@@ -10,6 +10,7 @@ import {
   resolveStatusShortLabel,
   resolveActiveCycle,
   DEPENDENCY_TYPE_LABEL,
+  DEPENDENCY_TYPE_META,
   DEPENDENCY_TYPES,
 } from "@/lib/status-config";
 
@@ -112,6 +113,9 @@ describe("status-config — DEPENDENCY_TYPES", () => {
   it("all have labels", () => {
     DEPENDENCY_TYPES.forEach((dt) => {
       expect(DEPENDENCY_TYPE_LABEL[dt]).toBeDefined();
+      expect(DEPENDENCY_TYPE_META[dt].code).toBe(dt);
+      expect(["Début", "Fin"]).toContain(DEPENDENCY_TYPE_META[dt].sourceMilestone);
+      expect(["Début", "Fin"]).toContain(DEPENDENCY_TYPE_META[dt].targetMilestone);
     });
   });
 });

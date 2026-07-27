@@ -182,7 +182,7 @@ describe("alertEngine — generateAlerts", () => {
     expect(greenAlerts).toHaveLength(0);
   });
 
-  it("manual alerts take priority over auto for the same scope", () => {
+  it("keeps auto alerts by default when a manual alert uses the same scope", () => {
     const data = makeData({
       levers: [{ ...baseLever, progress: 10 }], // will generate AUTO-DELAY-L001
       alerts: [
@@ -199,9 +199,66 @@ describe("alertEngine — generateAlerts", () => {
     });
     const alerts = generateAlerts(data);
     const l001Alerts = alerts.filter((a) => a.scope === "L001");
-    // Only the manual one (auto is deduplicated)
-    expect(l001Alerts).toHaveLength(1);
-    expect(l001Alerts[0].id).toBe("MANUAL-1");
+    expect(l001Alerts.some((alert) => alert.id === "MANUAL-1")).toBe(true);
+    expect(l001Alerts.some((alert) => alert.id.startsWith("AUTO-DELAY-"))).toBe(true);
+  });
+
+  it("suppresses auto alerts only when the manual alert explicitly requests it", () => {
+    const data = makeData({
+      levers: [{ ...baseLever, progress: 10 }],
+      alerts: [
+        {
+          id: "MANUAL-1",
+          type: "red",
+          ts: "1h ago",
+          scope: "L001",
+          title: "Manual alert for L001",
+          desc: "This is manual",
+          actorRole: "lever",
+          suppressAutomaticAlerts: true,
+        },
+      ],
+    });
+    const alerts = generateAlerts(data).filter((alert) => alert.scope === "L001");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].id).toBe("MANUAL-1");
+  });
+
+  it("does not suppress an automatic alert belonging to another company", () => {
+    const data = makeData({
+      levers: [{ ...baseLever, progress: 10, companyId: "c2" }],
+      alerts: [
+        {
+          id: "MANUAL-1",
+          type: "red",
+          ts: "1h ago",
+          scope: "L001",
+          title: "Tenant c1 alert",
+          desc: "This is manual",
+          actorRole: "lever",
+          companyId: "c1",
+          suppressAutomaticAlerts: true,
+        },
+      ],
+    });
+    expect(generateAlerts(data).some((alert) => alert.id === "AUTO-DELAY-L001")).toBe(true);
+  });
+
+  it("applies persisted resolved state to automatic alerts", () => {
+    const data = makeData({
+      levers: [{ ...baseLever, progress: 10 }],
+      alertStates: {
+        "global__AUTO-DELAY-L001": {
+          alertId: "AUTO-DELAY-L001",
+          companyId: "c1",
+          resolved: true,
+          resolvedByUsername: "test.cto",
+        },
+      },
+    });
+    const alert = generateAlerts(data).find((item) => item.id === "AUTO-DELAY-L001");
+    expect(alert?.resolved).toBe(true);
+    expect(alert?.resolvedByUsername).toBe("test.cto");
   });
 
   it("all auto alerts have source=auto and resolved=false", () => {

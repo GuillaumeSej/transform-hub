@@ -34,6 +34,14 @@ service cloud.firestore {
     match /hierarchyNodes/{docId} {
       allow read, write: if true;
     }
+    // Temporairement aligné avec le reste de la démo. Une restriction par destinataire nécessite
+    // Firebase Auth : les profils actuellement stockés en localStorage ne créent pas request.auth.
+    match /alerts/{docId} {
+      allow read, write: if true;
+    }
+    match /alertStates/{docId} {
+      allow read, write: if true;
+    }
     match /{document=**} {
       allow read, write: if false;
     }

@@ -53,6 +53,7 @@ export function generateAlerts(data: BeTrackData): Alert[] {
       actorRole: "lever",
       impactEur: Math.round(impact * 1000000),
       owner: u.owner,
+      companyId: u.companyId,
       source: "auto",
       resolved: false,
     });
@@ -61,7 +62,10 @@ export function generateAlerts(data: BeTrackData): Alert[] {
   // ── 2. Conflits de dépendances ──────────────────────────────────────────────
   const depAlerts = dependencyAlerts(data);
   for (const da of depAlerts) {
-    const sourceLever = data.levers.find((l) => l.id === da.sourceId);
+    const sourceSubLever = data.subLevers.find((l) => l.id === da.sourceId);
+    const sourceLever = data.levers.find(
+      (l) => l.id === da.sourceId || l.id === sourceSubLever?.leverId
+    );
     auto.push({
       id: `AUTO-DEP-${da.sourceId}-${da.targetId}`,
       type: "amber",
@@ -72,6 +76,7 @@ export function generateAlerts(data: BeTrackData): Alert[] {
       actorRole: "lever",
       impactEur: sourceLever ? Math.round(-(sourceLever.netSavings * 1000000)) : undefined,
       owner: sourceLever?.owner,
+      companyId: sourceLever?.companyId ?? sourceSubLever?.companyId,
       source: "auto",
       resolved: false,
     });
@@ -94,6 +99,7 @@ export function generateAlerts(data: BeTrackData): Alert[] {
         actorRole: "finance",
         impactEur: Math.round(-delta * 1000000),
         owner: l.owner,
+        companyId: l.companyId,
         source: "auto",
         resolved: false,
       });
@@ -115,6 +121,7 @@ export function generateAlerts(data: BeTrackData): Alert[] {
         actorRole: "finance",
         impactEur: Math.round(-delta * 1000000),
         owner: l.owner,
+        companyId: l.companyId,
         source: "auto",
         resolved: false,
       });
@@ -134,6 +141,7 @@ export function generateAlerts(data: BeTrackData): Alert[] {
         actorRole: "lever",
         impactEur: 0,
         owner: l.owner,
+        companyId: l.companyId,
         source: "auto",
         resolved: false,
       });
@@ -150,6 +158,7 @@ export function generateAlerts(data: BeTrackData): Alert[] {
         actorRole: "lever",
         impactEur: Math.round(realized * 1000000),
         owner: l.owner,
+        companyId: l.companyId,
         source: "auto",
         resolved: false,
       });
@@ -157,16 +166,26 @@ export function generateAlerts(data: BeTrackData): Alert[] {
   }
 
   // ── Fusion avec alertes manuelles ──────────────────────────────────────────
-  // Les alertes manuelles ont priorité : si une manuelle existe pour le même scope,
-  // on ne garde pas l'auto-générée pour ce scope.
-  const manualScopes = new Set(data.alerts.map((a) => a.scope));
+  // Une alerte manuelle ne masque les alertes automatiques du scope que si son auteur a choisi
+  // explicitement cette option lors de la création.
+  const manualScopes = new Set(
+    data.alerts
+      .filter((a) => a.suppressAutomaticAlerts === true)
+      .map((a) => `${a.companyId ?? "global"}__${a.scope}`)
+  );
   const manualAlerts: Alert[] = data.alerts.map((a) => ({
     ...a,
     source: a.source ?? ("manual" as const),
     resolved: a.resolved ?? false,
   }));
-  const dedupedAuto = auto.filter((a) => !manualScopes.has(a.scope));
-  const merged = [...manualAlerts, ...dedupedAuto];
+  const dedupedAuto = auto.filter(
+    (a) => !manualScopes.has(`${a.companyId ?? "global"}__${a.scope}`)
+  );
+  const merged = [...manualAlerts, ...dedupedAuto].map((alert) => {
+    const stateKey = `${alert.companyId ?? "global"}__${alert.id}`;
+    const state = data.alertStates?.[stateKey] ?? data.alertStates?.[alert.id];
+    return state ? { ...alert, ...state } : alert;
+  });
 
   // ── Tri : "À traiter" d'abord → sévérité → |impactEur| décroissant ────────
   merged.sort((a, b) => {

@@ -6,16 +6,21 @@ import * as leversLogic from "@/lib/leversLogic";
 import * as leversDb from "@/lib/firestore/levers";
 import * as workforceLogic from "@/lib/workforceLogic";
 import * as workforceDb from "@/lib/firestore/workforce";
+import * as alertsDb from "@/lib/firestore/alerts";
 import { ensureAdminSeeded } from "@/lib/firestore/admin";
 import type { CascadeShift } from "@/lib/engine";
 import { mockData } from "@/data/mockData";
 import type {
   AuditEntry,
+  Alert,
+  AlertState,
+  AuthUser,
   Comment,
   Department,
   Employee,
   Lever,
   LeverAction,
+  ManualAlertInput,
   SubLever,
   WorkforceMovement,
 } from "@/types";
@@ -63,8 +68,8 @@ function workforceSeed(): workforceDb.WorkforceSeed {
  * Le périmètre "leviers" (levers, subLevers, comments, audit) vit dans Firestore et est
  * partagé en temps réel entre utilisateurs via `onSnapshot` : chaque mutation met à jour l'état
  * local de façon optimiste (retour synchrone immédiat, comme avant) puis persiste dans Firestore
- * en tâche de fond. Le reste (program, workstreams, workforce, operations, alerts) reste sur
- * localStorage, voir lib/storage.ts.
+ * en tâche de fond. Les alertes et leurs états résolus vivent également dans Firestore. Le reste
+ * (program, workstreams, operations) reste sur localStorage, voir lib/storage.ts.
  */
 export function useBeTrackData(companyId?: string | null) {
   const [version, setVersion] = useState(0);
@@ -77,6 +82,8 @@ export function useBeTrackData(companyId?: string | null) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [movements, setMovements] = useState<WorkforceMovement[]>([]);
   const [workforceMeta, setWorkforceMeta] = useState<workforceDb.WorkforceMeta | null>(null);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alertStates, setAlertStates] = useState<Record<string, AlertState>>({});
 
   // Refs toujours à jour pour que les callbacks de mutation lisent l'état le plus récent sans
   // dépendre du cycle de rendu React (évite les fermetures obsolètes entre deux mutations
@@ -107,6 +114,9 @@ export function useBeTrackData(companyId?: string | null) {
     ensureAdminSeeded().catch((err) =>
       console.error("[betrack] échec du seed Firestore admin :", err)
     );
+    alertsDb
+      .ensureAlertsSeeded()
+      .catch((err) => console.error("[betrack] échec du seed Firestore des alertes :", err));
 
     if (companyId) {
       leversDb
@@ -122,6 +132,8 @@ export function useBeTrackData(companyId?: string | null) {
       workforceDb.subscribeEmployees((e) => !cancelled && setEmployees(e)),
       workforceDb.subscribeMovements((m) => !cancelled && setMovements(m)),
       workforceDb.subscribeWorkforceMeta((m) => !cancelled && setWorkforceMeta(m)),
+      alertsDb.subscribeAlerts((a) => !cancelled && setAlerts(a), companyId),
+      alertsDb.subscribeAlertStates((s) => !cancelled && setAlertStates(s), companyId),
     ];
     return () => {
       cancelled = true;
@@ -154,7 +166,8 @@ export function useBeTrackData(companyId?: string | null) {
         movements,
       },
       operations: storage.getOperations(),
-      alerts: storage.getAlerts(),
+      alerts,
+      alertStates,
       audit,
       comments,
       // Référentiels statiques (jamais mutés, pas besoin de passer par une BDD)
@@ -167,7 +180,18 @@ export function useBeTrackData(companyId?: string | null) {
       pnlAccounts: mockData.pnlAccounts,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [version, levers, subLevers, comments, audit, employees, movements, workforceMeta]
+    [
+      version,
+      levers,
+      subLevers,
+      comments,
+      audit,
+      employees,
+      movements,
+      workforceMeta,
+      alerts,
+      alertStates,
+    ]
   );
 
   const updateLever = useCallback(
@@ -408,12 +432,45 @@ export function useBeTrackData(companyId?: string | null) {
     [persistAudit]
   );
 
-  const resolveAlert = useCallback(
-    (alertId: string) => {
-      storage.resolveAlert(alertId);
-      bump();
+  const createManualAlert = useCallback((input: ManualAlertInput, user: AuthUser) => {
+    const createdAt = new Date().toISOString();
+    const alert: Alert = {
+      ...input,
+      id: `MANUAL-${crypto.randomUUID()}`,
+      ts: createdAt,
+      actorRole: user.role,
+      owner: user.name,
+      source: "manual",
+      companyId: user.companyId,
+      createdByUsername: user.username.trim().toLowerCase(),
+      createdAt,
+      resolved: false,
+    };
+    setAlerts((current) => [...current, alert]);
+    alertsDb.saveManualAlert(alert).catch((err) => console.error("[betrack] alerte :", err));
+    return alert;
+  }, []);
+
+  const setAlertResolved = useCallback(
+    (alertId: string, resolved: boolean, user: AuthUser, alertCompanyId?: string | null) => {
+      const state: AlertState = {
+        alertId,
+        companyId: alertCompanyId ?? user.companyId,
+        resolved,
+        ...(resolved
+          ? {
+              resolvedAt: new Date().toISOString(),
+              resolvedByUsername: user.username.trim().toLowerCase(),
+            }
+          : {}),
+      };
+      const stateKey = `${state.companyId ?? "global"}__${alertId}`;
+      setAlertStates((current) => ({ ...current, [stateKey]: state }));
+      alertsDb
+        .saveAlertState(state)
+        .catch((err) => console.error("[betrack] état d'alerte :", err));
     },
-    [bump]
+    []
   );
 
   const updateWorkforceMovement = useCallback(
@@ -528,7 +585,8 @@ export function useBeTrackData(companyId?: string | null) {
     deleteAction,
     applyCascadeShift,
     addComment,
-    resolveAlert,
+    createManualAlert,
+    setAlertResolved,
     updateWorkforceMovement,
     createWorkforceMovement,
     validateMovement,

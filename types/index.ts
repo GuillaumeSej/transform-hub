@@ -312,7 +312,7 @@ export type Alert = {
   id: string;
   type: AlertType;
   ts: string;
-  scope: string; // lever id or workstream id
+  scope: string; // lever, sub-lever or workstream id
   title: string;
   desc: string;
   actorRole: string;
@@ -322,9 +322,41 @@ export type Alert = {
   owner?: string;
   /** Origine de l'alerte : saisie manuelle ou auto-générée par le moteur. */
   source?: "manual" | "auto";
-  /** false = "À traiter" (défaut), true = "Résolu / vu" (coché par le CTO). */
+  /** Entreprise propriétaire de l'alerte. */
+  companyId?: string | null;
+  /** Utilisateurs destinataires, calculés depuis leur profil et leur accès au scope. */
+  recipientUsernames?: string[];
+  /** Auteur d'une alerte manuelle. */
+  createdByUsername?: string;
+  /** Date ISO de création, distincte du libellé historique `ts`. */
+  createdAt?: string;
+  /** Une alerte manuelle peut explicitement masquer les alertes auto du même scope. */
+  suppressAutomaticAlerts?: boolean;
+  /** false = "À traiter" (défaut), true = "Résolu" pour tous les destinataires. */
   resolved?: boolean;
+  resolvedAt?: string;
+  resolvedByUsername?: string;
 };
+
+export type AlertState = {
+  alertId: string;
+  companyId?: string | null;
+  resolved: boolean;
+  resolvedAt?: string;
+  resolvedByUsername?: string;
+};
+
+export type ManualAlertInput = Pick<Alert, "type" | "scope" | "title" | "desc"> & {
+  impactEur?: number;
+  suppressAutomaticAlerts: boolean;
+};
+
+export type SetAlertResolved = (
+  alertId: string,
+  resolved: boolean,
+  user: AuthUser,
+  alertCompanyId?: string | null
+) => void;
 
 export type AuditEntry = {
   ts: string;
@@ -445,6 +477,7 @@ export type BeTrackData = {
   workforce: Workforce;
   operations: Operations;
   alerts: Alert[];
+  alertStates?: Record<string, AlertState>;
   audit: AuditEntry[];
   comments: Record<string, Comment[]>;
 };

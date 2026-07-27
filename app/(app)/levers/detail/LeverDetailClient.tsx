@@ -23,11 +23,7 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as engine from "@/lib/engine";
 import type { CascadeResult } from "@/lib/engine";
-import {
-  DEPENDENCY_TYPE_DESCRIPTION,
-  DEPENDENCY_TYPE_LABEL,
-  STATUS_ORDER,
-} from "@/lib/status-config";
+import { DEPENDENCY_TYPE_DESCRIPTION, STATUS_ORDER } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { Avatar } from "@/components/shared/Avatar";
@@ -37,6 +33,7 @@ import { ProgressBar } from "@/components/shared/ProgressBar";
 import { RadialProgress } from "@/components/shared/RadialProgress";
 import { Modal } from "@/components/shared/Modal";
 import { DependencyEditor } from "@/components/shared/DependencyEditor";
+import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
 import { SubLeverForm, type SubLeverFormValues } from "@/components/shared/SubLeverForm";
 import { ActionForm, type ActionFormValues } from "@/components/shared/ActionForm";
@@ -528,7 +525,7 @@ export default function LeverDetailClient() {
                   <span className="font-semibold text-primary">
                     {l.id} · {l.name}
                   </span>
-                  <span className="text-tertiary">{DEPENDENCY_TYPE_LABEL[l.dependencyType]}</span>
+                  <DependencyTypeBadge type={l.dependencyType} />
                 </button>
               ))}
             </div>
@@ -849,9 +846,7 @@ export default function LeverDetailClient() {
                       </span>
                       <span className="flex shrink-0 items-center gap-1.5">
                         {alert && <TriangleAlert size={13} className="text-rag-red" />}
-                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
-                          {DEPENDENCY_TYPE_LABEL[d.type]}
-                        </span>
+                        <DependencyTypeBadge type={d.type} />
                       </span>
                     </button>
                   );
@@ -876,9 +871,7 @@ export default function LeverDetailClient() {
                     <span className="font-semibold text-primary">
                       {dep.id} · {dep.name}
                     </span>
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
-                      {DEPENDENCY_TYPE_LABEL[dep.type]}
-                    </span>
+                    <DependencyTypeBadge type={dep.type} />
                   </button>
                 ))}
               </div>
@@ -891,9 +884,9 @@ export default function LeverDetailClient() {
                     className="flex items-start gap-2 rounded-md border border-rag-red-light bg-rag-red-light/30 px-2.5 py-2 text-xs text-primary"
                   >
                     <TriangleAlert size={13} className="mt-0.5 shrink-0 text-rag-red" />
-                    <span>
-                      <strong>{a.sourceName}</strong> ({DEPENDENCY_TYPE_LABEL[a.type]}) —{" "}
-                      {a.message}
+                    <span className="flex flex-wrap items-center gap-1">
+                      <strong>{a.sourceName}</strong> <DependencyTypeBadge type={a.type} />
+                      <span>— {a.message}</span>
                     </span>
                   </div>
                 ))}
