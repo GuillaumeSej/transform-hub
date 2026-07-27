@@ -21,14 +21,16 @@ import type {
   HierarchySemantic,
 } from "@/types";
 import {
-  saveCompany,
+  saveCompanyHierarchyLevels,
   subscribeHierarchyNodes,
   saveHierarchyNode,
   saveHierarchyNodesBatch,
   deleteHierarchyNode,
+  deleteHierarchyNodesBatch,
 } from "@/lib/firestore/admin";
 import {
   buildHierarchyForest,
+  buildHierarchyNodePayload,
   resolveHierarchyPath,
   type HierarchyTreeNode,
 } from "@/lib/hierarchyLogic";
@@ -43,6 +45,16 @@ import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
 
 let nodeSeq = 0;
+const EMPTY_NODE_FORM = {
+  code: "",
+  label: "",
+  parentId: "",
+  baseline: "",
+  sign: "1" as const,
+  computed: false,
+  selectable: true,
+};
+
 function nextNodeId() {
   nodeSeq += 1;
   return `HN-${Date.now()}-${nodeSeq}`;
@@ -124,14 +136,21 @@ export function HierarchyEditor({
   const [importPreview, setImportPreview] = useState<HierarchyImportPreview | null>(null);
   const [importFileName, setImportFileName] = useState("");
   const [importing, setImporting] = useState(false);
+  const [levelsDirty, setLevelsDirty] = useState(false);
+  const [savingLevels, setSavingLevels] = useState(false);
+  const [savingNodeKey, setSavingNodeKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const company = companies.find((c) => c.id === companyId);
     const configured =
       domain === "financial" ? company?.hierarchyLevels : company?.geographyHierarchyLevels;
-    setLevels(configured ? structuredClone(configured) : []);
-  }, [companies, companyId, domain]);
+    if (!levelsDirty) setLevels(configured ? structuredClone(configured) : []);
+  }, [companies, companyId, domain, levelsDirty]);
+
+  useEffect(() => {
+    setLevelsDirty(false);
+  }, [companyId, domain]);
 
   useEffect(() => {
     if (!companyId) {
@@ -153,32 +172,54 @@ export function HierarchyEditor({
     }
     return map;
   }, [nodes]);
-  const forest = useMemo(() => buildHierarchyForest(nodes, sortedLevels), [nodes, sortedLevels]);
+  const configuredLevelKeys = useMemo(
+    () => new Set(sortedLevels.map((level) => level.key)),
+    [sortedLevels]
+  );
+  const validNodes = useMemo(
+    () => nodes.filter((node) => configuredLevelKeys.has(node.levelKey)),
+    [nodes, configuredLevelKeys]
+  );
+  const orphanNodes = useMemo(
+    () => nodes.filter((node) => !configuredLevelKeys.has(node.levelKey)),
+    [nodes, configuredLevelKeys]
+  );
+  const forest = useMemo(
+    () => buildHierarchyForest(validNodes, sortedLevels),
+    [validNodes, sortedLevels]
+  );
 
   const addLevel = () => {
     const order = levels.length;
     const key = `level_${order}_${Date.now()}`;
     setLevels((prev) => [...prev, { key, label: `Niveau ${order + 1}`, order }]);
+    setLevelsDirty(true);
   };
 
   const removeLevel = (key: string) => {
     setLevels((prev) => prev.filter((l) => l.key !== key).map((l, idx) => ({ ...l, order: idx })));
+    setLevelsDirty(true);
   };
 
   const renameLevel = (key: string, label: string) => {
     setLevels((prev) => prev.map((l) => (l.key === key ? { ...l, label } : l)));
+    setLevelsDirty(true);
   };
 
   const setLevelSemantic = (key: string, semantic: string) => {
     setLevels((current) =>
-      current.map((level) =>
-        level.key === key
-          ? { ...level, semantic: (semantic || undefined) as HierarchySemantic | undefined }
-          : level.semantic === semantic
-            ? { ...level, semantic: undefined }
-            : level
-      )
+      current.map((level) => {
+        const next = { ...level };
+        if (level.key === key) {
+          delete next.semantic;
+          if (semantic) next.semantic = semantic as HierarchySemantic;
+        } else if (semantic && level.semantic === semantic) {
+          delete next.semantic;
+        }
+        return next;
+      })
     );
+    setLevelsDirty(true);
   };
 
   const moveLevel = (key: string, direction: "up" | "down") => {
@@ -189,23 +230,45 @@ export function HierarchyEditor({
     if (swap < 0 || swap >= ordered.length) return;
     [ordered[idx], ordered[swap]] = [ordered[swap], ordered[idx]];
     setLevels(ordered.map((l, i) => ({ ...l, order: i })));
+    setLevelsDirty(true);
   };
 
   const saveLevels = async () => {
-    const company = companies.find((c) => c.id === companyId);
-    if (!company) return;
-    await saveCompany({
-      ...company,
-      ...(domain === "financial"
-        ? { hierarchyLevels: sortedLevels }
-        : { geographyHierarchyLevels: sortedLevels }),
-    });
-    showToast("Niveaux enregistrés", "La structure est disponible immédiatement.", "success");
+    if (!companies.some((company) => company.id === companyId)) return;
+    setSavingLevels(true);
+    try {
+      const sanitized = sortedLevels.map((level) => {
+        const next = {
+          key: level.key,
+          label: level.label.trim(),
+          order: level.order,
+        } as HierarchyLevelDef;
+        if (level.semantic) next.semantic = level.semantic;
+        return next;
+      });
+      await saveCompanyHierarchyLevels(companyId, domain, sanitized);
+      setLevels(sanitized);
+      setLevelsDirty(false);
+      showToast(
+        "Structure enregistrée",
+        "Les niveaux sont maintenant persistés dans Firebase.",
+        "success"
+      );
+    } catch (error) {
+      console.error("[betrack] échec de sauvegarde des niveaux :", error);
+      showToast(
+        "Enregistrement impossible",
+        "La structure n'a pas été enregistrée dans Firebase.",
+        "error"
+      );
+    } finally {
+      setSavingLevels(false);
+    }
   };
 
   const setFormField = (levelKey: string, field: "code" | "label" | "parentId", value: string) => {
     setNodeForm((prev) => {
-      const current = prev[levelKey] ?? { code: "", label: "", parentId: "" };
+      const current = prev[levelKey] ?? EMPTY_NODE_FORM;
       return { ...prev, [levelKey]: { ...current, [field]: value } };
     });
   };
@@ -213,45 +276,62 @@ export function HierarchyEditor({
   const addNode = async (level: HierarchyLevelDef) => {
     const form = nodeForm[level.key];
     if (!form || !form.code.trim() || !form.label.trim()) return;
-    const isMacro = level.order === 0;
-    if (!isMacro && !form.parentId) return;
-    const isPnl = level.semantic === "pnl";
-    const node: HierarchyNode = {
+    const node = buildHierarchyNodePayload({
       id: nextNodeId(),
       companyId,
-      levelKey: level.key,
-      code: form.code.trim(),
-      label: form.label.trim(),
-      parentId: isMacro ? null : form.parentId,
       domain,
-      ...(isPnl
-        ? {
-            financial: {
-              baseline: Number(form.baseline || 0),
-              sign: Number(form.sign) as 1 | -1,
-              computed: form.computed,
-              selectable: form.selectable,
-            },
-          }
-        : {}),
-    };
-    await saveHierarchyNode(node);
-    setNodeForm((prev) => ({
-      ...prev,
-      [level.key]: {
-        code: "",
-        label: "",
-        parentId: "",
-        baseline: "",
-        sign: "1",
-        computed: false,
-        selectable: true,
-      },
-    }));
+      level,
+      draft: form,
+    });
+    if (!node) return;
+    setSavingNodeKey(level.key);
+    try {
+      await saveHierarchyNode(node);
+      setNodeForm((prev) => ({ ...prev, [level.key]: { ...EMPTY_NODE_FORM } }));
+      showToast("Valeur enregistrée", `${node.label} est enregistrée dans Firebase.`, "success");
+    } catch (error) {
+      console.error("[betrack] échec de sauvegarde du nœud :", error);
+      showToast(
+        "Enregistrement impossible",
+        "La valeur n'a pas été enregistrée dans Firebase.",
+        "error"
+      );
+    } finally {
+      setSavingNodeKey(null);
+    }
   };
 
   const removeNode = async (id: string) => {
-    await deleteHierarchyNode(id);
+    try {
+      await deleteHierarchyNode(id);
+      showToast("Valeur supprimée", "La suppression est enregistrée dans Firebase.", "success");
+    } catch (error) {
+      console.error("[betrack] échec de suppression du nœud :", error);
+      showToast(
+        "Suppression impossible",
+        "La valeur est toujours présente dans Firebase.",
+        "error"
+      );
+    }
+  };
+
+  const removeOrphanNodes = async () => {
+    if (orphanNodes.length === 0) return;
+    try {
+      await deleteHierarchyNodesBatch(orphanNodes.map((node) => node.id));
+      showToast(
+        "Données orphelines nettoyées",
+        `${orphanNodes.length} valeur(s) sans niveau enregistré ont été supprimées de Firebase.`,
+        "success"
+      );
+    } catch (error) {
+      console.error("[betrack] échec de nettoyage des nœuds orphelins :", error);
+      showToast(
+        "Nettoyage impossible",
+        "Les valeurs orphelines sont toujours présentes dans Firebase.",
+        "error"
+      );
+    }
   };
 
   const parentLevel = (level: HierarchyLevelDef): HierarchyLevelDef | undefined =>
@@ -488,10 +568,10 @@ export function HierarchyEditor({
           </button>
           <button
             onClick={saveLevels}
-            disabled={!companyId}
+            disabled={!companyId || !levelsDirty || savingLevels}
             className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:opacity-40"
           >
-            <Save size={14} /> Enregistrer les niveaux
+            <Save size={14} /> {savingLevels ? "Enregistrement…" : "Enregistrer la structure"}
           </button>
         </div>
       </section>
@@ -499,6 +579,12 @@ export function HierarchyEditor({
       {/* Section 2 : nœuds */}
       {sortedLevels.length > 0 && (
         <section className="space-y-4">
+          {levelsDirty && (
+            <div className="rounded-lg border border-rag-amber bg-rag-amber-light px-3 py-2 text-xs text-rag-amber">
+              Enregistrez d&apos;abord la structure des niveaux. Les valeurs ne peuvent pas être
+              ajoutées à un niveau non persisté.
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-bold text-text-primary">
               2. Valeurs de l&apos;arborescence
@@ -537,15 +623,7 @@ export function HierarchyEditor({
             const pLevel = parentLevel(level);
             const parentOptions = pLevel ? (nodesByLevel.get(pLevel.key) ?? []) : [];
             const levelNodes = nodesByLevel.get(level.key) ?? [];
-            const form = nodeForm[level.key] ?? {
-              code: "",
-              label: "",
-              parentId: "",
-              baseline: "",
-              sign: "1" as const,
-              computed: false,
-              selectable: true,
-            };
+            const form = nodeForm[level.key] ?? EMPTY_NODE_FORM;
             const isPnl = level.semantic === "pnl";
             return (
               <div key={level.key} className="rounded-xl border border-border">
@@ -695,9 +773,11 @@ export function HierarchyEditor({
                         <td className="px-4 py-2 text-center">
                           <button
                             onClick={() => addNode(level)}
+                            disabled={levelsDirty || savingNodeKey === level.key}
                             className="rounded-lg bg-bp-coral px-2.5 py-1 text-xs font-semibold text-white hover:bg-bp-coral/90"
                           >
-                            <Plus size={12} className="inline" /> Ajouter
+                            <Plus size={12} className="inline" />{" "}
+                            {savingNodeKey === level.key ? "Enregistrement…" : "Ajouter"}
                           </button>
                         </td>
                       </tr>
@@ -824,6 +904,7 @@ export function HierarchyEditor({
                     )}
                     <button
                       onClick={() => addNode(level)}
+                      disabled={levelsDirty || savingNodeKey === level.key}
                       className="w-full rounded-lg bg-bp-coral px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
                     >
                       <Plus size={12} className="inline" /> Ajouter
@@ -850,6 +931,24 @@ export function HierarchyEditor({
               <TreeBranch key={root.id} node={root} />
             ))}
           </ul>
+        )}
+        {orphanNodes.length > 0 && (
+          <div className="mt-4 rounded-lg border border-rag-amber bg-rag-amber-light p-3 text-xs text-secondary">
+            <strong className="block text-rag-amber">
+              {orphanNodes.length} valeur(s) orpheline(s) détectée(s)
+            </strong>
+            <p className="mt-1">
+              Ces documents existent dans Firebase mais leur niveau n&apos;est pas enregistré dans
+              la structure. Ils ne sont pas affichés dans l&apos;arbre valide.
+            </p>
+            <button
+              type="button"
+              onClick={() => void removeOrphanNodes()}
+              className="mt-2 rounded-md border border-rag-amber px-2.5 py-1 font-semibold text-rag-amber hover:bg-white"
+            >
+              Supprimer ces valeurs de Firebase
+            </button>
+          </div>
         )}
       </section>
 

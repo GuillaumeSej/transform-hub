@@ -4,7 +4,10 @@ import {
   doc,
   getDocs,
   onSnapshot,
+  query,
   setDoc,
+  updateDoc,
+  where,
   writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -32,6 +35,15 @@ export function subscribeCompanies(cb: (companies: Company[]) => void): Unsubscr
 
 export async function saveCompany(company: Company): Promise<void> {
   await setDoc(doc(companiesCol(), company.id), company);
+}
+
+export async function saveCompanyHierarchyLevels(
+  companyId: string,
+  domain: HierarchyDomain,
+  levels: Company["hierarchyLevels"]
+): Promise<void> {
+  const field = domain === "financial" ? "hierarchyLevels" : "geographyHierarchyLevels";
+  await updateDoc(doc(companiesCol(), companyId), { [field]: levels ?? [] });
 }
 
 export async function deleteCompany(id: string): Promise<void> {
@@ -81,13 +93,18 @@ export async function saveLifecycleConfig(
 
 const hierarchyNodesCol = () => collection(db, "hierarchyNodes");
 
-/** Abonnement filtré côté client par companyId, comme subscribeLevers/subscribeSubLevers. */
+/** Abonnement filtré par entreprise côté Firestore. Le domaine reste filtré côté client pour
+ * préserver la compatibilité des anciens nœuds financiers sans champ `domain`. */
 export function subscribeHierarchyNodes(
   companyId: string,
   cb: (nodes: HierarchyNode[]) => void,
   domain?: HierarchyDomain
 ): Unsubscribe {
-  return onSnapshot(hierarchyNodesCol(), (snap) => {
+  const scopedQuery = query(hierarchyNodesCol(), where("companyId", "==", companyId));
+  return onSnapshot(scopedQuery, { includeMetadataChanges: true }, (snap) => {
+    // Ne jamais présenter une écriture locale comme enregistrée : on conserve l'ancien rendu
+    // jusqu'à l'acquittement serveur. Cela évite les lignes fantômes en cas de rejet Firestore.
+    if (snap.metadata.hasPendingWrites) return;
     const all = snap.docs.map((d) => d.data() as HierarchyNode);
     cb(
       all.filter(
@@ -103,6 +120,15 @@ export async function saveHierarchyNode(node: HierarchyNode): Promise<void> {
 
 export async function deleteHierarchyNode(id: string): Promise<void> {
   await deleteDoc(doc(hierarchyNodesCol(), id));
+}
+
+export async function deleteHierarchyNodesBatch(ids: string[]): Promise<void> {
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    ids.slice(i, i + CHUNK).forEach((id) => batch.delete(doc(hierarchyNodesCol(), id)));
+    await batch.commit();
+  }
 }
 
 /** Création en masse (import Excel) — un seul writeBatch, jusqu'à 500 écritures par lot Firestore

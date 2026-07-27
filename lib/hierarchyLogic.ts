@@ -8,6 +8,54 @@ export type HierarchyPathEntry = {
 
 export type HierarchyTreeNode = HierarchyNode & { children: HierarchyTreeNode[] };
 
+export type HierarchyNodeDraft = {
+  code: string;
+  label: string;
+  parentId: string;
+  baseline: string;
+  sign: "1" | "-1";
+  selectable: boolean;
+};
+
+export function buildHierarchyNodePayload({
+  id,
+  companyId,
+  domain,
+  level,
+  draft,
+}: {
+  id: string;
+  companyId: string;
+  domain: HierarchyDomain;
+  level: HierarchyLevelDef;
+  draft: HierarchyNodeDraft;
+}): HierarchyNode | null {
+  const code = draft.code.trim();
+  const label = draft.label.trim();
+  const isRoot = level.order === 0;
+  if (!code || !label || (!isRoot && !draft.parentId)) return null;
+
+  const node: HierarchyNode = {
+    id,
+    companyId,
+    domain,
+    levelKey: level.key,
+    code,
+    label,
+    parentId: isRoot ? null : draft.parentId,
+  };
+  if (level.semantic === "pnl") {
+    const baseline = Number(draft.baseline || 0);
+    if (!Number.isFinite(baseline)) return null;
+    node.financial = {
+      baseline,
+      sign: draft.sign === "-1" ? -1 : 1,
+      selectable: draft.selectable !== false,
+    };
+  }
+  return node;
+}
+
 export function hierarchyDomain(node: HierarchyNode): HierarchyDomain {
   return node.domain ?? "financial";
 }
