@@ -260,6 +260,12 @@ const es: Record<string, string> = {
   "leverForm.popImpacted": "Población impactada",
   "leverForm.updated": "Palanca actualizada",
   "leverForm.created": "Palanca creada",
+
+  // ─── unsavedChanges ───────────────────────────────────────────────────────
+  "unsavedChanges.title": "Cambios sin guardar",
+  "unsavedChanges.body": "Tiene cambios sin guardar en esta página. Si sale ahora, se perderán.",
+  "unsavedChanges.stay": "Permanecer en esta página",
+  "unsavedChanges.leave": "Salir sin guardar",
 };
 
 export default es;

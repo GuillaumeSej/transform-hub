@@ -261,6 +261,13 @@ const de: Record<string, string> = {
   "leverForm.popImpacted": "Betroffene Population",
   "leverForm.updated": "Hebel aktualisiert",
   "leverForm.created": "Hebel erstellt",
+
+  // ─── unsavedChanges ───────────────────────────────────────────────────────
+  "unsavedChanges.title": "Nicht gespeicherte Änderungen",
+  "unsavedChanges.body":
+    "Sie haben nicht gespeicherte Änderungen auf dieser Seite. Wenn Sie sie jetzt verlassen, gehen sie verloren.",
+  "unsavedChanges.stay": "Auf dieser Seite bleiben",
+  "unsavedChanges.leave": "Ohne Speichern verlassen",
 };
 
 export default de;

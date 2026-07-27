@@ -5,6 +5,7 @@ import { Save, RotateCcw, ChevronUp, ChevronDown } from "lucide-react";
 import type { LifecycleStage, LeverStatus } from "@/types";
 import { DEFAULT_LIFECYCLE_STAGES, STATUS_LEVEL } from "@/lib/status-config";
 import { subscribeLifecycleConfig, saveLifecycleConfig } from "@/lib/firestore/admin";
+import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 /**
  * Édition des étapes du cycle de vie pour UNE entreprise déjà sélectionnée. Extrait de
@@ -14,14 +15,23 @@ import { subscribeLifecycleConfig, saveLifecycleConfig } from "@/lib/firestore/a
  */
 export function LifecycleEditor({ companyId }: { companyId: string }) {
   const [stages, setStages] = useState<LifecycleStage[]>(structuredClone(DEFAULT_LIFECYCLE_STAGES));
+  // Snapshot du dernier état persisté — utilisé pour détecter les modifs non enregistrées.
+  const [savedStages, setSavedStages] = useState<LifecycleStage[]>(() =>
+    structuredClone(DEFAULT_LIFECYCLE_STAGES)
+  );
 
   useEffect(() => {
     if (!companyId) return;
     const unsub = subscribeLifecycleConfig(companyId, (fetched) => {
-      setStages(fetched.length > 0 ? fetched : structuredClone(DEFAULT_LIFECYCLE_STAGES));
+      const next = fetched.length > 0 ? fetched : structuredClone(DEFAULT_LIFECYCLE_STAGES);
+      setStages(next);
+      setSavedStages(structuredClone(next));
     });
     return unsub;
   }, [companyId]);
+
+  const stagesDirty = JSON.stringify(stages) !== JSON.stringify(savedStages);
+  useRegisterUnsavedChanges(`admin:lifecycle:${companyId}`, stagesDirty);
 
   const updateStage = (key: LeverStatus, patch: Partial<LifecycleStage>) => {
     setStages((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
@@ -178,6 +188,9 @@ export function LifecycleEditor({ companyId }: { companyId: string }) {
           onClick={async () => {
             if (!companyId) return;
             await saveLifecycleConfig(companyId, stages);
+            // Rafraîchit le snapshot "sauvegardé" — sans attendre l'écho de la souscription
+            // Firestore, sinon le bouton peut rester "dirty" quelques ms après le clic.
+            setSavedStages(structuredClone(stages));
           }}
           className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
         >

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { GuardedLink } from "@/components/shared/GuardedLink";
+import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import {
   ArrowLeft,
   Building2,
@@ -39,6 +40,12 @@ type TabId =
   | "lifecycle"
   | "data"
   | "database";
+
+/** Comparaison simple (JSON stringify) — suffisant vu la taille du formulaire, et robuste au
+ *  fait que confidentialityLevels et roleClearance sont des objets/tableaux "plats". */
+function companyFormEquals(a: CompanyFormState, b: CompanyFormState): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 const TABS: { id: TabId; label: string; icon: typeof Building2 }[] = [
   { id: "settings", label: "Paramètres", icon: Building2 },
@@ -83,6 +90,31 @@ export default function CompanyDetailClient() {
   }, []);
 
   const company = useMemo(() => companies.find((c) => c.id === companyId), [companies, companyId]);
+
+  // "Baseline" du formulaire = état dérivé de `company` en Firestore. On compare `form` à cette
+  // baseline pour savoir si l'utilisateur a des modifs non enregistrées (seul l'onglet "settings"
+  // édite `form` ; les autres onglets ont leurs propres composants qui gèrent leur propre dirty).
+  const baselineForm = useMemo<CompanyFormState>(() => {
+    if (!company) return DEFAULT_COMPANY_FORM;
+    return {
+      name: company.name,
+      industry: company.industry,
+      fyStart: company.fyStart,
+      fyEnd: company.fyEnd,
+      capexBudget: company.capexBudget != null ? String(company.capexBudget) : "",
+      actionPlanEnabled: company.actionPlanEnabled ?? true,
+      socialChargesRate:
+        company.socialChargesRate != null
+          ? String(Math.round(company.socialChargesRate * 100))
+          : "",
+      confidentialityLevels: company.confidentialityLevels ?? [],
+      roleClearance: company.roleClearance ?? {},
+    };
+  }, [company]);
+
+  const settingsDirty =
+    tab === "settings" && company != null && !companyFormEquals(form, baselineForm);
+  useRegisterUnsavedChanges("admin:company-settings", settingsDirty);
 
   useEffect(() => {
     if (!company) return;
@@ -152,12 +184,12 @@ export default function CompanyDetailClient() {
   if (!companyId) {
     return (
       <div className="space-y-4">
-        <Link
+        <GuardedLink
           href="/admin/companies"
           className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-bp-coral"
         >
           <ArrowLeft size={14} /> Retour à la liste des entreprises
-        </Link>
+        </GuardedLink>
         <div className="rounded-xl border border-border bg-bg-elevated p-8 text-center text-sm text-text-secondary">
           Aucune entreprise sélectionnée.
         </div>
@@ -168,12 +200,12 @@ export default function CompanyDetailClient() {
   if (loaded && !company) {
     return (
       <div className="space-y-4">
-        <Link
+        <GuardedLink
           href="/admin/companies"
           className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-bp-coral"
         >
           <ArrowLeft size={14} /> Retour à la liste des entreprises
-        </Link>
+        </GuardedLink>
         <div className="rounded-xl border border-border bg-bg-elevated p-8 text-center text-sm text-text-secondary">
           Entreprise introuvable ({companyId}).
         </div>
@@ -184,12 +216,12 @@ export default function CompanyDetailClient() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <Link
+        <GuardedLink
           href="/admin/companies"
           className="inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-bp-coral"
         >
           <ArrowLeft size={12} /> Toutes les entreprises
-        </Link>
+        </GuardedLink>
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Building2 size={22} className="text-bp-coral" />
           <h1 className="text-xl font-bold text-text-primary">{company?.name ?? "Entreprise"}</h1>

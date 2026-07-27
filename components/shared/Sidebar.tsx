@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Avatar } from "@/components/shared/Avatar";
+import { GuardedLink } from "@/components/shared/GuardedLink";
 import { useRole } from "@/lib/hooks/useRole";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Role } from "@/types";
@@ -63,7 +63,7 @@ export function Sidebar({
           const href = PAGE_ROUTES[item.id] ?? "/dashboard";
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
-            <Link
+            <GuardedLink
               key={item.id}
               href={href}
               onClick={onNavigate}
@@ -79,7 +79,7 @@ export function Sidebar({
                   {alertCount}
                 </span>
               )}
-            </Link>
+            </GuardedLink>
           );
         })}
       </nav>

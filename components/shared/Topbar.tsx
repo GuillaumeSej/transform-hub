@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRole } from "@/lib/hooks/useRole";
+import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 import { roles } from "@/lib/nav-config";
 import { ResetDemoButton } from "@/components/shared/ResetDemoButton";
@@ -100,6 +101,7 @@ export function Topbar({
   const router = useRouter();
   const { logout, user } = useRole();
   const { t } = useTranslation();
+  const { confirmDiscard } = useUnsavedChanges();
   const isLeverDetail = pathname.startsWith("/levers/") && pathname !== "/levers";
   const label = isLeverDetail ? t("topbar.leverDetail") : t(CRUMBS[pathname] ?? "", "BeTrack");
 
@@ -169,7 +171,12 @@ export function Topbar({
                     <button
                       key={alert.id}
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
+                        // Bloc de notifications = navigation vers /levers/detail. On protège de
+                        // la même manière que la sidebar : si l'utilisateur a une modif en cours,
+                        // on lui demande avant d'ouvrir le levier.
+                        const proceed = await confirmDiscard();
+                        if (!proceed) return;
                         setAlertsOpen(false);
                         onAlertClick(alert);
                       }}
@@ -197,7 +204,10 @@ export function Topbar({
             entreprise, réservé lui aussi à l'admin global). */}
         {role === "admin" && <ResetDemoButton onReset={onReset} />}
         <button
-          onClick={() => {
+          onClick={async () => {
+            // La déconnexion perdra tout le travail non enregistré — on demande confirmation.
+            const proceed = await confirmDiscard();
+            if (!proceed) return;
             logout();
             router.push("/login");
           }}

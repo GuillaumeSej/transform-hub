@@ -43,6 +43,7 @@ import {
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
+import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 let nodeSeq = 0;
 const EMPTY_NODE_FORM = {
@@ -151,6 +152,10 @@ export function HierarchyEditor({
   useEffect(() => {
     setLevelsDirty(false);
   }, [companyId, domain]);
+
+  // Enregistre le scope dans la garde de navigation globale — si l'utilisateur essaie de
+  // quitter alors que les niveaux ne sont pas sauvegardés, il verra la modale de confirmation.
+  useRegisterUnsavedChanges(`admin:hierarchy:${domain}:${companyId}`, levelsDirty);
 
   useEffect(() => {
     if (!companyId) {

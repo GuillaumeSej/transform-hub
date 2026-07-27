@@ -6,6 +6,7 @@ import type { AuthUser, Role, Company } from "@/types";
 import { subscribeUsers, saveUser, deleteUser, subscribeCompanies } from "@/lib/firestore/admin";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
+import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 const ALL_ROLES: { value: Role; label: string }[] = [
   { value: "admin", label: "Administrator" },
@@ -99,6 +100,18 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     clearanceLevels: [] as string[],
   });
   const [showForm, setShowForm] = useState(false);
+
+  // Le formulaire utilisateur est "dirty" dès qu'il est ouvert avec au moins un champ utile
+  // rempli. En mode édition (editIdx != null), il est dirty tant qu'il est ouvert — on n'a pas
+  // ici de snapshot facile de "l'état initial", et fermer le formulaire annule les changements.
+  const userFormDirty =
+    showForm &&
+    (editIdx !== null ||
+      form.username.trim() !== "" ||
+      form.firstName.trim() !== "" ||
+      form.lastName.trim() !== "" ||
+      form.name.trim() !== "");
+  useRegisterUnsavedChanges(`admin:users:${fixedCompanyId ?? "global"}`, userFormDirty);
 
   const startCreate = () => {
     setEditIdx(null);

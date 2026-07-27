@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FolderKanban, Plus, Pencil, Trash2 } from "lucide-react";
 import type { Project } from "@/types";
 import { subscribeProjects, saveProject, deleteProject } from "@/lib/firestore/admin";
+import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 /**
  * Gestion des projets pour UNE entreprise déjà sélectionnée. Extrait de
@@ -25,6 +26,14 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", sponsor: "", target: "" });
   const [showForm, setShowForm] = useState(false);
+
+  // Un projet est "en cours d'édition" (dirty) si le formulaire est ouvert avec au moins un
+  // champ rempli — évite de bloquer inutilement la navigation quand l'utilisateur a juste
+  // cliqué sur "Nouveau projet" sans rien saisir.
+  const projectFormDirty =
+    showForm &&
+    (form.name.trim() !== "" || form.sponsor.trim() !== "" || form.target.trim() !== "");
+  useRegisterUnsavedChanges(`admin:projects:${companyId}`, projectFormDirty);
 
   const startCreate = () => {
     setEditId(null);

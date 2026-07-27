@@ -287,6 +287,13 @@ const fr: Record<string, string> = {
   "leverForm.popImpacted": "Population impactée",
   "leverForm.updated": "Levier mis à jour",
   "leverForm.created": "Levier créé",
+
+  // ─── unsavedChanges (garde de navigation) ─────────────────────────────────
+  "unsavedChanges.title": "Modifications non enregistrées",
+  "unsavedChanges.body":
+    "Vous avez des modifications non enregistrées sur cette page. Si vous quittez maintenant, elles seront perdues.",
+  "unsavedChanges.stay": "Rester sur cette page",
+  "unsavedChanges.leave": "Quitter sans enregistrer",
 };
 
 export default fr;

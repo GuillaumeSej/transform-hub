@@ -9,6 +9,7 @@ import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import * as engine from "@/lib/engine";
 
 /**
@@ -32,6 +33,10 @@ export default function FinancePage() {
     });
     return unsub;
   }, [user?.companyId]);
+
+  // Le budget CAPEX est "sale" quand la valeur saisie diffère de celle stockée sur `company`.
+  const savedCapex = company?.capexBudget != null ? String(company.capexBudget) : "";
+  useRegisterUnsavedChanges("finance:capex-budget", capexBudget.trim() !== savedCapex.trim());
 
   const save = async () => {
     if (!company) return;
