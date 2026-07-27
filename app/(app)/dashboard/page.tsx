@@ -45,8 +45,11 @@ import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { AlertItem } from "@/components/shared/AlertItem";
+import { ManualAlertForm } from "@/components/shared/ManualAlertForm";
+import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
 import { Tooltip } from "@/components/shared/Tooltip";
-import { generateAlerts } from "@/lib/alertEngine";
+import { DEPENDENCY_TYPE_META } from "@/lib/status-config";
+import { useNotifications } from "@/lib/hooks/useNotifications";
 import {
   ArrowDown,
   ArrowRight,
@@ -146,7 +149,14 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.levers, user?.role, company?.roleClearance, user?.confidentialityClearance]
   );
-  const visibleData = useMemo(() => ({ ...data, levers: visibleLevers }), [data, visibleLevers]);
+  const visibleData = useMemo(() => {
+    const visibleLeverIds = new Set(visibleLevers.map((lever) => lever.id));
+    return {
+      ...data,
+      levers: visibleLevers,
+      subLevers: data.subLevers.filter((subLever) => visibleLeverIds.has(subLever.leverId)),
+    };
+  }, [data, visibleLevers]);
 
   // Projets de l'entreprise — pour la ventilation "par projet" (en plus de "par workstream").
   const [projects, setProjects] = useState<Project[]>([]);
@@ -270,16 +280,8 @@ export default function DashboardPage() {
   const [alertPage, setAlertPage] = useState(0);
   const [alertTypeFilter, setAlertTypeFilter] = useState<string>("all");
   const [alertShowResolved, setAlertShowResolved] = useState(false);
-  const [resolvedAlertIds, setResolvedAlertIds] = useState<Set<string>>(new Set());
-
-  const allAlerts = useMemo(() => {
-    const generated = generateAlerts(filteredData);
-    // Apply resolved state from local toggle
-    return generated.map((a) => ({
-      ...a,
-      resolved: resolvedAlertIds.has(a.id) ? true : (a.resolved ?? false),
-    }));
-  }, [filteredData, resolvedAlertIds]);
+  const [manualAlertOpen, setManualAlertOpen] = useState(false);
+  const { alerts: allAlerts } = useNotifications(visibleData, user);
 
   const filteredAlerts = useMemo(() => {
     let result = allAlerts;
@@ -296,19 +298,13 @@ export default function DashboardPage() {
   );
 
   const toggleAlertResolved = (id: string) => {
-    setResolvedAlertIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    if (!user) return;
+    const alert = allAlerts.find((item) => item.id === id);
+    data.setAlertResolved(id, !(alert?.resolved ?? false), user, alert?.companyId);
   };
   const markAllResolved = () => {
-    setResolvedAlertIds((prev) => {
-      const next = new Set(prev);
-      filteredAlerts.forEach((a) => next.add(a.id));
-      return next;
-    });
+    if (!user) return;
+    filteredAlerts.forEach((alert) => data.setAlertResolved(alert.id, true, user, alert.companyId));
   };
 
   /** Résout le scope d'une alerte en nom lisible (lever name ou workstream name). */
@@ -406,6 +402,9 @@ export default function DashboardPage() {
       goToLevers(ws ? { f_ws: ws.name } : {});
     } else if (data.getLeverById(alert.scope)) {
       router.push(`/levers/detail?id=${alert.scope}`);
+    } else if (data.subLevers.some((subLever) => subLever.id === alert.scope)) {
+      const subLever = data.subLevers.find((item) => item.id === alert.scope);
+      router.push(`/levers/detail?id=${subLever?.leverId}`);
     } else {
       goToLevers({});
     }
@@ -807,6 +806,12 @@ export default function DashboardPage() {
               actions={
                 <div className="flex items-center gap-2">
                   {/* Compteurs par sévérité (cliquables pour filtrer, avec tooltip) */}
+                  <button
+                    onClick={() => setManualAlertOpen(true)}
+                    className="rounded-sm border border-border px-2 py-0.5 text-[10.5px] font-semibold text-secondary transition hover:border-black hover:text-primary"
+                  >
+                    + Alerte manuelle
+                  </button>
                   {(["red", "amber", "green", "blue"] as const).map((type) => {
                     const count = alertCounts[type];
                     if (count === 0) return null;
@@ -907,6 +912,14 @@ export default function DashboardPage() {
                 </>
               )}
             </CardBody>
+            <ManualAlertForm
+              open={manualAlertOpen}
+              onOpenChange={setManualAlertOpen}
+              data={visibleData}
+              onSubmit={(input) => {
+                if (user) data.createManualAlert(input, user);
+              }}
+            />
           </Card>
         );
       case "savings-trajectory":
@@ -1522,24 +1535,11 @@ export default function DashboardPage() {
         );
 
       case "dependency-alerts": {
-        const depTypeLabels: Record<string, string> = {
-          FS: t("dep.fs"),
-          SS: t("dep.ss"),
-          FF: t("dep.ff"),
-          SF: t("dep.sf"),
-        };
-        const depTypeTooltips: Record<string, string> = {
-          FS: t("dep.tooltip.fs"),
-          SS: t("dep.tooltip.ss"),
-          FF: t("dep.tooltip.ff"),
-          SF: t("dep.tooltip.sf"),
-        };
         const depSeverity = (days: number) => {
           if (days > 30) return { label: t("dep.blocking"), cls: "bg-rag-red-light text-rag-red" };
           if (days > 7) return { label: t("dep.watch"), cls: "bg-rag-amber-light text-rag-amber" };
           return { label: t("dep.minor"), cls: "bg-neutral-100 text-secondary" };
         };
-        const isDirectional = (type: string) => type === "FS" || type === "SF";
 
         return renderWidgetShell(
           instance,
@@ -1561,14 +1561,35 @@ export default function DashboardPage() {
                 <div className="flex flex-col gap-3">
                   {depAlerts.slice(0, 6).map((a, i) => {
                     const sev = depSeverity(a.delayDays);
+                    const meta = DEPENDENCY_TYPE_META[a.type];
                     return (
                       <div
                         key={`${a.sourceId}-${a.targetId}-${i}`}
-                        onClick={() => router.push(`/levers/detail?id=${a.sourceId}`)}
+                        onClick={() => {
+                          const sourceSubLever = data.subLevers.find(
+                            (item) => item.id === a.sourceId
+                          );
+                          router.push(`/levers/detail?id=${sourceSubLever?.leverId ?? a.sourceId}`);
+                        }}
                         className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
                       >
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                              Règle de planning
+                            </div>
+                            <div className="mt-1 text-[11px] font-semibold text-primary">
+                              {a.type === "FS" && "La cible doit finir avant le début de la source"}
+                              {a.type === "SF" &&
+                                "La cible doit démarrer avant la fin de la source"}
+                              {a.type === "SS" && "Les deux éléments doivent démarrer ensemble"}
+                              {a.type === "FF" && "Les deux éléments doivent finir ensemble"}
+                            </div>
+                          </div>
+                          <DependencyTypeBadge type={a.type} />
+                        </div>
                         {/* Layout directionnel (FS, SF) : côte à côte avec flèche */}
-                        {isDirectional(a.type) ? (
+                        {meta.directional ? (
                           <div className="flex items-stretch gap-2">
                             <div className="flex flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
                               <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
@@ -1578,16 +1599,13 @@ export default function DashboardPage() {
                                 {a.targetName}
                               </div>
                               <div className="mt-0.5 text-[10px] text-secondary">
-                                {a.type === "FS"
-                                  ? t("dep.ff").split("=")[0]?.trim()
-                                  : t("dep.fs").split("→")[0]?.trim()}{" "}
-                                : {a.targetDate}
+                                {meta.targetMilestone} : {a.targetDate}
                               </div>
                             </div>
                             <div className="flex flex-col items-center justify-center text-tertiary">
                               <ArrowRight size={14} />
                               <span className="mt-0.5 text-[8px] font-semibold uppercase">
-                                {depTypeLabels[a.type]}
+                                {a.type}
                               </span>
                             </div>
                             <div className="flex flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
@@ -1598,10 +1616,7 @@ export default function DashboardPage() {
                                 {a.sourceName}
                               </div>
                               <div className="mt-0.5 text-[10px] text-secondary">
-                                {a.type === "FS"
-                                  ? t("dep.fs").split("→")[0]?.trim()
-                                  : t("dep.ff").split("=")[0]?.trim()}{" "}
-                                : {a.sourceDate}
+                                {meta.sourceMilestone} : {a.sourceDate}
                               </div>
                             </div>
                           </div>
@@ -1616,15 +1631,12 @@ export default function DashboardPage() {
                                 {a.sourceName}
                               </div>
                               <div className="mt-0.5 text-[10px] text-secondary">
-                                {a.type === "SS"
-                                  ? t("dep.fs").split("→")[0]?.trim()
-                                  : t("dep.ff").split("=")[0]?.trim()}{" "}
-                                : {a.sourceDate}
+                                {meta.sourceMilestone} : {a.sourceDate}
                               </div>
                             </div>
                             <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
                               <ArrowUpDown size={10} />
-                              {depTypeLabels[a.type]}
+                              {a.type}
                             </div>
                             <div className="bg-bp-coral/[0.03] p-2">
                               <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
@@ -1634,10 +1646,7 @@ export default function DashboardPage() {
                                 {a.targetName}
                               </div>
                               <div className="mt-0.5 text-[10px] text-secondary">
-                                {a.type === "SS"
-                                  ? t("dep.fs").split("→")[0]?.trim()
-                                  : t("dep.ff").split("=")[0]?.trim()}{" "}
-                                : {a.targetDate}
+                                {meta.targetMilestone} : {a.targetDate}
                               </div>
                             </div>
                           </div>
@@ -1649,13 +1658,8 @@ export default function DashboardPage() {
                           </span>
                           <span className="text-secondary">
                             {a.delayDays}{" "}
-                            {isDirectional(a.type) ? t("dep.delayDays") : t("dep.offsetDays")}
+                            {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
                           </span>
-                          <Tooltip text={depTypeTooltips[a.type]} position="bottom">
-                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
-                              {depTypeLabels[a.type]}
-                            </span>
-                          </Tooltip>
                           {a.sourceKind === "subLever" && (
                             <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
                               Sous-levier

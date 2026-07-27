@@ -9,6 +9,7 @@ import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
+import { useNotifications } from "@/lib/hooks/useNotifications";
 
 /**
  * Coquille de l'app (sidebar + topbar) + garde d'authentification : redirige vers /login si
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const data = useBeTrackData(user?.companyId ?? null);
+  const notifications = useNotifications(data, user);
   const [ready, setReady] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -63,7 +65,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Sidebar fixe — visible seulement à partir de `lg` (1024px). En dessous, remplacée par le
           bouton hamburger du Topbar + ce drawer coulissant. */}
       <div className="hidden lg:flex">
-        <Sidebar alertCount={data.alerts.length} role={role} />
+        <Sidebar alertCount={notifications.unresolvedAlerts.length} role={role} />
       </div>
 
       {mobileNavOpen && (
@@ -74,7 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setMobileNavOpen(false)}
           />
           <Sidebar
-            alertCount={data.alerts.length}
+            alertCount={notifications.unresolvedAlerts.length}
             role={role}
             onNavigate={() => setMobileNavOpen(false)}
             className="relative z-10 h-full w-[248px] min-w-[248px] shadow-xl"
@@ -84,7 +86,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
-          alertCount={data.alerts.length}
+          alertCount={notifications.unresolvedAlerts.length}
+          alerts={notifications.unresolvedAlerts}
+          onAlertClick={(alert) => {
+            const directLever = data.getLeverById(alert.scope);
+            const subLever = data.subLevers.find((item) => item.id === alert.scope);
+            const leverId = directLever?.id ?? subLever?.leverId;
+            router.push(leverId ? `/levers/detail?id=${leverId}` : "/levers");
+          }}
           role={role}
           onReset={() => {
             data.resetToMockData();

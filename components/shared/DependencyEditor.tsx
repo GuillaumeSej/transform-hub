@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/shared/Button";
-import { DEPENDENCY_TYPES, DEPENDENCY_TYPE_DESCRIPTION, DEPENDENCY_TYPE_LABEL } from "@/lib/status-config";
+import {
+  DEPENDENCY_TYPES,
+  DEPENDENCY_TYPE_DESCRIPTION,
+  DEPENDENCY_TYPE_LABEL,
+} from "@/lib/status-config";
 import type { BeTrackData, DependencyType, LeverDependency } from "@/types";
 
 const inputClass =
@@ -69,9 +73,7 @@ export function DependencyEditor({
             onChange={(e) =>
               onChange(
                 value.map((d) =>
-                  d.targetId === dep.targetId
-                    ? { ...d, type: e.target.value as DependencyType }
-                    : d
+                  d.targetId === dep.targetId ? { ...d, type: e.target.value as DependencyType } : d
                 )
               )
             }
@@ -80,7 +82,7 @@ export function DependencyEditor({
           >
             {DEPENDENCY_TYPES.map((t) => (
               <option key={t} value={t}>
-                {DEPENDENCY_TYPE_LABEL[t]}
+                {t} — {DEPENDENCY_TYPE_LABEL[t]}
               </option>
             ))}
           </select>
@@ -116,11 +118,17 @@ export function DependencyEditor({
         >
           {DEPENDENCY_TYPES.map((t) => (
             <option key={t} value={t}>
-              {DEPENDENCY_TYPE_LABEL[t]}
+              {t} — {DEPENDENCY_TYPE_LABEL[t]}
             </option>
           ))}
         </select>
-        <Button type="button" variant="outline" size="sm" onClick={addDraft} disabled={!draftTarget}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addDraft}
+          disabled={!draftTarget}
+        >
           <Plus size={12} /> Ajouter
         </Button>
       </div>

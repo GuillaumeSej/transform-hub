@@ -115,4 +115,19 @@ export const DEPENDENCY_TYPE_DESCRIPTION: Record<DependencyType, string> = {
   SF: "L'autre doit avoir démarré avant que celui-ci se termine",
 };
 
+export const DEPENDENCY_TYPE_META: Record<
+  DependencyType,
+  {
+    code: DependencyType;
+    sourceMilestone: "Début" | "Fin";
+    targetMilestone: "Début" | "Fin";
+    directional: boolean;
+  }
+> = {
+  FS: { code: "FS", sourceMilestone: "Début", targetMilestone: "Fin", directional: true },
+  SS: { code: "SS", sourceMilestone: "Début", targetMilestone: "Début", directional: false },
+  FF: { code: "FF", sourceMilestone: "Fin", targetMilestone: "Fin", directional: false },
+  SF: { code: "SF", sourceMilestone: "Fin", targetMilestone: "Début", directional: true },
+};
+
 export const DEPENDENCY_TYPES: DependencyType[] = ["FS", "SS", "FF", "SF"];

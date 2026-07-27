@@ -7,14 +7,78 @@ import type { AuthUser } from "@/types";
  * data/mockData.ts, leviers rattachés au Lever Owner de test).
  */
 export const TEST_USERS: AuthUser[] = [
-  { username: "admin", password: "test", role: "admin", firstName: "Admin", lastName: "BeTrack", name: "Admin BeTrack", companyId: null },
-  { username: "admin.c1", password: "test", role: "admin_entreprise", firstName: "Admin", lastName: "Acme", name: "Admin Acme", companyId: "c1" },
-  { username: "test.cto", password: "test", role: "cto", firstName: "Jean", lastName: "Dupont", name: "Jean Dupont", companyId: "c1" },
-  { username: "test.sponsor", password: "test", role: "sponsor", firstName: "Marie", lastName: "Martin", name: "Marie Martin", companyId: "c1" },
-  { username: "test.lever", password: "test", role: "lever", firstName: "Pierre", lastName: "Bernard", name: "Pierre Bernard", companyId: "c1" },
-  { username: "test.finance", password: "test", role: "finance", firstName: "Sophie", lastName: "Dubois", name: "Sophie Dubois", companyId: "c1" },
-  { username: "test.hr", password: "test", role: "hr", firstName: "Claire", lastName: "Moreau", name: "Claire Moreau", companyId: "c1" },
-  { username: "test.ops", password: "test", role: "ops", firstName: "Lucas", lastName: "Petit", name: "Lucas Petit", companyId: "c1" },
+  {
+    username: "admin",
+    password: "test",
+    role: "admin",
+    firstName: "Admin",
+    lastName: "BeTrack",
+    name: "Admin BeTrack",
+    companyId: null,
+  },
+  {
+    username: "admin.c1",
+    password: "test",
+    role: "admin_entreprise",
+    firstName: "Admin",
+    lastName: "Acme",
+    name: "Admin Acme",
+    companyId: "c1",
+  },
+  {
+    username: "test.cto",
+    password: "test",
+    role: "cto",
+    firstName: "Jean",
+    lastName: "Dupont",
+    name: "Jean Dupont",
+    companyId: "c1",
+  },
+  {
+    username: "test.sponsor",
+    password: "test",
+    role: "sponsor",
+    firstName: "Marie",
+    lastName: "Martin",
+    name: "Marie Martin",
+    companyId: "c1",
+  },
+  {
+    username: "test.lever",
+    password: "test",
+    role: "lever",
+    firstName: "Pierre",
+    lastName: "Bernard",
+    name: "Pierre Bernard",
+    companyId: "c1",
+  },
+  {
+    username: "test.finance",
+    password: "test",
+    role: "finance",
+    firstName: "Sophie",
+    lastName: "Dubois",
+    name: "Sophie Dubois",
+    companyId: "c1",
+  },
+  {
+    username: "test.hr",
+    password: "test",
+    role: "hr",
+    firstName: "Claire",
+    lastName: "Moreau",
+    name: "Claire Moreau",
+    companyId: "c1",
+  },
+  {
+    username: "test.ops",
+    password: "test",
+    role: "ops",
+    firstName: "Lucas",
+    lastName: "Petit",
+    name: "Lucas Petit",
+    companyId: "c1",
+  },
 ];
 
 export function normalizeUsername(username: string): string {
@@ -26,7 +90,10 @@ export function findUser(username: string, password: string): AuthUser | null {
   return TEST_USERS.find((t) => t.username.toLowerCase() === u && t.password === password) ?? null;
 }
 
-export async function findUserFromFirestore(username: string, password: string): Promise<AuthUser | null> {
+export async function findUserFromFirestore(
+  username: string,
+  password: string
+): Promise<AuthUser | null> {
   try {
     const { collection, getDocs, query, where } = await import("firebase/firestore");
     const { db } = await import("@/lib/firebase");
@@ -51,6 +118,7 @@ export async function findUserFromFirestore(username: string, password: string):
       lastName: data.lastName,
       name: data.name ?? `${data.firstName} ${data.lastName}`,
       companyId: data.companyId ?? null,
+      confidentialityClearance: data.confidentialityClearance,
     };
   } catch {
     return null;

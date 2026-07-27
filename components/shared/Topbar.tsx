@@ -8,7 +8,7 @@ import { useRole } from "@/lib/hooks/useRole";
 import { roles } from "@/lib/nav-config";
 import { ResetDemoButton } from "@/components/shared/ResetDemoButton";
 import { Avatar } from "@/components/shared/Avatar";
-import type { Company, Role } from "@/types";
+import type { Alert, Company, Role } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
@@ -78,13 +78,18 @@ export function Topbar({
   role,
   onReset,
   onMenuClick,
+  alerts,
+  onAlertClick,
 }: {
   alertCount: number;
   role: Role;
   onReset: () => void;
   onMenuClick: () => void;
+  alerts: Alert[];
+  onAlertClick: (alert: Alert) => void;
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [alertsOpen, setAlertsOpen] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeCompanies(setCompanies);
@@ -132,15 +137,57 @@ export function Topbar({
           <Avatar initials={initials || "?"} size="sm" />
         </span>
         <LanguageSwitcher />
-        <button
-          className="relative flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black"
-          aria-label={t("topbar.alerts")}
-        >
-          <Bell size={14} />
-          {alertCount > 0 && (
-            <span className="absolute right-1.5 top-1.5 h-[7px] w-[7px] rounded-full border-2 border-white bg-bp-coral" />
+        <div className="relative">
+          <button
+            onClick={() => setAlertsOpen((open) => !open)}
+            className="relative flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black"
+            aria-label={`${t("topbar.alerts")} (${alertCount})`}
+            aria-expanded={alertsOpen}
+          >
+            <Bell size={14} />
+            {alertCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-bp-coral px-1 text-[9px] font-bold text-white">
+                {alertCount > 99 ? "99+" : alertCount}
+              </span>
+            )}
+          </button>
+          {alertsOpen && (
+            <div className="absolute right-0 top-10 z-30 w-[340px] overflow-hidden rounded-lg border border-border bg-white shadow-xl">
+              <div className="border-b border-border px-4 py-3 text-xs font-bold text-primary">
+                Notifications à traiter · {alertCount}
+              </div>
+              <div className="max-h-[360px] overflow-y-auto">
+                {alerts.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-xs text-tertiary">
+                    Aucune notification à traiter.
+                  </p>
+                ) : (
+                  alerts.map((alert) => (
+                    <button
+                      key={alert.id}
+                      type="button"
+                      onClick={() => {
+                        setAlertsOpen(false);
+                        onAlertClick(alert);
+                      }}
+                      className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
+                    >
+                      <span className="block text-xs font-semibold text-primary">
+                        {alert.title}
+                      </span>
+                      <span className="mt-1 block line-clamp-2 text-[11px] text-secondary">
+                        {alert.desc}
+                      </span>
+                      <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
+                        {alert.source === "auto" ? "Automatique" : "Manuelle"} · {alert.scope}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           )}
-        </button>
+        </div>
         {/* Réservé au global admin : ce bouton réinitialise TOUTES les entreprises, pas
             seulement celle de l'utilisateur courant — le rendre visible à tous les rôles était
             un oubli (voir composant CompanyDatabasePanel pour l'équivalent scopé à une seule
