@@ -51,7 +51,7 @@ export function JCurveChart({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: -8, bottom: 0 }}>
+      <ComposedChart data={chartData} margin={{ top: 24, right: 16, left: -8, bottom: 0 }}>
         <defs>
           <linearGradient id="greenGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#2E7D32" stopOpacity={0.15} />
