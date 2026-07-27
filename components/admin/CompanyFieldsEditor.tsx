@@ -82,7 +82,7 @@ export function CompanyFieldsEditor({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="text-xs font-medium text-text-secondary">Nom</label>
           <input
@@ -125,7 +125,7 @@ export function CompanyFieldsEditor({
         <div className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
           Paramètres avancés
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="text-xs font-medium text-text-secondary">
               Budget CAPEX total (€M) — optionnel

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
 import { findUser, findUserFromFirestore, TEST_USERS } from "@/lib/auth";
-import { roles } from "@/lib/nav-config";
+import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
 
@@ -33,7 +33,7 @@ export default function LoginPage() {
       return;
     }
     login(user);
-    router.replace(user.role === "lever" ? "/levers" : "/dashboard");
+    router.replace(PAGE_ROUTES[roles[user.role].nav[0]?.id] ?? "/levers");
   };
 
   return (

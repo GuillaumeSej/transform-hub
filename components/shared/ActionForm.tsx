@@ -89,7 +89,7 @@ export function ActionForm({
     });
   };
 
-  const pnlOptions = data.pnlAccounts.filter((a) => !a.computed);
+  const pnlOptions = data.pnlAccounts.filter((a) => !a.computed && a.selectable !== false);
   const entityOptions = Array.from(
     new Set(data.levers.map((l) => l.entity).filter((v): v is string => !!v))
   ).sort();

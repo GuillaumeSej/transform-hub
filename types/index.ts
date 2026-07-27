@@ -68,6 +68,7 @@ export type PnlAccount = {
   baseline: number; // €M
   sign: 1 | -1;
   computed?: boolean;
+  selectable?: boolean;
 };
 
 /** Instantané des chiffres financiers d'un levier/sous-levier, utilisé pour figer le plan initial
@@ -143,6 +144,8 @@ export type Lever = {
    *  `costCenter` (texte libre, conservé pour compat) : quand hierarchyLeafId est défini, c'est
    *  lui qui fait foi pour l'affichage de l'arborescence complète. */
   hierarchyLeafId?: string;
+  /** Maille la plus fine de l'arborescence géographique configurée pour l'entreprise. */
+  geographyLeafId?: string;
   /** Id du Project (voir types Project) auquel ce levier est rattaché, pour la ventilation
    *  "par projet" (en plus de la ventilation existante "par workstream"). */
   projectId?: string;
@@ -405,6 +408,8 @@ export type Company = {
    *  compte P&L) au plus fin. Les leviers/sous-leviers ne renseignent que la maille la plus fine
    *  (voir Lever.hierarchyLeafId) ; les niveaux intermédiaires sont dérivés via HierarchyNode. */
   hierarchyLevels?: HierarchyLevelDef[];
+  /** Arborescence géographique indépendante et de profondeur libre. */
+  geographyHierarchyLevels?: HierarchyLevelDef[];
   /** Taux de charges sociales patronales appliqué au salaire brut pour obtenir le "salaire
    *  chargé" utilisé dans le calcul EUR mécanisme-dépendant des mouvements RH (voir
    *  lib/hrFinancials.ts). Varie fortement selon pays/statut/convention collective — ASSUMPTION :
@@ -416,10 +421,15 @@ export type Company = {
 /** Un niveau de l'arborescence financière P&L → Cost Center, configuré par entreprise.
  *  `order` 0 = le plus macro (juste sous le compte P&L), le plus grand = la maille la plus fine
  *  (celle effectivement saisie dans le fichier des leviers). */
+export type HierarchyDomain = "financial" | "geographic";
+export type HierarchySemantic = "pnl" | "legal_entity" | "country" | "region" | "continent";
+
 export type HierarchyLevelDef = {
   key: string; // slug stable, ex. "business_unit", "cost_center"
   label: string; // libellé affiché, ex. "Business Unit", "Centre de coût"
   order: number;
+  /** Sémantique facultative permettant d'alimenter les champs et vues standard. */
+  semantic?: HierarchySemantic;
 };
 
 /** Un nœud concret de l'arborescence (ex. le Cost Center "CC-PROC-001", enfant de la Business
@@ -432,6 +442,15 @@ export type HierarchyNode = {
   code: string; // code saisi tel quel dans le fichier des leviers pour la maille la plus fine
   label: string;
   parentId: string | null;
+  /** Les nœuds historiques sans domaine sont financiers. */
+  domain?: HierarchyDomain;
+  /** Métadonnées des lignes P&L, utilisées uniquement au niveau semantic="pnl". */
+  financial?: {
+    baseline: number;
+    sign: 1 | -1;
+    computed?: boolean;
+    selectable?: boolean;
+  };
 };
 
 export type Project = {

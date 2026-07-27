@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Building2, Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
 import type { Company } from "@/types";
 import { subscribeCompanies, saveCompany, deleteCompany } from "@/lib/firestore/admin";
@@ -16,6 +17,7 @@ const DEFAULT_FORM: CompanyFormState = DEFAULT_COMPANY_FORM;
 
 export default function AdminCompaniesPage() {
   const { showToast } = useToast();
+  const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
 
   useEffect(() => {
@@ -81,6 +83,7 @@ export default function AdminCompaniesPage() {
       } else {
         const id = `c${Date.now()}`;
         await saveCompany({ id, ...common, createdAt: new Date().toISOString().slice(0, 10) });
+        router.push(`/admin/companies/detail?id=${id}`);
       }
       setShowForm(false);
     } catch (err) {
@@ -95,7 +98,7 @@ export default function AdminCompaniesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Building2 size={22} className="text-bp-coral" />
           <h1 className="text-xl font-bold text-text-primary">Gestion des Entreprises</h1>

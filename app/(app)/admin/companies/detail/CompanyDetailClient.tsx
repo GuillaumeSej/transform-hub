@@ -8,6 +8,7 @@ import {
   Building2,
   Users,
   Network,
+  Globe2,
   Workflow,
   Database,
   BarChart3,
@@ -29,12 +30,21 @@ import { ProjectsPanel } from "@/components/admin/ProjectsPanel";
 import { CompanyDataHistoryPanel } from "@/components/admin/CompanyDataHistoryPanel";
 import { CompanyDatabasePanel } from "@/components/admin/CompanyDatabasePanel";
 
-type TabId = "settings" | "users" | "hierarchy" | "projects" | "lifecycle" | "data" | "database";
+type TabId =
+  | "settings"
+  | "users"
+  | "financial-hierarchy"
+  | "geographic-hierarchy"
+  | "projects"
+  | "lifecycle"
+  | "data"
+  | "database";
 
 const TABS: { id: TabId; label: string; icon: typeof Building2 }[] = [
   { id: "settings", label: "Paramètres", icon: Building2 },
   { id: "users", label: "Utilisateurs", icon: Users },
-  { id: "hierarchy", label: "Hiérarchie", icon: Network },
+  { id: "financial-hierarchy", label: "Arborescence financière", icon: Network },
+  { id: "geographic-hierarchy", label: "Arborescence géographique", icon: Globe2 },
   { id: "projects", label: "Projets", icon: FolderKanban },
   { id: "lifecycle", label: "Cycle de vie", icon: Workflow },
   { id: "data", label: "Données & Historique", icon: BarChart3 },
@@ -180,7 +190,7 @@ export default function CompanyDetailClient() {
         >
           <ArrowLeft size={12} /> Toutes les entreprises
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Building2 size={22} className="text-bp-coral" />
           <h1 className="text-xl font-bold text-text-primary">{company?.name ?? "Entreprise"}</h1>
           {company && (
@@ -191,7 +201,7 @@ export default function CompanyDetailClient() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-border pb-2">
+      <div className="flex snap-x gap-2 overflow-x-auto border-b border-border pb-2">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -199,7 +209,7 @@ export default function CompanyDetailClient() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              className={`flex min-h-10 shrink-0 snap-start items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 active
                   ? "bg-bp-coral text-white"
                   : "border border-border text-text-secondary hover:bg-bg-elevated"
@@ -231,7 +241,12 @@ export default function CompanyDetailClient() {
             </div>
           )}
           {tab === "users" && <UsersPanel scopeCompanyId={company.id} />}
-          {tab === "hierarchy" && <HierarchyEditor companies={companies} companyId={company.id} />}
+          {tab === "financial-hierarchy" && (
+            <HierarchyEditor companies={companies} companyId={company.id} domain="financial" />
+          )}
+          {tab === "geographic-hierarchy" && (
+            <HierarchyEditor companies={companies} companyId={company.id} domain="geographic" />
+          )}
           {tab === "projects" && <ProjectsPanel companyId={company.id} />}
           {tab === "lifecycle" && <LifecycleEditor companyId={company.id} />}
           {tab === "data" && <CompanyDataHistoryPanel company={company} />}

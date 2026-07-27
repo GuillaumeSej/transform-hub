@@ -61,7 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!role || !ready) return null;
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-dvh">
       {/* Sidebar fixe — visible seulement à partir de `lg` (1024px). En dessous, remplacée par le
           bouton hamburger du Topbar + ce drawer coulissant. */}
       <div className="hidden lg:flex">
@@ -69,7 +69,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {mobileNavOpen && (
-        <div className="fixed inset-0 z-40 flex lg:hidden">
+        <div
+          className="fixed inset-0 z-40 flex lg:hidden"
+          role="dialog"
+          aria-label="Navigation principale"
+        >
           <div
             className="fixed inset-0 bg-black/50"
             aria-hidden="true"
@@ -79,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             alertCount={notifications.unresolvedAlerts.length}
             role={role}
             onNavigate={() => setMobileNavOpen(false)}
-            className="relative z-10 h-full w-[248px] min-w-[248px] shadow-xl"
+            className="relative z-10 h-dvh w-[min(248px,85vw)] min-w-0 shadow-xl"
           />
         </div>
       )}

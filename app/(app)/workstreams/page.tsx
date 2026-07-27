@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
@@ -11,7 +12,9 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import type { Lever } from "@/types";
+import type { Company, Lever } from "@/types";
+import { subscribeCompanies } from "@/lib/firestore/admin";
+import { canUserViewLever } from "@/lib/leversLogic";
 
 type Row = Lever & { realized: number; wsName: string; statusLabel: string };
 
@@ -24,9 +27,18 @@ export default function WorkstreamsPage() {
   const data = useBeTrackData(user?.companyId ?? null);
   const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
-  const summary = engine.programSummary(data);
+  const [company, setCompany] = useState<Company | undefined>();
+  useEffect(
+    () =>
+      subscribeCompanies((items) => setCompany(items.find((item) => item.id === user?.companyId))),
+    [user?.companyId]
+  );
+  const visibleLevers = data.levers.filter((lever) =>
+    canUserViewLever(user, lever, company?.roleClearance)
+  );
+  const summary = engine.programSummary({ ...data, levers: visibleLevers });
 
-  const rows: Row[] = data.levers.map((l) => ({
+  const rows: Row[] = visibleLevers.map((l) => ({
     ...l,
     realized: engine.realizedSavings(l),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
@@ -74,7 +86,7 @@ export default function WorkstreamsPage() {
         </div>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="mb-5 grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 lg:grid-cols-5">
         <Kpi label="Leviers" value={String(summary.leverCount)} />
         <Kpi
           label="Savings réalisés / cible"

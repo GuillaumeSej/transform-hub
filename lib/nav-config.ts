@@ -31,6 +31,8 @@ export const roles: Record<Role, RoleDefinition> = {
     nav: [
       { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
       { id: "levers", icon: "Target", label: "nav.leverLibrary" },
+      { id: "finance", icon: "LineChart", label: "nav.financeModule" },
+      { id: "hr", icon: "Users", label: "nav.hrDashboard" },
     ],
   },
   sponsor: {

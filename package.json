@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "serve:export": "serve out -l 4173",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "format": "prettier --write .",
     "prepare": "husky"
   },
@@ -33,6 +36,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
@@ -44,6 +48,7 @@
     "lint-staged": "^17.0.8",
     "postcss": "^8",
     "prettier": "^3.9.4",
+    "serve": "^14.2.6",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
     "vitest": "^3.2.1"

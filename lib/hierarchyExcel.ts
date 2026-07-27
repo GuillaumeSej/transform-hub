@@ -1,4 +1,4 @@
-import type { HierarchyLevelDef, HierarchyNode } from "@/types";
+import type { HierarchyDomain, HierarchyLevelDef, HierarchyNode } from "@/types";
 
 /**
  * Import/export Excel de l'arborescence financière (P&L -> maille la plus fine), utilisé par
@@ -65,7 +65,8 @@ export function validateHierarchyImportRows(
   rawRows: Record<string, unknown>[],
   levels: HierarchyLevelDef[],
   existingNodes: HierarchyNode[],
-  companyId: string
+  companyId: string,
+  domain: HierarchyDomain = "financial"
 ): HierarchyImportPreview {
   const errors: HierarchyImportError[] = [];
   const sortedLevels = [...levels].sort((a, b) => a.order - b.order);
@@ -186,6 +187,7 @@ export function validateHierarchyImportRows(
         code: p.code,
         label: p.label,
         parentId,
+        domain,
       };
       toCreate.push(node);
       codeMap.set(lowerCode, node);

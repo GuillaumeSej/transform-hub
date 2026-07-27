@@ -43,9 +43,11 @@ export default function LeversPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const searchParams = useSearchParams();
+  const requestedView = searchParams.get("view");
   const [view, setView] = useState<"table" | "kanban">(
-    (searchParams.get("view") as "table" | "kanban") ?? "table"
+    requestedView === "kanban" ? "kanban" : "table"
   );
+  useEffect(() => setView(requestedView === "kanban" ? "kanban" : "table"), [requestedView]);
   const [newLeverOpen, setNewLeverOpen] = useState(false);
 
   // Arborescence financière (optionnelle) de l'entreprise courante — n'affiche des colonnes
@@ -173,10 +175,10 @@ export default function LeversPage() {
   const activeFilters: ActiveFilters = useMemo(() => {
     const result: ActiveFilters = {};
     searchParams.forEach((value, key) => {
-      if (key.startsWith("f_")) result[key] = value.split(",").filter(Boolean);
+      if (filterDefs.some((def) => def.key === key)) result[key] = value.split(",").filter(Boolean);
     });
     return result;
-  }, [searchParams]);
+  }, [searchParams, filterDefs]);
 
   const setFilters = (next: ActiveFilters) => {
     const params = new URLSearchParams(searchParams.toString());

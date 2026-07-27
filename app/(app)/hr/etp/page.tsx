@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Plus, TriangleAlert, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
@@ -74,7 +74,13 @@ export default function BaseEtpPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
-  const [tab, setTab] = useState<"etp" | "mouvements">("etp");
+  const requestedTab = searchParams.get("tab");
+  const [tab, setTab] = useState<"etp" | "mouvements">(
+    requestedTab === "mouvements" ? "mouvements" : "etp"
+  );
+  useEffect(() => {
+    setTab(requestedTab === "mouvements" ? "mouvements" : "etp");
+  }, [requestedTab]);
   const [movementModal, setMovementModal] = useState<{ movement?: WorkforceMovement } | null>(null);
 
   const wf = data.workforce;
@@ -244,10 +250,11 @@ export default function BaseEtpPage() {
   const etpActiveFilters: ActiveFilters = useMemo(() => {
     const result: ActiveFilters = {};
     searchParams.forEach((value, key) => {
-      if (key.startsWith("f_")) result[key] = value.split(",").filter(Boolean);
+      if (etpFilterDefs.some((def) => def.key === key))
+        result[key] = value.split(",").filter(Boolean);
     });
     return result;
-  }, [searchParams]);
+  }, [searchParams, etpFilterDefs]);
 
   const setFilters = (next: ActiveFilters) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -263,10 +270,11 @@ export default function BaseEtpPage() {
   const movementActiveFilters: ActiveFilters = useMemo(() => {
     const result: ActiveFilters = {};
     searchParams.forEach((value, key) => {
-      if (key.startsWith("f_")) result[key] = value.split(",").filter(Boolean);
+      if (movementFilterDefs.some((def) => def.key === key))
+        result[key] = value.split(",").filter(Boolean);
     });
     return result;
-  }, [searchParams]);
+  }, [searchParams, movementFilterDefs]);
 
   const filteredEmployees = useMemo(
     () =>

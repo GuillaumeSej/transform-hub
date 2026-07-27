@@ -115,6 +115,12 @@ const FILTER_PARAM_BY_DIMENSION: Partial<Record<string, string>> = {
   ws: "f_ws",
   owner: "f_owner",
   geography: "f_geography",
+  country: "f_country",
+  entity: "f_entity",
+  sponsor: "f_sponsor",
+  priority: "f_priority",
+  risk: "f_risk",
+  pnl: "f_pnl",
   type: "f_type",
   status: "f_status",
 };
@@ -248,7 +254,14 @@ export default function DashboardPage() {
     );
   }, [visibleLevers, data.workstreams, filters, lifecycle]);
 
-  const filteredData = useMemo(() => ({ ...data, levers: filteredLevers }), [data, filteredLevers]);
+  const filteredData = useMemo(() => {
+    const ids = new Set(filteredLevers.map((lever) => lever.id));
+    return {
+      ...visibleData,
+      levers: filteredLevers,
+      subLevers: visibleData.subLevers.filter((subLever) => ids.has(subLever.leverId)),
+    };
+  }, [visibleData, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
@@ -370,7 +383,7 @@ export default function DashboardPage() {
     });
   }, [filteredData, trajGranularity, trajRangeStart, trajRangeEnd, labelToDate]);
   const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
-  const sCurve = engine.sCurve3(visibleData, sCurveGranularity);
+  const sCurve = engine.sCurve3(filteredData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
   const sankeyChrono = engine.sankeyChronology(filteredData);
   const bridge = engine.financialBridge(filteredData, bridgeGranularity);
@@ -411,12 +424,12 @@ export default function DashboardPage() {
   };
   const currentYear = new Date(data.program.fyStart).getFullYear();
   const goToMonth = (month: string) => goToLevers({ f_endMonth: `${month} ${currentYear}` });
-  const goToBridgePeriod = (period: string) =>
-    bridgeGranularity === "quarter"
+  const goToBridgePeriod = (period: string, granularity = bridgeGranularity) =>
+    granularity === "quarter"
       ? goToLevers({ f_endQuarter: period })
       : goToLevers({ f_endMonth: period });
-  const goToSCurvePoint = (label: string) =>
-    sCurveGranularity === "quarter"
+  const goToSCurvePoint = (label: string, granularity = sCurveGranularity) =>
+    granularity === "quarter"
       ? goToLevers({ f_endQuarter: `${label} ${currentYear}` })
       : goToMonth(label);
 
@@ -692,9 +705,6 @@ export default function DashboardPage() {
         className={`relative ${SPAN_COL_CLASS[instance.span]} ${
           isDragOver ? "outline outline-2 outline-offset-2 outline-bp-coral" : ""
         }`}
-        style={{
-          gridColumn: `span ${instance.span === "XL" ? 4 : instance.span === "L" ? 3 : instance.span === "M" ? 2 : 1} / auto`,
-        }}
         draggable={editMode}
         onDragStart={() => setDragInstanceId(instance.instanceId)}
         onDragOver={(e) => {
@@ -975,7 +985,7 @@ export default function DashboardPage() {
                 <SCurveChart
                   data={trajSCurve}
                   height={360}
-                  onPointClick={goToSCurvePoint}
+                  onPointClick={(label) => goToSCurvePoint(label, trajGranularity)}
                   labelActual={t("chart.scurve.actual")}
                   labelPlanned={t("chart.scurve.planned")}
                   labelReforecast={t("chart.scurve.reforecast")}
@@ -984,7 +994,7 @@ export default function DashboardPage() {
                 <QuarterlyBridgeChart
                   data={trajBridge}
                   height={340}
-                  onBarClick={goToBridgePeriod}
+                  onBarClick={(period) => goToBridgePeriod(period, trajGranularity)}
                   barLabel={
                     trajGranularity === "month"
                       ? t("chart.bridge.monthSavings")

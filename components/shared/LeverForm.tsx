@@ -20,6 +20,7 @@ import type {
   Project,
   RiskLevel,
 } from "@/types";
+import { hierarchyPathValue, resolveHierarchyPath } from "@/lib/hierarchyLogic";
 
 export type LeverFormValues = Omit<Lever, "id" | "createdAt" | "lastUpdate" | "dependencies">;
 
@@ -45,6 +46,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function emptyValues(data: BeTrackData): LeverFormValues {
+  const defaultPnl = data.pnlAccounts.find(
+    (account) => account.selectable !== false && !account.computed
+  );
   return {
     code: "",
     type: data.leverTypes[0] ?? "",
@@ -59,7 +63,7 @@ function emptyValues(data: BeTrackData): LeverFormValues {
     entity: "",
     function: data.functions[0] ?? "",
     costCenter: "",
-    pnlMap: data.pnlAccounts[0]?.id ?? "",
+    pnlMap: defaultPnl?.id ?? "",
     start: new Date().toISOString().slice(0, 10),
     end: new Date().toISOString().slice(0, 10),
     status: "idea",
@@ -108,43 +112,95 @@ export function LeverForm({
 
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
   const [leafNodes, setLeafNodes] = useState<HierarchyNode[]>([]);
+  const [geographyLevels, setGeographyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
+  const [geographyLeafNodes, setGeographyLeafNodes] = useState<HierarchyNode[]>([]);
   const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
 
   useEffect(() => {
     if (!companyId) {
       setHierarchyLevels([]);
       setLeafNodes([]);
+      setGeographyLevels([]);
+      setGeographyNodes([]);
+      setGeographyLeafNodes([]);
       setConfidentialityLevels([]);
       return;
     }
     let cancelled = false;
     let unsubNodes: (() => void) | null = null;
+    let unsubGeoNodes: (() => void) | null = null;
     const unsubCompanies = subscribeCompanies((companies) => {
       if (cancelled) return;
       const company = companies.find((c) => c.id === companyId);
       const levels = company?.hierarchyLevels ?? [];
+      const geoLevels = company?.geographyHierarchyLevels ?? [];
       setHierarchyLevels(levels);
+      setGeographyLevels(geoLevels);
       setConfidentialityLevels(company?.confidentialityLevels ?? []);
       unsubNodes?.();
+      unsubGeoNodes?.();
       unsubNodes = null;
       if (levels.length === 0) {
         setLeafNodes([]);
-        return;
+      } else {
+        const finestLevelKey = [...levels].sort((a, b) => b.order - a.order)[0].key;
+        unsubNodes = subscribeHierarchyNodes(
+          companyId,
+          (nodes) => {
+            if (cancelled) return;
+            setLeafNodes(nodes.filter((n) => n.levelKey === finestLevelKey));
+          },
+          "financial"
+        );
       }
-      const finestLevelKey = [...levels].sort((a, b) => b.order - a.order)[0].key;
-      unsubNodes = subscribeHierarchyNodes(companyId, (nodes) => {
-        if (cancelled) return;
-        setLeafNodes(nodes.filter((n) => n.levelKey === finestLevelKey));
-      });
+      if (geoLevels.length === 0) {
+        setGeographyNodes([]);
+        setGeographyLeafNodes([]);
+      } else {
+        const finestGeoLevelKey = [...geoLevels].sort((a, b) => b.order - a.order)[0].key;
+        unsubGeoNodes = subscribeHierarchyNodes(
+          companyId,
+          (nodes) => {
+            if (cancelled) return;
+            setGeographyNodes(nodes);
+            setGeographyLeafNodes(nodes.filter((node) => node.levelKey === finestGeoLevelKey));
+          },
+          "geographic"
+        );
+      }
     });
     return () => {
       cancelled = true;
       unsubNodes?.();
+      unsubGeoNodes?.();
       unsubCompanies();
     };
   }, [companyId]);
 
   const hasHierarchy = hierarchyLevels.length > 0;
+  const hasGeographyHierarchy = geographyLevels.length > 0;
+
+  const selectGeographyLeaf = (leafId: string) => {
+    setValues((current) => {
+      const next = { ...current };
+      delete next.geographyLeafId;
+      if (!leafId) return next;
+      return {
+        ...next,
+        geographyLeafId: leafId,
+        geography:
+          hierarchyPathValue(leafId, "region", geographyNodes, geographyLevels) ??
+          hierarchyPathValue(leafId, "continent", geographyNodes, geographyLevels) ??
+          current.geography,
+        country:
+          hierarchyPathValue(leafId, "country", geographyNodes, geographyLevels) ?? current.country,
+        entity:
+          hierarchyPathValue(leafId, "legal_entity", geographyNodes, geographyLevels) ??
+          current.entity,
+      };
+    });
+  };
 
   const [projects, setProjects] = useState<Project[]>([]);
   useEffect(() => {
@@ -174,7 +230,7 @@ export function LeverForm({
       }}
     >
       <SectionTitle>{t("leverForm.sectionIdentification")}</SectionTitle>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         <Field label={t("leverForm.code")}>
           <input
             required
@@ -225,7 +281,7 @@ export function LeverForm({
             </select>
           </Field>
         )}
-        <div className="col-span-3">
+        <div className="col-span-1 sm:col-span-2 md:col-span-3">
           <Field label={t("leverForm.name")}>
             <input
               required
@@ -236,7 +292,7 @@ export function LeverForm({
           </Field>
         </div>
         {confidentialityLevels.length > 0 && (
-          <div className="col-span-3">
+          <div className="col-span-1 sm:col-span-2 md:col-span-3">
             <Field label={t("leverForm.confidentiality")}>
               <select
                 className={inputClass}
@@ -256,8 +312,8 @@ export function LeverForm({
       </div>
 
       <SectionTitle>{t("leverForm.sectionOwnership")}</SectionTitle>
-      <div className="grid grid-cols-4 gap-3">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <div className="col-span-1 sm:col-span-2">
           <Field label={t("leverForm.owner")}>
             <input
               className={inputClass}
@@ -275,7 +331,7 @@ export function LeverForm({
           />
         </Field>
         <div />
-        <div className="col-span-2">
+        <div className="col-span-1 sm:col-span-2">
           <Field label={t("leverForm.sponsor")}>
             <input
               className={inputClass}
@@ -295,7 +351,28 @@ export function LeverForm({
       </div>
 
       <SectionTitle>{t("leverForm.sectionLocation")}</SectionTitle>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+        {hasGeographyHierarchy && (
+          <div className="col-span-1 sm:col-span-2 md:col-span-3">
+            <Field label="Maille géographique configurée">
+              <select
+                className={inputClass}
+                value={values.geographyLeafId ?? ""}
+                onChange={(e) => selectGeographyLeaf(e.target.value)}
+              >
+                <option value="">{t("leverForm.selectPlaceholder")}</option>
+                {geographyLeafNodes.map((node) => (
+                  <option key={node.id} value={node.id}>
+                    {resolveHierarchyPath(node.id, geographyNodes, geographyLevels)
+                      .map((entry) => entry.label)
+                      .join(" › ")}{" "}
+                    ({node.code})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
         <Field label={t("leverForm.geography")}>
           <select
             className={inputClass}
@@ -384,17 +461,19 @@ export function LeverForm({
             value={values.pnlMap}
             onChange={(e) => set("pnlMap", e.target.value)}
           >
-            {data.pnlAccounts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+            {data.pnlAccounts
+              .filter((p) => p.selectable !== false && !p.computed)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
           </select>
         </Field>
       </div>
 
       <SectionTitle>{t("leverForm.sectionStatus")}</SectionTitle>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         <Field label={t("leverForm.startDate")}>
           <input
             type="date"
@@ -470,7 +549,7 @@ export function LeverForm({
           {t("leverForm.lockedPlanNoticeEnd")}
         </p>
       )}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         <Field label={t("leverForm.grossSavings")}>
           <input
             type="number"
@@ -525,7 +604,7 @@ export function LeverForm({
       </div>
 
       <SectionTitle>{t("leverForm.sectionHr")}</SectionTitle>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={t("leverForm.fteImpact")}>
           <input
             type="number"

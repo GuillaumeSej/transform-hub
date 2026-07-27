@@ -9,7 +9,15 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { AuthUser, Company, HierarchyNode, LifecycleStage, Project } from "@/types";
+import type {
+  AuthUser,
+  Company,
+  HierarchyDomain,
+  HierarchyNode,
+  LifecycleStage,
+  Project,
+} from "@/types";
+import { hierarchyDomain } from "@/lib/hierarchyLogic";
 import { TEST_USERS } from "@/lib/auth";
 
 // --- Companies ---
@@ -76,11 +84,16 @@ const hierarchyNodesCol = () => collection(db, "hierarchyNodes");
 /** Abonnement filtré côté client par companyId, comme subscribeLevers/subscribeSubLevers. */
 export function subscribeHierarchyNodes(
   companyId: string,
-  cb: (nodes: HierarchyNode[]) => void
+  cb: (nodes: HierarchyNode[]) => void,
+  domain?: HierarchyDomain
 ): Unsubscribe {
   return onSnapshot(hierarchyNodesCol(), (snap) => {
     const all = snap.docs.map((d) => d.data() as HierarchyNode);
-    cb(all.filter((n) => n.companyId === companyId));
+    cb(
+      all.filter(
+        (node) => node.companyId === companyId && (!domain || hierarchyDomain(node) === domain)
+      )
+    );
   });
 }
 

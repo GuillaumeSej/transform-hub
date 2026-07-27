@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import {
+  buildHierarchyForest,
+  derivePnlAccounts,
+  hierarchyPathValue,
+  nodesForDomain,
+  resolveHierarchyPath,
+} from "@/lib/hierarchyLogic";
 import type { HierarchyLevelDef, HierarchyNode } from "@/types";
 
 const levels3: HierarchyLevelDef[] = [
@@ -82,5 +88,86 @@ describe("hierarchyLogic — resolveHierarchyPath", () => {
     ];
     const path = resolveHierarchyPath("a", cyclic, levels3);
     expect(path.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("hierarchyLogic — domains, tree and P&L", () => {
+  it("keeps legacy nodes in the financial domain and isolates geography", () => {
+    const nodes = [...nodes3, { ...nodes3[0], id: "geo", domain: "geographic" as const }];
+    expect(nodesForDomain(nodes, "financial")).toHaveLength(3);
+    expect(nodesForDomain(nodes, "geographic")).toHaveLength(1);
+  });
+
+  it("builds a stable nested forest", () => {
+    const forest = buildHierarchyForest(nodes3, levels3);
+    expect(forest).toHaveLength(1);
+    expect(forest[0].children[0].children[0].id).toBe("cc1");
+  });
+
+  it("derives P&L accounts from the semantic level", () => {
+    const levels: HierarchyLevelDef[] = [{ key: "pnl", label: "P&L", order: 0, semantic: "pnl" }];
+    const nodes: HierarchyNode[] = [
+      {
+        id: "p1",
+        companyId: "c1",
+        domain: "financial",
+        levelKey: "pnl",
+        code: "REV",
+        label: "Revenue",
+        parentId: null,
+        financial: { baseline: 125, sign: 1, computed: false, selectable: true },
+      },
+    ];
+    expect(derivePnlAccounts(levels, nodes, [])).toEqual([
+      { id: "REV", name: "Revenue", baseline: 125, sign: 1, computed: false, selectable: true },
+    ]);
+  });
+
+  it("keeps legacy accounts that are still referenced by existing levers", () => {
+    const levels: HierarchyLevelDef[] = [{ key: "pnl", label: "P&L", order: 0, semantic: "pnl" }];
+    const nodes: HierarchyNode[] = [
+      {
+        id: "p1",
+        companyId: "c1",
+        domain: "financial",
+        levelKey: "pnl",
+        code: "NEW",
+        label: "New line",
+        parentId: null,
+        financial: { baseline: 0, sign: 1 },
+      },
+    ];
+    const fallback = [{ id: "OLD", name: "Old line", baseline: 10, sign: 1 as const }];
+    expect(
+      derivePnlAccounts(levels, nodes, fallback, ["OLD"]).map((account) => account.id)
+    ).toEqual(["NEW", "OLD"]);
+  });
+
+  it("resolves a semantic geography value from a selected leaf", () => {
+    const levels: HierarchyLevelDef[] = [
+      { key: "country", label: "Pays", order: 0, semantic: "country" },
+      { key: "entity", label: "Entité", order: 1, semantic: "legal_entity" },
+    ];
+    const nodes: HierarchyNode[] = [
+      {
+        id: "fr",
+        companyId: "c1",
+        domain: "geographic",
+        levelKey: "country",
+        code: "FR",
+        label: "France",
+        parentId: null,
+      },
+      {
+        id: "acme",
+        companyId: "c1",
+        domain: "geographic",
+        levelKey: "entity",
+        code: "ACME",
+        label: "Acme France",
+        parentId: "fr",
+      },
+    ];
+    expect(hierarchyPathValue("acme", "country", nodes, levels)).toBe("France");
   });
 });

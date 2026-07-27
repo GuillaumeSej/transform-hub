@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { subscribeCompanies } from "@/lib/firestore/admin";
-import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
+import { canUserViewLever } from "@/lib/leversLogic";
 import {
   ArrowLeft,
   ArrowRight,
@@ -42,7 +42,7 @@ import { ActionGantt } from "@/components/shared/charts/ActionGantt";
 import { JCurveChart } from "@/components/shared/charts/JCurveChart";
 import { consolidateLeverFromActions, leverJCurve, leverPayback } from "@/lib/leverConsolidate";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import type { ActionStatus, LeverAction, SubLever } from "@/types";
+import type { ActionStatus, Company, LeverAction, SubLever } from "@/types";
 
 const TABS = ["overview", "plan", "impact", "collab"] as const;
 type Tab = (typeof TABS)[number];
@@ -56,14 +56,14 @@ const TAB_LABELS: Record<Tab, string> = {
 type CascadeProposal = CascadeResult & { checked: Record<string, boolean> };
 
 export default function LeverDetailClient() {
-  const { role, user } = useRole();
+  const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
-  const [clearance, setClearance] = useState<"all" | string[]>([]);
   const [actionPlanEnabled, setActionPlanEnabled] = useState(true);
+  const [roleClearance, setRoleClearance] = useState<Company["roleClearance"]>();
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
-      setClearance(resolveConfidentialityClearance(user, company?.roleClearance));
+      setRoleClearance(company?.roleClearance);
       setActionPlanEnabled(company?.actionPlanEnabled ?? true);
     });
     return unsub;
@@ -74,7 +74,8 @@ export default function LeverDetailClient() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id") ?? "";
   const { showToast } = useToast();
-  const [tab, setTab] = useState<Tab>("overview");
+  const requestedTab = searchParams.get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(requestedTab ?? "overview");
   const [comment, setComment] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [subLeverModal, setSubLeverModal] = useState<{
@@ -91,6 +92,10 @@ export default function LeverDetailClient() {
   const [depsModalOpen, setDepsModalOpen] = useState(false);
 
   const lever = data.getLeverById(id);
+  useEffect(() => {
+    if (requestedTab) setTab(requestedTab);
+    setActiveSubLeverId(searchParams.get("subLever"));
+  }, [requestedTab, searchParams]);
   const allDependencyAlerts = useMemo(() => engine.dependencyAlerts(data), [data]);
 
   // J-Curve + consolidation — hooks doivent être avant tout return conditionnel
@@ -118,10 +123,7 @@ export default function LeverDetailClient() {
     );
   }
 
-  const canView =
-    role === "admin" ||
-    role === "admin_entreprise" ||
-    isLeverVisibleForClearance(lever.confidentialityLevel, clearance);
+  const canView = canUserViewLever(user, lever, roleClearance);
 
   if (!canView) {
     return (
@@ -533,7 +535,7 @@ export default function LeverDetailClient() {
         )}
       </Modal>
 
-      <div className="mb-4 flex flex-wrap gap-0 rounded-t-lg border-b-[1.5px] border-border bg-white px-4">
+      <div className="mb-4 flex snap-x flex-nowrap gap-0 overflow-x-auto rounded-t-lg border-b-[1.5px] border-border bg-white px-4">
         {TABS.map((t) => (
           <button
             key={t}
@@ -570,7 +572,7 @@ export default function LeverDetailClient() {
                 <BigStat label="Risque" value={<StatusBadge risk={lever.risk} />} />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Stat label="Code">
                 <span className="font-mono text-[13px]">{lever.code}</span>
               </Stat>
@@ -640,7 +642,7 @@ export default function LeverDetailClient() {
                   </>
                 )}
                 {consolidatedKPIs && (
-                  <div className="mt-4 grid grid-cols-5 gap-3 rounded-lg border border-border bg-neutral-50 p-3">
+                  <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-border bg-neutral-50 p-3 sm:grid-cols-3 lg:grid-cols-5">
                     <div className="text-center">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
                         Gain brut
@@ -729,7 +731,7 @@ export default function LeverDetailClient() {
                 </div>
                 <div className="h-6 w-px bg-neutral-300" />
                 {/* Branches vers chaque sous-levier */}
-                <div className="flex w-full items-start justify-center gap-4">
+                <div className="grid w-full grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:flex lg:justify-center">
                   {subLevers.map((s, i) => (
                     <div key={s.id} className="relative flex-1 pt-5" style={{ maxWidth: 220 }}>
                       {i > 0 && <div className="absolute left-0 top-0 h-px w-1/2 bg-neutral-300" />}
@@ -802,7 +804,7 @@ export default function LeverDetailClient() {
               </button>
             </div>
 
-            <div className="mt-2.5 grid grid-cols-2 gap-4">
+            <div className="mt-2.5 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
                   Ce levier dépend de
@@ -1037,7 +1039,7 @@ export default function LeverDetailClient() {
             ) : (
               <>
                 <SectionTitle first>Impact financier</SectionTitle>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <Stat
                     label={`Plan initial (net, figé à « ${lifecycle.label("validated")} »)`}
                     accent
@@ -1060,7 +1062,7 @@ export default function LeverDetailClient() {
                   </strong>
                 </p>
                 <SectionTitle>Impact RH</SectionTitle>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <Stat label="Impact estimé (ETP)">
                     {lever.fteImpact > 0 ? `+${lever.fteImpact}` : lever.fteImpact}
                   </Stat>
