@@ -117,23 +117,26 @@ export function Topbar({
     .toUpperCase();
 
   return (
-    <header className="flex h-[60px] min-h-[60px] items-center justify-between gap-2 border-b border-border bg-white px-4 sm:px-6">
+    <header className="flex h-[60px] min-h-[60px] items-center justify-between gap-1 border-b border-border bg-white px-2 sm:gap-2 sm:px-6">
       <div className="flex min-w-0 items-center gap-2 text-xs text-secondary">
         <button
           type="button"
           onClick={onMenuClick}
           aria-label={t("topbar.menu")}
-          className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black lg:hidden"
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black lg:hidden"
         >
           <Menu size={16} />
         </button>
         <strong className="truncate font-semibold text-primary">{label}</strong>
       </div>
-      <div className="flex flex-shrink-0 items-center gap-2">
+      <div className="flex flex-shrink-0 items-center gap-1 sm:gap-2">
         <span className="hidden rounded-md border border-border bg-neutral-50 px-3 py-1.5 text-xs font-medium text-primary sm:inline-block">
           {displayName} · {companyLabel}
         </span>
-        <span className="sm:hidden" title={`${displayName} · ${companyLabel}`}>
+        <span
+          className="hidden min-[360px]:inline sm:hidden"
+          title={`${displayName} · ${companyLabel}`}
+        >
           <Avatar initials={initials || "?"} size="sm" />
         </span>
         <LanguageSwitcher />
@@ -152,7 +155,7 @@ export function Topbar({
             )}
           </button>
           {alertsOpen && (
-            <div className="absolute right-0 top-10 z-30 w-[340px] overflow-hidden rounded-lg border border-border bg-white shadow-xl">
+            <div className="absolute right-0 top-10 z-30 w-[calc(100vw-1rem)] max-w-[340px] overflow-hidden rounded-lg border border-border bg-white shadow-xl">
               <div className="border-b border-border px-4 py-3 text-xs font-bold text-primary">
                 Notifications à traiter · {alertCount}
               </div>

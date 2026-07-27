@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LineChart } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
 import { subscribeCompanies, saveCompany } from "@/lib/firestore/admin";
@@ -8,6 +8,8 @@ import type { Company } from "@/types";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
+import { useBeTrackData } from "@/lib/hooks/useStorage";
+import * as engine from "@/lib/engine";
 
 /**
  * Module Finance — encore un STRETCH (baseline P&L éditable, reforecast, waterfall à venir), mais
@@ -18,6 +20,7 @@ import { useToast } from "@/lib/hooks/useToast";
 export default function FinancePage() {
   const { user } = useRole();
   const { showToast } = useToast();
+  const data = useBeTrackData(user?.companyId ?? null);
   const [company, setCompany] = useState<Company | null>(null);
   const [capexBudget, setCapexBudget] = useState("");
 
@@ -32,10 +35,15 @@ export default function FinancePage() {
 
   const save = async () => {
     if (!company) return;
-    const value = capexBudget.trim() === "" ? undefined : Number(capexBudget);
-    await saveCompany({ ...company, capexBudget: value });
+    const next = { ...company };
+    delete next.capexBudget;
+    await saveCompany({
+      ...next,
+      ...(capexBudget.trim() !== "" ? { capexBudget: Number(capexBudget) } : {}),
+    });
     showToast("Budget CAPEX enregistré", "", "success");
   };
+  const pnlRows = useMemo(() => engine.pnlImpactDetailed(data), [data]);
 
   return (
     <div className="space-y-6">
@@ -52,8 +60,8 @@ export default function FinancePage() {
             en amont de la mission (souvent le cas). Non renseigné = le dashboard affiche uniquement
             le montant engagé.
           </p>
-          <div className="flex items-end gap-3">
-            <div>
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
+            <div className="w-full sm:w-auto">
               <label className="text-xs font-medium text-text-secondary">
                 Budget CAPEX total (€M)
               </label>
@@ -62,7 +70,7 @@ export default function FinancePage() {
                 value={capexBudget}
                 onChange={(e) => setCapexBudget(e.target.value)}
                 placeholder="Non renseigné"
-                className="mt-1 w-48 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral sm:w-48"
               />
             </div>
             <Button variant="primary" onClick={save} disabled={!company}>
@@ -73,12 +81,71 @@ export default function FinancePage() {
       </Card>
 
       <Card>
-        <CardHeader title="À venir" />
+        <CardHeader title="Compte de résultat configuré" />
         <CardBody>
-          <p className="text-sm text-text-secondary">
-            Baseline P&amp;L éditable, hypothèses de reforecast, waterfall et historique
-            d&apos;audit — prochaine passe de développement.
+          <p className="mb-4 text-sm text-text-secondary">
+            Les lignes ci-dessous proviennent directement de l&apos;arborescence financière définie
+            par l&apos;administrateur global. Les impacts des leviers sont consolidés
+            automatiquement.
           </p>
+          <div className="hidden overflow-x-auto rounded-lg border border-border sm:block">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-50 text-xs text-secondary">
+                <tr>
+                  <th className="px-3 py-2 text-left">Ligne P&amp;L</th>
+                  <th className="px-3 py-2 text-right">Baseline</th>
+                  <th className="px-3 py-2 text-right">Plan</th>
+                  <th className="px-3 py-2 text-right">Réalisé</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.pnlAccounts.map((account) => {
+                  const impact = pnlRows.find((row) => row.accountId === account.id);
+                  return (
+                    <tr key={account.id} className="border-t border-border">
+                      <td className="px-3 py-2 font-semibold text-primary">
+                        {account.name}
+                        {account.selectable === false ? (
+                          <span className="ml-2 text-[10px] font-normal text-tertiary">
+                            Non imputable
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-right">{engine.fmtCurr(account.baseline)}</td>
+                      <td className="px-3 py-2 text-right">{engine.fmtCurr(impact?.plan ?? 0)}</td>
+                      <td className="px-3 py-2 text-right">
+                        {engine.fmtCurr(impact?.realized ?? 0)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="space-y-2 sm:hidden">
+            {data.pnlAccounts.map((account) => {
+              const impact = pnlRows.find((row) => row.accountId === account.id);
+              return (
+                <div key={account.id} className="rounded-lg border border-border p-3">
+                  <div className="font-semibold text-primary">{account.name}</div>
+                  <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <dt className="text-tertiary">Baseline</dt>
+                      <dd>{engine.fmtCurr(account.baseline)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-tertiary">Plan</dt>
+                      <dd>{engine.fmtCurr(impact?.plan ?? 0)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-tertiary">Réalisé</dt>
+                      <dd>{engine.fmtCurr(impact?.realized ?? 0)}</dd>
+                    </div>
+                  </dl>
+                </div>
+              );
+            })}
+          </div>
         </CardBody>
       </Card>
     </div>

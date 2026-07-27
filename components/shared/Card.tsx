@@ -17,9 +17,9 @@ export function Card({ children, className }: { children: ReactNode; className?:
 
 export function CardHeader({ title, actions }: { title: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border px-[18px] py-3.5">
+    <div className="flex flex-col items-stretch justify-between gap-2 border-b border-border px-4 py-3.5 sm:flex-row sm:items-center sm:gap-3 sm:px-[18px]">
       <h3 className="flex items-center gap-2 text-[13px] font-semibold text-primary">{title}</h3>
-      {actions && <div className="flex items-center gap-1.5">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-1.5">{actions}</div>}
     </div>
   );
 }

@@ -7,7 +7,12 @@ import * as leversDb from "@/lib/firestore/levers";
 import * as workforceLogic from "@/lib/workforceLogic";
 import * as workforceDb from "@/lib/firestore/workforce";
 import * as alertsDb from "@/lib/firestore/alerts";
-import { ensureAdminSeeded } from "@/lib/firestore/admin";
+import {
+  ensureAdminSeeded,
+  subscribeCompanies,
+  subscribeHierarchyNodes,
+} from "@/lib/firestore/admin";
+import { derivePnlAccounts } from "@/lib/hierarchyLogic";
 import type { CascadeShift } from "@/lib/engine";
 import { mockData } from "@/data/mockData";
 import type {
@@ -16,10 +21,12 @@ import type {
   AlertState,
   AuthUser,
   Comment,
+  Company,
   Department,
   Employee,
   Lever,
   LeverAction,
+  HierarchyNode,
   ManualAlertInput,
   SubLever,
   WorkforceMovement,
@@ -84,6 +91,8 @@ export function useBeTrackData(companyId?: string | null) {
   const [workforceMeta, setWorkforceMeta] = useState<workforceDb.WorkforceMeta | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertStates, setAlertStates] = useState<Record<string, AlertState>>({});
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [financialNodes, setFinancialNodes] = useState<HierarchyNode[]>([]);
 
   // Refs toujours à jour pour que les callbacks de mutation lisent l'état le plus récent sans
   // dépendre du cycle de rendu React (évite les fermetures obsolètes entre deux mutations
@@ -134,7 +143,19 @@ export function useBeTrackData(companyId?: string | null) {
       workforceDb.subscribeWorkforceMeta((m) => !cancelled && setWorkforceMeta(m)),
       alertsDb.subscribeAlerts((a) => !cancelled && setAlerts(a), companyId),
       alertsDb.subscribeAlertStates((s) => !cancelled && setAlertStates(s), companyId),
+      subscribeCompanies((items) => !cancelled && setCompanies(items)),
     ];
+    if (companyId) {
+      unsubscribers.push(
+        subscribeHierarchyNodes(
+          companyId,
+          (nodes) => !cancelled && setFinancialNodes(nodes),
+          "financial"
+        )
+      );
+    } else {
+      setFinancialNodes([]);
+    }
     return () => {
       cancelled = true;
       unsubscribers.forEach((unsub) => unsub());
@@ -150,35 +171,43 @@ export function useBeTrackData(companyId?: string | null) {
   }, []);
 
   const data = useMemo(
-    () => ({
-      program: storage.getProgram(),
-      workstreams: storage.getWorkstreams(),
-      levers,
-      subLevers,
-      // Reconstruit au format Workforce historique pour ne pas casser les consommateurs
-      // existants — mais la donnée vit désormais dans Firestore (temps réel partagé).
-      workforce: {
-        totalFTE: workforceMeta?.totalFTE ?? mockData.workforce.totalFTE,
-        massSalary: workforceMeta?.massSalary ?? mockData.workforce.massSalary,
-        budgetSalary: workforceMeta?.budgetSalary ?? mockData.workforce.budgetSalary,
-        departments: workforceMeta?.departments ?? mockData.workforce.departments,
-        employees,
-        movements,
-      },
-      operations: storage.getOperations(),
-      alerts,
-      alertStates,
-      audit,
-      comments,
-      // Référentiels statiques (jamais mutés, pas besoin de passer par une BDD)
-      leverStatuses: mockData.leverStatuses,
-      riskLevels: mockData.riskLevels,
-      priorityLevels: mockData.priorityLevels,
-      leverTypes: mockData.leverTypes,
-      geographies: mockData.geographies,
-      functions: mockData.functions,
-      pnlAccounts: mockData.pnlAccounts,
-    }),
+    () => {
+      const company = companies.find((item) => item.id === companyId);
+      return {
+        program: storage.getProgram(),
+        workstreams: storage.getWorkstreams(),
+        levers,
+        subLevers,
+        // Reconstruit au format Workforce historique pour ne pas casser les consommateurs
+        // existants — mais la donnée vit désormais dans Firestore (temps réel partagé).
+        workforce: {
+          totalFTE: workforceMeta?.totalFTE ?? mockData.workforce.totalFTE,
+          massSalary: workforceMeta?.massSalary ?? mockData.workforce.massSalary,
+          budgetSalary: workforceMeta?.budgetSalary ?? mockData.workforce.budgetSalary,
+          departments: workforceMeta?.departments ?? mockData.workforce.departments,
+          employees,
+          movements,
+        },
+        operations: storage.getOperations(),
+        alerts,
+        alertStates,
+        audit,
+        comments,
+        // Référentiels statiques (jamais mutés, pas besoin de passer par une BDD)
+        leverStatuses: mockData.leverStatuses,
+        riskLevels: mockData.riskLevels,
+        priorityLevels: mockData.priorityLevels,
+        leverTypes: mockData.leverTypes,
+        geographies: mockData.geographies,
+        functions: mockData.functions,
+        pnlAccounts: derivePnlAccounts(
+          company?.hierarchyLevels ?? [],
+          financialNodes,
+          mockData.pnlAccounts,
+          [...levers.map((lever) => lever.pnlMap), ...subLevers.map((subLever) => subLever.pnlMap)]
+        ),
+      };
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       version,
@@ -191,6 +220,9 @@ export function useBeTrackData(companyId?: string | null) {
       workforceMeta,
       alerts,
       alertStates,
+      companies,
+      financialNodes,
+      companyId,
     ]
   );
 

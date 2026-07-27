@@ -56,6 +56,9 @@ export function SubLeverForm({
   submitLabel?: string;
 }) {
   const parentLever = data.levers.find((l) => l.id === leverId);
+  const defaultPnl = data.pnlAccounts.find(
+    (account) => account.selectable !== false && !account.computed
+  );
   const today = new Date().toISOString().slice(0, 10);
   const [values, setValues] = useState<SubLeverFormValues>({
     leverId,
@@ -64,7 +67,7 @@ export function SubLeverForm({
     ownerInit: "",
     expensePost: "",
     businessUnit: "",
-    pnlMap: data.pnlAccounts[0]?.id ?? "",
+    pnlMap: defaultPnl?.id ?? "",
     grossSavings: 0,
     netSavings: 0,
     opexOneOff: 0,
@@ -158,11 +161,13 @@ export function SubLeverForm({
             value={values.pnlMap}
             onChange={(e) => set("pnlMap", e.target.value)}
           >
-            {data.pnlAccounts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+            {data.pnlAccounts
+              .filter((p) => p.selectable !== false && !p.computed)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
           </select>
         </Field>
         <Field label="Date de départ">

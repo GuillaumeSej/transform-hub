@@ -11,8 +11,15 @@ import {
   Download,
   Upload,
   FileSpreadsheet,
+  GitBranch,
 } from "lucide-react";
-import type { Company, HierarchyLevelDef, HierarchyNode } from "@/types";
+import type {
+  Company,
+  HierarchyDomain,
+  HierarchyLevelDef,
+  HierarchyNode,
+  HierarchySemantic,
+} from "@/types";
 import {
   saveCompany,
   subscribeHierarchyNodes,
@@ -20,7 +27,11 @@ import {
   saveHierarchyNodesBatch,
   deleteHierarchyNode,
 } from "@/lib/firestore/admin";
-import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import {
+  buildHierarchyForest,
+  resolveHierarchyPath,
+  type HierarchyTreeNode,
+} from "@/lib/hierarchyLogic";
 import {
   HIERARCHY_EXCEL_HEADERS,
   hierarchyNodeToExcelRow,
@@ -50,6 +61,34 @@ function ancestryLabel(
   return path.map((p) => p.label).join(" › ");
 }
 
+const SEMANTICS: Record<HierarchyDomain, { value: HierarchySemantic; label: string }[]> = {
+  financial: [{ value: "pnl", label: "Ligne P&L" }],
+  geographic: [
+    { value: "continent", label: "Continent" },
+    { value: "region", label: "Région" },
+    { value: "country", label: "Pays" },
+    { value: "legal_entity", label: "Entité légale" },
+  ],
+};
+
+function TreeBranch({ node }: { node: HierarchyTreeNode }) {
+  return (
+    <li>
+      <div className="flex items-center gap-2 rounded-md border border-border bg-white px-2.5 py-2 text-xs">
+        <code className="text-tertiary">{node.code}</code>
+        <span className="font-semibold text-primary">{node.label}</span>
+      </div>
+      {node.children.length > 0 && (
+        <ul className="ml-4 mt-1.5 space-y-1.5 border-l border-border pl-3">
+          {node.children.map((child) => (
+            <TreeBranch key={child.id} node={child} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 /**
  * Édition de l'arborescence financière (niveaux + valeurs) pour UNE entreprise déjà sélectionnée.
  * Extrait de `admin/hierarchy/page.tsx` — cette page garde son propre sélecteur d'entreprise et
@@ -59,15 +98,28 @@ function ancestryLabel(
 export function HierarchyEditor({
   companies,
   companyId,
+  domain = "financial",
 }: {
   companies: Company[];
   companyId: string;
+  domain?: HierarchyDomain;
 }) {
   const { showToast } = useToast();
   const [levels, setLevels] = useState<HierarchyLevelDef[]>([]);
   const [nodes, setNodes] = useState<HierarchyNode[]>([]);
   const [nodeForm, setNodeForm] = useState<
-    Record<string, { code: string; label: string; parentId: string }>
+    Record<
+      string,
+      {
+        code: string;
+        label: string;
+        parentId: string;
+        baseline: string;
+        sign: "1" | "-1";
+        computed: boolean;
+        selectable: boolean;
+      }
+    >
   >({});
   const [importPreview, setImportPreview] = useState<HierarchyImportPreview | null>(null);
   const [importFileName, setImportFileName] = useState("");
@@ -76,17 +128,19 @@ export function HierarchyEditor({
 
   useEffect(() => {
     const company = companies.find((c) => c.id === companyId);
-    setLevels(company?.hierarchyLevels ? structuredClone(company.hierarchyLevels) : []);
-  }, [companies, companyId]);
+    const configured =
+      domain === "financial" ? company?.hierarchyLevels : company?.geographyHierarchyLevels;
+    setLevels(configured ? structuredClone(configured) : []);
+  }, [companies, companyId, domain]);
 
   useEffect(() => {
     if (!companyId) {
       setNodes([]);
       return;
     }
-    const unsub = subscribeHierarchyNodes(companyId, setNodes);
+    const unsub = subscribeHierarchyNodes(companyId, setNodes, domain);
     return unsub;
-  }, [companyId]);
+  }, [companyId, domain]);
 
   const sortedLevels = useMemo(() => [...levels].sort((a, b) => a.order - b.order), [levels]);
 
@@ -99,6 +153,7 @@ export function HierarchyEditor({
     }
     return map;
   }, [nodes]);
+  const forest = useMemo(() => buildHierarchyForest(nodes, sortedLevels), [nodes, sortedLevels]);
 
   const addLevel = () => {
     const order = levels.length;
@@ -114,6 +169,18 @@ export function HierarchyEditor({
     setLevels((prev) => prev.map((l) => (l.key === key ? { ...l, label } : l)));
   };
 
+  const setLevelSemantic = (key: string, semantic: string) => {
+    setLevels((current) =>
+      current.map((level) =>
+        level.key === key
+          ? { ...level, semantic: (semantic || undefined) as HierarchySemantic | undefined }
+          : level.semantic === semantic
+            ? { ...level, semantic: undefined }
+            : level
+      )
+    );
+  };
+
   const moveLevel = (key: string, direction: "up" | "down") => {
     const ordered = [...levels].sort((a, b) => a.order - b.order);
     const idx = ordered.findIndex((l) => l.key === key);
@@ -127,7 +194,13 @@ export function HierarchyEditor({
   const saveLevels = async () => {
     const company = companies.find((c) => c.id === companyId);
     if (!company) return;
-    await saveCompany({ ...company, hierarchyLevels: sortedLevels });
+    await saveCompany({
+      ...company,
+      ...(domain === "financial"
+        ? { hierarchyLevels: sortedLevels }
+        : { geographyHierarchyLevels: sortedLevels }),
+    });
+    showToast("Niveaux enregistrés", "La structure est disponible immédiatement.", "success");
   };
 
   const setFormField = (levelKey: string, field: "code" | "label" | "parentId", value: string) => {
@@ -142,6 +215,7 @@ export function HierarchyEditor({
     if (!form || !form.code.trim() || !form.label.trim()) return;
     const isMacro = level.order === 0;
     if (!isMacro && !form.parentId) return;
+    const isPnl = level.semantic === "pnl";
     const node: HierarchyNode = {
       id: nextNodeId(),
       companyId,
@@ -149,9 +223,31 @@ export function HierarchyEditor({
       code: form.code.trim(),
       label: form.label.trim(),
       parentId: isMacro ? null : form.parentId,
+      domain,
+      ...(isPnl
+        ? {
+            financial: {
+              baseline: Number(form.baseline || 0),
+              sign: Number(form.sign) as 1 | -1,
+              computed: form.computed,
+              selectable: form.selectable,
+            },
+          }
+        : {}),
     };
     await saveHierarchyNode(node);
-    setNodeForm((prev) => ({ ...prev, [level.key]: { code: "", label: "", parentId: "" } }));
+    setNodeForm((prev) => ({
+      ...prev,
+      [level.key]: {
+        code: "",
+        label: "",
+        parentId: "",
+        baseline: "",
+        sign: "1",
+        computed: false,
+        selectable: true,
+      },
+    }));
   };
 
   const removeNode = async (id: string) => {
@@ -194,7 +290,7 @@ export function HierarchyEditor({
     const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
       defval: "",
     });
-    const preview = validateHierarchyImportRows(rawRows, sortedLevels, nodes, companyId);
+    const preview = validateHierarchyImportRows(rawRows, sortedLevels, nodes, companyId, domain);
     setImportFileName(file.name);
     setImportPreview(preview);
   };
@@ -218,11 +314,9 @@ export function HierarchyEditor({
   return (
     <div className="space-y-6">
       <p className="max-w-2xl text-sm text-text-secondary">
-        Configurez le nombre de niveaux entre le compte P&amp;L (macro) et la maille la plus fine
-        saisie sur les leviers (ex. Centre de coût), puis construisez l&apos;arbre de valeurs
-        possibles pour chaque niveau. Une fois configurée, la maille la plus fine saisie sur un
-        levier (manuellement ou via import Excel) suffit à résoudre automatiquement tous les niveaux
-        intermédiaires.
+        {domain === "financial"
+          ? "Configurez les lignes du P&L puis les niveaux de maille financière jusqu'au centre de coût ou à la maille la plus fine. Le niveau marqué Ligne P&L alimente directement le module Finance."
+          : "Configurez librement le découpage géographique de l'entreprise : continent, région, pays, entité légale ou tout autre niveau propre au client."}
       </p>
 
       {/* Section 1 : niveaux */}
@@ -240,6 +334,9 @@ export function HierarchyEditor({
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
                   Libellé
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                  Usage standard
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
                   Clé
@@ -264,6 +361,20 @@ export function HierarchyEditor({
                       onChange={(e) => renameLevel(level.key, e.target.value)}
                       className="w-full rounded-lg border border-border bg-bg-surface px-3 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
                     />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <select
+                      value={level.semantic ?? ""}
+                      onChange={(e) => setLevelSemantic(level.key, e.target.value)}
+                      className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1.5 text-xs"
+                    >
+                      <option value="">Aucun / personnalisé</option>
+                      {SEMANTICS[domain].map((semantic) => (
+                        <option key={semantic.value} value={semantic.value}>
+                          {semantic.label}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="px-4 py-2.5">
                     <code className="rounded bg-bg-surface px-1.5 py-0.5 text-xs text-text-secondary">
@@ -298,7 +409,7 @@ export function HierarchyEditor({
               ))}
               {sortedLevels.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-sm text-text-secondary">
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-text-secondary">
                     Aucun niveau configuré — l&apos;entreprise utilise le champ texte libre
                     &quot;Centre de coût&quot; historique.
                   </td>
@@ -323,6 +434,18 @@ export function HierarchyEditor({
                 onChange={(e) => renameLevel(level.key, e.target.value)}
                 className="mb-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
               />
+              <select
+                value={level.semantic ?? ""}
+                onChange={(e) => setLevelSemantic(level.key, e.target.value)}
+                className="mb-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-1.5 text-sm"
+              >
+                <option value="">Usage personnalisé</option>
+                {SEMANTICS[domain].map((semantic) => (
+                  <option key={semantic.value} value={semantic.value}>
+                    {semantic.label}
+                  </option>
+                ))}
+              </select>
               <div className="flex items-center justify-between">
                 <div>
                   <button
@@ -414,7 +537,16 @@ export function HierarchyEditor({
             const pLevel = parentLevel(level);
             const parentOptions = pLevel ? (nodesByLevel.get(pLevel.key) ?? []) : [];
             const levelNodes = nodesByLevel.get(level.key) ?? [];
-            const form = nodeForm[level.key] ?? { code: "", label: "", parentId: "" };
+            const form = nodeForm[level.key] ?? {
+              code: "",
+              label: "",
+              parentId: "",
+              baseline: "",
+              sign: "1" as const,
+              computed: false,
+              selectable: true,
+            };
+            const isPnl = level.semantic === "pnl";
             return (
               <div key={level.key} className="rounded-xl border border-border">
                 <div className="bg-bg-elevated border-b border-border px-4 py-2 text-xs font-semibold text-text-secondary">
@@ -443,6 +575,11 @@ export function HierarchyEditor({
                             Parent ({pLevel.label})
                           </th>
                         )}
+                        {isPnl && (
+                          <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
+                            Baseline / signe
+                          </th>
+                        )}
                         <th className="px-4 py-2 text-center text-xs font-semibold text-text-secondary">
                           Actions
                         </th>
@@ -458,6 +595,13 @@ export function HierarchyEditor({
                           {pLevel && (
                             <td className="px-4 py-2 text-text-secondary">
                               {n.parentId ? ancestryLabel(n.parentId, nodes, sortedLevels) : "—"}
+                            </td>
+                          )}
+                          {isPnl && (
+                            <td className="px-4 py-2 text-xs text-secondary">
+                              {n.financial?.baseline ?? 0} €M ·{" "}
+                              {n.financial?.sign === -1 ? "−" : "+"}
+                              {n.financial?.computed ? " · Calculée" : ""}
                             </td>
                           )}
                           <td className="px-4 py-2 text-center">
@@ -503,6 +647,51 @@ export function HierarchyEditor({
                             </select>
                           </td>
                         )}
+                        {isPnl && (
+                          <td className="px-4 py-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <input
+                                type="number"
+                                step="0.1"
+                                placeholder="Baseline €M"
+                                value={form.baseline}
+                                onChange={(e) =>
+                                  setNodeForm((prev) => ({
+                                    ...prev,
+                                    [level.key]: { ...form, baseline: e.target.value },
+                                  }))
+                                }
+                                className="w-28 rounded-lg border border-border px-2 py-1 text-xs"
+                              />
+                              <select
+                                value={form.sign}
+                                onChange={(e) =>
+                                  setNodeForm((prev) => ({
+                                    ...prev,
+                                    [level.key]: { ...form, sign: e.target.value as "1" | "-1" },
+                                  }))
+                                }
+                                className="rounded-lg border border-border px-2 py-1 text-xs"
+                              >
+                                <option value="1">Positif</option>
+                                <option value="-1">Négatif</option>
+                              </select>
+                              <label className="flex items-center gap-1 text-[10px] text-secondary">
+                                <input
+                                  type="checkbox"
+                                  checked={form.selectable}
+                                  onChange={(e) =>
+                                    setNodeForm((prev) => ({
+                                      ...prev,
+                                      [level.key]: { ...form, selectable: e.target.checked },
+                                    }))
+                                  }
+                                />{" "}
+                                Imputable aux leviers
+                              </label>
+                            </div>
+                          </td>
+                        )}
                         <td className="px-4 py-2 text-center">
                           <button
                             onClick={() => addNode(level)}
@@ -515,7 +704,7 @@ export function HierarchyEditor({
                       {levelNodes.length === 0 && (
                         <tr>
                           <td
-                            colSpan={pLevel ? 4 : 3}
+                            colSpan={(pLevel ? 4 : 3) + (isPnl ? 1 : 0)}
                             className="px-4 py-3 text-center text-xs text-text-secondary"
                           >
                             Aucune valeur pour ce niveau pour le moment.
@@ -541,6 +730,12 @@ export function HierarchyEditor({
                           <div className="mt-0.5 text-xs text-text-secondary">
                             Parent :{" "}
                             {n.parentId ? ancestryLabel(n.parentId, nodes, sortedLevels) : "—"}
+                          </div>
+                        )}
+                        {isPnl && (
+                          <div className="mt-1 text-xs text-secondary">
+                            Baseline : {n.financial?.baseline ?? 0} €M · signe{" "}
+                            {n.financial?.sign === -1 ? "−" : "+"}
                           </div>
                         )}
                       </div>
@@ -584,6 +779,49 @@ export function HierarchyEditor({
                         ))}
                       </select>
                     )}
+                    {isPnl && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="number"
+                          step="0.1"
+                          placeholder="Baseline €M"
+                          value={form.baseline}
+                          onChange={(e) =>
+                            setNodeForm((prev) => ({
+                              ...prev,
+                              [level.key]: { ...form, baseline: e.target.value },
+                            }))
+                          }
+                          className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
+                        />
+                        <select
+                          value={form.sign}
+                          onChange={(e) =>
+                            setNodeForm((prev) => ({
+                              ...prev,
+                              [level.key]: { ...form, sign: e.target.value as "1" | "-1" },
+                            }))
+                          }
+                          className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
+                        >
+                          <option value="1">Signe positif</option>
+                          <option value="-1">Signe négatif</option>
+                        </select>
+                        <label className="col-span-2 flex items-center gap-1 text-xs text-secondary">
+                          <input
+                            type="checkbox"
+                            checked={form.selectable}
+                            onChange={(e) =>
+                              setNodeForm((prev) => ({
+                                ...prev,
+                                [level.key]: { ...form, selectable: e.target.checked },
+                              }))
+                            }
+                          />{" "}
+                          Ligne imputable aux leviers
+                        </label>
+                      </div>
+                    )}
                     <button
                       onClick={() => addNode(level)}
                       className="w-full rounded-lg bg-bp-coral px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
@@ -597,6 +835,23 @@ export function HierarchyEditor({
           })}
         </section>
       )}
+
+      <section className="rounded-xl border border-border bg-neutral-50 p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-primary">
+          <GitBranch size={16} className="text-bp-coral" /> Aperçu live de l&apos;arborescence
+        </h2>
+        {forest.length === 0 ? (
+          <p className="text-xs text-secondary">
+            Ajoutez des valeurs pour visualiser les branches.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {forest.map((root) => (
+              <TreeBranch key={root.id} node={root} />
+            ))}
+          </ul>
+        )}
+      </section>
 
       <Modal
         open={importPreview !== null}

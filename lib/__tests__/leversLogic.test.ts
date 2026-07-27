@@ -6,8 +6,27 @@ import {
   deleteSubLever,
   resolveConfidentialityClearance,
   isLeverVisibleForClearance,
+  canUserViewLever,
 } from "@/lib/leversLogic";
 import type { Lever, LeverStatus, SubLever } from "@/types";
+
+describe("canUserViewLever", () => {
+  const user = {
+    role: "lever" as const,
+    name: "Test Lever Owner",
+    companyId: "c1",
+  };
+
+  it("allows a lever owner to access their own lever", () => {
+    expect(canUserViewLever(user, { ...baseLever, companyId: "c1" }, {})).toBe(true);
+  });
+
+  it("blocks a lever owner from a different owner's lever", () => {
+    expect(
+      canUserViewLever(user, { ...baseLever, owner: "Another Owner", companyId: "c1" }, {})
+    ).toBe(false);
+  });
+});
 
 const baseLever: Lever = {
   id: "L001",

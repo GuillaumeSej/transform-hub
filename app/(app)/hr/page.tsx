@@ -146,7 +146,7 @@ export default function HrDashboardPage() {
    *  cliquée a un équivalent dans les filtres de la Base ETP, sinon navigue sans filtre. */
   const goToHrDimensionValue = (dimensionKey: string, value: string) => {
     const param = FILTER_PARAM_BY_HR_DIMENSION[dimensionKey];
-    goToEtp(param ? { [param]: value } : {});
+    goToEtp(param ? { tab: "mouvements", [param]: value } : { tab: "mouvements" });
   };
 
   // ─── Layout du Dashboard RH (widgets) ───────────────────────────────────────────────────────

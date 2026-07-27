@@ -42,6 +42,23 @@ export function isLeverVisibleForClearance(
   return clearance.includes(confidentialityLevel);
 }
 
+export function canUserViewLever(
+  user:
+    Pick<AuthUser, "role" | "name" | "companyId" | "confidentialityClearance"> | null | undefined,
+  lever: Pick<Lever, "owner" | "companyId" | "confidentialityLevel">,
+  roleClearance: Partial<Record<Role, string[]>> | undefined
+): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (lever.companyId != null && user.companyId !== lever.companyId) return false;
+  if (user.role === "admin_entreprise") return true;
+  if (user.role === "lever" && lever.owner !== user.name) return false;
+  return isLeverVisibleForClearance(
+    lever.confidentialityLevel,
+    resolveConfidentialityClearance(user, roleClearance)
+  );
+}
+
 type PlanLockable = Pick<
   Lever,
   | "status"

@@ -1,10 +1,84 @@
-import type { HierarchyLevelDef, HierarchyNode } from "@/types";
+import type { HierarchyDomain, HierarchyLevelDef, HierarchyNode, PnlAccount } from "@/types";
 
 export type HierarchyPathEntry = {
   levelKey: string;
   label: string;
   code: string;
 };
+
+export type HierarchyTreeNode = HierarchyNode & { children: HierarchyTreeNode[] };
+
+export function hierarchyDomain(node: HierarchyNode): HierarchyDomain {
+  return node.domain ?? "financial";
+}
+
+export function nodesForDomain(nodes: HierarchyNode[], domain: HierarchyDomain): HierarchyNode[] {
+  return nodes.filter((node) => hierarchyDomain(node) === domain);
+}
+
+/** Construit une forêt stable, utilisable aussi bien par l'aperçu UI que par les tests. */
+export function buildHierarchyForest(
+  nodes: HierarchyNode[],
+  levels: HierarchyLevelDef[]
+): HierarchyTreeNode[] {
+  const orderByLevel = new Map(levels.map((level) => [level.key, level.order]));
+  const sorted = [...nodes].sort(
+    (a, b) =>
+      (orderByLevel.get(a.levelKey) ?? 999) - (orderByLevel.get(b.levelKey) ?? 999) ||
+      a.label.localeCompare(b.label, "fr")
+  );
+  const byId = new Map<string, HierarchyTreeNode>();
+  sorted.forEach((node) => byId.set(node.id, { ...node, children: [] }));
+  const roots: HierarchyTreeNode[] = [];
+  sorted.forEach((node) => {
+    const treeNode = byId.get(node.id)!;
+    const parent = node.parentId ? byId.get(node.parentId) : undefined;
+    if (parent && parent.id !== treeNode.id) parent.children.push(treeNode);
+    else roots.push(treeNode);
+  });
+  return roots;
+}
+
+export function derivePnlAccounts(
+  levels: HierarchyLevelDef[],
+  nodes: HierarchyNode[],
+  fallback: PnlAccount[],
+  referencedAccountIds: string[] = []
+): PnlAccount[] {
+  const pnlLevel = levels.find((level) => level.semantic === "pnl");
+  if (!pnlLevel) return fallback;
+  const accounts = nodes
+    .filter((node) => node.levelKey === pnlLevel.key)
+    .map((node) => ({
+      id: node.code,
+      name: node.label,
+      baseline: node.financial?.baseline ?? 0,
+      sign: node.financial?.sign ?? (1 as const),
+      computed: node.financial?.computed ?? false,
+      selectable: node.financial?.selectable ?? !node.financial?.computed,
+    }));
+  if (accounts.length === 0) return fallback;
+  const configuredIds = new Set(accounts.map((account) => account.id));
+  const referencedIds = new Set(referencedAccountIds.filter(Boolean));
+  return [
+    ...accounts,
+    ...fallback.filter(
+      (account) => referencedIds.has(account.id) && !configuredIds.has(account.id)
+    ),
+  ];
+}
+
+export function hierarchyPathValue(
+  leafId: string | undefined,
+  semantic: HierarchyLevelDef["semantic"],
+  nodes: HierarchyNode[],
+  levels: HierarchyLevelDef[]
+): string | undefined {
+  if (!leafId || !semantic) return undefined;
+  const level = levels.find((item) => item.semantic === semantic);
+  return resolveHierarchyPath(leafId, nodes, levels).find((entry) => entry.levelKey === level?.key)
+    ?.label;
+}
 
 /**
  * Remonte la chaîne `parentId` d'un `HierarchyNode` (maille la plus fine, ex. Cost Center)
