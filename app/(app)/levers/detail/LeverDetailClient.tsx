@@ -636,7 +636,10 @@ export default function LeverDetailClient() {
                 {(lever.actions ?? []).length > 0 && (
                   <>
                     <SectionTitle>Timeline des actions</SectionTitle>
-                    <ActionGantt actions={lever.actions ?? []} />
+                    <ActionGantt
+                      actions={lever.actions ?? []}
+                      onActionClick={(action) => setActionModal({ mode: "edit", action })}
+                    />
                   </>
                 )}
                 {consolidatedKPIs && (
@@ -1007,7 +1010,10 @@ export default function LeverDetailClient() {
                 }
               />
             ) : (
-              <ActionGantt actions={actions} />
+              <ActionGantt
+                actions={actions}
+                onActionClick={(action) => setActionModal({ mode: "edit", action })}
+              />
             )}
 
             <p className="mt-4 flex items-start gap-1.5 text-[11px] text-tertiary">

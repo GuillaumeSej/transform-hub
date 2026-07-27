@@ -20,8 +20,17 @@ function actionNet(action: LeverAction): number {
 }
 
 /** Mini-Gantt des actions d'un levier — barres horizontales positionnées dans le temps,
- *  colorées vert (gain net) ou rouge (coût net), avec remplissage selon le statut. */
-export function ActionGantt({ actions, height }: { actions: LeverAction[]; height?: number }) {
+ *  colorées vert (gain net) ou rouge (coût net), avec remplissage selon le statut.
+ *  Clic sur une barre → ouvre la fiche action (via onActionClick). */
+export function ActionGantt({
+  actions,
+  height,
+  onActionClick,
+}: {
+  actions: LeverAction[];
+  height?: number;
+  onActionClick?: (action: LeverAction) => void;
+}) {
   if (actions.length === 0) {
     return <p className="py-6 text-center text-sm text-tertiary">Aucune action définie.</p>;
   }
@@ -97,13 +106,29 @@ export function ActionGantt({ actions, height }: { actions: LeverAction[]; heigh
                 {action.name}
               </div>
 
-              {/* Barre */}
+              {/* Barre — cliquable si onActionClick est fourni */}
               <Tooltip
                 text={`${action.name} · ${statusLabels[action.status] ?? action.status} · ${fmtAmount}`}
                 className="absolute"
                 style={{ left: `${startPct}%`, width: `${widthPct}%` }}
               >
-                <div className={`h-5 w-full rounded-sm ${bgColor} ${statusClass} transition-all`} />
+                <div
+                  role={onActionClick ? "button" : undefined}
+                  tabIndex={onActionClick ? 0 : undefined}
+                  onClick={() => onActionClick?.(action)}
+                  onKeyDown={
+                    onActionClick
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") onActionClick(action);
+                        }
+                      : undefined
+                  }
+                  className={`h-5 w-full rounded-sm ${bgColor} ${statusClass} transition-all ${
+                    onActionClick
+                      ? "cursor-pointer ring-offset-1 hover:ring-2 hover:ring-bp-coral/40"
+                      : ""
+                  }`}
+                />
               </Tooltip>
 
               {/* Montant droite */}
