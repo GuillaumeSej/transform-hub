@@ -82,10 +82,12 @@ export function useBeTrackData(companyId?: string | null) {
   const [version, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
-  const [levers, setLevers] = useState<Lever[]>([]);
+  // Fallback immédiat : l'application reste utilisable avec le nouveau modèle même si Firestore
+  // est indisponible ou si le compte courant n'a pas les droits de reseed.
+  const [levers, setLevers] = useState<Lever[]>(() => lockedSeed().levers);
   const [subLevers, setSubLevers] = useState<SubLever[]>([]);
-  const [comments, setComments] = useState<Record<string, Comment[]>>({});
-  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [comments, setComments] = useState<Record<string, Comment[]>>(() => mockData.comments);
+  const [audit, setAudit] = useState<AuditEntry[]>(() => mockData.audit);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [movements, setMovements] = useState<WorkforceMovement[]>([]);
   const [workforceMeta, setWorkforceMeta] = useState<workforceDb.WorkforceMeta | null>(null);
@@ -128,7 +130,12 @@ export function useBeTrackData(companyId?: string | null) {
         ]);
         if (companyId) await leversDb.migrateCompanyIds(companyId);
       } catch (err) {
-        console.error("[betrack] échec de l'initialisation Firestore :", err);
+        // Le fallback seedé plus haut reste actif. Les subscriptions sont tout de même tentées :
+        // si la lecture est autorisée mais pas le reseed, elles remplacent le fallback.
+        console.warn(
+          "[betrack] Firestore indisponible, utilisation du jeu de données local :",
+          err
+        );
       }
       if (cancelled) return;
 
