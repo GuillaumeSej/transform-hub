@@ -1603,10 +1603,13 @@ export default function DashboardPage() {
                           </div>
                           <DependencyTypeBadge type={a.type} />
                         </div>
-                        {/* Layout directionnel (FS, SF) : côte à côte avec flèche */}
+                        {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
+                            mobile (les deux blocs côte à côte débordaient sous ~480px), côte à
+                            côte avec flèche dès sm. min-w-0 partout : sans lui, flex-1 refuse de
+                            rétrécir sous la largeur du contenu et pousse hors de la carte. */}
                         {meta.directional ? (
-                          <div className="flex items-stretch gap-2">
-                            <div className="flex flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
+                          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
+                            <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
                               <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
                                 {t("dep.blocker")}
                               </div>
@@ -1617,13 +1620,14 @@ export default function DashboardPage() {
                                 {meta.targetMilestone} : {a.targetDate}
                               </div>
                             </div>
-                            <div className="flex flex-col items-center justify-center text-tertiary">
-                              <ArrowRight size={14} />
-                              <span className="mt-0.5 text-[8px] font-semibold uppercase">
+                            <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
+                              <ArrowDown size={14} className="sm:hidden" />
+                              <ArrowRight size={14} className="hidden sm:block" />
+                              <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
                                 {a.type}
                               </span>
                             </div>
-                            <div className="flex flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
+                            <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
                               <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
                                 {t("dep.blocked")}
                               </div>
@@ -1666,8 +1670,9 @@ export default function DashboardPage() {
                             </div>
                           </div>
                         )}
-                        {/* Barre de pied : sévérité + retard + type + impact € */}
-                        <div className="mt-2 flex items-center gap-2 text-[10px]">
+                        {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
+                            que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
+                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
                           <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
                             {sev.label}
                           </span>
