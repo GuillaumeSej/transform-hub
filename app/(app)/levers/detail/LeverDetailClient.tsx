@@ -494,8 +494,9 @@ export default function LeverDetailClient() {
               <div className="flex flex-1 flex-wrap gap-x-8 gap-y-4">
                 <BigStat label="Réalisé à date" value={engine.fmtCurr(real)} accent />
                 <BigStat label="Net savings visé" value={engine.fmtCurr(lever.netSavings)} />
+                <BigStat label="Priorité" value={<StatusBadge risk={lever.priority} />} />
                 <BigStat
-                  label="Cycle de vie"
+                  label="Maturité"
                   value={<StageBadge status={lever.status} label={lifecycle.label(lever.status)} />}
                 />
                 <BigStat label="Risque" value={<StatusBadge risk={lever.risk} />} />
@@ -527,9 +528,6 @@ export default function LeverDetailClient() {
                 <span className="inline-flex items-center gap-2">
                   <Avatar initials={lever.sponsorInit} /> {lever.sponsor}
                 </span>
-              </OverviewField>
-              <OverviewField label="Priorité">
-                <StatusBadge risk={lever.priority} />
               </OverviewField>
             </div>
 
