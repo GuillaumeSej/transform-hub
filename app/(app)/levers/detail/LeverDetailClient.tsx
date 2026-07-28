@@ -483,6 +483,7 @@ export default function LeverDetailClient() {
       {tab === "overview" && (
         <Card>
           <CardBody>
+            {/* ── 1. Bandeau exécutif ─────────────────────────────────────── */}
             <div className="mb-6 flex flex-wrap items-center gap-6 rounded-lg border border-border bg-neutral-50 p-4">
               <RadialProgress
                 pct={lever.progress}
@@ -494,37 +495,54 @@ export default function LeverDetailClient() {
                 <BigStat label="Réalisé à date" value={engine.fmtCurr(real)} accent />
                 <BigStat label="Net savings visé" value={engine.fmtCurr(lever.netSavings)} />
                 <BigStat
-                  label="Niveau"
+                  label="Cycle de vie"
                   value={<StageBadge status={lever.status} label={lifecycle.label(lever.status)} />}
                 />
                 <BigStat label="Risque" value={<StatusBadge risk={lever.risk} />} />
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Stat label="Code">
-                <span className="font-mono text-[13px]">{lever.code}</span>
-              </Stat>
-              <Stat label="Type de levier">{lever.type}</Stat>
-              <Stat label="Workstream">
-                <span style={{ color: ws?.color }}>{ws?.name}</span>
-              </Stat>
-              <Stat label="Owner">
-                <Avatar initials={lever.ownerInit} /> {lever.owner}
-              </Stat>
-              <Stat label="Sponsor">
-                <Avatar initials={lever.sponsorInit} /> {lever.sponsor}
-              </Stat>
-              <Stat label="Status">
-                <StageBadge status={lever.status} label={lifecycle.label(lever.status)} />
-              </Stat>
-              <Stat label="Région">
+
+            {/* ── 2. Description (remontée avant les blocs identité) ──────── */}
+            <OverviewSectionTitle>Description</OverviewSectionTitle>
+            <p className="mb-6 text-[13px] leading-relaxed text-secondary">{lever.description}</p>
+
+            {/* ── 3. Identité ─────────────────────────────────────────────── */}
+            <OverviewSectionTitle>Identité</OverviewSectionTitle>
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <OverviewField label="Code">
+                <span className="font-mono text-[13px] text-primary">{lever.code}</span>
+              </OverviewField>
+              <OverviewField label="Type">{lever.type}</OverviewField>
+              <OverviewField label="Workstream">
+                <span className="font-medium" style={{ color: ws?.color }}>
+                  {ws?.name}
+                </span>
+              </OverviewField>
+              <OverviewField label="Owner">
+                <span className="inline-flex items-center gap-2">
+                  <Avatar initials={lever.ownerInit} /> {lever.owner}
+                </span>
+              </OverviewField>
+              <OverviewField label="Sponsor">
+                <span className="inline-flex items-center gap-2">
+                  <Avatar initials={lever.sponsorInit} /> {lever.sponsor}
+                </span>
+              </OverviewField>
+              <OverviewField label="Priorité">
+                <StatusBadge risk={lever.priority} />
+              </OverviewField>
+            </div>
+
+            {/* ── 4. Périmètre ─────────────────────────────────────────────── */}
+            <OverviewSectionTitle>Périmètre</OverviewSectionTitle>
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <OverviewField label="Région">
                 {lever.geography} · {lever.country}
-              </Stat>
-              <Stat label="Function / Entité">
-                {lever.function} · {lever.entity}
-              </Stat>
-              <Stat label="Centres de coût impactés">
-                <span className="font-mono text-[13px]">
+              </OverviewField>
+              <OverviewField label="Fonction">{lever.function}</OverviewField>
+              <OverviewField label="Entité légale">{lever.entity}</OverviewField>
+              <OverviewField label="Centres de coût impactés">
+                <span className="text-[12px] text-secondary">
                   {Array.from(
                     new Set(
                       actions
@@ -532,19 +550,26 @@ export default function LeverDetailClient() {
                         .map((impact) => impact.costCenter)
                         .filter((value): value is string => !!value)
                     )
-                  ).join(", ") || lever.costCenter}
+                  ).join(" · ") || lever.costCenter}
                 </span>
-              </Stat>
-              <Stat label="Priorité">
-                <StatusBadge risk={lever.priority} />
-              </Stat>
-              <Stat label="Risque">
-                <StatusBadge risk={lever.risk} />
-              </Stat>
-              <Stat label="Date de départ">{lever.start}</Stat>
-              <Stat label="Date de fin estimée">{lever.end}</Stat>
-              <Stat label="Dernière mise à jour">{lever.lastUpdate}</Stat>
+              </OverviewField>
             </div>
+
+            {/* ── 5. Planning ─────────────────────────────────────────────── */}
+            <OverviewSectionTitle>Planning</OverviewSectionTitle>
+            <div className="mb-2 flex flex-wrap items-center gap-3 text-[12.5px] text-primary">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-neutral-50 px-3 py-1">
+                <span className="text-tertiary">Début</span>
+                <span className="font-medium">{lever.start}</span>
+                <span className="text-tertiary">→ Fin</span>
+                <span className="font-medium">{lever.end}</span>
+              </span>
+              <span className="text-tertiary">·</span>
+              <span className="text-tertiary">
+                Mis à jour le <span className="font-medium text-primary">{lever.lastUpdate}</span>
+              </span>
+            </div>
+
             {/* ── Courbe en J + Gantt des actions (si le levier a des actions avec impacts) ── */}
             {(lever.actions ?? []).some((a) => (a.impacts ?? []).length > 0) && (
               <>
@@ -623,9 +648,6 @@ export default function LeverDetailClient() {
                 )}
               </>
             )}
-
-            <SectionTitle>Description</SectionTitle>
-            <p className="text-[13px] text-secondary">{lever.description}</p>
 
             <div className="mt-6 flex items-center justify-between border-b-[1.5px] border-bp-coral pb-1.5">
               <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-secondary">
@@ -1035,6 +1057,33 @@ function BigStat({
       >
         {value}
       </div>
+    </div>
+  );
+}
+
+/** Mini-titre de section pour l'onglet Overview : accent coral discret + label capitalé.
+ *  Volontairement plus léger que SectionTitle (pas de filet plein largeur) pour aérer la fiche
+ *  et laisser les blocs se distinguer par l'espacement plutôt que par des cadres imbriqués. */
+function OverviewSectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <span className="inline-block h-[2px] w-6 rounded-full bg-bp-coral" />
+      <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
+        {children}
+      </span>
+    </div>
+  );
+}
+
+/** Champ label/valeur allégé pour l'onglet Overview — même métrique typographique que Stat
+ *  mais sans souligné coral (réservé aux valeurs clés du bandeau). */
+function OverviewField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+        {label}
+      </div>
+      <div className="mt-1 text-[13px] text-primary">{children}</div>
     </div>
   );
 }
