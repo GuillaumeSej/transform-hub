@@ -1,7 +1,8 @@
 /**
  * Registre des widgets du dashboard exécutif + modèle de mise en page ("layout") éditable par
  * l'utilisateur. Ceci est une customisation d'affichage PERSONNELLE (par navigateur), pas une
- * donnée d'entreprise : elle vit en localStorage, suivant le même pattern que `lib/storage.ts`
+ * donnée d'entreprise : elle vit en localStorage — c'est le SEUL usage localStorage légitime
+ * restant avec la session (useRole), toute la donnée métier étant sur Firestore
  * (clé préfixée `betrack_`, JSON-sérialisée, lecture/écriture protégées par `isBrowser()`).
  *
  * Décision de scope : la ligne de KPI, l'en-tête (titre, export) et la barre de filtres restent EN

@@ -33,7 +33,7 @@ Le code est organisé par feature pour permettre le travail en parallèle sans s
 
 - `app/<feature>/` — une page/module par dossier (dashboard, levers, finance, hr, operations, governance). Ne touchez qu'au dossier de votre feature.
 - `components/shared/` — composants réutilisés par plusieurs features. Toute modification ici impacte tout le monde : discuter avant de changer la signature d'un composant partagé existant.
-- `types/index.ts` et `lib/storage.ts` sont des fichiers partagés à fort risque de conflit — préférer des ajouts (nouveaux champs optionnels, nouvelles fonctions) plutôt que des modifications de signatures existantes, et prévenir l'équipe avant d'y toucher.
+- `types/index.ts` et `lib/hooks/useStorage.ts` sont des fichiers partagés à fort risque de conflit — préférer des ajouts (nouveaux champs optionnels, nouvelles fonctions) plutôt que des modifications de signatures existantes, et prévenir l'équipe avant d'y toucher.
 
 ## Setup local
 

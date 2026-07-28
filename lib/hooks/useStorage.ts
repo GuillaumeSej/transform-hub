@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import * as storage from "@/lib/storage";
 import * as leversLogic from "@/lib/leversLogic";
 import * as leversDb from "@/lib/firestore/levers";
 import * as workforceLogic from "@/lib/workforceLogic";
 import * as workforceDb from "@/lib/firestore/workforce";
 import * as alertsDb from "@/lib/firestore/alerts";
+import * as programDb from "@/lib/firestore/programConfig";
 import {
   ensureAdminSeeded,
   subscribeCompanies,
@@ -63,28 +63,29 @@ function workforceSeed(): workforceDb.WorkforceSeed {
   };
 }
 
+function programSeed(): programDb.ProgramSeed {
+  return { program: mockData.program, workstreams: mockData.workstreams };
+}
+
 /**
  * Point d'accès React unique à la couche de persistance. Toute page/composant qui a besoin
- * des données BeTrack doit passer par ce hook plutôt que par `lib/storage.ts` ou
- * `lib/firestore/levers.ts` directement, afin que les composants abonnés se re-rendent après
- * chaque mutation.
+ * des données BeTrack doit passer par ce hook plutôt que par `lib/firestore/*` directement,
+ * afin que les composants abonnés se re-rendent après chaque mutation.
  *
  * Multi-tenancy : le hook accepte un `companyId` optionnel. Les subscribers Firestore filtrent
  * les données par companyId. Un admin (companyId null) voit toutes les données.
  *
- * Le périmètre "leviers" (levers, subLevers, comments, audit) vit dans Firestore et est
- * partagé en temps réel entre utilisateurs via `onSnapshot` : chaque mutation met à jour l'état
- * local de façon optimiste (retour synchrone immédiat, comme avant) puis persiste dans Firestore
- * en tâche de fond. Les alertes et leurs états résolus vivent également dans Firestore. Le reste
- * (program, workstreams, operations) reste sur localStorage, voir lib/storage.ts.
+ * TOUTE la donnée métier vit dans Firestore et est partagée en temps réel entre utilisateurs
+ * via `onSnapshot` : chaque mutation met à jour l'état local de façon optimiste (retour
+ * synchrone immédiat) puis persiste dans Firestore en tâche de fond. La config programme
+ * (program + workstreams), dernier périmètre historiquement en localStorage, a été migrée —
+ * voir lib/firestore/programConfig.ts.
  */
 export function useBeTrackData(companyId?: string | null) {
-  const [version, setVersion] = useState(0);
-  const bump = useCallback(() => setVersion((v) => v + 1), []);
-
   // Fallback immédiat : l'application reste utilisable avec le nouveau modèle même si Firestore
   // est indisponible ou si le compte courant n'a pas les droits de reseed.
   const [levers, setLevers] = useState<Lever[]>(() => lockedSeed().levers);
+  const [programConfig, setProgramConfig] = useState<programDb.ProgramSeed>(() => programSeed());
   const [subLevers, setSubLevers] = useState<SubLever[]>([]);
   const [comments, setComments] = useState<Record<string, Comment[]>>(() => mockData.comments);
   const [audit, setAudit] = useState<AuditEntry[]>(() => mockData.audit);
@@ -127,6 +128,7 @@ export function useBeTrackData(companyId?: string | null) {
           workforceDb.ensureWorkforceSeeded(workforceSeed()),
           ensureAdminSeeded(),
           alertsDb.ensureAlertsSeeded(),
+          programDb.ensureProgramSeeded(programSeed(), companyId),
         ]);
         if (companyId) await leversDb.migrateCompanyIds(companyId);
       } catch (err) {
@@ -149,7 +151,11 @@ export function useBeTrackData(companyId?: string | null) {
         workforceDb.subscribeWorkforceMeta((m) => !cancelled && setWorkforceMeta(m)),
         alertsDb.subscribeAlerts((a) => !cancelled && setAlerts(a), companyId),
         alertsDb.subscribeAlertStates((s) => !cancelled && setAlertStates(s), companyId),
-        subscribeCompanies((items) => !cancelled && setCompanies(items))
+        subscribeCompanies((items) => !cancelled && setCompanies(items)),
+        programDb.subscribeProgramConfig(
+          (config) => !cancelled && config && setProgramConfig(config),
+          companyId
+        )
       );
       if (companyId) {
         unsubscribers.push(
@@ -183,8 +189,8 @@ export function useBeTrackData(companyId?: string | null) {
       const company = companies.find((item) => item.id === companyId);
       const migratedLevers = migrateMockLeversToActions(levers, subLevers);
       return {
-        program: storage.getProgram(),
-        workstreams: storage.getWorkstreams(),
+        program: programConfig.program,
+        workstreams: programConfig.workstreams,
         levers: migratedLevers,
         subLevers: [] as SubLever[],
         // Reconstruit au format Workforce historique pour ne pas casser les consommateurs
@@ -197,7 +203,9 @@ export function useBeTrackData(companyId?: string | null) {
           employees,
           movements,
         },
-        operations: storage.getOperations(),
+        // Référentiel statique : le module Operations est encore un Placeholder (aucune page ne
+        // lit ni ne mute ces données) — pas de persistance tant que le module n'est pas construit.
+        operations: mockData.operations,
         alerts,
         alertStates,
         audit,
@@ -226,7 +234,7 @@ export function useBeTrackData(companyId?: string | null) {
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
-      version,
+      programConfig,
       levers,
       subLevers,
       comments,
@@ -607,15 +615,17 @@ export function useBeTrackData(companyId?: string | null) {
   }, []);
 
   const resetToMockData = useCallback(() => {
-    storage.resetToMockData();
     leversDb
       .forceReseedLevers(lockedSeed())
       .catch((err) => console.error("[betrack] échec du reset Firestore des leviers :", err));
     workforceDb
       .forceReseedWorkforce(workforceSeed())
       .catch((err) => console.error("[betrack] échec du reset Firestore workforce :", err));
-    bump();
-  }, [bump]);
+    setProgramConfig(programSeed());
+    programDb
+      .forceReseedProgram(programSeed(), companyId)
+      .catch((err) => console.error("[betrack] échec du reset Firestore programme :", err));
+  }, [companyId]);
 
   return {
     ...data,

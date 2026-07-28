@@ -98,7 +98,7 @@ export function applyPlanLock<T extends PlanLockable>(entity: T): T {
 
 /**
  * Logique métier pure du périmètre "leviers" : mêmes règles que l'ancienne couche
- * localStorage (lib/storage.ts), mais sans I/O — prend l'état courant (levers/subLevers) en
+ * localStorage (lib/storage.ts, supprimé depuis), mais sans I/O — prend l'état courant (levers/subLevers) en
  * entrée et retourne le nouvel état + les entités à persister. Permet à useBeTrackData de faire
  * une mise à jour optimiste locale puis d'écrire dans Firestore en tâche de fond.
  */

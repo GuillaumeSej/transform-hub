@@ -2,7 +2,9 @@ import type { BeTrackData, Employee, WorkforceMovement } from "@/types";
 
 /**
  * Seed initial — copié fidèlement depuis le prototype de Guillaume (legacy/index.html, `const DB`).
- * Ne jamais importer ce module directement dans une page/composant : passer par lib/storage.ts.
+ * Ne jamais importer ce module directement dans une page/composant : passer par le hook
+ * useBeTrackData (lib/hooks/useStorage.ts), qui seed Firestore avec ces données au premier
+ * démarrage puis n'y touche plus.
  */
 // ---------------------------------------------------------------------------
 // Générateur déterministe de la base ETP (pas de Math.random : le seed doit être

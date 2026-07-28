@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
@@ -13,6 +13,12 @@ import { assetPath } from "@/lib/utils";
 /**
  * Écran de connexion — identifiant + mot de passe. Comptes de démo uniquement (voir
  * lib/auth.ts) : 6 comptes de test, un par rôle, mot de passe "test" pour tous.
+ *
+ * L'aide-mémoire des comptes de démo n'est plus affiché par défaut (une liste de
+ * comptes/mot de passe sur un écran de login est rédhibitoire face à un client) : il
+ * n'apparaît qu'avec `?demo=1` dans l'URL, réservé aux démos internes BearingPoint.
+ * Lu via window.location plutôt que useSearchParams : l'export statique (output: export)
+ * exigerait un boundary <Suspense> pour ce hook, inutilement lourd ici.
  */
 export default function LoginPage() {
   const { login } = useRole();
@@ -21,6 +27,11 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [showDemoAccounts, setShowDemoAccounts] = useState(false);
+
+  useEffect(() => {
+    setShowDemoAccounts(new URLSearchParams(window.location.search).get("demo") === "1");
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -110,23 +121,25 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-5 border border-white/10 bg-white/[0.02] p-4 text-[11px] text-white/40">
-          <p className="mb-2 font-semibold uppercase tracking-[0.14em] text-white/50">
-            {t("login.demoAccountsTitle")}
-          </p>
-          <p className="mb-2 text-white/50">{t("login.demoAccountsNote")}</p>
-          <ul className="space-y-0.5">
-            {TEST_USERS.map((u) => (
-              <li key={u.username} className="flex justify-between gap-3">
-                <span className="font-mono text-white/60">{u.username}</span>
-                <span>
-                  {t(roles[u.role].short)} ·{" "}
-                  {u.companyId === "c1" ? "Acme Corp" : t("topbar.global")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {showDemoAccounts && (
+          <div className="mt-5 border border-white/10 bg-white/[0.02] p-4 text-[11px] text-white/40">
+            <p className="mb-2 font-semibold uppercase tracking-[0.14em] text-white/50">
+              {t("login.demoAccountsTitle")}
+            </p>
+            <p className="mb-2 text-white/50">{t("login.demoAccountsNote")}</p>
+            <ul className="space-y-0.5">
+              {TEST_USERS.map((u) => (
+                <li key={u.username} className="flex justify-between gap-3">
+                  <span className="font-mono text-white/60">{u.username}</span>
+                  <span>
+                    {t(roles[u.role].short)} ·{" "}
+                    {u.companyId === "c1" ? "Acme Corp" : t("topbar.global")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

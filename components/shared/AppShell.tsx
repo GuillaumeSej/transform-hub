@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
-import { initializeStorage } from "@/lib/storage";
+import { cleanupLegacyStorage } from "@/lib/legacyStorageCleanup";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
@@ -54,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       router.replace(PAGE_ROUTES[roles[role].nav[0]?.id] ?? "/levers");
       return;
     }
-    initializeStorage();
+    cleanupLegacyStorage();
     setReady(true);
   }, [role, router, pathname]);
 
