@@ -9,6 +9,10 @@ const nextConfig = {
   output: "export",
   basePath,
   assetPrefix: basePath,
+  // images.unoptimized désactive le loader Next qui, seul, préfixe les src par le basePath —
+  // on expose donc le basePath au code client (voir assetPath() dans lib/utils.ts) pour que
+  // les assets statiques (logos public/brand/...) résolvent bien sous /transform-hub/ en prod.
+  env: { NEXT_PUBLIC_BASE_PATH: basePath },
   images: { unoptimized: true },
   // pptxgenjs (export PowerPoint du dashboard, voir DashboardExportButton) référence
   // conditionnellement des modules Node ("fs", "https", "http") pour son usage côté serveur —

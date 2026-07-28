@@ -8,6 +8,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { onListenerError } from "@/lib/firestore/listenerError";
 import { mockData } from "@/data/mockData";
 import type { Alert, AlertState } from "@/types";
 
@@ -23,26 +24,34 @@ export function subscribeAlerts(
   cb: (alerts: Alert[]) => void,
   companyId?: string | null
 ): Unsubscribe {
-  return onSnapshot(alertsCol(), (snap) => {
-    const alerts = snap.docs.map((entry) => entry.data() as Alert);
-    cb(alerts.filter((alert) => belongsToCompany(alert, companyId)));
-  });
+  return onSnapshot(
+    alertsCol(),
+    (snap) => {
+      const alerts = snap.docs.map((entry) => entry.data() as Alert);
+      cb(alerts.filter((alert) => belongsToCompany(alert, companyId)));
+    },
+    onListenerError("alerts")
+  );
 }
 
 export function subscribeAlertStates(
   cb: (states: Record<string, AlertState>) => void,
   companyId?: string | null
 ): Unsubscribe {
-  return onSnapshot(alertStatesCol(), (snap) => {
-    const states = snap.docs
-      .map((entry) => entry.data() as AlertState)
-      .filter((state) => belongsToCompany(state, companyId));
-    cb(
-      Object.fromEntries(
-        states.map((state) => [`${state.companyId ?? "global"}__${state.alertId}`, state])
-      )
-    );
-  });
+  return onSnapshot(
+    alertStatesCol(),
+    (snap) => {
+      const states = snap.docs
+        .map((entry) => entry.data() as AlertState)
+        .filter((state) => belongsToCompany(state, companyId));
+      cb(
+        Object.fromEntries(
+          states.map((state) => [`${state.companyId ?? "global"}__${state.alertId}`, state])
+        )
+      );
+    },
+    onListenerError("alertStates")
+  );
 }
 
 export async function ensureAlertsSeeded(): Promise<void> {

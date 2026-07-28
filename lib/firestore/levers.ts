@@ -10,6 +10,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { onListenerError } from "@/lib/firestore/listenerError";
 import type { AuditEntry, Comment, Lever, LeverDependency, SubLever } from "@/types";
 
 /**
@@ -68,13 +69,17 @@ export function subscribeLevers(
   cb: (levers: Lever[]) => void,
   companyId?: string | null
 ): Unsubscribe {
-  return onSnapshot(leversCol(), (snap) => {
-    const all = snap.docs.map((d) => {
-      const lever = d.data() as Lever;
-      return { ...lever, dependencies: normalizeDependencies(lever.dependencies) };
-    });
-    cb(byCompany(all, companyId));
-  });
+  return onSnapshot(
+    leversCol(),
+    (snap) => {
+      const all = snap.docs.map((d) => {
+        const lever = d.data() as Lever;
+        return { ...lever, dependencies: normalizeDependencies(lever.dependencies) };
+      });
+      cb(byCompany(all, companyId));
+    },
+    onListenerError("levers")
+  );
 }
 
 /** Subscribe to subLevers, optionally filtered by companyId. */
@@ -82,25 +87,37 @@ export function subscribeSubLevers(
   cb: (subLevers: SubLever[]) => void,
   companyId?: string | null
 ): Unsubscribe {
-  return onSnapshot(subLeversCol(), (snap) => {
-    const all = snap.docs.map((d) => {
-      const subLever = d.data() as SubLever;
-      return { ...subLever, dependencies: normalizeDependencies(subLever.dependencies) };
-    });
-    cb(byCompany(all, companyId));
-  });
+  return onSnapshot(
+    subLeversCol(),
+    (snap) => {
+      const all = snap.docs.map((d) => {
+        const subLever = d.data() as SubLever;
+        return { ...subLever, dependencies: normalizeDependencies(subLever.dependencies) };
+      });
+      cb(byCompany(all, companyId));
+    },
+    onListenerError("subLevers")
+  );
 }
 
 export function subscribeComments(cb: (comments: Record<string, Comment[]>) => void): Unsubscribe {
-  return onSnapshot(commentsDoc(), (snap) => {
-    cb((snap.data() as Record<string, Comment[]>) ?? {});
-  });
+  return onSnapshot(
+    commentsDoc(),
+    (snap) => {
+      cb((snap.data() as Record<string, Comment[]>) ?? {});
+    },
+    onListenerError("comments")
+  );
 }
 
 export function subscribeAuditLog(cb: (audit: AuditEntry[]) => void): Unsubscribe {
-  return onSnapshot(auditDoc(), (snap) => {
-    cb((snap.data()?.entries as AuditEntry[]) ?? []);
-  });
+  return onSnapshot(
+    auditDoc(),
+    (snap) => {
+      cb((snap.data()?.entries as AuditEntry[]) ?? []);
+    },
+    onListenerError("auditLog")
+  );
 }
 
 /** Filtre le journal d'audit pour un admin d'entreprise : ne garde que les entrées dont

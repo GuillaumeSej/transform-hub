@@ -12,6 +12,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { onListenerError } from "@/lib/firestore/listenerError";
 import type {
   AuthUser,
   Company,
@@ -28,9 +29,13 @@ import { TEST_USERS } from "@/lib/auth";
 const companiesCol = () => collection(db, "companies");
 
 export function subscribeCompanies(cb: (companies: Company[]) => void): Unsubscribe {
-  return onSnapshot(companiesCol(), (snap) => {
-    cb(snap.docs.map((d) => d.data() as Company));
-  });
+  return onSnapshot(
+    companiesCol(),
+    (snap) => {
+      cb(snap.docs.map((d) => d.data() as Company));
+    },
+    onListenerError("companies")
+  );
 }
 
 export async function saveCompany(company: Company): Promise<void> {
@@ -55,9 +60,13 @@ export async function deleteCompany(id: string): Promise<void> {
 const projectsCol = () => collection(db, "projects");
 
 export function subscribeProjects(cb: (projects: Project[]) => void): Unsubscribe {
-  return onSnapshot(projectsCol(), (snap) => {
-    cb(snap.docs.map((d) => d.data() as Project));
-  });
+  return onSnapshot(
+    projectsCol(),
+    (snap) => {
+      cb(snap.docs.map((d) => d.data() as Project));
+    },
+    onListenerError("projects")
+  );
 }
 
 export async function saveProject(project: Project): Promise<void> {
@@ -76,10 +85,14 @@ export function subscribeLifecycleConfig(
   companyId: string,
   cb: (stages: LifecycleStage[]) => void
 ): Unsubscribe {
-  return onSnapshot(doc(lifecycleCol(), companyId), (snap) => {
-    const data = snap.data();
-    cb(data ? (data.stages as LifecycleStage[]) : []);
-  });
+  return onSnapshot(
+    doc(lifecycleCol(), companyId),
+    (snap) => {
+      const data = snap.data();
+      cb(data ? (data.stages as LifecycleStage[]) : []);
+    },
+    onListenerError("lifecycleConfigs")
+  );
 }
 
 export async function saveLifecycleConfig(
@@ -101,17 +114,22 @@ export function subscribeHierarchyNodes(
   domain?: HierarchyDomain
 ): Unsubscribe {
   const scopedQuery = query(hierarchyNodesCol(), where("companyId", "==", companyId));
-  return onSnapshot(scopedQuery, { includeMetadataChanges: true }, (snap) => {
-    // Ne jamais présenter une écriture locale comme enregistrée : on conserve l'ancien rendu
-    // jusqu'à l'acquittement serveur. Cela évite les lignes fantômes en cas de rejet Firestore.
-    if (snap.metadata.hasPendingWrites) return;
-    const all = snap.docs.map((d) => d.data() as HierarchyNode);
-    cb(
-      all.filter(
-        (node) => node.companyId === companyId && (!domain || hierarchyDomain(node) === domain)
-      )
-    );
-  });
+  return onSnapshot(
+    scopedQuery,
+    { includeMetadataChanges: true },
+    (snap) => {
+      // Ne jamais présenter une écriture locale comme enregistrée : on conserve l'ancien rendu
+      // jusqu'à l'acquittement serveur. Cela évite les lignes fantômes en cas de rejet Firestore.
+      if (snap.metadata.hasPendingWrites) return;
+      const all = snap.docs.map((d) => d.data() as HierarchyNode);
+      cb(
+        all.filter(
+          (node) => node.companyId === companyId && (!domain || hierarchyDomain(node) === domain)
+        )
+      );
+    },
+    onListenerError("hierarchyNodes")
+  );
 }
 
 export async function saveHierarchyNode(node: HierarchyNode): Promise<void> {
@@ -152,9 +170,13 @@ export async function saveHierarchyNodesBatch(nodes: HierarchyNode[]): Promise<v
 const usersCol = () => collection(db, "adminUsers");
 
 export function subscribeUsers(cb: (users: AuthUser[]) => void): Unsubscribe {
-  return onSnapshot(usersCol(), (snap) => {
-    cb(snap.docs.map((d) => d.data() as AuthUser));
-  });
+  return onSnapshot(
+    usersCol(),
+    (snap) => {
+      cb(snap.docs.map((d) => d.data() as AuthUser));
+    },
+    onListenerError("adminUsers")
+  );
 }
 
 export async function saveUser(user: AuthUser): Promise<void> {

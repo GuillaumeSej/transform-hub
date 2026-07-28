@@ -1,5 +1,6 @@
 import { doc, getDoc, onSnapshot, setDoc, writeBatch, type Unsubscribe } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { onListenerError } from "@/lib/firestore/listenerError";
 import type { Department, Employee, WorkforceMovement } from "@/types";
 
 /**
@@ -36,21 +37,33 @@ function stripUndefined<T>(value: T): T {
 }
 
 export function subscribeEmployees(cb: (employees: Employee[]) => void): Unsubscribe {
-  return onSnapshot(employeesDoc(), (snap) => {
-    cb((snap.data()?.list as Employee[]) ?? []);
-  });
+  return onSnapshot(
+    employeesDoc(),
+    (snap) => {
+      cb((snap.data()?.list as Employee[]) ?? []);
+    },
+    onListenerError("workforceEmployees")
+  );
 }
 
 export function subscribeMovements(cb: (movements: WorkforceMovement[]) => void): Unsubscribe {
-  return onSnapshot(movementsDoc(), (snap) => {
-    cb((snap.data()?.list as WorkforceMovement[]) ?? []);
-  });
+  return onSnapshot(
+    movementsDoc(),
+    (snap) => {
+      cb((snap.data()?.list as WorkforceMovement[]) ?? []);
+    },
+    onListenerError("workforceMovements")
+  );
 }
 
 export function subscribeWorkforceMeta(cb: (meta: WorkforceMeta | null) => void): Unsubscribe {
-  return onSnapshot(summaryDoc(), (snap) => {
-    cb(snap.exists() ? (snap.data() as WorkforceMeta) : null);
-  });
+  return onSnapshot(
+    summaryDoc(),
+    (snap) => {
+      cb(snap.exists() ? (snap.data() as WorkforceMeta) : null);
+    },
+    onListenerError("workforceSummary")
+  );
 }
 
 /** Persiste la liste complète des employés (mise à jour optimiste côté hook : la liste à jour

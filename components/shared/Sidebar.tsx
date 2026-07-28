@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
-import { cn } from "@/lib/utils";
+import { assetPath, cn } from "@/lib/utils";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Avatar } from "@/components/shared/Avatar";
 import { GuardedLink } from "@/components/shared/GuardedLink";
@@ -42,7 +42,7 @@ export function Sidebar({
     >
       <div className="border-b border-white/[0.12] px-[18px] pb-4 pt-5">
         <Image
-          src="/brand/logo-wordmark-white.png"
+          src={assetPath("/brand/logo-wordmark-white.png")}
           alt="BearingPoint"
           width={150}
           height={26}

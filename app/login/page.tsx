@@ -8,6 +8,7 @@ import { findUser, findUserFromFirestore, TEST_USERS } from "@/lib/auth";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
+import { assetPath } from "@/lib/utils";
 
 /**
  * Écran de connexion — identifiant + mot de passe. Comptes de démo uniquement (voir
@@ -55,7 +56,7 @@ export default function LoginPage() {
         </div>
         <div className="mb-10 flex flex-col items-start text-left">
           <Image
-            src="/brand/logo-wordmark-white.png"
+            src={assetPath("/brand/logo-wordmark-white.png")}
             alt="BearingPoint"
             width={210}
             height={36}
