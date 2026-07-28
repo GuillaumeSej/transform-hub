@@ -14,6 +14,7 @@ import {
   Maximize2,
   Plus,
   RotateCcw,
+  SlidersHorizontal,
   TriangleAlert,
   TrendingUp,
   Users,
@@ -217,6 +218,8 @@ export default function DashboardPage() {
     if (filters.f_type) result.type = filters.f_type.split(",").filter(Boolean);
     return result;
   }, [filters]);
+
+  const hasActiveFilters = Object.keys(activeForBar).length > 0;
 
   const handleFilterChange = (next: ActiveFilters) => {
     resetFilters();
@@ -582,6 +585,8 @@ export default function DashboardPage() {
   const [dragInstanceId, setDragInstanceId] = useState<string | null>(null);
   const [dragOverInstanceId, setDragOverInstanceId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+  // Filtres repliés par défaut sur mobile (< lg) — voir le bouton "Filtres" dans le rendu.
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // ─── Builder générique métrique × dimension(s) ─────────────────────────────────────────────
   // Widget "builder" (Marimekko, ventilations, P&L — voir `builderDimensionCount` du registre) déjà
@@ -1708,7 +1713,9 @@ export default function DashboardPage() {
             {t("dashboard.leversActive")}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Outils de bureau (export PPTX, personnalisation du layout) — sans objet au doigt
+            sur téléphone : masqués sous lg pour laisser toute la place aux indicateurs. */}
+        <div className="hidden items-center gap-2 lg:flex">
           {!editMode && <DashboardExportButton layout={layout} />}
           <Button
             variant={editMode ? "dark" : "outline"}
@@ -1721,7 +1728,38 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="mb-4">
+      {/* Filtres — repliés par défaut sur mobile derrière un bouton (ils poussaient les KPI
+          sous la ligne de flottaison), toujours visibles à partir de lg. */}
+      <div className="mb-4 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileFiltersOpen((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            hasActiveFilters || mobileFiltersOpen
+              ? "border-bp-coral bg-bp-coral text-white"
+              : "border-border bg-white text-secondary"
+          }`}
+        >
+          <SlidersHorizontal size={12} />
+          {t("dashboard.filters")}
+          {hasActiveFilters && (
+            <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-bold">
+              {Object.keys(activeForBar).length}
+            </span>
+          )}
+        </button>
+        {mobileFiltersOpen && (
+          <div className="mt-2">
+            <FilterBar
+              items={visibleLevers}
+              defs={filterDefs}
+              active={activeForBar}
+              onChange={handleFilterChange}
+            />
+          </div>
+        )}
+      </div>
+      <div className="mb-4 hidden lg:block">
         <FilterBar
           items={visibleLevers}
           defs={filterDefs}
@@ -1730,12 +1768,17 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2 max-[500px]:grid-cols-1">
+      {/* Grille KPI — desktop : 5 colonnes égales. Mobile/tablette (< 1100px) : hiérarchie
+          exécutive — "Économies réalisées" (l'indicateur que DG/CTO regardent en premier) passe
+          héros pleine largeur avec chiffre agrandi, les 4 autres en 2×2 compact dessous. */}
+      <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2 max-[1100px]:gap-3">
         {/* 1. Économies réalisées — cible + reforecast + % (marqueur sur la barre) */}
         <KPICard
           label={t("dashboard.kpi.savingsRealized")}
           value={engine.fmtCurr(summary.realized)}
           icon={Banknote}
+          hero
+          className="max-[1100px]:col-span-2"
           sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)} · ${summary.progressPct}%`}
           barPct={summary.progressPct}
           barMarkerPct={

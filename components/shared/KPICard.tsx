@@ -39,6 +39,8 @@ export function KPICard({
   barMarkerPct,
   barSegments,
   onClick,
+  className,
+  hero = false,
 }: {
   label: string;
   value: string;
@@ -49,6 +51,11 @@ export function KPICard({
   barMarkerPct?: number;
   barSegments?: KPIBarSegment[];
   onClick?: () => void;
+  /** Classes additionnelles sur la carte (ex. col-span responsive dans la grille KPI). */
+  className?: string;
+  /** Mise en avant mobile : chiffre agrandi sous le breakpoint desktop de la grille KPI
+   *  (1100px, voir dashboard) — au-dessus, identique aux autres cartes. */
+  hero?: boolean;
 }) {
   return (
     <div
@@ -65,7 +72,8 @@ export function KPICard({
       className={cn(
         "relative flex flex-col overflow-hidden rounded-lg border border-border bg-white p-4 shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
         ACCENT[accent],
-        onClick && "cursor-pointer transition hover:border-border-strong hover:shadow-md"
+        onClick && "cursor-pointer transition hover:border-border-strong hover:shadow-md",
+        className
       )}
     >
       {/* Contenu textuel — occupe le haut du widget */}
@@ -83,7 +91,14 @@ export function KPICard({
             <Icon size={14} />
           </div>
         </div>
-        <div className="text-2xl font-bold leading-tight tracking-tight text-primary">{value}</div>
+        <div
+          className={cn(
+            "text-2xl font-bold leading-tight tracking-tight text-primary",
+            hero && "text-4xl max-[1100px]:mt-1 min-[1101px]:text-2xl"
+          )}
+        >
+          {value}
+        </div>
         {sub && <div className="mt-0.5 text-[11px] text-tertiary">{sub}</div>}
       </div>
       {/* Barre de progression — ancrée en bas du widget via mt-auto */}

@@ -141,11 +141,15 @@ export function Topbar({
         >
           <Avatar initials={initials || "?"} size="sm" />
         </span>
-        <LanguageSwitcher />
+        {/* Sélecteur de langue — desktop uniquement : sur téléphone il encombrait la barre pour
+            une action rarissime en situation de consultation (la langue se choisit au login). */}
+        <span className="hidden sm:block">
+          <LanguageSwitcher />
+        </span>
         <div className="relative">
           <button
             onClick={() => setAlertsOpen((open) => !open)}
-            className="relative flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black"
+            className="relative flex h-11 w-11 items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black sm:h-[34px] sm:w-[34px]"
             aria-label={`${t("topbar.alerts")} (${alertCount})`}
             aria-expanded={alertsOpen}
           >
@@ -211,7 +215,7 @@ export function Topbar({
             logout();
             router.push("/login");
           }}
-          className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black sm:h-[34px] sm:w-[34px]"
           aria-label={t("topbar.logout")}
           title={t("topbar.logout")}
         >

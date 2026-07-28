@@ -177,6 +177,7 @@ const es: Record<string, string> = {
   "dashboard.widgets.pnl": "Impacto P&L por cuenta",
   "dashboard.month": "Mes",
   "dashboard.quarter": "Trimestre",
+  "dashboard.filters": "Filtros",
   "dashboard.workstream": "Workstream",
   "dashboard.project": "Proyecto",
   "dashboard.country": "País",

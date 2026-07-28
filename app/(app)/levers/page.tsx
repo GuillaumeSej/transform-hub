@@ -353,7 +353,9 @@ export default function LeversPage() {
       key: "realized",
       label: "Réalisé",
       align: "right",
-      mobile: "hide",
+      // Visible dans la vue carte mobile : avec Net Savings, c'est LA paire que DG/CTO
+      // regardent (réalisé vs engagé) — le reste du détail financier reste desktop.
+      mobile: "secondary",
       width: "90px",
       render: (r) => r.realized.toFixed(1),
     },
@@ -448,7 +450,10 @@ export default function LeversPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ExportButton data={data} />
+          {/* Export Excel : outil de bureau, sans objet sur téléphone. */}
+          <span className="hidden sm:inline-flex">
+            <ExportButton data={data} />
+          </span>
           <Button variant="primary" onClick={() => setNewLeverOpen(true)}>
             <Plus size={13} /> {t("levers.newLever")}
           </Button>

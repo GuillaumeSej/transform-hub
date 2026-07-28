@@ -104,3 +104,31 @@ body {
 .animate-fade-up {
   animation: fadeUp 0.2s cubic-bezier(0.2, 0, 0, 1) forwards;
 }
+
+/* ============================================================================
+   PWA installée (display standalone + viewport-fit=cover) : la zone d'encoche
+   iPhone est peinte en noir marque (les icônes de status bar iOS sont blanches
+   avec black-translucent), et le contenu démarre sous elle. Les env() valent 0
+   dans un navigateur classique — aucune de ces règles n'affecte le desktop.
+   ============================================================================ */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+/* Bandeau noir sous la status bar (hauteur nulle hors standalone → invisible). */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: env(safe-area-inset-top);
+  background: #000;
+  z-index: 60;
+}
+/* Le shell plein écran (h-dvh) doit déduire l'inset pour ne pas déborder sous
+   la barre home — uniquement en mode installé. */
+@media (display-mode: standalone) {
+  .h-dvh {
+    height: calc(100dvh - env(safe-area-inset-top));
+  }
+}

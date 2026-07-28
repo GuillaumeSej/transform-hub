@@ -204,6 +204,7 @@ const fr: Record<string, string> = {
   "dashboard.tab.portfolio": "Portefeuille",
   "dashboard.month": "Mois",
   "dashboard.quarter": "Trimestre",
+  "dashboard.filters": "Filtres",
   "dashboard.workstream": "Workstream",
   "dashboard.project": "Projet",
   "dashboard.country": "Pays",
