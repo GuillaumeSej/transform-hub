@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
-import { findUser, findUserFromFirestore, TEST_USERS } from "@/lib/auth";
+import { ensureAuthUsersSeeded, signInUser, TEST_USERS } from "@/lib/auth";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
@@ -12,7 +12,7 @@ import { assetPath } from "@/lib/utils";
 
 /**
  * Écran de connexion — identifiant + mot de passe. Comptes de démo uniquement (voir
- * lib/auth.ts) : 8 comptes de test, un par rôle, mot de passe "test" pour tous.
+ * lib/auth.ts) : 8 comptes de test, un par rôle, mot de passe "test123" pour tous.
  *
  * L'aide-mémoire des comptes de démo n'est plus affiché par défaut (une liste de
  * comptes/mot de passe sur un écran de login est rédhibitoire face à un client) : il
@@ -33,20 +33,52 @@ export default function LoginPage() {
     setShowDemoAccounts(new URLSearchParams(window.location.search).get("demo") === "1");
   }, []);
 
+  // /login est hors d'AppShell (accessible avant toute connexion) : c'est donc ICI, et pas
+  // seulement dans useStorage.ts (qui ne tourne qu'une fois connecté), qu'il faut garantir que
+  // les comptes de démo existent réellement côté Firebase Auth — sinon un utilisateur qui arrive
+  // directement sur /login (première visite) ne pourrait jamais se connecter. Idempotent, sans
+  // effet sur les visites suivantes.
+  useEffect(() => {
+    ensureAuthUsersSeeded().catch((err) => {
+      console.error("[LoginPage] Échec du seed des comptes de démo Firebase Auth :", err);
+    });
+  }, []);
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    let user = findUser(username, password);
-    if (!user) {
-      user = await findUserFromFirestore(username, password);
+    try {
+      const user = await signInUser(username, password);
+      login(user);
+      router.replace(PAGE_ROUTES[roles[user.role].nav[0]?.id] ?? "/levers");
+    } catch (err) {
+      setError(describeSignInError(err));
     }
-    if (!user) {
-      setError(t("login.error"));
-      return;
-    }
-    login(user);
-    router.replace(PAGE_ROUTES[roles[user.role].nav[0]?.id] ?? "/levers");
   };
+
+  /**
+   * Distingue deux causes d'échec très différentes pour l'utilisateur :
+   *  - identifiants invalides (cas normal, message générique volontairement vague : on ne révèle
+   *    pas si c'est le username ou le mot de passe qui est faux) ;
+   *  - Firebase Auth mal configuré côté console ('auth/operation-not-allowed', méthode e-mail/mot
+   *    de passe non activée dans Firebase Console > Authentication > Sign-in method) — un vrai
+   *    problème de configuration, pas une erreur de saisie, qui mérite un message différent.
+   */
+  function describeSignInError(err: unknown): string {
+    const code =
+      typeof err === "object" && err !== null && "code" in err
+        ? (err as { code?: unknown }).code
+        : undefined;
+    if (code === "auth/operation-not-allowed" || code === "auth/configuration-not-found") {
+      return t("login.errorNotConfigured");
+    }
+    // Authentifié avec succès mais aucun document 'adminUsers' correspondant (voir
+    // resolveAuthUserProfile dans lib/auth.ts) — pas un problème d'identifiants, message dédié.
+    if (err instanceof Error && err.message.includes("profil introuvable")) {
+      return err.message;
+    }
+    return t("login.error");
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-black px-6 py-10">

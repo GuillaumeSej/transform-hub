@@ -69,7 +69,9 @@ const fr: Record<string, string> = {
   "login.passwordPlaceholder": "••••••••",
   "login.submit": "Se connecter",
   "login.error": "Identifiant ou mot de passe incorrect.",
-  "login.demoAccountsTitle": "Comptes de démo (mot de passe : test)",
+  "login.errorNotConfigured":
+    "Authentification indisponible — la méthode e-mail/mot de passe n'est pas activée côté Firebase. Contactez un administrateur.",
+  "login.demoAccountsTitle": "Comptes de démo (mot de passe : test123)",
   "login.demoAccountsNote":
     "Tous les comptes de démo (sauf admin) sont rattachés à l'entreprise Acme Corp.",
 

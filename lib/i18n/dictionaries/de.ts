@@ -59,7 +59,9 @@ const de: Record<string, string> = {
   "login.passwordPlaceholder": "••••••••",
   "login.submit": "Anmelden",
   "login.error": "Benutzername oder Passwort falsch.",
-  "login.demoAccountsTitle": "Demo-Konten (Passwort: test)",
+  "login.errorNotConfigured":
+    "Anmeldung nicht verfügbar — E-Mail/Passwort-Anmeldung ist in Firebase nicht aktiviert. Bitte einen Administrator kontaktieren.",
+  "login.demoAccountsTitle": "Demo-Konten (Passwort: test123)",
   "login.demoAccountsNote": "Alle Demo-Konten (außer Admin) gehören zu Acme Corp.",
 
   // ─── topbar ───────────────────────────────────────────────────────────────

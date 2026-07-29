@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Users, Plus, Pencil, Trash2 } from "lucide-react";
 import type { AuthUser, Role, Company } from "@/types";
 import { subscribeUsers, saveUser, deleteUser, subscribeCompanies } from "@/lib/firestore/admin";
+import { isFirebaseErrorCode, usernameToSyntheticEmail } from "@/lib/auth";
+import { withSecondaryAuth } from "@/lib/firebase";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
@@ -163,6 +165,12 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       ...buildClearancePatch(form.role, form.clearanceMode, form.clearanceLevels),
     };
     try {
+      // Crée le compte Firebase Auth correspondant AVANT d'écrire le profil Firestore — sur une
+      // instance Auth SECONDAIRE (voir withSecondaryAuth dans lib/firebase.ts), jamais sur
+      // l'instance principale : createUserWithEmailAndPassword connecte automatiquement le
+      // navigateur en tant que ce nouvel utilisateur, ce qui déconnecterait l'admin de sa propre
+      // session s'il l'appelait sur l'instance principale.
+      await createAuthAccount(normalizedUsername, form.password);
       await saveUser(newUser);
       setShowForm(false);
     } catch (err) {
@@ -173,6 +181,29 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       );
     }
   };
+
+  /**
+   * Crée le compte Firebase Auth d'un utilisateur d'entreprise (e-mail synthétique dérivé du
+   * username saisi). 'auth/email-already-in-use' est explicitement toléré et n'interrompt pas le
+   * formulaire : soit l'admin modifie un profil existant (compte Firebase déjà là), soit le
+   * compte a été créé lors d'une tentative précédente sans que le profil Firestore ait suivi —
+   * dans les deux cas on procède quand même à l'écriture/mise à jour du profil Firestore.
+   */
+  async function createAuthAccount(username: string, password: string): Promise<void> {
+    await withSecondaryAuth(async (secondaryAuth) => {
+      const { createUserWithEmailAndPassword } = await import("firebase/auth");
+      try {
+        await createUserWithEmailAndPassword(
+          secondaryAuth,
+          usernameToSyntheticEmail(username),
+          password
+        );
+      } catch (err) {
+        if (isFirebaseErrorCode(err, "auth/email-already-in-use")) return;
+        throw err;
+      }
+    });
+  }
 
   const toggleClearanceLevel = (level: string) => {
     setForm((f) => ({

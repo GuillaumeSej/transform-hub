@@ -20,7 +20,7 @@ import { useNotifications } from "@/lib/hooks/useNotifications";
  * les données Firestore. Un admin (companyId null) voit toutes les données.
  */
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, user } = useRole();
+  const { role, user, loading } = useRole();
   const router = useRouter();
   const pathname = usePathname();
   const data = useBeTrackData(user?.companyId ?? null);
@@ -36,6 +36,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
+    // Tant que Firebase n'a pas fini de résoudre une éventuelle session existante (premier appel
+    // asynchrone d'onAuthStateChanged, voir useRole), on ne décide de rien : rediriger vers
+    // /login ici serait prématuré et éjecterait un utilisateur pourtant déjà connecté.
+    if (loading) return;
     if (!role) {
       router.replace("/login");
       return;
@@ -56,9 +60,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     cleanupLegacyStorage();
     setReady(true);
-  }, [role, router, pathname]);
+  }, [role, loading, router, pathname]);
 
-  if (!role || !ready) return null;
+  if (loading || !role || !ready) return null;
 
   return (
     <div className="flex h-dvh">
