@@ -91,6 +91,26 @@ body {
   background: var(--n-400);
 }
 
+/* Graphiques Recharts non interactifs : le texte SVG (labels d'axe, légende, tooltip) reste
+   sélectionnable par défaut et certains navigateurs (WebKit/Safari) affichent alors un curseur
+   texte (I-beam) au survol même quand aucun handler onClick n'est présent — donnant l'illusion
+   à tort que le graphique est cliquable. On neutralise la sélection et on force un curseur par
+   défaut sur le conteneur/texte/grille, MAIS sans !important : les éléments réellement cliquables
+   (Bar/Pie/Cell avec onClick) reçoivent leur propre `cursor: pointer` inline via la prop `cursor`
+   de Recharts ou un style JSX, qui reste prioritaire sur ces règles de conteneur. */
+.recharts-wrapper,
+.recharts-surface {
+  cursor: default;
+}
+.recharts-wrapper text,
+.recharts-legend-wrapper,
+.recharts-cartesian-axis-tick,
+.recharts-cartesian-grid,
+.recharts-reference-line {
+  cursor: default;
+  user-select: none;
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;

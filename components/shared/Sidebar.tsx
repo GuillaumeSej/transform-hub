@@ -36,7 +36,14 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "flex h-screen w-[248px] min-w-[248px] flex-col bg-black text-white",
+        // `h-dvh` (et non `h-screen`/100vh) pour matcher exactement la hauteur du conteneur
+        // racine de l'AppShell (`<div className="flex h-dvh">`, voir AppShell.tsx) : sur mobile,
+        // 100vh ignore les barres d'outils dynamiques du navigateur alors que 100dvh s'y adapte —
+        // un écart entre les deux faisait déborder la sidebar de son conteneur flex, rendait le
+        // <body> scrollable, et un simple scroll molette au-dessus du menu décalait alors TOUTE
+        // la page (topbar + sidebar comprises) au lieu de rester sans effet. `overflow-hidden`
+        // en garde-fou pour qu'aucun contenu interne ne puisse à son tour dépasser cette hauteur.
+        "flex h-dvh w-[248px] min-w-[248px] flex-col overflow-hidden bg-black text-white",
         className
       )}
     >
@@ -54,7 +61,10 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2.5 py-3">
+      {/* `overscroll-contain` : même si la liste de nav devait un jour dépasser sa hauteur
+          disponible, le scroll wheel ne doit jamais "chaîner" vers le body derrière une fois la
+          fin de la liste atteinte (cause typique d'un décalage visuel de toute la page). */}
+      <nav className="flex-1 overflow-y-auto overscroll-contain px-2.5 py-3">
         <div className="px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
           {t("nav.sectionLabel")}
         </div>
