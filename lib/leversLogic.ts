@@ -10,7 +10,6 @@ import type {
   Lever,
   LeverAction,
   Role,
-  SubLever,
 } from "@/types";
 
 /**
@@ -98,7 +97,7 @@ export function applyPlanLock<T extends PlanLockable>(entity: T): T {
 
 /**
  * Logique métier pure du périmètre "leviers" : mêmes règles que l'ancienne couche
- * localStorage (lib/storage.ts, supprimé depuis), mais sans I/O — prend l'état courant (levers/subLevers) en
+ * localStorage (lib/storage.ts, supprimé depuis), mais sans I/O — prend l'état courant (levers) en
  * entrée et retourne le nouvel état + les entités à persister. Permet à useBeTrackData de faire
  * une mise à jour optimiste locale puis d'écrire dans Firestore en tâche de fond.
  */
@@ -127,8 +126,8 @@ function makeAuditEntry(entry: Omit<AuditEntry, "ts">): AuditEntry {
 /** Recalcule le levier parent depuis son plan d'action : progression pondérée et agrégats
  * financiers/RH. Si le plan initial est déjà figé, les chiffres consolidés alimentent le
  * reforecast ; sinon ils alimentent directement les champs du levier. */
-function recomputeLeverProgress(lever: Lever, subLevers: SubLever[]): Lever | undefined {
-  const newProgress = engine.recomputeLeverProgress(lever, subLevers);
+function recomputeLeverProgress(lever: Lever): Lever | undefined {
+  const newProgress = engine.recomputeLeverProgress(lever);
   const consolidated = consolidateLeverFromActions(lever);
   const nextStatus =
     newProgress >= 100 && lever.status !== "cancelled" ? "delivered" : lever.status;
@@ -258,223 +257,62 @@ export function upsertLeverByCode(
   return { ...createLever(levers, input, user), created: true };
 }
 
-export type SubLeverMutationResult = {
-  subLevers: SubLever[];
-  subLever: SubLever;
-  levers: Lever[];
-  changedLever?: Lever;
-  auditEntries: AuditEntry[];
-};
-
-export function createSubLever(
-  levers: Lever[],
-  subLevers: SubLever[],
-  input: Omit<SubLever, "id">,
-  user: string
-): SubLeverMutationResult {
-  const id = nextEntityId(
-    "SL",
-    subLevers.map((s) => s.id)
-  );
-  const subLever: SubLever = applyPlanLock({ ...input, id });
-  const nextSubLevers = [...subLevers, subLever];
-
-  const auditEntries = [
-    makeAuditEntry({
-      user,
-      action: "created",
-      entity: subLever.leverId,
-      field: "sous-levier",
-      old: "",
-      new: subLever.name,
-    }),
-  ];
-
-  const lever = levers.find((l) => l.id === subLever.leverId);
-  const changedLever = lever ? recomputeLeverProgress(lever, nextSubLevers) : undefined;
-  const nextLevers = changedLever
-    ? levers.map((l) => (l.id === changedLever.id ? changedLever : l))
-    : levers;
-
-  return { subLevers: nextSubLevers, subLever, levers: nextLevers, changedLever, auditEntries };
-}
-
-export function updateSubLever(
-  levers: Lever[],
-  subLevers: SubLever[],
-  id: string,
-  patch: Partial<SubLever>,
-  user: string
-): SubLeverMutationResult {
-  const idx = subLevers.findIndex((s) => s.id === id);
-  if (idx === -1) throw new Error(`Sous-levier "${id}" introuvable`);
-  const before = subLevers[idx];
-  const safePatch = before.lockedPlan
-    ? {
-        ...patch,
-        grossSavings: before.grossSavings,
-        netSavings: before.netSavings,
-        opexOneOff: before.opexOneOff,
-        opexRec: before.opexRec,
-        capex: before.capex,
-      }
-    : patch;
-  const after: SubLever = applyPlanLock({ ...before, ...safePatch });
-  const nextSubLevers = [...subLevers];
-  nextSubLevers[idx] = after;
-
-  const auditEntries = [
-    makeAuditEntry({
-      user,
-      action: "updated",
-      entity: before.leverId,
-      field: `sous-levier ${before.name}`,
-      old: "",
-      new: "modifié",
-    }),
-  ];
-
-  const lever = levers.find((l) => l.id === before.leverId);
-  const changedLever = lever ? recomputeLeverProgress(lever, nextSubLevers) : undefined;
-  const nextLevers = changedLever
-    ? levers.map((l) => (l.id === changedLever.id ? changedLever : l))
-    : levers;
-
-  return {
-    subLevers: nextSubLevers,
-    subLever: after,
-    levers: nextLevers,
-    changedLever,
-    auditEntries,
-  };
-}
-
-export type DeleteSubLeverResult = {
-  subLevers: SubLever[];
-  deletedId: string;
-  levers: Lever[];
-  changedLever?: Lever;
-  auditEntries: AuditEntry[];
-};
-
-export function deleteSubLever(
-  levers: Lever[],
-  subLevers: SubLever[],
-  id: string,
-  user: string
-): DeleteSubLeverResult {
-  const target = subLevers.find((s) => s.id === id);
-  if (!target) return { subLevers, deletedId: id, levers, auditEntries: [] };
-  const nextSubLevers = subLevers.filter((s) => s.id !== id);
-
-  const auditEntries = [
-    makeAuditEntry({
-      user,
-      action: "updated",
-      entity: target.leverId,
-      field: "sous-levier",
-      old: target.name,
-      new: "supprimé",
-    }),
-  ];
-
-  const lever = levers.find((l) => l.id === target.leverId);
-  const changedLever = lever ? recomputeLeverProgress(lever, nextSubLevers) : undefined;
-  const nextLevers = changedLever
-    ? levers.map((l) => (l.id === changedLever.id ? changedLever : l))
-    : levers;
-
-  return {
-    subLevers: nextSubLevers,
-    deletedId: id,
-    levers: nextLevers,
-    changedLever,
-    auditEntries,
-  };
-}
-
-export type ActionScope = { leverId: string; subLeverId?: string };
+export type ActionScope = { leverId: string };
 
 export type ActionMutationResult = {
   levers: Lever[];
-  subLevers: SubLever[];
   changedLever?: Lever;
-  changedSubLever?: SubLever;
   action: LeverAction;
   auditEntries: AuditEntry[];
 };
 
-function readActions(levers: Lever[], subLevers: SubLever[], scope: ActionScope): LeverAction[] {
-  if (scope.subLeverId) {
-    return subLevers.find((s) => s.id === scope.subLeverId)?.actions ?? [];
-  }
+function readActions(levers: Lever[], scope: ActionScope): LeverAction[] {
   return levers.find((l) => l.id === scope.leverId)?.actions ?? [];
 }
 
-/** Applique le nouveau tableau d'actions sur le lever/sous-levier ciblé par `scope`, puis
- * recalcule la progression du lever parent. Retourne toujours le lever/sous-levier touché
- * (même sans changement de progression) pour que l'appelant persiste le nouveau plan d'action. */
+/** Applique le nouveau tableau d'actions sur le lever ciblé par `scope`, puis recalcule sa
+ * progression. Retourne toujours le lever touché (même sans changement de progression) pour que
+ * l'appelant persiste le nouveau plan d'action. */
 function writeActions(
   levers: Lever[],
-  subLevers: SubLever[],
   scope: ActionScope,
   actions: LeverAction[]
-): { levers: Lever[]; subLevers: SubLever[]; changedLever?: Lever; changedSubLever?: SubLever } {
-  let nextLevers = levers;
-  let nextSubLevers = subLevers;
-  let changedSubLever: SubLever | undefined;
+): { levers: Lever[]; changedLever?: Lever } {
+  const idx = levers.findIndex((l) => l.id === scope.leverId);
+  if (idx === -1) throw new Error(`Lever "${scope.leverId}" introuvable`);
+  let nextLevers = [...levers];
+  nextLevers[idx] = { ...levers[idx], actions };
 
-  if (scope.subLeverId) {
-    const idx = subLevers.findIndex((s) => s.id === scope.subLeverId);
-    if (idx === -1) throw new Error(`Sous-levier "${scope.subLeverId}" introuvable`);
-    changedSubLever = { ...subLevers[idx], actions };
-    nextSubLevers = [...subLevers];
-    nextSubLevers[idx] = changedSubLever;
-  } else {
-    const idx = levers.findIndex((l) => l.id === scope.leverId);
-    if (idx === -1) throw new Error(`Lever "${scope.leverId}" introuvable`);
-    nextLevers = [...levers];
-    nextLevers[idx] = { ...levers[idx], actions };
-  }
-
-  const lever = nextLevers.find((l) => l.id === scope.leverId);
-  const recomputed = lever ? recomputeLeverProgress(lever, nextSubLevers) : undefined;
-  const changedLever = recomputed
-    ? recomputed
-    : scope.subLeverId
-      ? undefined
-      : nextLevers.find((l) => l.id === scope.leverId);
+  const lever = nextLevers[idx];
+  const recomputed = recomputeLeverProgress(lever);
+  const changedLever = recomputed ?? lever;
   if (recomputed) {
     nextLevers = nextLevers.map((l) => (l.id === recomputed.id ? recomputed : l));
   }
 
-  return { levers: nextLevers, subLevers: nextSubLevers, changedLever, changedSubLever };
+  return { levers: nextLevers, changedLever };
 }
 
 export function createAction(
   levers: Lever[],
-  subLevers: SubLever[],
   scope: ActionScope,
   input: Omit<LeverAction, "id">,
   user: string
 ): ActionMutationResult {
-  const allIds = [
-    ...levers.flatMap((l) => l.actions?.map((a) => a.id) ?? []),
-    ...subLevers.flatMap((s) => s.actions.map((a) => a.id)),
-  ];
+  const allIds = levers.flatMap((l) => l.actions?.map((a) => a.id) ?? []);
   const action: LeverAction = {
     ...input,
     id: nextEntityId("AC", allIds),
     ...(input.status === "done" && !input.deliveredDate ? { deliveredDate: nowDate() } : {}),
   };
-  const currentActions = readActions(levers, subLevers, scope);
-  const result = writeActions(levers, subLevers, scope, [...currentActions, action]);
+  const currentActions = readActions(levers, scope);
+  const result = writeActions(levers, scope, [...currentActions, action]);
 
   const auditEntries = [
     makeAuditEntry({
       user,
       action: "created",
-      entity: scope.subLeverId ?? scope.leverId,
+      entity: scope.leverId,
       field: "action",
       old: "",
       new: action.name,
@@ -486,13 +324,12 @@ export function createAction(
 
 export function updateAction(
   levers: Lever[],
-  subLevers: SubLever[],
   scope: ActionScope,
   actionId: string,
   patch: Partial<LeverAction>,
   user: string
 ): ActionMutationResult {
-  const actions = readActions(levers, subLevers, scope);
+  const actions = readActions(levers, scope);
   const idx = actions.findIndex((a) => a.id === actionId);
   if (idx === -1) throw new Error(`Action "${actionId}" introuvable`);
   const before = actions[idx];
@@ -505,13 +342,13 @@ export function updateAction(
   const after = { ...before, ...patch, ...deliveredDatePatch };
   const nextActions = [...actions];
   nextActions[idx] = after;
-  const result = writeActions(levers, subLevers, scope, nextActions);
+  const result = writeActions(levers, scope, nextActions);
 
   const auditEntries = [
     makeAuditEntry({
       user,
       action: "updated",
-      entity: scope.subLeverId ?? scope.leverId,
+      entity: scope.leverId,
       field: `action ${after.name}`,
       old: actions[idx].status,
       new: after.status,
@@ -523,66 +360,39 @@ export function updateAction(
 
 export function deleteAction(
   levers: Lever[],
-  subLevers: SubLever[],
   scope: ActionScope,
   actionId: string
-): { levers: Lever[]; subLevers: SubLever[]; changedLever?: Lever; changedSubLever?: SubLever } {
-  const actions = readActions(levers, subLevers, scope).filter((a) => a.id !== actionId);
-  return writeActions(levers, subLevers, scope, actions);
+): { levers: Lever[]; changedLever?: Lever } {
+  const actions = readActions(levers, scope).filter((a) => a.id !== actionId);
+  return writeActions(levers, scope, actions);
 }
 
 export function applyCascadeShift(
   levers: Lever[],
-  subLevers: SubLever[],
   shifts: CascadeShift[],
   user: string
 ): {
   levers: Lever[];
-  subLevers: SubLever[];
   changedLevers: Lever[];
-  changedSubLevers: SubLever[];
   auditEntries: AuditEntry[];
 } {
   let curLevers = levers;
-  let curSubLevers = subLevers;
   const changedLevers: Lever[] = [];
-  const changedSubLevers: SubLever[] = [];
   const auditEntries: AuditEntry[] = [];
 
   shifts.forEach((shift) => {
-    if (shift.kind === "lever") {
-      const result = updateLever(
-        curLevers,
-        shift.id,
-        { start: shift.newStart, end: shift.newEnd },
-        user
-      );
-      curLevers = result.levers;
-      changedLevers.push(result.lever);
-      auditEntries.push(...result.auditEntries);
-    } else {
-      const result = updateSubLever(
-        curLevers,
-        curSubLevers,
-        shift.id,
-        { start: shift.newStart, end: shift.newEnd },
-        user
-      );
-      curLevers = result.levers;
-      curSubLevers = result.subLevers;
-      changedSubLevers.push(result.subLever);
-      if (result.changedLever) changedLevers.push(result.changedLever);
-      auditEntries.push(...result.auditEntries);
-    }
+    const result = updateLever(
+      curLevers,
+      shift.id,
+      { start: shift.newStart, end: shift.newEnd },
+      user
+    );
+    curLevers = result.levers;
+    changedLevers.push(result.lever);
+    auditEntries.push(...result.auditEntries);
   });
 
-  return {
-    levers: curLevers,
-    subLevers: curSubLevers,
-    changedLevers,
-    changedSubLevers,
-    auditEntries,
-  };
+  return { levers: curLevers, changedLevers, auditEntries };
 }
 
 export function addComment(

@@ -1,6 +1,6 @@
 import { collection, doc, getDocs, query, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { AuditEntry, Comment, Lever, SubLever } from "@/types";
+import type { AuditEntry, Comment, Lever } from "@/types";
 import { planCompanyScopedReset, type CompanyResetPlan } from "@/lib/companyResetLogic";
 
 /**
@@ -12,6 +12,8 @@ import { planCompanyScopedReset, type CompanyResetPlan } from "@/lib/companyRese
  */
 
 const leversCol = () => collection(db, "levers");
+/** Ancienne collection sous-leviers, plus alimentée — nettoyée par précaution si des documents
+ * orphelins d'un ancien schéma subsistent pour cette entreprise. */
 const subLeversCol = () => collection(db, "subLevers");
 const hierarchyNodesCol = () => collection(db, "hierarchyNodes");
 const commentsDoc = () => doc(db, "leverMeta", "comments");
@@ -34,50 +36,35 @@ async function readLeverMetaShared(): Promise<{
  * rien écrire — utilisé par l'UI pour afficher précisément ce qui sera supprimé dans la modale de
  * confirmation avant que l'utilisateur ne confirme. */
 export async function planCompanyReset(companyId: string): Promise<CompanyResetPlan> {
-  const [leverSnap, subLeverSnap, { comments, audit }] = await Promise.all([
+  const [leverSnap, { comments, audit }] = await Promise.all([
     getDocs(leversCol()),
-    getDocs(subLeversCol()),
     readLeverMetaShared(),
   ]);
   const levers = leverSnap.docs.map((d) => d.data() as Lever);
-  const subLevers = subLeverSnap.docs.map((d) => d.data() as SubLever);
 
-  return planCompanyScopedReset(levers, subLevers, comments, audit, companyId);
+  return planCompanyScopedReset(levers, comments, audit, companyId);
 }
 
-/** Exécute le reset scopé entreprise : supprime UNIQUEMENT les levers/subLevers/hierarchyNodes
- * tagués `companyId`, et ne retire des documents partagés `comments`/`auditLog` que les entrées
- * liées aux ids de levers/subLevers de cette entreprise (voir planCompanyScopedReset — les
- * entrées non attribuables, ex. mouvements RH, sont conservées telles quelles). N'écrit jamais sur
- * les documents d'une autre entreprise. */
+/** Exécute le reset scopé entreprise : supprime UNIQUEMENT les levers/hierarchyNodes tagués
+ * `companyId` (et les sous-leviers résiduels d'un ancien schéma qui porteraient ce companyId), et
+ * ne retire des documents partagés `comments`/`auditLog` que les entrées liées aux ids de levers
+ * de cette entreprise (voir planCompanyScopedReset — les entrées non attribuables, ex. mouvements
+ * RH, sont conservées telles quelles). N'écrit jamais sur les documents d'une autre entreprise. */
 export async function resetCompanyData(companyId: string): Promise<CompanyResetPlan> {
-  const [leverSnap, subLeverSnap, hierarchyNodesSnap] = await Promise.all([
+  const [leverSnap, legacySubLeverSnap, hierarchyNodesSnap] = await Promise.all([
     getDocs(query(leversCol(), where("companyId", "==", companyId))),
     getDocs(query(subLeversCol(), where("companyId", "==", companyId))),
     getDocs(query(hierarchyNodesCol(), where("companyId", "==", companyId))),
   ]);
 
-  // Les subLevers rattachés par leverId à un lever de l'entreprise mais sans companyId propre
-  // (données historiques) doivent aussi être capturés — on relit tous les subLevers pour les
-  // recouper avec les ids de levers qu'on vient de trouver (même heuristique que
-  // filterAuditByCompany / planCompanyScopedReset).
-  const allSubLeversSnap = await getDocs(subLeversCol());
-  const leverIds = new Set(leverSnap.docs.map((d) => d.id));
-  const scopedSubLeverDocs = allSubLeversSnap.docs.filter((d) => {
-    if (subLeverSnap.docs.some((s) => s.id === d.id)) return true;
-    const data = d.data() as SubLever;
-    return leverIds.has(data.leverId);
-  });
-
   const { comments, audit } = await readLeverMetaShared();
 
   const levers = leverSnap.docs.map((d) => d.data() as Lever);
-  const subLevers = scopedSubLeverDocs.map((d) => d.data() as SubLever);
-  const plan = planCompanyScopedReset(levers, subLevers, comments, audit, companyId);
+  const plan = planCompanyScopedReset(levers, comments, audit, companyId);
 
   const batch = writeBatch(db);
   leverSnap.docs.forEach((d) => batch.delete(d.ref));
-  scopedSubLeverDocs.forEach((d) => batch.delete(d.ref));
+  legacySubLeverSnap.docs.forEach((d) => batch.delete(d.ref));
   hierarchyNodesSnap.docs.forEach((d) => batch.delete(d.ref));
   batch.set(commentsDoc(), plan.remainingComments);
   batch.set(auditDoc(), { entries: plan.remainingAudit });

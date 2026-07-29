@@ -19,7 +19,7 @@ import type {
   HierarchyDomain,
   HierarchyNode,
   LifecycleStage,
-  Project,
+  Program,
 } from "@/types";
 import { hierarchyDomain } from "@/lib/hierarchyLogic";
 import { TEST_USERS } from "@/lib/auth";
@@ -55,26 +55,26 @@ export async function deleteCompany(id: string): Promise<void> {
   await deleteDoc(doc(companiesCol(), id));
 }
 
-// --- Projects ---
+// --- Programs ---
 
-const projectsCol = () => collection(db, "projects");
+const programsCol = () => collection(db, "programs");
 
-export function subscribeProjects(cb: (projects: Project[]) => void): Unsubscribe {
+export function subscribePrograms(cb: (programs: Program[]) => void): Unsubscribe {
   return onSnapshot(
-    projectsCol(),
+    programsCol(),
     (snap) => {
-      cb(snap.docs.map((d) => d.data() as Project));
+      cb(snap.docs.map((d) => d.data() as Program));
     },
-    onListenerError("projects")
+    onListenerError("programs")
   );
 }
 
-export async function saveProject(project: Project): Promise<void> {
-  await setDoc(doc(projectsCol(), project.id), project);
+export async function saveProgram(program: Program): Promise<void> {
+  await setDoc(doc(programsCol(), program.id), program);
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  await deleteDoc(doc(projectsCol(), id));
+export async function deleteProgram(id: string): Promise<void> {
+  await deleteDoc(doc(programsCol(), id));
 }
 
 // --- Lifecycle Configs ---
@@ -217,7 +217,7 @@ export const TEST_COMPANY_3: Company = {
   fyEnd: "2026-12-31",
 };
 
-export const TEST_PROJECT: Project = {
+export const TEST_PROGRAM: Program = {
   id: "p1",
   companyId: "c1",
   name: "Transformation Acme 2026",
@@ -231,7 +231,7 @@ export const TEST_PROJECT: Project = {
   createdAt: "2026-01-15",
 };
 
-export const TEST_PROJECT_2: Project = {
+export const TEST_PROGRAM_2: Program = {
   id: "p2",
   companyId: "c2",
   name: "Digital Shift GlobalTech",
@@ -245,7 +245,7 @@ export const TEST_PROJECT_2: Project = {
   createdAt: "2026-01-15",
 };
 
-export const TEST_PROJECT_3: Project = {
+export const TEST_PROGRAM_3: Program = {
   id: "p3",
   companyId: "c3",
   name: "Fusion EuroFinance 2026",
@@ -273,12 +273,12 @@ export async function ensureAdminSeeded(): Promise<void> {
     await setDoc(doc(companiesCol(), TEST_COMPANY_3.id), TEST_COMPANY_3);
   }
 
-  // Seed test projects if missing
-  const projectsSnap = await getDocs(projectsCol());
-  if (projectsSnap.empty) {
-    await setDoc(doc(projectsCol(), TEST_PROJECT.id), TEST_PROJECT);
-    await setDoc(doc(projectsCol(), TEST_PROJECT_2.id), TEST_PROJECT_2);
-    await setDoc(doc(projectsCol(), TEST_PROJECT_3.id), TEST_PROJECT_3);
+  // Seed test programs if missing
+  const programsSnap = await getDocs(programsCol());
+  if (programsSnap.empty) {
+    await setDoc(doc(programsCol(), TEST_PROGRAM.id), TEST_PROGRAM);
+    await setDoc(doc(programsCol(), TEST_PROGRAM_2.id), TEST_PROGRAM_2);
+    await setDoc(doc(programsCol(), TEST_PROGRAM_3.id), TEST_PROGRAM_3);
   }
 
   // Seed test users if missing

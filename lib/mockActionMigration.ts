@@ -3,10 +3,38 @@ import type {
   ActionStatus,
   Lever,
   LeverAction,
+  LeverDependency,
   LeverStatus,
-  SubLever,
 } from "@/types";
 import { hasActionImpacts } from "@/lib/leverConsolidate";
+
+/** Forme d'un ancien sous-levier (référentiel legacy pré-migration), utilisée uniquement pour
+ * convertir le seed `data/mockData.ts` historique vers le modèle actuel Levier → Action enrichie.
+ * Ce type n'existe plus dans le modèle de données live (voir types/index.ts, "SubLever" retiré) —
+ * confiné à ce script de migration ponctuelle du jeu de données de démo. */
+export type LegacySubLever = {
+  id: string;
+  leverId: string;
+  name: string;
+  owner?: string;
+  ownerInit?: string;
+  expensePost: string;
+  businessUnit: string;
+  pnlMap: string;
+  grossSavings: number;
+  netSavings: number;
+  opexOneOff: number;
+  opexRec: number;
+  capex: number;
+  fteImpact: number;
+  popImpacted: number;
+  start: string;
+  end: string;
+  status: LeverStatus;
+  deliveredDate?: string;
+  dependencies: LeverDependency[];
+  actions: LeverAction[];
+};
 
 function actionStatus(status: LeverStatus, progress = 0): ActionStatus {
   if (status === "delivered") return "done";
@@ -93,7 +121,7 @@ function financialImpacts(
   return impacts;
 }
 
-function migrateSubLever(sub: SubLever, parent: Lever): LeverAction[] {
+function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
   // Un sous-levier sans détail historique devient une action unique.
   if (sub.actions.length === 0) {
     const status = actionStatus(sub.status, parent.progress);
@@ -408,9 +436,10 @@ function alignActionsToLeverFinancials(actions: LeverAction[], lever: Lever): Le
 }
 
 /** Migration déterministe du seed legacy (Levier → Sous-levier → Action) vers 2 mailles
- * Levier → Action enrichie. Les anciennes APIs SubLever restent disponibles pour compatibilité,
- * mais le seed retourné ne contient plus aucun sous-levier. */
-export function migrateMockLeversToActions(levers: Lever[], subLevers: SubLever[]): Lever[] {
+ * Levier → Action enrichie. Le type sous-levier n'existe plus dans le modèle live (voir
+ * LegacySubLever plus haut) : cette fonction n'est appelée qu'au bootstrap du seed de démo, et le
+ * résultat retourné ne contient plus aucun sous-levier. */
+export function migrateMockLeversToActions(levers: Lever[], subLevers: LegacySubLever[]): Lever[] {
   const subLeverParentById = new Map(subLevers.map((sub) => [sub.id, sub.leverId]));
 
   return levers.map((lever) => {

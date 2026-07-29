@@ -24,7 +24,7 @@ import type {
   Lever,
   LeverStatus,
   PnlAccount,
-  Project,
+  Program,
   Workstream,
 } from "@/types";
 import { realizedSavings, type Marimekko2DColumn, type Marimekko2DSegment } from "@/lib/engine";
@@ -119,7 +119,7 @@ export function getMetricDef(key: string): MetricDef | undefined {
 export interface PivotContext {
   workstreams?: Workstream[];
   pnlAccounts?: PnlAccount[];
-  projects?: Project[];
+  programs?: Program[];
   hierarchyNodes?: HierarchyNode[];
   hierarchyLevels?: HierarchyLevelDef[];
   statusLabel?: (status: LeverStatus) => string;
@@ -152,7 +152,6 @@ export const DIMENSION_REGISTRY: DimensionDef[] = [
   { key: "country", label: "Pays", getValue: (l) => l.country || FALLBACK_LABEL },
   { key: "entity", label: "Entité", getValue: (l) => l.entity || FALLBACK_LABEL },
   { key: "function", label: "Fonction", getValue: (l) => l.function || FALLBACK_LABEL },
-  { key: "priority", label: "Priorité", getValue: (l) => l.priority || FALLBACK_LABEL },
   { key: "risk", label: "Risque", getValue: (l) => l.risk || FALLBACK_LABEL },
   {
     key: "status",
@@ -161,9 +160,9 @@ export const DIMENSION_REGISTRY: DimensionDef[] = [
       ctx.statusLabel ? ctx.statusLabel(l.status) : STATUS_SHORT_LABEL[l.status],
   },
   {
-    key: "project",
-    label: "Projet",
-    getValue: (l, ctx) => ctx.projects?.find((p) => p.id === l.projectId)?.name ?? "Non assigné",
+    key: "program",
+    label: "Programme",
+    getValue: (l, ctx) => ctx.programs?.find((p) => p.id === l.programId)?.name ?? "Non assigné",
   },
   {
     key: "pnlAccount",

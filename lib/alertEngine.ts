@@ -62,10 +62,7 @@ export function generateAlerts(data: BeTrackData): Alert[] {
   // ── 2. Conflits de dépendances ──────────────────────────────────────────────
   const depAlerts = dependencyAlerts(data);
   for (const da of depAlerts) {
-    const sourceSubLever = data.subLevers.find((l) => l.id === da.sourceId);
-    const sourceLever = data.levers.find(
-      (l) => l.id === da.sourceId || l.id === sourceSubLever?.leverId
-    );
+    const sourceLever = data.levers.find((l) => l.id === da.sourceId);
     auto.push({
       id: `AUTO-DEP-${da.sourceId}-${da.targetId}`,
       type: "amber",
@@ -76,7 +73,7 @@ export function generateAlerts(data: BeTrackData): Alert[] {
       actorRole: "lever",
       impactEur: sourceLever ? Math.round(-(sourceLever.netSavings * 1000000)) : undefined,
       owner: sourceLever?.owner,
-      companyId: sourceLever?.companyId ?? sourceSubLever?.companyId,
+      companyId: sourceLever?.companyId,
       source: "auto",
       resolved: false,
     });

@@ -1,17 +1,17 @@
 import type {
   ActionStatus,
+  Alert,
   BeTrackData,
   DependencyType,
   Lever,
   LeverAction,
   LeverDependency,
+  Program,
   ProgramSummary,
-  Project,
   RiskLevel,
-  SubLever,
   WorkstreamSummary,
 } from "@/types";
-import { addDays, daysBetween } from "@/lib/dateUtils";
+import { daysBetween } from "@/lib/dateUtils";
 import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type { LeverStatus } from "@/types";
 
@@ -227,37 +227,16 @@ export function pnlImpactDetailed(
       continue;
     }
 
-    const subs = data.subLevers?.filter((s) => s.leverId === lever.id) ?? [];
-    const hasSubLevers = subs.length > 0;
-
-    if (hasSubLevers) {
-      // Ventiler par sous-levier (chacun a sa propre date de fin et potentiellement son propre M5)
-      for (const sub of subs) {
-        if (sub.status === "cancelled") continue;
-        const planAmount = sub.lockedPlan?.netSavings ?? sub.netSavings;
-        const planDate = sub.end; // date de fin prévue du sous-levier
-        if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) {
-          addPlan(sub.pnlMap || lever.pnlMap, planAmount);
-        }
-        if (sub.status === "delivered") {
-          const realDate = sub.deliveredDate ?? sub.end; // fallback sur end si deliveredDate absent
-          if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
-            addRealized(sub.pnlMap || lever.pnlMap, sub.netSavings);
-          }
-        }
-      }
-    } else {
-      // Levier simple (pas de sous-leviers) : traité comme un bloc unique
-      const planAmount = lever.lockedPlan?.netSavings ?? lever.netSavings;
-      const planDate = lever.end;
-      if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) {
-        addPlan(lever.pnlMap, planAmount);
-      }
-      if (lever.status === "delivered") {
-        const realDate = lever.deliveredDate ?? lever.end;
-        if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
-          addRealized(lever.pnlMap, lever.netSavings);
-        }
+    // Levier sans impacts d'action détaillés : traité comme un bloc unique.
+    const planAmount = lever.lockedPlan?.netSavings ?? lever.netSavings;
+    const planDate = lever.end;
+    if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) {
+      addPlan(lever.pnlMap, planAmount);
+    }
+    if (lever.status === "delivered") {
+      const realDate = lever.deliveredDate ?? lever.end;
+      if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
+        addRealized(lever.pnlMap, lever.netSavings);
       }
     }
   }
@@ -312,19 +291,49 @@ export function byCountry(data: BeTrackData): Record<string, number> {
   return map;
 }
 
-/** Répartition des savings par projet (Lever.projectId) — pendant de `workstreamSummary` mais
- * pour la dimension "projet" plutôt que "workstream". Les leviers sans projet assigné sont
+/** Répartition des savings par programme (Lever.programId) — pendant de `workstreamSummary` mais
+ * pour la dimension "programme" plutôt que "workstream". Les leviers sans programme assigné sont
  * regroupés sous "Non assigné" plutôt qu'exclus, pour que le total reste cohérent avec les autres
  * vues. */
-export function byProject(data: BeTrackData, projects: Project[]): Record<string, number> {
+export function byProgram(data: BeTrackData, programs: Program[]): Record<string, number> {
   const map: Record<string, number> = {};
   data.levers
     .filter((l) => l.status !== "cancelled")
     .forEach((l) => {
-      const label = projects.find((p) => p.id === l.projectId)?.name ?? "Non assigné";
+      const label = programs.find((p) => p.id === l.programId)?.name ?? "Non assigné";
       map[label] = (map[label] || 0) + realizedSavings(l);
     });
   return map;
+}
+
+// ---------- Risque calculé depuis les alertes ----------
+
+/** Seuils par défaut (€, cumul des montants d'alertes ouvertes liées au levier, valeur absolue de
+ * Alert.impactEur) si l'entreprise n'a pas configuré Company.riskThresholds. Évalués du plus haut
+ * seuil au plus bas. */
+export const DEFAULT_RISK_THRESHOLDS: { level: RiskLevel; minAmount: number }[] = [
+  { level: "critical", minAmount: 500_000 },
+  { level: "high", minAmount: 200_000 },
+  { level: "medium", minAmount: 50_000 },
+  { level: "low", minAmount: 0 },
+];
+
+/** Risque d'un levier dérivé des alertes qui lui sont liées (Alert.scope === leverId, non
+ * résolues), segmenté par cumul de montant à risque (valeur absolue de Alert.impactEur) selon les
+ * seuils de l'entreprise (ou les seuils par défaut). Un levier sans alerte chiffrée est "low".
+ * Remplace la saisie manuelle de Lever.risk : c'est la nouvelle source de vérité, "vivante" — elle
+ * évolue avec les alertes plutôt que d'être figée à la main. */
+export function computeLeverRisk(
+  leverId: string,
+  alerts: Alert[],
+  thresholds: { level: RiskLevel; minAmount: number }[] = DEFAULT_RISK_THRESHOLDS
+): RiskLevel {
+  const total = alerts
+    .filter((a) => a.scope === leverId && !a.resolved && typeof a.impactEur === "number")
+    .reduce((s, a) => s + Math.abs(a.impactEur ?? 0), 0);
+  const sorted = [...thresholds].sort((a, b) => b.minAmount - a.minAmount);
+  const hit = sorted.find((t) => total >= t.minAmount);
+  return hit?.level ?? "low";
 }
 
 export function underperformers(data: BeTrackData, wsId?: string) {
@@ -385,29 +394,11 @@ export function actionProgress(actions: LeverAction[]): number {
   return Math.round(total / totalWeight);
 }
 
-export function subLeverProgress(subLever: SubLever): number {
-  return actionProgress(subLever.actions);
-}
-
 /**
- * Progression d'un levier : si des sous-leviers existent, moyenne de leur progression pondérée par
- * leur poids financier (|netSavings|) ; sinon, si le levier a son propre plan d'action, la
- * progression de ce plan ; sinon, la valeur manuelle existante (levier à impact unique, inchangé).
+ * Progression d'un levier : moyenne pondérée par statut de son plan d'action (Lever.actions) ;
+ * sans action, la valeur manuelle existante est conservée inchangée.
  */
-export function recomputeLeverProgress(lever: Lever, subLevers: SubLever[]): number {
-  const mySubLevers = subLevers.filter((s) => s.leverId === lever.id);
-  if (mySubLevers.length > 0) {
-    const totalWeight = mySubLevers.reduce((s, sl) => s + Math.abs(sl.netSavings), 0);
-    if (totalWeight === 0) {
-      return Math.round(
-        mySubLevers.reduce((s, sl) => s + subLeverProgress(sl), 0) / mySubLevers.length
-      );
-    }
-    return Math.round(
-      mySubLevers.reduce((s, sl) => s + subLeverProgress(sl) * Math.abs(sl.netSavings), 0) /
-        totalWeight
-    );
-  }
+export function recomputeLeverProgress(lever: Lever): number {
   if (lever.actions && lever.actions.length > 0) {
     return actionProgress(lever.actions);
   }
@@ -418,7 +409,7 @@ export function recomputeLeverProgress(lever: Lever, subLevers: SubLever[]): num
 
 type ScheduleEntity = {
   id: string;
-  kind: "lever" | "subLever";
+  kind: "lever";
   name: string;
   start: string;
   end: string;
@@ -426,7 +417,7 @@ type ScheduleEntity = {
 };
 
 function toScheduleEntities(data: BeTrackData): ScheduleEntity[] {
-  const leverEntities: ScheduleEntity[] = data.levers.map((l) => ({
+  return data.levers.map((l) => ({
     id: l.id,
     kind: "lever",
     name: l.name,
@@ -434,20 +425,11 @@ function toScheduleEntities(data: BeTrackData): ScheduleEntity[] {
     end: l.end,
     dependencies: l.dependencies,
   }));
-  const subEntities: ScheduleEntity[] = data.subLevers.map((s) => ({
-    id: s.id,
-    kind: "subLever",
-    name: s.name,
-    start: s.start,
-    end: s.end,
-    dependencies: s.dependencies,
-  }));
-  return [...leverEntities, ...subEntities];
 }
 
 export type CascadeShift = {
   id: string;
-  kind: "lever" | "subLever";
+  kind: "lever";
   name: string;
   oldStart: string;
   oldEnd: string;
@@ -456,7 +438,7 @@ export type CascadeShift = {
 };
 
 export type CascadeResult = {
-  /** Décalages proposés — sous-leviers uniquement (jamais appliqués sans confirmation). */
+  /** Décalages proposés sur les leviers dépendants (jamais appliqués sans confirmation). */
   shifts: CascadeShift[];
   /** Leviers dépendants touchés par le retard : alertés, mais leurs dates ne sont JAMAIS
    * modifiées automatiquement (décision inter-leviers = décision métier, hors outil). */
@@ -465,8 +447,8 @@ export type CascadeResult = {
 
 /**
  * Calcule (sans rien muter) l'impact d'un glissement de `oldEnd` à `newEnd` sur `entityId` :
- * décalage rigide proposé en cascade transitive sur les SOUS-LEVIERS dépendants (même delta de
- * jours, garde-fou anti-cycle), et simple liste d'alerte pour les LEVIERS dépendants.
+ * simple liste d'alerte pour les leviers dépendants (leurs dates ne bougent jamais
+ * automatiquement).
  */
 export function computeCascadeShift(
   entityId: string,
@@ -478,42 +460,14 @@ export function computeCascadeShift(
   if (deltaDays <= 0) return { shifts: [], impactedLevers: [] };
 
   const entities = toScheduleEntities(data);
-  const shifts: CascadeShift[] = [];
-  const impactedLevers: CascadeResult["impactedLevers"] = [];
-  const visited = new Set<string>([entityId]);
-  let frontier = [entityId];
+  const impactedLevers: CascadeResult["impactedLevers"] = entities
+    .filter((e) => e.id !== entityId && e.dependencies.some((d) => d.targetId === entityId))
+    .map((dep) => {
+      const link = dep.dependencies.find((d) => d.targetId === entityId);
+      return { id: dep.id, name: dep.name, dependencyType: link?.type ?? "FS" };
+    });
 
-  while (frontier.length > 0) {
-    const nextFrontier: string[] = [];
-    for (const currentId of frontier) {
-      const dependents = entities.filter(
-        (e) => e.dependencies.some((d) => d.targetId === currentId) && !visited.has(e.id)
-      );
-      for (const dep of dependents) {
-        visited.add(dep.id);
-        if (dep.kind === "lever") {
-          const link = dep.dependencies.find((d) => d.targetId === currentId);
-          impactedLevers.push({ id: dep.id, name: dep.name, dependencyType: link?.type ?? "FS" });
-          // On n'étend pas la cascade au-delà d'un levier : ses dates ne bougent pas, donc ses
-          // propres dépendants ne glissent pas non plus.
-          continue;
-        }
-        shifts.push({
-          id: dep.id,
-          kind: dep.kind,
-          name: dep.name,
-          oldStart: dep.start,
-          oldEnd: dep.end,
-          newStart: addDays(dep.start, deltaDays),
-          newEnd: addDays(dep.end, deltaDays),
-        });
-        nextFrontier.push(dep.id);
-      }
-    }
-    frontier = nextFrontier;
-  }
-
-  return { shifts, impactedLevers };
+  return { shifts: [], impactedLevers };
 }
 
 // ---------- Alertes de dépendances inter-leviers ----------
@@ -521,7 +475,7 @@ export function computeCascadeShift(
 export type DependencyAlert = {
   sourceId: string;
   sourceName: string;
-  sourceKind: "lever" | "subLever";
+  sourceKind: "lever";
   sourceDate: string;
   targetId: string;
   targetName: string;
@@ -552,14 +506,6 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
   const entityUnrealizedSavings = (id: string): number => {
     const lever = data.levers.find((l) => l.id === id);
     if (lever) return Math.max(0, lever.netSavings - realizedSavings(lever));
-    const sub = data.subLevers?.find((s) => s.id === id);
-    if (sub) {
-      // Le sous-levier n'a pas de `progress` propre — on utilise celui du levier parent.
-      const parentLever = data.levers.find((l) => l.id === sub.leverId);
-      const progress = parentLever?.progress ?? 0;
-      const subRealized = sub.netSavings * (progress / 100);
-      return Math.max(0, sub.netSavings - subRealized);
-    }
     return 0;
   };
 
@@ -936,7 +882,7 @@ export type Marimekko2DColumn = {
 export function marimekko2D(
   data: BeTrackData,
   pairKey: MarimekkoPairKey,
-  projects: Project[] = []
+  programs: Program[] = []
 ): Marimekko2DColumn[] {
   const active = data.levers.filter((l) => l.status !== "cancelled");
   const totalWeight = active.reduce((s, l) => s + Math.abs(l.netSavings), 0) || 1;
@@ -949,7 +895,7 @@ export function marimekko2D(
     if (pairKey === "function-country") return l.country || "—";
     if (pairKey === "workstream-lever") return l.name;
     // fallback legacy workstream-project
-    return projects.find((p) => p.id === l.projectId)?.name ?? "Non assigné";
+    return programs.find((p) => p.id === l.programId)?.name ?? "Non assigné";
   };
 
   const byPrimary = new Map<string, Lever[]>();

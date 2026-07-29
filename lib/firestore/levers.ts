@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -11,23 +10,27 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { onListenerError } from "@/lib/firestore/listenerError";
-import type { AuditEntry, Comment, Lever, LeverDependency, SubLever } from "@/types";
+import type { AuditEntry, Comment, Lever, LeverDependency } from "@/types";
 
 /**
- * Couche Firestore pour le périmètre "leviers" (levers, sous-leviers, commentaires, journal
- * d'audit) : c'est la donnée que plusieurs personnes doivent voir à jour en même temps. Les
- * autres périmètres ont leur propre couche : workforce.ts (base ETP), alerts.ts,
- * programConfig.ts (program + workstreams), admin.ts (companies/projects/users).
+ * Couche Firestore pour le périmètre "leviers" (levers, commentaires, journal d'audit) : c'est la
+ * donnée que plusieurs personnes doivent voir à jour en même temps. Les autres périmètres ont
+ * leur propre couche : workforce.ts (base ETP), alerts.ts, programConfig.ts (program +
+ * workstreams), admin.ts (companies/programs/users).
  *
- * Multi-tenancy : chaque lever/subLever porte un champ optionnel `companyId`. Les subscribers
- * filtrent par companyId pour n'exposer que les données de l'entreprise courante. Un admin
- * (companyId null) voit tout.
+ * Multi-tenancy : chaque lever porte un champ optionnel `companyId`. Les subscribers filtrent par
+ * companyId pour n'exposer que les données de l'entreprise courante. Un admin (companyId null)
+ * voit tout.
  */
 
 // Incrémenter force un reseed complet de la BDD (schéma de données modifié).
-const SCHEMA_VERSION = "6";
+// v7 : suppression du modèle sous-levier (fusionné dans Lever.actions via
+// lib/mockActionMigration.ts) — changement de forme assumé consciemment, reseed complet.
+const SCHEMA_VERSION = "7";
 
 const leversCol = () => collection(db, "levers");
+/** Ancienne collection sous-leviers, plus alimentée — supprimée à chaque reseed pour ne laisser
+ * traîner aucune donnée orpheline d'un ancien schéma. */
 const subLeversCol = () => collection(db, "subLevers");
 const metaDoc = () => doc(db, "meta", "levers");
 const commentsDoc = () => doc(db, "leverMeta", "comments");
@@ -81,24 +84,6 @@ export function subscribeLevers(
   );
 }
 
-/** Subscribe to subLevers, optionally filtered by companyId. */
-export function subscribeSubLevers(
-  cb: (subLevers: SubLever[]) => void,
-  companyId?: string | null
-): Unsubscribe {
-  return onSnapshot(
-    subLeversCol(),
-    (snap) => {
-      const all = snap.docs.map((d) => {
-        const subLever = d.data() as SubLever;
-        return { ...subLever, dependencies: normalizeDependencies(subLever.dependencies) };
-      });
-      cb(byCompany(all, companyId));
-    },
-    onListenerError("subLevers")
-  );
-}
-
 export function subscribeComments(cb: (comments: Record<string, Comment[]>) => void): Unsubscribe {
   return onSnapshot(
     commentsDoc(),
@@ -119,10 +104,10 @@ export function subscribeAuditLog(cb: (audit: AuditEntry[]) => void): Unsubscrib
   );
 }
 
-/** Filtre le journal d'audit pour un admin d'entreprise : ne garde que les entrées dont
- * l'entité (un id de levier, ou l'id de levier parent pour un sous-levier/commentaire) appartient
- * à `companyId`. Les entrées sans lien avec un levier connu (ex. mouvements RH, employés — pas
- * encore multi-tenant) restent visibles telles quelles. `companyId` null = aucun filtrage (super-admin). */
+/** Filtre le journal d'audit pour un admin d'entreprise : ne garde que les entrées dont l'entité
+ * (un id de levier, ou l'id de levier parent pour un commentaire) appartient à `companyId`. Les
+ * entrées sans lien avec un levier connu (ex. mouvements RH, employés — pas encore multi-tenant)
+ * restent visibles telles quelles. `companyId` null = aucun filtrage (super-admin). */
 export function filterAuditByCompany(
   audit: AuditEntry[],
   levers: Lever[],
@@ -134,7 +119,7 @@ export function filterAuditByCompany(
   );
   return audit.filter((entry) => {
     const entity = entry.entity;
-    const isLeverEntity = /^L\d+$/i.test(entity) || /^SL\d+$/i.test(entity);
+    const isLeverEntity = /^L\d+$/i.test(entity);
     if (!isLeverEntity) return true;
     return leverIds.has(entity);
   });
@@ -142,14 +127,6 @@ export function filterAuditByCompany(
 
 export async function saveLever(lever: Lever): Promise<void> {
   await setDoc(doc(leversCol(), lever.id), lever);
-}
-
-export async function saveSubLever(subLever: SubLever): Promise<void> {
-  await setDoc(doc(subLeversCol(), subLever.id), subLever);
-}
-
-export async function deleteSubLeverDoc(id: string): Promise<void> {
-  await deleteDoc(doc(subLeversCol(), id));
 }
 
 export async function saveComments(comments: Record<string, Comment[]>): Promise<void> {
@@ -162,13 +139,13 @@ export async function saveAuditLog(entries: AuditEntry[]): Promise<void> {
 
 type LeversSeed = {
   levers: Lever[];
-  subLevers: SubLever[];
   comments: Record<string, Comment[]>;
   audit: AuditEntry[];
 };
 
-/** Purge les leviers/sous-leviers existants et réécrit le seed fourni — utilisé au premier
- * démarrage (schéma jamais initialisé) et par le bouton "réinitialiser la démo". */
+/** Purge les leviers (et les sous-leviers résiduels d'un ancien schéma) existants et réécrit le
+ * seed fourni — utilisé au premier démarrage (schéma jamais initialisé) et par le bouton
+ * "réinitialiser la démo". */
 export async function forceReseedLevers(seed: LeversSeed): Promise<void> {
   const [existingLevers, existingSubLevers] = await Promise.all([
     getDocs(leversCol()),
@@ -178,8 +155,11 @@ export async function forceReseedLevers(seed: LeversSeed): Promise<void> {
   const batch = writeBatch(db);
   existingLevers.forEach((d) => batch.delete(d.ref));
   existingSubLevers.forEach((d) => batch.delete(d.ref));
-  seed.levers.forEach((l) => batch.set(doc(leversCol(), l.id), l));
-  seed.subLevers.forEach((s) => batch.set(doc(subLeversCol(), s.id), s));
+  // Le SDK Firestore rejette toute valeur `undefined` (contrairement à `null`) — le seed mock
+  // construit certains champs optionnels (deliveredDate, costCenter, entity…) via `a ?? b` où `b`
+  // peut lui-même valoir `undefined`, ce qui laisse la clé présente avec une valeur `undefined`.
+  // round-trip JSON pour purger ces clés avant écriture, plutôt que de traquer chaque site d'origine.
+  seed.levers.forEach((l) => batch.set(doc(leversCol(), l.id), JSON.parse(JSON.stringify(l))));
   batch.set(commentsDoc(), seed.comments);
   batch.set(auditDoc(), { entries: seed.audit });
   batch.set(metaDoc(), { schemaVersion: SCHEMA_VERSION });
@@ -196,24 +176,14 @@ export async function ensureLeversSeeded(seed: LeversSeed): Promise<void> {
 
 const MIGRATION_COMPANY_ID_KEY = "betrack_company_migration_v1";
 
-/** One-time migration: attach existing levers/subLevers to a company when they have no companyId. */
+/** One-time migration: attach existing levers to a company when they have no companyId. */
 export async function migrateCompanyIds(targetCompanyId: string): Promise<void> {
   if (typeof window !== "undefined" && localStorage.getItem(MIGRATION_COMPANY_ID_KEY)) return;
-  const [leverSnap, subLeverSnap] = await Promise.all([
-    getDocs(leversCol()),
-    getDocs(subLeversCol()),
-  ]);
+  const leverSnap = await getDocs(leversCol());
   const batch = writeBatch(db);
   let count = 0;
   leverSnap.docs.forEach((d) => {
     const data = d.data() as Lever;
-    if (!data.companyId) {
-      batch.update(d.ref, { companyId: targetCompanyId });
-      count++;
-    }
-  });
-  subLeverSnap.docs.forEach((d) => {
-    const data = d.data() as SubLever;
     if (!data.companyId) {
       batch.update(d.ref, { companyId: targetCompanyId });
       count++;

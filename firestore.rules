@@ -25,6 +25,9 @@ service cloud.firestore {
     match /projects/{docId} {
       allow read, write: if true;
     }
+    match /programs/{docId} {
+      allow read, write: if true;
+    }
     match /lifecycleConfigs/{docId} {
       allow read, write: if true;
     }

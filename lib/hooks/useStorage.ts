@@ -15,7 +15,7 @@ import {
 import { derivePnlAccounts } from "@/lib/hierarchyLogic";
 import { migrateMockLeversToActions } from "@/lib/mockActionMigration";
 import type { CascadeShift } from "@/lib/engine";
-import { mockData } from "@/data/mockData";
+import { mockData, legacySubLevers } from "@/data/mockData";
 import type {
   AuditEntry,
   Alert,
@@ -29,7 +29,6 @@ import type {
   LeverAction,
   HierarchyNode,
   ManualAlertInput,
-  SubLever,
   WorkforceMovement,
 } from "@/types";
 
@@ -39,12 +38,11 @@ const DEMO_USER = "Utilisateur démo";
  * seed mockData : sans ça, les leviers de démo déjà en L3+/L4+ n'auraient pas de plan figé tant
  * qu'on ne les modifie pas manuellement. */
 function lockedSeed() {
-  const migratedLevers = migrateMockLeversToActions(mockData.levers, mockData.subLevers);
+  const migratedLevers = migrateMockLeversToActions(mockData.levers, legacySubLevers);
   return {
     levers: migratedLevers.map((l) =>
       leversLogic.applyPlanLock({ ...l, companyId: l.companyId ?? "c1" })
     ),
-    subLevers: [],
     comments: mockData.comments,
     audit: mockData.audit,
   };
@@ -86,7 +84,6 @@ export function useBeTrackData(companyId?: string | null) {
   // est indisponible ou si le compte courant n'a pas les droits de reseed.
   const [levers, setLevers] = useState<Lever[]>(() => lockedSeed().levers);
   const [programConfig, setProgramConfig] = useState<programDb.ProgramSeed>(() => programSeed());
-  const [subLevers, setSubLevers] = useState<SubLever[]>([]);
   const [comments, setComments] = useState<Record<string, Comment[]>>(() => mockData.comments);
   const [audit, setAudit] = useState<AuditEntry[]>(() => mockData.audit);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -99,11 +96,9 @@ export function useBeTrackData(companyId?: string | null) {
 
   // Refs toujours à jour pour que les callbacks de mutation lisent l'état le plus récent sans
   // dépendre du cycle de rendu React (évite les fermetures obsolètes entre deux mutations
-  // rapprochées, ex. créer un sous-levier juste après en avoir supprimé un autre).
+  // rapprochées, ex. créer une action juste après en avoir supprimé une autre).
   const leversRef = useRef(levers);
   leversRef.current = levers;
-  const subLeversRef = useRef(subLevers);
-  subLeversRef.current = subLevers;
   const commentsRef = useRef(comments);
   commentsRef.current = comments;
   const auditRef = useRef(audit);
@@ -143,7 +138,6 @@ export function useBeTrackData(companyId?: string | null) {
 
       unsubscribers.push(
         leversDb.subscribeLevers((l) => !cancelled && setLevers(l), companyId),
-        leversDb.subscribeSubLevers((s) => !cancelled && setSubLevers(s), companyId),
         leversDb.subscribeComments((c) => !cancelled && setComments(c)),
         leversDb.subscribeAuditLog((a) => !cancelled && setAudit(a)),
         workforceDb.subscribeEmployees((e) => !cancelled && setEmployees(e)),
@@ -187,12 +181,14 @@ export function useBeTrackData(companyId?: string | null) {
   const data = useMemo(
     () => {
       const company = companies.find((item) => item.id === companyId);
-      const migratedLevers = migrateMockLeversToActions(levers, subLevers);
+      // Garde défensive idempotente (voir hasActionImpacts) : les leviers viennent déjà enrichis
+      // de Firestore depuis le seed, ce passage ne fait plus rien en pratique — plus de
+      // sous-leviers vivants à fusionner (voir lockedSeed()).
+      const migratedLevers = migrateMockLeversToActions(levers, []);
       return {
         program: programConfig.program,
         workstreams: programConfig.workstreams,
         levers: migratedLevers,
-        subLevers: [] as SubLever[],
         // Reconstruit au format Workforce historique pour ne pas casser les consommateurs
         // existants — mais la donnée vit désormais dans Firestore (temps réel partagé).
         workforce: {
@@ -213,7 +209,6 @@ export function useBeTrackData(companyId?: string | null) {
         // Référentiels statiques (jamais mutés, pas besoin de passer par une BDD)
         leverStatuses: mockData.leverStatuses,
         riskLevels: mockData.riskLevels,
-        priorityLevels: mockData.priorityLevels,
         leverTypes: mockData.leverTypes,
         geographies: mockData.geographies,
         functions: mockData.functions,
@@ -236,7 +231,6 @@ export function useBeTrackData(companyId?: string | null) {
     [
       programConfig,
       levers,
-      subLevers,
       comments,
       audit,
       employees,
@@ -286,105 +280,16 @@ export function useBeTrackData(companyId?: string | null) {
     [persistAudit]
   );
 
-  const createSubLever = useCallback(
-    (input: Omit<SubLever, "id">) => {
-      const result = leversLogic.createSubLever(
-        leversRef.current,
-        subLeversRef.current,
-        input,
-        DEMO_USER
-      );
-      leversRef.current = result.levers;
-      subLeversRef.current = result.subLevers;
-      setLevers(result.levers);
-      setSubLevers(result.subLevers);
-      persistAudit(result.auditEntries);
-      leversDb
-        .saveSubLever(result.subLever)
-        .catch((err) => console.error("[betrack] sous-levier :", err));
-      if (result.changedLever) {
-        leversDb
-          .saveLever(result.changedLever)
-          .catch((err) => console.error("[betrack] lever :", err));
-      }
-      return result.subLever;
-    },
-    [persistAudit]
-  );
-
-  const updateSubLever = useCallback(
-    (id: string, patch: Partial<SubLever>) => {
-      const result = leversLogic.updateSubLever(
-        leversRef.current,
-        subLeversRef.current,
-        id,
-        patch,
-        DEMO_USER
-      );
-      leversRef.current = result.levers;
-      subLeversRef.current = result.subLevers;
-      setLevers(result.levers);
-      setSubLevers(result.subLevers);
-      persistAudit(result.auditEntries);
-      leversDb
-        .saveSubLever(result.subLever)
-        .catch((err) => console.error("[betrack] sous-levier :", err));
-      if (result.changedLever) {
-        leversDb
-          .saveLever(result.changedLever)
-          .catch((err) => console.error("[betrack] lever :", err));
-      }
-      return result.subLever;
-    },
-    [persistAudit]
-  );
-
-  const deleteSubLever = useCallback(
-    (id: string) => {
-      const result = leversLogic.deleteSubLever(
-        leversRef.current,
-        subLeversRef.current,
-        id,
-        DEMO_USER
-      );
-      leversRef.current = result.levers;
-      subLeversRef.current = result.subLevers;
-      setLevers(result.levers);
-      setSubLevers(result.subLevers);
-      persistAudit(result.auditEntries);
-      leversDb.deleteSubLeverDoc(id).catch((err) => console.error("[betrack] sous-levier :", err));
-      if (result.changedLever) {
-        leversDb
-          .saveLever(result.changedLever)
-          .catch((err) => console.error("[betrack] lever :", err));
-      }
-    },
-    [persistAudit]
-  );
-
   const createAction = useCallback(
-    (scope: { leverId: string; subLeverId?: string }, input: Omit<LeverAction, "id">) => {
-      const result = leversLogic.createAction(
-        leversRef.current,
-        subLeversRef.current,
-        scope,
-        input,
-        DEMO_USER
-      );
+    (scope: { leverId: string }, input: Omit<LeverAction, "id">) => {
+      const result = leversLogic.createAction(leversRef.current, scope, input, DEMO_USER);
       leversRef.current = result.levers;
-      subLeversRef.current = result.subLevers;
       setLevers(result.levers);
-      setSubLevers(result.subLevers);
       persistAudit(result.auditEntries);
       if (result.changedLever) {
         leversDb
           .saveLever(result.changedLever)
           .catch((err) => console.error("[betrack] lever :", err));
-      }
-      if (result.changedSubLever) {
-        leversDb
-          .saveSubLever(result.changedSubLever)
-          .catch((err) => console.error("[betrack] sous-levier :", err));
       }
       return result.action;
     },
@@ -392,83 +297,40 @@ export function useBeTrackData(companyId?: string | null) {
   );
 
   const updateAction = useCallback(
-    (
-      scope: { leverId: string; subLeverId?: string },
-      actionId: string,
-      patch: Partial<LeverAction>
-    ) => {
-      const result = leversLogic.updateAction(
-        leversRef.current,
-        subLeversRef.current,
-        scope,
-        actionId,
-        patch,
-        DEMO_USER
-      );
+    (scope: { leverId: string }, actionId: string, patch: Partial<LeverAction>) => {
+      const result = leversLogic.updateAction(leversRef.current, scope, actionId, patch, DEMO_USER);
       leversRef.current = result.levers;
-      subLeversRef.current = result.subLevers;
       setLevers(result.levers);
-      setSubLevers(result.subLevers);
       persistAudit(result.auditEntries);
       if (result.changedLever) {
         leversDb
           .saveLever(result.changedLever)
           .catch((err) => console.error("[betrack] lever :", err));
-      }
-      if (result.changedSubLever) {
-        leversDb
-          .saveSubLever(result.changedSubLever)
-          .catch((err) => console.error("[betrack] sous-levier :", err));
       }
       return result.action;
     },
     [persistAudit]
   );
 
-  const deleteAction = useCallback(
-    (scope: { leverId: string; subLeverId?: string }, actionId: string) => {
-      const result = leversLogic.deleteAction(
-        leversRef.current,
-        subLeversRef.current,
-        scope,
-        actionId
-      );
-      leversRef.current = result.levers;
-      subLeversRef.current = result.subLevers;
-      setLevers(result.levers);
-      setSubLevers(result.subLevers);
-      if (result.changedLever) {
-        leversDb
-          .saveLever(result.changedLever)
-          .catch((err) => console.error("[betrack] lever :", err));
-      }
-      if (result.changedSubLever) {
-        leversDb
-          .saveSubLever(result.changedSubLever)
-          .catch((err) => console.error("[betrack] sous-levier :", err));
-      }
-    },
-    []
-  );
+  const deleteAction = useCallback((scope: { leverId: string }, actionId: string) => {
+    const result = leversLogic.deleteAction(leversRef.current, scope, actionId);
+    leversRef.current = result.levers;
+    setLevers(result.levers);
+    if (result.changedLever) {
+      leversDb
+        .saveLever(result.changedLever)
+        .catch((err) => console.error("[betrack] lever :", err));
+    }
+  }, []);
 
   const applyCascadeShift = useCallback(
     (shifts: CascadeShift[]) => {
-      const result = leversLogic.applyCascadeShift(
-        leversRef.current,
-        subLeversRef.current,
-        shifts,
-        DEMO_USER
-      );
+      const result = leversLogic.applyCascadeShift(leversRef.current, shifts, DEMO_USER);
       leversRef.current = result.levers;
-      subLeversRef.current = result.subLevers;
       setLevers(result.levers);
-      setSubLevers(result.subLevers);
       persistAudit(result.auditEntries);
       result.changedLevers.forEach((l) =>
         leversDb.saveLever(l).catch((err) => console.error("[betrack] lever :", err))
-      );
-      result.changedSubLevers.forEach((s) =>
-        leversDb.saveSubLever(s).catch((err) => console.error("[betrack] sous-levier :", err))
       );
     },
     [persistAudit]
@@ -614,30 +476,28 @@ export function useBeTrackData(companyId?: string | null) {
     return departments.find((d) => d.name === name)!;
   }, []);
 
-  const resetToMockData = useCallback(() => {
-    leversDb
-      .forceReseedLevers(lockedSeed())
-      .catch((err) => console.error("[betrack] échec du reset Firestore des leviers :", err));
-    workforceDb
-      .forceReseedWorkforce(workforceSeed())
-      .catch((err) => console.error("[betrack] échec du reset Firestore workforce :", err));
+  const resetToMockData = useCallback(async () => {
     setProgramConfig(programSeed());
-    programDb
-      .forceReseedProgram(programSeed(), companyId)
-      .catch((err) => console.error("[betrack] échec du reset Firestore programme :", err));
+    await Promise.all([
+      leversDb
+        .forceReseedLevers(lockedSeed())
+        .catch((err) => console.error("[betrack] échec du reset Firestore des leviers :", err)),
+      workforceDb
+        .forceReseedWorkforce(workforceSeed())
+        .catch((err) => console.error("[betrack] échec du reset Firestore workforce :", err)),
+      programDb
+        .forceReseedProgram(programSeed(), companyId)
+        .catch((err) => console.error("[betrack] échec du reset Firestore programme :", err)),
+    ]);
   }, [companyId]);
 
   return {
     ...data,
     getComments: (leverId: string) => comments[leverId] ?? [],
     getLeverById: (id: string) => data.levers.find((l) => l.id === id),
-    getSubLeversForLever: (leverId: string) => data.subLevers.filter((s) => s.leverId === leverId),
     updateLever,
     createLever,
     upsertLeverByCode,
-    createSubLever,
-    updateSubLever,
-    deleteSubLever,
     createAction,
     updateAction,
     deleteAction,

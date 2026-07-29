@@ -8,17 +8,11 @@ function normalize(value: string | undefined): string {
 function alertCompanyId(alert: Alert, data: BeTrackData): string | null | undefined {
   if (alert.companyId !== undefined) return alert.companyId;
   const lever = data.levers.find((item) => item.id === alert.scope);
-  if (lever) return lever.companyId;
-  const subLever = data.subLevers.find((item) => item.id === alert.scope);
-  return subLever?.companyId;
+  return lever?.companyId;
 }
 
 export function resolveAlertLever(alert: Alert, data: BeTrackData): Lever | undefined {
-  const direct = data.levers.find((lever) => lever.id === alert.scope);
-  if (direct) return direct;
-  const subLever = data.subLevers.find((item) => item.id === alert.scope);
-  if (subLever) return data.levers.find((lever) => lever.id === subLever.leverId);
-  return undefined;
+  return data.levers.find((lever) => lever.id === alert.scope);
 }
 
 export function canUserAccessLever(user: AuthUser, lever: Lever, company?: Company): boolean {
@@ -40,7 +34,6 @@ export function deriveAlertRecipients(
 ): string[] {
   const companyId = alertCompanyId(alert, data);
   const directLever = resolveAlertLever(alert, data);
-  const scopedSubLever = data.subLevers.find((item) => item.id === alert.scope);
   const workstreamLevers = data.workstreams.some((workstream) => workstream.id === alert.scope)
     ? data.levers.filter((lever) => lever.ws === alert.scope)
     : [];
@@ -51,7 +44,6 @@ export function deriveAlertRecipients(
       if (!companyId || user.companyId !== companyId) return false;
       const company = companies.find((item) => item.id === user.companyId);
       if (directLever) return canUserAccessLever(user, directLever, company);
-      if (scopedSubLever) return false;
       if (workstreamLevers.length > 0) {
         return workstreamLevers.some((lever) => canUserAccessLever(user, lever, company));
       }

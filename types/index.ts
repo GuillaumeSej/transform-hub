@@ -27,17 +27,27 @@ export type AuthUser = {
 export type LeverStatus =
   "idea" | "qualified" | "validated" | "in_progress" | "delivered" | "cancelled";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
-export type PriorityLevel = "low" | "medium" | "high" | "critical";
 export type AlertType = "red" | "amber" | "green" | "blue";
 export type ActionStatus = "todo" | "in_progress" | "done" | "delayed";
 
-/** Type de dépendance entre leviers/sous-leviers (sémantique planning classique). */
+/** Type de dépendance entre leviers (sémantique planning classique). */
 export type DependencyType = "FS" | "SS" | "FF" | "SF";
 
 export type LeverDependency = {
-  targetId: string; // lever id (L###) ou sous-levier id (SL###), résolu par préfixe
+  targetId: string; // lever id (L###)
   type: DependencyType;
 };
+
+/** Nature du gain, pour les lignes d'impact de type "saving" : baisse de coût, hausse de chiffre
+ *  d'affaires, ou impact BFR (besoin en fonds de roulement). Non pertinent pour les impacts de
+ *  type "cost" (déjà classés par `nature`, voir ActionImpact). */
+export type SavingType = "cost_reduction" | "revenue_increase" | "working_capital";
+
+/** Règle de reconnaissance dans le temps d'un coût/gain : "smoothing" = reconnu linéairement
+ *  entre le début de l'action et la date milestone (CAPEX ou gain) ; "one_shot" = reconnu à 100%
+ *  à la date milestone. Réglable par défaut au niveau entreprise (Company.defaultRecognition),
+ *  surchargeable par ligne d'impact (ActionImpact.recognition). */
+export type RecognitionMode = "smoothing" | "one_shot";
 
 export type ProgramConfig = {
   id: string;
@@ -96,16 +106,16 @@ export type Lever = {
   country: string;
   entity: string;
   function: string;
-  // Centre de coût du levier lorsqu'il n'a AUCUN sous-levier. S'il a des sous-leviers, l'impact
-  // se lit sur chaque sous-levier (poste de dépense + BU, voir SubLever) — ce champ est alors
-  // ignoré côté affichage au profit de la liste réelle des postes de dépense des sous-leviers.
   costCenter: string;
   pnlMap: string; // PnlAccount id
   start: string; // ISO date
   end: string; // ISO date
   status: LeverStatus;
   progress: number; // 0-100
-  priority: PriorityLevel;
+  /** Calculé automatiquement depuis les alertes liées à ce levier (voir
+   *  engine.computeLeverRisk / alertEngine.generateAlerts), plutôt que saisi à la main — source
+   *  de vérité = montants à risque (Alert.impactEur) des alertes ouvertes. Le champ reste stocké
+   *  (dernier calcul) pour affichage synchrone sans recalcul systématique. */
   risk: RiskLevel;
   grossSavings: number; // €M
   netSavings: number; // €M
@@ -124,9 +134,9 @@ export type Lever = {
   description: string;
   createdAt: string;
   lastUpdate: string;
-  // Plan d'action propre au levier, utilisé seulement s'il n'a AUCUN sous-levier (impact sur un
-  // centre de coût unique). Les leviers à impacts multiples ont leurs actions sur chaque SubLever
-  // (voir BeTrackData.subLevers, filtré par leverId — pas de nesting ici).
+  // Plan d'action du levier — liste plate d'actions ; chaque action peut porter plusieurs lignes
+  // d'impact (poste de dépense/BU compris via ActionImpact.costCenter/entity), plus de niveau
+  // sous-levier intermédiaire.
   actions?: LeverAction[];
   /** Niveau de confidentialité (doit correspondre à une valeur de Company.confidentialityLevels).
    *  Non défini = visible par tous les rôles de l'entreprise. */
@@ -146,9 +156,9 @@ export type Lever = {
   hierarchyLeafId?: string;
   /** Maille la plus fine de l'arborescence géographique configurée pour l'entreprise. */
   geographyLeafId?: string;
-  /** Id du Project (voir types Project) auquel ce levier est rattaché, pour la ventilation
-   *  "par projet" (en plus de la ventilation existante "par workstream"). */
-  projectId?: string;
+  /** Id du Program (voir type Program) auquel ce levier est rattaché. Le dashboard exécutif est
+   *  scopé à un Program sélectionné : un levier sans programId n'apparaît sur aucun dashboard. */
+  programId?: string;
 };
 
 /** Ligne d'impact d'une action — décrit UN effet financier/RH sur UN poste de coût.
@@ -165,6 +175,19 @@ export type ActionImpact = {
   pnlMap?: string; // compte P&L (hérite du levier si absent)
   costCenter?: string;
   entity?: string; // entité légale (hérite du levier si absent)
+  /** Nature du gain (uniquement pour type="saving") : baisse de coût / hausse de CA / impact BFR. */
+  savingType?: SavingType;
+  /** Pour nature="capex" — date à laquelle le CAPEX est supposé engagé à 100% (jusqu'ici confondue
+   *  avec les dates de l'action elle-même). */
+  capexDeploymentDate?: string; // ISO date
+  /** Pour type="saving" — date/milestone d'encaissement réel du gain (peut être postérieure à la
+   *  fin de l'action). */
+  gainDate?: string; // ISO date
+  /** Surcharge manuelle du mode de reconnaissance ; non défini = hérite de
+   *  Company.defaultRecognition (ou "smoothing" si l'entreprise n'a rien configuré). */
+  recognition?: RecognitionMode;
+  /** Commentaires libres sur cette ligne d'impact (ex. méthode de calcul, hypothèses). */
+  comments?: Comment[];
 };
 
 export type LeverAction = {
@@ -182,43 +205,6 @@ export type LeverAction = {
    *  mapping P&L, centre de coût, et entité. Le levier parent consolide automatiquement
    *  ses KPIs depuis la somme des impacts de toutes ses actions. */
   impacts?: ActionImpact[];
-};
-
-/** @deprecated Le modèle cible utilise uniquement Levier → Action enrichie. Conservé pour lire
- * les anciennes données et assurer une migration progressive.
- * Un sous-levier = l'impact d'un levier sur UN poste de dépense/BU unique, avec son propre plan
- * d'action. Un levier avec plusieurs postes de dépense impactés se décompose en plusieurs
- * sous-leviers ; un levier à impact unique n'en a pas besoin (voir Lever.actions). */
-export type SubLever = {
-  id: string;
-  leverId: string;
-  name: string;
-  // Owner propre au sous-levier (optionnel) — à défaut, l'owner du levier parent s'applique.
-  owner?: string;
-  ownerInit?: string;
-  // Poste de dépense impacté (remplace l'ancien "centre de coût" unique) + BU associée.
-  expensePost: string;
-  businessUnit: string;
-  pnlMap: string; // PnlAccount id
-  grossSavings: number; // €M
-  netSavings: number; // €M
-  opexOneOff: number; // €M
-  opexRec: number; // €M/an
-  capex: number; // €M
-  fteImpact: number;
-  popImpacted: number;
-  start: string; // ISO date
-  end: string; // ISO date
-  status: LeverStatus;
-  /** Date de passage en M5 (delivered), renseignée automatiquement. */
-  deliveredDate?: string;
-  priority: PriorityLevel;
-  risk: RiskLevel;
-  lockedPlan?: FinancialSnapshot;
-  reforecast?: FinancialSnapshot;
-  companyId?: string | null;
-  dependencies: LeverDependency[];
-  actions: LeverAction[];
 };
 
 export type Department = {
@@ -379,7 +365,7 @@ export type Comment = {
   text: string;
 };
 
-// ─── Multi-tenant: Company / Project / Lifecycle Configuration ───────────────
+// ─── Multi-tenant: Company / Program / Lifecycle Configuration ───────────────
 
 export type Company = {
   id: string;
@@ -418,6 +404,15 @@ export type Company = {
    *  non défini = valeur par défaut ~45% (ordre de grandeur France, cadre), à ajuster projet par
    *  projet selon la politique RH réelle du client. */
   socialChargesRate?: number;
+  /** Mode de reconnaissance par défaut appliqué aux nouvelles lignes d'impact de cette entreprise,
+   *  quand la ligne ne surcharge pas explicitement ActionImpact.recognition. Non défini =
+   *  "smoothing". */
+  defaultRecognition?: RecognitionMode;
+  /** Seuils de segmentation du risque d'un levier en fonction du cumul des montants (€, valeur
+   *  absolue de Alert.impactEur) des alertes ouvertes qui lui sont liées (voir
+   *  engine.computeLeverRisk). Non défini = seuils par défaut (voir DEFAULT_RISK_THRESHOLDS dans
+   *  lib/engine.ts). */
+  riskThresholds?: { level: RiskLevel; minAmount: number }[];
 };
 
 /** Un niveau de l'arborescence financière P&L → Cost Center, configuré par entreprise.
@@ -455,7 +450,12 @@ export type HierarchyNode = {
   };
 };
 
-export type Project = {
+/** Un Programme = un regroupement de leviers rattaché à une entreprise (renommé depuis "Project"
+ *  pour coller au vocabulaire métier). Le dashboard exécutif est scopé à un Program sélectionné
+ *  (voir app/(app)/dashboard/page.tsx) — distinct de ProgramConfig plus haut, qui est un vestige
+ *  de l'ancien modèle mono-programme global, conservé pour compat de fyStart/fyEnd/target au
+ *  niveau entreprise. */
+export type Program = {
   id: string;
   companyId: string;
   name: string;
@@ -488,13 +488,11 @@ export type BeTrackData = {
   workstreams: Workstream[];
   leverStatuses: LeverStatus[];
   riskLevels: RiskLevel[];
-  priorityLevels: PriorityLevel[];
   leverTypes: string[];
   geographies: string[];
   functions: string[];
   pnlAccounts: PnlAccount[];
   levers: Lever[];
-  subLevers: SubLever[];
   workforce: Workforce;
   operations: Operations;
   alerts: Alert[];
