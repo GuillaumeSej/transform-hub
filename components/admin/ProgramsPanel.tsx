@@ -2,23 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { FolderKanban, Plus, Pencil, Trash2 } from "lucide-react";
-import type { Project } from "@/types";
-import { subscribeProjects, saveProject, deleteProject } from "@/lib/firestore/admin";
+import type { Program } from "@/types";
+import { subscribePrograms, saveProgram, deleteProgram } from "@/lib/firestore/admin";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 /**
- * Gestion des projets pour UNE entreprise déjà sélectionnée. Extrait de
+ * Gestion des programmes pour UNE entreprise déjà sélectionnée. Extrait de
  * `admin/projects/page.tsx` (route supprimée — orpheline après le retrait de `admin-projects` de
  * la nav, voir lib/nav-config.ts) — le hub `/admin/companies/detail` le rend directement, scopé via
  * `companyId`, sans sélecteur ni filtre entreprise (contrairement à l'ancienne page globale). Seule
  * source de vérité pour ce CRUD.
  */
-export function ProjectsPanel({ companyId }: { companyId: string }) {
-  const [projects, setProjects] = useState<Project[]>([]);
+export function ProgramsPanel({ companyId }: { companyId: string }) {
+  const [programs, setPrograms] = useState<Program[]>([]);
 
   useEffect(() => {
-    const unsub = subscribeProjects((all) =>
-      setProjects(all.filter((p) => p.companyId === companyId))
+    const unsub = subscribePrograms((all) =>
+      setPrograms(all.filter((p) => p.companyId === companyId))
     );
     return unsub;
   }, [companyId]);
@@ -27,13 +27,13 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
   const [form, setForm] = useState({ name: "", sponsor: "", target: "" });
   const [showForm, setShowForm] = useState(false);
 
-  // Un projet est "en cours d'édition" (dirty) si le formulaire est ouvert avec au moins un
+  // Un programme est "en cours d'édition" (dirty) si le formulaire est ouvert avec au moins un
   // champ rempli — évite de bloquer inutilement la navigation quand l'utilisateur a juste
-  // cliqué sur "Nouveau projet" sans rien saisir.
-  const projectFormDirty =
+  // cliqué sur "Nouveau programme" sans rien saisir.
+  const programFormDirty =
     showForm &&
     (form.name.trim() !== "" || form.sponsor.trim() !== "" || form.target.trim() !== "");
-  useRegisterUnsavedChanges(`admin:projects:${companyId}`, projectFormDirty);
+  useRegisterUnsavedChanges(`admin:programs:${companyId}`, programFormDirty);
 
   const startCreate = () => {
     setEditId(null);
@@ -41,7 +41,7 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
     setShowForm(true);
   };
 
-  const startEdit = (p: Project) => {
+  const startEdit = (p: Program) => {
     setEditId(p.id);
     setForm({ name: p.name, sponsor: p.sponsor, target: String(p.target) });
     setShowForm(true);
@@ -51,9 +51,9 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
     if (!form.name.trim()) return;
     const target = parseFloat(form.target) || 0;
     if (editId) {
-      const existing = projects.find((p) => p.id === editId);
+      const existing = programs.find((p) => p.id === editId);
       if (existing) {
-        await saveProject({
+        await saveProgram({
           ...existing,
           name: form.name,
           sponsor: form.sponsor,
@@ -62,7 +62,7 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
       }
     } else {
       const id = `p${Date.now()}`;
-      await saveProject({
+      await saveProgram({
         id,
         companyId,
         name: form.name,
@@ -80,7 +80,7 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
   };
 
   const remove = async (id: string) => {
-    await deleteProject(id);
+    await deleteProgram(id);
   };
 
   return (
@@ -88,7 +88,7 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <FolderKanban size={22} className="text-bp-coral" />
-          <h1 className="text-xl font-bold text-text-primary">Gestion des Projets</h1>
+          <h1 className="text-xl font-bold text-text-primary">Gestion des Programmes</h1>
         </div>
         <button
           onClick={startCreate}
@@ -101,11 +101,11 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
       {showForm && (
         <div className="rounded-xl border border-border bg-bg-elevated p-4 space-y-3">
           <div className="text-sm font-semibold text-text-primary">
-            {editId ? "Modifier le projet" : "Nouveau projet"}
+            {editId ? "Modifier le programme" : "Nouveau programme"}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-text-secondary">Nom du projet</label>
+              <label className="text-xs font-medium text-text-secondary">Nom du programme</label>
               <input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -150,7 +150,7 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
         </div>
       )}
 
-      <div className="text-xs text-text-secondary">{projects.length} projet(s)</div>
+      <div className="text-xs text-text-secondary">{programs.length} programme(s)</div>
 
       {/* Desktop/tablette (>= sm). En dessous de sm, remplacé par des cartes empilées
        * verticalement — même pattern que LifecycleEditor/UsersPanel pour éviter tout scroll
@@ -163,7 +163,7 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
                 ID
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                Projet
+                Programme
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
                 Sponsor
@@ -177,7 +177,7 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
             </tr>
           </thead>
           <tbody>
-            {projects.map((p) => (
+            {programs.map((p) => (
               <tr key={p.id} className="border-b border-border hover:bg-bg-elevated/50">
                 <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary md:table-cell">
                   {p.id}
@@ -203,10 +203,10 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
                 </td>
               </tr>
             ))}
-            {projects.length === 0 && (
+            {programs.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-sm text-text-secondary">
-                  Aucun projet pour cette entreprise.
+                  Aucun programme pour cette entreprise.
                 </td>
               </tr>
             )}
@@ -214,9 +214,9 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
         </table>
       </div>
 
-      {/* Mobile (< sm) : une carte par projet. */}
+      {/* Mobile (< sm) : une carte par programme. */}
       <div className="divide-y divide-border rounded-xl border border-border sm:hidden">
-        {projects.map((p) => (
+        {programs.map((p) => (
           <div key={p.id} className="p-3">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -243,9 +243,9 @@ export function ProjectsPanel({ companyId }: { companyId: string }) {
             </div>
           </div>
         ))}
-        {projects.length === 0 && (
+        {programs.length === 0 && (
           <div className="p-4 text-center text-sm text-text-secondary">
-            Aucun projet pour cette entreprise.
+            Aucun programme pour cette entreprise.
           </div>
         )}
       </div>

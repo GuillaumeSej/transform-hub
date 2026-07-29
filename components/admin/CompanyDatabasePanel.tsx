@@ -20,7 +20,7 @@ import type { CompanyResetPlan } from "@/lib/companyResetLogic";
  *
  * Limite connue (voir lib/companyResetLogic.ts) : les documents `comments`/`audit` sont des DOCS
  * UNIQUES PARTAGÉS entre toutes les entreprises (pas de collection par entreprise). On ne peut les
- * scoper qu'en retirant les entrées liées aux ids de leviers/sous-leviers de cette entreprise —
+ * scoper qu'en retirant les entrées liées aux ids de leviers de cette entreprise —
  * les entrées non attribuables à un lever/subLever connu (mouvements RH, employés — pas encore
  * multi-tenant) restent dans le document partagé, quelle que soit l'entreprise qui déclenche le
  * reset.
@@ -59,7 +59,7 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
       await resetCompanyData(company.id);
       showToast(
         "Données réinitialisées",
-        `Les leviers, sous-leviers et hiérarchie de ${company.name} ont été supprimés.`,
+        `Les leviers et la hiérarchie de ${company.name} ont été supprimés.`,
         "success"
       );
       setScopedOpen(false);
@@ -84,9 +84,8 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
           Réinitialiser cette entreprise
         </h3>
         <p className="max-w-2xl text-sm text-text-secondary">
-          Supprime les leviers, sous-leviers et la hiérarchie financière de{" "}
-          <strong>{company.name}</strong> uniquement — les autres entreprises ne sont pas affectées.
-          Action irréversible.
+          Supprime les leviers et la hiérarchie financière de <strong>{company.name}</strong>{" "}
+          uniquement — les autres entreprises ne sont pas affectées. Action irréversible.
         </p>
         <Button variant="danger" size="sm" onClick={openScopedModal}>
           <Trash2 size={14} /> Réinitialiser {company.name}
@@ -101,9 +100,9 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
           </h3>
         </div>
         <p className="max-w-2xl text-sm text-text-secondary">
-          Réinitialise l&apos;intégralité des données de démonstration (leviers, sous-leviers,
-          commentaires, audit, effectifs) pour <strong>toutes les entreprises</strong>, sans
-          distinction. À réserver aux environnements de démo/test.
+          Réinitialise l&apos;intégralité des données de démonstration (leviers, commentaires,
+          audit, effectifs) pour <strong>toutes les entreprises</strong>, sans distinction. À
+          réserver aux environnements de démo/test.
         </p>
         <Button variant="danger" size="sm" onClick={() => setGlobalOpen(true)}>
           <RotateCcw size={14} /> Réinitialiser toutes les données de démo
@@ -143,7 +142,6 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
             </p>
             <ul className="list-disc space-y-1 pl-5">
               <li>{scopedPlan.leverIds.length} levier(s)</li>
-              <li>{scopedPlan.subLeverIds.length} sous-levier(s)</li>
               <li>
                 {scopedPlan.removedCommentKeys.length} fil(s) de commentaires liés à ces leviers
               </li>
@@ -173,14 +171,15 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
             <Button
               variant="danger"
               onClick={() => {
-                globalData.resetToMockData();
-                setGlobalOpen(false);
-                showToast(
-                  "Données réinitialisées",
-                  "Toutes les entreprises sont revenues au jeu de données de démo initial.",
-                  "success"
-                );
-                window.location.reload();
+                globalData.resetToMockData().finally(() => {
+                  setGlobalOpen(false);
+                  showToast(
+                    "Données réinitialisées",
+                    "Toutes les entreprises sont revenues au jeu de données de démo initial.",
+                    "success"
+                  );
+                  window.location.reload();
+                });
               }}
             >
               Réinitialiser tout
@@ -190,9 +189,8 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
       >
         <p className="text-sm text-text-secondary">
           Toutes les modifications effectuées dans cette session, pour{" "}
-          <strong>toutes les entreprises</strong> (leviers, sous-leviers, commentaires, audit,
-          effectifs), seront définitivement perdues et remplacées par le jeu de données de démo
-          initial.
+          <strong>toutes les entreprises</strong> (leviers, commentaires, audit, effectifs), seront
+          définitivement perdues et remplacées par le jeu de données de démo initial.
         </p>
       </Modal>
     </div>

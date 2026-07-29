@@ -2,7 +2,24 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import type { Role } from "@/types";
+import type { Role, RiskLevel, RecognitionMode } from "@/types";
+
+const RISK_LEVELS: { value: RiskLevel; label: string }[] = [
+  { value: "critical", label: "Critique" },
+  { value: "high", label: "Élevé" },
+  { value: "medium", label: "Moyen" },
+  { value: "low", label: "Faible" },
+];
+
+/** Seuils par défaut affichés quand `riskThresholds` n'est pas défini — mêmes ordres de grandeur
+ *  que DEFAULT_RISK_THRESHOLDS (lib/engine.ts), mais exprimés ici en €K (UI) plutôt qu'en € brut
+ *  (engine) : conversion à la charge de qui branche l'affichage/sauvegarde effective. */
+const DEFAULT_RISK_THRESHOLDS_KEUR: Record<RiskLevel, string> = {
+  critical: "500",
+  high: "200",
+  medium: "50",
+  low: "0",
+};
 
 export const OPERATIONAL_ROLES: { value: Role; label: string }[] = [
   { value: "cto", label: "CTO" },
@@ -26,6 +43,13 @@ export type CompanyFormState = {
   socialChargesRate: string;
   confidentialityLevels: string[];
   roleClearance: Partial<Record<Role, string[]>>;
+  /** Mode de reconnaissance par défaut des nouvelles lignes d'impact (voir
+   *  Company.defaultRecognition). Non défini = "smoothing". */
+  defaultRecognition?: RecognitionMode;
+  /** Seuils de risque par niveau, saisis en €K (voir Company.riskThresholds — stocké en € brut,
+   *  conversion à la charge de qui branche la sauvegarde). Non défini = valeurs par défaut
+   *  affichées (DEFAULT_RISK_THRESHOLDS_KEUR). */
+  riskThresholds?: { level: RiskLevel; minAmount: string }[];
 };
 
 export const DEFAULT_COMPANY_FORM: CompanyFormState = {
@@ -38,6 +62,8 @@ export const DEFAULT_COMPANY_FORM: CompanyFormState = {
   socialChargesRate: "",
   confidentialityLevels: [],
   roleClearance: {},
+  defaultRecognition: "smoothing",
+  riskThresholds: undefined,
 };
 
 /**
@@ -78,6 +104,21 @@ export function CompanyFieldsEditor({
     const current = value.roleClearance[role] ?? [];
     const next = current.includes(level) ? current.filter((l) => l !== level) : [...current, level];
     onChange({ roleClearance: { ...value.roleClearance, [role]: next } });
+  };
+
+  const riskThresholdFor = (level: RiskLevel): string => {
+    const found = value.riskThresholds?.find((t) => t.level === level);
+    return found ? found.minAmount : DEFAULT_RISK_THRESHOLDS_KEUR[level];
+  };
+
+  const setRiskThreshold = (level: RiskLevel, minAmount: string) => {
+    const base = RISK_LEVELS.map((r) => ({
+      level: r.value,
+      minAmount: riskThresholdFor(r.value),
+    }));
+    onChange({
+      riskThresholds: base.map((t) => (t.level === level ? { ...t, minAmount } : t)),
+    });
   };
 
   return (
@@ -168,6 +209,62 @@ export function CompanyFieldsEditor({
               mouvements RH (Vision mouvement). Non renseigné = 45% par défaut (ordre de grandeur
               France, cadre) — à ajuster selon la politique RH réelle du client.
             </p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-text-secondary">
+              Mode de reconnaissance par défaut
+            </label>
+            <select
+              value={value.defaultRecognition ?? "smoothing"}
+              onChange={(e) =>
+                onChange({
+                  defaultRecognition: e.target.value as CompanyFormState["defaultRecognition"],
+                })
+              }
+              className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+            >
+              <option value="smoothing">Lissé</option>
+              <option value="one_shot">One-shot</option>
+            </select>
+            <p className="mt-1 text-[11px] text-text-secondary">
+              Appliqué par défaut aux nouvelles lignes d&apos;impact, surchargeable pour chaque
+              ligne d&apos;impact individuellement.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-text-secondary">
+            Seuils de risque (€K) — cumul des montants d&apos;alertes ouvertes à partir duquel un
+            levier passe à ce niveau de risque
+          </label>
+          <div className="mt-2 overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-bg-surface border-b border-border">
+                  <th className="px-3 py-2 text-left font-semibold text-text-secondary">Niveau</th>
+                  <th className="px-3 py-2 text-left font-semibold text-text-secondary">
+                    Seuil (€K)
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {RISK_LEVELS.map((r) => (
+                  <tr key={r.value} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 font-medium text-text-primary">{r.label}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        value={riskThresholdFor(r.value)}
+                        onChange={(e) => setRiskThreshold(r.value, e.target.value)}
+                        className="w-32 rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 

@@ -27,7 +27,7 @@ import {
 import { UsersPanel } from "@/components/admin/UsersPanel";
 import { HierarchyEditor } from "@/components/admin/HierarchyEditor";
 import { LifecycleEditor } from "@/components/admin/LifecycleEditor";
-import { ProjectsPanel } from "@/components/admin/ProjectsPanel";
+import { ProgramsPanel } from "@/components/admin/ProgramsPanel";
 import { CompanyDataHistoryPanel } from "@/components/admin/CompanyDataHistoryPanel";
 import { CompanyDatabasePanel } from "@/components/admin/CompanyDatabasePanel";
 
@@ -52,7 +52,7 @@ const TABS: { id: TabId; label: string; icon: typeof Building2 }[] = [
   { id: "users", label: "Utilisateurs", icon: Users },
   { id: "financial-hierarchy", label: "Arborescence financière", icon: Network },
   { id: "geographic-hierarchy", label: "Arborescence géographique", icon: Globe2 },
-  { id: "projects", label: "Projets", icon: FolderKanban },
+  { id: "projects", label: "Programmes", icon: FolderKanban },
   { id: "lifecycle", label: "Cycle de vie", icon: Workflow },
   { id: "data", label: "Données & Historique", icon: BarChart3 },
   { id: "database", label: "Base de données", icon: Database },
@@ -279,7 +279,7 @@ export default function CompanyDetailClient() {
           {tab === "geographic-hierarchy" && (
             <HierarchyEditor companies={companies} companyId={company.id} domain="geographic" />
           )}
-          {tab === "projects" && <ProjectsPanel companyId={company.id} />}
+          {tab === "projects" && <ProgramsPanel companyId={company.id} />}
           {tab === "lifecycle" && <LifecycleEditor companyId={company.id} />}
           {tab === "data" && <CompanyDataHistoryPanel company={company} />}
           {tab === "database" && <CompanyDatabasePanel company={company} />}

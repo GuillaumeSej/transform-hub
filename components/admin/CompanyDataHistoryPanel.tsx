@@ -2,14 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Users, Target, Briefcase, FileSpreadsheet, Activity, History } from "lucide-react";
-import type { Company, AuthUser, Project, Lever, SubLever, AuditEntry } from "@/types";
-import { subscribeUsers, subscribeProjects } from "@/lib/firestore/admin";
-import {
-  subscribeLevers,
-  subscribeSubLevers,
-  subscribeAuditLog,
-  filterAuditByCompany,
-} from "@/lib/firestore/levers";
+import type { Company, AuthUser, Program, Lever, AuditEntry } from "@/types";
+import { subscribeUsers, subscribePrograms } from "@/lib/firestore/admin";
+import { subscribeLevers, subscribeAuditLog, filterAuditByCompany } from "@/lib/firestore/levers";
 import { subscribeEmployees, subscribeMovements } from "@/lib/firestore/workforce";
 
 const ACTION_COLORS: Record<string, string> = {
@@ -56,9 +51,8 @@ function formatTimestamp(ts: string): string {
 export function CompanyDataHistoryPanel({ company }: { company: Company }) {
   const companyId = company.id;
   const [users, setUsers] = useState<AuthUser[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [levers, setLevers] = useState<Lever[]>([]);
-  const [subLevers, setSubLevers] = useState<SubLever[]>([]);
   const [employeesCount, setEmployeesCount] = useState(0);
   const [movementsCount, setMovementsCount] = useState(0);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
@@ -69,7 +63,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
 
   useEffect(() => {
     const unsub1 = subscribeUsers(setUsers);
-    const unsub2 = subscribeProjects(setProjects);
+    const unsub2 = subscribePrograms(setPrograms);
     return () => {
       unsub1();
       unsub2();
@@ -78,12 +72,10 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
 
   useEffect(() => {
     const unsub1 = subscribeLevers(setLevers, companyId);
-    const unsub2 = subscribeSubLevers(setSubLevers, companyId);
-    const unsub3 = subscribeAuditLog(setAudit);
+    const unsub2 = subscribeAuditLog(setAudit);
     return () => {
       unsub1();
       unsub2();
-      unsub3();
     };
   }, [companyId]);
 
@@ -99,7 +91,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
   }, []);
 
   const cUsers = users.filter((u) => u.companyId === companyId);
-  const cProjects = projects.filter((p) => p.companyId === companyId);
+  const cPrograms = programs.filter((p) => p.companyId === companyId);
   const userRoles: Record<string, number> = {};
   cUsers.forEach((u) => {
     userRoles[u.role] = (userRoles[u.role] || 0) + 1;
@@ -110,8 +102,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
     if (actionFilter !== "all" && entry.action !== actionFilter) return false;
     if (entityFilter !== "all") {
       const e = entry.entity.toLowerCase();
-      if (entityFilter === "lever" && !e.startsWith("l") && !e.startsWith("sl")) return false;
-      if (entityFilter === "sublever" && !e.startsWith("sl")) return false;
+      if (entityFilter === "lever" && !e.startsWith("l")) return false;
       if (entityFilter === "movement" && !e.startsWith("mv")) return false;
       if (entityFilter === "employee" && !e.startsWith("emp")) return false;
     }
@@ -152,9 +143,9 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Briefcase size={14} />
-              <span className="text-xs font-semibold">Projets</span>
+              <span className="text-xs font-semibold">Programmes</span>
             </div>
-            <div className="text-2xl font-bold text-text-primary">{cProjects.length}</div>
+            <div className="text-2xl font-bold text-text-primary">{cPrograms.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
@@ -162,13 +153,6 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
               <span className="text-xs font-semibold">Leviers</span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{levers.length}</div>
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-text-secondary">
-              <Target size={14} />
-              <span className="text-xs font-semibold">Sous-leviers</span>
-            </div>
-            <div className="text-2xl font-bold text-text-primary">{subLevers.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
@@ -219,7 +203,6 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
           >
             <option value="all">Toutes les entités</option>
             <option value="lever">Leviers</option>
-            <option value="sublever">Sous-leviers</option>
             <option value="movement">Mouvements RH</option>
             <option value="employee">Employés</option>
           </select>
