@@ -1,11 +1,13 @@
 "use client";
 
 import { FileSpreadsheet } from "lucide-react";
+import { useMemo } from "react";
 import * as XLSX from "xlsx";
+import { generateAlerts } from "@/lib/alertEngine";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
 import { leverToExcelRow } from "@/lib/leverExcel";
-import type { BeTrackData } from "@/types";
+import type { BeTrackData, Company } from "@/types";
 
 /**
  * Export Excel réel des leviers (via `data`), utilisé sur la page Leviers.
@@ -13,11 +15,20 @@ import type { BeTrackData } from "@/types";
  * `DashboardExportButton` (capture DOM des widgets + génération .pptx via pptxgenjs), distinct de
  * celui-ci car sa logique n'a rien à voir avec l'export Excel tabulaire.
  */
-export function ExportButton({ data }: { data: BeTrackData }) {
+export function ExportButton({
+  data,
+  riskThresholds,
+}: {
+  data: BeTrackData;
+  /** Seuils de risque de l'entreprise courante (voir engine.computeLeverRisk) — seuils par défaut
+   *  si non fournis. */
+  riskThresholds?: Company["riskThresholds"];
+}) {
   const { showToast } = useToast();
+  const alerts = useMemo(() => generateAlerts(data), [data]);
 
   const exportExcel = (d: BeTrackData) => {
-    const rows = d.levers.map((l) => leverToExcelRow(l, d));
+    const rows = d.levers.map((l) => leverToExcelRow(l, d, alerts, riskThresholds));
     const sheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "Leviers");

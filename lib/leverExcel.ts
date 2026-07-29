@@ -1,6 +1,6 @@
 import * as engine from "@/lib/engine";
 import { STATUS_LABEL } from "@/lib/status-config";
-import type { BeTrackData, Lever } from "@/types";
+import type { Alert, BeTrackData, Lever, RiskLevel } from "@/types";
 
 /**
  * Mapping Lever -> ligne Excel, utilisé par `ExportButton` (type="excel") pour générer
@@ -8,7 +8,12 @@ import type { BeTrackData, Lever } from "@/types";
  * historique git si besoin de retrouver l'ancien parsing (`ExcelUploadButton`, retiré).
  */
 
-export function leverToExcelRow(lever: Lever, data: BeTrackData): Record<string, string | number> {
+export function leverToExcelRow(
+  lever: Lever,
+  data: BeTrackData,
+  alerts: Alert[],
+  riskThresholds?: { level: RiskLevel; minAmount: number }[]
+): Record<string, string | number> {
   const ws = data.workstreams.find((w) => w.id === lever.ws);
   const pnl = data.pnlAccounts.find((p) => p.id === lever.pnlMap);
   return {
@@ -30,7 +35,7 @@ export function leverToExcelRow(lever: Lever, data: BeTrackData): Record<string,
     "Date de fin estimée": lever.end,
     Statut: STATUS_LABEL[lever.status],
     "Progression (%)": lever.progress,
-    Risque: lever.risk,
+    Risque: engine.computeLeverRisk(lever.id, alerts, riskThresholds),
     "Impact estimé brut (€M)": lever.grossSavings,
     "Impact estimé net (€M)": lever.netSavings,
     "Réalisé à date (€M)": engine.realizedSavings(lever),
