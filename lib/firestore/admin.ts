@@ -23,6 +23,7 @@ import type {
 } from "@/types";
 import { hierarchyDomain } from "@/lib/hierarchyLogic";
 import { TEST_USERS } from "@/lib/auth";
+import { DEMO_HIERARCHY_NODES } from "@/data/mockData";
 
 // --- Companies ---
 
@@ -197,6 +198,20 @@ export const TEST_COMPANY: Company = {
   createdAt: "2026-01-15",
   fyStart: "2026-01-01",
   fyEnd: "2026-12-31",
+  // CAPEX total engagé par les 18 leviers de démo (data/mockData.ts) ≈ 10.7€M — budget fixé
+  // ~26% au-dessus pour un ratio "engagé / budgété" réaliste sur le dashboard exécutif.
+  capexBudget: 13.5,
+  // Arborescence financière P&L -> centre de coût (voir data/mockData.ts DEMO_HIERARCHY_NODES,
+  // domain: "financial"). Les leviers pointent vers leur centre de coût via hierarchyLeafId.
+  hierarchyLevels: [
+    { key: "pnl_account", label: "Compte P&L", order: 0, semantic: "pnl" },
+    { key: "cost_center", label: "Centre de coût", order: 1 },
+  ],
+  // Arborescence géographique continent -> pays (voir DEMO_HIERARCHY_NODES, domain: "geographic").
+  geographyHierarchyLevels: [
+    { key: "continent", label: "Continent", order: 0, semantic: "continent" },
+    { key: "country", label: "Pays", order: 1, semantic: "country" },
+  ],
 };
 
 export const TEST_COMPANY_2: Company = {
@@ -268,12 +283,19 @@ export async function ensureAdminSeeded(): Promise<void> {
   if (adminSeeded) return;
   adminSeeded = true;
 
-  // Seed test companies if missing
+  // Seed test companies if missing — les nœuds d'arborescence de démo (DEMO_HIERARCHY_NODES) sont
+  // volontairement seedés ICI, dans le même bloc, plutôt que via un check d'existence indépendant
+  // sur `hierarchyNodes` : une entreprise déjà existante peut avoir sa PROPRE arborescence
+  // configurée à la main (clés de niveau générées par l'admin, différentes de celles codées en
+  // dur ici), et un seed indépendant créerait alors des nœuds orphelins (déjà vécu en session :
+  // 22 valeurs orphelines détectées par l'éditeur d'arborescence). Les nœuds de démo ne doivent
+  // exister qu'aux côtés d'une entreprise elle-même fraîchement créée par ce seed.
   const companiesSnap = await getDocs(companiesCol());
   if (companiesSnap.empty) {
     await setDoc(doc(companiesCol(), TEST_COMPANY.id), TEST_COMPANY);
     await setDoc(doc(companiesCol(), TEST_COMPANY_2.id), TEST_COMPANY_2);
     await setDoc(doc(companiesCol(), TEST_COMPANY_3.id), TEST_COMPANY_3);
+    await saveHierarchyNodesBatch(DEMO_HIERARCHY_NODES);
   }
 
   // Seed test programs if missing

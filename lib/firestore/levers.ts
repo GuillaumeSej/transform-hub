@@ -28,7 +28,10 @@ import type { AuditEntry, Comment, Lever, LeverDependency } from "@/types";
 // lib/mockActionMigration.ts) — changement de forme assumé consciemment, reseed complet.
 // v8 : enrichissement des impacts migrés (capexDeploymentDate, gainDate, savingType,
 // recognition — voir lib/mockActionMigration.ts) — le seed existant ne les porte pas, reseed complet.
-const SCHEMA_VERSION = "8";
+// v9 : ajout de Lever.hierarchyLeafId (rattachement des 18 leviers de démo à l'arborescence
+// financière DEMO_HIERARCHY_NODES — voir data/mockData.ts) — le seed existant ne le porte pas,
+// reseed complet.
+const SCHEMA_VERSION = "9";
 
 const leversCol = () => collection(db, "levers");
 /** Ancienne collection sous-leviers, plus alimentée — supprimée à chaque reseed pour ne laisser
