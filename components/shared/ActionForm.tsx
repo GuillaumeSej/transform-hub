@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { ActionImpact, ActionStatus, BeTrackData, LeverAction } from "@/types";
+import type {
+  ActionImpact,
+  ActionStatus,
+  BeTrackData,
+  LeverAction,
+  RecognitionMode,
+  SavingType,
+} from "@/types";
 
 const inputClass =
   "w-full rounded-sm border border-border bg-white px-2 py-1.5 text-[12px] focus:border-bp-coral focus:outline-none";
@@ -14,6 +21,12 @@ const STATUS_LABELS: Record<ActionStatus, string> = {
   in_progress: "En cours",
   done: "Terminé",
   delayed: "En retard",
+};
+
+const SAVING_TYPE_LABELS: Record<SavingType, string> = {
+  cost_reduction: "Réduction de coût",
+  revenue_increase: "Augmentation du CA",
+  working_capital: "Impact BFR",
 };
 
 function generateId(): string {
@@ -33,9 +46,13 @@ function emptyImpact(): ActionImpact {
 export type ActionFormValues = Omit<LeverAction, "id">;
 
 /** Formulaire de création/édition d'une action enrichie, avec un tableau d'impacts inline.
- *  Le tableau d'impacts permet d'ajouter/supprimer des lignes comme dans un tableur. */
+ *  Le tableau d'impacts permet d'ajouter/supprimer des lignes comme dans un tableur. Pour les
+ *  gains (type="saving"), on précise en plus la nature du gain (coût/CA/BFR), la date
+ *  d'encaissement et le mode de reconnaissance (lissé/one-shot) ; pour les CAPEX (nature="capex"),
+ *  la date d'engagement. Un commentaire libre peut expliquer la méthode de calcul. */
 export function ActionForm({
   data,
+  companyDefaultRecognition = "smoothing",
   initialValues,
   submitLabel = "Créer l'action",
   onSubmit,
@@ -43,6 +60,9 @@ export function ActionForm({
   onDelete,
 }: {
   data: BeTrackData;
+  /** Mode de reconnaissance par défaut de l'entreprise (Company.defaultRecognition), affiché en
+   * clair sur l'option "Défaut entreprise" du sélecteur par ligne d'impact. */
+  companyDefaultRecognition?: RecognitionMode;
   initialValues?: Partial<LeverAction>;
   submitLabel?: string;
   onSubmit: (values: ActionFormValues) => void;
@@ -189,9 +209,14 @@ export function ActionForm({
                 <th className="px-2 py-1.5 font-semibold text-secondary">Nature</th>
                 <th className="px-2 py-1.5 font-semibold text-secondary">€M</th>
                 <th className="px-2 py-1.5 font-semibold text-secondary">ETP</th>
+                <th className="px-2 py-1.5 font-semibold text-secondary">Type de gain</th>
+                <th className="px-2 py-1.5 font-semibold text-secondary">Date CAPEX</th>
+                <th className="px-2 py-1.5 font-semibold text-secondary">Date gain</th>
+                <th className="px-2 py-1.5 font-semibold text-secondary">Reconnaissance</th>
                 <th className="px-2 py-1.5 font-semibold text-secondary">Poste de coût</th>
                 <th className="px-2 py-1.5 font-semibold text-secondary">Centre de coût</th>
                 <th className="px-2 py-1.5 font-semibold text-secondary">Entité (P&L)</th>
+                <th className="px-2 py-1.5 font-semibold text-secondary">Commentaire</th>
                 <th className="w-8 px-1"></th>
               </tr>
             </thead>
@@ -208,6 +233,10 @@ export function ActionForm({
                         // Si on passe en "saving" et que la nature est "capex" (non valide), basculer vers "oneoff"
                         if (newType === "saving" && imp.nature === "capex") {
                           patch.nature = "oneoff";
+                        }
+                        if (newType === "cost") {
+                          patch.savingType = undefined;
+                          patch.gainDate = undefined;
                         }
                         updateImpact(idx, patch);
                       }}
@@ -228,11 +257,12 @@ export function ActionForm({
                     <select
                       className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
                       value={imp.nature}
-                      onChange={(e) =>
-                        updateImpact(idx, {
-                          nature: e.target.value as ActionImpact["nature"],
-                        })
-                      }
+                      onChange={(e) => {
+                        const nature = e.target.value as ActionImpact["nature"];
+                        const patch: Partial<ActionImpact> = { nature };
+                        if (nature !== "capex") patch.capexDeploymentDate = undefined;
+                        updateImpact(idx, patch);
+                      }}
                     >
                       {imp.type === "cost" ? (
                         <>
@@ -273,6 +303,80 @@ export function ActionForm({
                     />
                   </td>
                   <td className="px-1 py-1">
+                    {imp.type === "saving" ? (
+                      <select
+                        className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
+                        value={imp.savingType ?? ""}
+                        onChange={(e) =>
+                          updateImpact(idx, {
+                            savingType: (e.target.value || undefined) as SavingType | undefined,
+                          })
+                        }
+                      >
+                        <option value="">—</option>
+                        {(Object.keys(SAVING_TYPE_LABELS) as SavingType[]).map((st) => (
+                          <option key={st} value={st}>
+                            {SAVING_TYPE_LABELS[st]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-tertiary">—</span>
+                    )}
+                  </td>
+                  <td className="px-1 py-1">
+                    {imp.nature === "capex" ? (
+                      <input
+                        className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
+                        type="date"
+                        value={imp.capexDeploymentDate ?? ""}
+                        onChange={(e) =>
+                          updateImpact(idx, { capexDeploymentDate: e.target.value || undefined })
+                        }
+                        title="Date à laquelle le CAPEX est engagé à 100%"
+                      />
+                    ) : (
+                      <span className="text-tertiary">—</span>
+                    )}
+                  </td>
+                  <td className="px-1 py-1">
+                    {imp.type === "saving" ? (
+                      <input
+                        className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
+                        type="date"
+                        value={imp.gainDate ?? ""}
+                        onChange={(e) =>
+                          updateImpact(idx, { gainDate: e.target.value || undefined })
+                        }
+                        title="Date d'encaissement réel du gain"
+                      />
+                    ) : (
+                      <span className="text-tertiary">—</span>
+                    )}
+                  </td>
+                  <td className="px-1 py-1">
+                    {imp.type === "saving" || imp.nature === "capex" ? (
+                      <select
+                        className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
+                        value={imp.recognition ?? ""}
+                        onChange={(e) =>
+                          updateImpact(idx, {
+                            recognition: (e.target.value || undefined) as
+                              RecognitionMode | undefined,
+                          })
+                        }
+                      >
+                        <option value="">
+                          Défaut ({companyDefaultRecognition === "one_shot" ? "one-shot" : "lissé"})
+                        </option>
+                        <option value="smoothing">Lissé</option>
+                        <option value="one_shot">One-shot</option>
+                      </select>
+                    ) : (
+                      <span className="text-tertiary">—</span>
+                    )}
+                  </td>
+                  <td className="px-1 py-1">
                     <select
                       className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
                       value={imp.pnlMap ?? ""}
@@ -309,6 +413,27 @@ export function ActionForm({
                         </option>
                       ))}
                     </select>
+                  </td>
+                  <td className="px-1 py-1">
+                    <input
+                      className="w-full rounded-sm border border-border px-1.5 py-1 text-[11px]"
+                      value={imp.comments?.[imp.comments.length - 1]?.text ?? ""}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        updateImpact(idx, {
+                          comments: text
+                            ? [
+                                {
+                                  user: owner.trim() || "Utilisateur démo",
+                                  ts: new Date().toISOString().slice(0, 10),
+                                  text,
+                                },
+                              ]
+                            : [],
+                        });
+                      }}
+                      placeholder="Méthode de calcul, hypothèses..."
+                    />
                   </td>
                   <td className="px-1 py-1 text-center">
                     {impacts.length > 1 && (

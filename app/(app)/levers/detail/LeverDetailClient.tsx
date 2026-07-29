@@ -39,7 +39,7 @@ import { ActionGantt } from "@/components/shared/charts/ActionGantt";
 import { JCurveChart } from "@/components/shared/charts/JCurveChart";
 import { consolidateLeverFromActions, leverJCurve, leverPayback } from "@/lib/leverConsolidate";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import type { ActionStatus, Company, LeverAction } from "@/types";
+import type { ActionStatus, Company, LeverAction, RecognitionMode } from "@/types";
 
 const TABS = ["overview", "plan", "impact", "collab"] as const;
 type Tab = (typeof TABS)[number];
@@ -57,11 +57,13 @@ export default function LeverDetailClient() {
   const data = useBeTrackData(user?.companyId ?? null);
   const [actionPlanEnabled, setActionPlanEnabled] = useState(true);
   const [roleClearance, setRoleClearance] = useState<Company["roleClearance"]>();
+  const [defaultRecognition, setDefaultRecognition] = useState<RecognitionMode>("smoothing");
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
       setRoleClearance(company?.roleClearance);
       setActionPlanEnabled(company?.actionPlanEnabled ?? true);
+      setDefaultRecognition(company?.defaultRecognition ?? "smoothing");
     });
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -299,6 +301,7 @@ export default function LeverDetailClient() {
         {actionModal && (
           <ActionForm
             data={data}
+            companyDefaultRecognition={defaultRecognition}
             initialValues={actionModal.action}
             submitLabel={actionModal.mode === "edit" ? "Enregistrer" : "Créer l'action"}
             onCancel={() => setActionModal(null)}
@@ -494,7 +497,6 @@ export default function LeverDetailClient() {
               <div className="flex flex-1 flex-wrap gap-x-8 gap-y-4">
                 <BigStat label="Réalisé à date" value={engine.fmtCurr(real)} accent />
                 <BigStat label="Net savings visé" value={engine.fmtCurr(lever.netSavings)} />
-                <BigStat label="Priorité" value={<StatusBadge risk={lever.priority} />} />
                 <BigStat
                   label="Maturité"
                   value={<StageBadge status={lever.status} label={lifecycle.label(lever.status)} />}
@@ -585,6 +587,7 @@ export default function LeverDetailClient() {
                     <ActionGantt
                       actions={lever.actions ?? []}
                       onActionClick={(action) => setActionModal({ mode: "edit", action })}
+                      defaultRecognition={defaultRecognition}
                     />
                   </>
                 )}
@@ -825,6 +828,7 @@ export default function LeverDetailClient() {
               <ActionGantt
                 actions={actions}
                 onActionClick={(action) => setActionModal({ mode: "edit", action })}
+                defaultRecognition={defaultRecognition}
               />
             )}
 

@@ -93,15 +93,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           alertCount={notifications.unresolvedAlerts.length}
           alerts={notifications.unresolvedAlerts}
           onAlertClick={(alert) => {
-            const directLever = data.getLeverById(alert.scope);
-            const subLever = data.subLevers.find((item) => item.id === alert.scope);
-            const leverId = directLever?.id ?? subLever?.leverId;
+            const leverId = data.getLeverById(alert.scope)?.id;
             router.push(leverId ? `/levers/detail?id=${leverId}` : "/levers");
           }}
           role={role}
           onReset={() => {
-            data.resetToMockData();
-            window.location.reload();
+            data.resetToMockData().finally(() => window.location.reload());
           }}
           onMenuClick={() => setMobileNavOpen((v) => !v)}
         />

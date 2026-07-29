@@ -24,7 +24,7 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
-import type { HierarchyLevelDef, HierarchyNode, Lever, PriorityLevel, RiskLevel } from "@/types";
+import type { HierarchyLevelDef, HierarchyNode, Lever } from "@/types";
 
 type LeverRow = Lever & {
   realized: number;
@@ -137,7 +137,6 @@ export default function LeversPage() {
             : l.costCenter;
         },
       },
-      { key: "f_priority", label: "Priorité", getValue: (l) => l.priority },
       { key: "f_risk", label: "Risque", getValue: (l) => l.risk },
       {
         key: "f_pnl",
@@ -249,10 +248,6 @@ export default function LeversPage() {
     if (field === "statusLabel") {
       const status = data.leverStatuses.find((s) => lifecycle.label(s) === value);
       if (status) patch.status = status;
-    } else if (field === "priority") {
-      patch.priority = value as PriorityLevel;
-    } else if (field === "risk") {
-      patch.risk = value as RiskLevel;
     } else if (field === "netSavings" || field === "fteImpact") {
       patch[field] = Number(value);
     } else if (
@@ -405,16 +400,6 @@ export default function LeversPage() {
     },
     // ── Statut ──
     {
-      key: "priority",
-      label: "Priorité",
-      editable: true,
-      type: "select",
-      options: data.priorityLevels,
-      mobile: "secondary",
-      width: "110px",
-      render: (r) => <StatusBadge risk={r.priority} />,
-    },
-    {
       key: "statusLabel",
       label: t("levers.columnMaturity"),
       editable: true,
@@ -425,11 +410,10 @@ export default function LeversPage() {
       render: (r) => <StageBadge status={r.status} label={lifecycle.label(r.status)} />,
     },
     {
+      // Risque calculé automatiquement depuis les alertes (voir engine.computeLeverRisk) —
+      // affichage lecture seule, plus d'édition manuelle possible.
       key: "risk",
       label: "Risque",
-      editable: true,
-      type: "select",
-      options: data.riskLevels,
       mobile: "secondary",
       width: "110px",
       render: (r) => <StatusBadge risk={r.risk} />,

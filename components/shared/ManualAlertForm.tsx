@@ -22,7 +22,6 @@ export function ManualAlertForm({
   const scopes = [
     ...data.workstreams.map((item) => ({ id: item.id, label: `Workstream · ${item.name}` })),
     ...data.levers.map((item) => ({ id: item.id, label: `${item.code} · ${item.name}` })),
-    ...data.subLevers.map((item) => ({ id: item.id, label: `Sous-levier · ${item.name}` })),
   ];
   const [type, setType] = useState<AlertType>("amber");
   const [scope, setScope] = useState("");
@@ -87,7 +86,7 @@ export function ManualAlertForm({
             value={scope}
             onChange={(e) => setScope(e.target.value)}
           >
-            <option value="">Choisir un levier, sous-levier ou workstream</option>
+            <option value="">Choisir un levier ou workstream</option>
             {scopes.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.label}

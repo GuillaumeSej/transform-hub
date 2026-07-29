@@ -25,30 +25,29 @@ export function FilterBar<T>({
   const optionsMap = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const def of defs) {
-      map[def.key] = Array.from(
-        new Set(items.map((i) => def.getValue(i)).filter(Boolean))
-      ).sort();
+      map[def.key] = Array.from(new Set(items.map((i) => def.getValue(i)).filter(Boolean))).sort();
     }
     return map;
   }, [items, defs]);
 
   const activeKeys = new Set(Object.keys(active));
 
+  // Activer un filtre ne restreint RIEN par défaut (aucune valeur cochée = tout reste affiché,
+  // comme dans Excel) — l'utilisateur coche ensuite les valeurs qu'il veut voir, plutôt que de
+  // devoir décocher tout ce qu'il ne veut pas parmi une sélection initiale "tout coché".
   const toggleFilter = (key: string) => {
     if (activeKeys.has(key)) {
       const next = { ...active };
       delete next[key];
       onChange(next);
     } else {
-      onChange({ ...active, [key]: optionsMap[key] ?? [] });
+      onChange({ ...active, [key]: [] });
     }
   };
 
   const toggleValue = (key: string, value: string) => {
     const current = active[key] ?? [];
-    const next = current.includes(value)
-      ? current.filter((v) => v !== value)
-      : [...current, value];
+    const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
     if (next.length === 0) {
       const updated = { ...active };
       delete updated[key];

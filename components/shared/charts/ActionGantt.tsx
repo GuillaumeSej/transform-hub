@@ -1,6 +1,6 @@
 "use client";
 
-import type { LeverAction } from "@/types";
+import type { LeverAction, RecognitionMode } from "@/types";
 import { Tooltip } from "@/components/shared/Tooltip";
 
 const STATUS_FILL: Record<string, string> = {
@@ -20,26 +20,43 @@ function actionNet(action: LeverAction): number {
 }
 
 /** Mini-Gantt des actions d'un levier — barres horizontales positionnées dans le temps,
- *  colorées vert (gain net) ou rouge (coût net), avec remplissage selon le statut.
- *  Clic sur une barre → ouvre la fiche action (via onActionClick). */
+ *  colorées vert (gain net) ou rouge (coût net), avec remplissage selon le statut. Affiche en
+ *  plus, par ligne d'impact : un marqueur losange pour le milestone CAPEX (date d'engagement à
+ *  100%) et un marqueur/bande pour le gain (bande depuis le début de l'action si lissé, marqueur
+ *  ponctuel à la date d'encaissement si one-shot). Clic sur une barre → ouvre la fiche action
+ *  (via onActionClick). */
 export function ActionGantt({
   actions,
   height,
   onActionClick,
+  defaultRecognition = "smoothing",
 }: {
   actions: LeverAction[];
   height?: number;
   onActionClick?: (action: LeverAction) => void;
+  /** Mode de reconnaissance par défaut de l'entreprise (Company.defaultRecognition), utilisé pour
+   * les lignes d'impact qui ne surchargent pas explicitement `recognition`. */
+  defaultRecognition?: RecognitionMode;
 }) {
   if (actions.length === 0) {
     return <p className="py-6 text-center text-sm text-tertiary">Aucune action définie.</p>;
   }
 
-  // Calculer l'intervalle temporel global
-  const allDates = actions.flatMap((a) => [new Date(a.start).getTime(), new Date(a.end).getTime()]);
+  // Calculer l'intervalle temporel global — inclut les dates de milestone CAPEX/gain pour que les
+  // marqueurs qui tombent hors de la plage start/end des actions restent visibles.
+  const allDates = actions.flatMap((a) => [
+    new Date(a.start).getTime(),
+    new Date(a.end).getTime(),
+    ...(a.impacts ?? []).flatMap((i) =>
+      [i.capexDeploymentDate, i.gainDate]
+        .filter(Boolean)
+        .map((d) => new Date(d as string).getTime())
+    ),
+  ]);
   const minTime = Math.min(...allDates);
   const maxTime = Math.max(...allDates);
   const range = maxTime - minTime || 1;
+  const pctOf = (iso: string) => ((new Date(iso).getTime() - minTime) / range) * 100;
 
   // Générer les labels de mois pour l'axe
   const startDate = new Date(minTime);
@@ -138,6 +155,43 @@ export function ActionGantt({
               >
                 {fmtAmount}
               </div>
+
+              {/* Milestones CAPEX / gain par ligne d'impact */}
+              {(action.impacts ?? []).map((impact) => {
+                const mode = impact.recognition ?? defaultRecognition;
+                return (
+                  <span key={impact.id}>
+                    {impact.capexDeploymentDate && (
+                      <Tooltip
+                        text={`CAPEX ${impact.amount}€M engagé au ${impact.capexDeploymentDate}`}
+                        className="absolute"
+                        style={{ left: `${pctOf(impact.capexDeploymentDate)}%`, top: "50%" }}
+                      >
+                        <span className="block h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-white bg-info-blue" />
+                      </Tooltip>
+                    )}
+                    {impact.gainDate &&
+                      (mode === "one_shot" ? (
+                        <Tooltip
+                          text={`Gain ${impact.amount}€M encaissé (one-shot) au ${impact.gainDate}`}
+                          className="absolute"
+                          style={{ left: `${pctOf(impact.gainDate)}%`, top: "50%" }}
+                        >
+                          <span className="block h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-rag-green" />
+                        </Tooltip>
+                      ) : (
+                        <span
+                          className="absolute top-0 h-1.5 rounded-sm bg-rag-green/40"
+                          style={{
+                            left: `${startPct}%`,
+                            width: `${Math.max(0, pctOf(impact.gainDate) - startPct)}%`,
+                          }}
+                          title={`Gain ${impact.amount}€M lissé jusqu'au ${impact.gainDate}`}
+                        />
+                      ))}
+                  </span>
+                );
+              })}
             </div>
           );
         })}
@@ -154,6 +208,21 @@ export function ActionGantt({
           ))}
         </div>
       </div>
+      {actions.some((a) => (a.impacts ?? []).some((i) => i.capexDeploymentDate || i.gainDate)) && (
+        <div className="mt-2 flex flex-wrap items-center gap-4 text-[10px] text-tertiary">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rotate-45 border border-white bg-info-blue" />{" "}
+            Milestone CAPEX
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-rag-green" /> Gain encaissé
+            (one-shot)
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-1.5 w-3 rounded-sm bg-rag-green/40" /> Gain lissé
+          </span>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,7 +15,7 @@ const inputClass =
 
 /**
  * Éditeur de dépendances typées (cible + type Fin→Début / Début→Début / Fin→Fin / Début→Fin),
- * réutilisé par le modal "Gérer les dépendances" du détail levier et par SubLeverForm.
+ * réutilisé par le modal "Gérer les dépendances" du détail levier.
  * Contrôlé : reçoit la liste courante et remonte chaque changement via onChange.
  */
 export function DependencyEditor({
@@ -33,20 +33,12 @@ export function DependencyEditor({
   const [draftTarget, setDraftTarget] = useState("");
   const [draftType, setDraftType] = useState<DependencyType>("FS");
 
-  const targetName = (id: string) =>
-    data.levers.find((l) => l.id === id)?.name ??
-    data.subLevers.find((s) => s.id === id)?.name ??
-    id;
+  const targetName = (id: string) => data.levers.find((l) => l.id === id)?.name ?? id;
 
   const usedIds = new Set(value.map((d) => d.targetId));
-  const options = [
-    ...data.levers
-      .filter((l) => !excludeIds.includes(l.id) && !usedIds.has(l.id))
-      .map((l) => ({ id: l.id, label: `${l.id} · ${l.name}` })),
-    ...data.subLevers
-      .filter((s) => !excludeIds.includes(s.id) && !usedIds.has(s.id))
-      .map((s) => ({ id: s.id, label: `${s.id} · ${s.name} (sous-levier)` })),
-  ];
+  const options = data.levers
+    .filter((l) => !excludeIds.includes(l.id) && !usedIds.has(l.id))
+    .map((l) => ({ id: l.id, label: `${l.id} · ${l.name}` }));
 
   const addDraft = () => {
     if (!draftTarget) return;
@@ -103,7 +95,7 @@ export function DependencyEditor({
           onChange={(e) => setDraftTarget(e.target.value)}
           className={`${inputClass} min-w-0 flex-1`}
         >
-          <option value="">Choisir un levier ou sous-levier…</option>
+          <option value="">Choisir un levier…</option>
           {options.map((opt) => (
             <option key={opt.id} value={opt.id}>
               {opt.label}

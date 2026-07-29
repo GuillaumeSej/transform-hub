@@ -8,7 +8,7 @@ import type { LifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import {
   subscribeCompanies,
   subscribeHierarchyNodes,
-  subscribeProjects,
+  subscribePrograms,
 } from "@/lib/firestore/admin";
 import type {
   BeTrackData,
@@ -16,9 +16,7 @@ import type {
   HierarchyNode,
   Lever,
   LeverStatus,
-  PriorityLevel,
-  Project,
-  RiskLevel,
+  Program,
 } from "@/types";
 import { hierarchyPathValue, resolveHierarchyPath } from "@/lib/hierarchyLogic";
 
@@ -68,7 +66,6 @@ function emptyValues(data: BeTrackData): LeverFormValues {
     end: new Date().toISOString().slice(0, 10),
     status: "idea",
     progress: 0,
-    priority: "medium",
     risk: "low",
     grossSavings: 0,
     netSavings: 0,
@@ -202,13 +199,13 @@ export function LeverForm({
     });
   };
 
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<Program[]>([]);
   useEffect(() => {
     if (!companyId) {
       setProjects([]);
       return;
     }
-    const unsub = subscribeProjects((all) =>
+    const unsub = subscribePrograms((all) =>
       setProjects(all.filter((p) => p.companyId === companyId))
     );
     return unsub;
@@ -269,8 +266,8 @@ export function LeverForm({
           <Field label={t("leverForm.project")}>
             <select
               className={inputClass}
-              value={values.projectId ?? ""}
-              onChange={(e) => set("projectId", e.target.value || undefined)}
+              value={values.programId ?? ""}
+              onChange={(e) => set("programId", e.target.value || undefined)}
             >
               <option value="">{t("leverForm.notAssigned")}</option>
               {projects.map((p) => (
@@ -513,31 +510,8 @@ export function LeverForm({
             onChange={(e) => set("progress", num(e.target.value))}
           />
         </Field>
-        <Field label={t("leverForm.priority")}>
-          <select
-            className={inputClass}
-            value={values.priority}
-            onChange={(e) => set("priority", e.target.value as PriorityLevel)}
-          >
-            {data.priorityLevels.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </Field>
         <Field label={t("leverForm.risk")}>
-          <select
-            className={inputClass}
-            value={values.risk}
-            onChange={(e) => set("risk", e.target.value as RiskLevel)}
-          >
-            {data.riskLevels.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
+          <div className={`${inputClass} bg-neutral-100 text-tertiary`}>{values.risk}</div>
         </Field>
       </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useGlobalFilters, matchesGlobalFilters } from "@/lib/hooks/useGlobalFilters";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import {
@@ -27,9 +27,9 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   subscribeCompanies,
   subscribeHierarchyNodes,
-  subscribeProjects,
+  subscribePrograms,
 } from "@/lib/firestore/admin";
-import type { Company, HierarchyLevelDef, HierarchyNode, Project } from "@/types";
+import type { Company, HierarchyLevelDef, HierarchyNode, Program } from "@/types";
 import * as engine from "@/lib/engine";
 import {
   METRIC_REGISTRY,
@@ -119,7 +119,6 @@ const FILTER_PARAM_BY_DIMENSION: Partial<Record<string, string>> = {
   country: "f_country",
   entity: "f_entity",
   sponsor: "f_sponsor",
-  priority: "f_priority",
   risk: "f_risk",
   pnl: "f_pnl",
   type: "f_type",
@@ -132,6 +131,7 @@ export default function DashboardPage() {
   const lifecycle = useLifecycleLabels(user?.companyId);
   const { t } = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { filters, setFilter, resetFilters } = useGlobalFilters();
 
   // Société courante — utilisée pour le budget CAPEX de référence (KPI ci-dessous) et
@@ -157,22 +157,51 @@ export default function DashboardPage() {
     [data.levers, user?.role, company?.roleClearance, user?.confidentialityClearance]
   );
   const visibleData = useMemo(() => {
-    const visibleLeverIds = new Set(visibleLevers.map((lever) => lever.id));
     return {
       ...data,
       levers: visibleLevers,
-      subLevers: data.subLevers.filter((subLever) => visibleLeverIds.has(subLever.leverId)),
     };
   }, [data, visibleLevers]);
 
-  // Projets de l'entreprise — pour la ventilation "par projet" (en plus de "par workstream").
-  const [projects, setProjects] = useState<Project[]>([]);
+  // Programmes de l'entreprise — pour la ventilation "par programme" (en plus de "par
+  // workstream") et pour le sélecteur de programme du dashboard (voir plus bas).
+  const [programs, setPrograms] = useState<Program[]>([]);
   useEffect(() => {
-    const unsub = subscribeProjects((all) =>
-      setProjects(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all)
+    const unsub = subscribePrograms((all) =>
+      setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all)
     );
     return unsub;
   }, [user?.companyId]);
+
+  // ── Sélecteur de programme (scope du dashboard) ─────────────────────────────
+  // Le dashboard exécutif est scopé à UN programme sélectionné, porté par l'URL (?program=) pour
+  // rester partageable/rechargeable. Auto-sélection du premier programme disponible si l'URL n'en
+  // précise aucun et qu'au moins un programme existe (évite un dashboard vide inutilement pour les
+  // entreprises n'ayant qu'un seul programme).
+  const selectedProgramId = searchParams.get("program") ?? "";
+
+  useEffect(() => {
+    if (!selectedProgramId && programs.length > 0) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("program", programs[0].id);
+      router.replace(`/dashboard?${params.toString()}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProgramId, programs]);
+
+  const handleProgramChange = (programId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("program", programId);
+    router.push(`/dashboard?${params.toString()}`);
+  };
+
+  // Leviers scopés au programme sélectionné — appliqué AVANT le filtrage de la barre de filtres
+  // (les options de filtres ne doivent refléter que les leviers du programme courant), mais reste
+  // distinct des filtres globaux (c'est un scope, pas un filtre parmi d'autres).
+  const programScopedLevers = useMemo(
+    () => visibleLevers.filter((l) => l.programId === selectedProgramId),
+    [visibleLevers, selectedProgramId]
+  );
 
   // Arborescence financière (optionnelle) de l'entreprise — n'ajoute des dimensions "hiérarchie"
   // au builder générique que si l'entreprise a explicitement configuré des hierarchyLevels (voir
@@ -208,21 +237,36 @@ export default function DashboardPage() {
     [data.workstreams, lifecycle]
   );
 
+  // Clés de filtre "activées" indépendamment d'une valeur choisie (voir FilterBar : activer une
+  // dimension démarre à ZÉRO valeur sélectionnée, style Excel). Sans cet état local, un filtre
+  // activé mais encore vide redeviendrait immédiatement "inactif" au prochain rendu puisque
+  // `activeForBar` ne serait dérivé que de `filters.f_X` (qui ne porte aucune valeur tant que rien
+  // n'est coché).
+  const [openFilterKeys, setOpenFilterKeys] = useState<string[]>([]);
+
   const activeForBar: ActiveFilters = useMemo(() => {
     const result: ActiveFilters = {};
-    if (filters.f_status) result.status = filters.f_status.split(",").filter(Boolean);
-    if (filters.f_ws) result.ws = filters.f_ws.split(",").filter(Boolean);
-    if (filters.f_owner) result.owner = filters.f_owner.split(",").filter(Boolean);
-    if (filters.f_geography) result.geography = filters.f_geography.split(",").filter(Boolean);
-    if (filters.f_function) result.function = filters.f_function.split(",").filter(Boolean);
-    if (filters.f_type) result.type = filters.f_type.split(",").filter(Boolean);
+    const openSet = new Set(openFilterKeys);
+    if (filters.f_status || openSet.has("status"))
+      result.status = filters.f_status ? filters.f_status.split(",").filter(Boolean) : [];
+    if (filters.f_ws || openSet.has("ws"))
+      result.ws = filters.f_ws ? filters.f_ws.split(",").filter(Boolean) : [];
+    if (filters.f_owner || openSet.has("owner"))
+      result.owner = filters.f_owner ? filters.f_owner.split(",").filter(Boolean) : [];
+    if (filters.f_geography || openSet.has("geography"))
+      result.geography = filters.f_geography ? filters.f_geography.split(",").filter(Boolean) : [];
+    if (filters.f_function || openSet.has("function"))
+      result.function = filters.f_function ? filters.f_function.split(",").filter(Boolean) : [];
+    if (filters.f_type || openSet.has("type"))
+      result.type = filters.f_type ? filters.f_type.split(",").filter(Boolean) : [];
     return result;
-  }, [filters]);
+  }, [filters, openFilterKeys]);
 
   const hasActiveFilters = Object.keys(activeForBar).length > 0;
 
   const handleFilterChange = (next: ActiveFilters) => {
     resetFilters();
+    setOpenFilterKeys(Object.keys(next));
     const map: Record<string, keyof typeof filters> = {
       status: "f_status",
       ws: "f_ws",
@@ -238,7 +282,7 @@ export default function DashboardPage() {
   };
 
   const filteredLevers = useMemo(() => {
-    return visibleLevers.filter((l) =>
+    return programScopedLevers.filter((l) =>
       matchesGlobalFilters(
         {
           status: lifecycle.label(l.status),
@@ -248,21 +292,18 @@ export default function DashboardPage() {
           country: l.country,
           owner: l.owner,
           type: l.type,
-          priority: l.priority,
           risk: l.risk,
           end: l.end,
         },
         filters
       )
     );
-  }, [visibleLevers, data.workstreams, filters, lifecycle]);
+  }, [programScopedLevers, data.workstreams, filters, lifecycle]);
 
   const filteredData = useMemo(() => {
-    const ids = new Set(filteredLevers.map((lever) => lever.id));
     return {
       ...visibleData,
       levers: filteredLevers,
-      subLevers: visibleData.subLevers.filter((subLever) => ids.has(subLever.leverId)),
     };
   }, [visibleData, filteredLevers]);
 
@@ -299,12 +340,31 @@ export default function DashboardPage() {
   const [manualAlertOpen, setManualAlertOpen] = useState(false);
   const { alerts: allAlerts } = useNotifications(visibleData, user);
 
+  // Une alerte ne reste affichée que si elle est liée (via un levier, ou via un workstream ayant
+  // au moins un levier) à l'ensemble scopé (programme) + filtré courant. Une alerte dont le scope
+  // ne résout à AUCUN levier ni workstream connu (scope orphelin/inconnu) reste visible par
+  // défaut ("fail open") plutôt que d'être masquée silencieusement.
+  const scopedLeverIds = useMemo(() => new Set(filteredLevers.map((l) => l.id)), [filteredLevers]);
+  const scopedWorkstreamIds = useMemo(
+    () => new Set(filteredLevers.map((l) => l.ws)),
+    [filteredLevers]
+  );
+  const scopedAlerts = useMemo(
+    () =>
+      allAlerts.filter((a) => {
+        if (a.scope.startsWith("WS-")) return scopedWorkstreamIds.has(a.scope);
+        if (data.getLeverById(a.scope)) return scopedLeverIds.has(a.scope);
+        return true;
+      }),
+    [allAlerts, scopedLeverIds, scopedWorkstreamIds, data]
+  );
+
   const filteredAlerts = useMemo(() => {
-    let result = allAlerts;
+    let result = scopedAlerts;
     if (!alertShowResolved) result = result.filter((a) => !a.resolved);
     if (alertTypeFilter !== "all") result = result.filter((a) => a.type === alertTypeFilter);
     return result;
-  }, [allAlerts, alertShowResolved, alertTypeFilter]);
+  }, [scopedAlerts, alertShowResolved, alertTypeFilter]);
 
   const alertPageCount = Math.max(1, Math.ceil(filteredAlerts.length / ALERTS_PER_PAGE));
   const alertPageClamped = Math.min(alertPage, alertPageCount - 1);
@@ -332,16 +392,16 @@ export default function DashboardPage() {
     return lever ? `${lever.name} (${lever.code})` : undefined;
   };
 
-  // Compteurs par sévérité (sur les non-résolus uniquement)
+  // Compteurs par sévérité (sur les non-résolus uniquement, scope+filtre appliqués)
   const alertCounts = useMemo(() => {
-    const unresolvedAlerts = allAlerts.filter((a) => !a.resolved);
+    const unresolvedAlerts = scopedAlerts.filter((a) => !a.resolved);
     return {
       red: unresolvedAlerts.filter((a) => a.type === "red").length,
       amber: unresolvedAlerts.filter((a) => a.type === "amber").length,
       green: unresolvedAlerts.filter((a) => a.type === "green").length,
       blue: unresolvedAlerts.filter((a) => a.type === "blue").length,
     };
-  }, [allAlerts]);
+  }, [scopedAlerts]);
   const [sCurveGranularity, setSCurveGranularity] = useState<engine.TimeGranularity>("month");
 
   // ── Trajectoire des économies (widget combiné S-curve + Bridge) ────────
@@ -418,9 +478,6 @@ export default function DashboardPage() {
       goToLevers(ws ? { f_ws: ws.name } : {});
     } else if (data.getLeverById(alert.scope)) {
       router.push(`/levers/detail?id=${alert.scope}`);
-    } else if (data.subLevers.some((subLever) => subLever.id === alert.scope)) {
-      const subLever = data.subLevers.find((item) => item.id === alert.scope);
-      router.push(`/levers/detail?id=${subLever?.leverId}`);
     } else {
       goToLevers({});
     }
@@ -481,15 +538,15 @@ export default function DashboardPage() {
   const countryBars = dimensionBars((l) => l.country);
   const functionBars = dimensionBars((l) => l.function);
 
-  const projectMap = engine.byProject(visibleData, projects);
-  const projectBars = [
-    ...projects.map((p) => ({
+  const programMap = engine.byProgram(visibleData, programs);
+  const programBars = [
+    ...programs.map((p) => ({
       label: p.name,
-      realized: projectMap[p.name] ?? 0,
+      realized: programMap[p.name] ?? 0,
       target: p.target,
     })),
-    ...(projectMap["Non assigné"]
-      ? [{ label: "Non assigné", realized: projectMap["Non assigné"], target: 0 }]
+    ...(programMap["Non assigné"]
+      ? [{ label: "Non assigné", realized: programMap["Non assigné"], target: 0 }]
       : []),
   ];
 
@@ -1088,9 +1145,9 @@ export default function DashboardPage() {
           activeView?.id === "workstream-lever";
         const mekko2D = activeView
           ? isLegacy
-            ? engine.marimekko2D(filteredData, activeView.id as engine.MarimekkoPairKey, projects)
+            ? engine.marimekko2D(filteredData, activeView.id as engine.MarimekkoPairKey, programs)
             : (pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
-                projects,
+                programs,
                 hierarchyLevels,
                 hierarchyNodes,
               }) as engine.Marimekko2DColumn[])
@@ -1135,7 +1192,7 @@ export default function DashboardPage() {
           activeView?.id === "workstream" ||
           activeView?.id === "country" ||
           activeView?.id === "function" ||
-          activeView?.id === "project";
+          activeView?.id === "program";
         const barData = activeView
           ? isLegacy
             ? activeView.id === "workstream"
@@ -1144,10 +1201,10 @@ export default function DashboardPage() {
                 ? countryBars
                 : activeView.id === "function"
                   ? functionBars
-                  : projectBars
+                  : programBars
             : (
                 pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
-                  projects,
+                  programs,
                   hierarchyLevels,
                   hierarchyNodes,
                 }) as PivotRow[]
@@ -1199,7 +1256,7 @@ export default function DashboardPage() {
             ? geoDataFor(activeView.id)
             : (
                 pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
-                  projects,
+                  programs,
                   hierarchyLevels,
                   hierarchyNodes,
                 }) as PivotRow[]
@@ -1581,10 +1638,7 @@ export default function DashboardPage() {
                       <div
                         key={`${a.sourceId}-${a.targetId}-${i}`}
                         onClick={() => {
-                          const sourceSubLever = data.subLevers.find(
-                            (item) => item.id === a.sourceId
-                          );
-                          router.push(`/levers/detail?id=${sourceSubLever?.leverId ?? a.sourceId}`);
+                          router.push(`/levers/detail?id=${a.sourceId}`);
                         }}
                         className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
                       >
@@ -1680,11 +1734,6 @@ export default function DashboardPage() {
                             {a.delayDays}{" "}
                             {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
                           </span>
-                          {a.sourceKind === "subLever" && (
-                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
-                              Sous-levier
-                            </span>
-                          )}
                           {a.impactEur > 0 && (
                             <span className="ml-auto font-bold text-bp-coral">
                               {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
@@ -1706,6 +1755,27 @@ export default function DashboardPage() {
     }
   };
 
+  // Aucun programme configuré pour l'entreprise (ou l'utilisateur n'en a pas encore choisi un
+  // parmi ceux disponibles) → écran vide guidant vers la création d'un programme, plutôt qu'un
+  // dashboard vide/incohérent (aucun levier ne peut être scopé sans programme).
+  if (programs.length === 0) {
+    return (
+      <div className="animate-fade-up">
+        <div className="mb-5">
+          <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
+            {t("dashboard.title")}
+          </h1>
+        </div>
+        <div className="rounded-lg border border-border bg-white p-10 text-center">
+          <p className="mx-auto max-w-md text-sm text-secondary">
+            Aucun programme n&apos;a encore été créé pour votre entreprise. Créez-en un dans Admin
+            &gt; Entreprises &gt; Programmes, puis rattachez-y des leviers.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-up">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
@@ -1713,9 +1783,20 @@ export default function DashboardPage() {
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
             {t("dashboard.title")}
           </h1>
-          <div className="mt-2.5 text-[13px] text-secondary">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
             {t("dashboard.program")} <strong>{data.program.name}</strong> · {summary.leverCount}{" "}
             {t("dashboard.leversActive")}
+            <select
+              value={selectedProgramId}
+              onChange={(e) => handleProgramChange(e.target.value)}
+              className="ml-1 rounded-sm border border-border bg-white px-2 py-0.5 text-[12px] font-semibold text-primary focus:border-bp-coral focus:outline-none"
+            >
+              {programs.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         {/* Outils de bureau (export PPTX, personnalisation du layout) — sans objet au doigt
@@ -1756,7 +1837,7 @@ export default function DashboardPage() {
         {mobileFiltersOpen && (
           <div className="mt-2">
             <FilterBar
-              items={visibleLevers}
+              items={programScopedLevers}
               defs={filterDefs}
               active={activeForBar}
               onChange={handleFilterChange}
@@ -1766,7 +1847,7 @@ export default function DashboardPage() {
       </div>
       <div className="mb-4 hidden lg:block">
         <FilterBar
-          items={visibleLevers}
+          items={programScopedLevers}
           defs={filterDefs}
           active={activeForBar}
           onChange={handleFilterChange}
