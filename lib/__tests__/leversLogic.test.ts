@@ -5,12 +5,11 @@ import {
   updateAction,
   createLever,
   updateLever,
-  deleteSubLever,
   resolveConfidentialityClearance,
   isLeverVisibleForClearance,
   canUserViewLever,
 } from "@/lib/leversLogic";
-import type { Lever, LeverStatus, SubLever } from "@/types";
+import type { Lever, LeverStatus } from "@/types";
 
 describe("canUserViewLever", () => {
   const user = {
@@ -50,7 +49,6 @@ const baseLever: Lever = {
   end: "2026-12-31",
   status: "idea",
   progress: 0,
-  priority: "medium",
   risk: "low",
   grossSavings: 10,
   netSavings: 8,
@@ -218,7 +216,7 @@ describe("leversLogic — updateLever (status change & plan lock triggering)", (
 
   it("creates audit entries for changed fields", () => {
     const levers = [makeLever("idea")];
-    const result = updateLever(levers, "L001", { status: "qualified", priority: "high" }, "user");
+    const result = updateLever(levers, "L001", { status: "qualified", owner: "New Owner" }, "user");
     expect(result.auditEntries.length).toBeGreaterThanOrEqual(1);
     expect(result.auditEntries[0].user).toBe("user");
   });
@@ -244,7 +242,7 @@ describe("leversLogic — updateLever (status change & plan lock triggering)", (
 
   it("does not overwrite cancelledAtStage on further updates once cancelled", () => {
     const levers = [makeLever("cancelled", { cancelledAtStage: "validated" })];
-    const result = updateLever(levers, "L001", { priority: "high" }, "user");
+    const result = updateLever(levers, "L001", { owner: "New Owner" }, "user");
     expect(result.lever.cancelledAtStage).toBe("validated");
   });
 });
@@ -260,7 +258,6 @@ describe("leversLogic — enriched action consolidation", () => {
   it("creates an action and recomputes the parent reforecast and FTE", () => {
     const result = createAction(
       [lockedLever],
-      [],
       { leverId: "L001" },
       {
         name: "Déploiement",
@@ -343,14 +340,7 @@ describe("leversLogic — enriched action consolidation", () => {
       ],
     };
 
-    const result = updateAction(
-      [lever],
-      [],
-      { leverId: "L001" },
-      "A1",
-      { status: "done" },
-      "alice"
-    );
+    const result = updateAction([lever], { leverId: "L001" }, "A1", { status: "done" }, "alice");
     expect(result.changedLever?.progress).toBe(10);
   });
 
@@ -381,133 +371,12 @@ describe("leversLogic — enriched action consolidation", () => {
 
     const result = updateAction(
       [lever],
-      [],
       { leverId: "L001" },
       "A1",
       { status: "in_progress" },
       "alice"
     );
     expect(result.action.deliveredDate).toBeUndefined();
-  });
-});
-
-describe("leversLogic — deleteSubLever", () => {
-  it("removes a sublever by id", () => {
-    const subLevers: SubLever[] = [
-      {
-        id: "SL001",
-        leverId: "L001",
-        name: "Sub1",
-        expensePost: "P1",
-        businessUnit: "BU1",
-        pnlMap: "PNL01",
-        grossSavings: 5,
-        netSavings: 4,
-        opexOneOff: 0,
-        opexRec: 0,
-        capex: 0,
-        fteImpact: 0,
-        popImpacted: 0,
-        start: "2026-01-01",
-        end: "2026-12-31",
-        status: "in_progress",
-        priority: "medium",
-        risk: "low",
-        dependencies: [],
-        actions: [],
-      },
-      {
-        id: "SL002",
-        leverId: "L001",
-        name: "Sub2",
-        expensePost: "P2",
-        businessUnit: "BU2",
-        pnlMap: "PNL01",
-        grossSavings: 3,
-        netSavings: 2,
-        opexOneOff: 0,
-        opexRec: 0,
-        capex: 0,
-        fteImpact: 0,
-        popImpacted: 0,
-        start: "2026-01-01",
-        end: "2026-12-31",
-        status: "in_progress",
-        priority: "medium",
-        risk: "low",
-        dependencies: [],
-        actions: [],
-      },
-    ];
-    const levers = [makeLever("in_progress")];
-    const result = deleteSubLever(levers, subLevers, "SL001", "user");
-    expect(result.subLevers).toHaveLength(1);
-    expect(result.subLevers[0].id).toBe("SL002");
-    expect(result.deletedId).toBe("SL001");
-  });
-
-  it("creates audit entry on deletion", () => {
-    const subLevers: SubLever[] = [
-      {
-        id: "SL001",
-        leverId: "L001",
-        name: "Sub1",
-        expensePost: "P1",
-        businessUnit: "BU1",
-        pnlMap: "PNL01",
-        grossSavings: 5,
-        netSavings: 4,
-        opexOneOff: 0,
-        opexRec: 0,
-        capex: 0,
-        fteImpact: 0,
-        popImpacted: 0,
-        start: "2026-01-01",
-        end: "2026-12-31",
-        status: "in_progress",
-        priority: "medium",
-        risk: "low",
-        dependencies: [],
-        actions: [],
-      },
-    ];
-    const levers = [makeLever("in_progress")];
-    const result = deleteSubLever(levers, subLevers, "SL001", "alice");
-    expect(result.auditEntries).toHaveLength(1);
-    expect(result.auditEntries[0].action).toBe("updated");
-    expect(result.auditEntries[0].user).toBe("alice");
-  });
-
-  it("returns unchanged list when sublever id not found", () => {
-    const subLevers: SubLever[] = [
-      {
-        id: "SL001",
-        leverId: "L001",
-        name: "Sub1",
-        expensePost: "P1",
-        businessUnit: "BU1",
-        pnlMap: "PNL01",
-        grossSavings: 5,
-        netSavings: 4,
-        opexOneOff: 0,
-        opexRec: 0,
-        capex: 0,
-        fteImpact: 0,
-        popImpacted: 0,
-        start: "2026-01-01",
-        end: "2026-12-31",
-        status: "in_progress",
-        priority: "medium",
-        risk: "low",
-        dependencies: [],
-        actions: [],
-      },
-    ];
-    const levers = [makeLever("in_progress")];
-    const result = deleteSubLever(levers, subLevers, "SL999", "user");
-    expect(result.subLevers).toHaveLength(1);
-    expect(result.deletedId).toBe("SL999");
-    expect(result.auditEntries).toHaveLength(0);
   });
 });
 

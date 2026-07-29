@@ -30,7 +30,6 @@ const baseLever: Lever = {
   end: "2026-12-31",
   status: "in_progress",
   progress: 50,
-  priority: "medium",
   risk: "low",
   grossSavings: 10,
   netSavings: 8,
@@ -71,13 +70,11 @@ function makeData(levers: Lever[]): BeTrackData {
     ],
     leverStatuses: [],
     riskLevels: [],
-    priorityLevels: [],
     leverTypes: [],
     geographies: [],
     functions: [],
     pnlAccounts: [{ id: "PNL01", name: "Compte Un", baseline: 0, sign: 1 }],
     levers,
-    subLevers: [],
     workforce: {
       totalFTE: 200,
       massSalary: 15,
@@ -128,10 +125,9 @@ describe("dashboardPivot — registries", () => {
         "country",
         "entity",
         "function",
-        "priority",
         "risk",
         "status",
-        "project",
+        "program",
         "pnlAccount",
       ])
     );
@@ -259,16 +255,16 @@ describe("dashboardPivot — edge cases", () => {
     expect(pivotByDimensions(data, "netSavings", ["does-not-exist"])).toEqual([]);
   });
 
-  it("resolves workstream and project dimensions via lookup context", () => {
-    const data = makeData([{ ...baseLever, id: "L001", ws: "WS-01", projectId: "PRJ-1" }]);
+  it("resolves workstream and program dimensions via lookup context", () => {
+    const data = makeData([{ ...baseLever, id: "L001", ws: "WS-01", programId: "PRJ-1" }]);
     const rows = pivotByDimensions(data, "netSavings", ["ws"]) as PivotRow[];
     expect(rows[0].key).toBe("Workstream Un");
-    const projectRows = pivotByDimensions(data, "netSavings", ["project"], {
-      projects: [
+    const programRows = pivotByDimensions(data, "netSavings", ["program"], {
+      programs: [
         {
           id: "PRJ-1",
           companyId: "C1",
-          name: "Projet Un",
+          name: "Programme Un",
           sponsor: "S",
           target: 1,
           currency: "€M",
@@ -280,7 +276,7 @@ describe("dashboardPivot — edge cases", () => {
         },
       ],
     }) as PivotRow[];
-    expect(projectRows[0].key).toBe("Projet Un");
+    expect(programRows[0].key).toBe("Programme Un");
   });
 
   it("resolves hierarchy dimensions via resolveHierarchyPath, falling back gracefully without nodes", () => {

@@ -9,7 +9,6 @@ const EMPTY_FILTERS: GlobalFilters = {
   f_country: "",
   f_owner: "",
   f_type: "",
-  f_priority: "",
   f_risk: "",
   f_endMonth: "",
   f_endQuarter: "",
@@ -23,7 +22,6 @@ const sampleLever = {
   country: "France",
   owner: "John Doe",
   type: "Digital",
-  priority: "high",
   risk: "medium",
   end: "2026-09-15",
 };

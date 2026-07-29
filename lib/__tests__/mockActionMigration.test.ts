@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { mockData } from "@/data/mockData";
+import { mockData, legacySubLevers } from "@/data/mockData";
 import { migrateMockLeversToActions } from "@/lib/mockActionMigration";
 
 describe("mockActionMigration", () => {
-  const migrated = migrateMockLeversToActions(mockData.levers, mockData.subLevers);
+  const migrated = migrateMockLeversToActions(mockData.levers, legacySubLevers);
 
   it("creates enriched actions for every lever", () => {
     expect(migrated).toHaveLength(mockData.levers.length);
@@ -55,9 +55,9 @@ describe("mockActionMigration", () => {
   });
 
   it("preserves former sub-lever actions and enriches each with impacts", () => {
-    const parentIds = new Set(mockData.subLevers.map((sub) => sub.leverId));
+    const parentIds = new Set(legacySubLevers.map((sub) => sub.leverId));
     parentIds.forEach((leverId) => {
-      const expected = mockData.subLevers
+      const expected = legacySubLevers
         .filter((sub) => sub.leverId === leverId)
         .reduce((sum, sub) => sum + Math.max(1, sub.actions.length), 0);
       const lever = migrated.find((candidate) => candidate.id === leverId)!;
@@ -94,13 +94,13 @@ describe("mockActionMigration", () => {
       dependencies: [],
     };
     const subA = {
-      ...mockData.subLevers[0],
+      ...legacySubLevers[0],
       id: "SL-A",
       leverId: "L-A",
       dependencies: [{ targetId: "SL-B", type: "FS" as const }],
     };
     const subB = {
-      ...mockData.subLevers[1],
+      ...legacySubLevers[1],
       id: "SL-B",
       leverId: "L-B",
       dependencies: [],
@@ -119,13 +119,13 @@ describe("mockActionMigration", () => {
       dependencies: [],
     };
     const subA = {
-      ...mockData.subLevers[0],
+      ...legacySubLevers[0],
       id: "SL-A1",
       leverId: "L-A",
       dependencies: [{ targetId: "SL-A2", type: "FS" as const }],
     };
     const subB = {
-      ...mockData.subLevers[1],
+      ...legacySubLevers[1],
       id: "SL-A2",
       leverId: "L-A",
       dependencies: [],

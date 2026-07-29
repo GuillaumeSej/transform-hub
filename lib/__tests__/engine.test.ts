@@ -13,7 +13,7 @@ import {
   byGeo,
   byFunction,
   byCountry,
-  byProject,
+  byProgram,
   marimekko2D,
   sCurve3,
   financialBridge,
@@ -23,7 +23,7 @@ import {
   programSummary,
 } from "@/lib/engine";
 import { STATUS_LEVEL } from "@/lib/status-config";
-import type { BeTrackData, Lever, Project, SubLever, LeverStatus } from "@/types";
+import type { BeTrackData, Lever, Program, LeverStatus } from "@/types";
 
 const baseLever: Lever = {
   id: "L001",
@@ -45,7 +45,6 @@ const baseLever: Lever = {
   end: "2026-12-31",
   status: "in_progress",
   progress: 50,
-  priority: "medium",
   risk: "low",
   grossSavings: 10,
   netSavings: 8,
@@ -77,13 +76,11 @@ function makeData(overrides?: Partial<BeTrackData>): BeTrackData {
     workstreams: [],
     leverStatuses: [],
     riskLevels: [],
-    priorityLevels: [],
     leverTypes: [],
     geographies: [],
     functions: [],
     pnlAccounts: [],
     levers: [],
-    subLevers: [],
     workforce: {
       totalFTE: 200,
       massSalary: 15,
@@ -281,50 +278,21 @@ describe("engine — actionProgress", () => {
 });
 
 describe("engine — recomputeLeverProgress", () => {
-  it("uses sublever weighted average when sublevers exist", () => {
-    const lever = { ...baseLever, progress: 0 };
-    const subLevers: SubLever[] = [
-      {
-        id: "SL001",
-        leverId: "L001",
-        name: "Sub1",
-        expensePost: "P1",
-        businessUnit: "BU1",
-        pnlMap: "PNL01",
-        grossSavings: 10,
-        netSavings: 8,
-        opexOneOff: 0,
-        opexRec: 0,
-        capex: 0,
-        fteImpact: 0,
-        popImpacted: 0,
-        start: "2026-01-01",
-        end: "2026-12-31",
-        status: "in_progress",
-        priority: "medium",
-        risk: "low",
-        dependencies: [],
-        actions: [
-          { id: "a1", name: "A1", start: "", end: "", cost: 0, status: "done" },
-          { id: "a2", name: "A2", start: "", end: "", cost: 0, status: "done" },
-        ],
-      },
-    ];
-    expect(recomputeLeverProgress(lever, subLevers)).toBe(100);
-  });
-
-  it("uses lever.actions when no sublevers", () => {
+  it("uses lever.actions weighted average when actions exist", () => {
     const lever = {
       ...baseLever,
       progress: 0,
-      actions: [{ id: "a1", name: "A1", start: "", end: "", cost: 0, status: "done" as const }],
+      actions: [
+        { id: "a1", name: "A1", start: "", end: "", cost: 0, status: "done" as const },
+        { id: "a2", name: "A2", start: "", end: "", cost: 0, status: "done" as const },
+      ],
     };
-    expect(recomputeLeverProgress(lever, [])).toBe(100);
+    expect(recomputeLeverProgress(lever)).toBe(100);
   });
 
   it("falls back to lever.progress when no actions", () => {
-    const lever = { ...baseLever, progress: 75 };
-    expect(recomputeLeverProgress(lever, [])).toBe(75);
+    const lever = { ...baseLever, progress: 75, actions: [] };
+    expect(recomputeLeverProgress(lever)).toBe(75);
   });
 });
 
@@ -435,7 +403,7 @@ describe("engine — financialBridge granularity", () => {
   });
 });
 
-describe("engine — byCountry / byProject", () => {
+describe("engine — byCountry / byProgram", () => {
   it("aggregates by country", () => {
     const data = makeData({
       levers: [
@@ -449,12 +417,12 @@ describe("engine — byCountry / byProject", () => {
     expect(result["Germany"]).toBe(2);
   });
 
-  it("aggregates by project, grouping unassigned levers under 'Non assigné'", () => {
-    const projects: Project[] = [
+  it("aggregates by program, grouping unassigned levers under 'Non assigné'", () => {
+    const programs: Program[] = [
       {
         id: "p1",
         companyId: "c1",
-        name: "Projet A",
+        name: "Programme A",
         sponsor: "CEO",
         target: 10,
         currency: "€M",
@@ -467,12 +435,12 @@ describe("engine — byCountry / byProject", () => {
     ];
     const data = makeData({
       levers: [
-        { ...baseLever, projectId: "p1", netSavings: 5, progress: 100 },
+        { ...baseLever, programId: "p1", netSavings: 5, progress: 100 },
         { ...baseLever, id: "L002", netSavings: 3, progress: 100 },
       ],
     });
-    const result = byProject(data, projects);
-    expect(result["Projet A"]).toBe(5);
+    const result = byProgram(data, programs);
+    expect(result["Programme A"]).toBe(5);
     expect(result["Non assigné"]).toBe(3);
   });
 });
@@ -522,12 +490,12 @@ describe("engine — marimekko2D", () => {
     expect(Math.round(franceSeg.heightPct + germanySeg.heightPct)).toBe(100);
   });
 
-  it("groups by workstream then by project (workstream-project pair), unassigned levers bucketed", () => {
-    const projects: Project[] = [
+  it("groups by workstream then by program (workstream-project pair), unassigned levers bucketed", () => {
+    const programs: Program[] = [
       {
         id: "p1",
         companyId: "c1",
-        name: "Projet A",
+        name: "Programme A",
         sponsor: "CEO",
         target: 10,
         currency: "€M",
@@ -540,14 +508,14 @@ describe("engine — marimekko2D", () => {
     ];
     const data = makeData({
       levers: [
-        { ...baseLever, id: "L001", ws: "WS-01", projectId: "p1", netSavings: 5, progress: 100 },
+        { ...baseLever, id: "L001", ws: "WS-01", programId: "p1", netSavings: 5, progress: 100 },
         { ...baseLever, id: "L002", ws: "WS-01", netSavings: 3, progress: 100 },
       ],
     });
-    const columns = marimekko2D(data, "workstream-project", projects);
+    const columns = marimekko2D(data, "workstream-project", programs);
     expect(columns).toHaveLength(1);
     const segments = columns[0].segments;
-    expect(segments.find((s) => s.key === "Projet A")?.value).toBe(5);
+    expect(segments.find((s) => s.key === "Programme A")?.value).toBe(5);
     expect(segments.find((s) => s.key === "Non assigné")?.value).toBe(3);
   });
 
@@ -787,7 +755,6 @@ describe("engine — pnlImpactDetailed from action impacts", () => {
           ],
         },
       ],
-      subLevers: [],
     });
 
     const feb = pnlImpactDetailed(data, { year: "2026", quarter: "Q1", month: "Feb" });
