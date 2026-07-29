@@ -9,6 +9,7 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import * as engine from "@/lib/engine";
+import { generateAlerts } from "@/lib/alertEngine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
@@ -24,7 +25,7 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
-import type { HierarchyLevelDef, HierarchyNode, Lever } from "@/types";
+import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
 
 type LeverRow = Lever & {
   realized: number;
@@ -56,16 +57,24 @@ export default function LeversPage() {
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
   const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
   const [clearance, setClearance] = useState<"all" | string[]>([]);
+  const [riskThresholds, setRiskThresholds] = useState<
+    { level: RiskLevel; minAmount: number }[] | undefined
+  >(undefined);
 
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
       setHierarchyLevels(company?.hierarchyLevels ?? []);
       setClearance(resolveConfidentialityClearance(user, company?.roleClearance));
+      setRiskThresholds(company?.riskThresholds);
     });
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.companyId, user?.role, user?.confidentialityClearance]);
+
+  // Alertes auto (dépendances, jalons, etc.) + manuelles — même source que useNotifications —
+  // servent à recalculer le risque de chaque levier à la volée (voir engine.computeLeverRisk).
+  const alerts = useMemo(() => generateAlerts(data), [data]);
 
   useEffect(() => {
     if (!user?.companyId || hierarchyLevels.length === 0) {
@@ -137,7 +146,13 @@ export default function LeversPage() {
             : l.costCenter;
         },
       },
-      { key: "f_risk", label: "Risque", getValue: (l) => l.risk },
+      {
+        key: "f_risk",
+        label: "Risque",
+        // Recalculé depuis les alertes (voir engine.computeLeverRisk), pas la valeur stockée —
+        // les options proposées doivent refléter le risque réellement affiché.
+        getValue: (l) => engine.computeLeverRisk(l.id, alerts, riskThresholds),
+      },
       {
         key: "f_pnl",
         label: "Compte P&L",
@@ -160,7 +175,7 @@ export default function LeversPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.workstreams, data.pnlAccounts, alertedLeverIds, lifecycle]
+    [data.workstreams, data.pnlAccounts, alertedLeverIds, lifecycle, alerts, riskThresholds]
   );
 
   const activeFilters: ActiveFilters = useMemo(() => {
@@ -204,6 +219,7 @@ export default function LeversPage() {
     const costs = l.capex + l.opexOneOff;
     return {
       ...l,
+      risk: engine.computeLeverRisk(l.id, alerts, riskThresholds),
       realized: engine.realizedSavings(l),
       wsName: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       statusLabel: lifecycle.label(l.status),

@@ -337,8 +337,8 @@ export function useBeTrackData(companyId?: string | null) {
   );
 
   const addComment = useCallback(
-    (leverId: string, text: string) => {
-      const result = leversLogic.addComment(commentsRef.current, leverId, text, DEMO_USER);
+    (leverId: string, text: string, user: AuthUser) => {
+      const result = leversLogic.addComment(commentsRef.current, leverId, text, user.name);
       commentsRef.current = result.comments;
       setComments(result.comments);
       persistAudit([result.auditEntry]);

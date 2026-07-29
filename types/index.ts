@@ -2,7 +2,7 @@ export type Role =
   "admin" | "admin_entreprise" | "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
 
 /** Compte de test (voir lib/auth.ts) — login réel par identifiant/mot de passe, mais toujours
- * des comptes de démo (mot de passe unique "test" pour les 6 + admin). */
+ * des comptes de démo (mot de passe unique "test" pour les 8 comptes/rôles). */
 export type AuthUser = {
   username: string;
   password: string;

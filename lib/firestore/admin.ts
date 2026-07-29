@@ -217,17 +217,20 @@ export const TEST_COMPANY_3: Company = {
   fyEnd: "2026-12-31",
 };
 
+// Aligné sur mockData.program (même id, mêmes chiffres) : c'est le MÊME programme réel pour
+// l'entreprise de démo Acme (c1), simplement exposé aussi comme entité `Program` Firestore
+// multi-instance (pour le sélecteur du dashboard). Ne pas laisser diverger — voir data/mockData.ts.
 export const TEST_PROGRAM: Program = {
   id: "p1",
   companyId: "c1",
-  name: "Transformation Acme 2026",
-  sponsor: "Marie Martin",
-  target: 15.0,
-  currency: "€M",
+  name: "Transformation Excellence 2026",
+  sponsor: "CEO Office",
+  target: 50.0,
+  currency: "EUR",
   fyStart: "2026-01-01",
   fyEnd: "2026-12-31",
-  baselineEBIT: 45.0,
-  revenue: 320.0,
+  baselineEBIT: 124.5,
+  revenue: 892.0,
   createdAt: "2026-01-15",
 };
 

@@ -12,7 +12,7 @@ import { assetPath } from "@/lib/utils";
 
 /**
  * Écran de connexion — identifiant + mot de passe. Comptes de démo uniquement (voir
- * lib/auth.ts) : 6 comptes de test, un par rôle, mot de passe "test" pour tous.
+ * lib/auth.ts) : 8 comptes de test, un par rôle, mot de passe "test" pour tous.
  *
  * L'aide-mémoire des comptes de démo n'est plus affiché par défaut (une liste de
  * comptes/mot de passe sur un écran de login est rédhibitoire face à un client) : il

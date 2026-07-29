@@ -2,7 +2,7 @@ import type { AuthUser } from "@/types";
 
 /**
  * Comptes de démo — connexion réelle par identifiant/mot de passe (mot de passe "test" pour les
- * 7), mais toujours des comptes de test, pas une vraie authentification. `name` doit correspondre
+ * 8), mais toujours des comptes de test, pas une vraie authentification. `name` doit correspondre
  * exactement au champ `owner` des leviers de démo qu'on veut voir apparaître pour ce compte (voir
  * data/mockData.ts, leviers rattachés au Lever Owner de test).
  */

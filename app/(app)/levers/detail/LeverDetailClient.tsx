@@ -21,6 +21,7 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as engine from "@/lib/engine";
+import { generateAlerts } from "@/lib/alertEngine";
 import type { CascadeResult } from "@/lib/engine";
 import { DEPENDENCY_TYPE_DESCRIPTION, STATUS_ORDER } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
@@ -58,12 +59,14 @@ export default function LeverDetailClient() {
   const [actionPlanEnabled, setActionPlanEnabled] = useState(true);
   const [roleClearance, setRoleClearance] = useState<Company["roleClearance"]>();
   const [defaultRecognition, setDefaultRecognition] = useState<RecognitionMode>("smoothing");
+  const [riskThresholds, setRiskThresholds] = useState<Company["riskThresholds"]>();
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
       setRoleClearance(company?.roleClearance);
       setActionPlanEnabled(company?.actionPlanEnabled ?? true);
       setDefaultRecognition(company?.defaultRecognition ?? "smoothing");
+      setRiskThresholds(company?.riskThresholds);
     });
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,6 +93,7 @@ export default function LeverDetailClient() {
     if (requestedTab) setTab(requestedTab);
   }, [requestedTab, searchParams]);
   const allDependencyAlerts = useMemo(() => engine.dependencyAlerts(data), [data]);
+  const alerts = useMemo(() => generateAlerts(data), [data]);
 
   // J-Curve + consolidation — hooks doivent être avant tout return conditionnel
   const jCurveData = useMemo(
@@ -296,7 +300,7 @@ export default function LeverDetailClient() {
         open={actionModal !== null}
         onOpenChange={(open) => !open && setActionModal(null)}
         title={actionModal?.mode === "edit" ? "Modifier l'action" : "Nouvelle action"}
-        maxWidth="860px"
+        maxWidth="min(1400px, 96vw)"
       >
         {actionModal && (
           <ActionForm
@@ -501,7 +505,12 @@ export default function LeverDetailClient() {
                   label="Maturité"
                   value={<StageBadge status={lever.status} label={lifecycle.label(lever.status)} />}
                 />
-                <BigStat label="Risque" value={<StatusBadge risk={lever.risk} />} />
+                <BigStat
+                  label="Risque"
+                  value={
+                    <StatusBadge risk={engine.computeLeverRisk(lever.id, alerts, riskThresholds)} />
+                  }
+                />
               </div>
             </div>
 
@@ -916,9 +925,10 @@ export default function LeverDetailClient() {
                 variant="primary"
                 size="sm"
                 className="mt-2"
+                disabled={!user}
                 onClick={() => {
-                  if (!comment.trim()) return;
-                  data.addComment(lever.id, comment);
+                  if (!comment.trim() || !user) return;
+                  data.addComment(lever.id, comment, user);
                   setComment("");
                   showToast("Commentaire ajouté", "", "success");
                 }}

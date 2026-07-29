@@ -109,6 +109,11 @@ export default function CompanyDetailClient() {
           : "",
       confidentialityLevels: company.confidentialityLevels ?? [],
       roleClearance: company.roleClearance ?? {},
+      defaultRecognition: company.defaultRecognition ?? "smoothing",
+      riskThresholds: company.riskThresholds?.map((t) => ({
+        level: t.level,
+        minAmount: String(t.minAmount / 1000),
+      })),
     };
   }, [company]);
 
@@ -131,6 +136,11 @@ export default function CompanyDetailClient() {
           : "",
       confidentialityLevels: company.confidentialityLevels ?? [],
       roleClearance: company.roleClearance ?? {},
+      defaultRecognition: company.defaultRecognition ?? "smoothing",
+      riskThresholds: company.riskThresholds?.map((t) => ({
+        level: t.level,
+        minAmount: String(t.minAmount / 1000),
+      })),
     });
   }, [company]);
 
@@ -149,7 +159,9 @@ export default function CompanyDetailClient() {
       // Ne jamais assigner `capexBudget`/`socialChargesRate` à `undefined` explicitement —
       // Firestore `setDoc` rejette toute clé valant `undefined` (voir le bug identique corrigé
       // sur AuthUser.confidentialityClearance dans UsersPanel.tsx) : on omet la clé plutôt que de
-      // la mettre à `undefined` quand le champ est vidé, ce qui l'efface bien du document.
+      // la mettre à `undefined` quand le champ est vidé, ce qui l'efface bien du document. Même
+      // précaution pour `riskThresholds` : on ne l'inclut que s'il a été chargé/renseigné dans le
+      // formulaire (voir baselineForm/useEffect ci-dessus, qui l'hydratent depuis `company`).
       const trimmedCapex = form.capexBudget.trim();
       const trimmedCharges = form.socialChargesRate.trim();
       const rest = { ...company };
@@ -166,6 +178,15 @@ export default function CompanyDetailClient() {
         ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
         confidentialityLevels: form.confidentialityLevels,
         roleClearance: form.roleClearance,
+        defaultRecognition: form.defaultRecognition ?? "smoothing",
+        ...(form.riskThresholds
+          ? {
+              riskThresholds: form.riskThresholds.map((t) => ({
+                level: t.level,
+                minAmount: Number(t.minAmount) * 1000,
+              })),
+            }
+          : {}),
       });
     } catch (err) {
       console.error("[betrack] échec de l'enregistrement des paramètres entreprise :", err);

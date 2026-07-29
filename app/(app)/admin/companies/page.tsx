@@ -47,6 +47,11 @@ export default function AdminCompaniesPage() {
         c.socialChargesRate != null ? String(Math.round(c.socialChargesRate * 100)) : "",
       confidentialityLevels: c.confidentialityLevels ?? [],
       roleClearance: c.roleClearance ?? {},
+      defaultRecognition: c.defaultRecognition ?? "smoothing",
+      riskThresholds: c.riskThresholds?.map((t) => ({
+        level: t.level,
+        minAmount: String(t.minAmount / 1000),
+      })),
     });
     setShowForm(true);
   };
@@ -70,6 +75,19 @@ export default function AdminCompaniesPage() {
       ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
       confidentialityLevels: form.confidentialityLevels,
       roleClearance: form.roleClearance,
+      ...(form.defaultRecognition !== undefined
+        ? { defaultRecognition: form.defaultRecognition }
+        : {}),
+      // riskThresholds saisi en €K côté formulaire (CompanyFormState) → converti en € brut pour
+      // Company.riskThresholds (voir commentaire de CompanyFormState.riskThresholds).
+      ...(form.riskThresholds !== undefined
+        ? {
+            riskThresholds: form.riskThresholds.map((t) => ({
+              level: t.level,
+              minAmount: Number(t.minAmount) * 1000,
+            })),
+          }
+        : {}),
     };
     try {
       if (editId) {

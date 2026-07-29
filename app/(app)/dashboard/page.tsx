@@ -1784,8 +1784,11 @@ export default function DashboardPage() {
             {t("dashboard.title")}
           </h1>
           <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
-            {t("dashboard.program")} <strong>{data.program.name}</strong> · {summary.leverCount}{" "}
-            {t("dashboard.leversActive")}
+            {t("dashboard.program")}{" "}
+            <strong>
+              {programs.find((p) => p.id === selectedProgramId)?.name ?? data.program.name}
+            </strong>{" "}
+            · {summary.leverCount} {t("dashboard.leversActive")}
             <select
               value={selectedProgramId}
               onChange={(e) => handleProgramChange(e.target.value)}

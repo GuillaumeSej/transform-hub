@@ -20,9 +20,6 @@ import type { LeverStatus } from "@/types";
  * Fonctions pures : prennent les données en paramètre plutôt que de lire un état global mutable.
  */
 
-// Date de référence courante — utilisée par underperformers() pour calculer l'avancement attendu.
-const DEMO_NOW = Date.now();
-
 export function realizedSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   return Math.round(lever.netSavings * (lever.progress / 100) * 100) / 100;
@@ -44,16 +41,15 @@ function implementationCosts(snapshot: { capex: number; opexOneOff: number }): n
 }
 
 /** Retard planning d'un levier in_progress : écart entre progression attendue (proportion du
- *  temps écoulé start→end) et progression réelle. Même logique que underperformers(). */
-function scheduleGap(lever: Lever): number {
+ *  temps écoulé start→end) et progression réelle. Même logique que underperformers().
+ *  `now` est calculé à chaque appel (Date.now() par défaut) plutôt que figé au chargement du
+ *  module, pour que le retard affiché reste réellement temps réel sur une session longue. */
+function scheduleGap(lever: Lever, now: number = Date.now()): number {
   if (lever.status !== "in_progress") return 0;
   const start = new Date(lever.start).getTime();
   const end = new Date(lever.end).getTime();
   if (end <= start) return 0;
-  const expected = Math.min(
-    100,
-    Math.max(0, Math.round(((DEMO_NOW - start) / (end - start)) * 100))
-  );
+  const expected = Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
   return expected - lever.progress;
 }
 
@@ -84,7 +80,8 @@ export function programSummary(data: BeTrackData): ProgramSummary {
   );
 
   // Catégories de risque dérivées (un levier peut cumuler plusieurs catégories).
-  const riskDelay = active.filter((l) => scheduleGap(l) > 10).length;
+  const now = Date.now();
+  const riskDelay = active.filter((l) => scheduleGap(l, now) > 10).length;
   const riskCostOverrun = active.filter(
     (l) =>
       l.reforecast &&
@@ -336,7 +333,9 @@ export function computeLeverRisk(
   return hit?.level ?? "low";
 }
 
-export function underperformers(data: BeTrackData, wsId?: string) {
+/** `now` est calculé à chaque appel (Date.now() par défaut) plutôt que figé au chargement du
+ *  module, pour que l'écart affiché reste réellement temps réel sur une session longue. */
+export function underperformers(data: BeTrackData, wsId?: string, now: number = Date.now()) {
   return data.levers
     .filter((l) => (!wsId || l.ws === wsId) && l.status === "in_progress")
     .map((l) => {
@@ -344,7 +343,7 @@ export function underperformers(data: BeTrackData, wsId?: string) {
       const end = new Date(l.end).getTime();
       const expectedProgress = Math.min(
         100,
-        Math.max(0, Math.round(((DEMO_NOW - start) / (end - start)) * 100))
+        Math.max(0, Math.round(((now - start) / (end - start)) * 100))
       );
       return { ...l, expectedProgress, gap: expectedProgress - l.progress };
     })
@@ -802,25 +801,99 @@ export function leverEndQuarterLabel(lever: Lever): string {
   return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
 }
 
+/** Index de mois fiscal (0-11) correspondant à `dateStr`, relatif à `fyStart` — clampé aux bornes
+ * de l'exercice (les dates hors exercice sont rattachées au premier ou dernier mois). */
+function fiscalMonthIndex(dateStr: string, fyStart: Date): number {
+  const d = new Date(dateStr);
+  const idx = (d.getFullYear() - fyStart.getFullYear()) * 12 + d.getMonth() - fyStart.getMonth();
+  return Math.min(11, Math.max(0, idx));
+}
+
+/** Noyau de lissage (approx. gaussien) : transforme un empilement de montants sur leur mois de fin
+ * exact (un "escalier") en une répartition mensuelle progressive type courbe en S, en étalant
+ * chaque montant sur les mois voisins plutôt que de le concentrer sur un seul mois. */
+const SCURVE_SMOOTH_KERNEL: { offset: number; weight: number }[] = [
+  { offset: -2, weight: 0.06 },
+  { offset: -1, weight: 0.24 },
+  { offset: 0, weight: 0.4 },
+  { offset: 1, weight: 0.24 },
+  { offset: 2, weight: 0.06 },
+];
+
+/** Répartit 12 fractions mensuelles (deltas, somme = 1) à partir des dates de fin réelles des
+ * leviers, pondérées par le montant de chacun (valeur absolue, pour éviter qu'un mélange de
+ * montants positifs/négatifs n'annule la pondération), et lissées avec `SCURVE_SMOOTH_KERNEL`.
+ * Même logique de ventilation par date réelle (`lever.end`) que `financialBridge` et
+ * `pnlImpactDetailed`, mais cumulée en courbe en S plutôt qu'en escalier trimestriel. */
+function sCurveMonthlyDeltaFractions(
+  entries: { date: string; amount: number }[],
+  fyStart: Date
+): number[] {
+  const deltas = new Array(12).fill(0);
+  const totalWeight = entries.reduce((s, e) => s + Math.abs(e.amount), 0);
+  if (totalWeight === 0) return deltas;
+  for (const entry of entries) {
+    const weight = Math.abs(entry.amount) / totalWeight;
+    if (weight === 0) continue;
+    const centerIdx = fiscalMonthIndex(entry.date, fyStart);
+    for (const { offset, weight: kernelWeight } of SCURVE_SMOOTH_KERNEL) {
+      const monthIdx = centerIdx + offset;
+      if (monthIdx < 0 || monthIdx > 11) continue;
+      deltas[monthIdx] += weight * kernelWeight;
+    }
+  }
+  // Renormaliser : le noyau est tronqué en début/fin d'exercice, ce qui ferait perdre du poids.
+  const sum = deltas.reduce((s, v) => s + v, 0);
+  if (sum > 0) {
+    for (let i = 0; i < 12; i++) deltas[i] /= sum;
+  }
+  return deltas;
+}
+
+function cumulativeFractions(deltas: number[]): number[] {
+  let acc = 0;
+  return deltas.map((v) => (acc += v));
+}
+
 /** S-curve à 3 courbes : Plan initial (figé à L3, ou valeur courante tant que non figé), Réalisé
  * à date (inchangé, calculé depuis la progression), Réactualisé (dernière prévision, ou plan
- * initial/valeur courante tant que non réactualisé à L4). Même forme de courbe mensuelle que
- * l'ancien planned/actual — seule la valeur totale distribuée diffère par série. */
+ * initial/valeur courante tant que non réactualisé à L4). Les totaux sont exacts (somme = valeur
+ * réelle du programme) ; la répartition mensuelle est dérivée des vraies dates de fin des leviers
+ * (`lever.end` / `deliveredDate`), lissée en courbe en S — pas d'un gabarit générique fixe. */
 export function sCurve3(data: BeTrackData, granularity: TimeGranularity = "month") {
+  const active = data.levers.filter((l) => l.status !== "cancelled");
+  const fyStart = new Date(data.program.fyStart);
+
   const plannedTotal = financialTotal(data, (l) => l.lockedPlan?.netSavings ?? l.netSavings);
   const reforecastTotal = financialTotal(
     data,
     (l) => l.reforecast?.netSavings ?? l.lockedPlan?.netSavings ?? l.netSavings
   );
-  const actualTotal = data.levers
-    .filter((l) => l.status !== "cancelled")
-    .reduce((s, l) => s + realizedSavings(l), 0);
+  const actualTotal = active.reduce((s, l) => s + realizedSavings(l), 0);
 
-  const curve = [0.05, 0.1, 0.18, 0.28, 0.4, 0.52, 0.62, 0.72, 0.81, 0.88, 0.94, 1.0];
-  const actualCurveBase = [0.04, 0.09, 0.15, 0.24, 0.34, 0.44, 0.53, 0.62, 0.71, 0.78, 0.86, 0.93];
+  const plannedFractions = cumulativeFractions(
+    sCurveMonthlyDeltaFractions(
+      active.map((l) => ({ date: l.end, amount: l.lockedPlan?.netSavings ?? l.netSavings })),
+      fyStart
+    )
+  );
+  const reforecastFractions = cumulativeFractions(
+    sCurveMonthlyDeltaFractions(
+      active.map((l) => ({
+        date: l.end,
+        amount: l.reforecast?.netSavings ?? l.lockedPlan?.netSavings ?? l.netSavings,
+      })),
+      fyStart
+    )
+  );
+  const actualFractions = cumulativeFractions(
+    sCurveMonthlyDeltaFractions(
+      active.map((l) => ({ date: l.deliveredDate ?? l.end, amount: realizedSavings(l) })),
+      fyStart
+    )
+  );
 
   const now = new Date();
-  const fyStart = new Date(data.program.fyStart);
   const currentMonthIdx = Math.min(
     11,
     Math.max(
@@ -828,16 +901,12 @@ export function sCurve3(data: BeTrackData, granularity: TimeGranularity = "month
       (now.getFullYear() - fyStart.getFullYear()) * 12 + now.getMonth() - fyStart.getMonth()
     )
   );
-  const actualCurve = actualCurveBase.map((v, i) => (i <= currentMonthIdx ? v : null));
 
   const monthlyPoints = MONTH_LABELS.map((label, i) => ({
     month: label,
-    planned: Math.round(curve[i] * plannedTotal * 10) / 10,
-    reforecast: Math.round(curve[i] * reforecastTotal * 10) / 10,
-    actual:
-      actualCurve[i] === null
-        ? null
-        : Math.round((actualCurve[i] as number) * actualTotal * 10) / 10,
+    planned: Math.round(plannedFractions[i] * plannedTotal * 10) / 10,
+    reforecast: Math.round(reforecastFractions[i] * reforecastTotal * 10) / 10,
+    actual: i <= currentMonthIdx ? Math.round(actualFractions[i] * actualTotal * 10) / 10 : null,
   }));
 
   if (granularity === "month") return monthlyPoints;
