@@ -585,6 +585,7 @@ export const mockData: BeTrackData = {
   levers: [
     {
       id: "L001",
+      programId: "p1",
       code: "PROC-001",
       type: "Sourcing & Achats",
       name: "Optimisation achats indirects",
@@ -633,6 +634,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L002",
+      programId: "p1",
       code: "PROC-002",
       type: "Sourcing & Achats",
       name: "Renégociation fournisseurs IT",
@@ -680,6 +682,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L003",
+      programId: "p1",
       code: "PROC-003",
       type: "Sourcing & Achats",
       name: "Centralisation achats marketing",
@@ -714,6 +717,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L004",
+      programId: "p1",
       code: "PROC-004",
       type: "Digitalisation & Automatisation",
       name: "E-procurement déploiement",
@@ -761,6 +765,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L005",
+      programId: "p1",
       code: "PROC-005",
       type: "Sourcing & Achats",
       name: "Pooling achats transport",
@@ -885,6 +890,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L006",
+      programId: "p1",
       code: "PROC-006",
       type: "Sourcing & Achats",
       name: "Optimisation achats énergie",
@@ -919,6 +925,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L007",
+      programId: "p1",
       code: "OPS-001",
       type: "Digitalisation & Automatisation",
       name: "Automatisation production ligne 3-5",
@@ -966,6 +973,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L008",
+      programId: "p1",
       code: "OPS-002",
       type: "Excellence Opérationnelle",
       name: "Lean Six Sigma — Site Lyon",
@@ -1013,6 +1021,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L009",
+      programId: "p1",
       code: "OPS-003",
       type: "Excellence Opérationnelle",
       name: "Optimisation maintenance préventive",
@@ -1060,6 +1069,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L010",
+      programId: "p1",
       code: "COM-001",
       type: "Pricing & Revenue Management",
       name: "Pricing optimization B2B",
@@ -1107,6 +1117,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L011",
+      programId: "p1",
       code: "COM-002",
       type: "Réorganisation & Effectifs",
       name: "Sales force effectiveness",
@@ -1154,6 +1165,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L012",
+      programId: "p1",
       code: "COM-003",
       type: "Digitalisation & Automatisation",
       name: "Cross-sell automation",
@@ -1201,6 +1213,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L013",
+      programId: "p1",
       code: "ORG-001",
       type: "Réorganisation & Effectifs",
       name: "Fusion équipes marketing EU",
@@ -1237,6 +1250,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L014",
+      programId: "p1",
       code: "ORG-002",
       type: "Réorganisation & Effectifs",
       name: "Optimisation organisationnelle COO",
@@ -1273,6 +1287,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L015",
+      programId: "p1",
       code: "DIG-001",
       type: "Digitalisation & Automatisation",
       name: "Digitalisation finance (RPA)",
@@ -1320,6 +1335,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L016",
+      programId: "p1",
       code: "DIG-002",
       type: "Digitalisation & Automatisation",
       name: "Transformation digitale CRM",
@@ -1354,6 +1370,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L017",
+      programId: "p1",
       code: "SC-001",
       type: "Supply Chain & Logistique",
       name: "Optimisation supply chain EU",
@@ -1401,6 +1418,7 @@ export const mockData: BeTrackData = {
     },
     {
       id: "L018",
+      programId: "p1",
       code: "SC-002",
       type: "Supply Chain & Logistique",
       name: "Inventory optimization",
@@ -1704,6 +1722,176 @@ export const mockData: BeTrackData = {
         text: "Retard sur déploiement site DE. Recrutement project manager difficile.",
       },
       { user: "Marc Dubois", ts: "2026-06-18", text: "Délai supplémentaire demandé (1.5 mois)." },
+    ],
+    L002: [
+      {
+        user: "Léa Moreau",
+        ts: "2026-06-10",
+        text: "Négociation cloud/SaaS bouclée avec 3 des 4 éditeurs majeurs. Économie confirmée supérieure au plan initial.",
+      },
+      {
+        user: "Isabelle Roy",
+        ts: "2026-06-18",
+        text: "Validé en comité sponsor. Bascule des contrats à finaliser avant fin de mois pour sécuriser le run-rate.",
+      },
+    ],
+    L003: [
+      {
+        user: "Isabelle Roy",
+        ts: "2026-04-02",
+        text: "Arbitrage direction marketing : le périmètre centralisation est jugé trop rigide pour les BU locales. Levier suspendu.",
+      },
+      {
+        user: "Léa Moreau",
+        ts: "2026-06-20",
+        text: "Confirmation de l'annulation actée en comité. Les gains identifiés seront réintégrés dans L002 si pertinent.",
+      },
+    ],
+    L005: [
+      {
+        user: "Alex Roussel",
+        ts: "2026-04-12",
+        text: "Signature des contrats-cadres transport sur les 5 pays. Méthodologie de calcul du saving : delta tarif négocié vs tarif spot moyen 2025.",
+      },
+      {
+        user: "Isabelle Roy",
+        ts: "2026-05-16",
+        text: "Bascule effectuée, savings constatés en ligne avec le plan. Levier clôturé, bon exemple à répliquer sur d'autres familles d'achats.",
+      },
+    ],
+    L006: [
+      {
+        user: "Isabelle Roy",
+        ts: "2026-06-05",
+        text: "Marché de l'énergie trop volatil pour sécuriser un contrat-cadre pluriannuel dans les conditions actuelles. Levier annulé en phase qualification.",
+      },
+    ],
+    L007: [
+      {
+        user: "Jean Dupont",
+        ts: "2026-05-20",
+        text: "Ligne 3 qualifiée, cadence nominale atteinte. Ligne 4 en retard : délai de livraison des cellules robotisées prolongé de 3 semaines.",
+      },
+      {
+        user: "Marc-Antoine Girard",
+        ts: "2026-06-19",
+        text: "Risque maintenu à 'high' tant que la ligne 4 n'est pas qualifiée. Point d'étape hebdomadaire demandé jusqu'à résorption du retard.",
+      },
+    ],
+    L008: [
+      {
+        user: "Lucas Fournier",
+        ts: "2026-04-10",
+        text: "3 chantiers Lean Six Sigma lancés sur le site Lyon. Amélioration TRS déjà visible de +6 points sur la ligne pilote.",
+      },
+      {
+        user: "Marc-Antoine Girard",
+        ts: "2026-06-21",
+        text: "Trajectoire solide, risque faible. Prochaine étape : généralisation de la méthode aux 2 autres sites du groupe.",
+      },
+    ],
+    L009: [
+      {
+        user: "Jean Dupont",
+        ts: "2026-06-14",
+        text: "Déploiement capteurs IoT en cours sur les équipements critiques. Dépendance L007 : capteurs posés en priorité sur ligne 3 déjà automatisée.",
+      },
+    ],
+    L010: [
+      {
+        user: "Sophie Martin",
+        ts: "2026-05-10",
+        text: "Moteur de pricing dynamique déployé sur le périmètre Europe. Élasticité prix recalibrée par catégorie produit sur 6 mois d'historique.",
+      },
+      {
+        user: "Nathalie Chevalier",
+        ts: "2026-06-22",
+        text: "Impact revenu conforme au forecast. Validation en comité pour extension au périmètre Americas via L010-SL007.",
+      },
+    ],
+    L011: [
+      {
+        user: "Test Lever Owner",
+        ts: "2026-04-25",
+        text: "Réorganisation de la force de vente USA finalisée sur 2 régions. Déploiement CRM associé en phase de recette.",
+      },
+      {
+        user: "Nathalie Chevalier",
+        ts: "2026-06-17",
+        text: "Bon niveau d'avancement, risque faible. Reste à traiter la formation des équipes sur les 2 dernières régions.",
+      },
+    ],
+    L012: [
+      {
+        user: "Test Lever Owner",
+        ts: "2026-04-15",
+        text: "Cadrage de la plateforme data cross-sell validé. Dépendance sur L010 (finish-to-finish) : lancement effectif après stabilisation du pricing Europe.",
+      },
+      {
+        user: "Nathalie Chevalier",
+        ts: "2026-06-08",
+        text: "Avancement encore limité à ce stade, cohérent avec le calendrier. À surveiller sur le T3 pour tenir l'échéance de décembre.",
+      },
+    ],
+    L013: [
+      {
+        user: "Pierre Lefevre",
+        ts: "2026-02-15",
+        text: "Fusion des équipes marketing Europe engagée, mapping des rôles finalisé sur 4 des 6 pays.",
+      },
+      {
+        user: "Grégoire Blanchard",
+        ts: "2026-03-20",
+        text: "Levier livré avant l'échéance prévue. Savings ETP confirmés en paie, très bon retour des équipes sur la nouvelle organisation.",
+      },
+    ],
+    L014: [
+      {
+        user: "Pierre Lefevre",
+        ts: "2026-01-20",
+        text: "Nouveaux spans of control validés pour le top management. Mise en œuvre plus rapide que prévu grâce à l'alignement en amont avec les RH.",
+      },
+      {
+        user: "Grégoire Blanchard",
+        ts: "2026-02-28",
+        text: "Clôturé en avance. Méthodologie de calcul de la saving : delta masse salariale directe avant/après réorganisation, base annualisée.",
+      },
+    ],
+    L015: [
+      {
+        user: "Claire Bernard",
+        ts: "2026-04-05",
+        text: "Robots RPA clôture comptable en développement, 6 processus sur 10 déjà automatisés. Rapprochements bancaires en cadrage.",
+      },
+      {
+        user: "Julien Moulin",
+        ts: "2026-06-20",
+        text: "Point d'attention sur le capex, légèrement supérieur au plan initial. À valider en prochain comité budgétaire.",
+      },
+    ],
+    L017: [
+      {
+        user: "Thomas Petit",
+        ts: "2026-04-20",
+        text: "Diagnostic flux terminé sur le hub France. Dépendance L007 : le lancement des hubs suivants attend la qualification de la ligne 3 automatisée.",
+      },
+      {
+        user: "Camille Vasseur",
+        ts: "2026-06-19",
+        text: "Avancement encore en retrait par rapport au plan (25%). Risque médium maintenu, revue de planning demandée avec les équipes supply chain.",
+      },
+    ],
+    L018: [
+      {
+        user: "Thomas Petit",
+        ts: "2026-05-25",
+        text: "Optimisation des niveaux de stock déployée sur les 2 premiers entrepôts italiens. Rotation stock améliorée de 12%.",
+      },
+      {
+        user: "Camille Vasseur",
+        ts: "2026-06-16",
+        text: "Bon rythme d'exécution, risque faible. Extension au 3e entrepôt prévue avant fin du mois.",
+      },
     ],
     L016: [
       {

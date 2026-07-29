@@ -5,6 +5,8 @@ import type {
   LeverAction,
   LeverDependency,
   LeverStatus,
+  RecognitionMode,
+  SavingType,
 } from "@/types";
 import { hasActionImpacts } from "@/lib/leverConsolidate";
 
@@ -53,6 +55,32 @@ function midpoint(start: string, end: string, ratio: number): string {
   return new Date(a + (b - a) * ratio).toISOString().slice(0, 10);
 }
 
+/** Répartit déterministiquement les impacts "saving" migrés entre les deux modes de
+ *  reconnaissance (voire aucun, pour illustrer l'héritage de Company.defaultRecognition) — sur la
+ *  base d'un hash stable de la clé fournie, pour obtenir un mélange varié mais reproductible d'un
+ *  seed à l'autre plutôt qu'une règle unique appliquée à tout le jeu de démo. */
+function pickRecognition(key: string): RecognitionMode | undefined {
+  const hash = Array.from(key).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  const bucket = hash % 3;
+  if (bucket === 0) return "one_shot";
+  if (bucket === 1) return "smoothing";
+  return undefined;
+}
+
+/** Repère les leviers/sous-leviers dont le libellé évoque un enjeu BFR (stocks, rotation,
+ *  encours, délais de paiement) pour varier `savingType` sans forcer ce classement partout. */
+function isWorkingCapitalCandidate(text: string): boolean {
+  return /stock|inventaire|inventory|rotation entrep|créances|encours client|délai de paiement|besoin en fonds de roulement|\bBFR\b/i.test(
+    text
+  );
+}
+
+function inferSavingType(pnlMap: string, contextText: string): SavingType {
+  if (isWorkingCapitalCandidate(contextText)) return "working_capital";
+  if (pnlMap === "REV") return "revenue_increase";
+  return "cost_reduction";
+}
+
 function financialImpacts(
   prefix: string,
   values: {
@@ -64,7 +92,12 @@ function financialImpacts(
     pnlMap: string;
     costCenter?: string;
     entity?: string;
-  }
+  },
+  // Intervalle de l'action porteuse — sert à dater `capexDeploymentDate`/`gainDate` plutôt que de
+  // laisser ces champs vides (voir ActionImpact, types/index.ts).
+  actionStart: string,
+  actionEnd: string,
+  options: { deliveredDate?: string; contextText?: string } = {}
 ): ActionImpact[] {
   const impacts: ActionImpact[] = [];
   if (values.capex > 0) {
@@ -77,6 +110,8 @@ function financialImpacts(
       pnlMap: values.pnlMap,
       costCenter: values.costCenter,
       entity: values.entity,
+      // Le CAPEX est engagé tôt dans l'exécution de l'action porteuse (premier tiers).
+      capexDeploymentDate: midpoint(actionStart, actionEnd, 1 / 3),
     });
   }
   if (values.opexOneOff > 0) {
@@ -116,6 +151,10 @@ function financialImpacts(
       pnlMap: values.pnlMap,
       costCenter: values.costCenter,
       entity: values.entity,
+      savingType: inferSavingType(values.pnlMap, options.contextText ?? ""),
+      // Le gain est constaté à la clôture de l'action porteuse (date de livraison si déjà connue).
+      gainDate: options.deliveredDate ?? actionEnd,
+      recognition: pickRecognition(prefix),
     });
   }
   return impacts;
@@ -136,16 +175,22 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
         cost: 0,
         status,
         deliveredDate: sub.deliveredDate ?? deliveredDate(status, sub.end),
-        impacts: financialImpacts(`IMP-${sub.id}`, {
-          netSavings: sub.netSavings,
-          capex: sub.capex,
-          opexOneOff: sub.opexOneOff,
-          opexRec: sub.opexRec,
-          fteImpact: sub.fteImpact,
-          pnlMap: sub.pnlMap || parent.pnlMap,
-          costCenter: sub.expensePost || parent.costCenter,
-          entity: parent.entity,
-        }),
+        impacts: financialImpacts(
+          `IMP-${sub.id}`,
+          {
+            netSavings: sub.netSavings,
+            capex: sub.capex,
+            opexOneOff: sub.opexOneOff,
+            opexRec: sub.opexRec,
+            fteImpact: sub.fteImpact,
+            pnlMap: sub.pnlMap || parent.pnlMap,
+            costCenter: sub.expensePost || parent.costCenter,
+            entity: parent.entity,
+          },
+          sub.start,
+          sub.end,
+          { deliveredDate: sub.deliveredDate, contextText: sub.name }
+        ),
       },
     ];
   }
@@ -172,6 +217,8 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
         pnlMap: sub.pnlMap || parent.pnlMap,
         costCenter: sub.expensePost || parent.costCenter,
         entity: parent.entity,
+        // Le CAPEX est engagé tôt dans l'exécution de cette action (premier tiers).
+        capexDeploymentDate: midpoint(action.start, action.end, 1 / 3),
       });
     }
     if (sub.opexOneOff > 0) {
@@ -198,6 +245,8 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
         entity: parent.entity,
       });
     }
+    const resolvedDeliveredDate = action.deliveredDate ?? deliveredDate(action.status, action.end);
+
     if (isLast && grossValue > 0) {
       impacts.push({
         id: `IMP-${sub.id}-${index + 1}-SAVING`,
@@ -212,6 +261,10 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
         pnlMap: sub.pnlMap || parent.pnlMap,
         costCenter: sub.expensePost || parent.costCenter,
         entity: parent.entity,
+        savingType: inferSavingType(sub.pnlMap || parent.pnlMap, sub.name),
+        // Le gain est constaté à la clôture de cette (dernière) action porteuse.
+        gainDate: resolvedDeliveredDate ?? action.end,
+        recognition: pickRecognition(`IMP-${sub.id}-${index + 1}-SAVING`),
       });
     }
 
@@ -219,7 +272,7 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
       ...action,
       owner: sub.owner ?? parent.owner,
       ownerInit: sub.ownerInit ?? parent.ownerInit,
-      deliveredDate: action.deliveredDate ?? deliveredDate(action.status, action.end),
+      deliveredDate: resolvedDeliveredDate,
       impacts: impacts.filter((impact) => impact.amount > 0),
     };
   });
@@ -260,16 +313,22 @@ function buildSimpleActions(lever: Lever): LeverAction[] {
       deliveredDate: deliveredDate(firstStatus, firstEnd),
       impacts:
         lever.opexOneOff > 0
-          ? financialImpacts(`IMP-${lever.id}-01`, {
-              netSavings: 0,
-              capex: 0,
-              opexOneOff: lever.opexOneOff,
-              opexRec: 0,
-              fteImpact: 0,
-              pnlMap: lever.pnlMap,
-              costCenter: lever.costCenter,
-              entity: lever.entity,
-            })
+          ? financialImpacts(
+              `IMP-${lever.id}-01`,
+              {
+                netSavings: 0,
+                capex: 0,
+                opexOneOff: lever.opexOneOff,
+                opexRec: 0,
+                fteImpact: 0,
+                pnlMap: lever.pnlMap,
+                costCenter: lever.costCenter,
+                entity: lever.entity,
+              },
+              lever.start,
+              firstEnd,
+              { contextText: lever.description }
+            )
           : [],
     },
     {
@@ -280,16 +339,22 @@ function buildSimpleActions(lever: Lever): LeverAction[] {
       cost: Math.round((lever.capex + lever.opexRec) * 1000),
       status: secondStatus,
       deliveredDate: deliveredDate(secondStatus, secondEnd),
-      impacts: financialImpacts(`IMP-${lever.id}-02`, {
-        netSavings: 0,
-        capex: lever.capex,
-        opexOneOff: 0,
-        opexRec: lever.opexRec,
-        fteImpact: 0,
-        pnlMap: lever.pnlMap,
-        costCenter: lever.costCenter,
-        entity: lever.entity,
-      }),
+      impacts: financialImpacts(
+        `IMP-${lever.id}-02`,
+        {
+          netSavings: 0,
+          capex: lever.capex,
+          opexOneOff: 0,
+          opexRec: lever.opexRec,
+          fteImpact: 0,
+          pnlMap: lever.pnlMap,
+          costCenter: lever.costCenter,
+          entity: lever.entity,
+        },
+        secondStart,
+        secondEnd,
+        { contextText: lever.description }
+      ),
     },
     {
       id: `AC-${lever.id}-03`,
@@ -299,19 +364,25 @@ function buildSimpleActions(lever: Lever): LeverAction[] {
       cost: 0,
       status: thirdStatus,
       deliveredDate: lever.deliveredDate ?? deliveredDate(thirdStatus, lever.end),
-      impacts: financialImpacts(`IMP-${lever.id}-03`, {
-        // Les coûts sont portés par les deux actions précédentes : le gain de cette dernière
-        // action doit donc correspondre au net du levier + tous ses coûts pour que la somme
-        // consolidée des actions restitue exactement le netSavings du levier parent.
-        netSavings: lever.netSavings + lever.capex + lever.opexOneOff + lever.opexRec,
-        capex: 0,
-        opexOneOff: 0,
-        opexRec: 0,
-        fteImpact: lever.fteImpact,
-        pnlMap: lever.pnlMap,
-        costCenter: lever.costCenter,
-        entity: lever.entity,
-      }),
+      impacts: financialImpacts(
+        `IMP-${lever.id}-03`,
+        {
+          // Les coûts sont portés par les deux actions précédentes : le gain de cette dernière
+          // action doit donc correspondre au net du levier + tous ses coûts pour que la somme
+          // consolidée des actions restitue exactement le netSavings du levier parent.
+          netSavings: lever.netSavings + lever.capex + lever.opexOneOff + lever.opexRec,
+          capex: 0,
+          opexOneOff: 0,
+          opexRec: 0,
+          fteImpact: lever.fteImpact,
+          pnlMap: lever.pnlMap,
+          costCenter: lever.costCenter,
+          entity: lever.entity,
+        },
+        thirdStart,
+        lever.end,
+        { deliveredDate: lever.deliveredDate, contextText: lever.description }
+      ),
     },
   ];
 }
@@ -364,6 +435,7 @@ function alignActionsToLeverFinancials(actions: LeverAction[], lever: Lever): Le
       pnlMap: lever.pnlMap,
       costCenter: lever.costCenter,
       entity: lever.entity,
+      capexDeploymentDate: midpoint(next.at(-1)!.start, next.at(-1)!.end, 1 / 3),
     })
   );
   adjust(
@@ -408,6 +480,9 @@ function alignActionsToLeverFinancials(actions: LeverAction[], lever: Lever): Le
       pnlMap: lever.pnlMap,
       costCenter: lever.costCenter,
       entity: lever.entity,
+      savingType: inferSavingType(lever.pnlMap, lever.description),
+      gainDate: lever.deliveredDate ?? next.at(-1)!.end,
+      recognition: pickRecognition(`IMP-${lever.id}-SAVING-ADJ`),
     })
   );
 

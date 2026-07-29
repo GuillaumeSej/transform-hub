@@ -200,256 +200,248 @@ export function ActionForm({
             + Ajouter
           </button>
         </div>
-        <div className="overflow-x-auto rounded-md border border-border">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-neutral-50 text-left">
-                <th className="px-2 py-1.5 font-semibold text-secondary">Type</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Description</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Nature</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">€M</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">ETP</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Type de gain</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Date CAPEX</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Date gain</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Reconnaissance</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Poste de coût</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Centre de coût</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Entité (P&L)</th>
-                <th className="px-2 py-1.5 font-semibold text-secondary">Commentaire</th>
-                <th className="w-8 px-1"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {impacts.map((imp, idx) => (
-                <tr key={imp.id} className="border-t border-border">
-                  <td className="px-1 py-1">
-                    <select
-                      className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
-                      value={imp.type}
-                      onChange={(e) => {
-                        const newType = e.target.value as "cost" | "saving";
-                        const patch: Partial<ActionImpact> = { type: newType };
-                        // Si on passe en "saving" et que la nature est "capex" (non valide), basculer vers "oneoff"
-                        if (newType === "saving" && imp.nature === "capex") {
-                          patch.nature = "oneoff";
-                        }
-                        if (newType === "cost") {
-                          patch.savingType = undefined;
-                          patch.gainDate = undefined;
-                        }
-                        updateImpact(idx, patch);
-                      }}
-                    >
-                      <option value="cost">Coût</option>
-                      <option value="saving">Gain</option>
-                    </select>
-                  </td>
-                  <td className="px-1 py-1">
-                    <input
-                      className="w-full rounded-sm border border-border px-1.5 py-1 text-[11px]"
-                      value={imp.label}
-                      onChange={(e) => updateImpact(idx, { label: e.target.value })}
-                      placeholder="Description..."
-                    />
-                  </td>
-                  <td className="px-1 py-1">
-                    <select
-                      className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
-                      value={imp.nature}
-                      onChange={(e) => {
-                        const nature = e.target.value as ActionImpact["nature"];
-                        const patch: Partial<ActionImpact> = { nature };
-                        if (nature !== "capex") patch.capexDeploymentDate = undefined;
-                        updateImpact(idx, patch);
-                      }}
-                    >
-                      {imp.type === "cost" ? (
-                        <>
-                          <option value="capex">CAPEX</option>
-                          <option value="opex_rec">OPEX réc.</option>
-                          <option value="oneoff">One-off</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="opex_rec">Récurrent</option>
-                          <option value="oneoff">One-off</option>
-                        </>
-                      )}
-                    </select>
-                  </td>
-                  <td className="px-1 py-1">
-                    <input
-                      className="w-16 rounded-sm border border-border px-1.5 py-1 text-right text-[11px]"
-                      type="number"
-                      step="0.01"
-                      value={imp.amount || ""}
-                      onChange={(e) =>
-                        updateImpact(idx, { amount: parseFloat(e.target.value) || 0 })
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+          {impacts.map((imp, idx) => (
+            <div key={imp.id} className="relative rounded-md border border-border p-3 space-y-2">
+              {impacts.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeImpact(idx)}
+                  className="absolute right-2 top-2 text-tertiary transition hover:text-bp-coral"
+                  aria-label="Supprimer cette ligne d'impact"
+                >
+                  ×
+                </button>
+              )}
+
+              <div className="pr-6">
+                <label className="text-[10px] font-semibold text-secondary">Description</label>
+                <input
+                  className={inputClass}
+                  value={imp.label}
+                  onChange={(e) => updateImpact(idx, { label: e.target.value })}
+                  placeholder="Description..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-secondary">Type</label>
+                  <select
+                    className={selectClass}
+                    value={imp.type}
+                    onChange={(e) => {
+                      const newType = e.target.value as "cost" | "saving";
+                      const patch: Partial<ActionImpact> = { type: newType };
+                      // Si on passe en "saving" et que la nature est "capex" (non valide), basculer vers "oneoff"
+                      if (newType === "saving" && imp.nature === "capex") {
+                        patch.nature = "oneoff";
                       }
-                    />
-                  </td>
-                  <td className="px-1 py-1">
-                    <input
-                      className="w-12 rounded-sm border border-border px-1.5 py-1 text-right text-[11px]"
-                      type="number"
-                      step="1"
-                      value={imp.fteCount ?? ""}
+                      if (newType === "cost") {
+                        patch.savingType = undefined;
+                        patch.gainDate = undefined;
+                      }
+                      updateImpact(idx, patch);
+                    }}
+                  >
+                    <option value="cost">Coût</option>
+                    <option value="saving">Gain</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-semibold text-secondary">Nature</label>
+                  <select
+                    className={selectClass}
+                    value={imp.nature}
+                    onChange={(e) => {
+                      const nature = e.target.value as ActionImpact["nature"];
+                      const patch: Partial<ActionImpact> = { nature };
+                      if (nature !== "capex") patch.capexDeploymentDate = undefined;
+                      updateImpact(idx, patch);
+                    }}
+                  >
+                    {imp.type === "cost" ? (
+                      <>
+                        <option value="capex">CAPEX</option>
+                        <option value="opex_rec">OPEX réc.</option>
+                        <option value="oneoff">One-off</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="opex_rec">Récurrent</option>
+                        <option value="oneoff">One-off</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-semibold text-secondary">€M</label>
+                  <input
+                    className={`${inputClass} text-right`}
+                    type="number"
+                    step="0.01"
+                    value={imp.amount || ""}
+                    onChange={(e) => updateImpact(idx, { amount: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-semibold text-secondary">ETP</label>
+                  <input
+                    className={`${inputClass} text-right`}
+                    type="number"
+                    step="1"
+                    value={imp.fteCount ?? ""}
+                    onChange={(e) =>
+                      updateImpact(idx, {
+                        fteCount: e.target.value ? parseInt(e.target.value) : undefined,
+                      })
+                    }
+                  />
+                </div>
+
+                {imp.type === "saving" && (
+                  <div>
+                    <label className="text-[10px] font-semibold text-secondary">Type de gain</label>
+                    <select
+                      className={selectClass}
+                      value={imp.savingType ?? ""}
                       onChange={(e) =>
                         updateImpact(idx, {
-                          fteCount: e.target.value ? parseInt(e.target.value) : undefined,
+                          savingType: (e.target.value || undefined) as SavingType | undefined,
                         })
                       }
-                    />
-                  </td>
-                  <td className="px-1 py-1">
-                    {imp.type === "saving" ? (
-                      <select
-                        className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
-                        value={imp.savingType ?? ""}
-                        onChange={(e) =>
-                          updateImpact(idx, {
-                            savingType: (e.target.value || undefined) as SavingType | undefined,
-                          })
-                        }
-                      >
-                        <option value="">—</option>
-                        {(Object.keys(SAVING_TYPE_LABELS) as SavingType[]).map((st) => (
-                          <option key={st} value={st}>
-                            {SAVING_TYPE_LABELS[st]}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-tertiary">—</span>
-                    )}
-                  </td>
-                  <td className="px-1 py-1">
-                    {imp.nature === "capex" ? (
-                      <input
-                        className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
-                        type="date"
-                        value={imp.capexDeploymentDate ?? ""}
-                        onChange={(e) =>
-                          updateImpact(idx, { capexDeploymentDate: e.target.value || undefined })
-                        }
-                        title="Date à laquelle le CAPEX est engagé à 100%"
-                      />
-                    ) : (
-                      <span className="text-tertiary">—</span>
-                    )}
-                  </td>
-                  <td className="px-1 py-1">
-                    {imp.type === "saving" ? (
-                      <input
-                        className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
-                        type="date"
-                        value={imp.gainDate ?? ""}
-                        onChange={(e) =>
-                          updateImpact(idx, { gainDate: e.target.value || undefined })
-                        }
-                        title="Date d'encaissement réel du gain"
-                      />
-                    ) : (
-                      <span className="text-tertiary">—</span>
-                    )}
-                  </td>
-                  <td className="px-1 py-1">
-                    {imp.type === "saving" || imp.nature === "capex" ? (
-                      <select
-                        className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
-                        value={imp.recognition ?? ""}
-                        onChange={(e) =>
-                          updateImpact(idx, {
-                            recognition: (e.target.value || undefined) as
-                              RecognitionMode | undefined,
-                          })
-                        }
-                      >
-                        <option value="">
-                          Défaut ({companyDefaultRecognition === "one_shot" ? "one-shot" : "lissé"})
-                        </option>
-                        <option value="smoothing">Lissé</option>
-                        <option value="one_shot">One-shot</option>
-                      </select>
-                    ) : (
-                      <span className="text-tertiary">—</span>
-                    )}
-                  </td>
-                  <td className="px-1 py-1">
-                    <select
-                      className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
-                      value={imp.pnlMap ?? ""}
-                      onChange={(e) => updateImpact(idx, { pnlMap: e.target.value || undefined })}
                     >
                       <option value="">—</option>
-                      {pnlOptions.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
+                      {(Object.keys(SAVING_TYPE_LABELS) as SavingType[]).map((st) => (
+                        <option key={st} value={st}>
+                          {SAVING_TYPE_LABELS[st]}
                         </option>
                       ))}
                     </select>
-                  </td>
-                  <td className="px-1 py-1">
+                  </div>
+                )}
+
+                {imp.nature === "capex" && (
+                  <div>
+                    <label className="text-[10px] font-semibold text-secondary">Date CAPEX</label>
                     <input
-                      className="w-full rounded-sm border border-border px-1.5 py-1 text-[11px]"
-                      value={imp.costCenter ?? ""}
+                      className={inputClass}
+                      type="date"
+                      value={imp.capexDeploymentDate ?? ""}
                       onChange={(e) =>
-                        updateImpact(idx, { costCenter: e.target.value || undefined })
+                        updateImpact(idx, { capexDeploymentDate: e.target.value || undefined })
                       }
-                      placeholder="CC..."
+                      title="Date à laquelle le CAPEX est engagé à 100%"
                     />
-                  </td>
-                  <td className="px-1 py-1">
-                    <select
-                      className="w-full rounded-sm border border-border px-1 py-1 text-[11px]"
-                      value={imp.entity ?? ""}
-                      onChange={(e) => updateImpact(idx, { entity: e.target.value || undefined })}
-                    >
-                      <option value="">—</option>
-                      {entityOptions.map((ent) => (
-                        <option key={ent} value={ent}>
-                          {ent}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-1 py-1">
+                  </div>
+                )}
+
+                {imp.type === "saving" && (
+                  <div>
+                    <label className="text-[10px] font-semibold text-secondary">Date gain</label>
                     <input
-                      className="w-full rounded-sm border border-border px-1.5 py-1 text-[11px]"
-                      value={imp.comments?.[imp.comments.length - 1]?.text ?? ""}
-                      onChange={(e) => {
-                        const text = e.target.value;
-                        updateImpact(idx, {
-                          comments: text
-                            ? [
-                                {
-                                  user: owner.trim() || "Utilisateur démo",
-                                  ts: new Date().toISOString().slice(0, 10),
-                                  text,
-                                },
-                              ]
-                            : [],
-                        });
-                      }}
-                      placeholder="Méthode de calcul, hypothèses..."
+                      className={inputClass}
+                      type="date"
+                      value={imp.gainDate ?? ""}
+                      onChange={(e) => updateImpact(idx, { gainDate: e.target.value || undefined })}
+                      title="Date d'encaissement réel du gain"
                     />
-                  </td>
-                  <td className="px-1 py-1 text-center">
-                    {impacts.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeImpact(idx)}
-                        className="text-tertiary transition hover:text-bp-coral"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                )}
+
+                {(imp.type === "saving" || imp.nature === "capex") && (
+                  <div>
+                    <label className="text-[10px] font-semibold text-secondary">
+                      Reconnaissance
+                    </label>
+                    <select
+                      className={selectClass}
+                      value={imp.recognition ?? ""}
+                      onChange={(e) =>
+                        updateImpact(idx, {
+                          recognition: (e.target.value || undefined) as RecognitionMode | undefined,
+                        })
+                      }
+                    >
+                      <option value="">
+                        Défaut ({companyDefaultRecognition === "one_shot" ? "one-shot" : "lissé"})
+                      </option>
+                      <option value="smoothing">Lissé</option>
+                      <option value="one_shot">One-shot</option>
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[10px] font-semibold text-secondary">Poste de coût</label>
+                  <select
+                    className={selectClass}
+                    value={imp.pnlMap ?? ""}
+                    onChange={(e) => updateImpact(idx, { pnlMap: e.target.value || undefined })}
+                  >
+                    <option value="">—</option>
+                    {pnlOptions.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-semibold text-secondary">Centre de coût</label>
+                  <input
+                    className={inputClass}
+                    value={imp.costCenter ?? ""}
+                    onChange={(e) => updateImpact(idx, { costCenter: e.target.value || undefined })}
+                    placeholder="CC..."
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-semibold text-secondary">Entité (P&L)</label>
+                  <select
+                    className={selectClass}
+                    value={imp.entity ?? ""}
+                    onChange={(e) => updateImpact(idx, { entity: e.target.value || undefined })}
+                  >
+                    <option value="">—</option>
+                    {entityOptions.map((ent) => (
+                      <option key={ent} value={ent}>
+                        {ent}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-semibold text-secondary">Commentaire</label>
+                <input
+                  className={inputClass}
+                  value={imp.comments?.[imp.comments.length - 1]?.text ?? ""}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    updateImpact(idx, {
+                      comments: text
+                        ? [
+                            {
+                              user: owner.trim() || "Utilisateur démo",
+                              ts: new Date().toISOString().slice(0, 10),
+                              text,
+                            },
+                          ]
+                        : [],
+                    });
+                  }}
+                  placeholder="Méthode de calcul, hypothèses..."
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

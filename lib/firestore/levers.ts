@@ -26,7 +26,9 @@ import type { AuditEntry, Comment, Lever, LeverDependency } from "@/types";
 // Incrémenter force un reseed complet de la BDD (schéma de données modifié).
 // v7 : suppression du modèle sous-levier (fusionné dans Lever.actions via
 // lib/mockActionMigration.ts) — changement de forme assumé consciemment, reseed complet.
-const SCHEMA_VERSION = "7";
+// v8 : enrichissement des impacts migrés (capexDeploymentDate, gainDate, savingType,
+// recognition — voir lib/mockActionMigration.ts) — le seed existant ne les porte pas, reseed complet.
+const SCHEMA_VERSION = "8";
 
 const leversCol = () => collection(db, "levers");
 /** Ancienne collection sous-leviers, plus alimentée — supprimée à chaque reseed pour ne laisser
