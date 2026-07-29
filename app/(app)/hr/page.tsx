@@ -8,9 +8,11 @@ import {
   ChevronUp,
   GripVertical,
   LayoutGrid,
+  Lock,
   Maximize2,
   Plus,
   RotateCcw,
+  SlidersHorizontal,
   TriangleAlert,
   Users,
   Wallet,
@@ -33,12 +35,15 @@ import {
   FteWaterfallChart,
   FteWaterfallLegend,
 } from "@/components/shared/charts/FteWaterfallChart";
+import { FteTrajectoryChart } from "@/components/shared/charts/FteTrajectoryChart";
 import {
   DepartmentMovementsChart,
   HrDonutChart,
   HrPivotBarChart,
 } from "@/components/shared/charts/HrBreakdownCharts";
+import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import type { MovementAlertKind } from "@/lib/hrEngine";
+import type { WorkforceMovement } from "@/types";
 import {
   HR_METRIC_REGISTRY,
   HR_DIMENSION_REGISTRY,
@@ -110,18 +115,64 @@ export default function HrDashboardPage() {
   const [granularity, setGranularity] = useState<"month" | "quarter">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
 
-  const wf = data.workforce;
-  const alerts = useMemo(() => hr.movementAlerts(wf, data.levers), [wf, data.levers]);
-  const bridge = useMemo(() => hr.fteBridge(wf, granularity), [wf, granularity]);
-  const salary = useMemo(() => hr.salaryBridge(wf, "quarter"), [wf]);
-  const byDept = useMemo(() => hr.movementsByDepartment(wf), [wf]);
-  const byCountry = useMemo(() => hr.movementsByCountry(wf), [wf]);
-  const deptDeltas = useMemo(() => hr.deltaByDepartment(wf), [wf]);
-  const pse = useMemo(() => hr.pseSummary(wf), [wf]);
+  // ─── Filtres RH (même pattern que le dashboard exécutif) ────────────────────────────────────
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  const current = hr.currentFTE(wf);
-  const target = hr.targetFTE(wf);
-  const landing = hr.plannedFTE(wf);
+  const filterDefs: FilterDef<WorkforceMovement>[] = useMemo(
+    () => [
+      { key: "type", label: "Type", getValue: (m) => m.type },
+      { key: "department", label: "Département", getValue: (m) => m.department },
+      { key: "country", label: "Pays", getValue: (m) => m.country },
+      { key: "status", label: "Statut", getValue: (m) => m.status },
+      { key: "hrOwner", label: "Owner RH", getValue: (m) => m.hrOwner },
+    ],
+    []
+  );
+
+  const wf = data.workforce;
+
+  // Mouvements filtrés — alimente TOUS les calculs du dashboard quand un filtre est actif.
+  const filteredMovements = useMemo(() => {
+    const keys = Object.keys(activeFilters);
+    if (keys.length === 0) return wf.movements;
+    return wf.movements.filter((m) =>
+      keys.every((key) => {
+        const values = activeFilters[key];
+        if (!values || values.length === 0) return true;
+        const def = filterDefs.find((d) => d.key === key);
+        return def ? values.includes(def.getValue(m)) : true;
+      })
+    );
+  }, [wf.movements, activeFilters, filterDefs]);
+
+  const hasActiveFilters = Object.keys(activeFilters).length > 0;
+
+  // Workforce virtuelle filtrée — remplace `wf` dans tous les calculs pour que les graphiques
+  // réagissent aux filtres exactement comme le dashboard exécutif.
+  const filteredWf = useMemo(
+    () => ({ ...wf, movements: filteredMovements }),
+    [wf, filteredMovements]
+  );
+
+  const alerts = useMemo(
+    () => hr.movementAlerts(filteredWf, data.levers),
+    [filteredWf, data.levers]
+  );
+  const bridge = useMemo(() => hr.fteBridge(filteredWf, granularity), [filteredWf, granularity]);
+  const trajectory = useMemo(
+    () => hr.fteTrajectory(filteredWf, granularity),
+    [filteredWf, granularity]
+  );
+  const salary = useMemo(() => hr.salaryBridge(filteredWf, "quarter"), [filteredWf]);
+  const byDept = useMemo(() => hr.movementsByDepartment(filteredWf), [filteredWf]);
+  const byCountry = useMemo(() => hr.movementsByCountry(filteredWf), [filteredWf]);
+  const deptDeltas = useMemo(() => hr.deltaByDepartment(filteredWf), [filteredWf]);
+  const pse = useMemo(() => hr.pseSummary(filteredWf), [filteredWf]);
+
+  const current = hr.currentFTE(filteredWf);
+  const target = hr.targetFTE(filteredWf);
+  const landing = hr.plannedFTE(filteredWf);
   const reductionGoal = wf.totalFTE - target;
   const reductionDone = wf.totalFTE - current;
   const goalPct = reductionGoal > 0 ? Math.round((reductionDone / reductionGoal) * 100) : 100;
@@ -136,7 +187,7 @@ export default function HrDashboardPage() {
     return bucket ? hr.bucketByLever(bucket, data.levers) : [];
   }, [drillBucket, bridge, data.levers]);
 
-  const realizedMovements = wf.movements.filter((m) => m.status === "Réalisé").length;
+  const realizedMovements = filteredMovements.filter((m) => m.status === "Réalisé").length;
 
   const goToEtp = (params: Record<string, string>) => {
     const qs = new URLSearchParams(params).toString();
@@ -362,6 +413,41 @@ export default function HrDashboardPage() {
                 onBarClick={(label) => setDrillBucket(label)}
               />
               <FteWaterfallLegend />
+            </CardBody>
+          </Card>
+        );
+      case "fte-trajectory":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title="Trajectoire des effectifs — cible vs réel vs plan"
+              actions={
+                <div className="flex overflow-hidden rounded-md border border-border">
+                  {(["month", "quarter"] as const).map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setGranularity(g)}
+                      className={`px-3 py-1.5 text-xs font-semibold ${granularity === g ? "bg-black text-white" : "bg-white text-secondary"}`}
+                    >
+                      {g === "month" ? "Mois" : "Trimestre"}
+                    </button>
+                  ))}
+                </div>
+              }
+            />
+            <CardBody>
+              <FteTrajectoryChart data={trajectory} />
+              <div className="mt-3 text-[11px] text-tertiary">
+                <strong className="text-primary">Réel</strong> : effectif constaté (mouvements
+                réalisés uniquement) · <strong className="text-primary">Plan</strong> : atterrissage
+                si tous les mouvements se réalisent ·{" "}
+                <strong className="text-primary" style={{ color: "#FF3C47" }}>
+                  Cible
+                </strong>{" "}
+                : objectif de fin d&apos;année. Survolez un point pour voir la ventilation par type
+                de mouvement.
+              </div>
             </CardBody>
           </Card>
         );
@@ -737,16 +823,27 @@ export default function HrDashboardPage() {
     <div className="animate-fade-up">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
         <div>
-          <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            Dashboard RH
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
+              Dashboard RH
+            </h1>
+            <span className="flex items-center gap-1 rounded-sm border border-neutral-300 bg-neutral-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-secondary">
+              <Lock size={10} />
+              Confidentiel
+            </span>
+          </div>
           <div className="mt-2.5 text-[13px] text-secondary">
             Trajectoire effectifs {wf.totalFTE.toLocaleString("fr-FR")} →{" "}
-            {target.toLocaleString("fr-FR")} ETP · {wf.movements.length} mouvements ·{" "}
+            {target.toLocaleString("fr-FR")} ETP · {filteredMovements.length} mouvements ·{" "}
             {realizedMovements} réalisés
+            {hasActiveFilters && (
+              <span className="ml-1 text-bp-coral">
+                (filtré · {filteredMovements.length}/{wf.movements.length})
+              </span>
+            )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="hidden items-center gap-2 lg:flex">
           {!editMode && (
             <DashboardExportButton
               layout={layout}
@@ -767,6 +864,52 @@ export default function HrDashboardPage() {
             <Users size={13} /> Ouvrir la Base ETP
           </Button>
         </div>
+        {/* Mobile : bouton condensé pour la Base ETP */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <Button variant="primary" size="sm" onClick={() => router.push("/hr/etp")}>
+            <Users size={13} /> Base ETP
+          </Button>
+        </div>
+      </div>
+
+      {/* Filtres RH — même mécanisme que le dashboard exécutif : repliés sur mobile,
+          toujours visibles sur desktop. Filtrent tous les graphiques et KPI. */}
+      <div className="mb-4 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileFiltersOpen((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            hasActiveFilters || mobileFiltersOpen
+              ? "border-bp-coral bg-bp-coral text-white"
+              : "border-border bg-white text-secondary"
+          }`}
+        >
+          <SlidersHorizontal size={12} />
+          Filtres
+          {hasActiveFilters && (
+            <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-bold">
+              {Object.keys(activeFilters).length}
+            </span>
+          )}
+        </button>
+        {mobileFiltersOpen && (
+          <div className="mt-2">
+            <FilterBar
+              items={wf.movements}
+              defs={filterDefs}
+              active={activeFilters}
+              onChange={setActiveFilters}
+            />
+          </div>
+        )}
+      </div>
+      <div className="mb-4 hidden lg:block">
+        <FilterBar
+          items={wf.movements}
+          defs={filterDefs}
+          active={activeFilters}
+          onChange={setActiveFilters}
+        />
       </div>
 
       {/* Alertes RH — réconciliation avec les leviers. Reste en chrome fixe (comme la ligne de KPI

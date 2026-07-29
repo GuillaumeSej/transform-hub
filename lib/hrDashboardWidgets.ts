@@ -41,6 +41,7 @@ export type { WidgetSpan };
 
 export type HrWidgetType =
   | "fte-waterfall"
+  | "fte-trajectory"
   | "department-breakdown"
   | "country-breakdown"
   | "movement-type-breakdown"
@@ -98,6 +99,13 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     type: "fte-waterfall",
     label: "Trajectoire des effectifs — waterfall des mouvements",
     icon: "Waypoints",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+  },
+  {
+    type: "fte-trajectory",
+    label: "Trajectoire effectifs — cible vs réel vs plan",
+    icon: "TrendingDown",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
   },

@@ -33,6 +33,7 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "levers", icon: "Target", label: "nav.leverLibrary" },
       { id: "finance", icon: "LineChart", label: "nav.financeModule" },
       { id: "hr", icon: "Users", label: "nav.hrDashboard" },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
     ],
   },
   sponsor: {

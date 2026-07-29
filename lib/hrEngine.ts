@@ -21,7 +21,10 @@ export function fteEffect(m: WorkforceMovement): number {
 }
 
 export function currentFTE(wf: Workforce): number {
-  return wf.totalFTE + wf.movements.filter((m) => m.status === "Réalisé").reduce((s, m) => s + fteEffect(m), 0);
+  return (
+    wf.totalFTE +
+    wf.movements.filter((m) => m.status === "Réalisé").reduce((s, m) => s + fteEffect(m), 0)
+  );
 }
 
 /** Atterrissage : effectif si TOUS les mouvements du plan se réalisent. */
@@ -43,7 +46,20 @@ export type FteBridgeBucket = {
   movements: WorkforceMovement[];
 };
 
-const MONTH_LABELS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
+const MONTH_LABELS = [
+  "Jan",
+  "Fév",
+  "Mar",
+  "Avr",
+  "Mai",
+  "Juin",
+  "Juil",
+  "Août",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Déc",
+];
 
 /** Projection en cascade des mouvements 2026, par mois ou trimestre, de la baseline vers
  * l'atterrissage. Chaque bucket porte ses mouvements pour la décomposition par levier au clic. */
@@ -76,7 +92,13 @@ export function fteBridge(wf: Workforce, granularity: "month" | "quarter"): FteB
 export function bucketByLever(
   bucket: FteBridgeBucket,
   levers: Lever[]
-): { leverId: string; leverCode: string; leverName: string; movements: WorkforceMovement[]; fte: number }[] {
+): {
+  leverId: string;
+  leverCode: string;
+  leverName: string;
+  movements: WorkforceMovement[];
+  fte: number;
+}[] {
   const byLever = new Map<string, WorkforceMovement[]>();
   for (const m of bucket.movements) {
     byLever.set(m.leverId, [...(byLever.get(m.leverId) ?? []), m]);
@@ -105,7 +127,8 @@ export type DepartmentMovements = {
 export function movementsByDepartment(wf: Workforce): DepartmentMovements[] {
   const rows = new Map<string, DepartmentMovements>();
   const row = (dept: string) => {
-    if (!rows.has(dept)) rows.set(dept, { department: dept, suppressions: 0, recrutements: 0, transferts: 0 });
+    if (!rows.has(dept))
+      rows.set(dept, { department: dept, suppressions: 0, recrutements: 0, transferts: 0 });
     return rows.get(dept)!;
   };
   for (const m of wf.movements) {
@@ -113,13 +136,16 @@ export function movementsByDepartment(wf: Workforce): DepartmentMovements[] {
     else if (m.type === "Recrutement") row(m.department).recrutements += m.fte;
     else {
       row(m.department).transferts += m.fte;
-      if (m.toDepartment && m.toDepartment !== m.department) row(m.toDepartment).transferts += m.fte;
+      if (m.toDepartment && m.toDepartment !== m.department)
+        row(m.toDepartment).transferts += m.fte;
     }
   }
   return Array.from(rows.values()).sort((a, b) => b.suppressions - a.suppressions);
 }
 
-export function movementsByCountry(wf: Workforce): { country: string; fte: number; count: number }[] {
+export function movementsByCountry(
+  wf: Workforce
+): { country: string; fte: number; count: number }[] {
   const rows = new Map<string, { country: string; fte: number; count: number }>();
   for (const m of wf.movements) {
     const r = rows.get(m.country) ?? { country: m.country, fte: 0, count: 0 };
@@ -137,7 +163,11 @@ export function movementsByType(wf: Workforce): MovementTypeSummary[] {
   return types
     .map((type) => {
       const list = wf.movements.filter((m) => m.type === type);
-      return { type, count: list.length, fte: Math.round(list.reduce((s, m) => s + m.fte, 0) * 10) / 10 };
+      return {
+        type,
+        count: list.length,
+        fte: Math.round(list.reduce((s, m) => s + m.fte, 0) * 10) / 10,
+      };
     })
     .filter((t) => t.count > 0);
 }
@@ -148,13 +178,20 @@ export type SalaryBridgeBucket = { label: string; delta: number; cumulative: num
 
 /** Impact cumulé des mouvements sur la masse salariale annuelle (€M) — baseline massSalary,
  * chaque bucket ajoute les salaryImpact des mouvements planifiés dessus. */
-export function salaryBridge(wf: Workforce, granularity: "month" | "quarter"): SalaryBridgeBucket[] {
+export function salaryBridge(
+  wf: Workforce,
+  granularity: "month" | "quarter"
+): SalaryBridgeBucket[] {
   const fte = fteBridge(wf, granularity);
   let running = wf.massSalary;
   return fte.map((b) => {
     const deltaM = b.movements.reduce((s, m) => s + m.salaryImpact, 0) / 1_000_000;
     running += deltaM;
-    return { label: b.label, delta: Math.round(deltaM * 100) / 100, cumulative: Math.round(running * 100) / 100 };
+    return {
+      label: b.label,
+      delta: Math.round(deltaM * 100) / 100,
+      cumulative: Math.round(running * 100) / 100,
+    };
   });
 }
 
@@ -220,6 +257,82 @@ export function deltaByDepartment(wf: Workforce): DepartmentDelta[] {
       gapToTarget: Math.round((landing - d.fteTarget) * 10) / 10,
     };
   });
+}
+
+// ---------- Trajectoire effectifs cible vs réel ----------
+
+export type FteTrajectoryPoint = {
+  label: string;
+  /** Effectif réel en fin de période (baseline + mouvements réalisés cumulés) */
+  actual: number;
+  /** Effectif prévu par le plan (baseline + tous mouvements cumulés planifiés) */
+  planned: number;
+  /** Cible fin d'année (constante, pour la ligne de référence) */
+  target: number;
+  /** Ventilation par type de mouvement des deltas de la période */
+  byType: Record<MovementType, number>;
+};
+
+/** Construit la trajectoire mois par mois ou trimestre par trimestre. Distingue :
+ *  - `actual` : ne cumule que les mouvements "Réalisé"
+ *  - `planned` : cumule TOUS les mouvements (plan complet)
+ *  - `byType` : ventilation du delta total de la période par mécanisme */
+export function fteTrajectory(
+  wf: Workforce,
+  granularity: "month" | "quarter"
+): FteTrajectoryPoint[] {
+  const bucketCount = granularity === "month" ? 12 : 4;
+  const labels = granularity === "month" ? MONTH_LABELS : ["T1", "T2", "T3", "T4"];
+
+  const allTypes: MovementType[] = ["Suppression", "Recrutement", "Redéploiement", "Reconversion"];
+  const points: FteTrajectoryPoint[] = Array.from({ length: bucketCount }, (_, i) => ({
+    label: labels[i],
+    actual: 0,
+    planned: 0,
+    target: 0,
+    byType: Object.fromEntries(allTypes.map((t) => [t, 0])) as Record<MovementType, number>,
+  }));
+
+  const tgt = targetFTE(wf);
+  let runningActual = wf.totalFTE;
+  let runningPlanned = wf.totalFTE;
+
+  for (const m of wf.movements) {
+    const month = Number(m.plannedDate.slice(5, 7)) - 1;
+    if (Number.isNaN(month) || month < 0 || month > 11) continue;
+    const idx = granularity === "month" ? month : Math.floor(month / 3);
+    const effect = fteEffect(m);
+    points[idx].byType[m.type] = (points[idx].byType[m.type] ?? 0) + effect;
+  }
+
+  for (let i = 0; i < bucketCount; i++) {
+    // Planned = tous les mouvements
+    const plannedDelta = wf.movements
+      .filter((m) => {
+        const month = Number(m.plannedDate.slice(5, 7)) - 1;
+        const idx = granularity === "month" ? month : Math.floor(month / 3);
+        return idx === i;
+      })
+      .reduce((s, m) => s + fteEffect(m), 0);
+    runningPlanned += plannedDelta;
+
+    // Actual = seulement les mouvements réalisés
+    const actualDelta = wf.movements
+      .filter((m) => {
+        if (m.status !== "Réalisé") return false;
+        const month = Number(m.plannedDate.slice(5, 7)) - 1;
+        const idx = granularity === "month" ? month : Math.floor(month / 3);
+        return idx === i;
+      })
+      .reduce((s, m) => s + fteEffect(m), 0);
+    runningActual += actualDelta;
+
+    points[i].actual = Math.round(runningActual * 10) / 10;
+    points[i].planned = Math.round(runningPlanned * 10) / 10;
+    points[i].target = tgt;
+  }
+
+  return points;
 }
 
 // ---------- Alertes de réconciliation RH ↔ leviers ----------
