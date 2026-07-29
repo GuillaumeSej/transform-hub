@@ -308,6 +308,13 @@ export default function DashboardPage() {
   }, [visibleData, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
+  // Ambition déclarée du programme (Program.target, top-down) vs cible bottom-up des leviers
+  // déjà identifiés (summary.target) — même unité (€M), voir components/admin/ProgramsPanel.tsx.
+  const programAmbition = programs.find((p) => p.id === selectedProgramId)?.target;
+  const leverCoveragePct =
+    programAmbition && programAmbition > 0
+      ? Math.round((summary.target / programAmbition) * 100)
+      : undefined;
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
 
   // ── Tri des leviers sous-performants ───────────────────────────────────
@@ -1868,7 +1875,15 @@ export default function DashboardPage() {
           icon={Banknote}
           hero
           className="max-[1100px]:col-span-2"
-          sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)} · ${summary.progressPct}%`}
+          sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)} · ${summary.progressPct}%${
+            programAmbition
+              ? ` · Ambition Programme : ${engine.fmtCurr(programAmbition)}${
+                  leverCoveragePct !== undefined
+                    ? ` · Couverture leviers identifiés : ${leverCoveragePct}%`
+                    : ""
+                }`
+              : ""
+          }`}
           barPct={summary.progressPct}
           barMarkerPct={
             summary.target > 0

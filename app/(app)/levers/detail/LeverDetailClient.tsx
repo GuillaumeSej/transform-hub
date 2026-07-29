@@ -500,6 +500,14 @@ export default function LeverDetailClient() {
               />
               <div className="flex flex-1 flex-wrap gap-x-8 gap-y-4">
                 <BigStat label="Réalisé à date" value={engine.fmtCurr(real)} accent />
+                <BigStat
+                  label={`Plan initial (figé à « ${lifecycle.label("validated")} »)`}
+                  value={lever.lockedPlan ? engine.fmtCurr(lever.lockedPlan.netSavings) : "—"}
+                />
+                <BigStat
+                  label="Planifié (réactualisé)"
+                  value={lever.reforecast ? engine.fmtCurr(lever.reforecast.netSavings) : "—"}
+                />
                 <BigStat label="Net savings visé" value={engine.fmtCurr(lever.netSavings)} />
                 <BigStat
                   label="Maturité"
