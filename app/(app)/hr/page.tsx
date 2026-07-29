@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Banknote,
   ChevronDown,
   ChevronUp,
   GripVertical,
@@ -15,7 +14,6 @@ import {
   SlidersHorizontal,
   TriangleAlert,
   Users,
-  Wallet,
   X,
 } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
@@ -24,8 +22,8 @@ import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as hr from "@/lib/hrEngine";
 import { fmtCurr } from "@/lib/engine";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
-import { KPICard } from "@/components/shared/KPICard";
-import { RadialProgress } from "@/components/shared/RadialProgress";
+// KPICard et RadialProgress retirées : le bandeau RH utilise maintenant un design custom
+// (barre d'avancement pleine largeur + cartes épurées sans icônes, voir le bloc KPI ci-dessous).
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
@@ -114,6 +112,23 @@ export default function HrDashboardPage() {
   const router = useRouter();
   const [granularity, setGranularity] = useState<"month" | "quarter">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
+
+  /** Période affichée sur les graphiques à axe temporel (waterfall, trajectoire).
+   *  Tranche les données bridge/trajectory pour n'afficher que les N premiers mois/trimestres. */
+  type TimeRangeOption = { label: string; months: number };
+  const TIME_RANGES: TimeRangeOption[] = [
+    { label: "3 mois", months: 3 },
+    { label: "6 mois", months: 6 },
+    { label: "1 an", months: 12 },
+    { label: "3 ans", months: 36 },
+  ];
+  const [timeRangeMonths, setTimeRangeMonths] = useState(12);
+
+  /** Nombre de buckets à afficher selon la période et la granularité courante. */
+  const visibleBuckets = useMemo(() => {
+    if (granularity === "quarter") return Math.min(Math.ceil(timeRangeMonths / 3), 12);
+    return Math.min(timeRangeMonths, 12);
+  }, [timeRangeMonths, granularity]);
 
   // ─── Filtres RH (même pattern que le dashboard exécutif) ────────────────────────────────────
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
@@ -383,31 +398,44 @@ export default function HrDashboardPage() {
     );
   };
 
+  /** Sélecteur granularité + période — partagé entre waterfall et trajectoire. */
+  const timeControls = (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex overflow-hidden rounded-md border border-border">
+        {TIME_RANGES.map((r) => (
+          <button
+            key={r.months}
+            onClick={() => setTimeRangeMonths(r.months)}
+            className={`px-2 py-1 text-[11px] font-semibold ${timeRangeMonths === r.months ? "bg-neutral-900 text-white" : "bg-white text-secondary"}`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex overflow-hidden rounded-md border border-border">
+        {(["month", "quarter"] as const).map((g) => (
+          <button
+            key={g}
+            onClick={() => setGranularity(g)}
+            className={`px-2.5 py-1 text-[11px] font-semibold ${granularity === g ? "bg-neutral-900 text-white" : "bg-white text-secondary"}`}
+          >
+            {g === "month" ? "Mois" : "Trim."}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   const renderWidget = (instance: HrWidgetInstance): ReactNode => {
     switch (instance.type) {
       case "fte-waterfall":
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader
-              title="Trajectoire des effectifs — waterfall des mouvements"
-              actions={
-                <div className="flex overflow-hidden rounded-md border border-border">
-                  {(["month", "quarter"] as const).map((g) => (
-                    <button
-                      key={g}
-                      onClick={() => setGranularity(g)}
-                      className={`px-3 py-1.5 text-xs font-semibold ${granularity === g ? "bg-black text-white" : "bg-white text-secondary"}`}
-                    >
-                      {g === "month" ? "Mois" : "Trimestre"}
-                    </button>
-                  ))}
-                </div>
-              }
-            />
+            <CardHeader title="Waterfall des mouvements" actions={timeControls} />
             <CardBody>
               <FteWaterfallChart
-                buckets={bridge}
+                buckets={bridge.slice(0, visibleBuckets)}
                 baseline={wf.totalFTE}
                 target={target}
                 onBarClick={(label) => setDrillBucket(label)}
@@ -420,24 +448,9 @@ export default function HrDashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader
-              title="Trajectoire des effectifs — cible vs réel vs plan"
-              actions={
-                <div className="flex overflow-hidden rounded-md border border-border">
-                  {(["month", "quarter"] as const).map((g) => (
-                    <button
-                      key={g}
-                      onClick={() => setGranularity(g)}
-                      className={`px-3 py-1.5 text-xs font-semibold ${granularity === g ? "bg-black text-white" : "bg-white text-secondary"}`}
-                    >
-                      {g === "month" ? "Mois" : "Trimestre"}
-                    </button>
-                  ))}
-                </div>
-              }
-            />
+            <CardHeader title="Trajectoire — cible vs réel vs plan" actions={timeControls} />
             <CardBody>
-              <FteTrajectoryChart data={trajectory} />
+              <FteTrajectoryChart data={trajectory.slice(0, visibleBuckets)} />
               <div className="mt-3 text-[11px] text-tertiary">
                 <strong className="text-primary">Réel</strong> : effectif constaté (mouvements
                 réalisés uniquement) · <strong className="text-primary">Plan</strong> : atterrissage
@@ -912,10 +925,111 @@ export default function HrDashboardPage() {
         />
       </div>
 
-      {/* Alertes RH — réconciliation avec les leviers. Reste en chrome fixe (comme la ligne de KPI
-          ci-dessous) plutôt que de devenir un widget : c'est un flux d'actions prioritaires à
-          garder toujours visible en haut, pas un graphique repositionnable — voir la note de scope
-          dans lib/hrDashboardWidgets.ts. */}
+      {/* ═══════════════════════════════════════════════════════════════════════════════════════
+          BARRE D'AVANCEMENT ETP — pleine largeur, pas de cadre blanc isolé : lecture immédiate
+          du ratio mouvements réalisés / total et de la trajectoire baseline → cible.
+          ═══════════════════════════════════════════════════════════════════════════════════════ */}
+      <div className="mb-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[28px] font-bold leading-none tracking-tight text-primary">
+              {realizedMovements}
+              <span className="text-[18px] font-semibold text-tertiary">
+                /{filteredMovements.length}
+              </span>
+            </span>
+            <span className="text-[13px] text-secondary">mouvements réalisés</span>
+          </div>
+          <div className="flex items-center gap-3 text-[12px] tabular-nums text-secondary">
+            <span>
+              <strong className="text-primary">{current.toLocaleString("fr-FR")}</strong> ETP
+              actuels
+            </span>
+            <span className="text-tertiary">→</span>
+            <span>
+              cible <strong className="text-primary">{target.toLocaleString("fr-FR")}</strong>
+            </span>
+            <span className="rounded-sm bg-neutral-100 px-1.5 py-0.5 text-[11px] font-bold text-primary">
+              {goalPct}%
+            </span>
+          </div>
+        </div>
+        {/* Barre double : fond = total, remplissage = réalisé. Pas de rounded — charte BP. */}
+        <div className="mt-2 h-2 w-full overflow-hidden bg-neutral-200">
+          <div
+            className="h-full bg-bp-coral transition-all duration-500"
+            style={{
+              width: `${filteredMovements.length > 0 ? Math.round((realizedMovements / filteredMovements.length) * 100) : 0}%`,
+            }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-[10px] text-tertiary">
+          <span>Baseline {wf.totalFTE.toLocaleString("fr-FR")} ETP</span>
+          <span>
+            Atterrissage {landing.toLocaleString("fr-FR")} ({landing - target > 0 ? "+" : ""}
+            {(landing - target).toLocaleString("fr-FR")} vs cible)
+          </span>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════════════════════
+          4 KPI — design épuré : gros chiffre noir, libellé dessous, accent via le filet gauche
+          seulement. Les icônes sont retirées (les cartes parlent par le chiffre, pas par un
+          pictogramme générique). Grille 4 colonnes desktop, 2 mobile.
+          ═══════════════════════════════════════════════════════════════════════════════════════ */}
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* Effectif actuel */}
+        <div className="relative overflow-hidden border-l-[3px] border-black bg-white p-4">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-tertiary">
+            Effectif actuel
+          </div>
+          <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
+            {current.toLocaleString("fr-FR")}
+          </div>
+          <div className="mt-1 text-[11px] text-secondary">
+            {current - wf.totalFTE > 0 ? "+" : ""}
+            {(current - wf.totalFTE).toLocaleString("fr-FR")} vs baseline
+          </div>
+        </div>
+        {/* Cible fin 2026 */}
+        <div className="relative overflow-hidden border-l-[3px] border-bp-coral bg-white p-4">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-tertiary">
+            Cible fin 2026
+          </div>
+          <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
+            {target.toLocaleString("fr-FR")}
+          </div>
+          <div className="mt-1 text-[11px] text-secondary">
+            {reductionGoal > 0 ? `−${reductionGoal.toLocaleString("fr-FR")}` : "0"} postes à réduire
+          </div>
+        </div>
+        {/* Masse salariale */}
+        <div className="relative overflow-hidden border-l-[3px] border-bp-warm-brown bg-white p-4">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-tertiary">
+            Masse salariale
+          </div>
+          <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
+            €{wf.massSalary.toFixed(1)}M
+          </div>
+          <div className="mt-1 text-[11px] text-secondary">
+            budget €{wf.budgetSalary.toFixed(1)}M
+          </div>
+        </div>
+        {/* Économies salariales */}
+        <div className="relative overflow-hidden border-l-[3px] border-black bg-white p-4">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-tertiary">
+            Économies salariales
+          </div>
+          <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
+            {fmtCurr(hr.realizedSalarySavings(filteredWf) / 1_000_000)}
+          </div>
+          <div className="mt-1 text-[11px] text-secondary">annualisées · mouvements réalisés</div>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════════════════════
+          ALERTES MOUVEMENTS — sous les KPI, pas au-dessus.
+          ═══════════════════════════════════════════════════════════════════════════════════════ */}
       {alerts.length > 0 && (
         <div className="mb-4 rounded-lg border border-rag-amber-light bg-rag-amber-light/30 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -955,45 +1069,6 @@ export default function HrDashboardPage() {
           </div>
         </div>
       )}
-
-      {/* KPIs */}
-      <div className="mb-4 grid grid-cols-[auto_1fr_1fr_1fr_1fr] gap-3.5 max-[1100px]:grid-cols-2 max-[500px]:grid-cols-1">
-        <div className="flex items-center justify-center rounded-lg border border-border bg-white px-5 shadow-sm">
-          <RadialProgress
-            pct={goalPct}
-            size={104}
-            label={`${goalPct}%`}
-            sublabel="objectif réalisé"
-          />
-        </div>
-        <KPICard
-          label="Effectif actuel"
-          value={current.toLocaleString("fr-FR")}
-          icon={Users}
-          sub={`baseline ${wf.totalFTE.toLocaleString("fr-FR")} ETP`}
-        />
-        <KPICard
-          label="Cible fin 2026"
-          value={target.toLocaleString("fr-FR")}
-          icon={Users}
-          accent="green"
-          sub={`atterrissage plan : ${landing.toLocaleString("fr-FR")} (${landing - target > 0 ? "+" : ""}${(landing - target).toLocaleString("fr-FR")} vs cible)`}
-        />
-        <KPICard
-          label="Masse salariale"
-          value={`€${wf.massSalary.toFixed(1)}M`}
-          icon={Wallet}
-          accent="brown"
-          sub={`budget €${wf.budgetSalary.toFixed(1)}M`}
-        />
-        <KPICard
-          label="Économies salariales réalisées"
-          value={fmtCurr(hr.realizedSalarySavings(wf) / 1_000_000)}
-          icon={Banknote}
-          accent="green"
-          sub="annualisées · mouvements réalisés"
-        />
-      </div>
 
       {editMode && (
         <div className="mb-4 rounded-lg border-2 border-bp-coral/30 bg-bp-coral/[0.04]">
