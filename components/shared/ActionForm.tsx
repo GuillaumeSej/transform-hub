@@ -189,259 +189,310 @@ export function ActionForm({
       {/* Tableau d'impacts inline */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-secondary">
+          <span className="text-xs font-semibold uppercase tracking-wide text-secondary">
             Lignes d&apos;impact
           </span>
           <button
             type="button"
             onClick={addImpact}
-            className="rounded-sm bg-bp-coral/10 px-2 py-0.5 text-[10.5px] font-semibold text-bp-coral transition hover:bg-bp-coral/20"
+            className="rounded-sm bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral transition hover:bg-bp-coral/20"
           >
             + Ajouter
           </button>
         </div>
-        <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
-          {impacts.map((imp, idx) => (
-            <div key={imp.id} className="relative rounded-md border border-border p-3 space-y-2">
-              {impacts.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeImpact(idx)}
-                  className="absolute right-2 top-2 text-tertiary transition hover:text-bp-coral"
-                  aria-label="Supprimer cette ligne d'impact"
-                >
-                  ×
-                </button>
-              )}
+        <div className="max-h-[60vh] overflow-y-auto rounded-md border border-border">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1620px] border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-neutral-50">
+                  <th className="sticky left-0 z-10 w-[90px] min-w-[90px] bg-neutral-50 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Type
+                  </th>
+                  <th className="w-[160px] min-w-[160px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Description
+                  </th>
+                  <th className="w-[110px] min-w-[110px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Nature
+                  </th>
+                  <th className="w-[90px] min-w-[90px] px-2 py-1.5 text-right text-xs font-semibold uppercase tracking-wide text-secondary">
+                    €M
+                  </th>
+                  <th className="w-[70px] min-w-[70px] px-2 py-1.5 text-right text-xs font-semibold uppercase tracking-wide text-secondary">
+                    ETP
+                  </th>
+                  <th className="w-[130px] min-w-[130px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Type de gain
+                  </th>
+                  <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Date CAPEX
+                  </th>
+                  <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Date gain
+                  </th>
+                  <th className="w-[130px] min-w-[130px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Reconnaissance
+                  </th>
+                  <th className="w-[150px] min-w-[150px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Poste de coût
+                  </th>
+                  <th className="w-[110px] min-w-[110px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Centre de coût
+                  </th>
+                  <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Entité (P&amp;L)
+                  </th>
+                  <th className="w-[180px] min-w-[180px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    Commentaire
+                  </th>
+                  <th className="w-[40px] min-w-[40px] px-2 py-1.5" aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {impacts.map((imp, idx) => (
+                  <tr key={imp.id} className="border-b border-border last:border-b-0">
+                    <td className="sticky left-0 z-10 w-[90px] min-w-[90px] bg-white px-2 py-1.5 align-top">
+                      <select
+                        className={selectClass}
+                        value={imp.type}
+                        onChange={(e) => {
+                          const newType = e.target.value as "cost" | "saving";
+                          const patch: Partial<ActionImpact> = { type: newType };
+                          // Si on passe en "saving" et que la nature est "capex" (non valide), basculer vers "oneoff"
+                          if (newType === "saving" && imp.nature === "capex") {
+                            patch.nature = "oneoff";
+                          }
+                          if (newType === "cost") {
+                            patch.savingType = undefined;
+                            patch.gainDate = undefined;
+                          }
+                          updateImpact(idx, patch);
+                        }}
+                      >
+                        <option value="cost">Coût</option>
+                        <option value="saving">Gain</option>
+                      </select>
+                    </td>
 
-              <div className="pr-6">
-                <label className="text-[10px] font-semibold text-secondary">Description</label>
-                <input
-                  className={inputClass}
-                  value={imp.label}
-                  onChange={(e) => updateImpact(idx, { label: e.target.value })}
-                  placeholder="Description..."
-                />
-              </div>
+                    <td className="w-[160px] min-w-[160px] px-2 py-1.5 align-top">
+                      <input
+                        className={inputClass}
+                        value={imp.label}
+                        onChange={(e) => updateImpact(idx, { label: e.target.value })}
+                        placeholder="Description..."
+                      />
+                    </td>
 
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                <div>
-                  <label className="text-[10px] font-semibold text-secondary">Type</label>
-                  <select
-                    className={selectClass}
-                    value={imp.type}
-                    onChange={(e) => {
-                      const newType = e.target.value as "cost" | "saving";
-                      const patch: Partial<ActionImpact> = { type: newType };
-                      // Si on passe en "saving" et que la nature est "capex" (non valide), basculer vers "oneoff"
-                      if (newType === "saving" && imp.nature === "capex") {
-                        patch.nature = "oneoff";
-                      }
-                      if (newType === "cost") {
-                        patch.savingType = undefined;
-                        patch.gainDate = undefined;
-                      }
-                      updateImpact(idx, patch);
-                    }}
-                  >
-                    <option value="cost">Coût</option>
-                    <option value="saving">Gain</option>
-                  </select>
-                </div>
+                    <td className="w-[110px] min-w-[110px] px-2 py-1.5 align-top">
+                      <select
+                        className={selectClass}
+                        value={imp.nature}
+                        onChange={(e) => {
+                          const nature = e.target.value as ActionImpact["nature"];
+                          const patch: Partial<ActionImpact> = { nature };
+                          if (nature !== "capex") patch.capexDeploymentDate = undefined;
+                          updateImpact(idx, patch);
+                        }}
+                      >
+                        {imp.type === "cost" ? (
+                          <>
+                            <option value="capex">CAPEX</option>
+                            <option value="opex_rec">OPEX réc.</option>
+                            <option value="oneoff">One-off</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="opex_rec">Récurrent</option>
+                            <option value="oneoff">One-off</option>
+                          </>
+                        )}
+                      </select>
+                    </td>
 
-                <div>
-                  <label className="text-[10px] font-semibold text-secondary">Nature</label>
-                  <select
-                    className={selectClass}
-                    value={imp.nature}
-                    onChange={(e) => {
-                      const nature = e.target.value as ActionImpact["nature"];
-                      const patch: Partial<ActionImpact> = { nature };
-                      if (nature !== "capex") patch.capexDeploymentDate = undefined;
-                      updateImpact(idx, patch);
-                    }}
-                  >
-                    {imp.type === "cost" ? (
-                      <>
-                        <option value="capex">CAPEX</option>
-                        <option value="opex_rec">OPEX réc.</option>
-                        <option value="oneoff">One-off</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="opex_rec">Récurrent</option>
-                        <option value="oneoff">One-off</option>
-                      </>
-                    )}
-                  </select>
-                </div>
+                    <td className="w-[90px] min-w-[90px] px-2 py-1.5 align-top">
+                      <input
+                        className={`${inputClass} text-right`}
+                        type="number"
+                        step="0.01"
+                        value={imp.amount || ""}
+                        onChange={(e) =>
+                          updateImpact(idx, { amount: parseFloat(e.target.value) || 0 })
+                        }
+                      />
+                    </td>
 
-                <div>
-                  <label className="text-[10px] font-semibold text-secondary">€M</label>
-                  <input
-                    className={`${inputClass} text-right`}
-                    type="number"
-                    step="0.01"
-                    value={imp.amount || ""}
-                    onChange={(e) => updateImpact(idx, { amount: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
+                    <td className="w-[70px] min-w-[70px] px-2 py-1.5 align-top">
+                      <input
+                        className={`${inputClass} text-right`}
+                        type="number"
+                        step="1"
+                        value={imp.fteCount ?? ""}
+                        onChange={(e) =>
+                          updateImpact(idx, {
+                            fteCount: e.target.value ? parseInt(e.target.value) : undefined,
+                          })
+                        }
+                      />
+                    </td>
 
-                <div>
-                  <label className="text-[10px] font-semibold text-secondary">ETP</label>
-                  <input
-                    className={`${inputClass} text-right`}
-                    type="number"
-                    step="1"
-                    value={imp.fteCount ?? ""}
-                    onChange={(e) =>
-                      updateImpact(idx, {
-                        fteCount: e.target.value ? parseInt(e.target.value) : undefined,
-                      })
-                    }
-                  />
-                </div>
+                    <td className="w-[130px] min-w-[130px] px-2 py-1.5 align-top">
+                      {imp.type === "saving" ? (
+                        <select
+                          className={selectClass}
+                          value={imp.savingType ?? ""}
+                          onChange={(e) =>
+                            updateImpact(idx, {
+                              savingType: (e.target.value || undefined) as SavingType | undefined,
+                            })
+                          }
+                        >
+                          <option value="">—</option>
+                          {(Object.keys(SAVING_TYPE_LABELS) as SavingType[]).map((st) => (
+                            <option key={st} value={st}>
+                              {SAVING_TYPE_LABELS[st]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-tertiary">—</span>
+                      )}
+                    </td>
 
-                {imp.type === "saving" && (
-                  <div>
-                    <label className="text-[10px] font-semibold text-secondary">Type de gain</label>
-                    <select
-                      className={selectClass}
-                      value={imp.savingType ?? ""}
-                      onChange={(e) =>
-                        updateImpact(idx, {
-                          savingType: (e.target.value || undefined) as SavingType | undefined,
-                        })
-                      }
-                    >
-                      <option value="">—</option>
-                      {(Object.keys(SAVING_TYPE_LABELS) as SavingType[]).map((st) => (
-                        <option key={st} value={st}>
-                          {SAVING_TYPE_LABELS[st]}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                    <td className="w-[120px] min-w-[120px] px-2 py-1.5 align-top">
+                      {imp.nature === "capex" ? (
+                        <input
+                          className={inputClass}
+                          type="date"
+                          value={imp.capexDeploymentDate ?? ""}
+                          onChange={(e) =>
+                            updateImpact(idx, { capexDeploymentDate: e.target.value || undefined })
+                          }
+                          title="Date à laquelle le CAPEX est engagé à 100%"
+                        />
+                      ) : (
+                        <span className="text-tertiary">—</span>
+                      )}
+                    </td>
 
-                {imp.nature === "capex" && (
-                  <div>
-                    <label className="text-[10px] font-semibold text-secondary">Date CAPEX</label>
-                    <input
-                      className={inputClass}
-                      type="date"
-                      value={imp.capexDeploymentDate ?? ""}
-                      onChange={(e) =>
-                        updateImpact(idx, { capexDeploymentDate: e.target.value || undefined })
-                      }
-                      title="Date à laquelle le CAPEX est engagé à 100%"
-                    />
-                  </div>
-                )}
+                    <td className="w-[120px] min-w-[120px] px-2 py-1.5 align-top">
+                      {imp.type === "saving" ? (
+                        <input
+                          className={inputClass}
+                          type="date"
+                          value={imp.gainDate ?? ""}
+                          onChange={(e) =>
+                            updateImpact(idx, { gainDate: e.target.value || undefined })
+                          }
+                          title="Date d'encaissement réel du gain"
+                        />
+                      ) : (
+                        <span className="text-tertiary">—</span>
+                      )}
+                    </td>
 
-                {imp.type === "saving" && (
-                  <div>
-                    <label className="text-[10px] font-semibold text-secondary">Date gain</label>
-                    <input
-                      className={inputClass}
-                      type="date"
-                      value={imp.gainDate ?? ""}
-                      onChange={(e) => updateImpact(idx, { gainDate: e.target.value || undefined })}
-                      title="Date d'encaissement réel du gain"
-                    />
-                  </div>
-                )}
+                    <td className="w-[130px] min-w-[130px] px-2 py-1.5 align-top">
+                      {imp.type === "saving" || imp.nature === "capex" ? (
+                        <select
+                          className={selectClass}
+                          value={imp.recognition ?? ""}
+                          onChange={(e) =>
+                            updateImpact(idx, {
+                              recognition: (e.target.value || undefined) as
+                                RecognitionMode | undefined,
+                            })
+                          }
+                        >
+                          <option value="">
+                            Défaut (
+                            {companyDefaultRecognition === "one_shot" ? "one-shot" : "lissé"})
+                          </option>
+                          <option value="smoothing">Lissé</option>
+                          <option value="one_shot">One-shot</option>
+                        </select>
+                      ) : (
+                        <span className="text-tertiary">—</span>
+                      )}
+                    </td>
 
-                {(imp.type === "saving" || imp.nature === "capex") && (
-                  <div>
-                    <label className="text-[10px] font-semibold text-secondary">
-                      Reconnaissance
-                    </label>
-                    <select
-                      className={selectClass}
-                      value={imp.recognition ?? ""}
-                      onChange={(e) =>
-                        updateImpact(idx, {
-                          recognition: (e.target.value || undefined) as RecognitionMode | undefined,
-                        })
-                      }
-                    >
-                      <option value="">
-                        Défaut ({companyDefaultRecognition === "one_shot" ? "one-shot" : "lissé"})
-                      </option>
-                      <option value="smoothing">Lissé</option>
-                      <option value="one_shot">One-shot</option>
-                    </select>
-                  </div>
-                )}
+                    <td className="w-[150px] min-w-[150px] px-2 py-1.5 align-top">
+                      <select
+                        className={selectClass}
+                        value={imp.pnlMap ?? ""}
+                        onChange={(e) => updateImpact(idx, { pnlMap: e.target.value || undefined })}
+                      >
+                        <option value="">—</option>
+                        {pnlOptions.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
 
-                <div>
-                  <label className="text-[10px] font-semibold text-secondary">Poste de coût</label>
-                  <select
-                    className={selectClass}
-                    value={imp.pnlMap ?? ""}
-                    onChange={(e) => updateImpact(idx, { pnlMap: e.target.value || undefined })}
-                  >
-                    <option value="">—</option>
-                    {pnlOptions.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <td className="w-[110px] min-w-[110px] px-2 py-1.5 align-top">
+                      <input
+                        className={inputClass}
+                        value={imp.costCenter ?? ""}
+                        onChange={(e) =>
+                          updateImpact(idx, { costCenter: e.target.value || undefined })
+                        }
+                        placeholder="CC..."
+                      />
+                    </td>
 
-                <div>
-                  <label className="text-[10px] font-semibold text-secondary">Centre de coût</label>
-                  <input
-                    className={inputClass}
-                    value={imp.costCenter ?? ""}
-                    onChange={(e) => updateImpact(idx, { costCenter: e.target.value || undefined })}
-                    placeholder="CC..."
-                  />
-                </div>
+                    <td className="w-[120px] min-w-[120px] px-2 py-1.5 align-top">
+                      <select
+                        className={selectClass}
+                        value={imp.entity ?? ""}
+                        onChange={(e) => updateImpact(idx, { entity: e.target.value || undefined })}
+                      >
+                        <option value="">—</option>
+                        {entityOptions.map((ent) => (
+                          <option key={ent} value={ent}>
+                            {ent}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
 
-                <div>
-                  <label className="text-[10px] font-semibold text-secondary">Entité (P&L)</label>
-                  <select
-                    className={selectClass}
-                    value={imp.entity ?? ""}
-                    onChange={(e) => updateImpact(idx, { entity: e.target.value || undefined })}
-                  >
-                    <option value="">—</option>
-                    {entityOptions.map((ent) => (
-                      <option key={ent} value={ent}>
-                        {ent}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                    <td className="w-[180px] min-w-[180px] px-2 py-1.5 align-top">
+                      <input
+                        className={inputClass}
+                        value={imp.comments?.[imp.comments.length - 1]?.text ?? ""}
+                        onChange={(e) => {
+                          const text = e.target.value;
+                          updateImpact(idx, {
+                            comments: text
+                              ? [
+                                  {
+                                    user: owner.trim() || "Utilisateur démo",
+                                    ts: new Date().toISOString().slice(0, 10),
+                                    text,
+                                  },
+                                ]
+                              : [],
+                          });
+                        }}
+                        placeholder="Méthode de calcul, hypothèses..."
+                      />
+                    </td>
 
-              <div>
-                <label className="text-[10px] font-semibold text-secondary">Commentaire</label>
-                <input
-                  className={inputClass}
-                  value={imp.comments?.[imp.comments.length - 1]?.text ?? ""}
-                  onChange={(e) => {
-                    const text = e.target.value;
-                    updateImpact(idx, {
-                      comments: text
-                        ? [
-                            {
-                              user: owner.trim() || "Utilisateur démo",
-                              ts: new Date().toISOString().slice(0, 10),
-                              text,
-                            },
-                          ]
-                        : [],
-                    });
-                  }}
-                  placeholder="Méthode de calcul, hypothèses..."
-                />
-              </div>
-            </div>
-          ))}
+                    <td className="w-[40px] min-w-[40px] px-2 py-1.5 align-top">
+                      {impacts.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeImpact(idx)}
+                          className="text-tertiary transition hover:text-bp-coral"
+                          aria-label="Supprimer cette ligne d'impact"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
