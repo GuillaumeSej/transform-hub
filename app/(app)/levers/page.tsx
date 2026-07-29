@@ -16,6 +16,7 @@ import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/adm
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { ExportButton } from "@/components/shared/ExportButton";
+import { LeverImportButton } from "@/components/shared/LeverImportButton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { StageBadge } from "@/components/shared/StageBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
@@ -450,9 +451,14 @@ export default function LeversPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Export Excel : outil de bureau, sans objet sur téléphone. */}
-          <span className="hidden sm:inline-flex">
+          {/* Export/import Excel : outils de bureau, sans objet sur téléphone. */}
+          <span className="hidden items-center gap-2 sm:inline-flex">
             <ExportButton data={data} />
+            <LeverImportButton
+              data={data}
+              companyId={user?.companyId}
+              onImport={(rows) => data.importLevers(rows)}
+            />
           </span>
           <Button variant="primary" onClick={() => setNewLeverOpen(true)}>
             <Plus size={13} /> {t("levers.newLever")}

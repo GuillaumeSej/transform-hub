@@ -280,6 +280,22 @@ export function useBeTrackData(companyId?: string | null) {
     [persistAudit]
   );
 
+  /** Import Excel en masse (leviers + actions + impacts) — voir lib/leverExcelImport.ts pour la
+   *  validation/construction des lignes en amont. Un seul writeBatch Firestore pour tout le lot. */
+  const importLevers = useCallback(
+    (inputs: Omit<Lever, "id" | "createdAt" | "lastUpdate">[]) => {
+      const result = leversLogic.bulkUpsertLeversByCode(leversRef.current, inputs, DEMO_USER);
+      leversRef.current = result.levers;
+      setLevers(result.levers);
+      persistAudit(result.auditEntries);
+      leversDb
+        .saveLeversBatch(result.changedLevers)
+        .catch((err) => console.error("[betrack] import leviers :", err));
+      return result;
+    },
+    [persistAudit]
+  );
+
   const createAction = useCallback(
     (scope: { leverId: string }, input: Omit<LeverAction, "id">) => {
       const result = leversLogic.createAction(leversRef.current, scope, input, DEMO_USER);
@@ -498,6 +514,7 @@ export function useBeTrackData(companyId?: string | null) {
     updateLever,
     createLever,
     upsertLeverByCode,
+    importLevers,
     createAction,
     updateAction,
     deleteAction,

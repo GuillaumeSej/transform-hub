@@ -4,8 +4,9 @@ import type { Alert, BeTrackData, Lever, RiskLevel } from "@/types";
 
 /**
  * Mapping Lever -> ligne Excel, utilisé par `ExportButton` (type="excel") pour générer
- * le fichier .xlsx téléchargé sur la page Leviers. Pas d'import Excel dans cette app — voir
- * historique git si besoin de retrouver l'ancien parsing (`ExcelUploadButton`, retiré).
+ * le fichier .xlsx téléchargé sur la page Leviers. L'import (leviers + actions + impacts) vit
+ * dans `lib/leverExcelImport.ts`, utilisé par `LeverImportButton` — voir ce fichier pour le format
+ * des 3 feuilles attendues et la logique de validation/upsert par Code.
  */
 
 export function leverToExcelRow(

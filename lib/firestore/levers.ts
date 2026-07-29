@@ -134,6 +134,23 @@ export async function saveLever(lever: Lever): Promise<void> {
   await setDoc(doc(leversCol(), lever.id), lever);
 }
 
+/** Création/mise à jour en masse (import Excel — voir lib/leverExcelImport.ts) : un seul
+ *  writeBatch, jusqu'à 500 écritures par lot Firestore, sur le même modèle que
+ *  `saveHierarchyNodesBatch` (lib/firestore/admin.ts). Round-trip JSON avant écriture pour purger
+ *  les clés `undefined` (rejetées par Firestore), comme le fait déjà `forceReseedLevers`. */
+export async function saveLeversBatch(levers: Lever[]): Promise<void> {
+  if (levers.length === 0) return;
+  const col = leversCol();
+  const CHUNK = 500;
+  for (let i = 0; i < levers.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    for (const lever of levers.slice(i, i + CHUNK)) {
+      batch.set(doc(col, lever.id), JSON.parse(JSON.stringify(lever)));
+    }
+    await batch.commit();
+  }
+}
+
 export async function saveComments(comments: Record<string, Comment[]>): Promise<void> {
   await setDoc(commentsDoc(), comments);
 }

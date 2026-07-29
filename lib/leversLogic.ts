@@ -257,6 +257,55 @@ export function upsertLeverByCode(
   return { ...createLever(levers, input, user), created: true };
 }
 
+export type BulkLeverImportResult = {
+  levers: Lever[];
+  /** Un élément par levier du lot (créé ou mis à jour), déjà consolidé (plan d'action pris en
+   *  compte) — ce qui doit être persisté tel quel en base. */
+  changedLevers: Lever[];
+  auditEntries: AuditEntry[];
+  createdCount: number;
+  updatedCount: number;
+};
+
+/**
+ * Import Excel en masse (voir lib/leverExcelImport.ts) : crée/met à jour chaque levier par Code
+ * (même règle que `upsertLeverByCode`), puis pose son plan d'action complet via `writeActions` —
+ * qui recalcule la progression et consolide les agrégats financiers depuis les impacts, exactement
+ * comme le ferait un utilisateur créant les actions une par une dans l'UI (voir
+ * `recomputeLeverProgress`/`consolidateLeverFromActions`). Chaque levier du lot est traité
+ * séquentiellement sur le même état accumulé, pour que les leviers plus haut dans le fichier
+ * soient visibles (ex. comme cible de dépendance) aux suivants.
+ */
+export function bulkUpsertLeversByCode(
+  levers: Lever[],
+  inputs: Omit<Lever, "id" | "createdAt" | "lastUpdate">[],
+  user: string
+): BulkLeverImportResult {
+  let curLevers = levers;
+  const changedLevers: Lever[] = [];
+  const auditEntries: AuditEntry[] = [];
+  let createdCount = 0;
+  let updatedCount = 0;
+
+  for (const input of inputs) {
+    const upsert = upsertLeverByCode(curLevers, input, user);
+    curLevers = upsert.levers;
+    auditEntries.push(...upsert.auditEntries);
+    if (upsert.created) createdCount++;
+    else updatedCount++;
+
+    const { levers: afterActions, changedLever } = writeActions(
+      curLevers,
+      { leverId: upsert.lever.id },
+      input.actions ?? []
+    );
+    curLevers = afterActions;
+    changedLevers.push(changedLever ?? upsert.lever);
+  }
+
+  return { levers: curLevers, changedLevers, auditEntries, createdCount, updatedCount };
+}
+
 export type ActionScope = { leverId: string };
 
 export type ActionMutationResult = {
@@ -272,8 +321,10 @@ function readActions(levers: Lever[], scope: ActionScope): LeverAction[] {
 
 /** Applique le nouveau tableau d'actions sur le lever ciblé par `scope`, puis recalcule sa
  * progression. Retourne toujours le lever touché (même sans changement de progression) pour que
- * l'appelant persiste le nouveau plan d'action. */
-function writeActions(
+ * l'appelant persiste le nouveau plan d'action. Exportée (en plus de createAction/updateAction/
+ * deleteAction, qui l'utilisent pour une seule action à la fois) pour `bulkUpsertLeversByCode`, qui
+ * doit poser le plan d'action COMPLET d'un levier importé en une fois. */
+export function writeActions(
   levers: Lever[],
   scope: ActionScope,
   actions: LeverAction[]
