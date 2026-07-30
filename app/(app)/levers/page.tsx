@@ -22,6 +22,7 @@ import { Button } from "@/components/shared/Button";
 import { ExportButton } from "@/components/shared/ExportButton";
 import { LeverImportButton } from "@/components/shared/LeverImportButton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Tooltip } from "@/components/shared/Tooltip";
 import { StageBadge } from "@/components/shared/StageBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
@@ -61,6 +62,11 @@ export default function LeversPage() {
   // colonne historique "Centre de coût / Poste de dépense" reste seule affichée (non-régressif).
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
   const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
+  // Arborescence géographique (optionnelle, domaine séparé) — même pattern que la financière,
+  // mais utilisée pour générer N filtres dynamiques (un par niveau configuré) plutôt que des
+  // colonnes : voir geographyFilterDefs plus bas.
+  const [geographyHierarchyLevels, setGeographyHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
   const [clearance, setClearance] = useState<"all" | string[]>([]);
   const [riskThresholds, setRiskThresholds] = useState<
     { level: RiskLevel; minAmount: number }[] | undefined
@@ -70,6 +76,7 @@ export default function LeversPage() {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
       setHierarchyLevels(company?.hierarchyLevels ?? []);
+      setGeographyHierarchyLevels(company?.geographyHierarchyLevels ?? []);
       setClearance(resolveConfidentialityClearance(user, company?.roleClearance));
       setRiskThresholds(company?.riskThresholds);
     });
@@ -96,13 +103,26 @@ export default function LeversPage() {
       setHierarchyNodes([]);
       return;
     }
-    const unsub = subscribeHierarchyNodes(user.companyId, setHierarchyNodes);
+    const unsub = subscribeHierarchyNodes(user.companyId, setHierarchyNodes, "financial");
     return unsub;
   }, [user?.companyId, hierarchyLevels.length]);
+
+  useEffect(() => {
+    if (!user?.companyId || geographyHierarchyLevels.length === 0) {
+      setGeographyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setGeographyNodes, "geographic");
+    return unsub;
+  }, [user?.companyId, geographyHierarchyLevels.length]);
 
   const sortedHierarchyLevels = useMemo(
     () => [...hierarchyLevels].sort((a, b) => a.order - b.order),
     [hierarchyLevels]
+  );
+  const sortedGeographyHierarchyLevels = useMemo(
+    () => [...geographyHierarchyLevels].sort((a, b) => a.order - b.order),
+    [geographyHierarchyLevels]
   );
 
   // Le Lever Owner ne voit que ses propres leviers (owner === son nom de compte de test). Les
@@ -130,6 +150,64 @@ export default function LeversPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.levers]);
 
+  // Un filtre par niveau d'arborescence configuré (financier ET géographique) — remplace les
+  // filtres figés (Région/Pays/Entité, Compte P&L) dès qu'une arborescence est active pour
+  // l'entreprise, pour qu'un N-ième niveau configuré produise bien un N-ième filtre distinct
+  // (voir aussi hierarchyColumns pour le même principe appliqué aux colonnes du tableau).
+  // Un levier importé via Excel n'a souvent qu'un `pnlMap` (ancien matching par code), pas encore
+  // de `hierarchyLeafId` — même repli que engine.pnlImpactDetailed : on retombe sur le nœud macro
+  // dont le code correspond à `lever.pnlMap`, pour ne pas afficher "—" sur des leviers valides.
+  const resolveMacroLabel = (l: Lever): string => {
+    const macroLevel = sortedHierarchyLevels[0];
+    if (!macroLevel) return "";
+    const path = resolveHierarchyPath(
+      l.hierarchyLeafId ?? "",
+      hierarchyNodes,
+      sortedHierarchyLevels
+    );
+    const viaLeaf = path.find((p) => p.levelKey === macroLevel.key)?.label;
+    if (viaLeaf) return viaLeaf;
+    const viaPnlMap = hierarchyNodes.find(
+      (n) => n.levelKey === macroLevel.key && n.code === l.pnlMap
+    )?.label;
+    return viaPnlMap ?? "";
+  };
+
+  const hierarchyFilterDefs: FilterDef<Lever>[] = useMemo(
+    () =>
+      sortedHierarchyLevels.map((level, index) => ({
+        key: `f_hierarchy_${level.key}`,
+        label: level.label,
+        getValue: (l: Lever) => {
+          if (index === 0) return resolveMacroLabel(l);
+          const path = resolveHierarchyPath(
+            l.hierarchyLeafId ?? "",
+            hierarchyNodes,
+            sortedHierarchyLevels
+          );
+          return path.find((p) => p.levelKey === level.key)?.label ?? "";
+        },
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sortedHierarchyLevels, hierarchyNodes]
+  );
+  const geographyFilterDefs: FilterDef<Lever>[] = useMemo(
+    () =>
+      sortedGeographyHierarchyLevels.map((level) => ({
+        key: `f_geo_${level.key}`,
+        label: level.label,
+        getValue: (l: Lever) => {
+          const path = resolveHierarchyPath(
+            l.geographyLeafId ?? "",
+            geographyNodes,
+            sortedGeographyHierarchyLevels
+          );
+          return path.find((p) => p.levelKey === level.key)?.label ?? "";
+        },
+      })),
+    [sortedGeographyHierarchyLevels, geographyNodes]
+  );
+
   // Toutes les propriétés catégorielles du levier sont filtrables — les valeurs proposées sont
   // celles réellement présentes dans les données. L'état vit dans l'URL (préfixe f_) pour rester
   // partageable/actualisable, comme les anciens filtres ws/status/risk.
@@ -144,9 +222,13 @@ export default function LeversPage() {
       { key: "f_status", label: "Maturité", getValue: (l) => lifecycle.label(l.status) },
       { key: "f_owner", label: "Owner", getValue: (l) => l.owner },
       { key: "f_sponsor", label: "Sponsor", getValue: (l) => l.sponsor },
-      { key: "f_geography", label: "Région", getValue: (l) => l.geography },
-      { key: "f_country", label: "Pays", getValue: (l) => l.country },
-      { key: "f_entity", label: "Entité", getValue: (l) => l.entity },
+      ...(geographyFilterDefs.length > 0
+        ? geographyFilterDefs
+        : [
+            { key: "f_geography", label: "Région", getValue: (l: Lever) => l.geography },
+            { key: "f_country", label: "Pays", getValue: (l: Lever) => l.country },
+            { key: "f_entity", label: "Entité", getValue: (l: Lever) => l.entity },
+          ]),
       { key: "f_function", label: "Fonction", getValue: (l) => l.function },
       {
         key: "f_costCenter",
@@ -168,11 +250,16 @@ export default function LeversPage() {
         // les options proposées doivent refléter le risque réellement affiché.
         getValue: (l) => engine.computeLeverRisk(l.id, alerts, riskThresholds),
       },
-      {
-        key: "f_pnl",
-        label: "Compte P&L",
-        getValue: (l) => data.pnlAccounts.find((p) => p.id === l.pnlMap)?.name ?? l.pnlMap,
-      },
+      ...(hierarchyFilterDefs.length > 0
+        ? hierarchyFilterDefs
+        : [
+            {
+              key: "f_pnl",
+              label: "Compte P&L",
+              getValue: (l: Lever) =>
+                data.pnlAccounts.find((p) => p.id === l.pnlMap)?.name ?? l.pnlMap,
+            },
+          ]),
       {
         key: "f_alerts",
         label: "Alerte dépendance",
@@ -190,7 +277,16 @@ export default function LeversPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.workstreams, data.pnlAccounts, alertedLeverIds, lifecycle, alerts, riskThresholds]
+    [
+      data.workstreams,
+      data.pnlAccounts,
+      alertedLeverIds,
+      lifecycle,
+      alerts,
+      riskThresholds,
+      hierarchyFilterDefs,
+      geographyFilterDefs,
+    ]
   );
 
   const activeFilters: ActiveFilters = useMemo(() => {
@@ -250,24 +346,35 @@ export default function LeversPage() {
     };
   });
 
-  /** Une colonne par niveau configuré (ordre macro -> fin), affichant le libellé résolu pour ce
-   *  levier via hierarchyLeafId. N'existe que si l'entreprise a activé l'arborescence. */
-  const hierarchyColumns: ColumnDef<LeverRow>[] = hasHierarchy
-    ? sortedHierarchyLevels.map((level) => ({
-        key: `hierarchy_${level.key}` as keyof LeverRow,
-        label: level.label,
-        width: "140px",
-        render: (r: LeverRow) => {
-          const path = resolveHierarchyPath(
-            r.hierarchyLeafId ?? "",
-            hierarchyNodes,
-            sortedHierarchyLevels
-          );
-          const entry = path.find((p) => p.levelKey === level.key);
-          return <span>{entry?.label ?? "—"}</span>;
-        },
-      }))
-    : [];
+  /** Une seule colonne, sur le niveau le plus macro (généralement P&L) — pas besoin des niveaux
+   *  plus fins dans la vue tableau. Le détail complet (tous les niveaux) reste consultable au
+   *  survol (tooltip) et dans le Focus Levier. N'existe que si l'entreprise a activé
+   *  l'arborescence. */
+  const macroHierarchyLevel = sortedHierarchyLevels[0];
+  const hierarchyColumns: ColumnDef<LeverRow>[] =
+    hasHierarchy && macroHierarchyLevel
+      ? [
+          {
+            key: `hierarchy_${macroHierarchyLevel.key}` as keyof LeverRow,
+            label: macroHierarchyLevel.label,
+            width: "160px",
+            render: (r: LeverRow) => {
+              const path = resolveHierarchyPath(
+                r.hierarchyLeafId ?? "",
+                hierarchyNodes,
+                sortedHierarchyLevels
+              );
+              const macroLabel = resolveMacroLabel(r);
+              const fullDetail = path.map((p) => p.label).join(" › ");
+              return (
+                <Tooltip text={fullDetail || macroLabel || "Non renseigné"}>
+                  <span>{macroLabel || "—"}</span>
+                </Tooltip>
+              );
+            },
+          },
+        ]
+      : [];
 
   const totalNet = filteredLevers.reduce((s, l) => s + l.netSavings, 0);
   const totalReal = filteredLevers.reduce((s, l) => s + engine.realizedSavings(l), 0);

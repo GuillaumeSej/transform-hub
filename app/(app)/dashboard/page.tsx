@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useGlobalFilters, matchesGlobalFilters } from "@/lib/hooks/useGlobalFilters";
+import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import {
   Banknote,
@@ -208,18 +209,100 @@ export default function DashboardPage() {
   // lib/dashboardPivot.ts, même pattern défensif que app/(app)/levers/page.tsx).
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
   const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
+  // Arborescence géographique (optionnelle, domaine séparé) — un filtre par niveau configuré,
+  // même principe que la financière : voir geographyFilterDefs plus bas et le pendant sur
+  // app/(app)/levers/page.tsx.
+  const [geographyHierarchyLevels, setGeographyHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
   useEffect(() => {
     setHierarchyLevels(company?.hierarchyLevels ?? []);
+    setGeographyHierarchyLevels(company?.geographyHierarchyLevels ?? []);
   }, [company]);
   useEffect(() => {
     if (!user?.companyId || hierarchyLevels.length === 0) {
       setHierarchyNodes([]);
       return;
     }
-    const unsub = subscribeHierarchyNodes(user.companyId, setHierarchyNodes);
+    const unsub = subscribeHierarchyNodes(user.companyId, setHierarchyNodes, "financial");
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.companyId, hierarchyLevels.length]);
+  useEffect(() => {
+    if (!user?.companyId || geographyHierarchyLevels.length === 0) {
+      setGeographyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setGeographyNodes, "geographic");
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, geographyHierarchyLevels.length]);
+
+  const sortedHierarchyLevels = useMemo(
+    () => [...hierarchyLevels].sort((a, b) => a.order - b.order),
+    [hierarchyLevels]
+  );
+  const sortedGeographyHierarchyLevels = useMemo(
+    () => [...geographyHierarchyLevels].sort((a, b) => a.order - b.order),
+    [geographyHierarchyLevels]
+  );
+
+  // Un levier importé via Excel n'a souvent qu'un `pnlMap` (ancien matching par code), pas encore
+  // de `hierarchyLeafId` — même repli que engine.pnlImpactDetailed / app/(app)/levers/page.tsx.
+  const resolveMacroPnlLabel = (l: Lever): string => {
+    const macroLevel = sortedHierarchyLevels[0];
+    if (!macroLevel) return "";
+    const path = resolveHierarchyPath(
+      l.hierarchyLeafId ?? "",
+      hierarchyNodes,
+      sortedHierarchyLevels
+    );
+    const viaLeaf = path.find((p) => p.levelKey === macroLevel.key)?.label;
+    if (viaLeaf) return viaLeaf;
+    return (
+      hierarchyNodes.find((n) => n.levelKey === macroLevel.key && n.code === l.pnlMap)?.label ?? ""
+    );
+  };
+
+  // Un filtre par niveau d'arborescence financière configuré — mêmes principes que la géographie
+  // ci-dessous (voir aussi hierarchyFilterDefs de app/(app)/levers/page.tsx).
+  const hierarchyFilterDefs: FilterDef<Lever>[] = useMemo(
+    () =>
+      sortedHierarchyLevels.map((level, index) => ({
+        key: `hierarchy_${level.key}`,
+        label: level.label,
+        getValue: (l: Lever) => {
+          if (index === 0) return resolveMacroPnlLabel(l);
+          const path = resolveHierarchyPath(
+            l.hierarchyLeafId ?? "",
+            hierarchyNodes,
+            sortedHierarchyLevels
+          );
+          return path.find((p) => p.levelKey === level.key)?.label ?? "";
+        },
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sortedHierarchyLevels, hierarchyNodes]
+  );
+
+  // Un filtre par niveau d'arborescence géographique configuré — remplace le filtre unique
+  // "Géographie" dès que l'entreprise a activé l'arborescence, pour qu'un N-ième niveau produise
+  // bien un N-ième filtre distinct (répond à "si j'ai 4 niveaux de géographie, 4 filtres ?").
+  const geographyFilterDefs: FilterDef<Lever>[] = useMemo(
+    () =>
+      sortedGeographyHierarchyLevels.map((level) => ({
+        key: `geo_${level.key}`,
+        label: level.label,
+        getValue: (l: Lever) => {
+          const path = resolveHierarchyPath(
+            l.geographyLeafId ?? "",
+            geographyNodes,
+            sortedGeographyHierarchyLevels
+          );
+          return path.find((p) => p.levelKey === level.key)?.label ?? "";
+        },
+      })),
+    [sortedGeographyHierarchyLevels, geographyNodes]
+  );
 
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
@@ -230,11 +313,14 @@ export default function DashboardPage() {
         getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       },
       { key: "owner", label: "Owner", getValue: (l) => l.owner },
-      { key: "geography", label: "Géographie", getValue: (l) => l.geography },
+      ...(geographyFilterDefs.length > 0
+        ? geographyFilterDefs
+        : [{ key: "geography", label: "Géographie", getValue: (l: Lever) => l.geography }]),
       { key: "function", label: "Fonction", getValue: (l) => l.function },
       { key: "type", label: "Type", getValue: (l) => l.type },
+      ...hierarchyFilterDefs,
     ],
-    [data.workstreams, lifecycle]
+    [data.workstreams, lifecycle, geographyFilterDefs, hierarchyFilterDefs]
   );
 
   // Clés de filtre "activées" indépendamment d'une valeur choisie (voir FilterBar : activer une
