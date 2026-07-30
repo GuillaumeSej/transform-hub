@@ -12,7 +12,11 @@ import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
-import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
+import {
+  subscribeCompanies,
+  subscribeHierarchyNodes,
+  subscribePrograms,
+} from "@/lib/firestore/admin";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { ExportButton } from "@/components/shared/ExportButton";
@@ -26,7 +30,7 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
-import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
+import type { HierarchyLevelDef, HierarchyNode, Lever, Program, RiskLevel } from "@/types";
 
 type LeverRow = Lever & {
   realized: number;
@@ -72,6 +76,16 @@ export default function LeversPage() {
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.companyId, user?.role, user?.confidentialityClearance]);
+
+  // Programmes de l'entreprise — pour résoudre la colonne optionnelle "Programme" de l'import
+  // Excel des leviers (voir lib/leverExcelImport.ts) ; même pattern que le dashboard exécutif.
+  const [programs, setPrograms] = useState<Program[]>([]);
+  useEffect(() => {
+    const unsub = subscribePrograms((all) =>
+      setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all)
+    );
+    return unsub;
+  }, [user?.companyId]);
 
   // Alertes auto (dépendances, jalons, etc.) + manuelles — même source que useNotifications —
   // servent à recalculer le risque de chaque levier à la volée (voir engine.computeLeverRisk).
@@ -457,7 +471,9 @@ export default function LeversPage() {
             <LeverImportButton
               data={data}
               companyId={user?.companyId}
+              programs={programs}
               onImport={(rows) => data.importLevers(rows)}
+              onCreateWorkstreams={(workstreams) => data.addWorkstreams(workstreams)}
             />
           </span>
           <Button variant="primary" onClick={() => setNewLeverOpen(true)}>

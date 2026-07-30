@@ -30,6 +30,7 @@ import type {
   HierarchyNode,
   ManualAlertInput,
   WorkforceMovement,
+  Workstream,
 } from "@/types";
 
 const DEMO_USER = "Utilisateur démo";
@@ -296,6 +297,27 @@ export function useBeTrackData(companyId?: string | null) {
     [persistAudit]
   );
 
+  /** Ajoute des workstreams (upsert par id) au ProgramConfig de l'entreprise courante — aucune UI
+   *  dédiée de gestion des workstreams n'existe aujourd'hui (voir lib/firestore/programConfig.ts),
+   *  cette fonction est utilisée par l'import Excel des leviers pour auto-créer les workstreams
+   *  référencés par un fichier mais absents de l'entreprise (voir lib/leverExcelImport.ts,
+   *  LeverImportPreview.toCreateWorkstreams). */
+  const addWorkstreams = useCallback(
+    (newOnes: Workstream[]) => {
+      if (newOnes.length === 0) return;
+      setProgramConfig((prev) => {
+        const byId = new Map(prev.workstreams.map((w) => [w.id, w]));
+        for (const w of newOnes) byId.set(w.id, w);
+        const next = { ...prev, workstreams: Array.from(byId.values()) };
+        programDb
+          .saveProgramConfig(next, companyId)
+          .catch((err) => console.error("[betrack] ajout workstreams :", err));
+        return next;
+      });
+    },
+    [companyId]
+  );
+
   const createAction = useCallback(
     (scope: { leverId: string }, input: Omit<LeverAction, "id">) => {
       const result = leversLogic.createAction(leversRef.current, scope, input, DEMO_USER);
@@ -515,6 +537,7 @@ export function useBeTrackData(companyId?: string | null) {
     createLever,
     upsertLeverByCode,
     importLevers,
+    addWorkstreams,
     createAction,
     updateAction,
     deleteAction,

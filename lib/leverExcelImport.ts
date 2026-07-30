@@ -10,7 +10,24 @@ import type {
   LeverStatus,
   RecognitionMode,
   SavingType,
+  Workstream,
 } from "@/types";
+
+const WORKSTREAM_PALETTE = ["#C8102E", "#7B6B58", "#4A4A4A", "#8A9A5B", "#5B7A9A", "#9A7A5B"];
+
+/** Slug stable et lisible à partir d'un nom de workstream (utilisé comme id lors d'une
+ *  auto-création — voir plus bas). */
+function slugifyWorkstreamName(name: string): string {
+  return (
+    "WS-" +
+    name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+  );
+}
 
 /**
  * Import Excel des leviers + plan d'action + lignes d'impact, utilisé par `LeverImportButton` sur
@@ -58,6 +75,7 @@ export const LEVER_IMPORT_HEADERS = [
   "Type de levier",
   "Nom du levier",
   "Workstream",
+  "Programme",
   "Owner",
   "Owner (initiales)",
   "Sponsor",
@@ -265,6 +283,14 @@ export type LeverImportPreview = {
   errors: LeverImportError[];
   createCount: number;
   updateCount: number;
+  /** Workstreams référencés par la feuille "Leviers" mais absents de `data.workstreams` — aucune
+   *  UI de gestion des workstreams n'existe aujourd'hui dans l'app (voir lib/firestore/
+   *  programConfig.ts, doc-comment "aucune mutation dans l'UI aujourd'hui"), donc un import de
+   *  leviers pour une entreprise flambant neuve ne pourrait jamais aboutir si on exigeait un
+   *  workstream préexistant. Auto-créés ici (une couleur de palette leur est assignée en tournant)
+   *  plutôt que de bloquer l'import — à persister par l'appelant (LeverImportButton) AVANT
+   *  d'écrire les leviers eux-mêmes. Dédupliqués par nom (insensible à la casse). */
+  toCreateWorkstreams: Workstream[];
 };
 
 export type LeverImportRawSheets = {
@@ -281,7 +307,14 @@ export type LeverImportRawSheets = {
 export function validateLeverImportRows(
   sheets: LeverImportRawSheets,
   data: Pick<BeTrackData, "levers" | "workstreams" | "pnlAccounts">,
-  companyId: string | null | undefined
+  companyId: string | null | undefined,
+  /** Programmes existants de l'entreprise, pour résoudre la colonne optionnelle "Programme" (par
+   *  nom ou id, insensible à la casse). Contrairement au Workstream, un Programme non trouvé est
+   *  une ERREUR de ligne plutôt qu'une auto-création : un Programme porte une ambition/sponsor/
+   *  dates propres qu'un import de leviers n'a pas vocation à définir — il doit déjà exister (créé
+   *  dans Admin > Entreprises > Programmes). Colonne vide = levier non rattaché (comportement
+   *  historique, modifiable ensuite manuellement dans la fiche du levier). */
+  programs: { id: string; name: string }[] = []
 ): LeverImportPreview {
   const errors: LeverImportError[] = [];
   const resolvedCompanyId = companyId ?? null;
@@ -290,6 +323,7 @@ export function validateLeverImportRows(
   type ParsedLever = { rowNumber: number; code: string; values: LeverImportRow };
   const parsedLevers: ParsedLever[] = [];
   const codeFirstSeenAtRow = new Map<string, number>();
+  const newWorkstreamsByName = new Map<string, Workstream>();
 
   sheets.leviers.forEach((row, i) => {
     const rowNumber = i + 2; // ligne 1 = en-têtes
@@ -317,17 +351,27 @@ export function validateLeverImportRows(
     }
 
     const wsRaw = str(row["Workstream"]);
-    const ws = data.workstreams.find(
-      (w) =>
-        w.id.toLowerCase() === wsRaw.toLowerCase() || w.name.toLowerCase() === wsRaw.toLowerCase()
-    );
-    if (!ws) {
-      errors.push({
-        sheet: "Leviers",
-        rowNumber,
-        reason: `Workstream "${wsRaw}" introuvable (attendu : ${data.workstreams.map((w) => w.name).join(", ")})`,
-      });
+    if (!wsRaw) {
+      errors.push({ sheet: "Leviers", rowNumber, reason: `"Workstream" est obligatoire` });
       return;
+    }
+    let ws =
+      data.workstreams.find(
+        (w) =>
+          w.id.toLowerCase() === wsRaw.toLowerCase() || w.name.toLowerCase() === wsRaw.toLowerCase()
+      ) ?? newWorkstreamsByName.get(wsRaw.toLowerCase());
+    if (!ws) {
+      // Aucune UI ne permet aujourd'hui de créer des workstreams pour une entreprise (voir
+      // doc-comment de LeverImportPreview.toCreateWorkstreams) — on en crée un à la volée plutôt
+      // que de bloquer l'import d'une entreprise qui n'en a pas encore.
+      ws = {
+        id: slugifyWorkstreamName(wsRaw),
+        name: wsRaw,
+        sponsor: str(row["Sponsor"]) || "À définir",
+        color: WORKSTREAM_PALETTE[newWorkstreamsByName.size % WORKSTREAM_PALETTE.length],
+        target: 0,
+      };
+      newWorkstreamsByName.set(wsRaw.toLowerCase(), ws);
     }
 
     const statusRaw = str(row["Statut"]);
@@ -371,11 +415,31 @@ export function validateLeverImportRows(
       return;
     }
 
+    const programRaw = str(row["Programme"]);
+    let programId: string | undefined;
+    if (programRaw) {
+      const program = programs.find(
+        (p) =>
+          p.id.toLowerCase() === programRaw.toLowerCase() ||
+          p.name.toLowerCase() === programRaw.toLowerCase()
+      );
+      if (!program) {
+        errors.push({
+          sheet: "Leviers",
+          rowNumber,
+          reason: `Programme "${programRaw}" introuvable (attendu : ${programs.map((p) => p.name).join(", ") || "aucun programme créé pour cette entreprise — créez-le dans Admin > Entreprises > Programmes"})`,
+        });
+        return;
+      }
+      programId = program.id;
+    }
+
     const values: LeverImportRow = {
       code,
       type: str(row["Type de levier"]),
       name,
       ws: ws.id,
+      programId,
       owner: str(row["Owner"]),
       ownerInit: str(row["Owner (initiales)"]),
       sponsor: str(row["Sponsor"]),
@@ -662,5 +726,11 @@ export function validateLeverImportRows(
     else createCount++;
   }
 
-  return { toUpsert, errors, createCount, updateCount };
+  return {
+    toUpsert,
+    errors,
+    createCount,
+    updateCount,
+    toCreateWorkstreams: Array.from(newWorkstreamsByName.values()),
+  };
 }

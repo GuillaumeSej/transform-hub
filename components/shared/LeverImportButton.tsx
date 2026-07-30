@@ -10,7 +10,7 @@ import {
   validateLeverImportRows,
   type LeverImportPreview,
 } from "@/lib/leverExcelImport";
-import type { BeTrackData } from "@/types";
+import type { BeTrackData, Workstream } from "@/types";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/lib/hooks/useToast";
@@ -36,14 +36,23 @@ function findSheet(workbook: XLSX.WorkBook, name: string): Record<string, unknow
 export function LeverImportButton({
   data,
   companyId,
+  programs = [],
   onImport,
+  onCreateWorkstreams,
 }: {
   data: Pick<BeTrackData, "levers" | "workstreams" | "pnlAccounts">;
   companyId?: string | null;
+  /** Programmes de l'entreprise, pour résoudre la colonne optionnelle "Programme" — voir
+   *  lib/leverExcelImport.ts (contrairement au Workstream, un Programme inconnu est une erreur de
+   *  ligne, pas une auto-création : il doit déjà exister, créé dans Admin > Programmes). */
+  programs?: { id: string; name: string }[];
   onImport: (rows: LeverImportPreview["toUpsert"]) => {
     createdCount: number;
     updatedCount: number;
   };
+  /** Persiste les workstreams auto-créés (voir LeverImportPreview.toCreateWorkstreams) — appelé
+   *  AVANT onImport pour que les leviers importés référencent des workstreams déjà enregistrés. */
+  onCreateWorkstreams: (workstreams: Workstream[]) => void;
 }) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,6 +69,7 @@ export function LeverImportButton({
         "Sourcing & Achats",
         "Optimisation achats indirects",
         "Achats & Supply Chain",
+        "",
         "Marc Dubois",
         "MD",
         "Isabelle Roy",
@@ -142,7 +152,7 @@ export function LeverImportButton({
       impacts: findSheet(workbook, SHEET_NAMES.impacts),
     };
 
-    const result = validateLeverImportRows(sheets, data, companyId);
+    const result = validateLeverImportRows(sheets, data, companyId, programs);
     setFileName(file.name);
     setPreview(result);
   };
@@ -151,10 +161,17 @@ export function LeverImportButton({
     if (!preview || preview.toUpsert.length === 0) return;
     setImporting(true);
     try {
+      if (preview.toCreateWorkstreams.length > 0) {
+        onCreateWorkstreams(preview.toCreateWorkstreams);
+      }
       const { createdCount, updatedCount } = onImport(preview.toUpsert);
+      const wsNote =
+        preview.toCreateWorkstreams.length > 0
+          ? ` · ${preview.toCreateWorkstreams.length} workstream(s) créé(s)`
+          : "";
       showToast(
         "Import Excel terminé",
-        `${createdCount} levier(s) créé(s) · ${updatedCount} mis à jour${preview.errors.length > 0 ? ` · ${preview.errors.length} ligne(s) ignorée(s)` : ""}`,
+        `${createdCount} levier(s) créé(s) · ${updatedCount} mis à jour${wsNote}${preview.errors.length > 0 ? ` · ${preview.errors.length} ligne(s) ignorée(s)` : ""}`,
         "success"
       );
       setPreview(null);
@@ -217,6 +234,14 @@ export function LeverImportButton({
             erreur
           </span>
         </div>
+        {preview && preview.toCreateWorkstreams.length > 0 && (
+          <div className="mb-3 rounded-md border border-bp-coral/30 bg-bp-coral/5 p-2.5 text-xs text-secondary">
+            <strong className="text-primary">{preview.toCreateWorkstreams.length}</strong>{" "}
+            workstream(s) référencé(s) dans le fichier n&apos;existe(nt) pas encore pour cette
+            entreprise et {preview.toCreateWorkstreams.length > 1 ? "seront créés" : "sera créé"}{" "}
+            automatiquement : {preview.toCreateWorkstreams.map((w) => w.name).join(", ")}.
+          </div>
+        )}
         <div className="max-h-[360px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
           {preview?.errors.length === 0 ? (
             <p className="text-tertiary">Aucune anomalie détectée.</p>

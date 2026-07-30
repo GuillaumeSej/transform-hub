@@ -281,14 +281,49 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     expect(impact.fteCount).toBeUndefined();
   });
 
-  it("rejects a row with an unknown Workstream, PnL account, or Statut", () => {
+  it("auto-creates an unknown Workstream instead of rejecting the row (no admin UI exists to pre-create one)", () => {
     const preview1 = validateLeverImportRows(
-      { ...emptySheets, leviers: [baseLeverRow({ Workstream: "Inconnu" })] },
+      { ...emptySheets, leviers: [baseLeverRow({ Workstream: "Excellence Nordique" })] },
       ctx(),
       "c1"
     );
-    expect(preview1.errors[0].reason).toMatch(/Workstream/);
+    expect(preview1.errors).toEqual([]);
+    expect(preview1.toCreateWorkstreams).toHaveLength(1);
+    expect(preview1.toCreateWorkstreams[0].name).toBe("Excellence Nordique");
+    expect(preview1.toUpsert[0].ws).toBe(preview1.toCreateWorkstreams[0].id);
+  });
 
+  it("resolves an optional Programme column by name, leaves programId undefined when blank, and errors on an unknown Programme (no auto-create, unlike Workstream)", () => {
+    const programs = [{ id: "p1", name: "NordicRetail Excellence 2026" }];
+
+    const noProgram = validateLeverImportRows(
+      { ...emptySheets, leviers: [baseLeverRow()] },
+      ctx(),
+      "c1",
+      programs
+    );
+    expect(noProgram.errors).toEqual([]);
+    expect(noProgram.toUpsert[0].programId).toBeUndefined();
+
+    const withProgram = validateLeverImportRows(
+      { ...emptySheets, leviers: [baseLeverRow({ Programme: "NordicRetail Excellence 2026" })] },
+      ctx(),
+      "c1",
+      programs
+    );
+    expect(withProgram.errors).toEqual([]);
+    expect(withProgram.toUpsert[0].programId).toBe("p1");
+
+    const unknownProgram = validateLeverImportRows(
+      { ...emptySheets, leviers: [baseLeverRow({ Programme: "Programme fantôme" })] },
+      ctx(),
+      "c1",
+      programs
+    );
+    expect(unknownProgram.errors[0].reason).toMatch(/Programme/);
+  });
+
+  it("rejects a row with an unknown PnL account or Statut", () => {
     const preview2 = validateLeverImportRows(
       { ...emptySheets, leviers: [baseLeverRow({ "Compte P&L impacté": "ZZZ" })] },
       ctx(),
