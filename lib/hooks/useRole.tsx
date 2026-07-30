@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { getAuthInstance } from "@/lib/firebase";
 import { resolveAuthUserProfile } from "@/lib/auth";
 import type { AuthUser, Role } from "@/types";
 
@@ -30,7 +30,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   // visite précédente — `loading` reste true jusqu'au premier appel du callback (voir AppShell,
   // qui n'agit sur `role` qu'une fois `loading` retombé à false).
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsub = onAuthStateChanged(getAuthInstance(), async (firebaseUser) => {
       if (!firebaseUser?.email) {
         setUser(null);
         setLoading(false);
@@ -63,7 +63,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     setUser(null);
-    void signOut(auth);
+    void signOut(getAuthInstance());
   }, []);
 
   return (

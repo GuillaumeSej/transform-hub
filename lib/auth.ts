@@ -207,8 +207,8 @@ export async function resolveAuthUserProfile(username: string): Promise<AuthUser
  */
 export async function signInUser(username: string, password: string): Promise<AuthUser> {
   const { signInWithEmailAndPassword } = await import("firebase/auth");
-  const { auth } = await import("@/lib/firebase");
+  const { getAuthInstance } = await import("@/lib/firebase");
 
-  await signInWithEmailAndPassword(auth, usernameToSyntheticEmail(username), password);
+  await signInWithEmailAndPassword(getAuthInstance(), usernameToSyntheticEmail(username), password);
   return resolveAuthUserProfile(username);
 }

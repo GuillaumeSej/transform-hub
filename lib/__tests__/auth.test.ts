@@ -24,7 +24,7 @@ vi.mock("firebase/firestore", () => ({
 const PRIMARY_AUTH = { __brand: "primary" };
 const SECONDARY_AUTH = { __brand: "secondary" };
 vi.mock("@/lib/firebase", () => ({
-  auth: PRIMARY_AUTH,
+  getAuthInstance: () => PRIMARY_AUTH,
   db: {},
   withSecondaryAuth: vi.fn(async (fn: (secondaryAuth: unknown) => Promise<unknown>) =>
     fn(SECONDARY_AUTH)

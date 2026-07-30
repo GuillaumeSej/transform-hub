@@ -17,7 +17,18 @@ const firebaseConfig = {
 const app = getApps()[0] ?? initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
-export const auth = getAuth(app);
+
+// getAuth() (contrairement à getFirestore()) valide le format de l'apiKey de façon SYNCHRONE dès
+// l'appel — sans config Firebase valide (ex. en CI, où aucune variable NEXT_PUBLIC_FIREBASE_* n'a
+// jamais été nécessaire jusqu'ici), un `export const auth = getAuth(app)` évalué au chargement du
+// module ferait planter tout import de lib/firebase.ts, y compris des tests qui ne s'authentifient
+// jamais. On ne l'appelle donc qu'à la demande, la première fois qu'une vraie utilisation de l'auth
+// se produit (connexion, écoute de session...) — jamais pendant le simple import du module.
+let _auth: Auth | undefined;
+export function getAuthInstance(): Auth {
+  if (!_auth) _auth = getAuth(app);
+  return _auth;
+}
 
 /**
  * Exécute `fn` sur une instance Firebase App/Auth SECONDAIRE, jetable, plutôt que sur l'instance
