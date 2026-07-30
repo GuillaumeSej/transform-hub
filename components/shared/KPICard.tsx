@@ -38,6 +38,7 @@ export function KPICard({
   barPct,
   barMarkerPct,
   barSegments,
+  secondary,
   onClick,
   className,
   hero = false,
@@ -50,6 +51,11 @@ export function KPICard({
   barPct?: number;
   barMarkerPct?: number;
   barSegments?: KPIBarSegment[];
+  /** Bloc secondaire optionnel, visuellement séparé du contenu principal (filet + fond
+   *  légèrement teinté) — pour une métrique liée mais distincte (ex. ambition du programme vs
+   *  cible bottom-up déjà affichée en `value`/`sub`), plutôt que de la faire cohabiter dans une
+   *  seule phrase dense au sein de `sub`. */
+  secondary?: { label: string; value: string; pct: number };
   onClick?: () => void;
   /** Classes additionnelles sur la carte (ex. col-span responsive dans la grille KPI). */
   className?: string;
@@ -101,9 +107,16 @@ export function KPICard({
         </div>
         {sub && <div className="mt-0.5 text-[11px] text-tertiary">{sub}</div>}
       </div>
-      {/* Barre de progression — ancrée en bas du widget via mt-auto */}
+      {/* Barre de progression — ancrée en bas du widget via mt-auto (sauf si un bloc `secondary`
+          suit : dans ce cas la barre principale n'a plus besoin de pousser jusqu'en bas, le bloc
+          secondaire s'en charge). */}
       {barSegments && barSegments.length > 0 ? (
-        <div className="mt-auto flex h-1.5 overflow-hidden rounded-full bg-neutral-100 pt-0">
+        <div
+          className={cn(
+            "flex h-1.5 overflow-hidden rounded-full bg-neutral-100 pt-0",
+            secondary ? "mt-3" : "mt-auto"
+          )}
+        >
           {barSegments.map((seg, i) => (
             <div
               key={i}
@@ -114,7 +127,12 @@ export function KPICard({
         </div>
       ) : (
         barPct !== undefined && (
-          <div className="relative mt-auto h-1.5 overflow-visible rounded-full bg-neutral-100">
+          <div
+            className={cn(
+              "relative h-1.5 overflow-visible rounded-full bg-neutral-100",
+              secondary ? "mt-3" : "mt-auto"
+            )}
+          >
             <div
               className="h-full rounded-full bg-bp-coral"
               style={{ width: `${Math.min(100, Math.max(0, barPct))}%` }}
@@ -128,6 +146,25 @@ export function KPICard({
             )}
           </div>
         )
+      )}
+      {/* Bloc secondaire — métrique liée mais distincte (ex. ambition du programme), séparée
+          visuellement du contenu principal par un filet + un fond légèrement teinté plutôt que
+          noyée dans `sub`. Toujours ancré en bas du widget. */}
+      {secondary && (
+        <div className="mt-3 -mx-4 -mb-4 border-t border-border bg-neutral-50 px-4 py-2.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+              {secondary.label}
+            </span>
+            <span className="text-xs font-bold text-primary">{secondary.value}</span>
+          </div>
+          <div className="relative mt-1.5 h-1 overflow-hidden rounded-full bg-neutral-200">
+            <div
+              className="h-full rounded-full bg-neutral-500"
+              style={{ width: `${Math.min(100, Math.max(0, secondary.pct))}%` }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

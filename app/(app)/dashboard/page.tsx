@@ -1875,19 +1875,20 @@ export default function DashboardPage() {
           icon={Banknote}
           hero
           className="max-[1100px]:col-span-2"
-          sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)} · ${summary.progressPct}%${
-            programAmbition
-              ? ` · Ambition Programme : ${engine.fmtCurr(programAmbition)}${
-                  leverCoveragePct !== undefined
-                    ? ` · Couverture leviers identifiés : ${leverCoveragePct}%`
-                    : ""
-                }`
-              : ""
-          }`}
+          sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)} · ${summary.progressPct}%`}
           barPct={summary.progressPct}
           barMarkerPct={
             summary.target > 0
               ? Math.round((summary.reforecastTarget / summary.target) * 100)
+              : undefined
+          }
+          secondary={
+            programAmbition
+              ? {
+                  label: "Ambition Programme",
+                  value: `${engine.fmtCurr(programAmbition)}${leverCoveragePct !== undefined ? ` · ${leverCoveragePct}% couvert` : ""}`,
+                  pct: leverCoveragePct ?? 0,
+                }
               : undefined
           }
           onClick={() => goToLevers({})}
