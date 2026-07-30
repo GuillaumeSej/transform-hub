@@ -30,6 +30,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { StageBadge } from "@/components/shared/StageBadge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { RadialProgress } from "@/components/shared/RadialProgress";
+import { Collapsible } from "@/components/shared/Collapsible";
 import { Modal } from "@/components/shared/Modal";
 import { DependencyEditor } from "@/components/shared/DependencyEditor";
 import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
@@ -523,74 +524,77 @@ export default function LeverDetailClient() {
             </div>
 
             {/* ── 2. Description (remontée avant les blocs identité) ──────── */}
-            <OverviewSectionTitle>Description</OverviewSectionTitle>
-            <p className="mb-6 text-[13px] leading-relaxed text-secondary">{lever.description}</p>
+            <Collapsible title="Description">
+              <p className="mb-2 text-[13px] leading-relaxed text-secondary">{lever.description}</p>
+            </Collapsible>
 
             {/* ── 3. Identité ─────────────────────────────────────────────── */}
-            <OverviewSectionTitle>Identité</OverviewSectionTitle>
-            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <OverviewField label="Code">
-                <span className="font-mono text-[13px] text-primary">{lever.code}</span>
-              </OverviewField>
-              <OverviewField label="Type">{lever.type}</OverviewField>
-              <OverviewField label="Workstream">
-                <span className="font-medium" style={{ color: ws?.color }}>
-                  {ws?.name}
-                </span>
-              </OverviewField>
-              <OverviewField label="Owner">
-                <span className="inline-flex items-center gap-2">
-                  <Avatar initials={lever.ownerInit} /> {lever.owner}
-                </span>
-              </OverviewField>
-              <OverviewField label="Sponsor">
-                <span className="inline-flex items-center gap-2">
-                  <Avatar initials={lever.sponsorInit} /> {lever.sponsor}
-                </span>
-              </OverviewField>
-            </div>
+            <Collapsible title="Identité">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <OverviewField label="Code">
+                  <span className="font-mono text-[13px] text-primary">{lever.code}</span>
+                </OverviewField>
+                <OverviewField label="Type">{lever.type}</OverviewField>
+                <OverviewField label="Workstream">
+                  <span className="font-medium" style={{ color: ws?.color }}>
+                    {ws?.name}
+                  </span>
+                </OverviewField>
+                <OverviewField label="Owner">
+                  <span className="inline-flex items-center gap-2">
+                    <Avatar initials={lever.ownerInit} /> {lever.owner}
+                  </span>
+                </OverviewField>
+                <OverviewField label="Sponsor">
+                  <span className="inline-flex items-center gap-2">
+                    <Avatar initials={lever.sponsorInit} /> {lever.sponsor}
+                  </span>
+                </OverviewField>
+              </div>
+            </Collapsible>
 
             {/* ── 4. Périmètre ─────────────────────────────────────────────── */}
-            <OverviewSectionTitle>Périmètre</OverviewSectionTitle>
-            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <OverviewField label="Région">
-                {lever.geography} · {lever.country}
-              </OverviewField>
-              <OverviewField label="Fonction">{lever.function}</OverviewField>
-              <OverviewField label="Entité légale">{lever.entity}</OverviewField>
-              <OverviewField label="Centres de coût impactés">
-                <span className="text-[12px] text-secondary">
-                  {Array.from(
-                    new Set(
-                      actions
-                        .flatMap((action) => action.impacts ?? [])
-                        .map((impact) => impact.costCenter)
-                        .filter((value): value is string => !!value)
-                    )
-                  ).join(" · ") || lever.costCenter}
-                </span>
-              </OverviewField>
-            </div>
+            <Collapsible title="Périmètre">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <OverviewField label="Région">
+                  {lever.geography} · {lever.country}
+                </OverviewField>
+                <OverviewField label="Fonction">{lever.function}</OverviewField>
+                <OverviewField label="Entité légale">{lever.entity}</OverviewField>
+                <OverviewField label="Centres de coût impactés">
+                  <span className="text-[12px] text-secondary">
+                    {Array.from(
+                      new Set(
+                        actions
+                          .flatMap((action) => action.impacts ?? [])
+                          .map((impact) => impact.costCenter)
+                          .filter((value): value is string => !!value)
+                      )
+                    ).join(" · ") || lever.costCenter}
+                  </span>
+                </OverviewField>
+              </div>
+            </Collapsible>
 
             {/* ── 5. Planning ─────────────────────────────────────────────── */}
-            <OverviewSectionTitle>Planning</OverviewSectionTitle>
-            <div className="mb-2 flex flex-wrap items-center gap-3 text-[12.5px] text-primary">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-neutral-50 px-3 py-1">
-                <span className="text-tertiary">Début</span>
-                <span className="font-medium">{lever.start}</span>
-                <span className="text-tertiary">→ Fin</span>
-                <span className="font-medium">{lever.end}</span>
-              </span>
-              <span className="text-tertiary">·</span>
-              <span className="text-tertiary">
-                Mis à jour le <span className="font-medium text-primary">{lever.lastUpdate}</span>
-              </span>
-            </div>
+            <Collapsible title="Planning">
+              <div className="flex flex-wrap items-center gap-3 text-[12.5px] text-primary">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-neutral-50 px-3 py-1">
+                  <span className="text-tertiary">Début</span>
+                  <span className="font-medium">{lever.start}</span>
+                  <span className="text-tertiary">→ Fin</span>
+                  <span className="font-medium">{lever.end}</span>
+                </span>
+                <span className="text-tertiary">·</span>
+                <span className="text-tertiary">
+                  Mis à jour le <span className="font-medium text-primary">{lever.lastUpdate}</span>
+                </span>
+              </div>
+            </Collapsible>
 
             {/* ── Courbe en J + Gantt des actions (si le levier a des actions avec impacts) ── */}
             {(lever.actions ?? []).some((a) => (a.impacts ?? []).length > 0) && (
-              <>
-                <SectionTitle>Courbe en J</SectionTitle>
+              <Collapsible title="Courbe en J & Timeline des actions">
                 <JCurveChart
                   data={jCurveData}
                   paybackMonth={paybackMonth}
@@ -664,107 +668,112 @@ export default function LeverDetailClient() {
                     </div>
                   </div>
                 )}
-              </>
+              </Collapsible>
             )}
 
-            <div className="mt-6 flex items-center justify-between border-b-[1.5px] border-bp-coral pb-1.5">
-              <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-secondary">
-                <Link2 size={13} /> Dépendances
-                {leverAlerts.length > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-rag-red-light px-2 py-0.5 text-[10px] font-bold normal-case text-rag-red">
-                    <TriangleAlert size={10} /> {leverAlerts.length} alerte(s)
-                  </span>
-                )}
-              </span>
-              <button
-                onClick={() => setDepsModalOpen(true)}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-bp-coral hover:underline"
-              >
-                <Pencil size={11} /> Gérer les dépendances
-              </button>
-            </div>
+            <Collapsible
+              title={
+                <span className="inline-flex items-center gap-1.5">
+                  <Link2 size={13} /> Dépendances
+                  {leverAlerts.length > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-rag-red-light px-2 py-0.5 text-[10px] font-bold normal-case text-rag-red">
+                      <TriangleAlert size={10} /> {leverAlerts.length} alerte(s)
+                    </span>
+                  )}
+                </span>
+              }
+            >
+              <div className="mb-2 flex justify-end">
+                <button
+                  onClick={() => setDepsModalOpen(true)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-bp-coral hover:underline"
+                >
+                  <Pencil size={11} /> Gérer les dépendances
+                </button>
+              </div>
 
-            <div className="mt-2.5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                  Ce levier dépend de
-                </div>
-                {lever.dependencies.length === 0 && (
-                  <p className="text-xs text-tertiary">Aucune dépendance amont.</p>
-                )}
-                {lever.dependencies.map((d) => {
-                  const target = data.levers.find((l) => l.id === d.targetId);
-                  const alert = leverAlerts.find(
-                    (a) => a.sourceId === lever.id && a.targetId === d.targetId
-                  );
-                  return (
-                    <button
-                      key={d.targetId}
-                      onClick={() => {
-                        router.push(`/levers/detail?id=${d.targetId}`);
-                      }}
-                      title={alert ? alert.message : DEPENDENCY_TYPE_DESCRIPTION[d.type]}
-                      className={`mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition hover:border-black ${
-                        alert
-                          ? "border-rag-red-light bg-rag-red-light/40"
-                          : "border-border bg-neutral-50"
-                      }`}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="font-semibold text-primary">
-                          {d.targetId} · {target?.name ?? "?"}
-                        </span>
-                        {target && (
-                          <span className="mt-0.5 block text-[10.5px] text-tertiary">
-                            {target.start} → {target.end}
-                          </span>
-                        )}
-                      </span>
-                      <span className="flex shrink-0 items-center gap-1.5">
-                        {alert && <TriangleAlert size={13} className="text-rag-red" />}
-                        <DependencyTypeBadge type={d.type} />
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div>
-                <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                  Dépendent de ce levier
-                </div>
-                {dependents.length === 0 && (
-                  <p className="text-xs text-tertiary">Aucun levier ne dépend de celui-ci.</p>
-                )}
-                {dependents.map((dep) => (
-                  <button
-                    key={dep.id}
-                    onClick={() => router.push(`/levers/detail?id=${dep.id}`)}
-                    className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border border-border bg-neutral-50 px-2.5 py-2 text-left text-xs transition hover:border-black"
-                  >
-                    <span className="font-semibold text-primary">
-                      {dep.id} · {dep.name}
-                    </span>
-                    <DependencyTypeBadge type={dep.type} />
-                  </button>
-                ))}
-              </div>
-            </div>
-            {leverAlerts.length > 0 && (
-              <div className="mt-3 space-y-1.5">
-                {leverAlerts.map((a, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-2 rounded-md border border-rag-red-light bg-rag-red-light/30 px-2.5 py-2 text-xs text-primary"
-                  >
-                    <TriangleAlert size={13} className="mt-0.5 shrink-0 text-rag-red" />
-                    <span className="flex flex-wrap items-center gap-1">
-                      <strong>{a.sourceName}</strong> <DependencyTypeBadge type={a.type} />
-                      <span>— {a.message}</span>
-                    </span>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                    Ce levier dépend de
                   </div>
-                ))}
+                  {lever.dependencies.length === 0 && (
+                    <p className="text-xs text-tertiary">Aucune dépendance amont.</p>
+                  )}
+                  {lever.dependencies.map((d) => {
+                    const target = data.levers.find((l) => l.id === d.targetId);
+                    const alert = leverAlerts.find(
+                      (a) => a.sourceId === lever.id && a.targetId === d.targetId
+                    );
+                    return (
+                      <button
+                        key={d.targetId}
+                        onClick={() => {
+                          router.push(`/levers/detail?id=${d.targetId}`);
+                        }}
+                        title={alert ? alert.message : DEPENDENCY_TYPE_DESCRIPTION[d.type]}
+                        className={`mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition hover:border-black ${
+                          alert
+                            ? "border-rag-red-light bg-rag-red-light/40"
+                            : "border-border bg-neutral-50"
+                        }`}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="font-semibold text-primary">
+                            {d.targetId} · {target?.name ?? "?"}
+                          </span>
+                          {target && (
+                            <span className="mt-0.5 block text-[10.5px] text-tertiary">
+                              {target.start} → {target.end}
+                            </span>
+                          )}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          {alert && <TriangleAlert size={13} className="text-rag-red" />}
+                          <DependencyTypeBadge type={d.type} />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                    Dépendent de ce levier
+                  </div>
+                  {dependents.length === 0 && (
+                    <p className="text-xs text-tertiary">Aucun levier ne dépend de celui-ci.</p>
+                  )}
+                  {dependents.map((dep) => (
+                    <button
+                      key={dep.id}
+                      onClick={() => router.push(`/levers/detail?id=${dep.id}`)}
+                      className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border border-border bg-neutral-50 px-2.5 py-2 text-left text-xs transition hover:border-black"
+                    >
+                      <span className="font-semibold text-primary">
+                        {dep.id} · {dep.name}
+                      </span>
+                      <DependencyTypeBadge type={dep.type} />
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
+              {leverAlerts.length > 0 && (
+                <div className="mt-3 space-y-1.5">
+                  {leverAlerts.map((a, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 rounded-md border border-rag-red-light bg-rag-red-light/30 px-2.5 py-2 text-xs text-primary"
+                    >
+                      <TriangleAlert size={13} className="mt-0.5 shrink-0 text-rag-red" />
+                      <span className="flex flex-wrap items-center gap-1">
+                        <strong>{a.sourceName}</strong> <DependencyTypeBadge type={a.type} />
+                        <span>— {a.message}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Collapsible>
           </CardBody>
         </Card>
       )}
@@ -1077,20 +1086,6 @@ function BigStat({
       >
         {value}
       </div>
-    </div>
-  );
-}
-
-/** Mini-titre de section pour l'onglet Overview : accent coral discret + label capitalé.
- *  Volontairement plus léger que SectionTitle (pas de filet plein largeur) pour aérer la fiche
- *  et laisser les blocs se distinguer par l'espacement plutôt que par des cadres imbriqués. */
-function OverviewSectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-3 flex items-center gap-2">
-      <span className="inline-block h-[2px] w-6 rounded-full bg-bp-coral" />
-      <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
-        {children}
-      </span>
     </div>
   );
 }
