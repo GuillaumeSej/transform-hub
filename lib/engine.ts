@@ -3,6 +3,8 @@ import type {
   Alert,
   BeTrackData,
   DependencyType,
+  HierarchyLevelDef,
+  HierarchyNode,
   Lever,
   LeverAction,
   LeverDependency,
@@ -12,6 +14,7 @@ import type {
   WorkstreamSummary,
 } from "@/types";
 import { daysBetween } from "@/lib/dateUtils";
+import { nodesForDomain, resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type { LeverStatus } from "@/types";
 
@@ -184,13 +187,38 @@ function dateMatchesPeriod(dateStr: string | undefined, filter: PnlPeriodFilter)
  *  - **Réalisé** : pour chaque levier/sous-levier en M5 (delivered), `netSavings` est
  *    comptabilisé au mois de `deliveredDate` (date de passage en M5). Les leviers non M5
  *    ne comptent pas dans le réalisé P&L.
- *  - Si aucun filtre de période, les totaux couvrent tout l'exercice. */
+ *  - Si aucun filtre de période, les totaux couvrent tout l'exercice.
+ *
+ *  Comptes P&L : si `hierarchyLevels` contient un niveau `semantic === "pnl"` avec des
+ *  `hierarchyNodes` (domaine "financial") configurés pour ce niveau, ce sont CES nœuds qui
+ *  font foi pour la liste des comptes — TOUS apparaissent dans le résultat (même sans aucun
+ *  levier dessus, à plan=0/realized=0), et chaque levier est rattaché à son compte en
+ *  remontant `lever.hierarchyLeafId` jusqu'à ce niveau macro (voir `resolveHierarchyPath`).
+ *  Un levier sans `hierarchyLeafId` (donnée pas encore migrée) retombe sur l'ancien matching
+ *  par `lever.pnlMap` / `impact.pnlMap` pour lui seul. Si aucune arborescence financière avec
+ *  un niveau "pnl" n'est configurée, le comportement est identique à avant (aucun changement
+ *  pour les entreprises sans arborescence). */
 export function pnlImpactDetailed(
   data: BeTrackData,
-  periodFilter?: PnlPeriodFilter
+  periodFilter?: PnlPeriodFilter,
+  hierarchyNodes?: HierarchyNode[],
+  hierarchyLevels?: HierarchyLevelDef[]
 ): PnlDetailedPoint[] {
   const active = data.levers.filter((l) => l.status !== "cancelled");
+
+  const pnlLevel = hierarchyLevels?.find((level) => level.semantic === "pnl");
+  const financialNodes = pnlLevel ? nodesForDomain(hierarchyNodes ?? [], "financial") : [];
+  const pnlNodes = pnlLevel ? financialNodes.filter((node) => node.levelKey === pnlLevel.key) : [];
+  const useHierarchy = !!pnlLevel && pnlNodes.length > 0;
+
   const map = new Map<string, { plan: number; realized: number }>();
+  if (useHierarchy) {
+    // Pré-remplit TOUS les comptes réellement configurés dans l'arborescence, même sans levier
+    // dessus — c'est le point clé du besoin : voir tous les blocs P&L définis, remplis ou vides.
+    for (const node of pnlNodes) {
+      map.set(node.code, { plan: 0, realized: 0 });
+    }
+  }
 
   const addPlan = (pnlMap: string, amount: number) => {
     const e = map.get(pnlMap) ?? { plan: 0, realized: 0 };
@@ -203,13 +231,23 @@ export function pnlImpactDetailed(
     map.set(pnlMap, e);
   };
 
+  // Résout le compte P&L (macro) d'un levier via son `hierarchyLeafId`, `undefined` si
+  // l'arborescence n'est pas utilisable ou si le levier n'a pas (encore) de leaf id — auquel
+  // cas l'appelant retombe sur `lever.pnlMap`/`impact.pnlMap` pour ce levier précis.
+  const resolveLeverAccount = (lever: Lever): string | undefined => {
+    if (!useHierarchy || !lever.hierarchyLeafId) return undefined;
+    const path = resolveHierarchyPath(lever.hierarchyLeafId, financialNodes, hierarchyLevels ?? []);
+    return path.find((entry) => entry.levelKey === pnlLevel!.key)?.code;
+  };
+
   for (const lever of active) {
+    const hierarchyAccount = resolveLeverAccount(lever);
     const actionImpacts = (lever.actions ?? []).flatMap((action) =>
       (action.impacts ?? []).map((impact) => ({ action, impact }))
     );
     if (actionImpacts.length > 0) {
       for (const { action, impact } of actionImpacts) {
-        const account = impact.pnlMap || lever.pnlMap;
+        const account = hierarchyAccount ?? (impact.pnlMap || lever.pnlMap);
         const signedAmount = impact.type === "saving" ? impact.amount : -impact.amount;
         if (!periodFilter || dateMatchesPeriod(action.end, periodFilter)) {
           addPlan(account, signedAmount);
@@ -225,15 +263,16 @@ export function pnlImpactDetailed(
     }
 
     // Levier sans impacts d'action détaillés : traité comme un bloc unique.
+    const account = hierarchyAccount ?? lever.pnlMap;
     const planAmount = lever.lockedPlan?.netSavings ?? lever.netSavings;
     const planDate = lever.end;
     if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) {
-      addPlan(lever.pnlMap, planAmount);
+      addPlan(account, planAmount);
     }
     if (lever.status === "delivered") {
       const realDate = lever.deliveredDate ?? lever.end;
       if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
-        addRealized(lever.pnlMap, lever.netSavings);
+        addRealized(account, lever.netSavings);
       }
     }
   }
@@ -241,7 +280,10 @@ export function pnlImpactDetailed(
   return Array.from(map.entries())
     .map(([id, vals]) => ({
       accountId: id,
-      accountName: data.pnlAccounts.find((a) => a.id === id)?.name ?? id,
+      accountName:
+        (useHierarchy ? pnlNodes.find((node) => node.code === id)?.label : undefined) ??
+        data.pnlAccounts.find((a) => a.id === id)?.name ??
+        id,
       plan: Math.round(vals.plan * 10) / 10,
       realized: Math.round(vals.realized * 10) / 10,
     }))

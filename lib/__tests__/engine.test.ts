@@ -23,7 +23,14 @@ import {
   programSummary,
 } from "@/lib/engine";
 import { STATUS_LEVEL } from "@/lib/status-config";
-import type { BeTrackData, Lever, Program, LeverStatus } from "@/types";
+import type {
+  BeTrackData,
+  HierarchyLevelDef,
+  HierarchyNode,
+  Lever,
+  Program,
+  LeverStatus,
+} from "@/types";
 
 const baseLever: Lever = {
   id: "L001",
@@ -766,5 +773,123 @@ describe("engine — pnlImpactDetailed from action impacts", () => {
     expect(march).toEqual([
       { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 1, realized: 0 },
     ]);
+  });
+});
+
+describe("engine — pnlImpactDetailed driven by the financial hierarchy", () => {
+  const hierarchyLevels: HierarchyLevelDef[] = [
+    { key: "pnl_account", label: "Compte P&L", order: 0, semantic: "pnl" },
+    { key: "cost_center", label: "Cost Center", order: 1 },
+  ];
+
+  const hierarchyNodes: HierarchyNode[] = [
+    {
+      id: "N-GA",
+      companyId: "C1",
+      levelKey: "pnl_account",
+      code: "GA",
+      label: "General & Admin",
+      parentId: null,
+      domain: "financial",
+    },
+    {
+      id: "N-REV",
+      companyId: "C1",
+      levelKey: "pnl_account",
+      code: "REV",
+      label: "Revenue",
+      parentId: null,
+      domain: "financial",
+    },
+    {
+      id: "N-CC01",
+      companyId: "C1",
+      levelKey: "cost_center",
+      code: "CC01",
+      label: "Cost Center 1",
+      parentId: "N-GA",
+      domain: "financial",
+    },
+  ];
+
+  it("lists every configured P&L account, including ones with no lever at plan=0/realized=0", () => {
+    const data = makeData({
+      pnlAccounts: [],
+      levers: [
+        {
+          ...baseLever,
+          pnlMap: "SOME_STALE_VALUE", // ignoré : la hiérarchie fait foi dès que hierarchyLeafId est résolu
+          hierarchyLeafId: "N-CC01",
+          status: "delivered",
+          netSavings: 3,
+          lockedPlan: { grossSavings: 4, netSavings: 3, opexOneOff: 0, opexRec: 0, capex: 0 },
+          deliveredDate: "2026-06-01",
+        },
+      ],
+    });
+
+    const result = pnlImpactDetailed(data, undefined, hierarchyNodes, hierarchyLevels);
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        { accountId: "GA", accountName: "General & Admin", plan: 3, realized: 3 },
+        { accountId: "REV", accountName: "Revenue", plan: 0, realized: 0 },
+      ])
+    );
+    expect(result).toHaveLength(2);
+  });
+
+  it("falls back to lever.pnlMap for a lever without hierarchyLeafId, without dropping it", () => {
+    const data = makeData({
+      pnlAccounts: [{ id: "COGS", name: "Cost of Goods Sold", baseline: -20, sign: -1 }],
+      levers: [
+        {
+          ...baseLever,
+          pnlMap: "COGS",
+          hierarchyLeafId: undefined,
+          status: "delivered",
+          netSavings: 5,
+          lockedPlan: { grossSavings: 6, netSavings: 5, opexOneOff: 0, opexRec: 0, capex: 0 },
+          deliveredDate: "2026-06-01",
+        },
+      ],
+    });
+
+    const result = pnlImpactDetailed(data, undefined, hierarchyNodes, hierarchyLevels);
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 5, realized: 5 },
+        { accountId: "GA", accountName: "General & Admin", plan: 0, realized: 0 },
+        { accountId: "REV", accountName: "Revenue", plan: 0, realized: 0 },
+      ])
+    );
+    expect(result).toHaveLength(3);
+  });
+
+  it("keeps the exact legacy behavior when no financial hierarchy is configured (no hierarchy args)", () => {
+    const data = makeData({
+      pnlAccounts: [{ id: "COGS", name: "Cost of Goods Sold", baseline: -20, sign: -1 }],
+      levers: [
+        {
+          ...baseLever,
+          pnlMap: "COGS",
+          hierarchyLeafId: "N-CC01", // ignoré : pas d'arborescence "pnl" passée en paramètre
+          status: "delivered",
+          netSavings: 5,
+          lockedPlan: { grossSavings: 6, netSavings: 5, opexOneOff: 0, opexRec: 0, capex: 0 },
+          deliveredDate: "2026-06-01",
+        },
+      ],
+    });
+
+    const withoutHierarchy = pnlImpactDetailed(data);
+    const withEmptyHierarchy = pnlImpactDetailed(data, undefined, [], []);
+    const expected = [
+      { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 5, realized: 5 },
+    ];
+
+    expect(withoutHierarchy).toEqual(expected);
+    expect(withEmptyHierarchy).toEqual(expected);
   });
 });

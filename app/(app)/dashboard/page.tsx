@@ -629,8 +629,9 @@ export default function DashboardPage() {
   }, [pnlQuarter]);
 
   const pnlDetailedData = useMemo(
-    () => engine.pnlImpactDetailed(pnlFilteredData, pnlPeriodFilter),
-    [pnlFilteredData, pnlPeriodFilter]
+    () =>
+      engine.pnlImpactDetailed(pnlFilteredData, pnlPeriodFilter, hierarchyNodes, hierarchyLevels),
+    [pnlFilteredData, pnlPeriodFilter, hierarchyNodes, hierarchyLevels]
   );
   const pnlData = pnlDetailedData.map((d) => ({
     account: d.accountName,
