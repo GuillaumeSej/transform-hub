@@ -108,218 +108,224 @@ const LEVER_HEADERS = [
   "Description",
 ];
 
-const LEVER_ROWS = [
-  [
-    "AC-001",
-    "Sourcing & Achats",
-    "Regroupement fournisseurs packaging",
-    "Achats & Supply Chain",
-    "",
-    "Isabelle Roy",
-    "IR",
-    "CEO Office",
-    "CEO",
-    "Europe",
-    "France",
-    "Acme France SAS",
-    "Procurement",
-    "CC-PROC-001",
-    "COGS",
-    "2026-02-01",
-    "2026-09-30",
-    "En cours d'exécution",
-    35,
-    4.2,
-    3.8,
-    -3,
-    120,
-    0.1,
-    0.3,
-    0,
-    "",
-    "Rationalisation de la base fournisseurs packaging avec mise en concurrence et standardisation des formats.",
-  ],
-  [
-    "AC-002",
-    "Excellence Opérationnelle",
-    "Réduction temps d'arrêt lignes B",
-    "Excellence Opérationnelle",
-    "",
-    "Thomas Petit",
-    "TP",
-    "Directeur Industriel",
-    "DI",
-    "Europe",
-    "France",
-    "Acme France SAS",
-    "Operations",
-    "CC-OPS-001",
-    "COGS",
-    "2026-03-15",
-    "2026-12-31",
-    "Implémentation planifiée",
-    20,
-    2.8,
-    2.5,
-    0,
-    45,
-    0.4,
-    0.15,
-    0.05,
-    "",
-    "Maintenance préventive et réduction des arrêts non planifiés sur les lignes de production B.",
-  ],
-  [
-    "AC-003",
-    "Digitalisation & Automatisation",
-    "Automatisation back-office finance",
-    "Digital & IT",
-    "",
-    "Claire Fontaine",
-    "CF",
-    "CFO",
-    "CFO",
-    "Europe",
-    "Germany",
-    "Acme Deutschland GmbH",
-    "IT",
-    "CC-GA-001",
-    "GA",
-    "2026-04-01",
-    "2026-11-30",
-    "Business case validé",
-    0,
-    1.6,
-    1.4,
-    -5,
-    20,
-    0.6,
-    0.1,
-    0.05,
-    "",
-    "RPA sur les processus de clôture comptable et de facturation fournisseurs.",
-  ],
-  [
-    "AC-004",
-    "Réorganisation & Effectifs",
-    "Fusion équipes marketing France-Allemagne",
-    "Marketing & Ventes",
-    "",
-    "Nadia Klein",
-    "NK",
-    "CMO",
-    "CMO",
-    "Europe",
-    "Germany",
-    "Acme Deutschland GmbH",
-    "Marketing",
-    "CC-SGA-001",
-    "SGA",
-    "2026-06-01",
-    "2027-01-31",
-    "Levier identifié",
-    0,
-    1.1,
-    0.9,
-    -4,
-    12,
-    0.05,
-    0.1,
-    0,
-    "",
-    "Mutualisation des équipes marketing France et Allemagne sous un management unique.",
-  ],
-  [
-    "AC-005",
-    "Pricing & Revenue Management",
-    "Revue tarifaire produits premium",
-    "Marketing & Ventes",
-    "",
-    "Elena Ruiz",
-    "ER",
-    "CEO Office",
-    "CEO",
-    "Europe",
-    "Spain",
-    "Acme Iberia SL",
-    "Sales",
-    "CC-SGA-002",
-    "REV",
-    "2026-01-05",
-    "2026-05-31",
-    "Valeur réalisée",
-    100,
-    2.0,
-    2.0,
-    0,
-    0,
-    0,
-    0.02,
-    0,
-    "",
-    "Repositionnement tarifaire de la gamme premium sur le marché ibérique.",
-  ],
-  [
-    "AC-006",
-    "Supply Chain & Logistique",
-    "Optimisation réseau entrepôts EMEA",
-    "Achats & Supply Chain",
-    "",
-    "Ryan Cole",
-    "RC",
-    "Directeur Industriel",
-    "DI",
-    "Americas",
-    "USA",
-    "Acme USA Inc.",
-    "Supply Chain",
-    "CC-OPS-001",
-    "COGS",
-    "2026-02-15",
-    "2026-10-15",
-    "Implémentation planifiée",
-    10,
-    3.4,
-    3.0,
-    -6,
-    35,
-    0.5,
-    0.2,
-    0.05,
-    "",
-    "Consolidation du réseau d'entrepôts nord-américain de 5 à 3 sites.",
-  ],
-  [
-    "AC-007",
-    "Excellence Opérationnelle",
-    "Programme qualité production",
-    "Excellence Opérationnelle",
-    "",
-    "Marc Dubois",
-    "MD",
-    "Directeur Industriel",
-    "DI",
-    "Europe",
-    "France",
-    "Acme France SAS",
-    "Operations",
-    "CC-OPS-001",
-    "COGS",
-    "2026-05-01",
-    "2026-12-15",
-    "Business case validé",
-    0,
-    0.9,
-    0.8,
-    0,
-    15,
-    0.15,
-    0.05,
-    0.02,
-    "AC-001:FS",
-    "Programme qualité conditionné à la fin du regroupement fournisseurs packaging (AC-001).",
-  ],
+// 30 leviers générés à partir de pools cycliques (déterministe, pas de Math.random, pour que le
+// diff reste stable d'une régénération à l'autre). Chaque pool reste cohérent en interne
+// (workstream <-> type <-> fonction, géographie <-> pays <-> entité, compte P&L <-> centre de
+// coût parent — voir FINANCIAL_ROWS/GEOGRAPHY_ROWS plus haut).
+const LEVER_WORKSTREAMS = [
+  "Achats & Supply Chain",
+  "Excellence Opérationnelle",
+  "Digital & IT",
+  "Marketing & Ventes",
+  "Finance & Contrôle de gestion",
+  "RH & Organisation",
 ];
+const LEVER_PROFILES = [
+  {
+    ws: "Achats & Supply Chain",
+    type: "Sourcing & Achats",
+    fn: "Procurement",
+    pnl: "COGS",
+    cc: "CC-PROC-001",
+  },
+  {
+    ws: "Excellence Opérationnelle",
+    type: "Excellence Opérationnelle",
+    fn: "Operations",
+    pnl: "COGS",
+    cc: "CC-OPS-001",
+  },
+  {
+    ws: "Digital & IT",
+    type: "Digitalisation & Automatisation",
+    fn: "IT",
+    pnl: "GA",
+    cc: "CC-GA-001",
+  },
+  {
+    ws: "Marketing & Ventes",
+    type: "Pricing & Revenue Management",
+    fn: "Sales",
+    pnl: "REV",
+    cc: "CC-SGA-002",
+  },
+  {
+    ws: "Marketing & Ventes",
+    type: "Réorganisation & Effectifs",
+    fn: "Marketing",
+    pnl: "SGA",
+    cc: "CC-SGA-001",
+  },
+  {
+    ws: "Achats & Supply Chain",
+    type: "Supply Chain & Logistique",
+    fn: "Supply Chain",
+    pnl: "COGS",
+    cc: "CC-OPS-001",
+  },
+  {
+    ws: "Finance & Contrôle de gestion",
+    type: "Digitalisation & Automatisation",
+    fn: "Finance",
+    pnl: "GA",
+    cc: "CC-GA-002",
+  },
+  {
+    ws: "RH & Organisation",
+    type: "Réorganisation & Effectifs",
+    fn: "HR",
+    pnl: "GA",
+    cc: "CC-GA-002",
+  },
+];
+const LEVER_GEOS = [
+  { geo: "Europe", country: "France", entity: "Acme France SAS" },
+  { geo: "Europe", country: "Germany", entity: "Acme Deutschland GmbH" },
+  { geo: "Europe", country: "Spain", entity: "Acme Iberia SL" },
+  { geo: "Americas", country: "USA", entity: "Acme USA Inc." },
+];
+const LEVER_PEOPLE = [
+  ["Isabelle Roy", "IR"],
+  ["Thomas Petit", "TP"],
+  ["Claire Fontaine", "CF"],
+  ["Nadia Klein", "NK"],
+  ["Elena Ruiz", "ER"],
+  ["Ryan Cole", "RC"],
+  ["Marc Dubois", "MD"],
+  ["Léa Moreau", "LM"],
+  ["Julien Blanc", "JB"],
+  ["Sofia Alvarez", "SA"],
+  ["Henrik Dahl", "HD"],
+  ["Camille Vasseur", "CV"],
+];
+const LEVER_SPONSORS = [
+  ["CEO Office", "CEO"],
+  ["Directeur Industriel", "DI"],
+  ["CFO", "CFO"],
+  ["CMO", "CMO"],
+  ["Directeur Commercial", "DC"],
+  ["Directrice RH", "DRH"],
+];
+const LEVER_STATUS_LABELS = [
+  "Levier identifié",
+  "Business case validé",
+  "Implémentation planifiée",
+  "En cours d'exécution",
+  "Valeur réalisée",
+];
+const LEVER_NAME_TEMPLATES = [
+  "Regroupement fournisseurs {n}",
+  "Réduction temps d'arrêt {n}",
+  "Automatisation back-office {n}",
+  "Fusion équipes {n}",
+  "Revue tarifaire {n}",
+  "Optimisation réseau {n}",
+  "Programme qualité {n}",
+  "Renégociation baux {n}",
+  "Centralisation achats indirects {n}",
+  "Digitalisation reporting {n}",
+  "Rationalisation gamme {n}",
+  "Mutualisation flotte {n}",
+  "Automatisation support client {n}",
+  "Optimisation stocks {n}",
+  "Réorganisation service client {n}",
+];
+const LEVER_NAME_SUFFIXES = [
+  "Europe",
+  "France",
+  "Allemagne",
+  "Espagne",
+  "US",
+  "EMEA",
+  "Nord",
+  "Sud",
+  "Groupe",
+  "Retail",
+];
+
+const LEVER_COUNT = 30;
+const LEVER_ROWS = [];
+for (let i = 0; i < LEVER_COUNT; i++) {
+  const code = `AC-${String(i + 1).padStart(3, "0")}`;
+  const profile = LEVER_PROFILES[i % LEVER_PROFILES.length];
+  const geo = LEVER_GEOS[i % LEVER_GEOS.length];
+  const [owner, ownerInit] = LEVER_PEOPLE[i % LEVER_PEOPLE.length];
+  const [sponsor, sponsorInit] = LEVER_SPONSORS[i % LEVER_SPONSORS.length];
+  const status = LEVER_STATUS_LABELS[i % LEVER_STATUS_LABELS.length];
+  const name = LEVER_NAME_TEMPLATES[i % LEVER_NAME_TEMPLATES.length].replace(
+    "{n}",
+    LEVER_NAME_SUFFIXES[i % LEVER_NAME_SUFFIXES.length]
+  );
+  const progress =
+    status === "En cours d'exécution"
+      ? 25 + (i % 6) * 10
+      : status === "Valeur réalisée"
+        ? 100
+        : status === "Implémentation planifiée"
+          ? 5 + (i % 3) * 5
+          : 0;
+  const netSavings = Math.round((0.6 + (i % 9) * 0.45) * 100) / 100;
+  const grossSavings = Math.round(netSavings * 1.12 * 100) / 100;
+  const capex = Math.round(netSavings * 0.12 * 100) / 100;
+  const opexOneOff = Math.round(netSavings * 0.08 * 100) / 100;
+  const opexRec = Math.round(netSavings * 0.02 * 100) / 100;
+  const fteImpact = i % 4 === 0 ? 0 : -(2 + (i % 5));
+  const popImpacted = Math.abs(fteImpact) * (6 + (i % 4));
+  const startMonth = 1 + (i % 10);
+  const durationMonths = 5 + (i % 8);
+  const endMonthRaw = startMonth + durationMonths;
+  const startDate = `2026-${String(startMonth).padStart(2, "0")}-01`;
+  const endYear = endMonthRaw > 12 ? 2027 : 2026;
+  const endMonth = ((endMonthRaw - 1) % 12) + 1;
+  const endDate = `${endYear}-${String(endMonth).padStart(2, "0")}-28`;
+
+  // Dépendances : résolues par Code contre les leviers déjà upsertés PLUS TÔT dans le fichier
+  // (voir leversLogic.bulkUpsertLeversByCode) — donc uniquement des indices < i. But d'une
+  // toile dense : environ 2 leviers sur 3 dépendent d'un prédécesseur immédiat, et un sur quatre
+  // a une seconde dépendance vers un levier plus ancien, pour croiser plusieurs chaînes.
+  const depTypes = ["FS", "SS", "FF", "SF"];
+  const deps = [];
+  if (i >= 1 && i % 3 !== 0) {
+    const targetIdx = i - 1 - (i % 2);
+    if (targetIdx >= 0)
+      deps.push(`AC-${String(targetIdx + 1).padStart(3, "0")}:${depTypes[i % 4]}`);
+  }
+  if (i >= 5 && i % 4 === 0) {
+    const targetIdx = i - 5;
+    deps.push(`AC-${String(targetIdx + 1).padStart(3, "0")}:${depTypes[(i + 2) % 4]}`);
+  }
+
+  LEVER_ROWS.push([
+    code,
+    profile.type,
+    name,
+    profile.ws,
+    "",
+    owner,
+    ownerInit,
+    sponsor,
+    sponsorInit,
+    geo.geo,
+    geo.country,
+    geo.entity,
+    profile.fn,
+    profile.cc,
+    profile.pnl,
+    startDate,
+    endDate,
+    status,
+    progress,
+    grossSavings,
+    netSavings,
+    fteImpact,
+    popImpacted,
+    capex,
+    opexOneOff,
+    opexRec,
+    deps.join(";"),
+    `Levier de démo généré (${profile.type.toLowerCase()}, ${geo.country}).`,
+  ]);
+}
 
 const ACTION_HEADERS = [
   "Code Levier",
@@ -493,7 +499,7 @@ XLSX.writeFile(leverWb, path.join(DEMO_DIR, "leviers_demo.xlsx"));
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. base_etp_demo.xlsx — import HrExcelButtons (Dashboard RH > Base ETP)
 //    2 feuilles Base ETP / Mouvements. Les mouvements référencent les codes leviers ci-dessus
-//    (AC-001 à AC-007) pour que l'impact RH remonte correctement sur les leviers importés.
+//    (AC-001 à AC-030) pour que l'impact RH remonte correctement sur les leviers importés.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMPLOYEE_HEADERS = [
@@ -515,224 +521,142 @@ const EMPLOYEE_HEADERS = [
   "Départ retraite",
 ];
 
-const EMPLOYEE_ROWS = [
-  [
-    "M001",
-    "Lambert Emma",
-    "Achats",
-    "Supply Chain",
-    "Sophie Dubois",
-    "Europe",
-    "France",
-    "Procurement",
-    "Achats directs",
-    "Acme France",
-    "Acme France SAS",
-    "Local",
-    1,
-    58000,
-    "2019-03-01",
-    "2041-06-30",
-  ],
-  [
-    "M002",
-    "Garnier Louis",
-    "Achats",
-    "Supply Chain",
-    "Sophie Dubois",
-    "Europe",
-    "France",
-    "Procurement",
-    "Achats directs",
-    "Acme France",
-    "Acme France SAS",
-    "Local",
-    1,
-    52000,
-    "2021-09-15",
-    "2044-02-28",
-  ],
-  [
-    "M003",
-    "Petit Camille",
-    "Production",
-    "Opérations",
-    "Sophie Dubois",
-    "Europe",
-    "France",
-    "Operations",
-    "Ligne B",
-    "Acme France",
-    "Acme France SAS",
-    "Local",
-    1,
-    41000,
-    "2017-01-10",
-    "2038-11-30",
-  ],
-  [
-    "M004",
-    "Roy Antoine",
-    "Production",
-    "Opérations",
-    "Sophie Dubois",
-    "Europe",
-    "France",
-    "Operations",
-    "Ligne B",
-    "Acme France",
-    "Acme France SAS",
-    "Local",
-    1,
-    43000,
-    "2015-05-20",
-    "2036-04-30",
-  ],
-  [
-    "M005",
-    "Moreau Julie",
-    "Marketing",
-    "Commercial",
-    "Claire Moreau",
-    "Europe",
-    "Germany",
-    "Marketing",
-    "Marketing Central",
-    "Acme Deutschland",
-    "Acme Deutschland GmbH",
-    "Régional",
-    1,
-    61000,
-    "2020-02-01",
-    "2043-01-31",
-  ],
-  [
-    "M006",
-    "Klein Hans",
-    "Marketing",
-    "Commercial",
-    "Claire Moreau",
-    "Europe",
-    "Germany",
-    "Marketing",
-    "Marketing Central",
-    "Acme Deutschland",
-    "Acme Deutschland GmbH",
-    "Régional",
-    1,
-    63000,
-    "2018-06-01",
-    "2040-09-30",
-  ],
-  [
-    "M007",
-    "Fontaine Léa",
-    "Finance",
-    "Finance",
-    "Claire Moreau",
-    "Europe",
-    "Germany",
-    "Finance",
-    "Comptabilité",
-    "Acme Deutschland",
-    "Acme Deutschland GmbH",
-    "Local",
-    1,
-    55000,
-    "2019-11-01",
-    "2042-07-31",
-  ],
-  [
-    "M008",
-    "Weber Paul",
-    "Finance",
-    "Finance",
-    "Claire Moreau",
-    "Europe",
-    "Germany",
-    "Finance",
-    "Comptabilité",
-    "Acme Deutschland",
-    "Acme Deutschland GmbH",
-    "Local",
-    1,
-    56000,
-    "2016-03-15",
-    "2037-12-31",
-  ],
-  [
-    "M009",
-    "Ruiz Sofia",
-    "Ventes",
-    "Commercial",
-    "Sophie Dubois",
-    "Europe",
-    "Spain",
-    "Sales",
-    "Ventes Ibérie",
-    "Acme Iberia",
-    "Acme Iberia SL",
-    "Local",
-    1,
-    48000,
-    "2021-01-05",
-    "2045-03-31",
-  ],
-  [
-    "M010",
-    "Diaz Mateo",
-    "Ventes",
-    "Commercial",
-    "Sophie Dubois",
-    "Europe",
-    "Spain",
-    "Sales",
-    "Ventes Ibérie",
-    "Acme Iberia",
-    "Acme Iberia SL",
-    "Local",
-    1,
-    47000,
-    "2022-04-01",
-    "2047-08-31",
-  ],
-  [
-    "M011",
-    "Cole Ryan",
-    "Logistique",
-    "Supply Chain",
-    "Sophie Dubois",
-    "Americas",
-    "USA",
-    "Supply Chain",
-    "Entrepôts",
-    "Acme USA",
-    "Acme USA Inc.",
-    "Régional",
-    1,
-    72000,
-    "2014-09-01",
-    "2039-05-31",
-  ],
-  [
-    "M012",
-    "Bennett Sarah",
-    "Logistique",
-    "Supply Chain",
-    "Sophie Dubois",
-    "Americas",
-    "USA",
-    "Supply Chain",
-    "Entrepôts",
-    "Acme USA",
-    "Acme USA Inc.",
-    "Local",
-    1,
-    54000,
-    "2019-07-01",
-    "2044-10-31",
-  ],
+// 100 employés générés à partir de pools cycliques croisés (prénom x nom x département), avec
+// dates d'entrée/salaires variés mais déterministes — même logique que les leviers ci-dessus.
+const EMP_FIRST_NAMES = [
+  "Emma",
+  "Louis",
+  "Camille",
+  "Antoine",
+  "Julie",
+  "Hans",
+  "Léa",
+  "Paul",
+  "Sofia",
+  "Mateo",
+  "Ryan",
+  "Sarah",
+  "Nadia",
+  "Marc",
+  "Elena",
+  "Thomas",
+  "Claire",
+  "Julien",
+  "Henrik",
+  "Ines",
 ];
+const EMP_LAST_NAMES = [
+  "Lambert",
+  "Garnier",
+  "Petit",
+  "Roy",
+  "Moreau",
+  "Klein",
+  "Fontaine",
+  "Weber",
+  "Ruiz",
+  "Diaz",
+  "Cole",
+  "Bennett",
+  "Girard",
+  "Bernard",
+  "Alvarez",
+  "Dahl",
+  "Vasseur",
+  "Blanc",
+  "Nystrom",
+  "Keller",
+];
+const EMP_DEPTS = [
+  {
+    dept: "Achats",
+    dir: "Supply Chain",
+    fn: "Procurement",
+    team: "Achats directs",
+    hrOwner: "Sophie Dubois",
+  },
+  {
+    dept: "Production",
+    dir: "Opérations",
+    fn: "Operations",
+    team: "Ligne de production",
+    hrOwner: "Sophie Dubois",
+  },
+  {
+    dept: "Marketing",
+    dir: "Commercial",
+    fn: "Marketing",
+    team: "Marketing Central",
+    hrOwner: "Claire Moreau",
+  },
+  {
+    dept: "Finance",
+    dir: "Finance",
+    fn: "Finance",
+    team: "Comptabilité",
+    hrOwner: "Claire Moreau",
+  },
+  {
+    dept: "Ventes",
+    dir: "Commercial",
+    fn: "Sales",
+    team: "Ventes terrain",
+    hrOwner: "Sophie Dubois",
+  },
+  {
+    dept: "Logistique",
+    dir: "Supply Chain",
+    fn: "Supply Chain",
+    team: "Entrepôts",
+    hrOwner: "Sophie Dubois",
+  },
+  { dept: "IT", dir: "IT", fn: "IT", team: "Support SI", hrOwner: "Claire Moreau" },
+  { dept: "RH", dir: "RH", fn: "HR", team: "RH Généraliste", hrOwner: "Claire Moreau" },
+];
+const EMP_GEOS = [
+  { region: "Europe", country: "France", bu: "Acme France", entity: "Acme France SAS" },
+  { region: "Europe", country: "Germany", bu: "Acme Deutschland", entity: "Acme Deutschland GmbH" },
+  { region: "Europe", country: "Spain", bu: "Acme Iberia", entity: "Acme Iberia SL" },
+  { region: "Americas", country: "USA", bu: "Acme USA", entity: "Acme USA Inc." },
+];
+const EMP_LEVELS = ["Local", "Local", "Local", "Régional", "Global"];
+
+const EMPLOYEE_COUNT = 100;
+const EMPLOYEE_ROWS = [];
+for (let i = 0; i < EMPLOYEE_COUNT; i++) {
+  const matricule = `M${String(i + 1).padStart(3, "0")}`;
+  const firstName = EMP_FIRST_NAMES[i % EMP_FIRST_NAMES.length];
+  const lastName =
+    EMP_LAST_NAMES[(i + Math.floor(i / EMP_FIRST_NAMES.length)) % EMP_LAST_NAMES.length];
+  const d = EMP_DEPTS[i % EMP_DEPTS.length];
+  const g = EMP_GEOS[i % EMP_GEOS.length];
+  const level = EMP_LEVELS[i % EMP_LEVELS.length];
+  const salary = 38000 + ((i * 733) % 42000);
+  const hireYear = 2012 + (i % 13);
+  const hireMonth = 1 + (i % 12);
+  const hireDate = `${hireYear}-${String(hireMonth).padStart(2, "0")}-${String(1 + (i % 27)).padStart(2, "0")}`;
+  const retireYear = hireYear + 21 + (i % 15);
+  const retireDate = `${retireYear}-${String(((i + 5) % 12) + 1).padStart(2, "0")}-28`;
+
+  EMPLOYEE_ROWS.push([
+    matricule,
+    `${lastName} ${firstName}`,
+    d.dept,
+    d.dir,
+    d.hrOwner,
+    g.region,
+    g.country,
+    d.fn,
+    d.team,
+    g.bu,
+    g.entity,
+    level,
+    1,
+    salary,
+    hireDate,
+    retireDate,
+  ]);
+}
 
 const MOVEMENT_HEADERS = [
   "ID mouvement",
@@ -756,134 +680,56 @@ const MOVEMENT_HEADERS = [
   "Commentaire",
 ];
 
-const MOVEMENT_ROWS = [
-  [
-    "MV-001",
-    "M002",
-    "Garnier Louis",
-    "Suppression",
+// 20 mouvements — cycle Suppression / Redéploiement / Reconversion / Recrutement, référencent des
+// matricules réels de la base ci-dessus (sauf les recrutements, sans matricule existant) et des
+// codes leviers AC-001..AC-030 pour que l'impact RH remonte sur des leviers réellement importés.
+const MOVEMENT_TYPES_POOL = ["Suppression", "Redéploiement", "Reconversion", "Recrutement"];
+const MOVEMENT_STATUS_POOL = ["Planifié", "En cours", "Réalisé"];
+const MOVEMENT_COUNT = 20;
+const MOVEMENT_ROWS = [];
+for (let i = 0; i < MOVEMENT_COUNT; i++) {
+  const type = MOVEMENT_TYPES_POOL[i % MOVEMENT_TYPES_POOL.length];
+  const status = MOVEMENT_STATUS_POOL[i % MOVEMENT_STATUS_POOL.length];
+  const leverIdx = (i * 3) % LEVER_COUNT;
+  const leverCode = `AC-${String(leverIdx + 1).padStart(3, "0")}`;
+  const isRecruitment = type === "Recrutement";
+  const empRow = isRecruitment ? null : EMPLOYEE_ROWS[(i * 5) % EMPLOYEE_COUNT];
+  const matricule = empRow ? empRow[0] : "";
+  const label = empRow ? empRow[1] : `Poste à recruter (${leverCode})`;
+  const department = empRow ? empRow[2] : EMP_DEPTS[i % EMP_DEPTS.length].dept;
+  const country = empRow ? empRow[6] : EMP_GEOS[i % EMP_GEOS.length].country;
+  const hrOwner = empRow ? empRow[4] : EMP_DEPTS[i % EMP_DEPTS.length].hrOwner;
+  const plannedMonth = 1 + (i % 12);
+  const plannedDate = `2026-${String(plannedMonth).padStart(2, "0")}-15`;
+  const actualDate = status === "Réalisé" ? plannedDate : "";
+  const baseSalary = empRow ? empRow[13] : 45000;
+  const salaryImpact =
+    type === "Suppression" ? -baseSalary : type === "Recrutement" ? baseSalary : 0;
+  const savings = type === "Suppression" ? baseSalary : 0;
+  const cost = 2000 + (i % 6) * 1500;
+
+  MOVEMENT_ROWS.push([
+    `MV-${String(i + 1).padStart(3, "0")}`,
+    matricule,
+    label,
+    type,
     1,
-    "Achats",
-    "",
-    "France",
-    "Sophie Dubois",
-    "AC-001",
-    "2026-07-01",
-    "",
-    "Planifié",
-    "Non",
-    "Non",
-    -52000,
-    52000,
-    5000,
-    "Poste supprimé suite au regroupement fournisseurs.",
-  ],
-  [
-    "MV-002",
-    "M004",
-    "Roy Antoine",
-    "Redéploiement",
-    1,
-    "Production",
-    "Maintenance",
-    "France",
-    "Sophie Dubois",
-    "AC-002",
-    "2026-06-01",
-    "2026-06-01",
-    "Réalisé",
-    "Oui",
-    "Non",
-    0,
-    0,
-    2000,
-    "Reclassé sur l'équipe maintenance préventive.",
-  ],
-  [
-    "MV-003",
-    "M006",
-    "Klein Hans",
-    "Reconversion",
-    1,
-    "Marketing",
-    "Marketing Central",
-    "Germany",
-    "Claire Moreau",
-    "AC-004",
-    "2026-08-01",
-    "",
-    "Planifié",
-    "Non",
-    "Oui",
-    0,
-    0,
-    8000,
-    "Formation de reconversion suite à la fusion des équipes.",
-  ],
-  [
-    "MV-004",
-    "M008",
-    "Weber Paul",
-    "Suppression",
-    1,
-    "Finance",
-    "",
-    "Germany",
-    "Claire Moreau",
-    "AC-003",
-    "2026-10-01",
-    "",
-    "Planifié",
-    "Non",
-    "Oui",
-    -56000,
-    56000,
-    6000,
-    "Automatisation du back-office comptable.",
-  ],
-  [
-    "MV-005",
-    "M012",
-    "Bennett Sarah",
-    "Redéploiement",
-    1,
-    "Logistique",
-    "Entrepôts",
-    "USA",
-    "Sophie Dubois",
-    "AC-006",
-    "2026-09-01",
-    "",
-    "Planifié",
-    "Non",
-    "Non",
-    0,
-    0,
-    3000,
-    "Réaffectée sur le site consolidé.",
-  ],
-  [
-    "MV-006",
-    "",
-    "Ingénieur Qualité (à recruter)",
-    "Recrutement",
-    1,
-    "Production",
-    "",
-    "France",
-    "Sophie Dubois",
-    "AC-007",
-    "2026-05-01",
-    "",
-    "Planifié",
-    "Non",
-    "Non",
-    45000,
-    0,
-    4000,
-    "Recrutement lié au programme qualité production.",
-  ],
-];
+    department,
+    type === "Redéploiement" ? EMP_DEPTS[(i + 1) % EMP_DEPTS.length].dept : "",
+    country,
+    hrOwner,
+    leverCode,
+    plannedDate,
+    actualDate,
+    status,
+    status === "Réalisé" ? "Oui" : "Non",
+    i % 5 === 0 ? "Oui" : "Non",
+    salaryImpact,
+    savings,
+    cost,
+    `Mouvement de démo généré (${type.toLowerCase()}, lié à ${leverCode}).`,
+  ]);
+}
 
 const hrWb = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(
