@@ -89,30 +89,49 @@ principale : ~11 leviers actifs, arborescence financière (P&L → Aggrégat) et
 
 ## 3. Démo "from scratch" — nouvelle entreprise
 
-Se connecter en **`admin`** (super-admin).
+Se connecter en **`admin`** (super-admin). Les 4 fichiers Excel du dossier [`demo/`](../demo/)
+couvrent ce parcours de bout en bout — régénérés par `node scripts/generate-demo-excel.js` si les
+formats d'import changent, ne jamais les éditer à la main.
 
 1. **Admin > Entreprises > Nouvelle entreprise** : créer l'entreprise (nom, secteur, exercice
-   fiscal).
-2. **Configurer les arborescences** : ajouter les niveaux financiers (ex. P&L → Centre de coût) et
-   géographiques (ex. Continent → Pays), puis les nœuds de chaque arborescence.
-3. **Paramètres de setup** : créer les utilisateurs (rôles), définir la confidentialité
-   (`roleClearance`) et les seuils de risque (`riskThresholds`) de l'entreprise.
-4. **Import des données** :
-   - Base ETP (effectifs) et mouvements RH via Dashboard RH > Import.
-   - Leviers + Actions + Impacts via Bibliothèque des leviers > Importer un fichier.
+   fiscal). Pas de fichier Excel pour cette étape — formulaire uniquement.
+2. **Configurer les arborescences** (onglets "Arborescence financière" / "Arborescence
+   géographique" de la fiche entreprise) :
+   - Financière : ajouter un niveau macro nommé **P&L** (usage standard "Ligne P&L") puis un
+     niveau **Centre de coût**, enregistrer la structure, puis importer
+     [`demo/arborescence_financiere_demo.xlsx`](../demo/arborescence_financiere_demo.xlsx) (10
+     nœuds : 4 comptes P&L, 6 centres de coût).
+   - Géographique : ajouter un niveau macro nommé **Continent** puis un niveau **Pays**,
+     enregistrer la structure, puis importer
+     [`demo/arborescence_geographique_demo.xlsx`](../demo/arborescence_geographique_demo.xlsx) (6
+     nœuds : 2 continents, 4 pays).
+   - Les libellés de niveaux doivent être nommés exactement ainsi (ou les mêmes clés) : la colonne
+     "Niveau" du fichier matche par libellé ou par clé, insensible à la casse.
+3. **Créer un utilisateur** (onglet "Utilisateurs") avec un rôle autre qu'Admin Entreprise (ex.
+   CTO) pour accéder aux pages Dashboard/Leviers/RH — Admin Entreprise ne voit que la
+   configuration de l'entreprise, pas les pages opérationnelles.
+4. **Import des données**, connecté avec ce nouvel utilisateur :
+   - Leviers + Actions + Impacts via Bibliothèque des leviers > Importer un fichier >
+     [`demo/leviers_demo.xlsx`](../demo/leviers_demo.xlsx) (7 leviers, dont 4 workstreams
+     auto-créés et 1 dépendance).
+   - Base ETP + mouvements via Base ETP > Importer Excel >
+     [`demo/base_etp_demo.xlsx`](../demo/base_etp_demo.xlsx) (12 employés, 6 mouvements liés aux
+     leviers importés).
 5. **Vérifier les affichages** : dashboard exécutif (KPIs, filtres dynamiques selon les niveaux
    configurés, graphique P&L par compte), bibliothèque des leviers (colonne P&L macro + tooltip),
    Focus Levier (sections repliables, risque calculé).
 
-Ce parcours a été validé de bout en bout sur une entreprise fictive ("NordicRetail") : création,
-configuration des deux arborescences, import ETP/mouvements/leviers, et vérification que le
-graphique P&L affiche bien tous les comptes définis (y compris ceux sans levier).
+Ce parcours a été validé de bout en bout deux fois : sur une entreprise fictive ("NordicRetail",
+via import direct de fichiers legacy) et sur une entreprise "DemoCheck" créée uniquement à partir
+des 4 fichiers ci-dessus (tous importés sans une seule ligne en erreur), avant suppression des
+données de test.
 
 ### Leviers de démo pour illustrer les moteurs de risque
 
-Trois leviers ont été ajoutés au jeu de données de démo (`data/mockData.ts`, visibles après un
-reset de démo ou dans un nouveau jeu de données construit sur le même modèle) pour illustrer
-chaque moteur de risque isolément :
+Le fichier `leviers_demo.xlsx` ci-dessus couvre la diversité des statuts/workstreams mais pas les
+moteurs de risque. Pour les démontrer isolément, trois leviers ont été ajoutés au jeu de données
+`data/mockData.ts` (visibles après un reset de démo sur Acme, ou reproductibles à la main sur
+n'importe quelle entreprise) :
 
 | Code    | Nom                                       | Ce qu'il démontre                                                                                                                                                  |
 | ------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
