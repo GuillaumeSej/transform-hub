@@ -288,7 +288,20 @@ export function bulkUpsertLeversByCode(
   let updatedCount = 0;
 
   for (const input of inputs) {
-    const upsert = upsertLeverByCode(curLevers, input, user);
+    // Le fichier d'import référence les dépendances par Code (colonne "Dépendances"), pas par id
+    // Firestore (inconnu de l'auteur du fichier au moment de le remplir) — on résout ici contre
+    // les leviers déjà upsertés dans CE lot + ceux déjà en base, avant écriture. Une dépendance
+    // vers un levier qui n'apparaît que PLUS LOIN dans le même fichier reste non résolue (son id
+    // n'est alloué qu'à son tour) : limitation documentée dans lib/leverExcelImport.ts.
+    const resolvedDependencies = (input.dependencies ?? []).map((d) => {
+      const target = curLevers.find((l) => l.code.toLowerCase() === d.targetId.toLowerCase());
+      return target ? { ...d, targetId: target.id } : d;
+    });
+    const upsert = upsertLeverByCode(
+      curLevers,
+      { ...input, dependencies: resolvedDependencies },
+      user
+    );
     curLevers = upsert.levers;
     auditEntries.push(...upsert.auditEntries);
     if (upsert.created) createdCount++;
