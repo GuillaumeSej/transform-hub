@@ -19,12 +19,13 @@ import type { DepartmentMovements } from "@/lib/hrEngine";
 // Palette catégorielle validée (dataviz, tous checks PASS sur surface claire).
 export const HR_CATEGORICAL = ["#FF3C47", "#421799", "#320300", "#FFB1B5", "#421799", "#A99E9A"];
 
-const COLOR_DOWN = "#FF3C47"; // suppressions
+const COLOR_DOWN = "#FF3C47"; // départs (attrition + départs forcés)
 const COLOR_UP = "#421799"; // recrutements
-const COLOR_NEUTRAL = "#806659"; // transferts (redéploiements + reconversions)
+const COLOR_NEUTRAL = "#806659"; // transferts internes (entrants + sortants)
 
-/** Barres divergentes par département : suppressions vers le bas (corail), recrutements vers le
- * haut (bleu), transferts en neutre — trois séries co-signées, un seul axe ETP. */
+/** Barres divergentes par département : départs (attrition + départs forcés) vers le bas
+ * (corail), recrutements vers le haut (bleu), transferts internes en neutre — trois séries
+ * co-signées, un seul axe ETP. */
 export function DepartmentMovementsChart({
   data,
   height = 260,
@@ -35,7 +36,7 @@ export function DepartmentMovementsChart({
   const chartData = data.map((d) => ({
     department: d.department.split(" ")[0],
     fullName: d.department,
-    Suppressions: -d.suppressions,
+    Départs: -d.exits,
     Recrutements: d.recrutements,
     Transferts: d.transferts,
   }));
@@ -54,7 +55,7 @@ export function DepartmentMovementsChart({
         />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <ReferenceLine y={0} stroke="rgba(0,0,0,0.25)" />
-        <Bar dataKey="Suppressions" fill={COLOR_DOWN} radius={[0, 0, 3, 3]} />
+        <Bar dataKey="Départs" fill={COLOR_DOWN} radius={[0, 0, 3, 3]} />
         <Bar dataKey="Recrutements" fill={COLOR_UP} radius={[3, 3, 0, 0]} />
         <Bar dataKey="Transferts" fill={COLOR_NEUTRAL} radius={[3, 3, 0, 0]} />
       </BarChart>

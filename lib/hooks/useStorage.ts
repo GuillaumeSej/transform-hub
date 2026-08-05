@@ -94,6 +94,7 @@ export function useBeTrackData(companyId?: string | null) {
   const [alertStates, setAlertStates] = useState<Record<string, AlertState>>({});
   const [companies, setCompanies] = useState<Company[]>([]);
   const [financialNodes, setFinancialNodes] = useState<HierarchyNode[]>([]);
+  const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
 
   // Refs toujours à jour pour que les callbacks de mutation lisent l'état le plus récent sans
   // dépendre du cycle de rendu React (évite les fermetures obsolètes entre deux mutations
@@ -158,10 +159,16 @@ export function useBeTrackData(companyId?: string | null) {
             companyId,
             (nodes) => !cancelled && setFinancialNodes(nodes),
             "financial"
+          ),
+          subscribeHierarchyNodes(
+            companyId,
+            (nodes) => !cancelled && setGeographyNodes(nodes),
+            "geographic"
           )
         );
       } else {
         setFinancialNodes([]);
+        setGeographyNodes([]);
       }
     })();
 
@@ -181,7 +188,7 @@ export function useBeTrackData(companyId?: string | null) {
 
   const data = useMemo(
     () => {
-      const company = companies.find((item) => item.id === companyId);
+      const company = companies.find((item) => item.id === companyId) ?? null;
       // Garde défensive idempotente (voir hasActionImpacts) : les leviers viennent déjà enrichis
       // de Firestore depuis le seed, ce passage ne fait plus rien en pratique — plus de
       // sous-leviers vivants à fusionner (voir lockedSeed()).
@@ -192,6 +199,15 @@ export function useBeTrackData(companyId?: string | null) {
         levers: migratedLevers,
         // Reconstruit au format Workforce historique pour ne pas casser les consommateurs
         // existants — mais la donnée vit désormais dans Firestore (temps réel partagé).
+        //
+        // NOTE MULTI-TENANT (gap connu) : `employees` et `movements` sont abonnés SANS filtre
+        // `companyId` (voir subscribeEmployees/subscribeMovements ci-dessus). La donnée RH est
+        // donc partagée entre toutes les démos, contrairement aux leviers. Les nouveaux widgets
+        // (region/cluster, exercice fiscal, économie nette) exposent cette donnée partagée
+        // jusqu'à ce que la subscription workforce soit rendue multi-tenant. La résolution du
+        // cluster utilise en revanche `Company.geographyHierarchyLevels` qui EST scopé par
+        // entreprise, donc les libellés diffèrent par tenant même si les mouvements sont
+        // partagés. Voir agent.md (Août 2026, section "Enrichissement OD Monitoring").
         workforce: {
           totalFTE: workforceMeta?.totalFTE ?? mockData.workforce.totalFTE,
           massSalary: workforceMeta?.massSalary ?? mockData.workforce.massSalary,
@@ -226,6 +242,11 @@ export function useBeTrackData(companyId?: string | null) {
             ),
           ]
         ),
+        // Contexte multi-tenant exposé pour les consommateurs qui ont besoin de la config
+        // entreprise (Company.fyStart pour l'exercice fiscal, Company.geographyHierarchyLevels
+        // pour le cluster/région).
+        activeCompany: company,
+        geographyNodes,
       };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,6 +262,7 @@ export function useBeTrackData(companyId?: string | null) {
       alertStates,
       companies,
       financialNodes,
+      geographyNodes,
       companyId,
     ]
   );

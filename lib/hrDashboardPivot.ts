@@ -5,19 +5,30 @@
  * extension du fichier existant (voir la décision de scope dans `lib/hrDashboardWidgets.ts`).
  *
  * Contrairement au dashboard exécutif, aucun widget RH du builder générique n'a de forme
- * Marimekko (2 dimensions) — chaque breakdown RH (département, pays, type de mouvement) est une
+ * Marimekko (2 dimensions) — chaque breakdown RH (département, pays, type, région, FY) est une
  * ventilation simple à 1 dimension (barre/donut). `pivotWorkforceByDimension` ne prend donc
- * qu'UNE SEULE clé de dimension, contrairement à `pivotByDimensions` (1 ou 2). Si un futur widget
- * RH a besoin d'une forme à 2 dimensions, généraliser alors cette fonction plutôt que d'anticiper
- * un besoin qui n'existe pas encore.
+ * qu'UNE SEULE clé de dimension, contrairement à `pivotByDimensions` (1 ou 2).
+ *
+ * DIMENSIONS AVEC CONTEXTE (nouveauté Août 2026, alignement OD Monitoring) : le getter de
+ * dimension prend désormais un second argument `ctx: HrDimensionContext` (employés, hiérarchie
+ * géographique, config entreprise). Les dimensions statiques (`type`, `department`, `country`…)
+ * ignorent `ctx` ; les dimensions dérivées (`region`, `fiscalYear`) l'utilisent pour résoudre
+ * la valeur depuis la config multi-tenant. Un getter qui ignore `ctx` reste 100% compatible.
  *
  * Réutilise directement le type `PivotRow` de `lib/dashboardPivot.ts` (forme générique
  * `{ key, label, value, count }`, indépendante de Lever) plutôt que de le redéfinir à l'identique.
  */
 
-import type { MovementType, WorkforceMovement } from "@/types";
+import type {
+  Company,
+  Employee,
+  HierarchyLevelDef,
+  HierarchyNode,
+  MovementType,
+  WorkforceMovement,
+} from "@/types";
 import type { PivotRow } from "@/lib/dashboardPivot";
-import { fteEffect } from "@/lib/hrEngine";
+import { fteEffect, fiscalYearBucket, resolveMovementRegion } from "@/lib/hrEngine";
 
 export type { PivotRow };
 
@@ -33,14 +44,11 @@ export interface HrMetricDef {
   getValue: (m: WorkforceMovement) => number;
 }
 
-/** Indicateurs RH sélectionnables — ancrés sur les champs calculés de `lib/hrFinancials.ts`
- *  (persistés sur `WorkforceMovement` au moment de la saisie via `computeMovementEuros`, voir
- *  `app/(app)/hr/etp/page.tsx`) : `fteImpact` (signé par mécanisme — reprend exactement
- *  `hrEngine.fteEffect`), `salarySavings`/`socialCost` (champs `savings`/`cost` du mouvement, déjà
- *  la sortie de `computeMovementFinancials`), et `netFirstYearImpact` = `salaryImpact + socialCost`
- *  (même formule que `MovementFinancials.netFirstYearImpact`, dérivée des champs persistés plutôt
- *  que recalculée — un Recrutement n'a pas forcément d'`Employee` lié pour retrouver
- *  ancienneté/salaire brut d'origine). `movementCount` est un pur comptage. */
+/** Indicateurs RH sélectionnables — ancrés sur les champs calculés de `lib/hrFinancials.ts`.
+ *  Le libellé "ENR (coût social)" reprend le vocabulaire "OD Monitoring" (Gooduelle) pour
+ *  désigner les Éléments Non Récurrents = coûts sociaux one-off ; le champ persisté sur le
+ *  mouvement (`WorkforceMovement.cost`) est inchangé. `netEconomy` = savings récurrentes − ENR
+ *  (miroir de `netEconomyTotal` de `lib/hrFinancials.ts`, appliqué au niveau du mouvement). */
 export const HR_METRIC_REGISTRY: HrMetricDef[] = [
   {
     key: "fteImpact",
@@ -56,9 +64,15 @@ export const HR_METRIC_REGISTRY: HrMetricDef[] = [
   },
   {
     key: "socialCost",
-    label: "Coût social one-off",
+    label: "ENR (coût social one-off)",
     aggregation: "sum",
     getValue: (m) => m.cost,
+  },
+  {
+    key: "netEconomy",
+    label: "Économie nette (savings − ENR)",
+    aggregation: "sum",
+    getValue: (m) => m.savings - m.cost,
   },
   {
     key: "netFirstYearImpact",
@@ -80,10 +94,27 @@ export function getHrMetricDef(key: string): HrMetricDef | undefined {
 
 // ─── Dimensions ─────────────────────────────────────────────────────────────────────────────────
 
+/** Contexte transmis aux getters de dimension. Les dimensions statiques l'ignorent, les
+ *  dimensions dérivées (région/cluster, exercice fiscal) l'utilisent pour résoudre la valeur
+ *  depuis la configuration multi-tenant (hiérarchie géographique, `Company.fyStart`). */
+export interface HrDimensionContext {
+  employees: Employee[];
+  geographyNodes: HierarchyNode[];
+  geographyLevels: HierarchyLevelDef[];
+  activeCompany: Company | null;
+}
+
+export const EMPTY_HR_DIMENSION_CONTEXT: HrDimensionContext = {
+  employees: [],
+  geographyNodes: [],
+  geographyLevels: [],
+  activeCompany: null,
+};
+
 export interface HrDimensionDef {
   key: string;
   label: string;
-  getValue: (m: WorkforceMovement) => string;
+  getValue: (m: WorkforceMovement, ctx: HrDimensionContext) => string;
 }
 
 const FALLBACK_LABEL = "Non renseigné";
@@ -105,7 +136,7 @@ const MONTH_LABELS = [
 ];
 
 /** Libellé "<mois> <année>" à partir d'une date ISO (YYYY-MM-DD) — retourne le libellé de repli si
- *  la date est absente ou mal formée, plutôt que d'afficher "undefined". */
+ *  la date est absente ou mal formée. */
 function monthLabel(date: string | null | undefined): string {
   if (!date) return FALLBACK_LABEL;
   const month = Number(date.slice(5, 7)) - 1;
@@ -114,7 +145,6 @@ function monthLabel(date: string | null | undefined): string {
   return `${MONTH_LABELS[month]} ${year}`;
 }
 
-/** Libellé "T<n> <année>" à partir d'une date ISO — même repli que `monthLabel`. */
 function quarterLabel(date: string | null | undefined): string {
   if (!date) return FALLBACK_LABEL;
   const month = Number(date.slice(5, 7)) - 1;
@@ -123,10 +153,10 @@ function quarterLabel(date: string | null | undefined): string {
   return `T${Math.floor(month / 3) + 1} ${year}`;
 }
 
-/** Dimensions RH sélectionnables — mécanisme (type de mouvement), département source/destination,
- *  pays, owner RH, statut opérationnel, drapeau PSE, et mois/trimestre de la date planifiée (le
- *  seul axe temporel qui a du sens ici : `actualDate` est `null` tant que le mouvement n'est pas
- *  réalisé, ce qui viderait la dimension pour la majorité du plan). */
+/** Dimensions RH sélectionnables. Nouveautés Août 2026 (alignement OD Monitoring) :
+ *  - `region` : cluster géographique dérivé de `Company.geographyHierarchyLevels` — le libellé
+ *    dépend de la config de l'entreprise, jamais d'une liste figée.
+ *  - `fiscalYear` : exercice fiscal configurable — dépend de `Company.fyStart`. */
 export const HR_DIMENSION_REGISTRY: HrDimensionDef[] = [
   { key: "type", label: "Type de mouvement (mécanisme)", getValue: (m) => m.type },
   { key: "department", label: "Département", getValue: (m) => m.department || FALLBACK_LABEL },
@@ -136,6 +166,16 @@ export const HR_DIMENSION_REGISTRY: HrDimensionDef[] = [
     getValue: (m) => m.toDepartment || NOT_APPLICABLE,
   },
   { key: "country", label: "Pays", getValue: (m) => m.country || FALLBACK_LABEL },
+  {
+    key: "region",
+    label: "Région / Cluster",
+    getValue: (m, ctx) =>
+      resolveMovementRegion(m, {
+        employees: ctx.employees,
+        geographyNodes: ctx.geographyNodes,
+        geographyLevels: ctx.geographyLevels,
+      }) || FALLBACK_LABEL,
+  },
   { key: "hrOwner", label: "Owner RH", getValue: (m) => m.hrOwner || FALLBACK_LABEL },
   { key: "status", label: "Statut", getValue: (m) => m.status },
   { key: "pse", label: "PSE", getValue: (m) => (m.inPSE ? "Oui" : "Non") },
@@ -144,6 +184,12 @@ export const HR_DIMENSION_REGISTRY: HrDimensionDef[] = [
     key: "plannedQuarter",
     label: "Trimestre (date prévue)",
     getValue: (m) => quarterLabel(m.plannedDate),
+  },
+  {
+    key: "fiscalYear",
+    label: "Exercice fiscal (date prévue)",
+    getValue: (m, ctx) =>
+      fiscalYearBucket(m.plannedDate, ctx.activeCompany?.fyStart) ?? FALLBACK_LABEL,
   },
 ];
 
@@ -164,16 +210,20 @@ function aggregate(movements: WorkforceMovement[], metric: HrMetricDef): number 
 }
 
 /**
- * Point d'entrée unique du pivot générique RH : étant donné une métrique et une clé de dimension,
- * regroupe les mouvements fournis et retourne une ligne par valeur de dimension rencontrée, triée
- * par valeur décroissante. Métrique/dimension inconnue ou tableau vide → tableau vide (jamais
- * d'exception), pour rester directement utilisable dans le rendu sans garde supplémentaire côté
- * appelant — même contrat que `pivotByDimensions` du dashboard exécutif.
+ * Point d'entrée unique du pivot générique RH. Regroupe les mouvements par valeur de dimension
+ * et retourne une ligne par valeur rencontrée, triée par valeur décroissante. Métrique/
+ * dimension inconnue ou tableau vide → tableau vide (jamais d'exception).
+ *
+ * `ctx` fournit le contexte multi-tenant (employés, hiérarchie géographique, entreprise
+ * active) — obligatoire pour les dimensions dérivées `region`/`fiscalYear`. Les dimensions
+ * statiques ignorent `ctx` ; les appelants qui ne se soucient pas des dimensions dérivées
+ * peuvent passer `EMPTY_HR_DIMENSION_CONTEXT`.
  */
 export function pivotWorkforceByDimension(
   movements: WorkforceMovement[],
   metricKey: string,
-  dimensionKey: string
+  dimensionKey: string,
+  ctx: HrDimensionContext = EMPTY_HR_DIMENSION_CONTEXT
 ): PivotRow[] {
   const metric = getHrMetricDef(metricKey);
   const dim = getHrDimensionDef(dimensionKey);
@@ -181,7 +231,7 @@ export function pivotWorkforceByDimension(
 
   const groups = new Map<string, WorkforceMovement[]>();
   for (const m of movements) {
-    const raw = dim.getValue(m);
+    const raw = dim.getValue(m, ctx);
     const key = raw && raw.trim() !== "" ? raw : FALLBACK_LABEL;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(m);
@@ -197,12 +247,11 @@ export function pivotWorkforceByDimension(
     .sort((a, b) => b.value - a.value);
 }
 
-/** Utilitaire d'affichage : le type de mouvement en tant que clé de dimension typée, pour les
- *  appelants qui veulent restreindre `MovementType` explicitement plutôt que `string` générique
- *  (ex. filtrage). Non utilisé par le moteur de pivot lui-même (qui reste générique sur `string`). */
+/** Utilitaire d'affichage : liste des 5 types Gooduelle en tant que clés typées. */
 export const MOVEMENT_TYPES: MovementType[] = [
-  "Suppression",
   "Recrutement",
-  "Redéploiement",
-  "Reconversion",
+  "Attrition",
+  "Départ forcé",
+  "Transfert entrant",
+  "Transfert sortant",
 ];

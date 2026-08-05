@@ -1,12 +1,20 @@
 import { describe, it, expect } from "vitest";
 import {
+  EMPTY_HR_DIMENSION_CONTEXT,
   HR_METRIC_REGISTRY,
   HR_DIMENSION_REGISTRY,
   getHrMetricDef,
   getHrDimensionDef,
   pivotWorkforceByDimension,
+  type HrDimensionContext,
 } from "@/lib/hrDashboardPivot";
-import type { WorkforceMovement } from "@/types";
+import type {
+  Company,
+  Employee,
+  HierarchyLevelDef,
+  HierarchyNode,
+  WorkforceMovement,
+} from "@/types";
 
 function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement {
   return {
@@ -14,7 +22,7 @@ function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement 
     empId: "E001",
     label: "Test movement",
     leverId: "L001",
-    type: "Suppression",
+    type: "Départ forcé",
     fte: 1,
     department: "Supply Chain",
     country: "France",
@@ -32,29 +40,36 @@ function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement 
 }
 
 describe("hrDashboardPivot — registries", () => {
-  it("getHrMetricDef finds known metrics", () => {
-    expect(getHrMetricDef("fteImpact")?.label).toBeDefined();
-    expect(getHrMetricDef("salarySavings")?.label).toBeDefined();
-    expect(getHrMetricDef("socialCost")?.label).toBeDefined();
-    expect(getHrMetricDef("netFirstYearImpact")?.label).toBeDefined();
-    expect(getHrMetricDef("movementCount")?.label).toBeDefined();
+  it("getHrMetricDef finds known metrics (including new netEconomy)", () => {
+    [
+      "fteImpact",
+      "salarySavings",
+      "socialCost",
+      "netEconomy",
+      "netFirstYearImpact",
+      "movementCount",
+    ].forEach((key) => {
+      expect(getHrMetricDef(key)?.label).toBeDefined();
+    });
   });
 
-  it("getHrMetricDef returns undefined for an unknown key", () => {
-    expect(getHrMetricDef("does-not-exist")).toBeUndefined();
+  it("socialCost label uses the ENR (Gooduelle) vocabulary", () => {
+    expect(getHrMetricDef("socialCost")?.label).toMatch(/ENR/);
   });
 
-  it("getHrDimensionDef finds known dimensions", () => {
+  it("getHrDimensionDef finds known dimensions (including region + fiscalYear)", () => {
     [
       "type",
       "department",
       "toDepartment",
       "country",
+      "region",
       "hrOwner",
       "status",
       "pse",
       "plannedMonth",
       "plannedQuarter",
+      "fiscalYear",
     ].forEach((key) => {
       expect(getHrDimensionDef(key)?.label).toBeDefined();
     });
@@ -68,11 +83,11 @@ describe("hrDashboardPivot — registries", () => {
   });
 });
 
-describe("hrDashboardPivot — pivotWorkforceByDimension", () => {
+describe("hrDashboardPivot — pivotWorkforceByDimension (5-types Gooduelle)", () => {
   const movements: WorkforceMovement[] = [
     makeMovement({
       id: "M1",
-      type: "Suppression",
+      type: "Départ forcé",
       department: "Supply Chain",
       country: "France",
       fte: 2,
@@ -92,7 +107,7 @@ describe("hrDashboardPivot — pivotWorkforceByDimension", () => {
     }),
     makeMovement({
       id: "M3",
-      type: "Redéploiement",
+      type: "Transfert entrant",
       department: "Supply Chain",
       toDepartment: "IT",
       country: "Germany",
@@ -103,42 +118,45 @@ describe("hrDashboardPivot — pivotWorkforceByDimension", () => {
     }),
   ];
 
-  it("groups by dimension and sums the requested metric, sorted descending", () => {
+  it("groups by dimension and sorts descending", () => {
     const rows = pivotWorkforceByDimension(movements, "movementCount", "department");
     expect(rows.map((r) => r.key).sort()).toEqual(["IT", "Supply Chain"]);
-    const supplyChain = rows.find((r) => r.key === "Supply Chain")!;
-    expect(supplyChain.count).toBe(2);
+    expect(rows.find((r) => r.key === "Supply Chain")?.count).toBe(2);
   });
 
-  it("fteImpact is signed by movement type (Suppression negative, Recrutement positive, transfer 0)", () => {
+  it("fteImpact signed by movement type (5-types)", () => {
     const rows = pivotWorkforceByDimension(movements, "fteImpact", "type");
-    expect(rows.find((r) => r.key === "Suppression")?.value).toBe(-2);
+    expect(rows.find((r) => r.key === "Départ forcé")?.value).toBe(-2);
     expect(rows.find((r) => r.key === "Recrutement")?.value).toBe(1);
-    expect(rows.find((r) => r.key === "Redéploiement")?.value).toBe(0);
+    expect(rows.find((r) => r.key === "Transfert entrant")?.value).toBe(0);
   });
 
-  it("salarySavings/socialCost/netFirstYearImpact aggregate the persisted fields", () => {
-    const savingsRows = pivotWorkforceByDimension(movements, "salarySavings", "country");
-    expect(savingsRows.find((r) => r.key === "France")?.value).toBe(100000);
+  it("salarySavings / socialCost / netEconomy / netFirstYearImpact aggregate persisted fields", () => {
+    const savings = pivotWorkforceByDimension(movements, "salarySavings", "country");
+    expect(savings.find((r) => r.key === "France")?.value).toBe(100000);
 
-    const costRows = pivotWorkforceByDimension(movements, "socialCost", "country");
-    expect(costRows.find((r) => r.key === "France")?.value).toBe(29000);
+    const cost = pivotWorkforceByDimension(movements, "socialCost", "country");
+    expect(cost.find((r) => r.key === "France")?.value).toBe(29000);
 
-    const netRows = pivotWorkforceByDimension(movements, "netFirstYearImpact", "country");
-    // France: (-100000 + 20000) + (60000 + 9000) = -80000 + 69000 = -11000
-    expect(netRows.find((r) => r.key === "France")?.value).toBe(-11000);
+    const net = pivotWorkforceByDimension(movements, "netEconomy", "country");
+    // France: (100000 - 20000) + (0 - 9000) = 71000
+    expect(net.find((r) => r.key === "France")?.value).toBe(71000);
+
+    const netY1 = pivotWorkforceByDimension(movements, "netFirstYearImpact", "country");
+    // France: (-100000 + 20000) + (60000 + 9000) = -11000
+    expect(netY1.find((r) => r.key === "France")?.value).toBe(-11000);
   });
 
-  it("unknown metric or dimension key returns an empty array", () => {
+  it("unknown metric or dimension returns empty array", () => {
     expect(pivotWorkforceByDimension(movements, "not-a-metric", "department")).toEqual([]);
     expect(pivotWorkforceByDimension(movements, "movementCount", "not-a-dimension")).toEqual([]);
   });
 
-  it("empty input returns an empty array", () => {
+  it("empty input returns empty array", () => {
     expect(pivotWorkforceByDimension([], "movementCount", "department")).toEqual([]);
   });
 
-  it("falls back to a placeholder label for a blank dimension value", () => {
+  it("blank dimension value falls back to placeholder label", () => {
     const withBlank = [...movements, makeMovement({ id: "M4", department: "" })];
     const rows = pivotWorkforceByDimension(withBlank, "movementCount", "department");
     expect(rows.some((r) => r.label === "Non renseigné")).toBe(true);
@@ -151,9 +169,117 @@ describe("hrDashboardPivot — pivotWorkforceByDimension", () => {
   });
 
   it("plannedMonth / plannedQuarter derive readable labels from plannedDate", () => {
-    const monthRows = pivotWorkforceByDimension(movements, "movementCount", "plannedMonth");
-    expect(monthRows.some((r) => r.label === "Mar 2026")).toBe(true);
-    const quarterRows = pivotWorkforceByDimension(movements, "movementCount", "plannedQuarter");
-    expect(quarterRows.some((r) => r.label === "T1 2026")).toBe(true);
+    const month = pivotWorkforceByDimension(movements, "movementCount", "plannedMonth");
+    expect(month.some((r) => r.label === "Mar 2026")).toBe(true);
+    const quarter = pivotWorkforceByDimension(movements, "movementCount", "plannedQuarter");
+    expect(quarter.some((r) => r.label === "T1 2026")).toBe(true);
+  });
+});
+
+describe("hrDashboardPivot — dimension context (region + fiscalYear)", () => {
+  const employees: Employee[] = [
+    {
+      id: "E100",
+      name: "Alice",
+      region: "EMEA",
+      country: "France",
+      department: "IT",
+      direction: "Dir IT",
+      hrOwner: "HR",
+      func: "Engineer",
+      team: "A",
+      bu: "BU1",
+      entity: "E1",
+      level: "Global",
+      fte: 1,
+      salary: 60000,
+      hireDate: "2020-01-01",
+      retirement: "",
+    },
+  ];
+
+  const geographyLevels: HierarchyLevelDef[] = [
+    { key: "region", label: "Région", order: 0, semantic: "region" },
+    { key: "country", label: "Pays", order: 1, semantic: "country" },
+  ];
+
+  const geographyNodes: HierarchyNode[] = [
+    {
+      id: "N-REG-APAC",
+      companyId: "c1",
+      levelKey: "region",
+      code: "APAC",
+      label: "APAC",
+      parentId: null,
+      domain: "geographic",
+    },
+    {
+      id: "N-CTR-JP",
+      companyId: "c1",
+      levelKey: "country",
+      code: "Japan",
+      label: "Japan",
+      parentId: "N-REG-APAC",
+      domain: "geographic",
+    },
+  ];
+
+  const company: Company = {
+    id: "c1",
+    name: "Test",
+    industry: "Test",
+    createdAt: "2026-01-01",
+    fyStart: "2026-07-01",
+    fyEnd: "2027-06-30",
+  };
+
+  const ctx: HrDimensionContext = {
+    employees,
+    geographyNodes,
+    geographyLevels,
+    activeCompany: company,
+  };
+
+  it("region dimension resolves via employee.region when empId points to a known employee", () => {
+    const movements = [
+      makeMovement({ empId: "E100", country: "France" }),
+      makeMovement({ id: "M2", empId: null, country: "Japan" }),
+    ];
+    const rows = pivotWorkforceByDimension(movements, "movementCount", "region", ctx);
+    const labels = rows.map((r) => r.label);
+    expect(labels).toContain("EMEA");
+    expect(labels).toContain("APAC");
+  });
+
+  it("region dimension falls back to country when no hierarchy configured", () => {
+    const movements = [makeMovement({ empId: null, country: "France" })];
+    const rows = pivotWorkforceByDimension(
+      movements,
+      "movementCount",
+      "region",
+      EMPTY_HR_DIMENSION_CONTEXT
+    );
+    expect(rows.some((r) => r.label === "France")).toBe(true);
+  });
+
+  it("fiscalYear dimension uses activeCompany.fyStart when available", () => {
+    const movements = [
+      makeMovement({ plannedDate: "2026-06-15" }),
+      makeMovement({ id: "M2", plannedDate: "2026-08-15" }),
+    ];
+    const rows = pivotWorkforceByDimension(movements, "movementCount", "fiscalYear", ctx);
+    const labels = rows.map((r) => r.label);
+    expect(labels).toContain("FY25/26");
+    expect(labels).toContain("FY26/27");
+  });
+
+  it("fiscalYear dimension falls back to placeholder when no company", () => {
+    const rows = pivotWorkforceByDimension(
+      [makeMovement({ plannedDate: "2026-06-15" })],
+      "movementCount",
+      "fiscalYear",
+      EMPTY_HR_DIMENSION_CONTEXT
+    );
+    expect(rows.some((r) => r.label === "Non renseigné")).toBe(true);
   });
 });

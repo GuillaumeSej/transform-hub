@@ -20,19 +20,24 @@ const COLOR_PLANNED = "#A99E9A"; // taupe — le plan
 const COLOR_TARGET = "#FF3C47"; // coral — la cible
 const AREA_FILL = "rgba(0,0,0,0.04)"; // surface grise très légère sous la courbe réelle
 
-/** Couleurs de la ventilation par type de mouvement dans le tooltip. */
+/** Couleurs de la ventilation par type de mouvement dans le tooltip.
+ *  Typologie 5-types Gooduelle (post-migration Août 2026) : partage la palette de
+ *  `components/shared/charts/FteWaterfallChart.tsx` — sorties en corail/rose, entrée en bleu,
+ *  transferts internes en taupe. */
 const TYPE_COLORS: Record<MovementType, string> = {
-  Suppression: "#FF3C47",
   Recrutement: "#421799",
-  Redéploiement: "#806659",
-  Reconversion: "#A99E9A",
+  Attrition: "#FFB1B5",
+  "Départ forcé": "#FF3C47",
+  "Transfert entrant": "#806659",
+  "Transfert sortant": "#A99E9A",
 };
 
 const TYPE_LABELS: Record<MovementType, string> = {
-  Suppression: "Suppressions",
   Recrutement: "Recrutements",
-  Redéploiement: "Redéploiements",
-  Reconversion: "Reconversions",
+  Attrition: "Attritions",
+  "Départ forcé": "Départs forcés",
+  "Transfert entrant": "Transferts entrants",
+  "Transfert sortant": "Transferts sortants",
 };
 
 /** Trajectoire effectifs — lignes cible / plan / réel avec ventilation par type au hover.

@@ -133,7 +133,8 @@ describe("hrDashboardWidgets — builder générique (customViews)", () => {
     expect(updated.customViews).toHaveLength(2);
     expect(updated.view).toBe(updated.customViews?.[1].id);
     const country = next.find((w) => w.type === "country-breakdown")!;
-    expect(country.customViews).toHaveLength(1);
+    // country-breakdown ships with 2 default views since Août 2026 (country + region)
+    expect(country.customViews).toHaveLength(2);
   });
 
   it("addCustomViewToHrInstance materializes legacy defaultCustomViews first if the instance had none", () => {
@@ -145,9 +146,11 @@ describe("hrDashboardWidgets — builder générique (customViews)", () => {
       dimension: "department",
     });
     const updated = next[0];
-    expect(updated.customViews).toHaveLength(2);
+    // Existing 2 defaults (country + region) + 1 new = 3
+    expect(updated.customViews).toHaveLength(3);
     expect(updated.customViews?.[0].id).toBe("country");
-    expect(updated.view).toBe(updated.customViews?.[1].id);
+    expect(updated.customViews?.[1].id).toBe("region");
+    expect(updated.view).toBe(updated.customViews?.[2].id);
   });
 
   it("resolveHrCustomViews falls back to registry defaults when the instance has none", () => {
@@ -157,7 +160,8 @@ describe("hrDashboardWidgets — builder générique (customViews)", () => {
       span: "M",
       view: "country",
     };
-    expect(resolveHrCustomViews(instance)).toHaveLength(1);
+    // country-breakdown ships with 2 default views (country + region)
+    expect(resolveHrCustomViews(instance)).toHaveLength(2);
   });
 
   it("resolveHrActiveCustomView resolves by id, falling back to the first available view", () => {

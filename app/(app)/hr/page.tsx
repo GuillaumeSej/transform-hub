@@ -20,6 +20,7 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as hr from "@/lib/hrEngine";
+import { netEconomy, netEconomyTotal } from "@/lib/hrFinancials";
 import { fmtCurr } from "@/lib/engine";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 // KPICard et RadialProgress retirées : le bandeau RH utilise maintenant un design custom
@@ -39,6 +40,12 @@ import {
   HrDonutChart,
   HrPivotBarChart,
 } from "@/components/shared/charts/HrBreakdownCharts";
+import {
+  MovementRhythmChart,
+  NetEconomyChart,
+  MultiFYBudgetChart,
+} from "@/components/shared/charts/HrGooduelleCharts";
+import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import type { MovementAlertKind } from "@/lib/hrEngine";
 import type { WorkforceMovement } from "@/types";
@@ -48,6 +55,7 @@ import {
   getHrMetricDef,
   getHrDimensionDef,
   pivotWorkforceByDimension,
+  type HrDimensionContext,
 } from "@/lib/hrDashboardPivot";
 import {
   HR_WIDGET_REGISTRY,
@@ -110,8 +118,11 @@ export default function HrDashboardPage() {
   const data = useBeTrackData(user?.companyId ?? null);
   const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
-  const [granularity, setGranularity] = useState<"month" | "quarter">("quarter");
+  const [granularity, setGranularity] = useState<"month" | "quarter" | "year">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
+  // Toggle "Vue nette / Vue par type" du waterfall ETP (Gooduelle-style, Août 2026).
+  // Toggle "Vue nette / Vue par type" du waterfall ETP (Gooduelle-style, Août 2026).
+  const [fteWaterfallByType, setFteWaterfallByType] = useState<boolean>(false);
 
   /** Période affichée sur les graphiques à axe temporel (waterfall, trajectoire).
    *  Tranche les données bridge/trajectory pour n'afficher que les N premiers mois/trimestres. */
@@ -130,36 +141,99 @@ export default function HrDashboardPage() {
     return Math.min(timeRangeMonths, 12);
   }, [timeRangeMonths, granularity]);
 
+  const wf = data.workforce;
+  const activeCompany = data.activeCompany;
+  // useMemo stabilise ces références pour éviter de recréer `dimensionCtx` à chaque rendu, ce
+  // qui aurait cascade sur tous les useMemo dépendants. `data.geographyNodes` peut être
+  // undefined si le hook n'a pas encore chargé la hiérarchie géographique — on retombe sur [].
+  const geographyNodes = useMemo(() => data.geographyNodes ?? [], [data.geographyNodes]);
+  const geographyLevels = useMemo(
+    () => activeCompany?.geographyHierarchyLevels ?? [],
+    [activeCompany?.geographyHierarchyLevels]
+  );
+  const fyStart = activeCompany?.fyStart ?? null;
+  const hasGeographyHierarchy = geographyNodes.length > 0 && geographyLevels.length > 0;
+
+  const dimensionCtx: HrDimensionContext = useMemo(
+    () => ({
+      employees: wf.employees,
+      geographyNodes,
+      geographyLevels,
+      activeCompany,
+    }),
+    [wf.employees, geographyNodes, geographyLevels, activeCompany]
+  );
+
   // ─── Filtres RH (même pattern que le dashboard exécutif) ────────────────────────────────────
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  const filterDefs: FilterDef<WorkforceMovement>[] = useMemo(
-    () => [
+  const filterDefs: FilterDef<WorkforceMovement>[] = useMemo(() => {
+    const defs: FilterDef<WorkforceMovement>[] = [
       { key: "type", label: "Type", getValue: (m) => m.type },
       { key: "department", label: "Département", getValue: (m) => m.department },
       { key: "country", label: "Pays", getValue: (m) => m.country },
       { key: "status", label: "Statut", getValue: (m) => m.status },
       { key: "hrOwner", label: "Owner RH", getValue: (m) => m.hrOwner },
-    ],
-    []
+      { key: "pse", label: "PSE", getValue: (m) => (m.inPSE ? "Oui" : "Non") },
+    ];
+    // Filtres additionnels conditionnels sur la configuration entreprise :
+    //  - "cluster" (région géographique) : uniquement si Company.geographyHierarchyLevels
+    //    et Company.geographyNodes sont définis (résolution runtime via resolveMovementRegion).
+    //  - "fiscalYear" : uniquement si Company.fyStart est défini.
+    if (hasGeographyHierarchy) {
+      defs.push({
+        key: "cluster",
+        label: "Région / Cluster",
+        getValue: (m) => hr.resolveMovementRegion(m, dimensionCtx),
+      });
+    }
+    if (fyStart) {
+      defs.push({
+        key: "fiscalYear",
+        label: "Exercice fiscal",
+        getValue: (m) => hr.fiscalYearBucket(m.plannedDate, fyStart) ?? "—",
+      });
+    }
+    return defs;
+  }, [hasGeographyHierarchy, fyStart, dimensionCtx]);
+
+  // ─── Range picker Du → Au (bornes calculées depuis les mouvements) ─────────────────────────
+  const movementDates = useMemo(
+    () =>
+      wf.movements
+        .map((m) => m.plannedDate)
+        .filter((d): d is string => !!d)
+        .sort(),
+    [wf.movements]
   );
+  const minDate = movementDates[0] ?? "2026-01-01";
+  const maxDate = movementDates[movementDates.length - 1] ?? "2028-12-31";
+  const [dateFrom, setDateFrom] = useState<string>(minDate);
+  const [dateTo, setDateTo] = useState<string>(maxDate);
+  // Synchronise les bornes quand les données changent (chargement asynchrone Firestore).
+  useEffect(() => {
+    setDateFrom(minDate);
+    setDateTo(maxDate);
+  }, [minDate, maxDate]);
 
-  const wf = data.workforce;
-
-  // Mouvements filtrés — alimente TOUS les calculs du dashboard quand un filtre est actif.
+  // Mouvements filtrés — alimente TOUS les calculs du dashboard quand un filtre ou le range
+  // picker sont actifs. Le range picker s'ajoute par-dessus les filtres nominaux : un mouvement
+  // doit être dans la plage de dates ET matcher tous les filtres actifs pour être conservé.
   const filteredMovements = useMemo(() => {
-    const keys = Object.keys(activeFilters);
-    if (keys.length === 0) return wf.movements;
-    return wf.movements.filter((m) =>
-      keys.every((key) => {
-        const values = activeFilters[key];
-        if (!values || values.length === 0) return true;
-        const def = filterDefs.find((d) => d.key === key);
-        return def ? values.includes(def.getValue(m)) : true;
-      })
-    );
-  }, [wf.movements, activeFilters, filterDefs]);
+    return wf.movements.filter((m) => {
+      // Range picker temporel (dateFrom/dateTo initialisés depuis les bornes min/max).
+      if (dateFrom && m.plannedDate < dateFrom) return false;
+      if (dateTo && m.plannedDate > dateTo) return false;
+      // FilterBar (nominal)
+      for (const def of filterDefs) {
+        const values = activeFilters[def.key];
+        if (!values || values.length === 0) continue;
+        if (!values.includes(def.getValue(m))) return false;
+      }
+      return true;
+    });
+  }, [wf.movements, activeFilters, filterDefs, dateFrom, dateTo]);
 
   const hasActiveFilters = Object.keys(activeFilters).length > 0;
 
@@ -174,12 +248,33 @@ export default function HrDashboardPage() {
     () => hr.movementAlerts(filteredWf, data.levers),
     [filteredWf, data.levers]
   );
-  const bridge = useMemo(() => hr.fteBridge(filteredWf, granularity), [filteredWf, granularity]);
+  const bridge = useMemo(
+    () => hr.fteBridge(filteredWf, granularity, fyStart),
+    [filteredWf, granularity, fyStart]
+  );
   const trajectory = useMemo(
     () => hr.fteTrajectory(filteredWf, granularity),
     [filteredWf, granularity]
   );
-  const salary = useMemo(() => hr.salaryBridge(filteredWf, "quarter"), [filteredWf]);
+  // Nouveaux widgets Gooduelle (Août 2026) — rythme mensuel décomposé, économie nette, projection
+  // multi-exercices. Tous alimentés par `filteredMovements` déjà scopé filtres + range picker.
+  const rhythm = useMemo(
+    () => hr.movementRhythm(filteredWf, granularity, fyStart),
+    [filteredWf, granularity, fyStart]
+  );
+  const netEcoBuckets = useMemo(
+    () => netEconomy(filteredMovements, granularity, fyStart),
+    [filteredMovements, granularity, fyStart]
+  );
+  const multiFYBuckets = useMemo(
+    () => netEconomy(filteredMovements, "year", fyStart),
+    [filteredMovements, fyStart]
+  );
+  const netEcoTotal = useMemo(() => netEconomyTotal(filteredMovements), [filteredMovements]);
+  const salary = useMemo(
+    () => hr.salaryBridge(filteredWf, "quarter", fyStart),
+    [filteredWf, fyStart]
+  );
   const byDept = useMemo(() => hr.movementsByDepartment(filteredWf), [filteredWf]);
   const byCountry = useMemo(() => hr.movementsByCountry(filteredWf), [filteredWf]);
   const deptDeltas = useMemo(() => hr.deltaByDepartment(filteredWf), [filteredWf]);
@@ -413,13 +508,13 @@ export default function HrDashboardPage() {
         ))}
       </div>
       <div className="flex overflow-hidden rounded-md border border-border">
-        {(["month", "quarter"] as const).map((g) => (
+        {(["month", "quarter", "year"] as const).map((g) => (
           <button
             key={g}
             onClick={() => setGranularity(g)}
             className={`px-2.5 py-1 text-[11px] font-semibold ${granularity === g ? "bg-neutral-900 text-white" : "bg-white text-secondary"}`}
           >
-            {g === "month" ? "Mois" : "Trim."}
+            {g === "month" ? "Mois" : g === "quarter" ? "Trim." : "Exercice"}
           </button>
         ))}
       </div>
@@ -432,15 +527,90 @@ export default function HrDashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Waterfall des mouvements" actions={timeControls} />
+            <CardHeader
+              title="Waterfall des mouvements"
+              actions={
+                <div className="flex items-center gap-2">
+                  {/* Toggle Vue nette / Vue par type (Gooduelle, Août 2026) */}
+                  <button
+                    type="button"
+                    onClick={() => setFteWaterfallByType((v) => !v)}
+                    className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition ${
+                      fteWaterfallByType
+                        ? "border-black bg-black text-white"
+                        : "border-border bg-white text-secondary hover:border-black"
+                    }`}
+                    title="Basculer entre waterfall net et décomposition par type Gooduelle"
+                  >
+                    {fteWaterfallByType ? "Vue par type" : "Vue nette"}
+                  </button>
+                  {timeControls}
+                </div>
+              }
+            />
+
             <CardBody>
               <FteWaterfallChart
                 buckets={bridge.slice(0, visibleBuckets)}
                 baseline={wf.totalFTE}
                 target={target}
+                byType={fteWaterfallByType}
                 onBarClick={(label) => setDrillBucket(label)}
               />
-              <FteWaterfallLegend />
+              {!fteWaterfallByType && <FteWaterfallLegend />}
+            </CardBody>
+          </Card>
+        );
+      case "movement-rhythm":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader title="Rythme des mouvements (5 catégories + cumul net)" />
+            <CardBody>
+              <MovementRhythmChart buckets={rhythm} />
+            </CardBody>
+          </Card>
+        );
+      case "net-economy":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title="Économie nette (savings récurrentes − ENR)"
+              actions={
+                <div className="text-right text-[11px] leading-tight text-secondary">
+                  <div>
+                    Total :{" "}
+                    <strong className="text-primary">{fmtCurr(netEcoTotal.net / 1_000_000)}</strong>
+                  </div>
+                  <div className="text-tertiary">
+                    Savings {fmtCurr(netEcoTotal.grossSavings / 1_000_000)} · ENR{" "}
+                    {fmtCurr(netEcoTotal.enr / 1_000_000)}
+                  </div>
+                </div>
+              }
+            />
+            <CardBody>
+              <NetEconomyChart buckets={netEcoBuckets} />
+            </CardBody>
+          </Card>
+        );
+      case "multi-fy-budget":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title="Projection multi-exercices (par FY)"
+              actions={
+                !fyStart ? (
+                  <span className="text-[10.5px] text-rag-amber">
+                    Aucun fyStart configuré — définir sur l&apos;entreprise pour activer
+                  </span>
+                ) : undefined
+              }
+            />
+            <CardBody>
+              <MultiFYBudgetChart buckets={multiFYBuckets} />
             </CardBody>
           </Card>
         );
@@ -470,7 +640,12 @@ export default function HrDashboardPage() {
         const isLegacy = activeView?.id === "detail";
         const pivotRows =
           activeView && !isLegacy
-            ? pivotWorkforceByDimension(wf.movements, activeView.metric, activeView.dimension)
+            ? pivotWorkforceByDimension(
+                filteredMovements,
+                activeView.metric,
+                activeView.dimension,
+                dimensionCtx
+              )
             : [];
         return renderWidgetShell(
           instance,
@@ -514,7 +689,12 @@ export default function HrDashboardPage() {
         const isLegacy = activeView?.id === "country";
         const pivotRows =
           activeView && !isLegacy
-            ? pivotWorkforceByDimension(wf.movements, activeView.metric, activeView.dimension)
+            ? pivotWorkforceByDimension(
+                filteredMovements,
+                activeView.metric,
+                activeView.dimension,
+                dimensionCtx
+              )
             : [];
         return renderWidgetShell(
           instance,
@@ -560,7 +740,12 @@ export default function HrDashboardPage() {
         const activeView = resolveHrActiveCustomView(instance);
         const views = resolveHrCustomViews(instance);
         const pivotRows = activeView
-          ? pivotWorkforceByDimension(wf.movements, activeView.metric, activeView.dimension)
+          ? pivotWorkforceByDimension(
+              filteredMovements,
+              activeView.metric,
+              activeView.dimension,
+              dimensionCtx
+            )
           : [];
         return renderWidgetShell(
           instance,
@@ -1242,6 +1427,82 @@ export default function HrDashboardPage() {
           )}
         </div>
       </Modal>
+
+      {/* Barre de contrôles transverses — granularité, range picker, filtres.
+          Alignement OD Monitoring (Gooduelle) : les sélecteurs pilotent uniformément TOUS les
+          widgets Gooduelle (waterfall, rythme, économie nette, breakdowns pivot). */}
+      <div className="mb-4 rounded-lg border border-border bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="inline-flex items-center gap-1">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+              Granularité
+            </span>
+            <div className="flex overflow-hidden rounded-md border border-border">
+              {(["month", "quarter", "year"] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setGranularity(g)}
+                  className={`px-2.5 py-1 text-[11px] font-semibold ${granularity === g ? "bg-black text-white" : "bg-white text-secondary hover:text-primary"}`}
+                >
+                  {g === "month" ? "Mois" : g === "quarter" ? "Trimestre" : "Exercice"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="inline-flex items-center gap-1">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+              Période
+            </span>
+            <DateRangePicker
+              fromISO={dateFrom}
+              toISO={dateTo}
+              minISO={minDate}
+              maxISO={maxDate}
+              onChange={({ fromISO, toISO }) => {
+                setDateFrom(fromISO);
+                setDateTo(toISO);
+              }}
+              showSummary
+            />
+          </div>
+          {fyStart && (
+            <div className="inline-flex flex-wrap items-center gap-1">
+              <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                Presets
+              </span>
+              {hr.fiscalYearRange(fyStart, minDate, maxDate).map((fy) => (
+                <button
+                  key={fy.label}
+                  type="button"
+                  onClick={() => {
+                    setDateFrom(fy.startISO);
+                    setDateTo(fy.endISO);
+                  }}
+                  className="rounded-md border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-secondary hover:border-black hover:text-primary"
+                >
+                  {fy.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFrom(minDate);
+                  setDateTo(maxDate);
+                }}
+                className="rounded-md border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-secondary hover:border-black hover:text-primary"
+              >
+                Programme complet
+              </button>
+            </div>
+          )}
+          {filteredMovements.length !== wf.movements.length && (
+            <span className="text-[11px] text-secondary">
+              <strong className="text-primary">{filteredMovements.length}</strong> /{" "}
+              {wf.movements.length} mouvements filtrés
+            </span>
+          )}
+        </div>
+      </div>
 
       <div
         data-hr-dashboard-widget-grid

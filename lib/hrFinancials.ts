@@ -1,42 +1,49 @@
-import type { Company, MovementType } from "@/types";
+import type { Company, MovementType, WorkforceMovement } from "@/types";
 import { daysBetween } from "@/lib/dateUtils";
+import { fiscalYearBucket } from "@/lib/hrEngine";
 
 /**
  * Calcul EUR mécanisme-dépendant des mouvements RH (Vision mouvement / Base ETP).
  *
- * Avant ce module, `WorkforceMovement.salaryImpact` / `savings` / `cost` étaient de purs champs
- * de saisie libre : le formulaire (`MovementForm`) ne préremplissait `salaryImpact`/`savings` que
- * pour une "Suppression" liée à un employé (= -salaire brut / +salaire brut, sans charges
- * sociales), et `cost` n'était JAMAIS calculé — un utilisateur pouvait laisser 0€ de coût social
- * pour un licenciement ou saisir n'importe quoi. Ce module remplace ce vide par une formule
- * dépendante du `MovementType`, appliquée au SALAIRE CHARGÉ (brut + charges patronales) plutôt
- * qu'au seul brut.
+ * Aligné sur la typologie 5-types de "OD Monitoring" (Gooduelle) :
+ *  - `Recrutement` : payroll ajouté, coût d'onboarding + frais de recrutement.
+ *  - `Attrition` : départ volontaire → savings récurrentes = loadedSalary, coût social minime
+ *    (préavis court, PAS d'indemnité de rupture — c'est la différence clé avec `Départ forcé`).
+ *  - `Départ forcé` : miroir de l'ancienne `Suppression` avec un multiplicateur
+ *    `FORCED_DEPARTURE_MULTIPLIER` sur l'indemnité pour refléter la contrainte (transaction).
+ *  - `Transfert entrant` / `Transfert sortant` : mobilité interne, savings 0, coût de transition
+ *    léger (5% par défaut) sauf si `requiresRetraining=true` (reconversion — 15%).
  *
  * ASSUMPTIONS BUSINESS À VALIDER AVEC LE CLIENT (documentées ici faute de politique RH réelle
  * fournie) :
  * - Le taux de charges patronales par défaut (`DEFAULT_SOCIAL_CHARGES_RATE`) est un ordre de
- *   grandeur France (statut cadre, hors spécificités sectorielles) — configurable par entreprise
- *   via `Company.socialChargesRate`. Ne pas le traiter comme universel (le taux réel varie selon
- *   pays, statut, convention collective — souvent 1.4x à 1.8x le brut).
- * - Les formules de coûts sociaux (indemnité de licenciement, préavis, PSE, frais de recrutement,
- *   onboarding, formation/transition) sont des ESTIMATIONS simplifiées inspirées d'ordres de
- *   grandeur usuels (ex. barème légal français d'indemnité de licenciement), PAS des règles
- *   légales exactes ni une convention collective précise. Elles servent de valeur par défaut
- *   éditable, pas de calcul définitif.
+ *   grandeur France (statut cadre) — configurable via `Company.socialChargesRate`.
+ * - Les formules de coûts sociaux sont des ESTIMATIONS simplifiées inspirées d'ordres de
+ *   grandeur usuels, PAS des règles légales exactes.
+ * - `FORCED_DEPARTURE_MULTIPLIER = 1.2` (rupture négociée en contexte contraint) — à ajuster.
+ * - `ATTRITION_NOTICE_MONTHS = 0.5` (départ volontaire, préavis souvent réduit) — à ajuster.
  *
- * Toutes les fonctions sont pures (aucune I/O, aucun couplage React) pour rester unitairement
- * testables — voir lib/__tests__/hrFinancials.test.ts.
+ * Toutes les fonctions sont pures (aucune I/O, aucun couplage React).
  */
 
 /** Taux de charges sociales patronales par défaut si l'entreprise n'a rien configuré. */
 export const DEFAULT_SOCIAL_CHARGES_RATE = 0.45;
 
-/** Préavis moyen estimé (mois de salaire chargé) pour une Suppression. */
+/** Préavis moyen estimé (mois de salaire chargé) pour un Départ forcé. */
 export const NOTICE_PERIOD_MONTHS = 2;
+
+/** Préavis moyen estimé (mois de salaire chargé) pour une Attrition — souvent plus court car
+ *  départ volontaire, parfois négocié à la baisse. */
+export const ATTRITION_NOTICE_MONTHS = 0.5;
 
 /** Surcoût d'accompagnement (outplacement, cellule de reclassement...) si le mouvement est
  *  inclus dans un PSE, en % de l'indemnité de licenciement estimée. */
 export const PSE_OVERHEAD_RATE = 0.2;
+
+/** Multiplicateur appliqué à l'indemnité + préavis d'un Départ forcé pour refléter la
+ *  contrainte (rupture conventionnelle négociée en contexte défavorable, ordre de grandeur
+ *  généralement observé au-delà du barème strict). */
+export const FORCED_DEPARTURE_MULTIPLIER = 1.2;
 
 /** Frais de recrutement (cabinet, sourcing, jobboards...) en % du salaire chargé annuel. */
 export const RECRUITMENT_FEE_RATE = 0.15;
@@ -44,12 +51,13 @@ export const RECRUITMENT_FEE_RATE = 0.15;
 /** Coût d'intégration/onboarding estimé (mois de salaire chargé). */
 export const ONBOARDING_COST_MONTHS = 0.5;
 
-/** Coût de transition interne (formation courte, changement d'équipe) pour un Redéploiement. */
-export const REDEPLOIEMENT_TRANSITION_RATE = 0.05;
+/** Coût de transition interne (formation courte, changement d'équipe) pour un transfert
+ *  interne SANS reconversion. */
+export const TRANSFER_TRANSITION_RATE = 0.05;
 
-/** Coût de reconversion (formation lourde, requalification) — plus élevé qu'un simple
- *  redéploiement. */
-export const RECONVERSION_TRANSITION_RATE = 0.15;
+/** Coût de reconversion (formation lourde, requalification) pour un transfert interne avec
+ *  `requiresRetraining=true` — plus élevé qu'un simple transfert. */
+export const RETRAINING_TRANSITION_RATE = 0.15;
 
 /** Résout le taux de charges sociales patronales à utiliser : celui configuré sur l'entreprise,
  *  ou la valeur par défaut si absent/invalide. */
@@ -75,8 +83,7 @@ export function tenureYears(hireDate: string | undefined | null, refDate: string
 
 /** Indemnité de licenciement estimée, barème légal français simplifié (ordre de grandeur) :
  *  1/4 de mois de salaire chargé par année d'ancienneté jusqu'à 10 ans, puis 1/3 de mois
- *  au-delà. Appliqué au salaire CHARGÉ (et non au seul brut, base légale réelle) pour rester
- *  cohérent avec le reste du calcul — majore donc légèrement l'estimation réelle. */
+ *  au-delà. Appliqué au salaire CHARGÉ (et non au seul brut, base légale réelle). */
 export function severanceEstimate(loadedSalary: number, tenure: number): number {
   const monthly = loadedSalary / 12;
   const first10 = Math.min(tenure, 10) * 0.25 * monthly;
@@ -91,28 +98,26 @@ export type MovementFinancialsInput = {
   grossSalary: number;
   /** Taux de charges patronales (voir getSocialChargesRate). */
   chargesRate: number;
-  /** Ancienneté en années — utilisée uniquement pour une Suppression. */
+  /** Ancienneté en années — utilisée pour les Départs forcés / Attrition. */
   tenure?: number;
-  /** Mouvement inclus dans un PSE — majore le coût social d'une Suppression. */
+  /** Mouvement inclus dans un PSE — majore le coût social d'un Départ forcé. */
   inPSE?: boolean;
+  /** Uniquement `Transfert entrant`/`Transfert sortant` : `true` = reconversion (taux majoré). */
+  requiresRetraining?: boolean;
 };
 
 export type MovementFinancials = {
   /** € salaire chargé annuel — base du calcul. */
   loadedSalary: number;
   /** € économie de masse salariale chargée en régime annuel (>= 0). 0 pour Recrutement et pour
-   *  Redéploiement/Reconversion (aucune réduction nette d'ETP — voir MovementType, transfert
-   *  interne uniquement, pas d'économie). */
+   *  Transfert entrant/Transfert sortant (aucune réduction nette d'ETP). */
   salarySavings: number;
-  /** € coût social one-off associé au mécanisme (indemnités + préavis + PSE, ou frais de
-   *  recrutement + onboarding, ou formation/transition selon le type). */
+  /** € coût social one-off = ENR (Éléments Non Récurrents) associé au mécanisme. */
   socialCost: number;
   /** € impact masse salariale ANNUEL signé (négatif = économie), destiné à
-   *  WorkforceMovement.salaryImpact : -salarySavings pour une Suppression, +loadedSalary pour un
-   *  Recrutement, 0 pour un transfert interne (Redéploiement/Reconversion). */
+   *  WorkforceMovement.salaryImpact. */
   salaryImpact: number;
-  /** € impact net la première année (salaryImpact + socialCost) — vision cash court terme,
-   *  utile pour situer l'effort de trésorerie au-delà du seul run-rate annualisé. */
+  /** € impact net la première année (salaryImpact + socialCost). */
   netFirstYearImpact: number;
 };
 
@@ -122,15 +127,35 @@ export type MovementFinancials = {
  * l'affichage (recalcul de contrôle).
  */
 export function computeMovementFinancials(input: MovementFinancialsInput): MovementFinancials {
-  const { type, grossSalary, chargesRate, tenure = 0, inPSE = false } = input;
+  const {
+    type,
+    grossSalary,
+    chargesRate,
+    tenure = 0,
+    inPSE = false,
+    requiresRetraining = false,
+  } = input;
   const loadedSalary = Math.round(loadedAnnualSalary(grossSalary, chargesRate));
 
   switch (type) {
-    case "Suppression": {
+    case "Départ forcé": {
       const severance = severanceEstimate(loadedSalary, tenure);
       const notice = Math.round((NOTICE_PERIOD_MONTHS / 12) * loadedSalary);
       const pseOverhead = inPSE ? Math.round(PSE_OVERHEAD_RATE * severance) : 0;
-      const socialCost = severance + notice + pseOverhead;
+      const rawCost = severance + notice + pseOverhead;
+      const socialCost = Math.round(rawCost * FORCED_DEPARTURE_MULTIPLIER);
+      return {
+        loadedSalary,
+        salarySavings: loadedSalary,
+        socialCost,
+        salaryImpact: -loadedSalary,
+        netFirstYearImpact: -loadedSalary + socialCost,
+      };
+    }
+    case "Attrition": {
+      // Départ volontaire : savings intégrales, coût social limité au préavis (pas d'indemnité
+      // de rupture, pas de PSE).
+      const socialCost = Math.round((ATTRITION_NOTICE_MONTHS / 12) * loadedSalary);
       return {
         loadedSalary,
         salarySavings: loadedSalary,
@@ -151,10 +176,9 @@ export function computeMovementFinancials(input: MovementFinancialsInput): Movem
         netFirstYearImpact: loadedSalary + socialCost,
       };
     }
-    case "Redéploiement":
-    case "Reconversion": {
-      const rate =
-        type === "Reconversion" ? RECONVERSION_TRANSITION_RATE : REDEPLOIEMENT_TRANSITION_RATE;
+    case "Transfert entrant":
+    case "Transfert sortant": {
+      const rate = requiresRetraining ? RETRAINING_TRANSITION_RATE : TRANSFER_TRANSITION_RATE;
       const socialCost = Math.round(rate * loadedSalary);
       return {
         loadedSalary,
@@ -168,13 +192,13 @@ export function computeMovementFinancials(input: MovementFinancialsInput): Movem
 }
 
 /** Raccourci pratique : calcule directement les 3 champs persistés sur WorkforceMovement
- *  (salaryImpact/savings/cost) à partir d'un salaire brut, d'une entreprise (pour le taux de
- *  charges) et d'options mécanisme-dépendantes. */
+ *  (salaryImpact/savings/cost) à partir d'un salaire brut, d'une entreprise et d'options
+ *  mécanisme-dépendantes. */
 export function computeMovementEuros(
   type: MovementType,
   grossSalary: number,
   company: Pick<Company, "socialChargesRate"> | null | undefined,
-  opts?: { tenure?: number; inPSE?: boolean }
+  opts?: { tenure?: number; inPSE?: boolean; requiresRetraining?: boolean }
 ): { salaryImpact: number; savings: number; cost: number } {
   const chargesRate = getSocialChargesRate(company);
   const fin = computeMovementFinancials({
@@ -183,6 +207,97 @@ export function computeMovementEuros(
     chargesRate,
     tenure: opts?.tenure ?? 0,
     inPSE: opts?.inPSE ?? false,
+    requiresRetraining: opts?.requiresRetraining ?? false,
   });
   return { salaryImpact: fin.salaryImpact, savings: fin.salarySavings, cost: fin.socialCost };
+}
+
+// ---------- Économie nette (Gooduelle-style) ----------
+
+export type NetEconomyBucket = {
+  label: string;
+  /** € savings salariales récurrentes annualisées portées par ce bucket (Σ savings). */
+  grossSavings: number;
+  /** € ENR (Éléments Non Récurrents) = coût social one-off (Σ cost). */
+  enr: number;
+  /** € économie nette = grossSavings − enr — vue "Économie nette" du Gooduelle. */
+  net: number;
+};
+
+export type NetEconomyGranularity = "month" | "quarter" | "year";
+
+const MONTH_LABELS = [
+  "Jan",
+  "Fév",
+  "Mar",
+  "Avr",
+  "Mai",
+  "Juin",
+  "Juil",
+  "Août",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Déc",
+];
+
+function granularityLabel(
+  dateISO: string,
+  granularity: NetEconomyGranularity,
+  fyStart: string | null | undefined
+): string {
+  if (granularity === "year")
+    return fiscalYearBucket(dateISO, fyStart ?? null) ?? dateISO.slice(0, 4);
+  const month = Number(dateISO.slice(5, 7)) - 1;
+  const year = dateISO.slice(0, 4);
+  if (Number.isNaN(month) || month < 0 || month > 11) return dateISO;
+  if (granularity === "month") return `${MONTH_LABELS[month]} ${year}`;
+  return `T${Math.floor(month / 3) + 1} ${year}`;
+}
+
+/**
+ * Économie nette = savings récurrentes annualisées − ENR (coûts sociaux one-off), ventilée par
+ * granularité temporelle. Reprend exactement les deux lignes de synthèse "Économie nette" de
+ * "OD Monitoring" (Gooduelle) : la barre verte (savings) diminuée de la barre rouge (ENR).
+ *
+ * Prend les `WorkforceMovement` déjà filtrés (par la barre de filtres, la sélection de FY,
+ * etc.) — la responsabilité du filtrage vit dans l'appelant, cette fonction ne fait qu'agréger.
+ */
+export function netEconomy(
+  movements: WorkforceMovement[],
+  granularity: NetEconomyGranularity,
+  fyStart?: string | null
+): NetEconomyBucket[] {
+  const groups = new Map<string, { grossSavings: number; enr: number }>();
+  for (const m of movements) {
+    if (!m.plannedDate) continue;
+    const label = granularityLabel(m.plannedDate, granularity, fyStart);
+    const cur = groups.get(label) ?? { grossSavings: 0, enr: 0 };
+    // savings = économies annualisées récurrentes attendues (déjà signées >= 0 par
+    // computeMovementFinancials).
+    cur.grossSavings += m.savings;
+    cur.enr += m.cost;
+    groups.set(label, cur);
+  }
+  return Array.from(groups.entries()).map(([label, v]) => ({
+    label,
+    grossSavings: Math.round(v.grossSavings),
+    enr: Math.round(v.enr),
+    net: Math.round(v.grossSavings - v.enr),
+  }));
+}
+
+/** Résumé mono-ligne (pour KPI Card) — totaux tous mouvements confondus. */
+export function netEconomyTotal(movements: WorkforceMovement[]): {
+  grossSavings: number;
+  enr: number;
+  net: number;
+} {
+  const grossSavings = movements.reduce((s, m) => s + m.savings, 0);
+  const enr = movements.reduce((s, m) => s + m.cost, 0);
+  return {
+    grossSavings: Math.round(grossSavings),
+    enr: Math.round(enr),
+    net: Math.round(grossSavings - enr),
+  };
 }
