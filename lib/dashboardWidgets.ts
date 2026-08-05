@@ -50,7 +50,8 @@ export type DashboardWidgetType =
   | "underperformers"
   | "dependency-alerts"
   | "portfolio-funnel"
-  | "savings-trajectory";
+  | "savings-trajectory"
+  | "initiative-health";
 
 /** Onglets du dashboard CTO — chaque widget est assigné à un onglet par défaut.
  *  L'onglet actif filtre les widgets affichés dans la grille. */
@@ -81,6 +82,7 @@ export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   pnl: "portfolio",
   underperformers: "prioritization",
   "dependency-alerts": "prioritization",
+  "initiative-health": "prioritization",
 };
 
 /** Une option d'indicateur/dimension pour un type de widget "configurable" (voir plus bas) — ex.
@@ -220,7 +222,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   },
   {
     type: "marimekko",
-    label: "Marimekko",
+    label: "Économies prévues",
     icon: "LayoutGrid",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
@@ -249,7 +251,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   },
   {
     type: "workstream-breakdown",
-    label: "Économies par dimension",
+    label: "Réalisation des économies",
     icon: "Columns3",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
@@ -312,6 +314,19 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "Unlink",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "initiative-health",
+    label: "Santé des initiatives",
+    icon: "LayoutGrid",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+    viewOptions: [
+      { key: "workstream", labelKey: "dashboard.workstream" },
+      { key: "country", labelKey: "dashboard.country" },
+      { key: "function", labelKey: "dashboard.function" },
+    ],
+    defaultView: "workstream",
   },
   {
     type: "pnl",
@@ -544,6 +559,7 @@ export function resolveActiveCustomView(
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
 const LAYOUT_KEY = "betrack_dashboard_layout_v10";
+const INITIATIVE_HEALTH_MIGRATION_KEY = "betrack_dashboard_migration_initiative_health_v1";
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -605,6 +621,28 @@ function migrateSpan(instance: DashboardWidgetInstance): DashboardWidgetInstance
   return instance;
 }
 
+/** Ajoute le nouveau widget une seule fois aux layouts persistés antérieurs. Le booléen est
+ * persisté séparément : si l'utilisateur supprime ensuite le widget, il ne réapparaît pas. */
+export function migrateInitiativeHealthWidget(
+  layout: DashboardWidgetInstance[],
+  migrationAlreadyApplied: boolean
+): DashboardWidgetInstance[] {
+  if (migrationAlreadyApplied || layout.some((instance) => instance.type === "initiative-health")) {
+    return layout;
+  }
+  const def = getWidgetDef("initiative-health");
+  if (!def) return layout;
+  return [
+    ...layout,
+    {
+      instanceId: "initiative-health",
+      type: "initiative-health",
+      span: def.defaultSpan,
+      view: def.defaultView,
+    },
+  ];
+}
+
 /** Charge le layout personnalisé depuis localStorage. Retombe sur le layout par défaut si absent,
  * corrompu, ou si son contenu ne correspond plus au registre actuel (ex. widget renommé/retiré).
  * `customViews` de chaque instance est en plus assaini (voir `sanitizeInstance`) — un layout
@@ -614,12 +652,26 @@ export function loadDashboardLayout(): DashboardWidgetInstance[] {
   if (!isBrowser()) return buildDefaultLayout();
   try {
     const raw = window.localStorage.getItem(LAYOUT_KEY);
-    if (!raw) return buildDefaultLayout();
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidInstance)) {
+    if (!raw) {
+      window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
       return buildDefaultLayout();
     }
-    return (parsed as DashboardWidgetInstance[]).map(sanitizeInstance).map(migrateSpan);
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidInstance)) {
+      window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
+      return buildDefaultLayout();
+    }
+    const migrationAlreadyApplied =
+      window.localStorage.getItem(INITIATIVE_HEALTH_MIGRATION_KEY) === "1";
+    const migrated = migrateInitiativeHealthWidget(
+      (parsed as DashboardWidgetInstance[]).map(sanitizeInstance).map(migrateSpan),
+      migrationAlreadyApplied
+    );
+    if (!migrationAlreadyApplied) {
+      window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(migrated));
+    }
+    window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
+    return migrated;
   } catch {
     return buildDefaultLayout();
   }
@@ -629,6 +681,7 @@ export function saveDashboardLayout(layout: DashboardWidgetInstance[]): void {
   if (!isBrowser()) return;
   try {
     window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+    window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
   } catch (err) {
     console.error(
       "[betrack storage] échec d'écriture localStorage pour le layout dashboard :",

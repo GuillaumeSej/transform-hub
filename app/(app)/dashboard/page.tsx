@@ -52,6 +52,8 @@ import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { DEPENDENCY_TYPE_META } from "@/lib/status-config";
 import { useNotifications } from "@/lib/hooks/useNotifications";
+import { paginateDashboardItems } from "@/lib/dashboardPagination";
+import { groupLeversByHealthDimension, type LeverHealthDimension } from "@/lib/leverHealth";
 import {
   ArrowDown,
   ArrowRight,
@@ -68,6 +70,7 @@ import { SCurveChart } from "@/components/shared/charts/SCurveChart";
 import { WorkstreamBarChart } from "@/components/shared/charts/WorkstreamBarChart";
 import { GeoDonutChart } from "@/components/shared/charts/GeoDonutChart";
 import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
+import { InitiativeHealthMatrix } from "@/components/shared/charts/InitiativeHealthMatrix";
 import { StageFunnel } from "@/components/shared/charts/StageFunnel";
 import { SankeyChart } from "@/components/shared/charts/SankeyChart";
 import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
@@ -394,13 +397,6 @@ export default function DashboardPage() {
   }, [visibleData, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
-  // Ambition déclarée du programme (Program.target, top-down) vs cible bottom-up des leviers
-  // déjà identifiés (summary.target) — même unité (€M), voir components/admin/ProgramsPanel.tsx.
-  const programAmbition = programs.find((p) => p.id === selectedProgramId)?.target;
-  const leverCoveragePct =
-    programAmbition && programAmbition > 0
-      ? Math.round((summary.target / programAmbition) * 100)
-      : undefined;
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
 
   // ── Tri des leviers sous-performants ───────────────────────────────────
@@ -424,6 +420,29 @@ export default function DashboardPage() {
     }
   };
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
+  const [underPage, setUnderPage] = useState(0);
+  const [dependencyPage, setDependencyPage] = useState(0);
+  const underPagination = paginateDashboardItems(sortedUnderperformers, underPage, 8);
+  const dependencyPagination = paginateDashboardItems(depAlerts, dependencyPage, 6);
+
+  useEffect(() => {
+    setUnderPage(0);
+    setDependencyPage(0);
+  }, [selectedProgramId, filters]);
+
+  useEffect(() => {
+    setUnderPage(0);
+  }, [underSort, underSortDir]);
+
+  useEffect(() => {
+    if (underPage !== underPagination.page) setUnderPage(underPagination.page);
+  }, [underPage, underPagination.page]);
+
+  useEffect(() => {
+    if (dependencyPage !== dependencyPagination.page) {
+      setDependencyPage(dependencyPagination.page);
+    }
+  }, [dependencyPage, dependencyPagination.page]);
 
   // ── Alertes enrichies (manuelles + auto-générées) ──────────────────────────
   const ALERTS_PER_PAGE = 5;
@@ -451,6 +470,14 @@ export default function DashboardPage() {
       }),
     [allAlerts, scopedLeverIds, scopedWorkstreamIds, data]
   );
+
+  const healthLabels = {
+    onTrack: t("dashboard.widgets.healthOnTrack"),
+    watch: t("dashboard.widgets.healthWatch"),
+    critical: t("dashboard.widgets.healthCritical"),
+    cancelled: t("dashboard.widgets.healthCancelled"),
+    empty: t("dashboard.widgets.initiativeHealthEmpty"),
+  };
 
   const filteredAlerts = useMemo(() => {
     let result = scopedAlerts;
@@ -1308,13 +1335,7 @@ export default function DashboardPage() {
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title={
-                activeView
-                  ? isLegacy
-                    ? describeCustomView(activeView, hierarchyLevels)
-                    : describeCustomView(activeView, hierarchyLevels)
-                  : t("dashboard.widgets.workstreamBreakdown")
-              }
+              title={t("dashboard.widgets.workstreamBreakdown")}
               actions={
                 views.length > 1 && activeView ? (
                   <DimensionToggle
@@ -1659,42 +1680,57 @@ export default function DashboardPage() {
                   {t("dashboard.widgets.noUnderperformers")}
                 </p>
               ) : (
-                <div className="flex flex-col gap-0">
-                  {sortedUnderperformers.slice(0, 8).map((l) => (
-                    <div
-                      key={l.id}
-                      onClick={() => router.push(`/levers/detail?id=${l.id}`)}
-                      className="flex cursor-pointer items-start gap-3 border-b border-border py-2.5 last:border-b-0 hover:bg-neutral-50"
-                    >
-                      <Avatar initials={l.ownerInit} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="truncate text-[12.5px] font-semibold text-primary">
-                            {l.name}
+                <>
+                  <div className="flex flex-col gap-0">
+                    {underPagination.items.map((l) => (
+                      <div
+                        key={l.id}
+                        onClick={() => router.push(`/levers/detail?id=${l.id}`)}
+                        className="flex cursor-pointer items-start gap-3 border-b border-border py-2.5 last:border-b-0 hover:bg-neutral-50"
+                      >
+                        <Avatar initials={l.ownerInit} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="truncate text-[12.5px] font-semibold text-primary">
+                              {l.name}
+                            </div>
+                            <span className="flex-shrink-0 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10.5px] font-bold text-bp-coral">
+                              −{l.gap} {t("dashboard.widgets.gapPts")}
+                            </span>
                           </div>
-                          <span className="flex-shrink-0 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10.5px] font-bold text-bp-coral">
-                            −{l.gap} {t("dashboard.widgets.gapPts")}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center gap-3 text-[11px] text-secondary">
-                          <span>
-                            {t("dashboard.widgets.expectedProgress")} {l.expectedProgress}%
-                          </span>
-                          <span>→</span>
-                          <span>
-                            {t("dashboard.widgets.actualProgress")} {l.progress}%
-                          </span>
-                          <span className="ml-auto font-semibold text-bp-coral">
-                            {engine.fmtCurr(l.netSavings)} {t("dashboard.widgets.atRiskAmount")}
-                          </span>
-                        </div>
-                        <div className="mt-1.5">
-                          <ProgressBar pct={l.progress} />
+                          <div className="mt-1 flex items-center gap-3 text-[11px] text-secondary">
+                            <span>
+                              {t("dashboard.widgets.expectedProgress")} {l.expectedProgress}%
+                            </span>
+                            <span>→</span>
+                            <span>
+                              {t("dashboard.widgets.actualProgress")} {l.progress}%
+                            </span>
+                            <span className="ml-auto font-semibold text-bp-coral">
+                              {engine.fmtCurr(l.netSavings)} {t("dashboard.widgets.atRiskAmount")}
+                            </span>
+                          </div>
+                          <div className="mt-1.5">
+                            <ProgressBar pct={l.progress} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  {underPagination.pageCount > 1 && (
+                    <DashboardPager
+                      page={underPagination.page}
+                      pageCount={underPagination.pageCount}
+                      onPrevious={() => setUnderPage(Math.max(0, underPagination.page - 1))}
+                      onNext={() =>
+                        setUnderPage(
+                          Math.min(underPagination.pageCount - 1, underPagination.page + 1)
+                        )
+                      }
+                      label={t("alerts.page")}
+                    />
+                  )}
+                </>
               )}
             </CardBody>
           </Card>
@@ -1724,121 +1760,183 @@ export default function DashboardPage() {
                   {t("dashboard.widgets.noDependencyAlerts")}
                 </p>
               ) : (
-                <div className="flex flex-col gap-3">
-                  {depAlerts.slice(0, 6).map((a, i) => {
-                    const sev = depSeverity(a.delayDays);
-                    const meta = DEPENDENCY_TYPE_META[a.type];
-                    return (
-                      <div
-                        key={`${a.sourceId}-${a.targetId}-${i}`}
-                        onClick={() => {
-                          router.push(`/levers/detail?id=${a.sourceId}`);
-                        }}
-                        className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
-                      >
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <div>
-                            <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
-                              Règle de planning
+                <>
+                  <div className="flex flex-col gap-3">
+                    {dependencyPagination.items.map((a, i) => {
+                      const sev = depSeverity(a.delayDays);
+                      const meta = DEPENDENCY_TYPE_META[a.type];
+                      return (
+                        <div
+                          key={`${a.sourceId}-${a.targetId}-${i}`}
+                          onClick={() => {
+                            router.push(`/levers/detail?id=${a.sourceId}`);
+                          }}
+                          className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
+                        >
+                          <div className="mb-2 flex items-start justify-between gap-2">
+                            <div>
+                              <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                                Règle de planning
+                              </div>
+                              <div className="mt-1 text-[11px] font-semibold text-primary">
+                                {a.type === "FS" &&
+                                  "La cible doit finir avant le début de la source"}
+                                {a.type === "SF" &&
+                                  "La cible doit démarrer avant la fin de la source"}
+                                {a.type === "SS" && "Les deux éléments doivent démarrer ensemble"}
+                                {a.type === "FF" && "Les deux éléments doivent finir ensemble"}
+                              </div>
                             </div>
-                            <div className="mt-1 text-[11px] font-semibold text-primary">
-                              {a.type === "FS" && "La cible doit finir avant le début de la source"}
-                              {a.type === "SF" &&
-                                "La cible doit démarrer avant la fin de la source"}
-                              {a.type === "SS" && "Les deux éléments doivent démarrer ensemble"}
-                              {a.type === "FF" && "Les deux éléments doivent finir ensemble"}
-                            </div>
+                            <DependencyTypeBadge type={a.type} />
                           </div>
-                          <DependencyTypeBadge type={a.type} />
-                        </div>
-                        {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
+                          {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
                             mobile (les deux blocs côte à côte débordaient sous ~480px), côte à
                             côte avec flèche dès sm. min-w-0 partout : sans lui, flex-1 refuse de
                             rétrécir sous la largeur du contenu et pousse hors de la carte. */}
-                        {meta.directional ? (
-                          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
-                            <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
-                              <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                                {t("dep.blocker")}
+                          {meta.directional ? (
+                            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
+                              <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                                  {t("dep.blocker")}
+                                </div>
+                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                  {a.targetName}
+                                </div>
+                                <div className="mt-0.5 text-[10px] text-secondary">
+                                  {meta.targetMilestone} : {a.targetDate}
+                                </div>
                               </div>
-                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                {a.targetName}
+                              <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
+                                <ArrowDown size={14} className="sm:hidden" />
+                                <ArrowRight size={14} className="hidden sm:block" />
+                                <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
+                                  {a.type}
+                                </span>
                               </div>
-                              <div className="mt-0.5 text-[10px] text-secondary">
-                                {meta.targetMilestone} : {a.targetDate}
+                              <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                  {t("dep.blocked")}
+                                </div>
+                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                  {a.sourceName}
+                                </div>
+                                <div className="mt-0.5 text-[10px] text-secondary">
+                                  {meta.sourceMilestone} : {a.sourceDate}
+                                </div>
                               </div>
                             </div>
-                            <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
-                              <ArrowDown size={14} className="sm:hidden" />
-                              <ArrowRight size={14} className="hidden sm:block" />
-                              <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
+                          ) : (
+                            /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
+                            <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
+                              <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                  {t("dep.atRisk")}
+                                </div>
+                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                  {a.sourceName}
+                                </div>
+                                <div className="mt-0.5 text-[10px] text-secondary">
+                                  {meta.sourceMilestone} : {a.sourceDate}
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
+                                <ArrowUpDown size={10} />
                                 {a.type}
-                              </span>
-                            </div>
-                            <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
-                              <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                {t("dep.blocked")}
                               </div>
-                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                {a.sourceName}
-                              </div>
-                              <div className="mt-0.5 text-[10px] text-secondary">
-                                {meta.sourceMilestone} : {a.sourceDate}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
-                          <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
-                            <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
-                              <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                {t("dep.atRisk")}
-                              </div>
-                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                {a.sourceName}
-                              </div>
-                              <div className="mt-0.5 text-[10px] text-secondary">
-                                {meta.sourceMilestone} : {a.sourceDate}
+                              <div className="bg-bp-coral/[0.03] p-2">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                  {t("dep.atRisk")}
+                                </div>
+                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                  {a.targetName}
+                                </div>
+                                <div className="mt-0.5 text-[10px] text-secondary">
+                                  {meta.targetMilestone} : {a.targetDate}
+                                </div>
                               </div>
                             </div>
-                            <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
-                              <ArrowUpDown size={10} />
-                              {a.type}
-                            </div>
-                            <div className="bg-bp-coral/[0.03] p-2">
-                              <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                {t("dep.atRisk")}
-                              </div>
-                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                {a.targetName}
-                              </div>
-                              <div className="mt-0.5 text-[10px] text-secondary">
-                                {meta.targetMilestone} : {a.targetDate}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
-                            que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
-                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
-                          <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
-                            {sev.label}
-                          </span>
-                          <span className="text-secondary">
-                            {a.delayDays}{" "}
-                            {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
-                          </span>
-                          {a.impactEur > 0 && (
-                            <span className="ml-auto font-bold text-bp-coral">
-                              {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
-                            </span>
                           )}
+                          {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
+                            que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
+                          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+                            <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
+                              {sev.label}
+                            </span>
+                            <span className="text-secondary">
+                              {a.delayDays}{" "}
+                              {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
+                            </span>
+                            {a.impactEur > 0 && (
+                              <span className="ml-auto font-bold text-bp-coral">
+                                {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                  {dependencyPagination.pageCount > 1 && (
+                    <DashboardPager
+                      page={dependencyPagination.page}
+                      pageCount={dependencyPagination.pageCount}
+                      onPrevious={() =>
+                        setDependencyPage(Math.max(0, dependencyPagination.page - 1))
+                      }
+                      onNext={() =>
+                        setDependencyPage(
+                          Math.min(
+                            dependencyPagination.pageCount - 1,
+                            dependencyPagination.page + 1
+                          )
+                        )
+                      }
+                      label={t("alerts.page")}
+                    />
+                  )}
+                </>
               )}
+            </CardBody>
+          </Card>
+        );
+      }
+
+      case "initiative-health": {
+        const dimension = (
+          instance.view === "country" || instance.view === "function" ? instance.view : "workstream"
+        ) as LeverHealthDimension;
+        const groups = groupLeversByHealthDimension(
+          filteredData.levers,
+          dimension,
+          scopedAlerts,
+          data.workstreams,
+          company?.riskThresholds
+        );
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title={t("dashboard.widgets.initiativeHealth")}
+              actions={
+                <DimensionToggle
+                  options={[
+                    { value: "workstream", label: t("dashboard.workstream") },
+                    { value: "country", label: t("dashboard.country") },
+                    { value: "function", label: t("dashboard.function") },
+                  ]}
+                  value={dimension}
+                  onChange={(next) =>
+                    updateLayout(setWidgetView(layout, instance.instanceId, next))
+                  }
+                />
+              }
+            />
+            <CardBody>
+              <InitiativeHealthMatrix
+                groups={groups}
+                labels={healthLabels}
+                onLeverClick={(leverId) => router.push(`/levers/detail?id=${leverId}`)}
+              />
             </CardBody>
           </Card>
         );
@@ -1967,15 +2065,6 @@ export default function DashboardPage() {
           barMarkerPct={
             summary.target > 0
               ? Math.round((summary.reforecastTarget / summary.target) * 100)
-              : undefined
-          }
-          secondary={
-            programAmbition
-              ? {
-                  label: "Ambition Programme",
-                  value: `${engine.fmtCurr(programAmbition)}${leverCoveragePct !== undefined ? ` · ${leverCoveragePct}% couvert` : ""}`,
-                  pct: leverCoveragePct ?? 0,
-                }
               : undefined
           }
           onClick={() => goToLevers({})}
@@ -2299,6 +2388,46 @@ function DimensionToggle<T extends string>({
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+function DashboardPager({
+  page,
+  pageCount,
+  onPrevious,
+  onNext,
+  label,
+}: {
+  page: number;
+  pageCount: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  label: string;
+}) {
+  return (
+    <div className="mt-3 flex items-center justify-center gap-3 border-t border-border pt-3">
+      <button
+        type="button"
+        onClick={onPrevious}
+        disabled={page === 0}
+        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+        aria-label="Page précédente"
+      >
+        <ChevronLeft size={14} />
+      </button>
+      <span className="text-[11px] font-semibold text-secondary">
+        {label.replace("{current}", String(page + 1)).replace("{total}", String(pageCount))}
+      </span>
+      <button
+        type="button"
+        onClick={onNext}
+        disabled={page >= pageCount - 1}
+        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+        aria-label="Page suivante"
+      >
+        <ChevronRight size={14} />
+      </button>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   getWidgetDef,
   resolveCustomViews,
   resolveActiveCustomView,
+  migrateInitiativeHealthWidget,
   type DashboardWidgetInstance,
 } from "@/lib/dashboardWidgets";
 
@@ -27,6 +28,11 @@ describe("dashboardWidgets — buildDefaultLayout", () => {
     });
   });
 
+  it("includes initiative health with a persisted per-instance grouping view", () => {
+    const widget = buildDefaultLayout().find((w) => w.type === "initiative-health");
+    expect(widget).toMatchObject({ view: "workstream", span: "XL" });
+  });
+
   it("excludeFromDefault widgets are still in the registry (available in picker)", () => {
     const excluded = DASHBOARD_WIDGET_REGISTRY.filter((d) => d.excludeFromDefault);
     expect(excluded.length).toBeGreaterThan(0);
@@ -34,6 +40,19 @@ describe("dashboardWidgets — buildDefaultLayout", () => {
     excluded.forEach((d) => {
       expect(layout.find((w) => w.type === d.type)).toBeUndefined();
     });
+  });
+});
+
+describe("dashboardWidgets — initiative health layout migration", () => {
+  it("adds the widget once to a legacy layout", () => {
+    const legacy = buildDefaultLayout().filter((w) => w.type !== "initiative-health");
+    const migrated = migrateInitiativeHealthWidget(legacy, false);
+    expect(migrated.filter((w) => w.type === "initiative-health")).toHaveLength(1);
+  });
+
+  it("does not re-add a widget deliberately removed after migration", () => {
+    const legacy = buildDefaultLayout().filter((w) => w.type !== "initiative-health");
+    expect(migrateInitiativeHealthWidget(legacy, true)).toBe(legacy);
   });
 });
 

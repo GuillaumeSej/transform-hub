@@ -49,6 +49,7 @@ export function PnlBarChart({
     ...d,
     remaining: Math.max(0, Math.round((d.plan - d.realized) * 10) / 10),
   }));
+  const hasNegativeValues = chartData.some((d) => d.plan < 0 || d.realized < 0);
 
   return (
     <ResponsiveContainer width="100%" height={Math.max(200, data.length * 36 + 40)}>
@@ -60,6 +61,7 @@ export function PnlBarChart({
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" horizontal={false} />
         <XAxis
           type="number"
+          domain={hasNegativeValues ? ["auto", "auto"] : [0, "auto"]}
           tick={{ fontSize: 10 }}
           axisLine={false}
           tickLine={false}
