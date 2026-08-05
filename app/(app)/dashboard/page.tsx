@@ -2053,7 +2053,11 @@ export default function DashboardPage() {
           exécutive — "Économies réalisées" (l'indicateur que DG/CTO regardent en premier) passe
           héros pleine largeur avec chiffre agrandi, les 4 autres en 2×2 compact dessous. */}
       <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2 max-[1100px]:gap-3">
-        {/* 1. Économies réalisées — cible + reforecast + % (marqueur sur la barre) */}
+        {/* 1. Économies réalisées — cible + reforecast + % (marqueur reforecast sur la barre).
+            NOTE (feedback pilote Août 2026) : l'ancien bloc `secondary` "Ambition Programme"
+            (Program.target top-down) a été retiré — sa cohabitation avec la cible bottom-up
+            (summary.target) dans la même carte produisait deux chiffres perçus comme
+            incohérents. L'ambition programme reste consultable dans Admin → Programmes. */}
         <KPICard
           label={t("dashboard.kpi.savingsRealized")}
           value={engine.fmtCurr(summary.realized)}
