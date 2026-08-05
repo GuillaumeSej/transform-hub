@@ -20,19 +20,23 @@ const COLOR_PLANNED = "#A99E9A"; // taupe — le plan
 const COLOR_TARGET = "#FF3C47"; // coral — la cible
 const AREA_FILL = "rgba(0,0,0,0.04)"; // surface grise très légère sous la courbe réelle
 
-/** Couleurs de la ventilation par type de mouvement dans le tooltip. */
+/** Couleurs de la ventilation par type de mouvement dans le tooltip. Palette 5-types
+ *  Gooduelle (Août 2026) : vert Recrutement, orange Attrition, rouge Départ forcé, gris clair
+ *  Transfert entrant, gris foncé Transfert sortant. */
 const TYPE_COLORS: Record<MovementType, string> = {
-  Suppression: "#FF3C47",
-  Recrutement: "#421799",
-  Redéploiement: "#806659",
-  Reconversion: "#A99E9A",
+  Recrutement: "#3D9970",
+  Attrition: "#FF9F1C",
+  "Départ forcé": "#FF3C47",
+  "Transfert entrant": "#B4B0AB",
+  "Transfert sortant": "#7A756F",
 };
 
 const TYPE_LABELS: Record<MovementType, string> = {
-  Suppression: "Suppressions",
   Recrutement: "Recrutements",
-  Redéploiement: "Redéploiements",
-  Reconversion: "Reconversions",
+  Attrition: "Attritions",
+  "Départ forcé": "Départs forcés",
+  "Transfert entrant": "Transferts entrants",
+  "Transfert sortant": "Transferts sortants",
 };
 
 /** Trajectoire effectifs — lignes cible / plan / réel avec ventilation par type au hover.

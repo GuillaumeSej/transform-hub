@@ -4,20 +4,40 @@ import { STATUS_ORDER } from "@/lib/status-config";
 
 /**
  * Moteur de calcul pur du module RH — agrégations de la base ETP et des mouvements pour le
- * Dashboard RH (waterfall, breakdowns, PSE) et les alertes de réconciliation RH ↔ leviers.
- * Séparé de lib/engine.ts (leviers) pour limiter les conflits de merge : mêmes conventions,
- * fonctions pures qui prennent les données en paramètre.
+ * Dashboard RH (waterfall, breakdowns, PSE, pont ETP, rythme mensuel) et les alertes de
+ * réconciliation RH ↔ leviers. Séparé de lib/engine.ts (leviers) pour limiter les conflits
+ * de merge : mêmes conventions, fonctions pures qui prennent les données en paramètre.
+ *
+ * Aligné sur la typologie 5-types de "OD Monitoring" (Gooduelle) — voir
+ * `types/index.ts::MovementType`.
  */
 
 /** Date de référence du scénario démo — alignée sur DEMO_NOW de lib/engine.ts. */
 export const HR_TODAY = "2026-06-22";
 
-/** Effet d'un mouvement sur l'effectif TOTAL (les redéploiements/reconversions déplacent des
- * ETP entre départements sans changer le total). */
+/** Liste ordonnée des 5 types Gooduelle — utilisée par les widgets qui ont besoin d'itérer sur
+ *  toutes les catégories dans un ordre stable (breakdown, ventilation, pont ETP). */
+export const MOVEMENT_TYPES: MovementType[] = [
+  "Recrutement",
+  "Attrition",
+  "Départ forcé",
+  "Transfert entrant",
+  "Transfert sortant",
+];
+
+/** Effet d'un mouvement sur l'effectif TOTAL — les transferts internes (entrants/sortants) sont
+ *  neutres pour le total, seuls Recrutement (+) et Attrition/Départ forcé (−) le modifient. */
 export function fteEffect(m: WorkforceMovement): number {
-  if (m.type === "Suppression") return -m.fte;
-  if (m.type === "Recrutement") return +m.fte;
-  return 0;
+  switch (m.type) {
+    case "Recrutement":
+      return +m.fte;
+    case "Attrition":
+    case "Départ forcé":
+      return -m.fte;
+    case "Transfert entrant":
+    case "Transfert sortant":
+      return 0;
+  }
 }
 
 export function currentFTE(wf: Workforce): number {
@@ -38,12 +58,29 @@ export function targetFTE(wf: Workforce): number {
 
 // ---------- Waterfall ETP ----------
 
+/** Décomposition signée d'un bucket par type (positifs pour Recrutement, négatifs pour
+ *  Attrition/Départ forcé, 0 pour les transferts internes). */
+export type MovementTypeDelta = Record<MovementType, number>;
+
+const EMPTY_TYPE_DELTA = (): MovementTypeDelta => ({
+  Recrutement: 0,
+  Attrition: 0,
+  "Départ forcé": 0,
+  "Transfert entrant": 0,
+  "Transfert sortant": 0,
+});
+
 export type FteBridgeBucket = {
-  /** "Jan", "Fév"… ou "T1"… */
+  /** "Jan 2026" (avec année si multi-année), "T1 2026", "2026", etc. */
   label: string;
+  /** ISO début et fin de la période couverte par le bucket. */
+  startISO: string;
+  endISO: string;
   delta: number;
   cumulative: number; // effectif total en fin de bucket
   movements: WorkforceMovement[];
+  /** Détail signé du delta par type (utilisé par le rythme et le pont ETP). */
+  byType: MovementTypeDelta;
 };
 
 const MONTH_LABELS = [
@@ -61,23 +98,125 @@ const MONTH_LABELS = [
   "Déc",
 ];
 
-/** Projection en cascade des mouvements 2026, par mois ou trimestre, de la baseline vers
- * l'atterrissage. Chaque bucket porte ses mouvements pour la décomposition par levier au clic. */
-export function fteBridge(wf: Workforce, granularity: "month" | "quarter"): FteBridgeBucket[] {
-  const bucketCount = granularity === "month" ? 12 : 4;
-  const buckets: FteBridgeBucket[] = Array.from({ length: bucketCount }, (_, i) => ({
-    label: granularity === "month" ? MONTH_LABELS[i] : `T${i + 1}`,
-    delta: 0,
-    cumulative: 0,
-    movements: [],
-  }));
+export type BridgeGranularity = "month" | "quarter" | "year";
+
+/** Plage de dates optionnelle (ISO). Un mouvement compte dans un bucket si sa `plannedDate` est
+ *  entre `from` et `to` (inclusif). */
+export type DateRange = { from?: string | null; to?: string | null };
+
+function isInRange(dateISO: string, range?: DateRange): boolean {
+  if (!range) return true;
+  if (range.from && dateISO < range.from) return false;
+  if (range.to && dateISO > range.to) return false;
+  return true;
+}
+
+function firstDayOfMonth(year: number, monthIdx: number): string {
+  return `${year}-${String(monthIdx + 1).padStart(2, "0")}-01`;
+}
+
+function lastDayOfMonth(year: number, monthIdx: number): string {
+  const d = new Date(year, monthIdx + 1, 0);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Détermine les bornes ISO d'un bucket pour la granularité et l'année de référence donnés. */
+function bucketBounds(
+  year: number,
+  index: number,
+  granularity: BridgeGranularity
+): { startISO: string; endISO: string; label: string } {
+  if (granularity === "month") {
+    return {
+      startISO: firstDayOfMonth(year, index),
+      endISO: lastDayOfMonth(year, index),
+      label: `${MONTH_LABELS[index]} ${year}`,
+    };
+  }
+  if (granularity === "quarter") {
+    const startMonth = index * 3;
+    const endMonth = startMonth + 2;
+    return {
+      startISO: firstDayOfMonth(year, startMonth),
+      endISO: lastDayOfMonth(year, endMonth),
+      label: `T${index + 1} ${year}`,
+    };
+  }
+  // year
+  return {
+    startISO: firstDayOfMonth(year, 0),
+    endISO: lastDayOfMonth(year, 11),
+    label: `${year}`,
+  };
+}
+
+/** Détermine les années couvertes par le range (ou par les mouvements si absent). */
+function yearsCovered(wf: Workforce, range?: DateRange): number[] {
+  let minYear: number | null = null;
+  let maxYear: number | null = null;
+  if (range?.from) minYear = Number(range.from.slice(0, 4));
+  if (range?.to) maxYear = Number(range.to.slice(0, 4));
+  if (minYear === null || maxYear === null) {
+    for (const m of wf.movements) {
+      if (!m.plannedDate) continue;
+      const y = Number(m.plannedDate.slice(0, 4));
+      if (!Number.isFinite(y)) continue;
+      if (minYear === null || y < minYear) minYear = y;
+      if (maxYear === null || y > maxYear) maxYear = y;
+    }
+  }
+  if (minYear === null || maxYear === null) {
+    const currentYear = Number(HR_TODAY.slice(0, 4));
+    return [currentYear];
+  }
+  const years: number[] = [];
+  for (let y = minYear; y <= maxYear; y++) years.push(y);
+  return years;
+}
+
+/**
+ * Projection en cascade des mouvements par mois, trimestre ou année.
+ *
+ *  - Sans `range` : couvre toutes les années présentes dans les mouvements.
+ *  - Avec `range` : les buckets couvrent la plage `from`/`to` (bornes incluses).
+ *  - Chaque bucket porte ses mouvements et un détail signé par type (`byType`) — utilisé par
+ *    le rythme mensuel et le pont ETP au clic.
+ */
+export function fteBridge(
+  wf: Workforce,
+  granularity: BridgeGranularity,
+  range?: DateRange
+): FteBridgeBucket[] {
+  const years = yearsCovered(wf, range);
+  const buckets: FteBridgeBucket[] = [];
+  for (const year of years) {
+    const bucketCount = granularity === "month" ? 12 : granularity === "quarter" ? 4 : 1;
+    for (let i = 0; i < bucketCount; i++) {
+      const { startISO, endISO, label } = bucketBounds(year, i, granularity);
+      // Skip buckets entièrement hors range
+      if (range?.from && endISO < range.from) continue;
+      if (range?.to && startISO > range.to) continue;
+      buckets.push({
+        label,
+        startISO,
+        endISO,
+        delta: 0,
+        cumulative: 0,
+        movements: [],
+        byType: EMPTY_TYPE_DELTA(),
+      });
+    }
+  }
 
   for (const m of wf.movements) {
-    const month = Number(m.plannedDate.slice(5, 7)) - 1; // 0-11
-    if (Number.isNaN(month) || month < 0 || month > 11) continue;
-    const idx = granularity === "month" ? month : Math.floor(month / 3);
-    buckets[idx].delta += fteEffect(m);
-    buckets[idx].movements.push(m);
+    if (!m.plannedDate) continue;
+    if (range && !isInRange(m.plannedDate, range)) continue;
+    const bucket = buckets.find((b) => m.plannedDate >= b.startISO && m.plannedDate <= b.endISO);
+    if (!bucket) continue;
+    const effect = fteEffect(m);
+    bucket.delta += effect;
+    bucket.byType[m.type] += effect;
+    bucket.movements.push(m);
   }
 
   let running = wf.totalFTE;
@@ -115,32 +254,115 @@ export function bucketByLever(
   });
 }
 
+// ---------- Pont ETP (bridge summary sur une plage) ----------
+
+/** Décomposition ETP d'une plage : ouverture, contributions par type (signées), clôture.
+ *  Utilisé par le widget "Contribution des mouvements au résultat net" (pont ETP vertical). */
+export type FteBridgeSummary = {
+  opening: number;
+  closing: number;
+  contributions: { type: MovementType; delta: number }[];
+};
+
+export function fteBridgeSummary(wf: Workforce, range?: DateRange): FteBridgeSummary {
+  // Ouverture = totalFTE + effet cumulé des mouvements RÉALISÉS avant `range.from`.
+  let opening = wf.totalFTE;
+  if (range?.from) {
+    for (const m of wf.movements) {
+      if (!m.plannedDate || m.plannedDate >= range.from) continue;
+      if (m.status === "Réalisé") opening += fteEffect(m);
+    }
+  }
+
+  const contribs: MovementTypeDelta = EMPTY_TYPE_DELTA();
+  for (const m of wf.movements) {
+    if (!m.plannedDate) continue;
+    if (range && !isInRange(m.plannedDate, range)) continue;
+    contribs[m.type] += fteEffect(m);
+  }
+  const closing = opening + Object.values(contribs).reduce((s, v) => s + v, 0);
+
+  return {
+    opening: Math.round(opening * 10) / 10,
+    closing: Math.round(closing * 10) / 10,
+    contributions: MOVEMENT_TYPES.map((type) => ({
+      type,
+      delta: Math.round(contribs[type] * 10) / 10,
+    })),
+  };
+}
+
 // ---------- Breakdowns ----------
 
+/** Ventilation d'un département par type de mouvement Gooduelle. Les 5 catégories sont
+ *  exposées + `exits` = attritions + départs forcés (compat legacy avec les composants).
+ *  Les transferts entrants/sortants sont comptés au département SOURCE (m.department) et au
+ *  département CIBLE (m.toDepartment) séparément — un transfert impacte les deux. */
 export type DepartmentMovements = {
   department: string;
-  suppressions: number; // ETP (positif)
   recrutements: number;
-  transferts: number; // redéploiements + reconversions (entrants + sortants du département)
+  attritions: number;
+  forcedDepartures: number;
+  transfertEntrants: number;
+  transfertSortants: number;
+  /** Legacy — somme des sorties (Attrition + Départ forcé), pour compat avec les composants
+   *  existants qui affichent 3 séries (créations / départs / transferts). */
+  exits: number;
+  /** Legacy — somme des transferts entrants + sortants. */
+  transferts: number;
+  /** Impact net (signé) sur le département source / cible. */
+  net: number;
 };
 
 export function movementsByDepartment(wf: Workforce): DepartmentMovements[] {
   const rows = new Map<string, DepartmentMovements>();
   const row = (dept: string) => {
-    if (!rows.has(dept))
-      rows.set(dept, { department: dept, suppressions: 0, recrutements: 0, transferts: 0 });
+    if (!rows.has(dept)) {
+      rows.set(dept, {
+        department: dept,
+        recrutements: 0,
+        attritions: 0,
+        forcedDepartures: 0,
+        transfertEntrants: 0,
+        transfertSortants: 0,
+        exits: 0,
+        transferts: 0,
+        net: 0,
+      });
+    }
     return rows.get(dept)!;
   };
   for (const m of wf.movements) {
-    if (m.type === "Suppression") row(m.department).suppressions += m.fte;
-    else if (m.type === "Recrutement") row(m.department).recrutements += m.fte;
-    else {
-      row(m.department).transferts += m.fte;
-      if (m.toDepartment && m.toDepartment !== m.department)
-        row(m.toDepartment).transferts += m.fte;
+    if (m.type === "Recrutement") {
+      const r = row(m.department);
+      r.recrutements += m.fte;
+      r.net += m.fte;
+    } else if (m.type === "Attrition") {
+      const r = row(m.department);
+      r.attritions += m.fte;
+      r.exits += m.fte;
+      r.net -= m.fte;
+    } else if (m.type === "Départ forcé") {
+      const r = row(m.department);
+      r.forcedDepartures += m.fte;
+      r.exits += m.fte;
+      r.net -= m.fte;
+    } else if (m.type === "Transfert entrant" || m.type === "Transfert sortant") {
+      // Sortie du département source.
+      const rSrc = row(m.department);
+      rSrc.transfertSortants += m.fte;
+      rSrc.transferts += m.fte;
+      rSrc.net -= m.fte;
+      // Entrée au département cible si renseigné et différent.
+      if (m.toDepartment && m.toDepartment !== m.department) {
+        const rDst = row(m.toDepartment);
+        rDst.transfertEntrants += m.fte;
+        rDst.transferts += m.fte;
+        rDst.net += m.fte;
+      }
     }
   }
-  return Array.from(rows.values()).sort((a, b) => b.suppressions - a.suppressions);
+  return Array.from(rows.values()).sort((a, b) => b.exits - a.exits);
 }
 
 export function movementsByCountry(
@@ -159,36 +381,42 @@ export function movementsByCountry(
 export type MovementTypeSummary = { type: MovementType; count: number; fte: number };
 
 export function movementsByType(wf: Workforce): MovementTypeSummary[] {
-  const types: MovementType[] = ["Suppression", "Redéploiement", "Reconversion", "Recrutement"];
-  return types
-    .map((type) => {
-      const list = wf.movements.filter((m) => m.type === type);
-      return {
-        type,
-        count: list.length,
-        fte: Math.round(list.reduce((s, m) => s + m.fte, 0) * 10) / 10,
-      };
-    })
-    .filter((t) => t.count > 0);
+  return MOVEMENT_TYPES.map((type) => {
+    const list = wf.movements.filter((m) => m.type === type);
+    return {
+      type,
+      count: list.length,
+      fte: Math.round(list.reduce((s, m) => s + m.fte, 0) * 10) / 10,
+    };
+  }).filter((t) => t.count > 0);
 }
 
 // ---------- Masse salariale ----------
 
-export type SalaryBridgeBucket = { label: string; delta: number; cumulative: number };
+export type SalaryBridgeBucket = {
+  label: string;
+  startISO: string;
+  endISO: string;
+  delta: number;
+  cumulative: number;
+};
 
 /** Impact cumulé des mouvements sur la masse salariale annuelle (€M) — baseline massSalary,
  * chaque bucket ajoute les salaryImpact des mouvements planifiés dessus. */
 export function salaryBridge(
   wf: Workforce,
-  granularity: "month" | "quarter"
+  granularity: BridgeGranularity,
+  range?: DateRange
 ): SalaryBridgeBucket[] {
-  const fte = fteBridge(wf, granularity);
+  const fte = fteBridge(wf, granularity, range);
   let running = wf.massSalary;
   return fte.map((b) => {
     const deltaM = b.movements.reduce((s, m) => s + m.salaryImpact, 0) / 1_000_000;
     running += deltaM;
     return {
       label: b.label,
+      startISO: b.startISO,
+      endISO: b.endISO,
       delta: Math.round(deltaM * 100) / 100,
       cumulative: Math.round(running * 100) / 100,
     };
@@ -240,9 +468,13 @@ export function deltaByDepartment(wf: Workforce): DepartmentDelta[] {
     const delta = wf.movements
       .filter((m) => m.department === d.name || m.toDepartment === d.name)
       .reduce((s, m) => {
-        if (m.type === "Suppression" && m.department === d.name) return s - m.fte;
-        if (m.type === "Recrutement" && m.department === d.name) return s + m.fte;
-        if ((m.type === "Redéploiement" || m.type === "Reconversion") && m.toDepartment) {
+        if ((m.type === "Attrition" || m.type === "Départ forcé") && m.department === d.name) {
+          return s - m.fte;
+        }
+        if (m.type === "Recrutement" && m.department === d.name) {
+          return s + m.fte;
+        }
+        if ((m.type === "Transfert entrant" || m.type === "Transfert sortant") && m.toDepartment) {
           if (m.toDepartment === d.name && m.department !== d.name) return s + m.fte;
           if (m.department === d.name && m.toDepartment !== d.name) return s - m.fte;
         }
@@ -284,13 +516,12 @@ export function fteTrajectory(
   const bucketCount = granularity === "month" ? 12 : 4;
   const labels = granularity === "month" ? MONTH_LABELS : ["T1", "T2", "T3", "T4"];
 
-  const allTypes: MovementType[] = ["Suppression", "Recrutement", "Redéploiement", "Reconversion"];
   const points: FteTrajectoryPoint[] = Array.from({ length: bucketCount }, (_, i) => ({
     label: labels[i],
     actual: 0,
     planned: 0,
     target: 0,
-    byType: Object.fromEntries(allTypes.map((t) => [t, 0])) as Record<MovementType, number>,
+    byType: EMPTY_TYPE_DELTA(),
   }));
 
   const tgt = targetFTE(wf);
@@ -306,7 +537,6 @@ export function fteTrajectory(
   }
 
   for (let i = 0; i < bucketCount; i++) {
-    // Planned = tous les mouvements
     const plannedDelta = wf.movements
       .filter((m) => {
         const month = Number(m.plannedDate.slice(5, 7)) - 1;
@@ -316,7 +546,6 @@ export function fteTrajectory(
       .reduce((s, m) => s + fteEffect(m), 0);
     runningPlanned += plannedDelta;
 
-    // Actual = seulement les mouvements réalisés
     const actualDelta = wf.movements
       .filter((m) => {
         if (m.status !== "Réalisé") return false;
@@ -347,14 +576,6 @@ export type MovementAlert = {
 
 const DUE_WINDOW_DAYS = 7;
 
-/**
- * Alertes actionnables pour le RH :
- * - `overdue`  : échéance dépassée sans réalisation — relancer l'owner du levier.
- * - `due`      : échéance dans ≤ 7 jours — préparer/valider le mouvement.
- * - `toValidate` : réalisé opérationnellement mais pas encore validé RH.
- * - `leverMismatch` : le levier lié est annulé ou se termine avant la date du mouvement —
- *   le plan RH et le plan levier ne sont plus synchronisés.
- */
 export function movementAlerts(
   wf: Workforce,
   levers: Lever[],

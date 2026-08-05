@@ -95,8 +95,9 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     (l) => l.reforecast && l.lockedPlan && l.reforecast.netSavings < l.lockedPlan.netSavings
   ).length;
 
-  // Suppressions de postes (mouvements RH type "Suppression"), en ETP.
-  const suppressionMoves = data.workforce.movements.filter((m) => m.type === "Suppression");
+  // Suppressions de postes (mouvements RH type "Départ forcé" — départs contraints /
+  // licenciements, distincts de l'attrition volontaire), en ETP.
+  const suppressionMoves = data.workforce.movements.filter((m) => m.type === "Départ forcé");
   const suppressionsPlanned = suppressionMoves.reduce((s, m) => s + m.fte, 0);
   const suppressionsRealized = suppressionMoves
     .filter((m) => m.status === "Réalisé")

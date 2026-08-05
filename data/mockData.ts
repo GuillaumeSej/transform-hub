@@ -200,88 +200,118 @@ function generateEmployees(): Employee[] {
   return employees;
 }
 
-/** Plan de mouvements par levier : [leverId, département source, nb suppressions,
- * nb redéploiements (vers toDept), nb reconversions, PSE?] — aligné sur les fteImpact
- * des leviers (L007 −24, L001 −12, L014 −8, L008 −8, L015 −8, L013 −6, L017 −6…). */
+/** Plan de mouvements par levier — typologie 5-types "OD Monitoring" (Gooduelle) :
+ *  - `forcedDeparture` : licenciement contraint / rupture négociée (ancienne "Suppression").
+ *  - `attrition` : départ volontaire (démission spontanée, prévue au plan).
+ *  - `transferIn` : transfert entrant simple (formation courte).
+ *  - `retraining` : transfert entrant avec reconversion (formation lourde, `requiresRetraining`).
+ *  - `transferOut` : sortie du périmètre monitoré (transfert externe).
+ *  Aligné sur les fteImpact des leviers (L007 −24, L001 −12, L014 −8, L008 −8, L015 −8…). */
 const MOVEMENT_PLAN: {
   leverId: string;
   dept: string;
-  suppressions: number;
-  redeploy: number;
+  forcedDeparture: number;
+  attrition?: number;
+  transferIn: number;
   toDept?: string;
-  reconversions: number;
+  retraining: number;
+  transferOut?: number;
   pse: boolean;
   startMonth: number; // mois de la 1ère échéance (2026)
+  /** Workstream de rattachement (peuplé sur chaque mouvement — filtre transverse du dashboard). */
+  workstream: string;
+  /** Fonction de rattachement (peuplée sur chaque mouvement). */
+  functionArea: string;
 }[] = [
   {
     leverId: "L007",
     dept: "Production",
-    suppressions: 8,
-    redeploy: 3,
+    forcedDeparture: 6,
+    attrition: 2,
+    transferIn: 3,
     toDept: "Supply Chain",
-    reconversions: 2,
+    retraining: 2,
+    transferOut: 1,
     pse: true,
     startMonth: 3,
+    workstream: "WS-01",
+    functionArea: "Opérations",
   },
   {
     leverId: "L001",
     dept: "Support (IT/Finance/HR)",
-    suppressions: 4,
-    redeploy: 2,
+    forcedDeparture: 3,
+    attrition: 1,
+    transferIn: 2,
     toDept: "Commercial & Marketing",
-    reconversions: 1,
+    retraining: 1,
     pse: true,
     startMonth: 2,
+    workstream: "WS-02",
+    functionArea: "Support",
   },
   {
     leverId: "L014",
     dept: "Commercial & Marketing",
-    suppressions: 3,
-    redeploy: 1,
+    forcedDeparture: 2,
+    attrition: 1,
+    transferIn: 1,
     toDept: "Support (IT/Finance/HR)",
-    reconversions: 0,
+    retraining: 0,
     pse: false,
     startMonth: 2,
+    workstream: "WS-03",
+    functionArea: "Commercial",
   },
   {
     leverId: "L008",
     dept: "Production",
-    suppressions: 3,
-    redeploy: 2,
+    forcedDeparture: 3,
+    transferIn: 2,
     toDept: "Production",
-    reconversions: 1,
+    retraining: 1,
     pse: true,
     startMonth: 4,
+    workstream: "WS-01",
+    functionArea: "Opérations",
   },
   {
     leverId: "L015",
     dept: "Support (IT/Finance/HR)",
-    suppressions: 3,
-    redeploy: 1,
+    forcedDeparture: 2,
+    attrition: 1,
+    transferIn: 1,
     toDept: "R&D / Innovation",
-    reconversions: 1,
+    retraining: 1,
     pse: false,
     startMonth: 5,
+    workstream: "WS-04",
+    functionArea: "R&D",
   },
   {
     leverId: "L013",
     dept: "Commercial & Marketing",
-    suppressions: 2,
-    redeploy: 1,
+    forcedDeparture: 2,
+    transferIn: 1,
     toDept: "Commercial & Marketing",
-    reconversions: 0,
+    retraining: 0,
+    transferOut: 1,
     pse: false,
     startMonth: 1,
+    workstream: "WS-03",
+    functionArea: "Commercial",
   },
   {
     leverId: "L017",
     dept: "Supply Chain",
-    suppressions: 2,
-    redeploy: 2,
+    forcedDeparture: 2,
+    transferIn: 2,
     toDept: "Production",
-    reconversions: 1,
+    retraining: 1,
     pse: false,
     startMonth: 6,
+    workstream: "WS-05",
+    functionArea: "Supply",
   },
 ];
 
@@ -293,6 +323,8 @@ const RECRUITMENTS: {
   fte: number;
   salary: number;
   month: number;
+  workstream: string;
+  functionArea: string;
 }[] = [
   {
     label: "Data Engineer (poste créé)",
@@ -302,6 +334,8 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 65000,
     month: 4,
+    workstream: "WS-04",
+    functionArea: "R&D",
   },
   {
     label: "Data Engineer (poste créé)",
@@ -311,6 +345,8 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 65000,
     month: 6,
+    workstream: "WS-04",
+    functionArea: "R&D",
   },
   {
     label: "Expert e-procurement",
@@ -320,6 +356,8 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 72000,
     month: 5,
+    workstream: "WS-02",
+    functionArea: "Support",
   },
   {
     label: "Pricing Analyst",
@@ -329,6 +367,8 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 78000,
     month: 7,
+    workstream: "WS-03",
+    functionArea: "Commercial",
   },
   {
     label: "Automaticien senior",
@@ -338,6 +378,8 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 55000,
     month: 8,
+    workstream: "WS-01",
+    functionArea: "Opérations",
   },
   {
     label: "Chef de projet supply",
@@ -347,25 +389,34 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 60000,
     month: 9,
+    workstream: "WS-05",
+    functionArea: "Supply",
   },
 ];
 
 // Référence temporelle du scénario démo (voir DEMO_NOW dans lib/engine.ts) : 2026-06-22.
-// Les statuts sont dérivés de la date planifiée pour produire un mix réaliste : réalisés
-// (dont certains non validés RH), en cours, planifiés, et quelques retards non traités.
+// Les statuts sont dérivés de la date planifiée : les échéances passées sont majoritairement
+// réalisées, les échéances récentes en cours, les futures planifiées. Le mock couvre désormais
+// plusieurs années fiscales (2026-2028) pour illustrer les filtres FY du dashboard.
 function movementStatus(
+  plannedYear: number,
   plannedMonth: number,
   seq: number
 ): { status: WorkforceMovement["status"]; actual: boolean; validated: boolean } {
-  if (plannedMonth <= 4) {
-    // Échéance passée : majoritairement réalisés, validés pour la plupart
-    if (seq % 5 === 0) return { status: "En cours", actual: false, validated: false }; // retard non résorbé
+  const isPastYear = plannedYear < 2026;
+  const isCurrentYearPast = plannedYear === 2026 && plannedMonth <= 4;
+  const isCurrentYearRecent = plannedYear === 2026 && plannedMonth <= 6;
+  const isFuture = plannedYear > 2026 || (plannedYear === 2026 && plannedMonth > 6);
+
+  if (isPastYear || isCurrentYearPast) {
+    if (seq % 5 === 0) return { status: "En cours", actual: false, validated: false };
     return { status: "Réalisé", actual: true, validated: seq % 3 !== 0 };
   }
-  if (plannedMonth <= 6) {
-    if (seq % 3 === 0) return { status: "Réalisé", actual: true, validated: false }; // à valider
+  if (isCurrentYearRecent) {
+    if (seq % 3 === 0) return { status: "Réalisé", actual: true, validated: false };
     return { status: "En cours", actual: false, validated: false };
   }
+  if (isFuture) return { status: "Planifié", actual: false, validated: false };
   return { status: "Planifié", actual: false, validated: false };
 }
 
@@ -381,24 +432,83 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     return emp;
   };
 
+  /** Programme de rattachement standard pour tous les mouvements de démo (miroir du programme
+   *  déclaré dans `mockData.program`). Un mouvement sans programme ne remonterait pas dans les
+   *  vues scopées du dashboard RH — pour la démo on rattache tout au programme principal. */
+  const DEMO_PROGRAM_ID = "PRG-2026";
+
+  /** Génère un léger écart entre lockedPlan et reforecast pour rendre les KPI vivants : le
+   *  reforecast est ajusté sur les coûts et parfois sur le salaryImpact, comme dans la vraie vie
+   *  (dérive coûts sociaux, indemnités renégociées). Basé sur seq pour rester déterministe. */
+  const makeSnapshots = (
+    fte: number,
+    salaryImpact: number,
+    savings: number,
+    cost: number,
+    seqSnap: number
+  ): {
+    lockedPlan: WorkforceMovement["lockedPlan"];
+    reforecast: WorkforceMovement["reforecast"];
+  } => {
+    const lockedPlan = { fte, salaryImpact, savings, cost };
+    const drift = 0.05 + ((seqSnap * 7) % 15) / 100; // 5-20% de dérive
+    const forecastCost = Math.round(cost * (1 + drift));
+    // Salary impact reste souvent stable, sauf pour ~1/4 des mouvements
+    const forecastSalary =
+      seqSnap % 4 === 0
+        ? Math.round(salaryImpact * (1 - 0.05 - (seqSnap % 3) / 100))
+        : salaryImpact;
+    const reforecast = {
+      fte,
+      salaryImpact: forecastSalary,
+      savings: Math.max(0, -forecastSalary),
+      cost: forecastCost,
+    };
+    return { lockedPlan, reforecast };
+  };
+
   const push = (
     emp: Employee | null,
     label: string,
-    plan: { leverId: string; dept: string; country?: string },
+    plan: {
+      leverId: string;
+      dept: string;
+      country?: string;
+      workstream?: string;
+      functionArea?: string;
+    },
     type: WorkforceMovement["type"],
     fte: number,
+    year: number,
     month: number,
-    opts: { toDept?: string; pse?: boolean; salaryImpact: number; savings: number; cost: number }
+    opts: {
+      toDept?: string;
+      pse?: boolean;
+      salaryImpact: number;
+      savings: number;
+      cost: number;
+      requiresRetraining?: boolean;
+    }
   ) => {
     seq += 1;
     const day = String(1 + ((seq * 3) % 27)).padStart(2, "0");
-    const plannedDate = `2026-${String(month).padStart(2, "0")}-${day}`;
-    const st = movementStatus(month, seq);
+    const plannedDate = `${year}-${String(month).padStart(2, "0")}-${day}`;
+    const st = movementStatus(year, month, seq);
+    const { lockedPlan, reforecast } = makeSnapshots(
+      fte,
+      opts.salaryImpact,
+      opts.savings,
+      opts.cost,
+      seq
+    );
     movements.push({
       id: `MV${String(seq).padStart(3, "0")}`,
       empId: emp?.id ?? null,
       label,
       leverId: plan.leverId,
+      workstream: plan.workstream,
+      function: plan.functionArea,
+      programId: DEMO_PROGRAM_ID,
       type,
       fte,
       department: plan.dept,
@@ -413,49 +523,107 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
       salaryImpact: opts.salaryImpact,
       savings: opts.savings,
       cost: opts.cost,
+      ...(opts.requiresRetraining ? { requiresRetraining: true as const } : {}),
+      lockedPlan,
+      reforecast,
     });
   };
 
+  /** Étale les mouvements sur 3 années fiscales (2026, 2027, 2028) pour illustrer les filtres FY :
+   *  année = 2026 + (index d'itération sur le plan) */
+  const yearForIndex = (idx: number, total: number): number => {
+    // Distribution : 40% 2026, 40% 2027, 20% 2028
+    if (idx < Math.floor(total * 0.4)) return 2026;
+    if (idx < Math.floor(total * 0.8)) return 2027;
+    return 2028;
+  };
+
   for (const plan of MOVEMENT_PLAN) {
-    for (let i = 0; i < plan.suppressions; i++) {
+    const planContext = {
+      leverId: plan.leverId,
+      dept: plan.dept,
+      workstream: plan.workstream,
+      functionArea: plan.functionArea,
+    };
+    // Départs forcés (ancienne "Suppression") — indemnités majorées pour la contrainte.
+    for (let i = 0; i < plan.forcedDeparture; i++) {
       const emp = pickEmployee(plan.dept, seq + i);
+      const year = yearForIndex(i, plan.forcedDeparture);
       const month = Math.min(12, plan.startMonth + (i % 6));
-      push(emp, emp.name, plan, "Suppression", emp.fte, month, {
+      const baseCost = plan.pse ? 45000 + ((seq * 7) % 4) * 5000 : 20000;
+      push(emp, emp.name, planContext, "Départ forcé", emp.fte, year, month, {
         pse: plan.pse,
         salaryImpact: -emp.salary,
         savings: emp.salary,
-        cost: plan.pse ? 45000 + ((seq * 7) % 4) * 5000 : 20000,
+        cost: Math.round(baseCost * 1.2),
       });
     }
-    for (let i = 0; i < plan.redeploy; i++) {
+    // Attrition (départ volontaire — préavis seul, pas d'indemnité de rupture).
+    for (let i = 0; i < (plan.attrition ?? 0); i++) {
       const emp = pickEmployee(plan.dept, seq + i);
+      const year = yearForIndex(i, plan.attrition ?? 1);
+      const month = Math.min(12, plan.startMonth + 2 + (i % 5));
+      push(emp, emp.name, planContext, "Attrition", emp.fte, year, month, {
+        salaryImpact: -emp.salary,
+        savings: emp.salary,
+        cost: Math.round(emp.salary * (0.5 / 12)),
+      });
+    }
+    // Transferts entrants (mobilité interne, formation courte).
+    for (let i = 0; i < plan.transferIn; i++) {
+      const emp = pickEmployee(plan.dept, seq + i);
+      const year = yearForIndex(i, plan.transferIn);
       const month = Math.min(12, plan.startMonth + 1 + (i % 5));
-      push(emp, emp.name, plan, "Redéploiement", emp.fte, month, {
+      push(emp, emp.name, planContext, "Transfert entrant", emp.fte, year, month, {
         toDept: plan.toDept,
         salaryImpact: 0,
         savings: 0,
         cost: 8000,
       });
     }
-    for (let i = 0; i < plan.reconversions; i++) {
+    // Transferts avec reconversion (formation lourde — flag requiresRetraining).
+    for (let i = 0; i < plan.retraining; i++) {
       const emp = pickEmployee(plan.dept, seq + i);
+      const year = yearForIndex(i, plan.retraining);
       const month = Math.min(12, plan.startMonth + 2 + (i % 4));
-      push(emp, emp.name, plan, "Reconversion", emp.fte, month, {
+      push(emp, emp.name, planContext, "Transfert entrant", emp.fte, year, month, {
         toDept: plan.toDept,
         salaryImpact: -Math.round(emp.salary * 0.1),
         savings: Math.round(emp.salary * 0.1),
         cost: 15000,
+        requiresRetraining: true,
+      });
+    }
+    // Transferts sortants (sortie du périmètre monitoré).
+    for (let i = 0; i < (plan.transferOut ?? 0); i++) {
+      const emp = pickEmployee(plan.dept, seq + i);
+      const year = yearForIndex(i, plan.transferOut ?? 1);
+      const month = Math.min(12, plan.startMonth + 3 + (i % 3));
+      push(emp, emp.name, planContext, "Transfert sortant", emp.fte, year, month, {
+        toDept: plan.toDept,
+        salaryImpact: 0,
+        savings: 0,
+        cost: 5000,
       });
     }
   }
 
-  for (const rec of RECRUITMENTS) {
+  for (let i = 0; i < RECRUITMENTS.length; i++) {
+    const rec = RECRUITMENTS[i];
+    const year = yearForIndex(i, RECRUITMENTS.length);
     push(
       null,
       rec.label,
-      { leverId: rec.leverId, dept: rec.dept, country: rec.country },
+      {
+        leverId: rec.leverId,
+        dept: rec.dept,
+        country: rec.country,
+        workstream: rec.workstream,
+        functionArea: rec.functionArea,
+      },
       "Recrutement",
       rec.fte,
+      year,
       rec.month,
       {
         salaryImpact: rec.salary,

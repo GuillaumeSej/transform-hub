@@ -14,7 +14,7 @@ function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement 
     empId: "E001",
     label: "Test movement",
     leverId: "L001",
-    type: "Suppression",
+    type: "Départ forcé",
     fte: 1,
     department: "Supply Chain",
     country: "France",
@@ -32,24 +32,31 @@ function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement 
 }
 
 describe("hrDashboardPivot — registries", () => {
-  it("getHrMetricDef finds known metrics", () => {
+  it("getHrMetricDef finds known metrics (including netEconomy)", () => {
     expect(getHrMetricDef("fteImpact")?.label).toBeDefined();
     expect(getHrMetricDef("salarySavings")?.label).toBeDefined();
     expect(getHrMetricDef("socialCost")?.label).toBeDefined();
+    expect(getHrMetricDef("netEconomy")?.label).toBeDefined();
     expect(getHrMetricDef("netFirstYearImpact")?.label).toBeDefined();
     expect(getHrMetricDef("movementCount")?.label).toBeDefined();
+  });
+
+  it("socialCost uses the ENR (Gooduelle) vocabulary", () => {
+    expect(getHrMetricDef("socialCost")?.label).toMatch(/ENR/);
   });
 
   it("getHrMetricDef returns undefined for an unknown key", () => {
     expect(getHrMetricDef("does-not-exist")).toBeUndefined();
   });
 
-  it("getHrDimensionDef finds known dimensions", () => {
+  it("getHrDimensionDef finds known dimensions (including workstream and function)", () => {
     [
       "type",
       "department",
       "toDepartment",
       "country",
+      "workstream",
+      "function",
       "hrOwner",
       "status",
       "pse",
@@ -72,7 +79,7 @@ describe("hrDashboardPivot — pivotWorkforceByDimension", () => {
   const movements: WorkforceMovement[] = [
     makeMovement({
       id: "M1",
-      type: "Suppression",
+      type: "Départ forcé",
       department: "Supply Chain",
       country: "France",
       fte: 2,
@@ -92,7 +99,7 @@ describe("hrDashboardPivot — pivotWorkforceByDimension", () => {
     }),
     makeMovement({
       id: "M3",
-      type: "Redéploiement",
+      type: "Transfert entrant",
       department: "Supply Chain",
       toDepartment: "IT",
       country: "Germany",
@@ -110,19 +117,23 @@ describe("hrDashboardPivot — pivotWorkforceByDimension", () => {
     expect(supplyChain.count).toBe(2);
   });
 
-  it("fteImpact is signed by movement type (Suppression negative, Recrutement positive, transfer 0)", () => {
+  it("fteImpact is signed by movement type (Départ forcé negative, Recrutement positive, transfer 0)", () => {
     const rows = pivotWorkforceByDimension(movements, "fteImpact", "type");
-    expect(rows.find((r) => r.key === "Suppression")?.value).toBe(-2);
+    expect(rows.find((r) => r.key === "Départ forcé")?.value).toBe(-2);
     expect(rows.find((r) => r.key === "Recrutement")?.value).toBe(1);
-    expect(rows.find((r) => r.key === "Redéploiement")?.value).toBe(0);
+    expect(rows.find((r) => r.key === "Transfert entrant")?.value).toBe(0);
   });
 
-  it("salarySavings/socialCost/netFirstYearImpact aggregate the persisted fields", () => {
+  it("salarySavings/socialCost/netEconomy/netFirstYearImpact aggregate the persisted fields", () => {
     const savingsRows = pivotWorkforceByDimension(movements, "salarySavings", "country");
     expect(savingsRows.find((r) => r.key === "France")?.value).toBe(100000);
 
     const costRows = pivotWorkforceByDimension(movements, "socialCost", "country");
     expect(costRows.find((r) => r.key === "France")?.value).toBe(29000);
+
+    const netEcoRows = pivotWorkforceByDimension(movements, "netEconomy", "country");
+    // France: (100000 - 20000) + (0 - 9000) = 71000
+    expect(netEcoRows.find((r) => r.key === "France")?.value).toBe(71000);
 
     const netRows = pivotWorkforceByDimension(movements, "netFirstYearImpact", "country");
     // France: (-100000 + 20000) + (60000 + 9000) = -80000 + 69000 = -11000

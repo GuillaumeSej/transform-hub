@@ -56,9 +56,15 @@ export const HR_METRIC_REGISTRY: HrMetricDef[] = [
   },
   {
     key: "socialCost",
-    label: "Coût social one-off",
+    label: "ENR (coût social one-off)",
     aggregation: "sum",
     getValue: (m) => m.cost,
+  },
+  {
+    key: "netEconomy",
+    label: "Économie nette (savings − ENR)",
+    aggregation: "sum",
+    getValue: (m) => m.savings - m.cost,
   },
   {
     key: "netFirstYearImpact",
@@ -124,9 +130,9 @@ function quarterLabel(date: string | null | undefined): string {
 }
 
 /** Dimensions RH sélectionnables — mécanisme (type de mouvement), département source/destination,
- *  pays, owner RH, statut opérationnel, drapeau PSE, et mois/trimestre de la date planifiée (le
- *  seul axe temporel qui a du sens ici : `actualDate` est `null` tant que le mouvement n'est pas
- *  réalisé, ce qui viderait la dimension pour la majorité du plan). */
+ *  pays, workstream, fonction, owner RH, statut opérationnel, drapeau PSE, et mois/trimestre de
+ *  la date planifiée. Les dimensions `workstream` et `function` sont peuplées via les nouveaux
+ *  champs directs sur `WorkforceMovement` (Août 2026, alignement Gooduelle). */
 export const HR_DIMENSION_REGISTRY: HrDimensionDef[] = [
   { key: "type", label: "Type de mouvement (mécanisme)", getValue: (m) => m.type },
   { key: "department", label: "Département", getValue: (m) => m.department || FALLBACK_LABEL },
@@ -136,6 +142,8 @@ export const HR_DIMENSION_REGISTRY: HrDimensionDef[] = [
     getValue: (m) => m.toDepartment || NOT_APPLICABLE,
   },
   { key: "country", label: "Pays", getValue: (m) => m.country || FALLBACK_LABEL },
+  { key: "workstream", label: "Workstream", getValue: (m) => m.workstream || FALLBACK_LABEL },
+  { key: "function", label: "Fonction", getValue: (m) => m.function || FALLBACK_LABEL },
   { key: "hrOwner", label: "Owner RH", getValue: (m) => m.hrOwner || FALLBACK_LABEL },
   { key: "status", label: "Statut", getValue: (m) => m.status },
   { key: "pse", label: "PSE", getValue: (m) => (m.inPSE ? "Oui" : "Non") },
@@ -197,12 +205,12 @@ export function pivotWorkforceByDimension(
     .sort((a, b) => b.value - a.value);
 }
 
-/** Utilitaire d'affichage : le type de mouvement en tant que clé de dimension typée, pour les
- *  appelants qui veulent restreindre `MovementType` explicitement plutôt que `string` générique
- *  (ex. filtrage). Non utilisé par le moteur de pivot lui-même (qui reste générique sur `string`). */
+/** Utilitaire d'affichage : liste des 5 types Gooduelle (Août 2026). Non utilisé par le moteur
+ *  de pivot lui-même (qui reste générique sur `string`) — sert au filtrage typé. */
 export const MOVEMENT_TYPES: MovementType[] = [
-  "Suppression",
   "Recrutement",
-  "Redéploiement",
-  "Reconversion",
+  "Attrition",
+  "Départ forcé",
+  "Transfert entrant",
+  "Transfert sortant",
 ];

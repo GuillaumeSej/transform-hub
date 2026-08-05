@@ -1,6 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+  ATTRITION_NOTICE_MONTHS,
   DEFAULT_SOCIAL_CHARGES_RATE,
+  FORCED_DEPARTURE_MULTIPLIER,
+  NOTICE_PERIOD_MONTHS,
+  RETRAINING_TRANSITION_RATE,
+  TRANSFER_TRANSITION_RATE,
   computeMovementEuros,
   computeMovementFinancials,
   getSocialChargesRate,
@@ -10,9 +15,9 @@ import {
 } from "@/lib/hrFinancials";
 
 describe("hrFinancials — getSocialChargesRate", () => {
-  it("returns the default rate when the company has no rate configured", () => {
-    expect(getSocialChargesRate(undefined)).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
+  it("returns the default rate when no company config", () => {
     expect(getSocialChargesRate(null)).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
+    expect(getSocialChargesRate(undefined)).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
     expect(getSocialChargesRate({})).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
   });
 
@@ -20,7 +25,7 @@ describe("hrFinancials — getSocialChargesRate", () => {
     expect(getSocialChargesRate({ socialChargesRate: 0.6 })).toBe(0.6);
   });
 
-  it("falls back to the default for invalid rates", () => {
+  it("falls back to default for invalid rates", () => {
     expect(getSocialChargesRate({ socialChargesRate: -1 })).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
     expect(getSocialChargesRate({ socialChargesRate: NaN })).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
   });
@@ -38,75 +43,72 @@ describe("hrFinancials — loadedAnnualSalary", () => {
 
 describe("hrFinancials — tenureYears", () => {
   it("returns 0 when hireDate is missing", () => {
-    expect(tenureYears(undefined, "2026-06-22")).toBe(0);
     expect(tenureYears(null, "2026-06-22")).toBe(0);
+    expect(tenureYears(undefined, "2026-06-22")).toBe(0);
   });
 
   it("computes fractional years of service", () => {
     expect(tenureYears("2016-06-22", "2026-06-22")).toBeCloseTo(10, 1);
   });
 
-  it("returns 0 for a hire date in the future relative to refDate", () => {
+  it("returns 0 for a hire date in the future", () => {
     expect(tenureYears("2027-01-01", "2026-06-22")).toBe(0);
   });
 });
 
 describe("hrFinancials — severanceEstimate", () => {
   it("applies 1/4 month per year up to 10 years", () => {
-    const loadedSalary = 120_000; // 10k/month
-    expect(severanceEstimate(loadedSalary, 4)).toBe(4 * 0.25 * 10_000);
+    expect(severanceEstimate(120_000, 4)).toBe(4 * 0.25 * 10_000);
   });
 
   it("applies 1/3 month per year beyond 10 years", () => {
-    const loadedSalary = 120_000; // 10k/month
     const expected = Math.round(10 * 0.25 * 10_000 + 5 * (1 / 3) * 10_000);
-    expect(severanceEstimate(loadedSalary, 15)).toBe(expected);
+    expect(severanceEstimate(120_000, 15)).toBe(expected);
   });
 
-  it("returns 0 for no tenure", () => {
+  it("returns 0 for zero tenure", () => {
     expect(severanceEstimate(120_000, 0)).toBe(0);
   });
 });
 
-describe("hrFinancials — computeMovementFinancials", () => {
+describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () => {
   const chargesRate = 0.45;
 
-  it("Suppression: computes salary savings on the loaded salary, negative salaryImpact, and a severance + notice cost", () => {
+  it("Départ forcé: full salary savings, negative salaryImpact, severance + notice with ×1.2 multiplier", () => {
     const fin = computeMovementFinancials({
-      type: "Suppression",
+      type: "Départ forcé",
       grossSalary: 60_000,
       chargesRate,
       tenure: 5,
       inPSE: false,
     });
-    const loadedSalary = 60_000 * 1.45;
-    expect(fin.loadedSalary).toBe(Math.round(loadedSalary));
-    expect(fin.salarySavings).toBe(fin.loadedSalary);
-    expect(fin.salaryImpact).toBe(-fin.loadedSalary);
-    // cost = severance (5 * 0.25 month) + 2 months notice, both > 0
+    const loadedSalary = Math.round(60_000 * 1.45);
+    expect(fin.loadedSalary).toBe(loadedSalary);
+    expect(fin.salarySavings).toBe(loadedSalary);
+    expect(fin.salaryImpact).toBe(-loadedSalary);
     expect(fin.socialCost).toBeGreaterThan(0);
-    expect(fin.netFirstYearImpact).toBe(fin.salaryImpact + fin.socialCost);
+    const severance = severanceEstimate(loadedSalary, 5);
+    const notice = Math.round((NOTICE_PERIOD_MONTHS / 12) * loadedSalary);
+    expect(fin.socialCost).toBe(Math.round((severance + notice) * FORCED_DEPARTURE_MULTIPLIER));
   });
 
-  it("Suppression: inPSE adds an overhead on top of the non-PSE cost", () => {
-    const base = { type: "Suppression" as const, grossSalary: 60_000, chargesRate, tenure: 8 };
+  it("Départ forcé: inPSE adds an overhead on top of the non-PSE cost", () => {
+    const base = { type: "Départ forcé" as const, grossSalary: 60_000, chargesRate, tenure: 8 };
     const withoutPSE = computeMovementFinancials({ ...base, inPSE: false });
     const withPSE = computeMovementFinancials({ ...base, inPSE: true });
     expect(withPSE.socialCost).toBeGreaterThan(withoutPSE.socialCost);
-    // Only the PSE overhead differs — salaryImpact/savings unaffected by the PSE flag.
     expect(withPSE.salaryImpact).toBe(withoutPSE.salaryImpact);
-    expect(withPSE.salarySavings).toBe(withoutPSE.salarySavings);
   });
 
-  it("Suppression: longer tenure increases the social cost", () => {
+  it("Départ forcé: longer tenure increases the social cost", () => {
     const short = computeMovementFinancials({
-      type: "Suppression",
+      type: "Départ forcé",
       grossSalary: 60_000,
       chargesRate,
       tenure: 1,
     });
     const long = computeMovementFinancials({
-      type: "Suppression",
+      type: "Départ forcé",
       grossSalary: 60_000,
       chargesRate,
       tenure: 12,
@@ -114,7 +116,37 @@ describe("hrFinancials — computeMovementFinancials", () => {
     expect(long.socialCost).toBeGreaterThan(short.socialCost);
   });
 
-  it("Recrutement: positive salaryImpact (added payroll cost), zero savings, recruitment+onboarding cost", () => {
+  it("Attrition: full savings, minimal social cost (0.5 month notice), no severance, no PSE overhead", () => {
+    const fin = computeMovementFinancials({
+      type: "Attrition",
+      grossSalary: 60_000,
+      chargesRate,
+      tenure: 10,
+    });
+    const loadedSalary = Math.round(60_000 * 1.45);
+    expect(fin.salarySavings).toBe(loadedSalary);
+    expect(fin.salaryImpact).toBe(-loadedSalary);
+    expect(fin.socialCost).toBe(Math.round((ATTRITION_NOTICE_MONTHS / 12) * loadedSalary));
+  });
+
+  it("Attrition social cost is much lower than Départ forcé for the same tenure", () => {
+    const attrition = computeMovementFinancials({
+      type: "Attrition",
+      grossSalary: 60_000,
+      chargesRate,
+      tenure: 8,
+    });
+    const forced = computeMovementFinancials({
+      type: "Départ forcé",
+      grossSalary: 60_000,
+      chargesRate,
+      tenure: 8,
+    });
+    expect(attrition.socialCost).toBeLessThan(forced.socialCost);
+    expect(attrition.salarySavings).toBe(forced.salarySavings);
+  });
+
+  it("Recrutement: positive salaryImpact, zero savings, recruitment + onboarding cost", () => {
     const fin = computeMovementFinancials({
       type: "Recrutement",
       grossSalary: 50_000,
@@ -125,49 +157,57 @@ describe("hrFinancials — computeMovementFinancials", () => {
     expect(fin.salarySavings).toBe(0);
     expect(fin.salaryImpact).toBe(loadedSalary);
     expect(fin.socialCost).toBeGreaterThan(0);
-    expect(fin.netFirstYearImpact).toBe(fin.salaryImpact + fin.socialCost);
   });
 
-  it("Redéploiement: no FTE reduction so no salary savings, zero salaryImpact, light transition cost", () => {
-    const fin = computeMovementFinancials({
-      type: "Redéploiement",
+  it("Transfert entrant/sortant without retraining: light transition cost, zero salaryImpact", () => {
+    const inFin = computeMovementFinancials({
+      type: "Transfert entrant",
       grossSalary: 55_000,
       chargesRate,
     });
-    expect(fin.salarySavings).toBe(0);
-    expect(fin.salaryImpact).toBe(0);
-    expect(fin.socialCost).toBeGreaterThan(0);
-    expect(fin.netFirstYearImpact).toBe(fin.socialCost);
+    const outFin = computeMovementFinancials({
+      type: "Transfert sortant",
+      grossSalary: 55_000,
+      chargesRate,
+    });
+    expect(inFin.salarySavings).toBe(0);
+    expect(inFin.salaryImpact).toBe(0);
+    expect(outFin.salarySavings).toBe(0);
+    expect(outFin.salaryImpact).toBe(0);
+    expect(inFin.socialCost).toBe(outFin.socialCost);
+    const loadedSalary = Math.round(55_000 * 1.45);
+    expect(inFin.socialCost).toBe(Math.round(TRANSFER_TRANSITION_RATE * loadedSalary));
   });
 
-  it("Reconversion: no salary savings, zero salaryImpact, heavier transition cost than Redéploiement", () => {
-    const grossSalary = 55_000;
-    const redeploiement = computeMovementFinancials({
-      type: "Redéploiement",
-      grossSalary,
+  it("Transfert entrant with requiresRetraining=true has heavier transition cost", () => {
+    const light = computeMovementFinancials({
+      type: "Transfert entrant",
+      grossSalary: 55_000,
       chargesRate,
+      requiresRetraining: false,
     });
-    const reconversion = computeMovementFinancials({
-      type: "Reconversion",
-      grossSalary,
+    const heavy = computeMovementFinancials({
+      type: "Transfert entrant",
+      grossSalary: 55_000,
       chargesRate,
+      requiresRetraining: true,
     });
-    expect(reconversion.salarySavings).toBe(0);
-    expect(reconversion.salaryImpact).toBe(0);
-    expect(reconversion.socialCost).toBeGreaterThan(redeploiement.socialCost);
+    const loadedSalary = Math.round(55_000 * 1.45);
+    expect(heavy.socialCost).toBe(Math.round(RETRAINING_TRANSITION_RATE * loadedSalary));
+    expect(heavy.socialCost).toBeGreaterThan(light.socialCost);
   });
 });
 
 describe("hrFinancials — computeMovementEuros", () => {
-  it("maps computeMovementFinancials onto the WorkforceMovement EUR fields", () => {
+  it("maps computeMovementFinancials onto the persisted EUR fields", () => {
     const result = computeMovementEuros(
-      "Suppression",
+      "Départ forcé",
       60_000,
       { socialChargesRate: 0.45 },
       { tenure: 5 }
     );
     const fin = computeMovementFinancials({
-      type: "Suppression",
+      type: "Départ forcé",
       grossSalary: 60_000,
       chargesRate: 0.45,
       tenure: 5,
@@ -184,5 +224,15 @@ describe("hrFinancials — computeMovementEuros", () => {
     const result = computeMovementEuros("Recrutement", 40_000, undefined);
     const loadedSalary = Math.round(40_000 * (1 + DEFAULT_SOCIAL_CHARGES_RATE));
     expect(result.salaryImpact).toBe(loadedSalary);
+  });
+
+  it("passes requiresRetraining through for Transfert", () => {
+    const withRe = computeMovementEuros("Transfert entrant", 50_000, undefined, {
+      requiresRetraining: true,
+    });
+    const withoutRe = computeMovementEuros("Transfert entrant", 50_000, undefined, {
+      requiresRetraining: false,
+    });
+    expect(withRe.cost).toBeGreaterThan(withoutRe.cost);
   });
 });

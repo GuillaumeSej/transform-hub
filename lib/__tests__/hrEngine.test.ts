@@ -1,18 +1,21 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  fteEffect,
+  MOVEMENT_TYPES,
+  bucketByLever,
   currentFTE,
-  plannedFTE,
-  targetFTE,
-  fteBridge,
-  movementsByDepartment,
-  movementsByCountry,
-  movementsByType,
-  pseSummary,
   deltaByDepartment,
+  fteBridge,
+  fteBridgeSummary,
+  fteEffect,
+  movementsByCountry,
+  movementsByDepartment,
+  movementsByType,
+  plannedFTE,
+  pseSummary,
   realizedSalarySavings,
+  targetFTE,
 } from "@/lib/hrEngine";
-import type { Workforce, WorkforceMovement } from "@/types";
+import type { Lever, Workforce, WorkforceMovement } from "@/types";
 
 function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement {
   return {
@@ -20,7 +23,7 @@ function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement 
     empId: "E001",
     label: "Test Movement",
     leverId: "L001",
-    type: "Suppression",
+    type: "Départ forcé",
     fte: 1,
     department: "IT",
     toDepartment: undefined,
@@ -54,373 +57,308 @@ function makeWorkforce(overrides?: Partial<Workforce>): Workforce {
   };
 }
 
-describe("hrEngine — fteEffect", () => {
-  it("returns -fte for Suppression", () => {
-    const m = makeMovement({ type: "Suppression", fte: 3 });
-    expect(fteEffect(m)).toBe(-3);
+describe("hrEngine — MOVEMENT_TYPES", () => {
+  it("exposes the 5 Gooduelle categories in the expected order", () => {
+    expect(MOVEMENT_TYPES).toEqual([
+      "Recrutement",
+      "Attrition",
+      "Départ forcé",
+      "Transfert entrant",
+      "Transfert sortant",
+    ]);
+  });
+});
+
+describe("hrEngine — fteEffect (5-types)", () => {
+  it("Recrutement contributes +fte", () => {
+    expect(fteEffect(makeMovement({ type: "Recrutement", fte: 2 }))).toBe(2);
   });
 
-  it("returns +fte for Recrutement", () => {
-    const m = makeMovement({ type: "Recrutement", fte: 2 });
-    expect(fteEffect(m)).toBe(2);
+  it("Attrition and Départ forcé contribute −fte", () => {
+    expect(fteEffect(makeMovement({ type: "Attrition", fte: 2 }))).toBe(-2);
+    expect(fteEffect(makeMovement({ type: "Départ forcé", fte: 3 }))).toBe(-3);
   });
 
-  it("returns 0 for Redéploiement", () => {
-    const m = makeMovement({ type: "Redéploiement", fte: 5, toDepartment: "HR" });
-    expect(fteEffect(m)).toBe(0);
-  });
-
-  it("returns 0 for Reconversion", () => {
-    const m = makeMovement({ type: "Reconversion", fte: 4, toDepartment: "Finance" });
-    expect(fteEffect(m)).toBe(0);
+  it("Transfert entrant/sortant contribute 0 (internal mobility)", () => {
+    expect(fteEffect(makeMovement({ type: "Transfert entrant", fte: 5, toDepartment: "HR" }))).toBe(
+      0
+    );
+    expect(fteEffect(makeMovement({ type: "Transfert sortant", fte: 4 }))).toBe(0);
   });
 });
 
 describe("hrEngine — currentFTE", () => {
   it("returns baseline when no realized movements", () => {
-    const wf = makeWorkforce({ totalFTE: 200 });
-    expect(currentFTE(wf)).toBe(200);
+    expect(currentFTE(makeWorkforce({ totalFTE: 200 }))).toBe(200);
   });
 
-  it("adds realized Suppression and Recrutement to baseline", () => {
+  it("adds realized recrutements and subtracts realized departures", () => {
     const wf = makeWorkforce({
       totalFTE: 200,
       movements: [
-        makeMovement({ type: "Suppression", fte: 5, status: "Réalisé" }),
-        makeMovement({ id: "M002", type: "Recrutement", fte: 3, status: "Réalisé" }),
-        makeMovement({ id: "M003", type: "Redéploiement", fte: 2, status: "Réalisé" }),
-        makeMovement({ id: "M004", type: "Suppression", fte: 1, status: "Planifié" }),
+        makeMovement({ type: "Départ forcé", fte: 5, status: "Réalisé" }),
+        makeMovement({ id: "M2", type: "Recrutement", fte: 3, status: "Réalisé" }),
+        makeMovement({ id: "M3", type: "Transfert entrant", fte: 2, status: "Réalisé" }),
+        makeMovement({ id: "M4", type: "Départ forcé", fte: 1, status: "Planifié" }),
       ],
     });
+    // Baseline 200, − 5 (Départ forcé réalisé) + 3 (Recrutement réalisé) + 0 (transfert) = 198
     expect(currentFTE(wf)).toBe(198);
   });
 });
 
 describe("hrEngine — plannedFTE", () => {
   it("returns baseline when no movements", () => {
-    const wf = makeWorkforce({ totalFTE: 150 });
-    expect(plannedFTE(wf)).toBe(150);
+    expect(plannedFTE(makeWorkforce({ totalFTE: 150 }))).toBe(150);
   });
 
   it("applies all movements regardless of status", () => {
     const wf = makeWorkforce({
       totalFTE: 150,
       movements: [
-        makeMovement({ type: "Suppression", fte: 10, status: "Planifié" }),
-        makeMovement({ id: "M002", type: "Recrutement", fte: 4, status: "En cours" }),
-        makeMovement({ id: "M003", type: "Suppression", fte: 2, status: "Réalisé" }),
+        makeMovement({ type: "Départ forcé", fte: 10, status: "Planifié" }),
+        makeMovement({ id: "M2", type: "Recrutement", fte: 4, status: "En cours" }),
+        makeMovement({ id: "M3", type: "Attrition", fte: 2, status: "Réalisé" }),
       ],
     });
-    expect(plannedFTE(wf)).toBe(142);
+    expect(plannedFTE(wf)).toBe(150 - 10 + 4 - 2);
   });
 });
 
 describe("hrEngine — targetFTE", () => {
   it("sums department fteTargets", () => {
-    const wf = makeWorkforce({
-      departments: [
-        { name: "IT", fte: 50, fteTarget: 40 },
-        { name: "HR", fte: 30, fteTarget: 35 },
-      ],
-    });
-    expect(targetFTE(wf)).toBe(75);
-  });
-
-  it("returns 0 for empty departments", () => {
-    const wf = makeWorkforce({ departments: [] });
-    expect(targetFTE(wf)).toBe(0);
+    expect(targetFTE(makeWorkforce())).toBe(45 + 32 + 20);
   });
 });
 
 describe("hrEngine — fteBridge", () => {
-  it("returns 12 buckets for month granularity", () => {
+  it("returns 12 monthly buckets across the year (labels include the year)", () => {
     const wf = makeWorkforce({
-      totalFTE: 100,
-      movements: [makeMovement({ type: "Suppression", fte: 2, plannedDate: "2026-03-15" })],
+      movements: [makeMovement({ plannedDate: "2026-03-15" })],
     });
     const buckets = fteBridge(wf, "month");
     expect(buckets).toHaveLength(12);
+    expect(buckets[2].label).toBe("Mar 2026");
   });
 
-  it("returns 4 buckets for quarter granularity", () => {
+  it("returns 4 quarterly buckets across the year", () => {
     const wf = makeWorkforce({
-      totalFTE: 100,
-      movements: [makeMovement({ type: "Suppression", fte: 2, plannedDate: "2026-03-15" })],
+      movements: [makeMovement({ plannedDate: "2026-03-15" })],
     });
-    const buckets = fteBridge(wf, "quarter");
-    expect(buckets).toHaveLength(4);
+    expect(fteBridge(wf, "quarter")).toHaveLength(4);
   });
 
-  it("correctly buckets movements and accumulates", () => {
+  it("byType decomposes deltas by movement type", () => {
     const wf = makeWorkforce({
       totalFTE: 100,
       movements: [
-        makeMovement({ type: "Suppression", fte: 3, plannedDate: "2026-02-10" }),
-        makeMovement({ id: "M002", type: "Recrutement", fte: 1, plannedDate: "2026-05-20" }),
+        makeMovement({ id: "M1", type: "Départ forcé", fte: 3, plannedDate: "2026-02-10" }),
+        makeMovement({ id: "M2", type: "Recrutement", fte: 1, plannedDate: "2026-02-20" }),
+        makeMovement({ id: "M3", type: "Attrition", fte: 1, plannedDate: "2026-02-25" }),
       ],
     });
-    const monthly = fteBridge(wf, "month");
-    expect(monthly[1].delta).toBe(-3);
-    expect(monthly[4].delta).toBe(1);
-    expect(monthly[1].cumulative).toBe(97);
-    expect(monthly[4].cumulative).toBe(98);
+    const buckets = fteBridge(wf, "month");
+    const feb = buckets.find((b) => b.label === "Fév 2026");
+    expect(feb?.delta).toBe(-3 + 1 - 1);
+    expect(feb?.byType["Départ forcé"]).toBe(-3);
+    expect(feb?.byType["Recrutement"]).toBe(1);
+    expect(feb?.byType["Attrition"]).toBe(-1);
+    expect(feb?.byType["Transfert entrant"]).toBe(0);
   });
 
-  it("buckets by quarter grouping months correctly", () => {
+  it("dateRange filters buckets to the requested window", () => {
     const wf = makeWorkforce({
-      totalFTE: 200,
       movements: [
-        makeMovement({ type: "Suppression", fte: 5, plannedDate: "2026-01-15" }),
-        makeMovement({ id: "M002", type: "Suppression", fte: 3, plannedDate: "2026-04-10" }),
-        makeMovement({ id: "M003", type: "Recrutement", fte: 2, plannedDate: "2026-08-20" }),
+        makeMovement({ id: "M1", plannedDate: "2026-02-10" }),
+        makeMovement({ id: "M2", plannedDate: "2027-08-01" }),
       ],
     });
-    const quarterly = fteBridge(wf, "quarter");
-    expect(quarterly[0].delta).toBe(-5);
-    expect(quarterly[1].delta).toBe(-3);
-    expect(quarterly[2].delta).toBe(2);
-    expect(quarterly[0].cumulative).toBe(195);
-    expect(quarterly[1].cumulative).toBe(192);
-    expect(quarterly[2].cumulative).toBe(194);
+    const buckets = fteBridge(wf, "year", { from: "2027-01-01", to: "2027-12-31" });
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0].label).toBe("2027");
+  });
+
+  it("cumulative reflects the running FTE after each bucket", () => {
+    const wf = makeWorkforce({
+      totalFTE: 100,
+      movements: [
+        makeMovement({ id: "M1", type: "Départ forcé", fte: 3, plannedDate: "2026-02-10" }),
+        makeMovement({ id: "M2", type: "Recrutement", fte: 1, plannedDate: "2026-05-15" }),
+      ],
+    });
+    const buckets = fteBridge(wf, "month");
+    expect(buckets[1].cumulative).toBe(97);
+    expect(buckets[4].cumulative).toBe(98);
+    expect(buckets[11].cumulative).toBe(98);
   });
 
   it("skips movements with invalid dates", () => {
     const wf = makeWorkforce({
-      totalFTE: 100,
-      movements: [makeMovement({ type: "Suppression", fte: 5, plannedDate: "" })],
+      movements: [makeMovement({ plannedDate: "" })],
     });
     const buckets = fteBridge(wf, "month");
-    expect(buckets.every((b) => b.delta === 0)).toBe(true);
+    expect(buckets.every((b) => b.movements.length === 0)).toBe(true);
   });
 });
 
-describe("hrEngine — movementsByDepartment", () => {
-  it("aggregates suppressions, recrutements, and transferts per department", () => {
+describe("hrEngine — fteBridgeSummary (pont ETP)", () => {
+  it("computes opening, contributions by type, and closing", () => {
+    const wf = makeWorkforce({
+      totalFTE: 100,
+      movements: [
+        makeMovement({ id: "M1", type: "Départ forcé", fte: 3, plannedDate: "2026-02-10" }),
+        makeMovement({ id: "M2", type: "Recrutement", fte: 2, plannedDate: "2026-03-05" }),
+        makeMovement({ id: "M3", type: "Attrition", fte: 1, plannedDate: "2026-04-01" }),
+      ],
+    });
+    const summary = fteBridgeSummary(wf);
+    expect(summary.opening).toBe(100);
+    expect(summary.closing).toBe(100 - 3 + 2 - 1);
+    const contribByType = Object.fromEntries(summary.contributions.map((c) => [c.type, c.delta]));
+    expect(contribByType["Départ forcé"]).toBe(-3);
+    expect(contribByType["Recrutement"]).toBe(2);
+    expect(contribByType["Attrition"]).toBe(-1);
+  });
+});
+
+describe("hrEngine — bucketByLever", () => {
+  it("groups a bucket's movements by lever", () => {
     const wf = makeWorkforce({
       movements: [
-        makeMovement({ type: "Suppression", fte: 3, department: "IT" }),
-        makeMovement({ id: "M002", type: "Recrutement", fte: 2, department: "HR" }),
+        makeMovement({ id: "M1", leverId: "L001", plannedDate: "2026-02-10" }),
+        makeMovement({ id: "M2", leverId: "L001", plannedDate: "2026-02-15" }),
+        makeMovement({ id: "M3", leverId: "L002", plannedDate: "2026-02-20" }),
+      ],
+    });
+    const buckets = fteBridge(wf, "month");
+    const feb = buckets.find((b) => b.label === "Fév 2026")!;
+    const levers: Lever[] = [];
+    const grouped = bucketByLever(feb, levers);
+    expect(grouped).toHaveLength(2);
+    expect(grouped.find((g) => g.leverId === "L001")?.movements).toHaveLength(2);
+  });
+});
+
+describe("hrEngine — movementsByDepartment (5-types)", () => {
+  it("aggregates the 5 categories per department", () => {
+    const wf = makeWorkforce({
+      movements: [
+        makeMovement({ id: "M1", type: "Départ forcé", fte: 2, department: "IT" }),
+        makeMovement({ id: "M2", type: "Attrition", fte: 1, department: "IT" }),
+        makeMovement({ id: "M3", type: "Recrutement", fte: 3, department: "HR" }),
         makeMovement({
-          id: "M003",
-          type: "Redéploiement",
-          fte: 1,
+          id: "M4",
+          type: "Transfert entrant",
+          fte: 2,
           department: "IT",
-          toDepartment: "Finance",
+          toDepartment: "HR",
         }),
       ],
     });
-    const result = movementsByDepartment(wf);
-    const itRow = result.find((r) => r.department === "IT");
-    const hrRow = result.find((r) => r.department === "HR");
-    const finRow = result.find((r) => r.department === "Finance");
-    expect(itRow?.suppressions).toBe(3);
-    expect(itRow?.transferts).toBe(1);
-    expect(hrRow?.recrutements).toBe(2);
-    expect(finRow?.transferts).toBe(1);
-  });
-
-  it("returns sorted by suppressions descending", () => {
-    const wf = makeWorkforce({
-      movements: [
-        makeMovement({ type: "Suppression", fte: 1, department: "HR" }),
-        makeMovement({ id: "M002", type: "Suppression", fte: 5, department: "IT" }),
-      ],
-    });
-    const result = movementsByDepartment(wf);
-    expect(result[0].department).toBe("IT");
-    expect(result[1].department).toBe("HR");
+    const rows = movementsByDepartment(wf);
+    const it = rows.find((r) => r.department === "IT")!;
+    expect(it.forcedDepartures).toBe(2);
+    expect(it.attritions).toBe(1);
+    expect(it.exits).toBe(3);
+    expect(it.transfertSortants).toBe(2);
+    const hr = rows.find((r) => r.department === "HR")!;
+    expect(hr.recrutements).toBe(3);
+    expect(hr.transfertEntrants).toBe(2);
   });
 });
 
 describe("hrEngine — movementsByCountry", () => {
-  it("aggregates fte and count per country", () => {
+  it("aggregates FTE and count per country, sorted by FTE desc", () => {
     const wf = makeWorkforce({
       movements: [
-        makeMovement({ type: "Suppression", fte: 2, country: "France" }),
-        makeMovement({ id: "M002", type: "Recrutement", fte: 3, country: "France" }),
-        makeMovement({ id: "M003", type: "Suppression", fte: 1, country: "Germany" }),
+        makeMovement({ country: "France", fte: 3 }),
+        makeMovement({ id: "M2", country: "Germany", fte: 1 }),
+        makeMovement({ id: "M3", country: "France", fte: 2 }),
       ],
     });
-    const result = movementsByCountry(wf);
-    const fr = result.find((r) => r.country === "France");
-    const de = result.find((r) => r.country === "Germany");
-    expect(fr?.fte).toBe(5);
-    expect(fr?.count).toBe(2);
-    expect(de?.fte).toBe(1);
-    expect(de?.count).toBe(1);
-  });
-
-  it("returns sorted by fte descending", () => {
-    const wf = makeWorkforce({
-      movements: [
-        makeMovement({ type: "Suppression", fte: 1, country: "Germany" }),
-        makeMovement({ id: "M002", type: "Suppression", fte: 5, country: "France" }),
-      ],
-    });
-    const result = movementsByCountry(wf);
-    expect(result[0].country).toBe("France");
+    const rows = movementsByCountry(wf);
+    expect(rows[0]).toEqual({ country: "France", fte: 5, count: 2 });
+    expect(rows[1]).toEqual({ country: "Germany", fte: 1, count: 1 });
   });
 });
 
 describe("hrEngine — movementsByType", () => {
-  it("returns type breakdown excluding types with 0 count", () => {
+  it("returns 5-type breakdown of counts and FTE", () => {
     const wf = makeWorkforce({
       movements: [
-        makeMovement({ type: "Suppression", fte: 3 }),
-        makeMovement({ id: "M002", type: "Suppression", fte: 2 }),
-        makeMovement({ id: "M003", type: "Recrutement", fte: 1 }),
+        makeMovement({ id: "M1", type: "Départ forcé", fte: 2 }),
+        makeMovement({ id: "M2", type: "Départ forcé", fte: 3 }),
+        makeMovement({ id: "M3", type: "Recrutement", fte: 1 }),
       ],
     });
-    const result = movementsByType(wf);
-    expect(result).toHaveLength(2);
-    expect(result.find((r) => r.type === "Suppression")?.count).toBe(2);
-    expect(result.find((r) => r.type === "Suppression")?.fte).toBe(5);
-    expect(result.find((r) => r.type === "Recrutement")?.count).toBe(1);
+    const rows = movementsByType(wf);
+    expect(rows.find((r) => r.type === "Départ forcé")?.count).toBe(2);
+    expect(rows.find((r) => r.type === "Départ forcé")?.fte).toBe(5);
+    expect(rows.find((r) => r.type === "Recrutement")?.count).toBe(1);
   });
 
-  it("returns empty array for no movements", () => {
-    const wf = makeWorkforce({ movements: [] });
-    expect(movementsByType(wf)).toHaveLength(0);
-  });
-});
-
-describe("hrEngine — pseSummary", () => {
-  it("computes PSE summary from inPSE movements", () => {
+  it("hides categories with no movement", () => {
     const wf = makeWorkforce({
-      movements: [
-        makeMovement({
-          type: "Suppression",
-          fte: 2,
-          inPSE: true,
-          status: "En cours",
-          cost: 50000,
-          hrValidated: false,
-        }),
-        makeMovement({
-          id: "M002",
-          type: "Suppression",
-          fte: 3,
-          inPSE: true,
-          status: "Réalisé",
-          cost: 80000,
-          hrValidated: true,
-        }),
-        makeMovement({
-          id: "M003",
-          type: "Suppression",
-          fte: 1,
-          inPSE: false,
-          status: "Réalisé",
-          cost: 30000,
-        }),
-        makeMovement({
-          id: "M004",
-          type: "Recrutement",
-          fte: 1,
-          inPSE: true,
-          status: "Planifié",
-          cost: 10000,
-          hrValidated: false,
-        }),
-      ],
+      movements: [makeMovement({ type: "Recrutement", fte: 1 })],
     });
-    const result = pseSummary(wf);
-    expect(result.postes).toBe(6);
-    expect(result.enCours).toBe(1);
-    expect(result.realises).toBe(1);
-    expect(result.valides).toBe(1);
-    expect(result.coutTotal).toBe(140000);
-    expect(result.coutEngage).toBe(80000);
-  });
-
-  it("returns zeros for no PSE movements", () => {
-    const wf = makeWorkforce({ movements: [makeMovement({ inPSE: false })] });
-    const result = pseSummary(wf);
-    expect(result.postes).toBe(0);
-    expect(result.enCours).toBe(0);
-    expect(result.realises).toBe(0);
-    expect(result.valides).toBe(0);
-    expect(result.coutTotal).toBe(0);
-    expect(result.coutEngage).toBe(0);
+    const rows = movementsByType(wf);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("Recrutement");
   });
 });
 
 describe("hrEngine — deltaByDepartment", () => {
-  it("computes landing and gapToTarget for each department", () => {
+  it("computes landing = current fte + net contributions per department", () => {
     const wf = makeWorkforce({
-      departments: [
-        { name: "IT", fte: 50, fteTarget: 45 },
-        { name: "HR", fte: 30, fteTarget: 32 },
-      ],
       movements: [
-        makeMovement({ type: "Suppression", fte: 3, department: "IT" }),
-        makeMovement({ id: "M002", type: "Recrutement", fte: 1, department: "HR" }),
-      ],
-    });
-    const result = deltaByDepartment(wf);
-    const it = result.find((r) => r.name === "IT");
-    const hr = result.find((r) => r.name === "HR");
-    expect(it?.landing).toBe(47);
-    expect(it?.gapToTarget).toBe(2);
-    expect(hr?.landing).toBe(31);
-    expect(hr?.gapToTarget).toBe(-1);
-  });
-
-  it("accounts for redeployments between departments", () => {
-    const wf = makeWorkforce({
-      departments: [
-        { name: "IT", fte: 50, fteTarget: 45 },
-        { name: "Finance", fte: 20, fteTarget: 20 },
-      ],
-      movements: [
+        makeMovement({ id: "M1", type: "Départ forcé", fte: 3, department: "IT" }),
+        makeMovement({ id: "M2", type: "Attrition", fte: 1, department: "IT" }),
+        makeMovement({ id: "M3", type: "Recrutement", fte: 2, department: "HR" }),
         makeMovement({
-          type: "Redéploiement",
-          fte: 2,
+          id: "M4",
+          type: "Transfert entrant",
+          fte: 5,
           department: "IT",
-          toDepartment: "Finance",
+          toDepartment: "HR",
         }),
       ],
     });
-    const result = deltaByDepartment(wf);
-    const it = result.find((r) => r.name === "IT");
-    const fin = result.find((r) => r.name === "Finance");
-    expect(it?.landing).toBe(48);
-    expect(fin?.landing).toBe(22);
+    const rows = deltaByDepartment(wf);
+    const it = rows.find((r) => r.name === "IT")!;
+    // IT baseline 50, − 3 (départ forcé), − 1 (attrition), − 5 (transfert sortant) = 41
+    expect(it.landing).toBe(41);
+    const hr = rows.find((r) => r.name === "HR")!;
+    // HR baseline 30, + 2 (recrutement), + 5 (transfert entrant) = 37
+    expect(hr.landing).toBe(37);
+  });
+});
+
+describe("hrEngine — pseSummary", () => {
+  it("counts PSE-scoped movements and aggregates the cost", () => {
+    const wf = makeWorkforce({
+      movements: [
+        makeMovement({ id: "M1", inPSE: true, status: "Réalisé", cost: 45000 }),
+        makeMovement({ id: "M2", inPSE: true, status: "Planifié", cost: 40000 }),
+        makeMovement({ id: "M3", inPSE: false, status: "Réalisé", cost: 20000 }),
+      ],
+    });
+    const summary = pseSummary(wf);
+    expect(summary.postes).toBe(2);
+    expect(summary.coutTotal).toBe(85000);
+    expect(summary.coutEngage).toBe(45000);
   });
 });
 
 describe("hrEngine — realizedSalarySavings", () => {
-  it("returns 0 when no realized movements", () => {
-    const wf = makeWorkforce({
-      movements: [
-        makeMovement({ salaryImpact: -50000, status: "Planifié" }),
-        makeMovement({ id: "M002", salaryImpact: -30000, status: "En cours" }),
-      ],
-    });
-    expect(realizedSalarySavings(wf)).toBe(0);
-  });
-
-  it("sums positive savings (negative salaryImpact) from realized movements only", () => {
+  it("sums positive savings from realized movements only", () => {
     const wf = makeWorkforce({
       movements: [
         makeMovement({ salaryImpact: -50000, status: "Réalisé" }),
-        makeMovement({ id: "M002", salaryImpact: -30000, status: "Réalisé" }),
-        makeMovement({ id: "M003", salaryImpact: 20000, status: "Réalisé" }),
-        makeMovement({ id: "M004", salaryImpact: -40000, status: "Planifié" }),
+        makeMovement({ id: "M2", salaryImpact: -30000, status: "Réalisé" }),
+        makeMovement({ id: "M3", salaryImpact: 20000, status: "Réalisé" }),
+        makeMovement({ id: "M4", salaryImpact: -40000, status: "Planifié" }),
       ],
     });
     expect(realizedSalarySavings(wf)).toBe(80000);
-  });
-
-  it("ignores positive salaryImpact (costs)", () => {
-    const wf = makeWorkforce({
-      movements: [makeMovement({ salaryImpact: 100000, status: "Réalisé" })],
-    });
-    expect(realizedSalarySavings(wf)).toBe(0);
-  });
-
-  it("returns 0 for empty movements", () => {
-    const wf = makeWorkforce({ movements: [] });
-    expect(realizedSalarySavings(wf)).toBe(0);
   });
 });

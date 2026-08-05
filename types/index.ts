@@ -232,8 +232,32 @@ export type Employee = {
   retirement: string;
 };
 
-export type MovementType = "Redéploiement" | "Reconversion" | "Suppression" | "Recrutement";
+/**
+ * Typologie des mouvements RH, alignée sur la vue "OD Monitoring" de Gooduelle (5 types).
+ * Migration effectuée en Août 2026 depuis l'ancienne typologie 4-types
+ * (`Redéploiement | Reconversion | Suppression | Recrutement`) :
+ *   - `Suppression` → `Départ forcé` (indemnités majorées).
+ *   - `Redéploiement` / `Reconversion` → `Transfert entrant` (avec `requiresRetraining=false/true`).
+ *   - `Recrutement` inchangé.
+ *   - `Attrition` (nouveau) : départ volontaire, préavis seul, pas d'indemnité de rupture.
+ *   - `Transfert sortant` (nouveau) : mobilité vers un département hors du périmètre monitoré. */
+export type MovementType =
+  "Recrutement" | "Attrition" | "Départ forcé" | "Transfert entrant" | "Transfert sortant";
 export type MovementStatus = "Planifié" | "En cours" | "Réalisé";
+
+/** Snapshot financier d'un mouvement RH — figé à la validation initiale (`lockedPlan`) puis
+ *  réactualisé au fur et à mesure (`reforecast`). Mirror du pattern `FinancialSnapshot` du levier
+ *  mais adapté aux €/an et non aux €M (l'unité utilisée sur `WorkforceMovement.salaryImpact`). */
+export type WorkforceMovementSnapshot = {
+  /** ETP concernés (positif). L'effet signé sur l'effectif est dérivé du type via `fteEffect`. */
+  fte: number;
+  /** Impact masse salariale €/an (négatif = économie récurrente). */
+  salaryImpact: number;
+  /** Économies run-rate annualisées (€, ≥ 0). */
+  savings: number;
+  /** Coût social one-off (€, ≥ 0) = ENR (Éléments Non Récurrents). */
+  cost: number;
+};
 
 export type WorkforceMovement = {
   id: string;
@@ -242,12 +266,21 @@ export type WorkforceMovement = {
   /** Nom de l'employé concerné, ou intitulé du poste pour un Recrutement */
   label: string;
   leverId: string;
+  /** Workstream de rattachement — champ direct (peuplé au moment de la saisie), pas dérivé du
+   *  levier associé. Permet le filtrage transverse du dashboard RH sans jointure. */
+  workstream?: string;
+  /** Fonction (métier / département fonctionnel) — champ direct, même logique que `workstream`. */
+  function?: string;
+  /** Programme de rattachement — permet de scoper le dashboard RH à un programme (miroir du
+   *  dashboard exécutif). Le programme d'un mouvement est en principe celui du levier associé. */
+  programId?: string;
   type: MovementType;
   /** ETP concernés (positif) — l'effet sur l'effectif total est signé par le type :
-   * Suppression = −fte, Recrutement = +fte, Redéploiement/Reconversion = 0 (transfert). */
+   *  `Attrition` / `Départ forcé` = −fte, `Recrutement` = +fte, `Transfert entrant`/`Transfert
+   *  sortant` = 0 (transfert interne). Voir `lib/hrEngine.ts::fteEffect`. */
   fte: number;
   department: string;
-  /** Département d'arrivée (Redéploiement/Reconversion) */
+  /** Département d'arrivée (Transfert entrant / Transfert sortant) */
   toDepartment?: string;
   country: string;
   hrOwner: string;
@@ -256,12 +289,23 @@ export type WorkforceMovement = {
   status: MovementStatus;
   /** Validation RH que le mouvement a réellement eu lieu (distincte du statut opérationnel) */
   hrValidated: boolean;
-  /** Mouvement inclus dans le Plan de Sauvegarde de l'Emploi (suppressions) */
+  /** Mouvement inclus dans le Plan de Sauvegarde de l'Emploi (Départs forcés) */
   inPSE?: boolean;
   /** Impact masse salariale €/an (négatif = économie) */
   salaryImpact: number;
   savings: number; // € économies run-rate attendues
-  cost: number; // € coût one-off (indemnités, formation, recrutement)
+  cost: number; // € coût one-off (indemnités, formation, recrutement) — synonyme d'ENR
+  /** Uniquement pour `Transfert entrant`/`Transfert sortant` : `true` = reconversion nécessitant
+   *  une formation lourde, `false`/absent = simple redéploiement interne (formation courte). */
+  requiresRetraining?: boolean;
+  /** Snapshot figé à la validation du mouvement — jamais modifié après. Utilisé comme référence
+   *  "cible bottom-up" pour les KPI du dashboard RH (Impact ETP / Économies / Coûts sociaux /
+   *  Économies nettes). Non défini avant la validation ou pour des mouvements importés bruts. */
+  lockedPlan?: WorkforceMovementSnapshot;
+  /** Snapshot réactualisé — mis à jour au fil de la vie du mouvement (échéance repoussée, coût
+   *  révisé…). Initialisé à `lockedPlan` à la validation, éditable ensuite. Sert de "reforecast"
+   *  pour les KPI. Non défini si aucune réactualisation. */
+  reforecast?: WorkforceMovementSnapshot;
   comment?: string;
 };
 
@@ -545,7 +589,7 @@ export type ProgramSummary = {
   riskCostOverrun: number;
   /** Nb de leviers dont les savings réactualisés sont inférieurs au plan initial. */
   riskSavingsCut: number;
-  /** Suppressions de postes prévues (Σ ETP des mouvements RH type "Suppression"). */
+  /** Suppressions de postes prévues (Σ ETP des mouvements RH type "Départ forcé"). */
   suppressionsPlanned: number;
   /** Suppressions de postes réalisées (statut "Réalisé"). */
   suppressionsRealized: number;
