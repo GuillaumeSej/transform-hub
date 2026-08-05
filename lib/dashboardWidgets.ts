@@ -50,7 +50,8 @@ export type DashboardWidgetType =
   | "underperformers"
   | "dependency-alerts"
   | "portfolio-funnel"
-  | "savings-trajectory";
+  | "savings-trajectory"
+  | "initiative-health";
 
 /** Onglets du dashboard CTO — chaque widget est assigné à un onglet par défaut.
  *  L'onglet actif filtre les widgets affichés dans la grille. */
@@ -81,6 +82,7 @@ export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   pnl: "portfolio",
   underperformers: "prioritization",
   "dependency-alerts": "prioritization",
+  "initiative-health": "prioritization",
 };
 
 /** Une option d'indicateur/dimension pour un type de widget "configurable" (voir plus bas) — ex.
@@ -220,7 +222,9 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   },
   {
     type: "marimekko",
-    label: "Marimekko",
+    // Renommé "Économies prévues" en Août 2026 (feedback pilote) — la métrique par défaut reste
+    // `realizedSavings` pour préserver la rétrocompat des instances déjà en localStorage.
+    label: "Économies prévues",
     icon: "LayoutGrid",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
@@ -249,7 +253,9 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   },
   {
     type: "workstream-breakdown",
-    label: "Économies par dimension",
+    // Renommé "Réalisation des économies" en Août 2026 (feedback pilote) — pendant du widget
+    // "Économies prévues" (marimekko), ancre la lecture sur le REALISÉ par dimension.
+    label: "Réalisation des économies",
     icon: "Columns3",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
@@ -305,6 +311,17 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "TrendingDown",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    // Widget "Santé des initiatives" (Août 2026) — matrice type OD Monitoring : chaque tuile
+    // = un levier, coloration par statut de santé (onTrack/watch/critical/cancelled), colonnes
+    // = groupement configurable dans le widget (workstream / pays / fonction). Structure
+    // intrinsèquement fixe, donc pas de builder générique (`builderDimensionCount` non défini).
+    type: "initiative-health",
+    label: "Santé des initiatives",
+    icon: "Grid3x3",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
   },
   {
     type: "dependency-alerts",

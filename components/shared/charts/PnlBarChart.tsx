@@ -58,8 +58,16 @@ export function PnlBarChart({
         margin={{ top: 4, right: 16, left: 8, bottom: 0 }}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" horizontal={false} />
+        {/* domain={[0, "auto"]} : sans borne min explicite, Recharts applique un `nice()` qui
+         * élargit l'axe des deux côtés du zéro (ex. €-3M → €9M pour des valeurs €0 → €6M) et
+         * décale visuellement les barres loin des libellés Y — voir capture pilote Août 2026.
+         * Ancrer à 0 remet les barres immédiatement contre les libellés. Les impacts P&L
+         * (savings, coûts) sont toujours ≥ 0 dans ce widget (seule la "part restante" est signée
+         * positive par construction dans chartData). */}
         <XAxis
           type="number"
+          domain={[0, "auto"]}
+          allowDecimals={false}
           tick={{ fontSize: 10 }}
           axisLine={false}
           tickLine={false}
