@@ -200,98 +200,86 @@ function generateEmployees(): Employee[] {
   return employees;
 }
 
-/** Plan de mouvements par levier — typologie 5-types "OD Monitoring" (Gooduelle) :
- *  - `forcedDeparture` : ancien "Suppression" (licenciement contraint / rupture négociée).
- *  - `attrition` : départ volontaire (démission spontanée, prévu au plan).
- *  - `transferIn` : ancien "Redéploiement" — transfert INTERNE vers `toDept`.
- *  - `retraining` : ancien "Reconversion" — transfert avec formation lourde (`requiresRetraining`).
- *  - `transferOut` : sortie du périmètre monitoré vers un autre département hors du scope RH suivi.
- *  Aligné sur les fteImpact des leviers (L007 −24, L001 −12, L014 −8, L008 −8, L015 −8…). */
+/** Plan de mouvements par levier : [leverId, département source, nb suppressions,
+ * nb redéploiements (vers toDept), nb reconversions, PSE?] — aligné sur les fteImpact
+ * des leviers (L007 −24, L001 −12, L014 −8, L008 −8, L015 −8, L013 −6, L017 −6…). */
 const MOVEMENT_PLAN: {
   leverId: string;
   dept: string;
-  forcedDeparture: number;
-  attrition?: number;
-  transferIn: number;
+  suppressions: number;
+  redeploy: number;
   toDept?: string;
-  retraining: number;
-  transferOut?: number;
+  reconversions: number;
   pse: boolean;
   startMonth: number; // mois de la 1ère échéance (2026)
 }[] = [
   {
     leverId: "L007",
     dept: "Production",
-    forcedDeparture: 6,
-    attrition: 2,
-    transferIn: 3,
+    suppressions: 8,
+    redeploy: 3,
     toDept: "Supply Chain",
-    retraining: 2,
-    transferOut: 1,
+    reconversions: 2,
     pse: true,
     startMonth: 3,
   },
   {
     leverId: "L001",
     dept: "Support (IT/Finance/HR)",
-    forcedDeparture: 3,
-    attrition: 1,
-    transferIn: 2,
+    suppressions: 4,
+    redeploy: 2,
     toDept: "Commercial & Marketing",
-    retraining: 1,
+    reconversions: 1,
     pse: true,
     startMonth: 2,
   },
   {
     leverId: "L014",
     dept: "Commercial & Marketing",
-    forcedDeparture: 2,
-    attrition: 1,
-    transferIn: 1,
+    suppressions: 3,
+    redeploy: 1,
     toDept: "Support (IT/Finance/HR)",
-    retraining: 0,
+    reconversions: 0,
     pse: false,
     startMonth: 2,
   },
   {
     leverId: "L008",
     dept: "Production",
-    forcedDeparture: 3,
-    transferIn: 2,
+    suppressions: 3,
+    redeploy: 2,
     toDept: "Production",
-    retraining: 1,
+    reconversions: 1,
     pse: true,
     startMonth: 4,
   },
   {
     leverId: "L015",
     dept: "Support (IT/Finance/HR)",
-    forcedDeparture: 2,
-    attrition: 1,
-    transferIn: 1,
+    suppressions: 3,
+    redeploy: 1,
     toDept: "R&D / Innovation",
-    retraining: 1,
+    reconversions: 1,
     pse: false,
     startMonth: 5,
   },
   {
     leverId: "L013",
     dept: "Commercial & Marketing",
-    forcedDeparture: 2,
-    transferIn: 1,
+    suppressions: 2,
+    redeploy: 1,
     toDept: "Commercial & Marketing",
-    retraining: 0,
-    transferOut: 1,
+    reconversions: 0,
     pse: false,
     startMonth: 1,
   },
   {
     leverId: "L017",
     dept: "Supply Chain",
-    forcedDeparture: 2,
-    transferIn: 2,
+    suppressions: 2,
+    redeploy: 2,
     toDept: "Production",
-    retraining: 1,
+    reconversions: 1,
     pse: false,
     startMonth: 6,
   },
@@ -400,14 +388,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     type: WorkforceMovement["type"],
     fte: number,
     month: number,
-    opts: {
-      toDept?: string;
-      pse?: boolean;
-      salaryImpact: number;
-      savings: number;
-      cost: number;
-      requiresRetraining?: boolean;
-    }
+    opts: { toDept?: string; pse?: boolean; salaryImpact: number; savings: number; cost: number }
   ) => {
     seq += 1;
     const day = String(1 + ((seq * 3) % 27)).padStart(2, "0");
@@ -432,65 +413,38 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
       salaryImpact: opts.salaryImpact,
       savings: opts.savings,
       cost: opts.cost,
-      ...(opts.requiresRetraining ? { requiresRetraining: true as const } : {}),
     });
   };
 
   for (const plan of MOVEMENT_PLAN) {
-    // Départs forcés (ancienne "Suppression") — indemnités majorées ×1.2 pour la contrainte.
-    for (let i = 0; i < plan.forcedDeparture; i++) {
+    for (let i = 0; i < plan.suppressions; i++) {
       const emp = pickEmployee(plan.dept, seq + i);
       const month = Math.min(12, plan.startMonth + (i % 6));
-      const baseCost = plan.pse ? 45000 + ((seq * 7) % 4) * 5000 : 20000;
-      push(emp, emp.name, plan, "Départ forcé", emp.fte, month, {
+      push(emp, emp.name, plan, "Suppression", emp.fte, month, {
         pse: plan.pse,
         salaryImpact: -emp.salary,
         savings: emp.salary,
-        cost: Math.round(baseCost * 1.2),
+        cost: plan.pse ? 45000 + ((seq * 7) % 4) * 5000 : 20000,
       });
     }
-    // Attrition (départ volontaire — préavis seul, pas d'indemnité de rupture)
-    for (let i = 0; i < (plan.attrition ?? 0); i++) {
-      const emp = pickEmployee(plan.dept, seq + i);
-      const month = Math.min(12, plan.startMonth + 2 + (i % 5));
-      push(emp, emp.name, plan, "Attrition", emp.fte, month, {
-        salaryImpact: -emp.salary,
-        savings: emp.salary,
-        cost: Math.round(emp.salary * (0.5 / 12)), // ~0.5 mois de salaire (préavis court)
-      });
-    }
-    // Transferts entrants (mobilité interne, formation courte)
-    for (let i = 0; i < plan.transferIn; i++) {
+    for (let i = 0; i < plan.redeploy; i++) {
       const emp = pickEmployee(plan.dept, seq + i);
       const month = Math.min(12, plan.startMonth + 1 + (i % 5));
-      push(emp, emp.name, plan, "Transfert entrant", emp.fte, month, {
+      push(emp, emp.name, plan, "Redéploiement", emp.fte, month, {
         toDept: plan.toDept,
         salaryImpact: 0,
         savings: 0,
         cost: 8000,
       });
     }
-    // Transferts avec reconversion (formation lourde — flag requiresRetraining)
-    for (let i = 0; i < plan.retraining; i++) {
+    for (let i = 0; i < plan.reconversions; i++) {
       const emp = pickEmployee(plan.dept, seq + i);
       const month = Math.min(12, plan.startMonth + 2 + (i % 4));
-      push(emp, emp.name, plan, "Transfert entrant", emp.fte, month, {
+      push(emp, emp.name, plan, "Reconversion", emp.fte, month, {
         toDept: plan.toDept,
         salaryImpact: -Math.round(emp.salary * 0.1),
         savings: Math.round(emp.salary * 0.1),
         cost: 15000,
-        requiresRetraining: true,
-      });
-    }
-    // Transferts sortants (sortie du périmètre monitoré)
-    for (let i = 0; i < (plan.transferOut ?? 0); i++) {
-      const emp = pickEmployee(plan.dept, seq + i);
-      const month = Math.min(12, plan.startMonth + 3 + (i % 3));
-      push(emp, emp.name, plan, "Transfert sortant", emp.fte, month, {
-        toDept: plan.toDept,
-        salaryImpact: 0,
-        savings: 0,
-        cost: 5000,
       });
     }
   }

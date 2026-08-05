@@ -232,24 +232,7 @@ export type Employee = {
   retirement: string;
 };
 
-/**
- * Typologie des mouvements RH, alignée sur la vue "OD Monitoring" de Gooduelle (5 types).
- * Migration effectuée en Août 2026 depuis l'ancienne typologie 4-types
- * (`Redéploiement | Reconversion | Suppression | Recrutement`) :
- *   - `Suppression` → `Départ forcé` (indemnités majorées de FORCED_DEPARTURE_MULTIPLIER).
- *   - `Redéploiement`/`Reconversion` → `Transfert entrant` (avec `requiresRetraining=false/true`
- *     respectivement pour préserver la distinction "formation légère vs lourde").
- *   - `Recrutement` inchangé.
- *   - `Attrition` (nouveau) : départ volontaire, préavis seul, pas d'indemnité de rupture.
- *   - `Transfert sortant` (nouveau) : miroir de Transfert entrant côté département source.
- *
- * Note sémantique : `Transfert entrant`/`Transfert sortant` restent des transferts INTERNES au
- * périmètre suivi (comme l'étaient Redéploiement/Reconversion) — `fteEffect` renvoie 0 pour les
- * deux, la neutralité budgétaire globale est conservée. Les widgets Gooduelle-style les
- * exposent comme catégories distinctes du breakdown, mais pas comme flux entrants/sortants du
- * périmètre monitoré (ce n'est pas encore modélisé). */
-export type MovementType =
-  "Recrutement" | "Attrition" | "Départ forcé" | "Transfert entrant" | "Transfert sortant";
+export type MovementType = "Redéploiement" | "Reconversion" | "Suppression" | "Recrutement";
 export type MovementStatus = "Planifié" | "En cours" | "Réalisé";
 
 export type WorkforceMovement = {
@@ -261,11 +244,10 @@ export type WorkforceMovement = {
   leverId: string;
   type: MovementType;
   /** ETP concernés (positif) — l'effet sur l'effectif total est signé par le type :
-   * `Attrition` / `Départ forcé` = −fte, `Recrutement` = +fte, `Transfert entrant`/`Transfert
-   *  sortant` = 0 (transfert interne). Voir `lib/hrEngine.ts::fteEffect`. */
+   * Suppression = −fte, Recrutement = +fte, Redéploiement/Reconversion = 0 (transfert). */
   fte: number;
   department: string;
-  /** Département d'arrivée (Transfert entrant / Transfert sortant) */
+  /** Département d'arrivée (Redéploiement/Reconversion) */
   toDepartment?: string;
   country: string;
   hrOwner: string;
@@ -274,19 +256,12 @@ export type WorkforceMovement = {
   status: MovementStatus;
   /** Validation RH que le mouvement a réellement eu lieu (distincte du statut opérationnel) */
   hrValidated: boolean;
-  /** Mouvement inclus dans le Plan de Sauvegarde de l'Emploi (Départs forcés) */
+  /** Mouvement inclus dans le Plan de Sauvegarde de l'Emploi (suppressions) */
   inPSE?: boolean;
   /** Impact masse salariale €/an (négatif = économie) */
   salaryImpact: number;
   savings: number; // € économies run-rate attendues
-  cost: number; // € coût one-off (indemnités, formation, recrutement) — synonyme d'ENR (Éléments
-  //                Non Récurrents) dans le vocabulaire Gooduelle : coût social exceptionnel du
-  //                mouvement, distinct des savings récurrentes annualisées.
-  /** Uniquement pour `Transfert entrant`/`Transfert sortant` : `true` = reconversion nécessitant
-   *  une formation lourde (ex. changement de métier), `false`/absent = simple redéploiement
-   *  interne (formation courte). Détermine le taux de coût de transition dans
-   *  `lib/hrFinancials.ts::computeMovementFinancials`. Aucun effet sur les autres types. */
-  requiresRetraining?: boolean;
+  cost: number; // € coût one-off (indemnités, formation, recrutement)
   comment?: string;
 };
 
@@ -570,7 +545,7 @@ export type ProgramSummary = {
   riskCostOverrun: number;
   /** Nb de leviers dont les savings réactualisés sont inférieurs au plan initial. */
   riskSavingsCut: number;
-  /** Suppressions de postes prévues (Σ ETP des mouvements RH type "Départ forcé"). */
+  /** Suppressions de postes prévues (Σ ETP des mouvements RH type "Suppression"). */
   suppressionsPlanned: number;
   /** Suppressions de postes réalisées (statut "Réalisé"). */
   suppressionsRealized: number;

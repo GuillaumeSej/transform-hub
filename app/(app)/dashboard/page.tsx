@@ -33,13 +33,6 @@ import {
 import type { Company, HierarchyLevelDef, HierarchyNode, Program } from "@/types";
 import * as engine from "@/lib/engine";
 import {
-  countHealthStatuses,
-  groupLeversByDimension,
-  indexAlertsByLever,
-  type LeverHealthStatus,
-} from "@/lib/leverHealth";
-import { InitiativeHealthMatrix } from "@/components/shared/charts/InitiativeHealthMatrix";
-import {
   METRIC_REGISTRY,
   getAvailableDimensions,
   getDimensionDef,
@@ -401,10 +394,13 @@ export default function DashboardPage() {
   }, [visibleData, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
-  // NOTE : `programAmbition` (Program.target, top-down) était affiché dans le KPICard hero via
-  // `secondary` (bloc "Ambition Programme"). Retiré en Août 2026 suite au feedback pilote —
-  // les chiffres bottom-up (Σ lever.netSavings) et top-down divergent visuellement dans une
-  // carte destinée au réalisé. L'ambition programme reste consultable dans Admin → Programmes.
+  // Ambition déclarée du programme (Program.target, top-down) vs cible bottom-up des leviers
+  // déjà identifiés (summary.target) — même unité (€M), voir components/admin/ProgramsPanel.tsx.
+  const programAmbition = programs.find((p) => p.id === selectedProgramId)?.target;
+  const leverCoveragePct =
+    programAmbition && programAmbition > 0
+      ? Math.round((summary.target / programAmbition) * 100)
+      : undefined;
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
 
   // ── Tri des leviers sous-performants ───────────────────────────────────
@@ -428,45 +424,6 @@ export default function DashboardPage() {
     }
   };
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
-
-  // ── Pagination "Leviers sous-performants" & "Alertes de dépendances" ─────────
-  // Même pattern que le widget "alerts" (voir plus bas) : les widgets affichaient auparavant un
-  // slice figé (8 / 6 éléments) qui masquait le reste — remplacé par une pagination pour
-  // accéder à TOUS les éléments.
-  const UNDER_PER_PAGE = 8;
-  const DEP_ALERTS_PER_PAGE = 6;
-  const [underPage, setUnderPage] = useState(0);
-  const [depAlertPage, setDepAlertPage] = useState(0);
-
-  // ── Widget "Santé des initiatives" (matrice type OD Monitoring) ──────────────
-  // Le sélecteur "Grouper par" est contrôlé DANS le widget (choix validé pilote) — pas de
-  // partage avec les filtres globaux, chaque widget-instance peut avoir sa propre dimension.
-  const [healthGroupBy, setHealthGroupBy] = useState<"workstream" | "country" | "function">(
-    "workstream"
-  );
-
-  const underPageCount = Math.max(1, Math.ceil(sortedUnderperformers.length / UNDER_PER_PAGE));
-  const underPageClamped = Math.min(underPage, underPageCount - 1);
-  const underperformersOnPage = sortedUnderperformers.slice(
-    underPageClamped * UNDER_PER_PAGE,
-    (underPageClamped + 1) * UNDER_PER_PAGE
-  );
-
-  const depAlertPageCount = Math.max(1, Math.ceil(depAlerts.length / DEP_ALERTS_PER_PAGE));
-  const depAlertPageClamped = Math.min(depAlertPage, depAlertPageCount - 1);
-  const depAlertsOnPage = depAlerts.slice(
-    depAlertPageClamped * DEP_ALERTS_PER_PAGE,
-    (depAlertPageClamped + 1) * DEP_ALERTS_PER_PAGE
-  );
-
-  // Reset de la page quand le tri (underperformers) ou les données filtrées changent — évite
-  // d'être bloqué sur une "page 3" alors qu'après re-tri il n'y a plus qu'une page.
-  useEffect(() => {
-    setUnderPage(0);
-  }, [underSort, underSortDir, sortedUnderperformers.length]);
-  useEffect(() => {
-    setDepAlertPage(0);
-  }, [depAlerts.length]);
 
   // ── Alertes enrichies (manuelles + auto-générées) ──────────────────────────
   const ALERTS_PER_PAGE = 5;
@@ -494,23 +451,6 @@ export default function DashboardPage() {
       }),
     [allAlerts, scopedLeverIds, scopedWorkstreamIds, data]
   );
-
-  // ── Matrice santé : alertes indexées par levier, groupes par dimension configurée. On utilise
-  // `scopedAlerts` (déjà filtré au périmètre affiché) pour que le nombre d'alertes affichées par
-  // levier reste cohérent avec la vue "Alertes & notifications" du dashboard. Toute la logique
-  // métier vit dans `lib/leverHealth.ts`, le composant est juste une vue. ────
-  const healthAlertsByLever = useMemo(() => indexAlertsByLever(scopedAlerts), [scopedAlerts]);
-  const healthGroups = useMemo(
-    () =>
-      groupLeversByDimension(
-        filteredData.levers,
-        healthGroupBy,
-        healthAlertsByLever,
-        data.workstreams
-      ),
-    [filteredData.levers, healthGroupBy, healthAlertsByLever, data.workstreams]
-  );
-  const healthCounts = useMemo(() => countHealthStatuses(healthGroups), [healthGroups]);
 
   const filteredAlerts = useMemo(() => {
     let result = scopedAlerts;
@@ -1719,145 +1659,47 @@ export default function DashboardPage() {
                   {t("dashboard.widgets.noUnderperformers")}
                 </p>
               ) : (
-                <>
-                  <div className="flex flex-col gap-0">
-                    {underperformersOnPage.map((l) => (
-                      <div
-                        key={l.id}
-                        onClick={() => router.push(`/levers/detail?id=${l.id}`)}
-                        className="flex cursor-pointer items-start gap-3 border-b border-border py-2.5 last:border-b-0 hover:bg-neutral-50"
-                      >
-                        <Avatar initials={l.ownerInit} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="truncate text-[12.5px] font-semibold text-primary">
-                              {l.name}
-                            </div>
-                            <span className="flex-shrink-0 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10.5px] font-bold text-bp-coral">
-                              −{l.gap} {t("dashboard.widgets.gapPts")}
-                            </span>
+                <div className="flex flex-col gap-0">
+                  {sortedUnderperformers.slice(0, 8).map((l) => (
+                    <div
+                      key={l.id}
+                      onClick={() => router.push(`/levers/detail?id=${l.id}`)}
+                      className="flex cursor-pointer items-start gap-3 border-b border-border py-2.5 last:border-b-0 hover:bg-neutral-50"
+                    >
+                      <Avatar initials={l.ownerInit} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="truncate text-[12.5px] font-semibold text-primary">
+                            {l.name}
                           </div>
-                          <div className="mt-1 flex items-center gap-3 text-[11px] text-secondary">
-                            <span>
-                              {t("dashboard.widgets.expectedProgress")} {l.expectedProgress}%
-                            </span>
-                            <span>→</span>
-                            <span>
-                              {t("dashboard.widgets.actualProgress")} {l.progress}%
-                            </span>
-                            <span className="ml-auto font-semibold text-bp-coral">
-                              {engine.fmtCurr(l.netSavings)} {t("dashboard.widgets.atRiskAmount")}
-                            </span>
-                          </div>
-                          <div className="mt-1.5">
-                            <ProgressBar pct={l.progress} />
-                          </div>
+                          <span className="flex-shrink-0 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10.5px] font-bold text-bp-coral">
+                            −{l.gap} {t("dashboard.widgets.gapPts")}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-3 text-[11px] text-secondary">
+                          <span>
+                            {t("dashboard.widgets.expectedProgress")} {l.expectedProgress}%
+                          </span>
+                          <span>→</span>
+                          <span>
+                            {t("dashboard.widgets.actualProgress")} {l.progress}%
+                          </span>
+                          <span className="ml-auto font-semibold text-bp-coral">
+                            {engine.fmtCurr(l.netSavings)} {t("dashboard.widgets.atRiskAmount")}
+                          </span>
+                        </div>
+                        <div className="mt-1.5">
+                          <ProgressBar pct={l.progress} />
                         </div>
                       </div>
-                    ))}
-                  </div>
-                  {underPageCount > 1 && (
-                    <div className="flex items-center justify-center gap-3 pt-3 mt-2 border-t border-border">
-                      <button
-                        onClick={() => setUnderPage((p) => Math.max(0, p - 1))}
-                        disabled={underPageClamped === 0}
-                        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      <span className="text-[11px] font-semibold text-secondary">
-                        {t("alerts.page", `Page ${underPageClamped + 1} / ${underPageCount}`)
-                          .replace("{current}", String(underPageClamped + 1))
-                          .replace("{total}", String(underPageCount))}
-                      </span>
-                      <button
-                        onClick={() => setUnderPage((p) => Math.min(underPageCount - 1, p + 1))}
-                        disabled={underPageClamped >= underPageCount - 1}
-                        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
-                      >
-                        <ChevronRight size={14} />
-                      </button>
                     </div>
-                  )}
-                </>
+                  ))}
+                </div>
               )}
             </CardBody>
           </Card>
         );
 
-      case "initiative-health": {
-        // Palette du compteur de statut : reprend les couleurs de la matrice (rag-green /
-        // rag-amber / rag-red / neutral) pour que les chiffres de la barre d'actions du widget
-        // aient exactement la même identité visuelle que les tuiles.
-        const HEALTH_COUNT_CLASS: Record<LeverHealthStatus, string> = {
-          onTrack: "bg-rag-green-light text-rag-green-dark",
-          watch: "bg-rag-amber-light text-rag-amber",
-          critical: "bg-rag-red-light text-rag-red",
-          cancelled: "bg-neutral-100 text-tertiary",
-        };
-        const HEALTH_LABEL: Record<LeverHealthStatus, string> = {
-          onTrack: t("dashboard.widgets.healthOnTrack"),
-          watch: t("dashboard.widgets.healthWatch"),
-          critical: t("dashboard.widgets.healthCritical"),
-          cancelled: t("dashboard.widgets.healthCancelled"),
-        };
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader
-              title={t("dashboard.widgets.initiativeHealth")}
-              actions={
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Compteurs par statut — colorés, non-cliquables (le filtrage global se fait
-                   *  via la FilterBar en haut de page, contrôlée par les filtres cross-widget). */}
-                  {(["critical", "watch", "onTrack", "cancelled"] as const).map((status) => {
-                    const count = healthCounts[status];
-                    if (count === 0) return null;
-                    return (
-                      <span
-                        key={status}
-                        className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold ${HEALTH_COUNT_CLASS[status]}`}
-                        title={HEALTH_LABEL[status]}
-                      >
-                        {count}
-                      </span>
-                    );
-                  })}
-                  {/* Sélecteur "Grouper par" : dimension X de la matrice. Choix contrôlé DANS le
-                   *  widget, indépendant des filtres globaux (décision pilote Août 2026). */}
-                  <span className="text-[10px] text-tertiary">
-                    {t("dashboard.widgets.groupBy")}
-                  </span>
-                  <select
-                    value={healthGroupBy}
-                    onChange={(e) =>
-                      setHealthGroupBy(e.target.value as "workstream" | "country" | "function")
-                    }
-                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                  >
-                    <option value="workstream">{t("dashboard.widgets.groupByWorkstream")}</option>
-                    <option value="country">{t("dashboard.widgets.groupByCountry")}</option>
-                    <option value="function">{t("dashboard.widgets.groupByFunction")}</option>
-                  </select>
-                </div>
-              }
-            />
-            <CardBody>
-              <InitiativeHealthMatrix
-                groups={healthGroups}
-                labels={{
-                  onTrack: HEALTH_LABEL.onTrack,
-                  watch: HEALTH_LABEL.watch,
-                  critical: HEALTH_LABEL.critical,
-                  cancelled: HEALTH_LABEL.cancelled,
-                  empty: t("dashboard.widgets.initiativeHealthEmpty"),
-                }}
-                onLeverClick={(lever) => router.push(`/levers/detail?id=${lever.id}`)}
-              />
-            </CardBody>
-          </Card>
-        );
-      }
       case "dependency-alerts": {
         const depSeverity = (days: number) => {
           if (days > 30) return { label: t("dep.blocking"), cls: "bg-rag-red-light text-rag-red" };
@@ -1882,152 +1724,120 @@ export default function DashboardPage() {
                   {t("dashboard.widgets.noDependencyAlerts")}
                 </p>
               ) : (
-                <>
-                  <div className="flex flex-col gap-3">
-                    {depAlertsOnPage.map((a, i) => {
-                      const sev = depSeverity(a.delayDays);
-                      const meta = DEPENDENCY_TYPE_META[a.type];
-                      return (
-                        <div
-                          key={`${a.sourceId}-${a.targetId}-${i}`}
-                          onClick={() => {
-                            // Le modèle remote a supprimé les sous-leviers (commit 330b49a — le
-                            // plan d'action se lit désormais sur les Actions du levier). Un
-                            // sourceId est donc toujours un lever.id directement — plus besoin
-                            // du lookup subLever → leverId qui existait avant.
-                            router.push(`/levers/detail?id=${a.sourceId}`);
-                          }}
-                          className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
-                        >
-                          <div className="mb-2 flex items-start justify-between gap-2">
-                            <div>
-                              <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
-                                Règle de planning
-                              </div>
-                              <div className="mt-1 text-[11px] font-semibold text-primary">
-                                {a.type === "FS" &&
-                                  "La cible doit finir avant le début de la source"}
-                                {a.type === "SF" &&
-                                  "La cible doit démarrer avant la fin de la source"}
-                                {a.type === "SS" && "Les deux éléments doivent démarrer ensemble"}
-                                {a.type === "FF" && "Les deux éléments doivent finir ensemble"}
-                              </div>
+                <div className="flex flex-col gap-3">
+                  {depAlerts.slice(0, 6).map((a, i) => {
+                    const sev = depSeverity(a.delayDays);
+                    const meta = DEPENDENCY_TYPE_META[a.type];
+                    return (
+                      <div
+                        key={`${a.sourceId}-${a.targetId}-${i}`}
+                        onClick={() => {
+                          router.push(`/levers/detail?id=${a.sourceId}`);
+                        }}
+                        className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
+                      >
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                              Règle de planning
                             </div>
-                            <DependencyTypeBadge type={a.type} />
+                            <div className="mt-1 text-[11px] font-semibold text-primary">
+                              {a.type === "FS" && "La cible doit finir avant le début de la source"}
+                              {a.type === "SF" &&
+                                "La cible doit démarrer avant la fin de la source"}
+                              {a.type === "SS" && "Les deux éléments doivent démarrer ensemble"}
+                              {a.type === "FF" && "Les deux éléments doivent finir ensemble"}
+                            </div>
                           </div>
-                          {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
+                          <DependencyTypeBadge type={a.type} />
+                        </div>
+                        {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
                             mobile (les deux blocs côte à côte débordaient sous ~480px), côte à
                             côte avec flèche dès sm. min-w-0 partout : sans lui, flex-1 refuse de
                             rétrécir sous la largeur du contenu et pousse hors de la carte. */}
-                          {meta.directional ? (
-                            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
-                              <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                                  {t("dep.blocker")}
-                                </div>
-                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                  {a.targetName}
-                                </div>
-                                <div className="mt-0.5 text-[10px] text-secondary">
-                                  {meta.targetMilestone} : {a.targetDate}
-                                </div>
+                        {meta.directional ? (
+                          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
+                            <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                                {t("dep.blocker")}
                               </div>
-                              <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
-                                <ArrowDown size={14} className="sm:hidden" />
-                                <ArrowRight size={14} className="hidden sm:block" />
-                                <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
-                                  {a.type}
-                                </span>
+                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                {a.targetName}
                               </div>
-                              <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                  {t("dep.blocked")}
-                                </div>
-                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                  {a.sourceName}
-                                </div>
-                                <div className="mt-0.5 text-[10px] text-secondary">
-                                  {meta.sourceMilestone} : {a.sourceDate}
-                                </div>
+                              <div className="mt-0.5 text-[10px] text-secondary">
+                                {meta.targetMilestone} : {a.targetDate}
                               </div>
                             </div>
-                          ) : (
-                            /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
-                            <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
-                              <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                  {t("dep.atRisk")}
-                                </div>
-                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                  {a.sourceName}
-                                </div>
-                                <div className="mt-0.5 text-[10px] text-secondary">
-                                  {meta.sourceMilestone} : {a.sourceDate}
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
-                                <ArrowUpDown size={10} />
+                            <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
+                              <ArrowDown size={14} className="sm:hidden" />
+                              <ArrowRight size={14} className="hidden sm:block" />
+                              <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
                                 {a.type}
+                              </span>
+                            </div>
+                            <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                {t("dep.blocked")}
                               </div>
-                              <div className="bg-bp-coral/[0.03] p-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                  {t("dep.atRisk")}
-                                </div>
-                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                  {a.targetName}
-                                </div>
-                                <div className="mt-0.5 text-[10px] text-secondary">
-                                  {meta.targetMilestone} : {a.targetDate}
-                                </div>
+                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                {a.sourceName}
+                              </div>
+                              <div className="mt-0.5 text-[10px] text-secondary">
+                                {meta.sourceMilestone} : {a.sourceDate}
                               </div>
                             </div>
-                          )}
-                          {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
-                            que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
-                          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
-                            <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
-                              {sev.label}
-                            </span>
-                            <span className="text-secondary">
-                              {a.delayDays}{" "}
-                              {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
-                            </span>
-                            {a.impactEur > 0 && (
-                              <span className="ml-auto font-bold text-bp-coral">
-                                {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
-                              </span>
-                            )}
                           </div>
+                        ) : (
+                          /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
+                          <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
+                            <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                {t("dep.atRisk")}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                {a.sourceName}
+                              </div>
+                              <div className="mt-0.5 text-[10px] text-secondary">
+                                {meta.sourceMilestone} : {a.sourceDate}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
+                              <ArrowUpDown size={10} />
+                              {a.type}
+                            </div>
+                            <div className="bg-bp-coral/[0.03] p-2">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                {t("dep.atRisk")}
+                              </div>
+                              <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                {a.targetName}
+                              </div>
+                              <div className="mt-0.5 text-[10px] text-secondary">
+                                {meta.targetMilestone} : {a.targetDate}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
+                            que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
+                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+                          <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
+                            {sev.label}
+                          </span>
+                          <span className="text-secondary">
+                            {a.delayDays}{" "}
+                            {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
+                          </span>
+                          {a.impactEur > 0 && (
+                            <span className="ml-auto font-bold text-bp-coral">
+                              {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
+                            </span>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                  {depAlertPageCount > 1 && (
-                    <div className="flex items-center justify-center gap-3 pt-3 mt-2 border-t border-border">
-                      <button
-                        onClick={() => setDepAlertPage((p) => Math.max(0, p - 1))}
-                        disabled={depAlertPageClamped === 0}
-                        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      <span className="text-[11px] font-semibold text-secondary">
-                        {t("alerts.page", `Page ${depAlertPageClamped + 1} / ${depAlertPageCount}`)
-                          .replace("{current}", String(depAlertPageClamped + 1))
-                          .replace("{total}", String(depAlertPageCount))}
-                      </span>
-                      <button
-                        onClick={() =>
-                          setDepAlertPage((p) => Math.min(depAlertPageCount - 1, p + 1))
-                        }
-                        disabled={depAlertPageClamped >= depAlertPageCount - 1}
-                        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
-                      >
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                  )}
-                </>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </CardBody>
           </Card>
@@ -2145,12 +1955,7 @@ export default function DashboardPage() {
           exécutive — "Économies réalisées" (l'indicateur que DG/CTO regardent en premier) passe
           héros pleine largeur avec chiffre agrandi, les 4 autres en 2×2 compact dessous. */}
       <div className="mb-4 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2 max-[1100px]:gap-3">
-        {/* 1. Économies réalisées — cible + reforecast + % dans le sub, marqueur reforecast sur
-            la barre. La sub-ligne "Ambition Programme" (bloc `secondary`) a été retirée en
-            Août 2026 suite au feedback pilote : les chiffres bottom-up (Σ lever.netSavings)
-            et top-down (data.program.target) divergent visuellement de manière trompeuse dans
-            cette carte hero. L'ambition programme reste consultable ailleurs (Admin →
-            Programmes) et via le widget "Trajectoire des économies" (S-Curve). */}
+        {/* 1. Économies réalisées — cible + reforecast + % (marqueur sur la barre) */}
         <KPICard
           label={t("dashboard.kpi.savingsRealized")}
           value={engine.fmtCurr(summary.realized)}
@@ -2162,6 +1967,15 @@ export default function DashboardPage() {
           barMarkerPct={
             summary.target > 0
               ? Math.round((summary.reforecastTarget / summary.target) * 100)
+              : undefined
+          }
+          secondary={
+            programAmbition
+              ? {
+                  label: "Ambition Programme",
+                  value: `${engine.fmtCurr(programAmbition)}${leverCoveragePct !== undefined ? ` · ${leverCoveragePct}% couvert` : ""}`,
+                  pct: leverCoveragePct ?? 0,
+                }
               : undefined
           }
           onClick={() => goToLevers({})}

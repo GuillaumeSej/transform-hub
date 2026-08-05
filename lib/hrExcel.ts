@@ -137,23 +137,11 @@ export function parseEmployeeRow(
 }
 
 const MOVEMENT_TYPES: MovementType[] = [
+  "Redéploiement",
+  "Reconversion",
+  "Suppression",
   "Recrutement",
-  "Attrition",
-  "Départ forcé",
-  "Transfert entrant",
-  "Transfert sortant",
 ];
-
-/** Alias historiques : le mapping "ancien libellé" → "nouveau libellé Gooduelle" permet à
- *  l'import Excel de rester rétrocompatible avec les fichiers clients bâtis sur la typologie
- *  4-types (Suppression / Redéploiement / Reconversion / Recrutement). Le préfixe "requiresRe-
- *  training" pour Reconversion est appliqué en aval par le formulaire. */
-const LEGACY_TYPE_ALIASES: Record<string, MovementType> = {
-  suppression: "Départ forcé",
-  redéploiement: "Transfert entrant",
-  redeploiement: "Transfert entrant",
-  reconversion: "Transfert entrant",
-};
 const MOVEMENT_STATUSES: MovementStatus[] = ["Planifié", "En cours", "Réalisé"];
 
 export type ParsedMovementRow = { values: WorkforceMovement | null; warnings: string[] };
@@ -174,18 +162,11 @@ export function parseMovementRow(
   }
 
   const typeRaw = str(row["Type"]);
-  const typeRawLc = typeRaw.toLowerCase();
-  const exactMatch = MOVEMENT_TYPES.find((t) => t.toLowerCase() === typeRawLc);
-  const legacyMatch = LEGACY_TYPE_ALIASES[typeRawLc];
-  const type: MovementType = exactMatch ?? legacyMatch ?? "Transfert entrant";
-  const requiresRetraining = !exactMatch && typeRawLc === "reconversion";
-  if (typeRaw && !exactMatch && legacyMatch) {
+  const type =
+    MOVEMENT_TYPES.find((t) => t.toLowerCase() === typeRaw.toLowerCase()) ?? "Redéploiement";
+  if (typeRaw && type.toLowerCase() !== typeRaw.toLowerCase()) {
     warnings.push(
-      `Mouvements ligne ${rowNumber} : type "${typeRaw}" (typologie 4-types) converti automatiquement en "${type}"${requiresRetraining ? " avec reconversion (requiresRetraining=true)" : ""}`
-    );
-  } else if (typeRaw && !exactMatch && !legacyMatch) {
-    warnings.push(
-      `Mouvements ligne ${rowNumber} : type "${typeRaw}" inconnu — "Transfert entrant" utilisé`
+      `Mouvements ligne ${rowNumber} : type "${typeRaw}" inconnu — "Redéploiement" utilisé`
     );
   }
 
@@ -236,7 +217,6 @@ export function parseMovementRow(
       savings: numOr(row["Économies (€)"], 0),
       cost: numOr(row["Coût one-off (€)"], 0),
       comment: str(row["Commentaire"]) || undefined,
-      ...(requiresRetraining ? { requiresRetraining: true } : {}),
     },
     warnings,
   };

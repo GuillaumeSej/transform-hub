@@ -42,9 +42,6 @@ export type { WidgetSpan };
 export type HrWidgetType =
   | "fte-waterfall"
   | "fte-trajectory"
-  | "movement-rhythm"
-  | "net-economy"
-  | "multi-fy-budget"
   | "department-breakdown"
   | "country-breakdown"
   | "movement-type-breakdown"
@@ -113,31 +110,6 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     allowedSpans: ["L", "XL"],
   },
   {
-    type: "movement-rhythm",
-    // Nouveau (Août 2026, alignement OD Monitoring / Gooduelle) — rythme mensuel décomposé
-    // par les 5 types + ligne cumul net centrée zéro. Structure fixe, pas de builder.
-    label: "Rythme des mouvements (5 catégories + cumul net)",
-    icon: "Activity",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-  },
-  {
-    type: "net-economy",
-    // Nouveau — économie nette = savings récurrentes − ENR (coûts sociaux one-off).
-    label: "Économie nette (savings récurrentes − ENR)",
-    icon: "Wallet",
-    defaultSpan: "L",
-    allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "multi-fy-budget",
-    // Nouveau — projection multi-exercices (respecte Company.fyStart).
-    label: "Projection multi-exercices (par FY)",
-    icon: "CalendarRange",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-  },
-  {
     type: "department-breakdown",
     label: "Mouvements par département (ETP)",
     icon: "Building2",
@@ -150,13 +122,13 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
         id: "detail",
         metric: "fteImpact",
         dimension: "department",
-        label: "Détail par département (départs / recrut. / transferts)",
+        label: "Détail par département (suppr. / recrut. / transferts)",
       },
     ],
   },
   {
     type: "country-breakdown",
-    label: "Mouvements par pays / cluster (ETP)",
+    label: "Mouvements par pays (ETP)",
     icon: "Globe2",
     defaultSpan: "M",
     allowedSpans: ["S", "M", "L", "XL"],
@@ -164,7 +136,6 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     defaultView: "country",
     defaultCustomViews: [
       { id: "country", metric: "fteImpact", dimension: "country", label: "Pays" },
-      { id: "region", metric: "fteImpact", dimension: "region", label: "Cluster / région" },
     ],
   },
   {

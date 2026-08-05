@@ -626,7 +626,7 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
     expect(s.riskSavingsCut).toBe(1);
   });
 
-  it("suppressions aggregate FTE of 'Départ forcé' movements, realized = status Réalisé", () => {
+  it("suppressions aggregate FTE of Suppression movements, realized = status Réalisé", () => {
     const data = makeData({
       workforce: {
         totalFTE: 200,
@@ -640,7 +640,7 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
             empId: "EMP1",
             label: "A",
             leverId: "L001",
-            type: "Départ forcé",
+            type: "Suppression",
             fte: 3,
             department: "Prod",
             country: "France",
@@ -658,7 +658,7 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
             empId: "EMP2",
             label: "B",
             leverId: "L001",
-            type: "Départ forcé",
+            type: "Suppression",
             fte: 2,
             department: "Prod",
             country: "France",

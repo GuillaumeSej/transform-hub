@@ -34,18 +34,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export type MovementFormValues = Omit<WorkforceMovement, "id">;
 
-const TYPES: MovementType[] = [
-  "Recrutement",
-  "Attrition",
-  "Départ forcé",
-  "Transfert entrant",
-  "Transfert sortant",
-];
+const TYPES: MovementType[] = ["Redéploiement", "Reconversion", "Suppression", "Recrutement"];
 const STATUSES: MovementStatus[] = ["Planifié", "En cours", "Réalisé"];
-const TRANSFER_TYPES: MovementType[] = ["Transfert entrant", "Transfert sortant"];
-/** Types autorisant l'ancienneté (`tenure`) et le PSE dans le calcul mécanisme-dépendant. */
-const TENURE_TYPES: MovementType[] = ["Départ forcé", "Attrition"];
-const PSE_TYPES: MovementType[] = ["Départ forcé"];
+const TRANSFER_TYPES: MovementType[] = ["Redéploiement", "Reconversion"];
 const DEFAULT_RECRUITMENT_SALARY = 45_000;
 
 /** Formulaire de création/édition d'un mouvement RH — rattache un employé (ou un poste à
@@ -93,7 +84,7 @@ export function MovementForm({
     empId: firstEmployee?.id ?? null,
     label: firstEmployee?.name ?? "",
     leverId: data.levers[0]?.id ?? "",
-    type: "Transfert entrant",
+    type: "Redéploiement",
     fte: firstEmployee?.fte ?? 1,
     department: firstEmployee?.department ?? departments[0]?.name ?? "",
     toDepartment: undefined,
@@ -141,9 +132,8 @@ export function MovementForm({
         chargesRate,
         tenure,
         inPSE: values.inPSE,
-        requiresRetraining: values.requiresRetraining,
       }),
-    [values.type, grossSalary, chargesRate, tenure, values.inPSE, values.requiresRetraining]
+    [values.type, grossSalary, chargesRate, tenure, values.inPSE]
   );
 
   const applyFinancials = (fin: MovementFinancials) => {
@@ -169,7 +159,6 @@ export function MovementForm({
         chargesRate,
         tenure,
         inPSE: values.inPSE,
-        requiresRetraining: values.requiresRetraining,
       })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,7 +174,6 @@ export function MovementForm({
       chargesRate,
       tenure: nextTenure,
       inPSE: values.inPSE,
-      requiresRetraining: values.requiresRetraining,
     });
     setValues((prev) => ({
       ...prev,
@@ -204,18 +192,14 @@ export function MovementForm({
   const applyType = (type: MovementType) => {
     const emp = employees.find((e) => e.id === values.empId);
     const nextGrossSalary = type === "Recrutement" ? manualGrossSalary : (emp?.salary ?? 0);
-    const nextTenure = TENURE_TYPES.includes(type) ? tenureYears(emp?.hireDate, refDate) : 0;
-    const inPSE = PSE_TYPES.includes(type) ? (values.inPSE ?? false) : false;
-    const requiresRetraining = TRANSFER_TYPES.includes(type)
-      ? (values.requiresRetraining ?? false)
-      : undefined;
+    const nextTenure = type === "Suppression" ? tenureYears(emp?.hireDate, refDate) : 0;
+    const inPSE = type === "Suppression" ? (values.inPSE ?? false) : false;
     const fin = computeMovementFinancials({
       type,
       grossSalary: nextGrossSalary,
       chargesRate,
       tenure: nextTenure,
       inPSE,
-      requiresRetraining,
     });
     setValues((prev) => ({
       ...prev,
@@ -229,7 +213,6 @@ export function MovementForm({
           : (emp?.name ?? prev.label),
       toDepartment: TRANSFER_TYPES.includes(type) ? prev.toDepartment : undefined,
       inPSE,
-      requiresRetraining,
       salaryImpact: fin.salaryImpact,
       savings: fin.salarySavings,
       cost: fin.socialCost,
@@ -415,7 +398,7 @@ export function MovementForm({
             ))}
           </select>
         </Field>
-        {PSE_TYPES.includes(values.type) ? (
+        {values.type === "Suppression" ? (
           <label className="flex items-end gap-2 pb-1.5">
             <input
               type="checkbox"
@@ -430,38 +413,12 @@ export function MovementForm({
                     chargesRate,
                     tenure,
                     inPSE,
-                    requiresRetraining: values.requiresRetraining,
                   })
                 );
               }}
               className="accent-[#FF3C47]"
             />
             <span className="text-xs font-medium text-primary">Inclus dans le PSE</span>
-          </label>
-        ) : isTransfer ? (
-          <label className="flex items-end gap-2 pb-1.5">
-            <input
-              type="checkbox"
-              checked={values.requiresRetraining ?? false}
-              onChange={(e) => {
-                const requiresRetraining = e.target.checked;
-                set("requiresRetraining", requiresRetraining);
-                applyFinancials(
-                  computeMovementFinancials({
-                    type: values.type,
-                    grossSalary,
-                    chargesRate,
-                    tenure,
-                    inPSE: values.inPSE,
-                    requiresRetraining,
-                  })
-                );
-              }}
-              className="accent-[#0F172A]"
-            />
-            <span className="text-xs font-medium text-primary">
-              Nécessite une reconversion (formation lourde)
-            </span>
           </label>
         ) : (
           <div />
