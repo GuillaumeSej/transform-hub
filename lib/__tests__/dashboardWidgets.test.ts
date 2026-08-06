@@ -14,6 +14,7 @@ import {
   resolveCustomViews,
   resolveActiveCustomView,
   migrateInitiativeHealthWidget,
+  reorderInitiativeHealthWidget,
   type DashboardWidgetInstance,
 } from "@/lib/dashboardWidgets";
 
@@ -53,6 +54,62 @@ describe("dashboardWidgets — initiative health layout migration", () => {
   it("does not re-add a widget deliberately removed after migration", () => {
     const legacy = buildDefaultLayout().filter((w) => w.type !== "initiative-health");
     expect(migrateInitiativeHealthWidget(legacy, true)).toBe(legacy);
+  });
+});
+
+describe("dashboardWidgets — initiative health reorder migration", () => {
+  /** Helper : produit un layout hypothétique où `initiative-health` est en dernière position,
+   *  reproduisant l'état des layouts persistés avant Août 2026 (avant la remontée en position 3). */
+  const legacyOrder = (): DashboardWidgetInstance[] => {
+    const layout = buildDefaultLayout();
+    const initiativeHealth = layout.find((w) => w.type === "initiative-health")!;
+    const withoutIt = layout.filter((w) => w.type !== "initiative-health");
+    return [...withoutIt, initiativeHealth];
+  };
+
+  it("moves initiative-health right after 'alerts'", () => {
+    const before = legacyOrder();
+    const after = reorderInitiativeHealthWidget(before, false);
+    const alertsIdx = after.findIndex((w) => w.type === "alerts");
+    const healthIdx = after.findIndex((w) => w.type === "initiative-health");
+    expect(healthIdx).toBe(alertsIdx + 1);
+    // Aucun widget perdu ni dupliqué
+    expect(after).toHaveLength(before.length);
+    expect(after.filter((w) => w.type === "initiative-health")).toHaveLength(1);
+  });
+
+  it("is a no-op when the migration has already been applied", () => {
+    const before = legacyOrder();
+    expect(reorderInitiativeHealthWidget(before, true)).toBe(before);
+  });
+
+  it("does not reintroduce initiative-health if the user has removed it", () => {
+    const legacy = buildDefaultLayout().filter((w) => w.type !== "initiative-health");
+    const after = reorderInitiativeHealthWidget(legacy, false);
+    expect(after.find((w) => w.type === "initiative-health")).toBeUndefined();
+    expect(after).toBe(legacy);
+  });
+
+  it("falls back to 'portfolio-funnel' when 'alerts' has been removed", () => {
+    const before = legacyOrder().filter((w) => w.type !== "alerts");
+    const after = reorderInitiativeHealthWidget(before, false);
+    const funnelIdx = after.findIndex((w) => w.type === "portfolio-funnel");
+    const healthIdx = after.findIndex((w) => w.type === "initiative-health");
+    expect(healthIdx).toBe(funnelIdx + 1);
+  });
+
+  it("does not move initiative-health if neither 'alerts' nor 'portfolio-funnel' is present", () => {
+    const before: DashboardWidgetInstance[] = [
+      { instanceId: "pnl", type: "pnl", span: "M" },
+      {
+        instanceId: "initiative-health",
+        type: "initiative-health",
+        span: "XL",
+        view: "workstream",
+      },
+    ];
+    const after = reorderInitiativeHealthWidget(before, false);
+    expect(after).toBe(before);
   });
 });
 

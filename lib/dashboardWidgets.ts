@@ -182,6 +182,22 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     allowedSpans: ["M", "L", "XL"],
   },
   {
+    // Widget "Santé des initiatives" — remonté juste après portfolio-funnel + alerts en Août
+    // 2026 pour rester au niveau du cockpit d'entrée (voir buildDefaultLayout). Le picker
+    // "Ajouter un widget" applique automatiquement le même ordre.
+    type: "initiative-health",
+    label: "Santé des initiatives",
+    icon: "LayoutGrid",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+    viewOptions: [
+      { key: "workstream", labelKey: "dashboard.workstream" },
+      { key: "country", labelKey: "dashboard.country" },
+      { key: "function", labelKey: "dashboard.function" },
+    ],
+    defaultView: "workstream",
+  },
+  {
     type: "stage-funnel",
     label: "Avancement par étape du cycle de vie",
     icon: "Workflow",
@@ -314,19 +330,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "Unlink",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "initiative-health",
-    label: "Santé des initiatives",
-    icon: "LayoutGrid",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-    viewOptions: [
-      { key: "workstream", labelKey: "dashboard.workstream" },
-      { key: "country", labelKey: "dashboard.country" },
-      { key: "function", labelKey: "dashboard.function" },
-    ],
-    defaultView: "workstream",
   },
   {
     type: "pnl",
@@ -560,6 +563,9 @@ export function resolveActiveCustomView(
 
 const LAYOUT_KEY = "betrack_dashboard_layout_v10";
 const INITIATIVE_HEALTH_MIGRATION_KEY = "betrack_dashboard_migration_initiative_health_v1";
+/** Clé pour la migration one-shot qui remonte `initiative-health` en position 3 (après
+ *  `alerts`). Voir `reorderInitiativeHealthWidget`. */
+const INITIATIVE_HEALTH_REORDER_KEY = "betrack_dashboard_initiative_health_reorder_v1";
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -643,6 +649,39 @@ export function migrateInitiativeHealthWidget(
   ];
 }
 
+/**
+ * Remonte `initiative-health` juste après `alerts` dans les layouts persistés. Migration
+ * one-shot (Août 2026) pour aligner tous les utilisateurs sur le nouvel ordre du registre —
+ * l'application n'étant pas encore en usage réel, personne n'a fait de choix de personnalisation
+ * qui serait écrasé.
+ *
+ * Idempotente (contrôlée par une clé localStorage séparée), non destructive :
+ *   - Si l'utilisateur a supprimé `initiative-health`, ne le réintroduit pas.
+ *   - Si `alerts` a été supprimé, retombe sur `portfolio-funnel` comme point d'ancrage.
+ *   - Si ni `alerts` ni `portfolio-funnel` ne sont présents, ne fait rien plutôt que d'insérer
+ *     à un endroit arbitraire.
+ */
+export function reorderInitiativeHealthWidget(
+  layout: DashboardWidgetInstance[],
+  reorderAlreadyApplied: boolean
+): DashboardWidgetInstance[] {
+  if (reorderAlreadyApplied) return layout;
+  const target = layout.find((i) => i.type === "initiative-health");
+  if (!target) return layout;
+  const alertsIdx = layout.findIndex((i) => i.type === "alerts");
+  const anchorIdx =
+    alertsIdx >= 0 ? alertsIdx : layout.findIndex((i) => i.type === "portfolio-funnel");
+  if (anchorIdx < 0) return layout;
+  const without = layout.filter((i) => i.type !== "initiative-health");
+  // anchorIdx est calculé sur le layout initial (contenant target) ; comme target a été retiré
+  // dans `without`, la position d'ancrage reste correcte si target était APRÈS l'ancre. Si
+  // target était AVANT l'ancre (cas peu probable — utilisateur qui l'aurait déjà remonté), on
+  // ajuste d'un cran.
+  const targetIdx = layout.indexOf(target);
+  const insertAfter = targetIdx < anchorIdx ? anchorIdx - 1 : anchorIdx;
+  return [...without.slice(0, insertAfter + 1), target, ...without.slice(insertAfter + 1)];
+}
+
 /** Charge le layout personnalisé depuis localStorage. Retombe sur le layout par défaut si absent,
  * corrompu, ou si son contenu ne correspond plus au registre actuel (ex. widget renommé/retiré).
  * `customViews` de chaque instance est en plus assaini (voir `sanitizeInstance`) — un layout
@@ -654,23 +693,30 @@ export function loadDashboardLayout(): DashboardWidgetInstance[] {
     const raw = window.localStorage.getItem(LAYOUT_KEY);
     if (!raw) {
       window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
+      window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
       return buildDefaultLayout();
     }
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidInstance)) {
       window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
+      window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
       return buildDefaultLayout();
     }
     const migrationAlreadyApplied =
       window.localStorage.getItem(INITIATIVE_HEALTH_MIGRATION_KEY) === "1";
-    const migrated = migrateInitiativeHealthWidget(
+    const reorderAlreadyApplied =
+      window.localStorage.getItem(INITIATIVE_HEALTH_REORDER_KEY) === "1";
+    // Chaîne les deux migrations : ajout du widget (si absent), puis remontée en position 3.
+    const added = migrateInitiativeHealthWidget(
       (parsed as DashboardWidgetInstance[]).map(sanitizeInstance).map(migrateSpan),
       migrationAlreadyApplied
     );
-    if (!migrationAlreadyApplied) {
+    const migrated = reorderInitiativeHealthWidget(added, reorderAlreadyApplied);
+    if (!migrationAlreadyApplied || !reorderAlreadyApplied) {
       window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(migrated));
     }
     window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
+    window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
     return migrated;
   } catch {
     return buildDefaultLayout();
@@ -682,6 +728,7 @@ export function saveDashboardLayout(layout: DashboardWidgetInstance[]): void {
   try {
     window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
     window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
+    window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
   } catch (err) {
     console.error(
       "[betrack storage] échec d'écriture localStorage pour le layout dashboard :",
