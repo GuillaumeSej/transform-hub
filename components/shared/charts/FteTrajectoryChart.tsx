@@ -20,15 +20,14 @@ const COLOR_PLANNED = "#A99E9A"; // taupe — le plan
 const COLOR_TARGET = "#FF3C47"; // coral — la cible
 const AREA_FILL = "rgba(0,0,0,0.04)"; // surface grise très légère sous la courbe réelle
 
-/** Couleurs de la ventilation par type de mouvement dans le tooltip. Palette 5-types
- *  Gooduelle (Août 2026) : vert Recrutement, orange Attrition, rouge Départ forcé, gris clair
- *  Transfert entrant, gris foncé Transfert sortant. */
+/** Couleurs de la ventilation par type de mouvement dans le tooltip. Palette 5-types alignée
+ *  sur les tokens dataviz BeTrack : violet de secours, famille rouge et taupes. */
 const TYPE_COLORS: Record<MovementType, string> = {
-  Recrutement: "#3D9970",
-  Attrition: "#FF9F1C",
+  Recrutement: "#421799",
+  Attrition: "#FFB1B5",
   "Départ forcé": "#FF3C47",
-  "Transfert entrant": "#B4B0AB",
-  "Transfert sortant": "#7A756F",
+  "Transfert entrant": "#A99E9A",
+  "Transfert sortant": "#806659",
 };
 
 const TYPE_LABELS: Record<MovementType, string> = {

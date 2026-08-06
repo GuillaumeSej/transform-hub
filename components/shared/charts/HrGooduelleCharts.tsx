@@ -31,28 +31,24 @@ import type {
 import type { FteBridgeSummary } from "@/lib/hrEngine";
 import type { MovementType } from "@/types";
 
-/** Palette 5-types verrouillée en plan mode :
- *  - Vert Recrutement
- *  - Orange Attrition
- *  - Rouge Départ forcé
- *  - Gris clair Transfert entrant
- *  - Gris foncé Transfert sortant */
+/** Palette 5-types alignée sur les tokens dataviz BeTrack / BearingPoint : famille rouge,
+ *  taupes et violet de secours. Vert et orange sont volontairement exclus par la charte. */
 const TYPE_COLORS: Record<MovementType, string> = {
-  Recrutement: "#3D9970",
-  Attrition: "#FF9F1C",
+  Recrutement: "#421799",
+  Attrition: "#FFB1B5",
   "Départ forcé": "#FF3C47",
-  "Transfert entrant": "#B4B0AB",
-  "Transfert sortant": "#7A756F",
+  "Transfert entrant": "#A99E9A",
+  "Transfert sortant": "#806659",
 };
 
-const COLOR_SAVINGS = "#2E7D5B"; // vert bouteille pour actual+forecast
-const COLOR_PLAN = "#B4B0AB"; // gris clair pour le plan
-const COLOR_ENR = "#C0392B"; // rouge brique pour les ENR
-const COLOR_ENR_CUMUL = "#7C2418"; // rouge foncé pour la courbe cumul ENR
-const COLOR_NET_POS = "#3D9970"; // économie nette positive
-const COLOR_NET_NEG = "#C0392B"; // économie nette négative
-const COLOR_NET_CUMUL = "#0B5A3F"; // vert profond pour cumul net
-const COLOR_INK = "#0F172A"; // noir pour cumul mouvements
+const COLOR_SAVINGS = "#421799"; // bp-purple : actual + forecast
+const COLOR_PLAN = "#CCC1BD"; // warm-gray : plan
+const COLOR_ENR = "#FF3C47"; // coral : ENR par période
+const COLOR_ENR_CUMUL = "#991D1F"; // red-brick : cumul ENR
+const COLOR_NET_POS = "#421799"; // bp-purple : économie nette positive
+const COLOR_NET_NEG = "#FF3C47"; // coral : économie nette négative
+const COLOR_NET_CUMUL = "#320300"; // deep-red : cumul net
+const COLOR_INK = "#320300"; // deep-red : cumul mouvements
 
 const fmtMEur = (v: number) => `${v.toFixed(1)} M€`;
 const fmtEtp = (v: number) => v.toLocaleString("fr-FR");
@@ -403,9 +399,9 @@ export function EtpBridgeChart({
   });
 
   const kindColor: Record<Datum["kind"], string> = {
-    open: "#0B5A3F",
-    close: "#0B5A3F",
-    positive: "#3D9970",
+    open: "#320300",
+    close: "#320300",
+    positive: "#421799",
     negative: "#FF3C47",
   };
 

@@ -35,6 +35,15 @@ export type HrProgramSummary = {
   netEconomy: HrKpi;
 };
 
+/** Cible d'effectif absolue dérivée du plan bottom-up des mouvements : baseline + impact ETP
+ * cible. Centralisé ici pour que le même résultat puisse alimenter le dashboard, un export Excel
+ * ou un autre widget sans recalcul métier dans React. */
+export function targetFteFromBaseline(totalFTE: number, targetImpact: number): number {
+  const baseline = Number.isFinite(totalFTE) ? totalFTE : 0;
+  const impact = Number.isFinite(targetImpact) ? targetImpact : 0;
+  return Math.round((baseline + impact) * 10) / 10;
+}
+
 function safePct(realized: number, target: number): number {
   if (target === 0) return 0;
   const pct = Math.round((realized / target) * 100);

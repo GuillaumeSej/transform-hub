@@ -20,7 +20,7 @@ import type { DepartmentMovements } from "@/lib/hrEngine";
 export const HR_CATEGORICAL = ["#FF3C47", "#421799", "#320300", "#FFB1B5", "#421799", "#A99E9A"];
 
 const COLOR_DOWN = "#FF3C47"; // départs forcés + attrition (exits)
-const COLOR_UP = "#3D9970"; // recrutements
+const COLOR_UP = "#421799"; // recrutements — bp-purple, aligné waterfall ETP
 const COLOR_NEUTRAL = "#806659"; // transferts (entrants + sortants)
 
 /** Barres divergentes par département — depuis Août 2026 les "exits" agrègent Attrition + Départ

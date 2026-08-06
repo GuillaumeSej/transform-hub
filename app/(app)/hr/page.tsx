@@ -26,7 +26,7 @@ import {
   salarySavingsSeries,
   socialCostSeries,
 } from "@/lib/hrTimeSeries";
-import { hrProgramSummary } from "@/lib/hrProgramSummary";
+import { hrProgramSummary, targetFteFromBaseline } from "@/lib/hrProgramSummary";
 import { fmtCurr } from "@/lib/engine";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { HrKPICard } from "@/components/shared/HrKPICard";
@@ -272,7 +272,10 @@ export default function HrDashboardPage() {
   }, [savingsSeries]);
 
   const current = hr.currentFTE(filteredWf);
-  const target = hr.targetFTE(filteredWf);
+  // Cible ETP bottom-up : baseline + réductions/créations prévues dans les mouvements.
+  // L'ancienne cible reposait sur les fteTarget départementaux figés (2 600 ETP), sans lien
+  // avec la cible du KPI Impact ETP calculée depuis les lockedPlan des mouvements filtrés.
+  const target = targetFteFromBaseline(wf.totalFTE, summary.fte.target);
   const landing = hr.plannedFTE(filteredWf);
   const reductionGoal = wf.totalFTE - target;
   const reductionDone = wf.totalFTE - current;

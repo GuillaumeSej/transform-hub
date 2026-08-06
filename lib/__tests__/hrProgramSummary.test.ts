@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hrProgramSummary } from "@/lib/hrProgramSummary";
+import { hrProgramSummary, targetFteFromBaseline } from "@/lib/hrProgramSummary";
 import type { WorkforceMovement, WorkforceMovementSnapshot } from "@/types";
 
 function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement {
@@ -120,5 +120,16 @@ describe("hrProgramSummary", () => {
       makeMovement({ id: "M4", type: "Transfert entrant", fte: 5, status: "Réalisé" }),
     ]);
     expect(s.fte.realized).toBe(3 - 2 - 4);
+  });
+});
+
+describe("targetFteFromBaseline", () => {
+  it("derives the absolute target from baseline plus planned FTE impact", () => {
+    expect(targetFteFromBaseline(2840, -16.9)).toBe(2823.1);
+  });
+
+  it("falls back safely when an input is not finite", () => {
+    expect(targetFteFromBaseline(2840, Number.NaN)).toBe(2840);
+    expect(targetFteFromBaseline(Number.NaN, -16.9)).toBe(-16.9);
   });
 });
