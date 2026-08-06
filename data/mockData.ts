@@ -432,10 +432,12 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     return emp;
   };
 
-  /** Programme de rattachement standard pour tous les mouvements de démo (miroir du programme
-   *  déclaré dans `mockData.program`). Un mouvement sans programme ne remonterait pas dans les
-   *  vues scopées du dashboard RH — pour la démo on rattache tout au programme principal. */
-  const DEMO_PROGRAM_ID = "PRG-2026";
+  /** Programme de rattachement standard pour tous les mouvements de démo. Aligné sur
+   *  `TEST_PROGRAM.id = "p1"` (voir lib/firestore/admin.ts) — c'est le programme réellement
+   *  seedé dans la collection Firestore multi-programmes `programs`, qui alimente le sélecteur
+   *  du dashboard RH ET du dashboard exécutif. L'ancien `PRG-2026` (id de `ProgramConfig`, slot
+   *  mono-programme historique) rendait tous les mouvements invisibles au sélecteur multi. */
+  const DEMO_PROGRAM_ID = "p1";
 
   /** Génère un léger écart entre lockedPlan et reforecast pour rendre les KPI vivants : le
    *  reforecast est ajusté sur les coûts et parfois sur le salaryImpact, comme dans la vraie vie
@@ -529,13 +531,21 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     });
   };
 
-  /** Étale les mouvements sur 3 années fiscales (2026, 2027, 2028) pour illustrer les filtres FY :
-   *  année = 2026 + (index d'itération sur le plan) */
-  const yearForIndex = (idx: number, total: number): number => {
-    // Distribution : 40% 2026, 40% 2027, 20% 2028
-    if (idx < Math.floor(total * 0.4)) return 2026;
-    if (idx < Math.floor(total * 0.8)) return 2027;
-    return 2028;
+  /** Étale les mouvements sur 3 années fiscales (2026, 2027, 2028) via un compteur global
+   *  déterministe : le mouvement #N est placé sur `2026 + (N % 3)`, ce qui garantit
+   *  ~33% par année quelle que soit la taille du plan individuel (l'ancienne distribution
+   *  par sous-catégorie produisait des plans à zéro mouvement 2026 quand `forcedDeparture < 3`).
+   *  Le mois est également dérivé du compteur pour couvrir 1-12 (débordement autorisé au-delà
+   *  de décembre → passe à l'année suivante, ce qui rend la répartition encore plus naturelle). */
+  let movementYearCursor = 0;
+  const nextYearMonth = (startMonth: number): { year: number; month: number } => {
+    const seqYear = 2026 + (movementYearCursor % 3);
+    // Le mois de base démarre à `startMonth` et progresse par pas de 2 en tournant sur 12 pour
+    // éviter que tous les mouvements d'un même plan tombent le même mois.
+    const rawMonth = startMonth + Math.floor(movementYearCursor / 3) * 2;
+    const month = ((rawMonth - 1) % 12) + 1;
+    movementYearCursor += 1;
+    return { year: seqYear, month };
   };
 
   for (const plan of MOVEMENT_PLAN) {
@@ -548,8 +558,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     // Départs forcés (ancienne "Suppression") — indemnités majorées pour la contrainte.
     for (let i = 0; i < plan.forcedDeparture; i++) {
       const emp = pickEmployee(plan.dept, seq + i);
-      const year = yearForIndex(i, plan.forcedDeparture);
-      const month = Math.min(12, plan.startMonth + (i % 6));
+      const { year, month } = nextYearMonth(plan.startMonth);
       const baseCost = plan.pse ? 45000 + ((seq * 7) % 4) * 5000 : 20000;
       push(emp, emp.name, planContext, "Départ forcé", emp.fte, year, month, {
         pse: plan.pse,
@@ -561,8 +570,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     // Attrition (départ volontaire — préavis seul, pas d'indemnité de rupture).
     for (let i = 0; i < (plan.attrition ?? 0); i++) {
       const emp = pickEmployee(plan.dept, seq + i);
-      const year = yearForIndex(i, plan.attrition ?? 1);
-      const month = Math.min(12, plan.startMonth + 2 + (i % 5));
+      const { year, month } = nextYearMonth(plan.startMonth + 2);
       push(emp, emp.name, planContext, "Attrition", emp.fte, year, month, {
         salaryImpact: -emp.salary,
         savings: emp.salary,
@@ -572,8 +580,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     // Transferts entrants (mobilité interne, formation courte).
     for (let i = 0; i < plan.transferIn; i++) {
       const emp = pickEmployee(plan.dept, seq + i);
-      const year = yearForIndex(i, plan.transferIn);
-      const month = Math.min(12, plan.startMonth + 1 + (i % 5));
+      const { year, month } = nextYearMonth(plan.startMonth + 1);
       push(emp, emp.name, planContext, "Transfert entrant", emp.fte, year, month, {
         toDept: plan.toDept,
         salaryImpact: 0,
@@ -584,8 +591,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     // Transferts avec reconversion (formation lourde — flag requiresRetraining).
     for (let i = 0; i < plan.retraining; i++) {
       const emp = pickEmployee(plan.dept, seq + i);
-      const year = yearForIndex(i, plan.retraining);
-      const month = Math.min(12, plan.startMonth + 2 + (i % 4));
+      const { year, month } = nextYearMonth(plan.startMonth + 2);
       push(emp, emp.name, planContext, "Transfert entrant", emp.fte, year, month, {
         toDept: plan.toDept,
         salaryImpact: -Math.round(emp.salary * 0.1),
@@ -597,8 +603,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     // Transferts sortants (sortie du périmètre monitoré).
     for (let i = 0; i < (plan.transferOut ?? 0); i++) {
       const emp = pickEmployee(plan.dept, seq + i);
-      const year = yearForIndex(i, plan.transferOut ?? 1);
-      const month = Math.min(12, plan.startMonth + 3 + (i % 3));
+      const { year, month } = nextYearMonth(plan.startMonth + 3);
       push(emp, emp.name, planContext, "Transfert sortant", emp.fte, year, month, {
         toDept: plan.toDept,
         salaryImpact: 0,
@@ -610,7 +615,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
 
   for (let i = 0; i < RECRUITMENTS.length; i++) {
     const rec = RECRUITMENTS[i];
-    const year = yearForIndex(i, RECRUITMENTS.length);
+    const { year, month } = nextYearMonth(rec.month);
     push(
       null,
       rec.label,
@@ -624,7 +629,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
       "Recrutement",
       rec.fte,
       year,
-      rec.month,
+      month,
       {
         salaryImpact: rec.salary,
         savings: 0,

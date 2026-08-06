@@ -20,7 +20,11 @@ import type { Department, Employee, WorkforceMovement } from "@/types";
 // avant ce bump portent encore Suppression / Redéploiement / Reconversion, qui ne matchent
 // plus lib/hrEngine.ts::fteEffect (retour undefined → NaN partout dans le dashboard RH).
 // Le bump force ensureWorkforceSeeded à réécrire les 3 documents workforce depuis mockData.ts.
-const SCHEMA_VERSION = "2";
+// v3 (Août 2026) : alignement WorkforceMovement.programId sur la collection Firestore
+// multi-programmes (`programs`) — ancien "PRG-2026" (id de `ProgramConfig`) remplacé par "p1"
+// (id de `TEST_PROGRAM`). Redistribution des dates mouvements sur 2026-2028 pour peupler le
+// sélecteur FY et éviter des sous-catégories vides. Voir data/mockData.ts::nextYearMonth.
+const SCHEMA_VERSION = "3";
 
 const employeesDoc = () => doc(db, "leverMeta", "workforceEmployees");
 const movementsDoc = () => doc(db, "leverMeta", "workforceMovements");

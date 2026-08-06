@@ -55,7 +55,8 @@ import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shar
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { generateFiscalYears } from "@/lib/fiscalYear";
 import type { MovementAlertKind } from "@/lib/hrEngine";
-import type { WorkforceMovement } from "@/types";
+import type { Program, WorkforceMovement } from "@/types";
+import { subscribePrograms } from "@/lib/firestore/admin";
 import {
   HR_METRIC_REGISTRY,
   HR_DIMENSION_REGISTRY,
@@ -127,32 +128,51 @@ export default function HrDashboardPage() {
   const [granularity, setGranularity] = useState<"month" | "quarter" | "year">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
 
-  // ─── Sélecteur de programme (miroir du dashboard exécutif) ──────────────────────────────────
-  // Le dashboard RH est désormais scopé à UN programme sélectionné, mêmes règles que
-  // app/(app)/dashboard/page.tsx. Le premier programme de l'entreprise est sélectionné par
-  // défaut. Le sélecteur est ajouté au commit 3 pour piloter aussi bien les leviers rattachés
-  // que les périodes FY (via Program.fyStart/fyEnd) et le filtre transverse des mouvements RH.
-  const programs = useMemo(
-    () => [data.program], // BeTrackData.program (mono-programme mock) — TODO multi-programmes
-    [data.program]
-  );
-  const [selectedProgramId, setSelectedProgramId] = useState<string>(programs[0]?.id ?? "");
+  // ─── Sélecteur de programme (source unique = collection Firestore multi-programmes) ─────
+  // Le dashboard RH s'abonne à la même collection `programs` que le dashboard exécutif (voir
+  // subscribePrograms de lib/firestore/admin.ts). L'ancien fallback sur [data.program]
+  // (slot mono-programme ProgramConfig, id "PRG-2026") a été retiré Août 2026 : il ne
+  // pointait pas vers le même id que celui utilisé côté leviers et mouvements ("p1"), ce qui
+  // faisait apparaître un sélecteur avec un programme fantôme qui n'était l'ancre d'aucun
+  // mouvement scopé.
+  const [programs, setPrograms] = useState<Program[]>([]);
+  useEffect(() => {
+    const unsub = subscribePrograms((all) =>
+      setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all)
+    );
+    return unsub;
+  }, [user?.companyId]);
+  const [selectedProgramId, setSelectedProgramId] = useState<string>("");
   useEffect(() => {
     if (!selectedProgramId && programs.length > 0) setSelectedProgramId(programs[0].id);
   }, [programs, selectedProgramId]);
   const activeProgram = programs.find((p) => p.id === selectedProgramId) ?? programs[0] ?? null;
 
   // ─── Range picker + presets FY (Août 2026) ─────────────────────────────────
-  // Bornes de la plage — Programme complet par défaut = fyStart du programme → fyEnd. Presets :
-  // Programme complet · Réalisé à date · FY... (générés à partir des Program.fyStart/fyEnd).
-  const initialFrom = activeProgram?.fyStart ?? "2026-01-01";
-  const initialTo = activeProgram?.fyEnd ?? "2028-12-31";
-  const [dateFromISO, setDateFromISO] = useState<string>(initialFrom);
-  const [dateToISO, setDateToISO] = useState<string>(initialTo);
+  // Plage réelle des mouvements en base (min/max des plannedDate). Sert de valeur initiale au
+  // range picker, de borne min/max de l'input, ET de plage pour le preset "Programme complet"
+  // + les presets FY (générés sur cette plage plutôt que sur activeProgram.fyStart/fyEnd, sinon
+  // les mouvements des exercices ultérieurs seraient invisibles).
+  const movementDateRange = useMemo(() => {
+    const dates = data.workforce.movements
+      .map((m) => m.plannedDate)
+      .filter((d): d is string => !!d)
+      .sort();
+    if (dates.length === 0) {
+      return {
+        from: activeProgram?.fyStart ?? "2026-01-01",
+        to: activeProgram?.fyEnd ?? "2028-12-31",
+      };
+    }
+    return { from: dates[0], to: dates[dates.length - 1] };
+  }, [data.workforce.movements, activeProgram?.fyStart, activeProgram?.fyEnd]);
+
+  const [dateFromISO, setDateFromISO] = useState<string>(movementDateRange.from);
+  const [dateToISO, setDateToISO] = useState<string>(movementDateRange.to);
   useEffect(() => {
-    setDateFromISO(activeProgram?.fyStart ?? "2026-01-01");
-    setDateToISO(activeProgram?.fyEnd ?? "2028-12-31");
-  }, [activeProgram?.fyStart, activeProgram?.fyEnd]);
+    setDateFromISO(movementDateRange.from);
+    setDateToISO(movementDateRange.to);
+  }, [movementDateRange.from, movementDateRange.to]);
 
   // ─── Filtres RH (même pattern que le dashboard exécutif) ────────────────────────────────────
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
@@ -912,7 +932,7 @@ export default function HrDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {wf.movements.map((m) => {
+                    {filteredMovements.map((m) => {
                       const lever = data.levers.find((l) => l.id === m.leverId);
                       return (
                         <tr
@@ -939,10 +959,12 @@ export default function HrDashboardPage() {
                         </tr>
                       );
                     })}
-                    {wf.movements.length === 0 && (
+                    {filteredMovements.length === 0 && (
                       <tr>
                         <td colSpan={9} className="px-3 py-6 text-center text-sm text-tertiary">
-                          Aucun mouvement enregistré.
+                          {hasActiveFilters
+                            ? "Aucun mouvement dans le périmètre filtré."
+                            : "Aucun mouvement enregistré."}
                         </td>
                       </tr>
                     )}
@@ -1377,6 +1399,19 @@ export default function HrDashboardPage() {
           complet + range picker. Pilote uniformément TOUS les widgets à axe temporel via
           `dateFromISO` / `dateToISO` (dateRange dans les series et bridge/salary).
           ═══════════════════════════════════════════════════════════════════════════════════════ */}
+      {/* Aucune Program dans la collection Firestore multi-programmes pour ce tenant : on
+       *  informe explicitement plutôt que d'afficher une barre de contrôles à moitié vide.
+       *  Ce cas ne devrait pas se produire (TEST_PROGRAM est seedé par ensureAdminSeeded) mais
+       *  reste possible si l'admin a supprimé le programme. */}
+      {programs.length === 0 && (
+        <div className="mb-4 rounded-lg border border-rag-amber-light bg-rag-amber-light/20 p-3 text-[12.5px] text-secondary">
+          <strong className="text-primary">Aucun programme configuré</strong> pour cette entreprise.
+          Les widgets restent en lecture sur toute la période de mouvements disponibles. Configurer
+          un programme dans <em>Admin → Programmes</em> pour activer les presets FY et le scope
+          programme.
+        </div>
+      )}
+
       <div className="mb-4 rounded-lg border border-border bg-white p-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {programs.length > 1 && (
@@ -1404,8 +1439,8 @@ export default function HrDashboardPage() {
             <DateRangePicker
               fromISO={dateFromISO}
               toISO={dateToISO}
-              minISO={activeProgram?.fyStart}
-              maxISO={activeProgram?.fyEnd}
+              minISO={movementDateRange.from}
+              maxISO={movementDateRange.to}
               onChange={({ fromISO, toISO }) => {
                 setDateFromISO(fromISO);
                 setDateToISO(toISO);
@@ -1418,11 +1453,14 @@ export default function HrDashboardPage() {
               <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
                 Presets
               </span>
+              {/* Preset "Programme complet" = plage RÉELLE des mouvements (pas activeProgram
+               *  .fyStart/fyEnd qui pouvait exclure les exercices ultérieurs). Le libellé
+               *  reflète le vrai périmètre visible. */}
               <button
                 type="button"
                 onClick={() => {
-                  setDateFromISO(activeProgram.fyStart);
-                  setDateToISO(activeProgram.fyEnd);
+                  setDateFromISO(movementDateRange.from);
+                  setDateToISO(movementDateRange.to);
                 }}
                 className="rounded-sm border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-secondary hover:border-black hover:text-primary"
               >
@@ -1438,7 +1476,10 @@ export default function HrDashboardPage() {
               >
                 Réalisé à date
               </button>
-              {generateFiscalYears(activeProgram, activeProgram.fyStart, activeProgram.fyEnd).map(
+              {/* Presets FY générés sur la plage RÉELLE des mouvements. FY2026 / FY2027 /
+               *  FY2028 apparaîtront dès qu'un mouvement les couvre, indépendamment de
+               *  Program.fyStart/fyEnd (qui reste sur FY2026 dans le mock actuel). */}
+              {generateFiscalYears(activeProgram, movementDateRange.from, movementDateRange.to).map(
                 (fy) => (
                   <button
                     key={fy.label}
