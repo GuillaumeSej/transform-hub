@@ -20,10 +20,16 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as hr from "@/lib/hrEngine";
+import {
+  movementRhythmSeries,
+  netEconomySeries,
+  salarySavingsSeries,
+  socialCostSeries,
+} from "@/lib/hrTimeSeries";
+import { hrProgramSummary } from "@/lib/hrProgramSummary";
 import { fmtCurr } from "@/lib/engine";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
-// KPICard et RadialProgress retirées : le bandeau RH utilise maintenant un design custom
-// (barre d'avancement pleine largeur + cartes épurées sans icônes, voir le bloc KPI ci-dessous).
+import { HrKPICard } from "@/components/shared/HrKPICard";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
@@ -33,12 +39,18 @@ import {
   FteWaterfallChart,
   FteWaterfallLegend,
 } from "@/components/shared/charts/FteWaterfallChart";
-import { FteTrajectoryChart } from "@/components/shared/charts/FteTrajectoryChart";
 import {
   DepartmentMovementsChart,
   HrDonutChart,
   HrPivotBarChart,
 } from "@/components/shared/charts/HrBreakdownCharts";
+import {
+  EnrPeriodCumulChart,
+  EtpBridgeChart,
+  MovementRhythmChart,
+  NetEconomyChart,
+  SavingsPeriodCumulChart,
+} from "@/components/shared/charts/HrGooduelleCharts";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import type { MovementAlertKind } from "@/lib/hrEngine";
 import type { WorkforceMovement } from "@/types";
@@ -175,15 +187,50 @@ export default function HrDashboardPage() {
     [filteredWf, data.levers]
   );
   const bridge = useMemo(() => hr.fteBridge(filteredWf, granularity), [filteredWf, granularity]);
-  const trajectory = useMemo(
-    () => hr.fteTrajectory(filteredWf, granularity),
-    [filteredWf, granularity]
-  );
   const salary = useMemo(() => hr.salaryBridge(filteredWf, "quarter"), [filteredWf]);
   const byDept = useMemo(() => hr.movementsByDepartment(filteredWf), [filteredWf]);
   const byCountry = useMemo(() => hr.movementsByCountry(filteredWf), [filteredWf]);
   const deptDeltas = useMemo(() => hr.deltaByDepartment(filteredWf), [filteredWf]);
   const pse = useMemo(() => hr.pseSummary(filteredWf), [filteredWf]);
+
+  // ─── Gooduelle series (Août 2026) ────────────────────────────────────────────
+  // Plage de dates dérivée automatiquement des mouvements : borne min/max des plannedDate. Un
+  // sélecteur de range picker sera ajouté au commit 3 pour permettre à l'utilisateur d'affiner.
+  const dateRange = useMemo(() => {
+    const dates = filteredMovements
+      .map((m) => m.plannedDate)
+      .filter((d): d is string => !!d)
+      .sort();
+    if (dates.length === 0) return { from: "2026-01-01", to: "2028-12-31" };
+    return { from: dates[0], to: dates[dates.length - 1] };
+  }, [filteredMovements]);
+
+  const savingsSeries = useMemo(
+    () => salarySavingsSeries(filteredMovements, granularity, dateRange, hr.HR_TODAY),
+    [filteredMovements, granularity, dateRange]
+  );
+  const enrSeries = useMemo(
+    () => socialCostSeries(filteredMovements, granularity, dateRange),
+    [filteredMovements, granularity, dateRange]
+  );
+  const netEcoSeries = useMemo(
+    () => netEconomySeries(filteredMovements, granularity, dateRange),
+    [filteredMovements, granularity, dateRange]
+  );
+  const rhythmSeries = useMemo(
+    () => movementRhythmSeries(filteredMovements, granularity, dateRange),
+    [filteredMovements, granularity, dateRange]
+  );
+  const bridgeSummary = useMemo(
+    () => hr.fteBridgeSummary(filteredWf, dateRange),
+    [filteredWf, dateRange]
+  );
+  const summary = useMemo(() => hrProgramSummary(filteredMovements), [filteredMovements]);
+  /** Label du bucket "date d'arrêté" (HR_TODAY) — sert de repère vertical sur le chart Savings. */
+  const referenceBucketLabel = useMemo(() => {
+    const found = savingsSeries.find((b) => hr.HR_TODAY >= b.startISO && hr.HR_TODAY <= b.endISO);
+    return found?.label;
+  }, [savingsSeries]);
 
   const current = hr.currentFTE(filteredWf);
   const target = hr.targetFTE(filteredWf);
@@ -444,23 +491,93 @@ export default function HrDashboardPage() {
             </CardBody>
           </Card>
         );
-      case "fte-trajectory":
+      case "staff-cost-waterfall":
+        // Waterfall des staff costs chargés — même mécanique visuelle que la waterfall ETP mais
+        // exprimée en €M. Utilise `salary` déjà calculé par `hr.salaryBridge`.
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Trajectoire — cible vs réel vs plan" actions={timeControls} />
+            <CardHeader title="Waterfall des staff costs chargés" actions={timeControls} />
             <CardBody>
-              <FteTrajectoryChart data={trajectory.slice(0, visibleBuckets)} />
-              <div className="mt-3 text-[11px] text-tertiary">
-                <strong className="text-primary">Réel</strong> : effectif constaté (mouvements
-                réalisés uniquement) · <strong className="text-primary">Plan</strong> : atterrissage
-                si tous les mouvements se réalisent ·{" "}
-                <strong className="text-primary" style={{ color: "#FF3C47" }}>
-                  Cible
-                </strong>{" "}
-                : objectif de fin d&apos;année. Survolez un point pour voir la ventilation par type
-                de mouvement.
-              </div>
+              <FteWaterfallChart
+                buckets={salary}
+                baseline={wf.massSalary}
+                target={wf.massSalary + salary.reduce((s, b) => s + b.delta, 0)}
+                unit="€M"
+                decimals={1}
+              />
+              <FteWaterfallLegend downLabel="Économies" upLabel="Recrutements (coûts)" />
+            </CardBody>
+          </Card>
+        );
+      case "savings-period-cumul":
+        // Économies par période et cumul (Actual + forecast vs Plan, double axe Y).
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader title="Économies par période et cumul" actions={timeControls} />
+            <CardBody>
+              <SavingsPeriodCumulChart
+                buckets={savingsSeries}
+                referenceLabel={referenceBucketLabel}
+              />
+              <p className="mt-2 text-[11px] text-tertiary">
+                Barres = économies par période · courbes = cumul sur la période sélectionnée ·
+                double échelle Y
+              </p>
+            </CardBody>
+          </Card>
+        );
+      case "social-cost-enr":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader title="Coûts sociaux exceptionnels et cumul" actions={timeControls} />
+            <CardBody>
+              <EnrPeriodCumulChart buckets={enrSeries} />
+              <p className="mt-2 text-[11px] text-tertiary">
+                Barres = ENR par période générés par les départs forcés · courbe = cumul ENR
+              </p>
+            </CardBody>
+          </Card>
+        );
+      case "net-economy":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader title="Économie nette (savings récurrentes − ENR)" actions={timeControls} />
+            <CardBody>
+              <NetEconomyChart buckets={netEcoSeries} />
+              <p className="mt-2 text-[11px] text-tertiary">
+                Économies staff costs chargés diminuées des ENR · courbe = cumul net
+              </p>
+            </CardBody>
+          </Card>
+        );
+      case "movement-rhythm":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader title="Détail mensuel des mouvements et cumul net" actions={timeControls} />
+            <CardBody>
+              <MovementRhythmChart buckets={rhythmSeries} />
+              <p className="mt-2 text-[11px] text-tertiary">
+                Barres = mouvements par période · courbe noire = cumul net ETP · échelle centrée sur
+                zéro
+              </p>
+            </CardBody>
+          </Card>
+        );
+      case "etp-bridge":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader title="Pont ETP — contribution des mouvements au résultat net" />
+            <CardBody>
+              <EtpBridgeChart summary={bridgeSummary} />
+              <p className="mt-2 text-[11px] text-tertiary">
+                Décomposition ETP de la période sélectionnée · ouverture → mouvements → clôture
+              </p>
             </CardBody>
           </Card>
         );
@@ -973,58 +1090,62 @@ export default function HrDashboardPage() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════════════════════
-          4 KPI — design épuré : gros chiffre noir, libellé dessous, accent via le filet gauche
-          seulement. Les icônes sont retirées (les cartes parlent par le chiffre, pas par un
-          pictogramme générique). Grille 4 colonnes desktop, 2 mobile.
+          4 KPI Gooduelle — Impact ETP / Économies salariales annuelles / Coûts sociaux consommés
+          / Économies nettes — chacun affiche réalisé + cible + reforecast + barre de progression.
+          Alimenté par `hrProgramSummary` (source unique — voir lib/hrProgramSummary.ts).
           ═══════════════════════════════════════════════════════════════════════════════════════ */}
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {/* Effectif actuel */}
-        <div className="relative overflow-hidden border-l-[3px] border-black bg-white p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-tertiary">
-            Effectif actuel
-          </div>
-          <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
-            {current.toLocaleString("fr-FR")}
-          </div>
-          <div className="mt-1 text-[11px] text-secondary">
-            {current - wf.totalFTE > 0 ? "+" : ""}
-            {(current - wf.totalFTE).toLocaleString("fr-FR")} vs baseline
-          </div>
-        </div>
-        {/* Cible fin 2026 */}
-        <div className="relative overflow-hidden border-l-[3px] border-bp-coral bg-white p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-tertiary">
-            Cible fin 2026
-          </div>
-          <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
-            {target.toLocaleString("fr-FR")}
-          </div>
-          <div className="mt-1 text-[11px] text-secondary">
-            {reductionGoal > 0 ? `−${reductionGoal.toLocaleString("fr-FR")}` : "0"} postes à réduire
-          </div>
-        </div>
-        {/* Masse salariale */}
-        <div className="relative overflow-hidden border-l-[3px] border-bp-warm-brown bg-white p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-tertiary">
-            Masse salariale
-          </div>
-          <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
-            €{wf.massSalary.toFixed(1)}M
-          </div>
-          <div className="mt-1 text-[11px] text-secondary">
-            budget €{wf.budgetSalary.toFixed(1)}M
-          </div>
-        </div>
-        {/* Économies salariales */}
-        <div className="relative overflow-hidden border-l-[3px] border-black bg-white p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-tertiary">
-            Économies salariales
-          </div>
-          <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
-            {fmtCurr(hr.realizedSalarySavings(filteredWf) / 1_000_000)}
-          </div>
-          <div className="mt-1 text-[11px] text-secondary">annualisées · mouvements réalisés</div>
-        </div>
+        <HrKPICard
+          label="Impact ETP"
+          value={summary.fte.realized.toLocaleString("fr-FR")}
+          sub={`Cible ${summary.fte.target.toLocaleString("fr-FR")} · Reforecast ${summary.fte.reforecast.toLocaleString("fr-FR")} · ${summary.fte.progressPct}%`}
+          barPct={summary.fte.progressPct}
+          barMarkerPct={
+            summary.fte.target !== 0
+              ? Math.round((Math.abs(summary.fte.reforecast) / Math.abs(summary.fte.target)) * 100)
+              : undefined
+          }
+          accent="default"
+        />
+        <HrKPICard
+          label="Économies salariales annuelles"
+          value={fmtCurr(summary.salarySavings.realized / 1_000_000)}
+          sub={`Cible ${fmtCurr(summary.salarySavings.target / 1_000_000)} · Reforecast ${fmtCurr(summary.salarySavings.reforecast / 1_000_000)} · ${summary.salarySavings.progressPct}%`}
+          barPct={summary.salarySavings.progressPct}
+          barMarkerPct={
+            summary.salarySavings.target > 0
+              ? Math.round((summary.salarySavings.reforecast / summary.salarySavings.target) * 100)
+              : undefined
+          }
+          accent="green"
+        />
+        <HrKPICard
+          label="Coûts sociaux consommés"
+          value={fmtCurr(summary.socialCost.realized / 1_000_000)}
+          sub={`Cible ${fmtCurr(summary.socialCost.target / 1_000_000)} · Reforecast ${fmtCurr(summary.socialCost.reforecast / 1_000_000)} · ${summary.socialCost.progressPct}%`}
+          barPct={summary.socialCost.progressPct}
+          barMarkerPct={
+            summary.socialCost.target > 0
+              ? Math.round((summary.socialCost.reforecast / summary.socialCost.target) * 100)
+              : undefined
+          }
+          accent="red"
+        />
+        <HrKPICard
+          label="Économies nettes"
+          value={fmtCurr(summary.netEconomy.realized / 1_000_000)}
+          sub={`Cible ${fmtCurr(summary.netEconomy.target / 1_000_000)} · Reforecast ${fmtCurr(summary.netEconomy.reforecast / 1_000_000)} · ${summary.netEconomy.progressPct}%`}
+          barPct={summary.netEconomy.progressPct}
+          barMarkerPct={
+            summary.netEconomy.target !== 0
+              ? Math.round(
+                  (Math.abs(summary.netEconomy.reforecast) / Math.abs(summary.netEconomy.target)) *
+                    100
+                )
+              : undefined
+          }
+          accent="brown"
+        />
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,5 @@
 import {
+  Activity,
   ArrowLeftRight,
   BarChart3,
   Bell,
@@ -37,6 +38,7 @@ import {
  * sélecteurs de widgets des dashboards exécutif et RH (lib/dashboardWidgets.ts /
  * lib/hrDashboardWidgets.ts, champ `icon`). */
 export const ICON_REGISTRY: Record<string, LucideIcon> = {
+  Activity,
   PieChart,
   Layers,
   Target,

@@ -41,7 +41,12 @@ export type { WidgetSpan };
 
 export type HrWidgetType =
   | "fte-waterfall"
-  | "fte-trajectory"
+  | "staff-cost-waterfall"
+  | "savings-period-cumul"
+  | "social-cost-enr"
+  | "net-economy"
+  | "movement-rhythm"
+  | "etp-bridge"
   | "department-breakdown"
   | "country-breakdown"
   | "movement-type-breakdown"
@@ -97,15 +102,56 @@ export interface HrWidgetInstance {
 export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
   {
     type: "fte-waterfall",
-    label: "Trajectoire des effectifs — waterfall des mouvements",
+    label: "Waterfall des mouvements ETP",
     icon: "Waypoints",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
   },
   {
-    type: "fte-trajectory",
-    label: "Trajectoire effectifs — cible vs réel vs plan",
+    type: "staff-cost-waterfall",
+    // Nouveau (Août 2026) — waterfall des staff costs chargés, miroir €M de la waterfall ETP.
+    label: "Waterfall des staff costs chargés",
+    icon: "Wallet",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+  },
+  {
+    type: "savings-period-cumul",
+    // Nouveau — Économies par période et cumul (Actual + forecast vs Plan) avec double axe Y.
+    label: "Économies par période et cumul",
+    icon: "LineChart",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+  },
+  {
+    type: "social-cost-enr",
+    // Nouveau — ENR (coûts sociaux exceptionnels) par période + courbe cumul.
+    label: "Coûts sociaux exceptionnels et cumul",
     icon: "TrendingDown",
+    defaultSpan: "L",
+    allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "net-economy",
+    // Nouveau — Économie nette (savings récurrentes − ENR) barres +/− + courbe cumul.
+    label: "Économie nette (savings récurrentes − ENR)",
+    icon: "Wallet",
+    defaultSpan: "L",
+    allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "movement-rhythm",
+    // Nouveau — Rythme des mouvements (5 catégories empilées + point net + courbe cumul net).
+    label: "Rythme des mouvements (5 catégories + cumul net)",
+    icon: "Activity",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+  },
+  {
+    type: "etp-bridge",
+    // Nouveau — Pont ETP : Ouverture → contributions par type → Clôture.
+    label: "Pont ETP — contribution des mouvements",
+    icon: "GitBranch",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
   },
@@ -122,7 +168,7 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
         id: "detail",
         metric: "fteImpact",
         dimension: "department",
-        label: "Détail par département (suppr. / recrut. / transferts)",
+        label: "Détail par département (recrut. / départs / transferts)",
       },
     ],
   },
@@ -329,6 +375,45 @@ export function resolveHrActiveCustomView(
 
 const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v1";
 
+/** Clé séparée pour la migration one-shot des widgets Gooduelle (Août 2026). Voir
+ *  `migrateHrGooduelleWidgets` ci-dessous — ajoute les 5 nouveaux widgets aux layouts persistés
+ *  antérieurs, une seule fois, en respectant les suppressions ultérieures de l'utilisateur. */
+const HR_GOODUELLE_MIGRATION_KEY = "betrack_hr_dashboard_gooduelle_migration_v1";
+
+const NEW_GOODUELLE_WIDGET_TYPES: HrWidgetType[] = [
+  "staff-cost-waterfall",
+  "savings-period-cumul",
+  "social-cost-enr",
+  "net-economy",
+  "movement-rhythm",
+  "etp-bridge",
+];
+
+/** Ajoute les nouveaux widgets Gooduelle une seule fois aux layouts persistés antérieurs. Si
+ *  l'utilisateur supprime ensuite un widget, il ne réapparaît pas au chargement suivant. */
+export function migrateHrGooduelleWidgets(
+  layout: HrWidgetInstance[],
+  migrationAlreadyApplied: boolean
+): HrWidgetInstance[] {
+  if (migrationAlreadyApplied) return layout;
+  const presentTypes = new Set(layout.map((w) => w.type));
+  const toAdd: HrWidgetInstance[] = [];
+  for (const type of NEW_GOODUELLE_WIDGET_TYPES) {
+    if (presentTypes.has(type)) continue;
+    const def = getHrWidgetDef(type);
+    if (!def) continue;
+    toAdd.push({
+      instanceId: type,
+      type,
+      span: def.defaultSpan,
+      ...(def.defaultView ? { view: def.defaultView } : {}),
+    });
+  }
+  // Retire aussi l'ancien fte-trajectory (remplacé par les nouveaux graphiques Gooduelle).
+  const filtered = layout.filter((w) => w.type !== ("fte-trajectory" as HrWidgetType));
+  return [...filtered, ...toAdd];
+}
+
 const isBrowser = () => typeof window !== "undefined";
 
 function isValidHrInstance(value: unknown): value is HrWidgetInstance {
@@ -377,12 +462,23 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
   if (!isBrowser()) return buildHrDefaultLayout();
   try {
     const raw = window.localStorage.getItem(HR_LAYOUT_KEY);
-    if (!raw) return buildHrDefaultLayout();
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidHrInstance)) {
+    if (!raw) {
+      window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
       return buildHrDefaultLayout();
     }
-    return (parsed as HrWidgetInstance[]).map(sanitizeHrInstance);
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidHrInstance)) {
+      window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+      return buildHrDefaultLayout();
+    }
+    const migrationAlreadyApplied = window.localStorage.getItem(HR_GOODUELLE_MIGRATION_KEY) === "1";
+    const sanitized = (parsed as HrWidgetInstance[]).map(sanitizeHrInstance);
+    const migrated = migrateHrGooduelleWidgets(sanitized, migrationAlreadyApplied);
+    if (!migrationAlreadyApplied) {
+      window.localStorage.setItem(HR_LAYOUT_KEY, JSON.stringify(migrated));
+    }
+    window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+    return migrated;
   } catch {
     return buildHrDefaultLayout();
   }
@@ -392,6 +488,7 @@ export function saveHrDashboardLayout(layout: HrWidgetInstance[]): void {
   if (!isBrowser()) return;
   try {
     window.localStorage.setItem(HR_LAYOUT_KEY, JSON.stringify(layout));
+    window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
   } catch (err) {
     console.error(
       "[betrack storage] échec d'écriture localStorage pour le layout dashboard RH :",

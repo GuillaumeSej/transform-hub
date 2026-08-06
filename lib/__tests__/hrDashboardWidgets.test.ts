@@ -178,7 +178,7 @@ describe("hrDashboardWidgets — builder générique (customViews)", () => {
 
 describe("hrDashboardWidgets — getHrWidgetDef", () => {
   it("finds a known widget", () => {
-    expect(getHrWidgetDef("fte-waterfall")?.label).toContain("Trajectoire");
+    expect(getHrWidgetDef("fte-waterfall")?.label).toContain("Waterfall");
   });
 
   it("returns undefined for an unknown type", () => {
