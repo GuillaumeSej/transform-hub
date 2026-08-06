@@ -87,6 +87,53 @@ describe("hrEngine — fteEffect (5-types)", () => {
   });
 });
 
+describe("hrEngine — fteEffect defensive fallback (legacy Firestore data)", () => {
+  it("returns 0 for an unknown movement type (Aug 2026 migration filet)", () => {
+    // Reproduit un mouvement Firestore antérieur à la migration 5-types Gooduelle.
+    const legacy = makeMovement({
+      type: "Suppression" as unknown as WorkforceMovement["type"],
+      fte: 3,
+    });
+    expect(fteEffect(legacy)).toBe(0);
+  });
+
+  it("does not propagate NaN through currentFTE when a legacy type is present", () => {
+    const wf = makeWorkforce({
+      totalFTE: 100,
+      movements: [
+        makeMovement({
+          type: "Suppression" as unknown as WorkforceMovement["type"],
+          fte: 5,
+          status: "Réalisé",
+        }),
+        makeMovement({ id: "M2", type: "Recrutement", fte: 3, status: "Réalisé" }),
+      ],
+    });
+    // "Suppression" (legacy inconnu) → 0. "Recrutement" (connu) → +3.
+    expect(currentFTE(wf)).toBe(103);
+    expect(Number.isFinite(currentFTE(wf))).toBe(true);
+  });
+
+  it("does not propagate NaN through fteBridge either", () => {
+    const wf = makeWorkforce({
+      totalFTE: 100,
+      movements: [
+        makeMovement({
+          type: "Suppression" as unknown as WorkforceMovement["type"],
+          fte: 5,
+          plannedDate: "2026-03-01",
+        }),
+      ],
+    });
+    const buckets = fteBridge(wf, "month");
+    // Tous les deltas et cumulatifs doivent rester finis.
+    buckets.forEach((b) => {
+      expect(Number.isFinite(b.delta)).toBe(true);
+      expect(Number.isFinite(b.cumulative)).toBe(true);
+    });
+  });
+});
+
 describe("hrEngine — currentFTE", () => {
   it("returns baseline when no realized movements", () => {
     expect(currentFTE(makeWorkforce({ totalFTE: 200 }))).toBe(200);

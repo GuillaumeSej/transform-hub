@@ -26,7 +26,12 @@ export const MOVEMENT_TYPES: MovementType[] = [
 ];
 
 /** Effet d'un mouvement sur l'effectif TOTAL — les transferts internes (entrants/sortants) sont
- *  neutres pour le total, seuls Recrutement (+) et Attrition/Départ forcé (−) le modifient. */
+ *  neutres pour le total, seuls Recrutement (+) et Attrition/Départ forcé (−) le modifient.
+ *
+ *  Filet défensif (Août 2026) : un type inconnu (donnée Firestore antérieure à la migration
+ *  5-types, valeur importée depuis un Excel legacy, saisie API non validée) retombe sur 0
+ *  plutôt que de propager `undefined` en NaN dans tous les KPI dépendants (currentFTE,
+ *  plannedFTE, fteBridge, hrProgramSummary…). Un warning dev signale la donnée pour traçabilité. */
 export function fteEffect(m: WorkforceMovement): number {
   switch (m.type) {
     case "Recrutement":
@@ -37,6 +42,15 @@ export function fteEffect(m: WorkforceMovement): number {
     case "Transfert entrant":
     case "Transfert sortant":
       return 0;
+    default: {
+      const rawType = (m as { type?: unknown }).type;
+      if (typeof console !== "undefined" && process.env.NODE_ENV !== "production") {
+        console.warn(
+          `[hrEngine] fteEffect: unknown MovementType "${String(rawType)}" for movement ${m.id} — falling back to 0. Vérifier la migration 5-types Gooduelle (voir workforce SCHEMA_VERSION).`
+        );
+      }
+      return 0;
+    }
   }
 }
 
@@ -215,7 +229,10 @@ export function fteBridge(
     if (!bucket) continue;
     const effect = fteEffect(m);
     bucket.delta += effect;
-    bucket.byType[m.type] += effect;
+    // Filet défensif : m.type peut ne pas être une clé connue de MovementTypeDelta (donnée
+    // legacy Firestore). On garde 0 comme valeur de base pour éviter la cascade NaN.
+    const currentByType = bucket.byType[m.type] ?? 0;
+    bucket.byType[m.type] = currentByType + effect;
     bucket.movements.push(m);
   }
 
@@ -278,7 +295,9 @@ export function fteBridgeSummary(wf: Workforce, range?: DateRange): FteBridgeSum
   for (const m of wf.movements) {
     if (!m.plannedDate) continue;
     if (range && !isInRange(m.plannedDate, range)) continue;
-    contribs[m.type] += fteEffect(m);
+    // Filet défensif type legacy → 0 (voir fteEffect / MovementTypeDelta).
+    const currentContrib = contribs[m.type] ?? 0;
+    contribs[m.type] = currentContrib + fteEffect(m);
   }
   const closing = opening + Object.values(contribs).reduce((s, v) => s + v, 0);
 

@@ -71,7 +71,20 @@ export function FteWaterfallChart({
     };
   });
 
-  const values = [baseline, target, ...raw.map((d) => d.cumulative)];
+  // Filet défensif (Août 2026) : si un delta legacy a produit un NaN en cascade (typologie
+  // Firestore antérieure à la migration 5-types Gooduelle), on n'affiche pas un canvas vide
+  // muet — on avertit explicitement pour que l'incident soit identifiable en support.
+  const values = [baseline, target, ...raw.map((d) => d.cumulative)].filter((v): v is number =>
+    Number.isFinite(v)
+  );
+  if (values.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        Données ETP indisponibles — vérifier les types de mouvements RH (typologie 5-types Gooduelle
+        attendue).
+      </p>
+    );
+  }
   const range = Math.max(...values) - Math.min(...values);
   const pad = Math.max(range * 0.15, decimals > 0 ? 0.5 : 10);
   // Les barres empilées de recharts partent toujours de 0 : pour zoomer sur la plage utile
