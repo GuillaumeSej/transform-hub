@@ -1,4 +1,10 @@
-import type { AuditEntry, Employee, WorkforceMovement } from "@/types";
+import type {
+  AuditEntry,
+  Employee,
+  MovementStatus,
+  SocialScheme,
+  WorkforceMovement,
+} from "@/types";
 
 /**
  * Logique métier pure du périmètre "workforce" (base ETP + mouvements) — pattern identique à
@@ -13,6 +19,37 @@ function nowTs(): string {
 
 function nowDate(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Patch métier d'un changement de statut depuis les tableaux RH.
+ * - passage à Réalisé : renseigne la date effective si absente ;
+ * - retour à Planifié/En cours : efface la date effective et la validation RH. */
+export function movementStatusPatch(
+  movement: WorkforceMovement,
+  status: MovementStatus,
+  effectiveDate: string = nowDate()
+): Partial<WorkforceMovement> {
+  if (status === "Réalisé") {
+    return {
+      status,
+      actualDate: movement.actualDate ?? effectiveDate,
+    };
+  }
+  return {
+    status,
+    actualDate: null,
+    hrValidated: false,
+  };
+}
+
+/** Synchronise le nouveau dispositif social et le booléen PSE historique. */
+export function movementSocialSchemePatch(
+  socialScheme: SocialScheme | undefined
+): Partial<WorkforceMovement> {
+  return {
+    socialScheme,
+    inPSE: socialScheme === "PSE",
+  };
 }
 
 function nextMovementId(existingIds: string[]): string {

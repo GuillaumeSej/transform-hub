@@ -16,6 +16,7 @@ import type {
   Company,
   MovementStatus,
   MovementType,
+  SocialScheme,
   WorkforceMovement,
 } from "@/types";
 
@@ -45,6 +46,7 @@ const STATUSES: MovementStatus[] = ["Planifié", "En cours", "Réalisé"];
 const TRANSFER_TYPES: MovementType[] = ["Transfert entrant", "Transfert sortant"];
 const TENURE_TYPES: MovementType[] = ["Départ forcé", "Attrition"];
 const PSE_TYPES: MovementType[] = ["Départ forcé"];
+const SOCIAL_SCHEMES: SocialScheme[] = ["PSE", "RC", "RCC", "PDV", "Autre"];
 const DEFAULT_RECRUITMENT_SALARY = 45_000;
 
 /** Formulaire de création/édition d'un mouvement RH — rattache un employé (ou un poste à
@@ -75,6 +77,7 @@ export function MovementForm({
   const employees = data.workforce.employees;
   const departments = data.workforce.departments;
   const firstEmployee = employees[0];
+  const firstLever = data.levers[0];
 
   const [company, setCompany] = useState<Company | null>(null);
   useEffect(() => {
@@ -91,7 +94,10 @@ export function MovementForm({
   const [values, setValues] = useState<MovementFormValues>({
     empId: firstEmployee?.id ?? null,
     label: firstEmployee?.name ?? "",
-    leverId: data.levers[0]?.id ?? "",
+    leverId: firstLever?.id ?? "",
+    workstream: firstLever?.ws,
+    function: firstLever?.function,
+    programId: firstLever?.programId,
     type: "Transfert entrant",
     fte: firstEmployee?.fte ?? 1,
     department: firstEmployee?.department ?? departments[0]?.name ?? "",
@@ -103,6 +109,7 @@ export function MovementForm({
     status: "Planifié",
     hrValidated: false,
     inPSE: false,
+    socialScheme: undefined,
     salaryImpact: 0,
     savings: 0,
     cost: 0,
@@ -205,6 +212,9 @@ export function MovementForm({
     const nextGrossSalary = type === "Recrutement" ? manualGrossSalary : (emp?.salary ?? 0);
     const nextTenure = TENURE_TYPES.includes(type) ? tenureYears(emp?.hireDate, refDate) : 0;
     const inPSE = PSE_TYPES.includes(type) ? (values.inPSE ?? false) : false;
+    const socialScheme = PSE_TYPES.includes(type)
+      ? (values.socialScheme ?? (inPSE ? "PSE" : undefined))
+      : undefined;
     const requiresRetraining = TRANSFER_TYPES.includes(type)
       ? (values.requiresRetraining ?? false)
       : undefined;
@@ -228,6 +238,7 @@ export function MovementForm({
           : (emp?.name ?? prev.label),
       toDepartment: TRANSFER_TYPES.includes(type) ? prev.toDepartment : undefined,
       inPSE,
+      socialScheme,
       requiresRetraining,
       salaryImpact: fin.salaryImpact,
       savings: fin.salarySavings,
@@ -261,7 +272,16 @@ export function MovementForm({
           <select
             className={inputClass}
             value={values.leverId}
-            onChange={(e) => set("leverId", e.target.value)}
+            onChange={(e) => {
+              const lever = data.levers.find((item) => item.id === e.target.value);
+              setValues((prev) => ({
+                ...prev,
+                leverId: e.target.value,
+                workstream: lever?.ws,
+                function: lever?.function,
+                programId: lever?.programId,
+              }));
+            }}
           >
             {data.levers.map((l) => (
               <option key={l.id} value={l.id}>
@@ -405,7 +425,15 @@ export function MovementForm({
           <select
             className={inputClass}
             value={values.status}
-            onChange={(e) => set("status", e.target.value as MovementStatus)}
+            onChange={(e) => {
+              const status = e.target.value as MovementStatus;
+              setValues((prev) => ({
+                ...prev,
+                status,
+                actualDate: status === "Réalisé" ? (prev.actualDate ?? today) : null,
+                hrValidated: status === "Réalisé" ? prev.hrValidated : false,
+              }));
+            }}
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -415,13 +443,14 @@ export function MovementForm({
           </select>
         </Field>
         {PSE_TYPES.includes(values.type) ? (
-          <label className="flex items-end gap-2 pb-1.5">
-            <input
-              type="checkbox"
-              checked={values.inPSE ?? false}
+          <Field label="Dispositif social">
+            <select
+              className={inputClass}
+              value={values.socialScheme ?? ""}
               onChange={(e) => {
-                const inPSE = e.target.checked;
-                set("inPSE", inPSE);
+                const socialScheme = (e.target.value || undefined) as SocialScheme | undefined;
+                const inPSE = socialScheme === "PSE";
+                setValues((prev) => ({ ...prev, socialScheme, inPSE }));
                 applyFinancials(
                   computeMovementFinancials({
                     type: values.type,
@@ -433,10 +462,15 @@ export function MovementForm({
                   })
                 );
               }}
-              className="accent-[#FF3C47]"
-            />
-            <span className="text-xs font-medium text-primary">Inclus dans le PSE</span>
-          </label>
+            >
+              <option value="">— choisir —</option>
+              {SOCIAL_SCHEMES.map((scheme) => (
+                <option key={scheme} value={scheme}>
+                  {scheme}
+                </option>
+              ))}
+            </select>
+          </Field>
         ) : isTransfer ? (
           <label className="flex items-end gap-2 pb-1.5">
             <input
@@ -540,7 +574,8 @@ export function MovementForm({
 
         <div className="col-span-2">
           <Field label="Commentaire">
-            <input
+            <textarea
+              rows={3}
               className={inputClass}
               value={values.comment ?? ""}
               onChange={(e) => set("comment", e.target.value || undefined)}

@@ -1,4 +1,10 @@
-import type { BeTrackData, Employee, HierarchyNode, WorkforceMovement } from "@/types";
+import type {
+  BeTrackData,
+  Employee,
+  HierarchyNode,
+  SocialScheme,
+  WorkforceMovement,
+} from "@/types";
 import type { LegacySubLever } from "@/lib/mockActionMigration";
 
 /**
@@ -234,7 +240,7 @@ const MOVEMENT_PLAN: {
     transferOut: 1,
     pse: true,
     startMonth: 3,
-    workstream: "WS-01",
+    workstream: "WS-OPS",
     functionArea: "Opérations",
   },
   {
@@ -247,7 +253,7 @@ const MOVEMENT_PLAN: {
     retraining: 1,
     pse: true,
     startMonth: 2,
-    workstream: "WS-02",
+    workstream: "WS-PROC",
     functionArea: "Support",
   },
   {
@@ -260,7 +266,7 @@ const MOVEMENT_PLAN: {
     retraining: 0,
     pse: false,
     startMonth: 2,
-    workstream: "WS-03",
+    workstream: "WS-ORG",
     functionArea: "Commercial",
   },
   {
@@ -272,7 +278,7 @@ const MOVEMENT_PLAN: {
     retraining: 1,
     pse: true,
     startMonth: 4,
-    workstream: "WS-01",
+    workstream: "WS-OPS",
     functionArea: "Opérations",
   },
   {
@@ -285,7 +291,7 @@ const MOVEMENT_PLAN: {
     retraining: 1,
     pse: false,
     startMonth: 5,
-    workstream: "WS-04",
+    workstream: "WS-DIG",
     functionArea: "R&D",
   },
   {
@@ -298,7 +304,7 @@ const MOVEMENT_PLAN: {
     transferOut: 1,
     pse: false,
     startMonth: 1,
-    workstream: "WS-03",
+    workstream: "WS-ORG",
     functionArea: "Commercial",
   },
   {
@@ -310,7 +316,7 @@ const MOVEMENT_PLAN: {
     retraining: 1,
     pse: false,
     startMonth: 6,
-    workstream: "WS-05",
+    workstream: "WS-SC",
     functionArea: "Supply",
   },
 ];
@@ -334,7 +340,7 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 65000,
     month: 4,
-    workstream: "WS-04",
+    workstream: "WS-DIG",
     functionArea: "R&D",
   },
   {
@@ -345,7 +351,7 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 65000,
     month: 6,
-    workstream: "WS-04",
+    workstream: "WS-DIG",
     functionArea: "R&D",
   },
   {
@@ -356,7 +362,7 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 72000,
     month: 5,
-    workstream: "WS-02",
+    workstream: "WS-PROC",
     functionArea: "Support",
   },
   {
@@ -367,7 +373,7 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 78000,
     month: 7,
-    workstream: "WS-03",
+    workstream: "WS-COM",
     functionArea: "Commercial",
   },
   {
@@ -378,7 +384,7 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 55000,
     month: 8,
-    workstream: "WS-01",
+    workstream: "WS-OPS",
     functionArea: "Opérations",
   },
   {
@@ -389,7 +395,7 @@ const RECRUITMENTS: {
     fte: 1,
     salary: 60000,
     month: 9,
-    workstream: "WS-05",
+    workstream: "WS-SC",
     functionArea: "Supply",
   },
 ];
@@ -486,6 +492,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     opts: {
       toDept?: string;
       pse?: boolean;
+      socialScheme?: SocialScheme;
       salaryImpact: number;
       savings: number;
       cost: number;
@@ -522,6 +529,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
       status: st.status,
       hrValidated: st.validated,
       inPSE: opts.pse,
+      socialScheme: opts.socialScheme,
       salaryImpact: opts.salaryImpact,
       savings: opts.savings,
       cost: opts.cost,
@@ -560,8 +568,12 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
       const emp = pickEmployee(plan.dept, seq + i);
       const { year, month } = nextYearMonth(plan.startMonth);
       const baseCost = plan.pse ? 45000 + ((seq * 7) % 4) * 5000 : 20000;
+      const socialScheme: SocialScheme = plan.pse
+        ? "PSE"
+        : (["RC", "RCC", "PDV"] as SocialScheme[])[seq % 3];
       push(emp, emp.name, planContext, "Départ forcé", emp.fte, year, month, {
         pse: plan.pse,
+        socialScheme,
         salaryImpact: -emp.salary,
         savings: emp.salary,
         cost: Math.round(baseCost * 1.2),

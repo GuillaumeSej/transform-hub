@@ -24,7 +24,9 @@ import type { Department, Employee, WorkforceMovement } from "@/types";
 // multi-programmes (`programs`) — ancien "PRG-2026" (id de `ProgramConfig`) remplacé par "p1"
 // (id de `TEST_PROGRAM`). Redistribution des dates mouvements sur 2026-2028 pour peupler le
 // sélecteur FY et éviter des sous-catégories vides. Voir data/mockData.ts::nextYearMonth.
-const SCHEMA_VERSION = "3";
+// v4 (Août 2026) : ajout du dispositif social (PSE/RC/RCC/PDV/Autre) et alignement des
+// workstream IDs des mouvements sur le référentiel réel des initiatives (WS-PROC, WS-OPS…).
+const SCHEMA_VERSION = "4";
 
 const employeesDoc = () => doc(db, "leverMeta", "workforceEmployees");
 const movementsDoc = () => doc(db, "leverMeta", "workforceMovements");

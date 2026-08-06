@@ -3,6 +3,7 @@ import type {
   Employee,
   MovementStatus,
   MovementType,
+  SocialScheme,
   WorkforceMovement,
 } from "@/types";
 
@@ -51,10 +52,13 @@ export function movementToExcelRow(
     Pays: m.country,
     "RH local": m.hrOwner,
     "Levier (code)": lever?.code ?? m.leverId,
+    Programme: m.programId ?? lever?.programId ?? "",
+    "Owner Initiative": lever?.owner ?? "",
     "Date planifiée": m.plannedDate,
     "Date réalisée": m.actualDate ?? "",
     Statut: m.status,
     "Validé RH": m.hrValidated ? "Oui" : "Non",
+    "Dispositif social": m.socialScheme ?? (m.inPSE ? "PSE" : ""),
     PSE: m.inPSE ? "Oui" : "Non",
     "Impact masse salariale (€/an)": m.salaryImpact,
     "Économies (€)": m.savings,
@@ -154,6 +158,7 @@ const LEGACY_TYPE_ALIASES: Record<string, MovementType> = {
   reconversion: "Transfert entrant",
 };
 const MOVEMENT_STATUSES: MovementStatus[] = ["Planifié", "En cours", "Réalisé"];
+const SOCIAL_SCHEMES: SocialScheme[] = ["PSE", "RC", "RCC", "PDV", "Autre"];
 
 export type ParsedMovementRow = { values: WorkforceMovement | null; warnings: string[] };
 
@@ -213,6 +218,20 @@ export function parseMovementRow(
   }
 
   const today = new Date().toISOString().slice(0, 10);
+  const socialSchemeRaw = str(row["Dispositif social"]);
+  const socialScheme = SOCIAL_SCHEMES.find(
+    (scheme) => scheme.toLowerCase() === socialSchemeRaw.toLowerCase()
+  );
+  if (socialSchemeRaw && !socialScheme) {
+    warnings.push(
+      `Mouvements ligne ${rowNumber} : dispositif social "${socialSchemeRaw}" inconnu — "Autre" utilisé`
+    );
+  }
+  const resolvedSocialScheme: SocialScheme | undefined = socialSchemeRaw
+    ? (socialScheme ?? "Autre")
+    : bool(row["PSE"])
+      ? "PSE"
+      : undefined;
   return {
     values: {
       // id vide → généré à l'import (création) ; id existant → mise à jour
@@ -220,6 +239,9 @@ export function parseMovementRow(
       empId: type === "Recrutement" ? null : empId,
       label,
       leverId: lever?.id ?? "",
+      workstream: lever?.ws,
+      function: lever?.function,
+      programId: lever?.programId,
       type,
       fte: numOr(row["ETP concernés"], 1),
       department: str(row["Département"]),
@@ -230,7 +252,8 @@ export function parseMovementRow(
       actualDate: str(row["Date réalisée"]) || null,
       status,
       hrValidated: bool(row["Validé RH"]),
-      inPSE: bool(row["PSE"]),
+      socialScheme: resolvedSocialScheme,
+      inPSE: resolvedSocialScheme === "PSE",
       salaryImpact: numOr(row["Impact masse salariale (€/an)"], 0),
       savings: numOr(row["Économies (€)"], 0),
       cost: numOr(row["Coût one-off (€)"], 0),

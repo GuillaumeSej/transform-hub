@@ -53,10 +53,13 @@ import {
 } from "@/components/shared/charts/HrGooduelleCharts";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
+import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { generateFiscalYears } from "@/lib/fiscalYear";
 import type { MovementAlertKind } from "@/lib/hrEngine";
-import type { Program, WorkforceMovement } from "@/types";
+import type { MovementStatus, Program, SocialScheme, WorkforceMovement } from "@/types";
 import { subscribePrograms } from "@/lib/firestore/admin";
+import { buildMovementTableRows, type HrMovementTableRow } from "@/lib/hrMovementTable";
+import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceLogic";
 import {
   HR_METRIC_REGISTRY,
   HR_DIMENSION_REGISTRY,
@@ -265,6 +268,139 @@ export default function HrDashboardPage() {
     [filteredWf, dateRange]
   );
   const summary = useMemo(() => hrProgramSummary(filteredMovements), [filteredMovements]);
+  const movementTableRows = useMemo(
+    () => buildMovementTableRows(filteredMovements, data.levers, programs),
+    [filteredMovements, data.levers, programs]
+  );
+  const canEditMovements = user?.role === "hr" || user?.role === "cto";
+  const socialSchemeOptions = ["—", "PSE", "RC", "RCC", "PDV", "Autre"];
+  const movementStatusOptions: MovementStatus[] = ["Planifié", "En cours", "Réalisé"];
+
+  const movementTableColumns: ColumnDef<HrMovementTableRow>[] = [
+    { key: "label", label: "Mouvement", mobile: "primary" },
+    { key: "type", label: "Type", options: hr.MOVEMENT_TYPES },
+    { key: "programName", label: "Programme" },
+    {
+      key: "socialScheme",
+      label: "Dispositif social",
+      options: socialSchemeOptions,
+      render: (row) =>
+        canEditMovements && row.type === "Départ forcé" ? (
+          <select
+            value={row.socialScheme}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              event.stopPropagation();
+              handleMovementTableUpdate(row.id, "socialScheme", event.target.value);
+            }}
+            className="w-full min-w-[90px] rounded-sm border border-border bg-white px-1.5 py-1 text-xs focus:border-black focus:outline-none"
+          >
+            {socialSchemeOptions.map((scheme) => (
+              <option key={scheme} value={scheme}>
+                {scheme}
+              </option>
+            ))}
+          </select>
+        ) : (
+          row.socialScheme
+        ),
+    },
+    { key: "department", label: "Département" },
+    { key: "country", label: "Pays" },
+    { key: "initiativeOwner", label: "Owner Initiative" },
+    { key: "hrOwner", label: "Owner RH" },
+    { key: "fte", label: "ETP", align: "right" },
+    { key: "plannedDate", label: "Date prévisionnelle" },
+    {
+      key: "status",
+      label: "Statut",
+      options: movementStatusOptions,
+      render: (row) =>
+        canEditMovements ? (
+          <select
+            value={row.status}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              event.stopPropagation();
+              handleMovementTableUpdate(row.id, "status", event.target.value);
+            }}
+            className="w-full min-w-[100px] rounded-sm border border-border bg-white px-1.5 py-1 text-xs focus:border-black focus:outline-none"
+          >
+            {movementStatusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        ) : (
+          row.status
+        ),
+    },
+    {
+      key: "actualDate",
+      label: "Date effective",
+      editable: canEditMovements,
+      type: "date",
+      render: (row) => row.actualDate || "—",
+    },
+    {
+      key: "comment",
+      label: "Commentaire",
+      editable: canEditMovements,
+      type: "textarea",
+      render: (row) => row.comment || "—",
+    },
+    {
+      key: "salaryImpact",
+      label: "Impact salarial",
+      align: "right",
+      render: (row) => fmtCurr(row.salaryImpact / 1_000_000),
+    },
+    {
+      key: "cost",
+      label: "Coût social",
+      align: "right",
+      render: (row) => fmtCurr(row.cost / 1_000_000),
+    },
+  ];
+
+  const handleMovementTableUpdate = (
+    rowId: string,
+    field: keyof HrMovementTableRow,
+    value: string | number
+  ) => {
+    if (!canEditMovements) return;
+    const row = movementTableRows.find((item) => item.id === rowId);
+    if (!row) return;
+    if (field === "status") {
+      data.updateWorkforceMovement(
+        rowId,
+        movementStatusPatch(row.movement, String(value) as MovementStatus)
+      );
+      return;
+    }
+    if (field === "actualDate") {
+      const actualDate = String(value) || null;
+      data.updateWorkforceMovement(rowId, {
+        actualDate,
+        status: actualDate ? "Réalisé" : "En cours",
+        ...(actualDate ? {} : { hrValidated: false }),
+      });
+      return;
+    }
+    if (field === "comment") {
+      data.updateWorkforceMovement(rowId, { comment: String(value) || undefined });
+      return;
+    }
+    if (field === "socialScheme") {
+      data.updateWorkforceMovement(
+        rowId,
+        movementSocialSchemePatch(
+          String(value) === "—" ? undefined : (String(value) as SocialScheme)
+        )
+      );
+    }
+  };
   /** Label du bucket "date d'arrêté" (HR_TODAY) — sert de repère vertical sur le chart Savings. */
   const referenceBucketLabel = useMemo(() => {
     const found = savingsSeries.find((b) => hr.HR_TODAY >= b.startISO && hr.HR_TODAY <= b.endISO);
@@ -909,71 +1045,23 @@ export default function HrDashboardPage() {
           instance,
           <Card className="mb-0 h-full">
             <CardHeader title="Synthèse des mouvements" />
-            <CardBody flush>
-              <div className="overflow-auto">
-                <table className="w-full border-collapse text-[12.5px]">
-                  <thead>
-                    <tr>
-                      {[
-                        "Mouvement",
-                        "Type",
-                        "Département",
-                        "Pays",
-                        "Owner RH",
-                        "ETP",
-                        "Statut",
-                        "Impact salarial",
-                        "Coût social",
-                      ].map((h) => (
-                        <th
-                          key={h}
-                          className="border-b border-border bg-neutral-50 px-3 py-2.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-secondary"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredMovements.map((m) => {
-                      const lever = data.levers.find((l) => l.id === m.leverId);
-                      return (
-                        <tr
-                          key={m.id}
-                          onClick={() => goToEtp(lever ? { f_lever: lever.code } : {})}
-                          className="cursor-pointer border-b border-border last:border-b-0 hover:bg-neutral-50"
-                        >
-                          <td className="px-3 py-2.5 font-semibold text-primary">{m.label}</td>
-                          <td className="px-3 py-2.5">{m.type}</td>
-                          <td className="px-3 py-2.5">
-                            {m.department}
-                            {m.toDepartment ? ` → ${m.toDepartment}` : ""}
-                          </td>
-                          <td className="px-3 py-2.5">{m.country}</td>
-                          <td className="px-3 py-2.5">{m.hrOwner}</td>
-                          <td className="px-3 py-2.5 tabular-nums">{m.fte}</td>
-                          <td className="px-3 py-2.5">{m.status}</td>
-                          <td className="px-3 py-2.5 tabular-nums">
-                            {fmtCurr(m.salaryImpact / 1_000_000)}
-                          </td>
-                          <td className="px-3 py-2.5 tabular-nums">
-                            {fmtCurr(m.cost / 1_000_000)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {filteredMovements.length === 0 && (
-                      <tr>
-                        <td colSpan={9} className="px-3 py-6 text-center text-sm text-tertiary">
-                          {hasActiveFilters
-                            ? "Aucun mouvement dans le périmètre filtré."
-                            : "Aucun mouvement enregistré."}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <CardBody>
+              <EditableTable
+                data={movementTableRows}
+                columns={movementTableColumns}
+                onCellUpdate={handleMovementTableUpdate}
+                onRowClick={(row) => {
+                  const lever = data.levers.find((item) => item.id === row.movement.leverId);
+                  goToEtp(lever ? { f_lever: lever.code } : {});
+                }}
+                searchPlaceholder="Rechercher un mouvement, programme, owner..."
+                defaultSort={{ key: "plannedDate", direction: "asc" }}
+              />
+              {!canEditMovements && movementTableRows.length > 0 && (
+                <p className="mt-2 text-[10.5px] text-tertiary">
+                  Lecture seule — l&apos;édition est réservée aux rôles RH et CTO.
+                </p>
+              )}
             </CardBody>
           </Card>
         );

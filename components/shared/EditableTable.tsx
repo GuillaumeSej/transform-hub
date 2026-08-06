@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export type ColumnDef<T> = {
   key: keyof T & string;
   label: string;
-  type?: "text" | "number" | "select" | "readonly";
+  type?: "text" | "number" | "select" | "date" | "textarea" | "readonly";
   editable?: boolean;
   options?: string[];
   allowCustom?: boolean;
@@ -312,10 +312,29 @@ export function EditableTable<T extends { id: string }>({
                             ))}
                             {c.allowCustom && <option value="__custom__">Autre...</option>}
                           </select>
+                        ) : c.type === "textarea" ? (
+                          <textarea
+                            autoFocus
+                            rows={3}
+                            value={draftValue}
+                            onChange={(e) => setDraftValue(e.target.value)}
+                            onBlur={() => commitEdit(row, c)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                setIsCustomMode(false);
+                                setEditingCell(null);
+                              }
+                              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) commitEdit(row, c);
+                            }}
+                            className="min-w-[220px] resize-y rounded-sm border-[1.5px] border-bp-coral px-1.5 py-1 text-xs"
+                          />
                         ) : (
                           <input
                             autoFocus
-                            type={c.type === "number" ? "number" : "text"}
+                            type={
+                              c.type === "number" ? "number" : c.type === "date" ? "date" : "text"
+                            }
                             value={draftValue}
                             onChange={(e) => setDraftValue(e.target.value)}
                             onBlur={() => commitEdit(row, c)}

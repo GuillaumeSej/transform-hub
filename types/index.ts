@@ -245,6 +245,10 @@ export type MovementType =
   "Recrutement" | "Attrition" | "Départ forcé" | "Transfert entrant" | "Transfert sortant";
 export type MovementStatus = "Planifié" | "En cours" | "Réalisé";
 
+/** Dispositif social associé à une réduction de poste. La liste couvre les mécanismes courants
+ * tout en gardant `Autre` pour les politiques client spécifiques. */
+export type SocialScheme = "PSE" | "RC" | "RCC" | "PDV" | "Autre";
+
 /** Snapshot financier d'un mouvement RH — figé à la validation initiale (`lockedPlan`) puis
  *  réactualisé au fur et à mesure (`reforecast`). Mirror du pattern `FinancialSnapshot` du levier
  *  mais adapté aux €/an et non aux €M (l'unité utilisée sur `WorkforceMovement.salaryImpact`). */
@@ -291,6 +295,9 @@ export type WorkforceMovement = {
   hrValidated: boolean;
   /** Mouvement inclus dans le Plan de Sauvegarde de l'Emploi (Départs forcés) */
   inPSE?: boolean;
+  /** Dispositif social utilisé pour la réduction de poste (PSE, rupture conventionnelle, etc.).
+   * `inPSE` reste synchronisé pour la compatibilité des calculs et widgets existants. */
+  socialScheme?: SocialScheme;
   /** Impact masse salariale €/an (négatif = économie) */
   salaryImpact: number;
   savings: number; // € économies run-rate attendues

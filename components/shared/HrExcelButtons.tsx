@@ -33,8 +33,48 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
 
-  const EMP_HEADERS = ["Matricule", "Nom", "Département", "Direction", "Pays", "Fonction", "Niveau", "ETP", "Salaire (€)", "RH local"];
-  const MOV_HEADERS = ["ID", "Matricule", "Nom", "Type", "ETP", "Département", "Départ. arrival", "Pays", "RH local", "Date prévue", "Date réelle", "Statut", "Validé RH", "PSE", "Impact salarial (€)", "Économies (€)", "Coût (€)", "Levier", "Commentaire"];
+  const EMP_HEADERS = [
+    "Matricule",
+    "Nom",
+    "Département",
+    "Direction",
+    "RH local",
+    "Région",
+    "Pays",
+    "Fonction",
+    "Équipe",
+    "BU",
+    "Entité",
+    "Niveau",
+    "ETP",
+    "Salaire brut annuel (€)",
+    "Date d'entrée",
+    "Départ retraite",
+  ];
+  const MOV_HEADERS = [
+    "ID mouvement",
+    "Matricule",
+    "Employé / Poste",
+    "Type",
+    "ETP concernés",
+    "Département",
+    "Département d'arrivée",
+    "Pays",
+    "RH local",
+    "Levier (code)",
+    "Programme",
+    "Owner Initiative",
+    "Date planifiée",
+    "Date réalisée",
+    "Statut",
+    "Validé RH",
+    "Dispositif social",
+    "PSE",
+    "Impact masse salariale (€/an)",
+    "Économies (€)",
+    "Coût one-off (€)",
+    "Commentaire",
+  ];
 
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();
