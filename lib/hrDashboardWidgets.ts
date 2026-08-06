@@ -48,7 +48,9 @@ export type HrWidgetType =
   | "movement-rhythm"
   | "etp-bridge"
   | "department-breakdown"
-  | "movement-realization"
+  | "fte-execution-status"
+  | "salary-execution-status"
+  | "hr-owner-actions"
   | "pse-summary"
   | "department-table"
   | "movements-table";
@@ -106,11 +108,34 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     allowedSpans: ["M", "L", "XL"],
   },
   {
+    type: "fte-execution-status",
+    label: "Impacts ETP par statut",
+    icon: "BarChart3",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+    defaultView: "function",
+  },
+  {
     type: "staff-cost-waterfall",
     label: "Trajectoire Masse Salariale (€M, annualisé)",
     icon: "Wallet",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "salary-execution-status",
+    label: "Impacts Masse Salariale par statut (€M, annualisé)",
+    icon: "BarChart3",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+    defaultView: "function",
+  },
+  {
+    type: "hr-owner-actions",
+    label: "Plan d'actions par RH Owner",
+    icon: "Users",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
   },
   {
     type: "savings-period-cumul",
@@ -150,14 +175,6 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
     defaultView: "department",
-  },
-  {
-    type: "movement-realization",
-    label: "Réalisation des mouvements",
-    icon: "BarChart3",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
-    defaultView: "function|all",
   },
   {
     type: "department-table",
@@ -336,9 +353,9 @@ export function resolveHrActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-// v2 : nouvel ordre et suppression des widgets country/type/salary redondants. L'application
+// v3 : ajout des vues d'exécution ETP/masse salariale et du plan d'actions RH Owner. L'application
 // n'étant pas encore utilisée, on repart volontairement du nouveau layout par défaut pour tous.
-const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v2";
+const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v3";
 
 /** Clé séparée pour la migration one-shot des widgets Gooduelle (Août 2026). Voir
  *  `migrateHrGooduelleWidgets` ci-dessous — ajoute les 5 nouveaux widgets aux layouts persistés
@@ -352,7 +369,9 @@ const NEW_GOODUELLE_WIDGET_TYPES: HrWidgetType[] = [
   "net-economy",
   "movement-rhythm",
   "etp-bridge",
-  "movement-realization",
+  "fte-execution-status",
+  "salary-execution-status",
+  "hr-owner-actions",
 ];
 
 /** Ajoute les nouveaux widgets Gooduelle une seule fois aux layouts persistés antérieurs. Si

@@ -39,10 +39,9 @@ import {
   FteWaterfallChart,
   FteWaterfallLegend,
 } from "@/components/shared/charts/FteWaterfallChart";
-import {
-  DepartmentMovementsChart,
-  MovementRealizationChart,
-} from "@/components/shared/charts/HrBreakdownCharts";
+import { DepartmentMovementsChart } from "@/components/shared/charts/HrBreakdownCharts";
+import { ExecutionStatusChart } from "@/components/shared/charts/HrExecutionCharts";
+import { HrOwnerActionTable } from "@/components/shared/HrOwnerActionTable";
 import {
   EnrPeriodCumulChart,
   EtpBridgeChart,
@@ -59,6 +58,14 @@ import type { MovementStatus, Program, SocialScheme, WorkforceMovement } from "@
 import { subscribePrograms } from "@/lib/firestore/admin";
 import { buildMovementTableRows, type HrMovementTableRow } from "@/lib/hrMovementTable";
 import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceLogic";
+import {
+  fteExecutionByDimension,
+  EXECUTION_LABELS,
+  ownerActionSummary,
+  salaryExecutionByDimension,
+  type ExecutionDimension,
+  type MovementExecutionStatus,
+} from "@/lib/hrExecution";
 import {
   HR_METRIC_REGISTRY,
   HR_DIMENSION_REGISTRY,
@@ -410,6 +417,30 @@ export default function HrDashboardPage() {
     const qs = new URLSearchParams(params).toString();
     router.push(`/hr/etp${qs ? `?${qs}` : ""}`);
   };
+  const goToExecution = (
+    value: string,
+    dimension: ExecutionDimension,
+    status: MovementExecutionStatus
+  ) => {
+    const dimensionParam =
+      dimension === "function" ? "f_function" : dimension === "country" ? "f_country" : "f_program";
+    const dimensionValue =
+      dimension === "program"
+        ? (programs.find((program) => program.name === value)?.id ?? value)
+        : value;
+    const executionValue =
+      status === "upcoming"
+        ? `${EXECUTION_LABELS.dueSoon},${EXECUTION_LABELS.later}`
+        : status === "realized"
+          ? `${EXECUTION_LABELS.realized},${EXECUTION_LABELS.toValidate}`
+          : EXECUTION_LABELS[status];
+    const params = new URLSearchParams({
+      tab: "mouvements",
+      [dimensionParam]: dimensionValue,
+      f_execution: executionValue,
+    });
+    router.push(`/hr/etp?${params.toString()}`);
+  };
   // ─── Layout du Dashboard RH (widgets) ───────────────────────────────────────────────────────
   // Personnalisation d'affichage purement locale (localStorage, par navigateur, clé DISTINCTE du
   // dashboard exécutif) — voir lib/hrDashboardWidgets.ts.
@@ -628,6 +659,37 @@ export default function HrDashboardPage() {
             </CardBody>
           </Card>
         );
+      case "fte-execution-status": {
+        const dimension = (["function", "country", "program"] as const).includes(
+          instance.view as ExecutionDimension
+        )
+          ? (instance.view as ExecutionDimension)
+          : "function";
+        const rows = fteExecutionByDimension(filteredMovements, dimension, programs);
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title="Impacts ETP par statut"
+              actions={
+                <ExecutionDimensionToggle
+                  value={dimension}
+                  onChange={(next) =>
+                    updateLayout(setHrWidgetView(layout, instance.instanceId, next))
+                  }
+                />
+              }
+            />
+            <CardBody>
+              <ExecutionStatusChart
+                data={rows}
+                mode="fte"
+                onBarClick={(value, status) => goToExecution(value, dimension, status)}
+              />
+            </CardBody>
+          </Card>
+        );
+      }
       case "staff-cost-waterfall":
         // Waterfall des staff costs chargés — même mécanique visuelle que la waterfall ETP mais
         // exprimée en €M. Utilise `salary` déjà calculé par `hr.salaryBridge`.
@@ -651,6 +713,56 @@ export default function HrDashboardPage() {
             </CardBody>
           </Card>
         );
+      case "salary-execution-status": {
+        const dimension = (["function", "country", "program"] as const).includes(
+          instance.view as ExecutionDimension
+        )
+          ? (instance.view as ExecutionDimension)
+          : "function";
+        const rows = salaryExecutionByDimension(filteredMovements, dimension, programs);
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title="Impacts Masse Salariale par statut (€M, annualisé)"
+              actions={
+                <ExecutionDimensionToggle
+                  value={dimension}
+                  onChange={(next) =>
+                    updateLayout(setHrWidgetView(layout, instance.instanceId, next))
+                  }
+                />
+              }
+            />
+            <CardBody>
+              <ExecutionStatusChart
+                data={rows}
+                mode="salary"
+                onBarClick={(value, status) => goToExecution(value, dimension, status)}
+              />
+            </CardBody>
+          </Card>
+        );
+      }
+      case "hr-owner-actions": {
+        const rows = ownerActionSummary(filteredMovements);
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader title="Plan d'actions par RH Owner" />
+            <CardBody flush>
+              <HrOwnerActionTable
+                rows={rows}
+                onCellClick={(owner, status) =>
+                  router.push(
+                    `/hr/etp?tab=mouvements&f_hrOwner=${encodeURIComponent(owner)}&f_execution=${encodeURIComponent(EXECUTION_LABELS[status])}`
+                  )
+                }
+              />
+            </CardBody>
+          </Card>
+        );
+      }
       case "savings-period-cumul":
         // Économies par période et cumul (Actual + forecast vs Plan, double axe Y).
         return renderWidgetShell(
@@ -742,53 +854,6 @@ export default function HrDashboardPage() {
             />
             <CardBody>
               <DepartmentMovementsChart data={rows} />
-            </CardBody>
-          </Card>
-        );
-      }
-      case "movement-realization": {
-        const [rawDimension, rawType] = (instance.view ?? "function|all").split("|");
-        const dimension = rawDimension === "country" ? "country" : "function";
-        const movementType = hr.MOVEMENT_TYPES.includes(rawType as WorkforceMovement["type"])
-          ? (rawType as WorkforceMovement["type"])
-          : undefined;
-        const rows = hr.movementRealizationByDimension(filteredMovements, dimension, movementType);
-        const updateView = (nextDimension: string, nextType: string) =>
-          updateLayout(
-            setHrWidgetView(layout, instance.instanceId, `${nextDimension}|${nextType}`)
-          );
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader
-              title="Réalisation des mouvements — réalisé vs cible"
-              actions={
-                <div className="flex flex-wrap items-center gap-2">
-                  <ViewToggle
-                    options={[
-                      { value: "function", label: "Fonction" },
-                      { value: "country", label: "Pays" },
-                    ]}
-                    value={dimension}
-                    onChange={(next) => updateView(next, rawType || "all")}
-                  />
-                  <select
-                    value={movementType ?? "all"}
-                    onChange={(event) => updateView(dimension, event.target.value)}
-                    className="rounded-sm border border-border bg-white px-2 py-1 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
-                  >
-                    <option value="all">Tous les types</option>
-                    {hr.MOVEMENT_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              }
-            />
-            <CardBody>
-              <MovementRealizationChart data={rows} />
             </CardBody>
           </Card>
         );
@@ -1608,5 +1673,25 @@ function ViewToggle({
         </button>
       ))}
     </div>
+  );
+}
+
+function ExecutionDimensionToggle({
+  value,
+  onChange,
+}: {
+  value: ExecutionDimension;
+  onChange: (value: ExecutionDimension) => void;
+}) {
+  return (
+    <ViewToggle
+      options={[
+        { value: "function", label: "Fonction" },
+        { value: "country", label: "Pays" },
+        { value: "program", label: "Programme" },
+      ]}
+      value={value}
+      onChange={(next) => onChange(next as ExecutionDimension)}
+    />
   );
 }

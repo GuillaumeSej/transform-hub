@@ -31,8 +31,8 @@ describe("hrDashboardWidgets — buildHrDefaultLayout", () => {
     const dept = layout.find((w) => w.type === "department-breakdown")!;
     expect(dept.customViews).toBeUndefined();
     expect(dept.view).toBe("department");
-    const realization = layout.find((w) => w.type === "movement-realization")!;
-    expect(realization.view).toBe("function|all");
+    const execution = layout.find((w) => w.type === "fte-execution-status")!;
+    expect(execution.view).toBe("function");
   });
 
   it("non-builder widgets have no customViews field", () => {
@@ -132,7 +132,7 @@ describe("hrDashboardWidgets — builder générique (customViews)", () => {
     const updated = next.find((w) => w.instanceId === deptId)!;
     expect(updated.customViews).toHaveLength(1);
     expect(updated.view).toBe(updated.customViews?.[0].id);
-    expect(next.find((w) => w.type === "movement-realization")?.customViews).toBeUndefined();
+    expect(next.find((w) => w.type === "fte-execution-status")?.customViews).toBeUndefined();
   });
 
   it("addCustomViewToHrInstance creates the first custom view when the instance has none", () => {

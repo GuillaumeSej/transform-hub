@@ -7,6 +7,7 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import * as hr from "@/lib/hrEngine";
+import { classifyMovementAction, EXECUTION_LABELS } from "@/lib/hrExecution";
 import { fmtCurr } from "@/lib/engine";
 import { Button } from "@/components/shared/Button";
 import { KPICard } from "@/components/shared/KPICard";
@@ -48,6 +49,10 @@ type MovementRow = {
   type: string;
   department: string;
   country: string;
+  function: string;
+  programId: string;
+  hrOwner: string;
+  executionStatus: string;
   fte: number;
   plannedDate: string;
   actualDate: string;
@@ -170,6 +175,10 @@ export default function BaseEtpPage() {
           type: m.type,
           department: m.department,
           country: m.country,
+          function: m.function ?? "—",
+          programId: m.programId ?? "—",
+          hrOwner: m.hrOwner,
+          executionStatus: EXECUTION_LABELS[classifyMovementAction(m)],
           fte: m.fte,
           plannedDate: m.plannedDate,
           actualDate: m.actualDate ?? "—",
@@ -222,6 +231,14 @@ export default function BaseEtpPage() {
       { key: "f_type", label: "Type", getValue: (r) => r.type },
       { key: "f_department", label: "Département", getValue: (r) => r.department },
       { key: "f_country", label: "Pays", getValue: (r) => r.country },
+      { key: "f_function", label: "Fonction", getValue: (r) => r.function },
+      { key: "f_program", label: "Programme", getValue: (r) => r.programId },
+      { key: "f_hrOwner", label: "RH Owner", getValue: (r) => r.hrOwner },
+      {
+        key: "f_execution",
+        label: "État d'exécution",
+        getValue: (r) => r.executionStatus,
+      },
       { key: "f_status", label: "Statut", getValue: (r) => r.status },
       {
         key: "f_hrValidated",
