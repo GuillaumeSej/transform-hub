@@ -48,9 +48,7 @@ export type HrWidgetType =
   | "movement-rhythm"
   | "etp-bridge"
   | "department-breakdown"
-  | "country-breakdown"
-  | "movement-type-breakdown"
-  | "salary-waterfall"
+  | "movement-realization"
   | "pse-summary"
   | "department-table"
   | "movements-table";
@@ -102,18 +100,17 @@ export interface HrWidgetInstance {
 export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
   {
     type: "fte-waterfall",
-    label: "Waterfall des mouvements ETP",
+    label: "Trajectoire ETP",
     icon: "Waypoints",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "staff-cost-waterfall",
-    // Nouveau (Août 2026) — waterfall des staff costs chargés, miroir €M de la waterfall ETP.
-    label: "Waterfall des staff costs chargés",
+    label: "Trajectoire Masse Salariale (€M, annualisé)",
     icon: "Wallet",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "savings-period-cumul",
@@ -128,7 +125,14 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     // Nouveau — ENR (coûts sociaux exceptionnels) par période + courbe cumul.
     label: "Coûts sociaux exceptionnels et cumul",
     icon: "TrendingDown",
-    defaultSpan: "L",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "pse-summary",
+    label: "Suivi du PSE (Plan de Sauvegarde de l'Emploi)",
+    icon: "ShieldCheck",
+    defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
   },
   {
@@ -136,86 +140,46 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     // Nouveau — Économie nette (savings récurrentes − ENR) barres +/− + courbe cumul.
     label: "Économie nette (savings récurrentes − ENR)",
     icon: "Wallet",
-    defaultSpan: "L",
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
   },
   {
-    type: "movement-rhythm",
-    // Nouveau — Rythme des mouvements (5 catégories empilées + point net + courbe cumul net).
-    label: "Rythme des mouvements (5 catégories + cumul net)",
-    icon: "Activity",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-  },
-  {
-    type: "etp-bridge",
-    // Nouveau — Pont ETP : Ouverture → contributions par type → Clôture.
-    label: "Pont ETP — contribution des mouvements",
-    icon: "GitBranch",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-  },
-  {
     type: "department-breakdown",
-    label: "Mouvements par département (ETP)",
+    label: "Mouvements prévus par dimension",
     icon: "Building2",
     defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
-    builderEnabled: true,
-    defaultView: "detail",
-    defaultCustomViews: [
-      {
-        id: "detail",
-        metric: "fteImpact",
-        dimension: "department",
-        label: "Détail par département (recrut. / départs / transferts)",
-      },
-    ],
+    allowedSpans: ["M", "L", "XL"],
+    defaultView: "department",
   },
   {
-    type: "country-breakdown",
-    label: "Mouvements par pays (ETP)",
-    icon: "Globe2",
+    type: "movement-realization",
+    label: "Réalisation des mouvements",
+    icon: "BarChart3",
     defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
-    builderEnabled: true,
-    defaultView: "country",
-    defaultCustomViews: [
-      { id: "country", metric: "fteImpact", dimension: "country", label: "Pays" },
-    ],
-  },
-  {
-    type: "movement-type-breakdown",
-    label: "Mouvements par type (mécanisme)",
-    icon: "ArrowLeftRight",
-    defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
-    builderEnabled: true,
-    defaultView: "type",
-    defaultCustomViews: [
-      { id: "type", metric: "movementCount", dimension: "type", label: "Type de mouvement" },
-    ],
-  },
-  {
-    type: "salary-waterfall",
-    label: "Impact masse salariale (€M, annualisé)",
-    icon: "Wallet",
-    defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
-  },
-  {
-    type: "pse-summary",
-    label: "Suivi du PSE (Plan de Sauvegarde de l'Emploi)",
-    icon: "ShieldCheck",
-    defaultSpan: "M",
-    allowedSpans: ["S", "M", "L", "XL"],
+    allowedSpans: ["M", "L", "XL"],
+    defaultView: "function|all",
   },
   {
     type: "department-table",
-    label: "Effectifs par département — actuel vs cible vs atterrissage",
+    label: "Effectifs par dimension — actuel vs cible vs atterrissage",
     icon: "Table2",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
+    defaultView: "department",
+  },
+  {
+    type: "movement-rhythm",
+    label: "Détail mensuel des mouvements et cumul net",
+    icon: "Activity",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "etp-bridge",
+    label: "Pont ETP — contribution des mouvements",
+    icon: "GitBranch",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "movements-table",
@@ -230,9 +194,8 @@ export function getHrWidgetDef(type: string): HrWidgetDef | undefined {
   return HR_WIDGET_REGISTRY.find((w) => w.type === type);
 }
 
-/** Layout par défaut — reproduit l'ordre/tailles de l'ancien dashboard RH fixe pour les widgets qui
- *  y existaient déjà, plus les deux nouveaux widgets (ventilation par type, table de synthèse) en
- *  fin de liste. Les widgets du builder générique reçoivent en plus leurs `defaultCustomViews`. */
+/** Layout par défaut v2 — ordre cockpit validé en Août 2026, avec paires M+M et suppression des
+ * widgets pays/type/masse salariale devenus redondants. */
 export function buildHrDefaultLayout(): HrWidgetInstance[] {
   return HR_WIDGET_REGISTRY.map((def) => ({
     instanceId: def.type,
@@ -373,7 +336,9 @@ export function resolveHrActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v1";
+// v2 : nouvel ordre et suppression des widgets country/type/salary redondants. L'application
+// n'étant pas encore utilisée, on repart volontairement du nouveau layout par défaut pour tous.
+const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v2";
 
 /** Clé séparée pour la migration one-shot des widgets Gooduelle (Août 2026). Voir
  *  `migrateHrGooduelleWidgets` ci-dessous — ajoute les 5 nouveaux widgets aux layouts persistés
@@ -387,6 +352,7 @@ const NEW_GOODUELLE_WIDGET_TYPES: HrWidgetType[] = [
   "net-economy",
   "movement-rhythm",
   "etp-bridge",
+  "movement-realization",
 ];
 
 /** Ajoute les nouveaux widgets Gooduelle une seule fois aux layouts persistés antérieurs. Si

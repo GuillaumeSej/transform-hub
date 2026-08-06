@@ -41,8 +41,7 @@ import {
 } from "@/components/shared/charts/FteWaterfallChart";
 import {
   DepartmentMovementsChart,
-  HrDonutChart,
-  HrPivotBarChart,
+  MovementRealizationChart,
 } from "@/components/shared/charts/HrBreakdownCharts";
 import {
   EnrPeriodCumulChart,
@@ -65,7 +64,6 @@ import {
   HR_DIMENSION_REGISTRY,
   getHrMetricDef,
   getHrDimensionDef,
-  pivotWorkforceByDimension,
 } from "@/lib/hrDashboardPivot";
 import {
   HR_WIDGET_REGISTRY,
@@ -80,7 +78,6 @@ import {
   moveWidget,
   removeHrWidget,
   resolveHrActiveCustomView,
-  resolveHrCustomViews,
   saveHrDashboardLayout,
   setHrWidgetSpan,
   setHrWidgetView,
@@ -104,17 +101,6 @@ function describeHrCustomView(view: HrCustomViewConfig): string {
   const dimLabel = getHrDimensionDef(view.dimension)?.label ?? view.dimension;
   return `${metricLabel} par ${dimLabel}`;
 }
-
-/** Correspondance dimension RH → paramètre de filtre existant de la Base ETP (mouvements), pour le
- *  clic de drill-down depuis un graphique du builder générique — voir `movementFilterDefs` de
- *  `app/(app)/hr/etp/page.tsx`. Dimensions sans équivalent (owner RH, PSE, mois/trimestre...)
- *  naviguent simplement sans filtre additionnel plutôt que d'échouer. */
-const FILTER_PARAM_BY_HR_DIMENSION: Partial<Record<string, string>> = {
-  type: "f_type",
-  department: "f_department",
-  country: "f_country",
-  status: "f_status",
-};
 
 /**
  * Dashboard RH — pilotage visuel de la transformation effectifs, personnalisable façon PowerBI
@@ -238,9 +224,6 @@ export default function HrDashboardPage() {
     () => hr.salaryBridge(filteredWf, granularity, { from: dateFromISO, to: dateToISO }),
     [filteredWf, granularity, dateFromISO, dateToISO]
   );
-  const byDept = useMemo(() => hr.movementsByDepartment(filteredWf), [filteredWf]);
-  const byCountry = useMemo(() => hr.movementsByCountry(filteredWf), [filteredWf]);
-  const deptDeltas = useMemo(() => hr.deltaByDepartment(filteredWf), [filteredWf]);
   const pse = useMemo(() => hr.pseSummary(filteredWf), [filteredWf]);
 
   // ─── Gooduelle series (Août 2026) ────────────────────────────────────────────
@@ -401,12 +384,6 @@ export default function HrDashboardPage() {
       );
     }
   };
-  /** Label du bucket "date d'arrêté" (HR_TODAY) — sert de repère vertical sur le chart Savings. */
-  const referenceBucketLabel = useMemo(() => {
-    const found = savingsSeries.find((b) => hr.HR_TODAY >= b.startISO && hr.HR_TODAY <= b.endISO);
-    return found?.label;
-  }, [savingsSeries]);
-
   const current = hr.currentFTE(filteredWf);
   // Cible ETP bottom-up : baseline + réductions/créations prévues dans les mouvements.
   // L'ancienne cible reposait sur les fteTarget départementaux figés (2 600 ETP), sans lien
@@ -433,13 +410,6 @@ export default function HrDashboardPage() {
     const qs = new URLSearchParams(params).toString();
     router.push(`/hr/etp${qs ? `?${qs}` : ""}`);
   };
-  /** Drill-down générique depuis un graphique du builder RH : navigue filtré si la dimension
-   *  cliquée a un équivalent dans les filtres de la Base ETP, sinon navigue sans filtre. */
-  const goToHrDimensionValue = (dimensionKey: string, value: string) => {
-    const param = FILTER_PARAM_BY_HR_DIMENSION[dimensionKey];
-    goToEtp(param ? { tab: "mouvements", [param]: value } : { tab: "mouvements" });
-  };
-
   // ─── Layout du Dashboard RH (widgets) ───────────────────────────────────────────────────────
   // Personnalisation d'affichage purement locale (localStorage, par navigateur, clé DISTINCTE du
   // dashboard exécutif) — voir lib/hrDashboardWidgets.ts.
@@ -634,7 +604,7 @@ export default function HrDashboardPage() {
           onClick={() => setGranularity(g)}
           className={`px-2.5 py-1 text-[11px] font-semibold ${granularity === g ? "bg-neutral-900 text-white" : "bg-white text-secondary"}`}
         >
-          {g === "month" ? "Mois" : g === "quarter" ? "Trim." : "Exercice"}
+          {g === "month" ? "Mois" : g === "quarter" ? "Trim." : "Année"}
         </button>
       ))}
     </div>
@@ -646,7 +616,7 @@ export default function HrDashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Waterfall des mouvements" actions={timeControls} />
+            <CardHeader title="Trajectoire ETP" actions={timeControls} />
             <CardBody>
               <FteWaterfallChart
                 buckets={bridge}
@@ -664,7 +634,10 @@ export default function HrDashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Waterfall des staff costs chargés" actions={timeControls} />
+            <CardHeader
+              title="Trajectoire Masse Salariale (€M, annualisé)"
+              actions={timeControls}
+            />
             <CardBody>
               <FteWaterfallChart
                 buckets={salary}
@@ -672,6 +645,7 @@ export default function HrDashboardPage() {
                 target={wf.massSalary + salary.reduce((s, b) => s + b.delta, 0)}
                 unit="€M"
                 decimals={1}
+                targetLabel="Atterrissage plan"
               />
               <FteWaterfallLegend downLabel="Économies" upLabel="Recrutements (coûts)" />
             </CardBody>
@@ -684,13 +658,10 @@ export default function HrDashboardPage() {
           <Card className="mb-0 h-full">
             <CardHeader title="Économies par période et cumul" actions={timeControls} />
             <CardBody>
-              <SavingsPeriodCumulChart
-                buckets={savingsSeries}
-                referenceLabel={referenceBucketLabel}
-              />
+              <SavingsPeriodCumulChart buckets={savingsSeries} />
               <p className="mt-2 text-[11px] text-tertiary">
-                Barres = économies par période · courbes = cumul sur la période sélectionnée ·
-                double échelle Y
+                Barres violettes = réalisé + prévision par période · barres taupe = plan initial ·
+                courbes = cumuls correspondants
               </p>
             </CardBody>
           </Card>
@@ -749,152 +720,79 @@ export default function HrDashboardPage() {
           </Card>
         );
       case "department-breakdown": {
-        const activeView = resolveHrActiveCustomView(instance);
-        const views = resolveHrCustomViews(instance);
-        const isLegacy = activeView?.id === "detail";
-        const pivotRows =
-          activeView && !isLegacy
-            ? pivotWorkforceByDimension(wf.movements, activeView.metric, activeView.dimension)
-            : [];
+        const dimension = instance.view === "country" ? "country" : "department";
+        const rows = hr.movementBreakdownByDimension(filteredMovements, dimension);
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title={
-                activeView && !isLegacy
-                  ? describeHrCustomView(activeView)
-                  : "Mouvements par département (ETP)"
-              }
+              title={`Mouvements prévus par ${dimension === "country" ? "pays" : "département"} (ETP)`}
               actions={
-                views.length > 1 && activeView ? (
-                  <ViewToggle
-                    options={views.map((v) => ({ value: v.id, label: describeHrCustomView(v) }))}
-                    value={activeView.id}
-                    onChange={(next) =>
-                      updateLayout(setHrWidgetView(layout, instance.instanceId, next))
-                    }
-                  />
-                ) : undefined
-              }
-            />
-            <CardBody>
-              {activeView && isLegacy ? (
-                <DepartmentMovementsChart data={byDept} />
-              ) : (
-                <HrPivotBarChart
-                  data={pivotRows.map((r) => ({ label: r.label, value: r.value }))}
-                  onBarClick={(label) =>
-                    activeView && goToHrDimensionValue(activeView.dimension, label)
+                <ViewToggle
+                  options={[
+                    { value: "department", label: "Département" },
+                    { value: "country", label: "Pays" },
+                  ]}
+                  value={dimension}
+                  onChange={(next) =>
+                    updateLayout(setHrWidgetView(layout, instance.instanceId, next))
                   }
                 />
-              )}
+              }
+            />
+            <CardBody>
+              <DepartmentMovementsChart data={rows} />
             </CardBody>
           </Card>
         );
       }
-      case "country-breakdown": {
-        const activeView = resolveHrActiveCustomView(instance);
-        const views = resolveHrCustomViews(instance);
-        const isLegacy = activeView?.id === "country";
-        const pivotRows =
-          activeView && !isLegacy
-            ? pivotWorkforceByDimension(wf.movements, activeView.metric, activeView.dimension)
-            : [];
+      case "movement-realization": {
+        const [rawDimension, rawType] = (instance.view ?? "function|all").split("|");
+        const dimension = rawDimension === "country" ? "country" : "function";
+        const movementType = hr.MOVEMENT_TYPES.includes(rawType as WorkforceMovement["type"])
+          ? (rawType as WorkforceMovement["type"])
+          : undefined;
+        const rows = hr.movementRealizationByDimension(filteredMovements, dimension, movementType);
+        const updateView = (nextDimension: string, nextType: string) =>
+          updateLayout(
+            setHrWidgetView(layout, instance.instanceId, `${nextDimension}|${nextType}`)
+          );
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title={
-                activeView && !isLegacy
-                  ? describeHrCustomView(activeView)
-                  : "Mouvements par pays (ETP)"
-              }
+              title="Réalisation des mouvements — réalisé vs cible"
               actions={
-                views.length > 1 && activeView ? (
+                <div className="flex flex-wrap items-center gap-2">
                   <ViewToggle
-                    options={views.map((v) => ({ value: v.id, label: describeHrCustomView(v) }))}
-                    value={activeView.id}
-                    onChange={(next) =>
-                      updateLayout(setHrWidgetView(layout, instance.instanceId, next))
-                    }
+                    options={[
+                      { value: "function", label: "Fonction" },
+                      { value: "country", label: "Pays" },
+                    ]}
+                    value={dimension}
+                    onChange={(next) => updateView(next, rawType || "all")}
                   />
-                ) : undefined
+                  <select
+                    value={movementType ?? "all"}
+                    onChange={(event) => updateView(dimension, event.target.value)}
+                    className="rounded-sm border border-border bg-white px-2 py-1 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
+                  >
+                    <option value="all">Tous les types</option>
+                    {hr.MOVEMENT_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               }
             />
             <CardBody>
-              <HrDonutChart
-                data={
-                  activeView && isLegacy
-                    ? byCountry.map((c) => ({ name: c.country, value: c.fte }))
-                    : pivotRows.map((r) => ({ name: r.label, value: r.value }))
-                }
-                onSliceClick={(name) =>
-                  activeView &&
-                  goToHrDimensionValue(isLegacy ? "country" : activeView.dimension, name)
-                }
-              />
-              <p className="mt-1 text-center text-[10.5px] text-tertiary">
-                Cliquer sur une valeur pour ouvrir la Base ETP filtrée
-              </p>
+              <MovementRealizationChart data={rows} />
             </CardBody>
           </Card>
         );
       }
-      case "movement-type-breakdown": {
-        const activeView = resolveHrActiveCustomView(instance);
-        const views = resolveHrCustomViews(instance);
-        const pivotRows = activeView
-          ? pivotWorkforceByDimension(wf.movements, activeView.metric, activeView.dimension)
-          : [];
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader
-              title={
-                activeView ? describeHrCustomView(activeView) : "Mouvements par type (mécanisme)"
-              }
-              actions={
-                views.length > 1 && activeView ? (
-                  <ViewToggle
-                    options={views.map((v) => ({ value: v.id, label: describeHrCustomView(v) }))}
-                    value={activeView.id}
-                    onChange={(next) =>
-                      updateLayout(setHrWidgetView(layout, instance.instanceId, next))
-                    }
-                  />
-                ) : undefined
-              }
-            />
-            <CardBody>
-              <HrPivotBarChart
-                data={pivotRows.map((r) => ({ label: r.label, value: r.value }))}
-                formatValue={(v) => v.toLocaleString("fr-FR")}
-                onBarClick={(label) =>
-                  activeView && goToHrDimensionValue(activeView.dimension, label)
-                }
-              />
-            </CardBody>
-          </Card>
-        );
-      }
-      case "salary-waterfall":
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader title="Impact masse salariale (€M, annualisé)" />
-            <CardBody>
-              <FteWaterfallChart
-                buckets={salary}
-                baseline={wf.massSalary}
-                target={wf.massSalary + salary.reduce((s, b) => s + b.delta, 0)}
-                unit="€M"
-                decimals={1}
-                height={240}
-              />
-              <FteWaterfallLegend downLabel="Économies" upLabel="Recrutements (coûts)" />
-            </CardBody>
-          </Card>
-        );
       case "pse-summary":
         return renderWidgetShell(
           instance,
@@ -937,18 +835,44 @@ export default function HrDashboardPage() {
             </CardBody>
           </Card>
         );
-      case "department-table":
+      case "department-table": {
+        const dimension =
+          instance.view === "country"
+            ? "country"
+            : instance.view === "workstream"
+              ? "workstream"
+              : "department";
+        const positionRows = hr.ftePositionsByDimension(filteredWf, dimension);
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Effectifs par département — actuel vs cible vs atterrissage" />
+            <CardHeader
+              title="Effectifs par dimension — actuel vs cible vs atterrissage"
+              actions={
+                <ViewToggle
+                  options={[
+                    { value: "department", label: "Département" },
+                    { value: "country", label: "Pays" },
+                    { value: "workstream", label: "Workstream" },
+                  ]}
+                  value={dimension}
+                  onChange={(next) =>
+                    updateLayout(setHrWidgetView(layout, instance.instanceId, next))
+                  }
+                />
+              }
+            />
             <CardBody flush>
               <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full border-collapse text-[12.5px]">
                   <thead>
                     <tr>
                       {[
-                        "Département",
+                        dimension === "department"
+                          ? "Département"
+                          : dimension === "country"
+                            ? "Pays"
+                            : "Workstream",
                         "Actuel",
                         "Cible",
                         "Atterrissage plan",
@@ -965,21 +889,21 @@ export default function HrDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {deptDeltas.map((d) => {
-                      const toDo = d.fte - d.fteTarget;
-                      const done = d.fte - d.landing;
+                    {positionRows.map((d) => {
+                      const toDo = d.current - d.target;
+                      const done = d.current - d.landing;
                       const pct = toDo !== 0 ? Math.round((done / toDo) * 100) : 100;
                       return (
                         <tr
-                          key={d.name}
+                          key={d.key}
                           className="border-b border-border last:border-b-0 hover:bg-neutral-50"
                         >
-                          <td className="px-3 py-2.5 font-semibold text-primary">{d.name}</td>
+                          <td className="px-3 py-2.5 font-semibold text-primary">{d.label}</td>
                           <td className="px-3 py-2.5 tabular-nums">
-                            {d.fte.toLocaleString("fr-FR")}
+                            {d.current.toLocaleString("fr-FR")}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
-                            {d.fteTarget.toLocaleString("fr-FR")}
+                            {d.target.toLocaleString("fr-FR")}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
                             {d.landing.toLocaleString("fr-FR")}
@@ -1001,14 +925,14 @@ export default function HrDashboardPage() {
               </div>
 
               <div className="divide-y divide-border sm:hidden">
-                {deptDeltas.map((d) => {
-                  const toDo = d.fte - d.fteTarget;
-                  const done = d.fte - d.landing;
+                {positionRows.map((d) => {
+                  const toDo = d.current - d.target;
+                  const done = d.current - d.landing;
                   const pct = toDo !== 0 ? Math.round((done / toDo) * 100) : 100;
                   return (
-                    <div key={d.name} className="p-3">
+                    <div key={d.key} className="p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="text-[13px] font-semibold text-primary">{d.name}</span>
+                        <span className="text-[13px] font-semibold text-primary">{d.label}</span>
                         <span
                           className={`text-[12px] font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
                         >
@@ -1018,8 +942,8 @@ export default function HrDashboardPage() {
                       </div>
                       <dl className="mb-2 grid grid-cols-3 gap-x-3 gap-y-1.5">
                         {[
-                          { label: "Actuel", value: d.fte },
-                          { label: "Cible", value: d.fteTarget },
+                          { label: "Actuel", value: d.current },
+                          { label: "Cible", value: d.target },
                           { label: "Atterrissage", value: d.landing },
                         ].map((item) => (
                           <div key={item.label}>
@@ -1040,6 +964,7 @@ export default function HrDashboardPage() {
             </CardBody>
           </Card>
         );
+      }
       case "movements-table":
         return renderWidgetShell(
           instance,

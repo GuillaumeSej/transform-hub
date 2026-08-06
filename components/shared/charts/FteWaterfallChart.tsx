@@ -40,6 +40,7 @@ export function FteWaterfallChart({
   height = 280,
   unit = "ETP",
   decimals = 0,
+  targetLabel = "Cible",
   onBarClick,
 }: {
   buckets: Pick<FteBridgeBucket, "label" | "delta">[];
@@ -49,6 +50,7 @@ export function FteWaterfallChart({
   /** "ETP" ou "€M" — utilisé dans les tooltips et libellés */
   unit?: string;
   decimals?: number;
+  targetLabel?: string;
   onBarClick?: (label: string) => void;
 }) {
   if (buckets.length === 0) {
@@ -166,7 +168,7 @@ export function FteWaterfallChart({
           strokeDasharray="5 4"
           strokeWidth={1.5}
           label={{
-            value: `Cible ${fmt(target)}`,
+            value: `${targetLabel} ${fmt(target)}`,
             fontSize: 10,
             position: "insideBottomLeft",
             fill: COLOR_TARGET,

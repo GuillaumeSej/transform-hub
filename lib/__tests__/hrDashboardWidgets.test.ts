@@ -29,10 +29,10 @@ describe("hrDashboardWidgets — buildHrDefaultLayout", () => {
   it("seeds defaultCustomViews for builder-enabled widget types", () => {
     const layout = buildHrDefaultLayout();
     const dept = layout.find((w) => w.type === "department-breakdown")!;
-    expect(dept.customViews).toHaveLength(1);
-    expect(dept.view).toBe("detail");
-    const country = layout.find((w) => w.type === "country-breakdown")!;
-    expect(country.view).toBe("country");
+    expect(dept.customViews).toBeUndefined();
+    expect(dept.view).toBe("department");
+    const realization = layout.find((w) => w.type === "movement-realization")!;
+    expect(realization.view).toBe("function|all");
   });
 
   it("non-builder widgets have no customViews field", () => {
@@ -98,10 +98,10 @@ describe("hrDashboardWidgets — addHrWidget / removeHrWidget / setHrWidgetSpan"
 
   it("setHrWidgetView updates only the targeted instance", () => {
     const layout = buildHrDefaultLayout();
-    const next = setHrWidgetView(layout, "country-breakdown", "some-other-view");
-    expect(next.find((w) => w.instanceId === "country-breakdown")?.view).toBe("some-other-view");
-    expect(next.find((w) => w.instanceId === "department-breakdown")?.view).toBe(
-      layout.find((w) => w.instanceId === "department-breakdown")?.view
+    const next = setHrWidgetView(layout, "department-breakdown", "country");
+    expect(next.find((w) => w.instanceId === "department-breakdown")?.view).toBe("country");
+    expect(next.find((w) => w.instanceId === "department-table")?.view).toBe(
+      layout.find((w) => w.instanceId === "department-table")?.view
     );
   });
 });
@@ -130,42 +130,47 @@ describe("hrDashboardWidgets — builder générique (customViews)", () => {
       dimension: "status",
     });
     const updated = next.find((w) => w.instanceId === deptId)!;
-    expect(updated.customViews).toHaveLength(2);
-    expect(updated.view).toBe(updated.customViews?.[1].id);
-    const country = next.find((w) => w.type === "country-breakdown")!;
-    expect(country.customViews).toHaveLength(1);
+    expect(updated.customViews).toHaveLength(1);
+    expect(updated.view).toBe(updated.customViews?.[0].id);
+    expect(next.find((w) => w.type === "movement-realization")?.customViews).toBeUndefined();
   });
 
-  it("addCustomViewToHrInstance materializes legacy defaultCustomViews first if the instance had none", () => {
+  it("addCustomViewToHrInstance creates the first custom view when the instance has none", () => {
     const layout: HrWidgetInstance[] = [
-      { instanceId: "country-breakdown", type: "country-breakdown", span: "M", view: "country" },
+      {
+        instanceId: "department-breakdown",
+        type: "department-breakdown",
+        span: "M",
+        view: "department",
+      },
     ];
-    const next = addCustomViewToHrInstance(layout, "country-breakdown", {
+    const next = addCustomViewToHrInstance(layout, "department-breakdown", {
       metric: "salarySavings",
       dimension: "department",
     });
     const updated = next[0];
-    expect(updated.customViews).toHaveLength(2);
-    expect(updated.customViews?.[0].id).toBe("country");
-    expect(updated.view).toBe(updated.customViews?.[1].id);
+    expect(updated.customViews).toHaveLength(1);
+    expect(updated.customViews?.[0].metric).toBe("salarySavings");
+    expect(updated.view).toBe(updated.customViews?.[0].id);
   });
 
   it("resolveHrCustomViews falls back to registry defaults when the instance has none", () => {
     const instance: HrWidgetInstance = {
-      instanceId: "country-breakdown",
-      type: "country-breakdown",
+      instanceId: "department-breakdown",
+      type: "department-breakdown",
       span: "M",
-      view: "country",
+      view: "department",
     };
-    expect(resolveHrCustomViews(instance)).toHaveLength(1);
+    expect(resolveHrCustomViews(instance)).toHaveLength(0);
   });
 
-  it("resolveHrActiveCustomView resolves by id, falling back to the first available view", () => {
-    const layout = buildHrDefaultLayout();
-    const dept = layout.find((w) => w.type === "department-breakdown")!;
-    expect(resolveHrActiveCustomView(dept)?.id).toBe("detail");
-    const unknownView = { ...dept, view: "does-not-exist" };
-    expect(resolveHrActiveCustomView(unknownView)?.id).toBe("detail");
+  it("resolveHrActiveCustomView resolves explicit custom views", () => {
+    const layout = addHrWidgetWithCustomView(buildHrDefaultLayout(), "department-breakdown", {
+      metric: "movementCount",
+      dimension: "status",
+    });
+    const added = layout[layout.length - 1];
+    expect(resolveHrActiveCustomView(added)?.metric).toBe("movementCount");
   });
 
   it("non-builder widgets resolve to no custom views", () => {
@@ -178,7 +183,7 @@ describe("hrDashboardWidgets — builder générique (customViews)", () => {
 
 describe("hrDashboardWidgets — getHrWidgetDef", () => {
   it("finds a known widget", () => {
-    expect(getHrWidgetDef("fte-waterfall")?.label).toContain("Waterfall");
+    expect(getHrWidgetDef("fte-waterfall")?.label).toContain("Trajectoire");
   });
 
   it("returns undefined for an unknown type", () => {

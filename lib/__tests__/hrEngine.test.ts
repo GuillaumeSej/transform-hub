@@ -7,6 +7,9 @@ import {
   fteBridge,
   fteBridgeSummary,
   fteEffect,
+  ftePositionsByDimension,
+  movementBreakdownByDimension,
+  movementRealizationByDimension,
   movementsByCountry,
   movementsByDepartment,
   movementsByType,
@@ -311,6 +314,111 @@ describe("hrEngine — movementsByDepartment (5-types)", () => {
     const hr = rows.find((r) => r.department === "HR")!;
     expect(hr.recrutements).toBe(3);
     expect(hr.transfertEntrants).toBe(2);
+  });
+});
+
+describe("hrEngine — ftePositionsByDimension", () => {
+  it("computes current, target and landing by country", () => {
+    const wf = makeWorkforce({
+      countryBaselines: [
+        { key: "France", label: "France", fte: 60 },
+        { key: "Germany", label: "Germany", fte: 40 },
+      ],
+      movements: [
+        makeMovement({
+          id: "M1",
+          type: "Départ forcé",
+          country: "France",
+          fte: 3,
+          status: "Réalisé",
+          lockedPlan: { fte: 3, salaryImpact: -1, savings: 1, cost: 0 },
+        }),
+        makeMovement({
+          id: "M2",
+          type: "Recrutement",
+          country: "Germany",
+          fte: 2,
+          status: "Planifié",
+          lockedPlan: { fte: 2, salaryImpact: 1, savings: 0, cost: 0 },
+          reforecast: { fte: 1.5, salaryImpact: 1, savings: 0, cost: 0 },
+        }),
+      ],
+    });
+    const rows = ftePositionsByDimension(wf, "country");
+    expect(rows.find((row) => row.key === "France")).toMatchObject({
+      current: 57,
+      target: 57,
+      landing: 57,
+    });
+    expect(rows.find((row) => row.key === "Germany")).toMatchObject({
+      current: 40,
+      target: 42,
+      landing: 41.5,
+    });
+  });
+
+  it("moves FTE from source to destination for department transfers", () => {
+    const wf = makeWorkforce({
+      departments: [
+        { name: "IT", fte: 50, fteTarget: 45 },
+        { name: "HR", fte: 30, fteTarget: 35 },
+      ],
+      movements: [
+        makeMovement({
+          type: "Transfert entrant",
+          department: "IT",
+          toDepartment: "HR",
+          fte: 4,
+          status: "Réalisé",
+        }),
+      ],
+    });
+    const rows = ftePositionsByDimension(wf, "department");
+    expect(rows.find((row) => row.key === "IT")?.current).toBe(46);
+    expect(rows.find((row) => row.key === "HR")?.current).toBe(34);
+  });
+});
+
+describe("hrEngine — movementBreakdownByDimension", () => {
+  it("groups the five movement types by country", () => {
+    const rows = movementBreakdownByDimension(
+      [
+        makeMovement({ id: "M1", type: "Recrutement", country: "France", fte: 2 }),
+        makeMovement({ id: "M2", type: "Attrition", country: "France", fte: 1 }),
+      ],
+      "country"
+    );
+    expect(rows[0]).toMatchObject({ label: "France", recrutements: 2, attritions: 1, net: 1 });
+  });
+});
+
+describe("hrEngine — movementRealizationByDimension", () => {
+  it("computes realized, remaining and target ETP by function and type", () => {
+    const rows = movementRealizationByDimension(
+      [
+        makeMovement({
+          id: "M1",
+          type: "Départ forcé",
+          function: "Finance",
+          fte: 2,
+          status: "Réalisé",
+          lockedPlan: { fte: 2, salaryImpact: -1, savings: 1, cost: 0 },
+        }),
+        makeMovement({
+          id: "M2",
+          type: "Départ forcé",
+          function: "Finance",
+          fte: 3,
+          status: "Planifié",
+          lockedPlan: { fte: 3, salaryImpact: -1, savings: 1, cost: 0 },
+          reforecast: { fte: 2.5, salaryImpact: -1, savings: 1, cost: 0 },
+        }),
+        makeMovement({ id: "M3", type: "Recrutement", function: "Finance", fte: 4 }),
+      ],
+      "function",
+      "Départ forcé"
+    );
+    expect(rows[0]).toMatchObject({ label: "Finance", realized: 2, remaining: 3, target: 5 });
   });
 });
 

@@ -1,7 +1,7 @@
 import { doc, getDoc, onSnapshot, setDoc, writeBatch, type Unsubscribe } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { onListenerError } from "@/lib/firestore/listenerError";
-import type { Department, Employee, WorkforceMovement } from "@/types";
+import type { Department, Employee, WorkforceDimensionBaseline, WorkforceMovement } from "@/types";
 
 /**
  * Couche Firestore pour le périmètre "workforce" (base ETP + mouvements + méta départements) :
@@ -26,7 +26,9 @@ import type { Department, Employee, WorkforceMovement } from "@/types";
 // sélecteur FY et éviter des sous-catégories vides. Voir data/mockData.ts::nextYearMonth.
 // v4 (Août 2026) : ajout du dispositif social (PSE/RC/RCC/PDV/Autre) et alignement des
 // workstream IDs des mouvements sur le référentiel réel des initiatives (WS-PROC, WS-OPS…).
-const SCHEMA_VERSION = "4";
+// v5 (Août 2026) : ajout des baselines ETP pays/workstream dans WorkforceMeta pour alimenter
+// les vues actuel/cible/atterrissage sans extrapoler depuis l'échantillon d'employés détaillés.
+const SCHEMA_VERSION = "5";
 
 const employeesDoc = () => doc(db, "leverMeta", "workforceEmployees");
 const movementsDoc = () => doc(db, "leverMeta", "workforceMovements");
@@ -38,6 +40,8 @@ export type WorkforceMeta = {
   massSalary: number; // €M
   budgetSalary: number; // €M
   departments: Department[];
+  countryBaselines: WorkforceDimensionBaseline[];
+  workstreamBaselines: WorkforceDimensionBaseline[];
 };
 
 /** Firestore refuse `undefined` (champs optionnels comme toDepartment/comment) — on les retire

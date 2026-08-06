@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 
 /** Compte les mois, trimestres et années couverts par une plage — sert au libellé indicatif
- *  "N mois · N trimestres · N exercices" du DateRangePicker. */
+ *  "N mois · N trimestres · N années" du DateRangePicker. */
 export function summarizeRange(
   fromISO: string,
   toISO: string
@@ -81,7 +81,7 @@ export function DateRangePicker({
       {showSummary && summary.months > 0 && (
         <span className="text-[10.5px] text-tertiary">
           {summary.months} mois · {summary.quarters} trimestres · {summary.years}{" "}
-          {summary.years > 1 ? "exercices" : "exercice"}
+          {summary.years > 1 ? "années" : "année"}
         </span>
       )}
     </div>

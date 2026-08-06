@@ -5,7 +5,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Legend,
+  Line,
   Pie,
   PieChart,
   ReferenceLine,
@@ -14,7 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { DepartmentMovements } from "@/lib/hrEngine";
+import type { MovementBreakdownRow, MovementRealizationRow } from "@/lib/hrEngine";
 
 // Palette catégorielle validée (dataviz, tous checks PASS sur surface claire).
 export const HR_CATEGORICAL = ["#FF3C47", "#421799", "#320300", "#FFB1B5", "#421799", "#A99E9A"];
@@ -23,29 +25,30 @@ const COLOR_DOWN = "#FF3C47"; // départs forcés + attrition (exits)
 const COLOR_UP = "#421799"; // recrutements — bp-purple, aligné waterfall ETP
 const COLOR_NEUTRAL = "#806659"; // transferts (entrants + sortants)
 
-/** Barres divergentes par département — depuis Août 2026 les "exits" agrègent Attrition + Départ
- *  forcé (voir `DepartmentMovements.exits`) ; le composant conserve 3 séries pour rester lisible.
- *  Une refonte en 5 séries + point net + courbe cumul est prévue au commit 2. */
+/** Barres divergentes des cinq types de mouvements par département ou pays, avec point net. */
 export function DepartmentMovementsChart({
   data,
   height = 260,
 }: {
-  data: DepartmentMovements[];
+  data: MovementBreakdownRow[];
   height?: number;
 }) {
   const chartData = data.map((d) => ({
-    department: d.department.split(" ")[0],
-    fullName: d.department,
-    Départs: -d.exits,
+    dimension: d.label,
+    fullName: d.label,
     Recrutements: d.recrutements,
-    Transferts: d.transferts,
+    Attrition: -d.attritions,
+    "Départs forcés": -d.forcedDepartures,
+    "Transferts entrants": d.transfertEntrants,
+    "Transferts sortants": -d.transfertSortants,
+    Net: d.net,
   }));
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={chartData} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+      <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-        <XAxis dataKey="department" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+        <XAxis dataKey="dimension" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(value, name) => [`${Math.abs(Number(value))} ETP`, String(name)]}
@@ -55,9 +58,40 @@ export function DepartmentMovementsChart({
         />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <ReferenceLine y={0} stroke="rgba(0,0,0,0.25)" />
-        <Bar dataKey="Départs" fill={COLOR_DOWN} radius={[0, 0, 3, 3]} />
         <Bar dataKey="Recrutements" fill={COLOR_UP} radius={[3, 3, 0, 0]} />
-        <Bar dataKey="Transferts" fill={COLOR_NEUTRAL} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="Attrition" fill="#FFB1B5" radius={[0, 0, 3, 3]} />
+        <Bar dataKey="Départs forcés" fill={COLOR_DOWN} radius={[0, 0, 3, 3]} />
+        <Bar dataKey="Transferts entrants" fill="#A99E9A" radius={[3, 3, 0, 0]} />
+        <Bar dataKey="Transferts sortants" fill={COLOR_NEUTRAL} radius={[0, 0, 3, 3]} />
+        <Line type="monotone" dataKey="Net" stroke="#320300" strokeWidth={0} dot={{ r: 4 }} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Réalisé + reste à faire = cible, par fonction ou pays. */
+export function MovementRealizationChart({
+  data,
+  height = 260,
+}: {
+  data: MovementRealizationRow[];
+  height?: number;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+        <Tooltip
+          formatter={(value, name) => [
+            `${Number(value).toLocaleString("fr-FR")} ETP`,
+            String(name),
+          ]}
+        />
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        <Bar dataKey="realized" name="Réalisé" stackId="total" fill="#421799" />
+        <Bar dataKey="remaining" name="Reste à faire" stackId="total" fill="#CCC1BD" />
       </BarChart>
     </ResponsiveContainer>
   );

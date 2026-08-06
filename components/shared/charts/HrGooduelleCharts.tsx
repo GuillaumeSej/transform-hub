@@ -60,12 +60,9 @@ const fmtEtp = (v: number) => v.toLocaleString("fr-FR");
 export function SavingsPeriodCumulChart({
   buckets,
   height = 320,
-  referenceLabel,
 }: {
   buckets: SalarySavingsBucket[];
   height?: number;
-  /** Label du bucket qui marque l'arrêté (dernier bucket réalisé). Ligne verticale de repère. */
-  referenceLabel?: string;
 }) {
   if (buckets.length === 0) {
     return <p className="py-10 text-center text-sm text-tertiary">Aucune donnée à afficher.</p>;
@@ -104,27 +101,18 @@ export function SavingsPeriodCumulChart({
           labelStyle={{ fontSize: 11, fontWeight: 600 }}
         />
         <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" iconType="rect" />
-        {referenceLabel && (
-          <ReferenceLine
-            yAxisId="period"
-            x={referenceLabel}
-            stroke="rgba(0,0,0,0.35)"
-            strokeDasharray="4 4"
-            label={{ value: "Arrêté", fontSize: 10, position: "top", fill: "#0F172A" }}
-          />
-        )}
         <Bar
           yAxisId="period"
           dataKey="actualPlusForecast"
-          name="Actual + forecast"
+          name="Réalisé + prévision — période"
           fill={COLOR_SAVINGS}
         />
-        <Bar yAxisId="period" dataKey="plan" name="Plan" fill={COLOR_PLAN} />
+        <Bar yAxisId="period" dataKey="plan" name="Plan initial — période" fill={COLOR_PLAN} />
         <Line
           yAxisId="cumul"
           type="monotone"
           dataKey="cumulActualForecast"
-          name="Cumul actual + forecast"
+          name="Cumul réalisé + prévision"
           stroke={COLOR_SAVINGS}
           strokeWidth={2}
           dot={{ r: 3 }}
@@ -133,7 +121,7 @@ export function SavingsPeriodCumulChart({
           yAxisId="cumul"
           type="monotone"
           dataKey="cumulPlan"
-          name="Cumul plan"
+          name="Cumul plan initial"
           stroke={COLOR_PLAN}
           strokeWidth={1.5}
           strokeDasharray="5 4"

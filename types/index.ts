@@ -213,6 +213,14 @@ export type Department = {
   fteTarget: number;
 };
 
+/** Baseline ETP explicite pour une dimension sans référentiel natif dans la base ETP détaillée
+ * (pays, workstream). La somme par dimension doit égaler Workforce.totalFTE. */
+export type WorkforceDimensionBaseline = {
+  key: string;
+  label: string;
+  fte: number;
+};
+
 export type Employee = {
   id: string;
   name: string;
@@ -321,6 +329,8 @@ export type Workforce = {
   massSalary: number; // €M
   budgetSalary: number; // €M
   departments: Department[];
+  countryBaselines?: WorkforceDimensionBaseline[];
+  workstreamBaselines?: WorkforceDimensionBaseline[];
   employees: Employee[];
   movements: WorkforceMovement[];
 };

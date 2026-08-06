@@ -410,6 +410,232 @@ export function movementsByType(wf: Workforce): MovementTypeSummary[] {
   }).filter((t) => t.count > 0);
 }
 
+// ---------- Vues dimensionnelles génériques ----------
+
+export type WorkforceDimension = "department" | "country" | "workstream";
+
+export type FtePositionRow = {
+  key: string;
+  label: string;
+  current: number;
+  target: number;
+  landing: number;
+  gapToTarget: number;
+};
+
+function signedFteForType(type: MovementType, fte: number): number {
+  if (type === "Recrutement" || type === "Transfert entrant") return fte;
+  if (type === "Attrition" || type === "Départ forcé" || type === "Transfert sortant") return -fte;
+  return 0;
+}
+
+function movementFteValue(
+  movement: WorkforceMovement,
+  source: "actual" | "target" | "reforecast"
+): number {
+  if (source === "actual") return movement.fte;
+  if (source === "target") return movement.lockedPlan?.fte ?? movement.fte;
+  return movement.reforecast?.fte ?? movement.lockedPlan?.fte ?? movement.fte;
+}
+
+/** Contributions dimensionnelles d'un mouvement. Les transferts départementaux sortent du
+ * département source et entrent dans le département cible ; pays/workstream utilisent le type
+ * explicite entrant/sortant, faute de destination distincte dans le modèle. */
+function dimensionalContributions(
+  movement: WorkforceMovement,
+  dimension: WorkforceDimension,
+  source: "actual" | "target" | "reforecast"
+): { key: string; delta: number }[] {
+  const fte = movementFteValue(movement, source);
+  if (dimension === "department") {
+    if (movement.type === "Recrutement") return [{ key: movement.department, delta: fte }];
+    if (movement.type === "Attrition" || movement.type === "Départ forcé") {
+      return [{ key: movement.department, delta: -fte }];
+    }
+    const rows = [{ key: movement.department, delta: -fte }];
+    if (movement.toDepartment && movement.toDepartment !== movement.department) {
+      rows.push({ key: movement.toDepartment, delta: fte });
+    }
+    return rows;
+  }
+  const key = dimension === "country" ? movement.country : movement.workstream;
+  if (!key) return [];
+  return [{ key, delta: signedFteForType(movement.type, fte) }];
+}
+
+/** Positions ETP par département, pays ou workstream.
+ * - Actuel = baseline + mouvements réalisés ;
+ * - Cible = baseline + plan verrouillé de tous les mouvements ;
+ * - Atterrissage = actuel + reforecast des mouvements non réalisés. */
+export function ftePositionsByDimension(
+  wf: Workforce,
+  dimension: WorkforceDimension
+): FtePositionRow[] {
+  const baselines =
+    dimension === "department"
+      ? wf.departments.map((d) => ({ key: d.name, label: d.name, fte: d.fte }))
+      : dimension === "country"
+        ? (wf.countryBaselines ?? [])
+        : (wf.workstreamBaselines ?? []);
+  const rows = new Map(
+    baselines.map((baseline) => [
+      baseline.key,
+      {
+        key: baseline.key,
+        label: baseline.label,
+        baseline: baseline.fte,
+        realizedDelta: 0,
+        targetDelta: 0,
+        remainingForecastDelta: 0,
+      },
+    ])
+  );
+  const ensure = (key: string) => {
+    if (!rows.has(key)) {
+      rows.set(key, {
+        key,
+        label: key,
+        baseline: 0,
+        realizedDelta: 0,
+        targetDelta: 0,
+        remainingForecastDelta: 0,
+      });
+    }
+    return rows.get(key)!;
+  };
+
+  for (const movement of wf.movements) {
+    for (const contribution of dimensionalContributions(movement, dimension, "target")) {
+      ensure(contribution.key).targetDelta += contribution.delta;
+    }
+    if (movement.status === "Réalisé") {
+      for (const contribution of dimensionalContributions(movement, dimension, "actual")) {
+        ensure(contribution.key).realizedDelta += contribution.delta;
+      }
+    } else {
+      for (const contribution of dimensionalContributions(movement, dimension, "reforecast")) {
+        ensure(contribution.key).remainingForecastDelta += contribution.delta;
+      }
+    }
+  }
+
+  return Array.from(rows.values())
+    .map((row) => {
+      const current = row.baseline + row.realizedDelta;
+      const target = row.baseline + row.targetDelta;
+      const landing = current + row.remainingForecastDelta;
+      return {
+        key: row.key,
+        label: row.label,
+        current: Math.round(current * 10) / 10,
+        target: Math.round(target * 10) / 10,
+        landing: Math.round(landing * 10) / 10,
+        gapToTarget: Math.round((landing - target) * 10) / 10,
+      };
+    })
+    .sort((a, b) => b.current - a.current);
+}
+
+export type MovementBreakdownDimension = "department" | "country";
+export type MovementBreakdownRow = Omit<DepartmentMovements, "department"> & {
+  key: string;
+  label: string;
+};
+
+/** Ventilation prévue des cinq types de mouvements par département ou pays. */
+export function movementBreakdownByDimension(
+  movements: WorkforceMovement[],
+  dimension: MovementBreakdownDimension
+): MovementBreakdownRow[] {
+  const rows = new Map<string, MovementBreakdownRow>();
+  const ensure = (key: string) => {
+    if (!rows.has(key)) {
+      rows.set(key, {
+        key,
+        label: key,
+        recrutements: 0,
+        attritions: 0,
+        forcedDepartures: 0,
+        transfertEntrants: 0,
+        transfertSortants: 0,
+        exits: 0,
+        transferts: 0,
+        net: 0,
+      });
+    }
+    return rows.get(key)!;
+  };
+  for (const movement of movements) {
+    if (dimension === "country") {
+      const row = ensure(movement.country || "Non renseigné");
+      if (movement.type === "Recrutement") row.recrutements += movement.fte;
+      if (movement.type === "Attrition") row.attritions += movement.fte;
+      if (movement.type === "Départ forcé") row.forcedDepartures += movement.fte;
+      if (movement.type === "Transfert entrant") row.transfertEntrants += movement.fte;
+      if (movement.type === "Transfert sortant") row.transfertSortants += movement.fte;
+    } else {
+      const source = ensure(movement.department);
+      if (movement.type === "Recrutement") source.recrutements += movement.fte;
+      if (movement.type === "Attrition") source.attritions += movement.fte;
+      if (movement.type === "Départ forcé") source.forcedDepartures += movement.fte;
+      if (movement.type === "Transfert entrant" || movement.type === "Transfert sortant") {
+        source.transfertSortants += movement.fte;
+        if (movement.toDepartment && movement.toDepartment !== movement.department) {
+          ensure(movement.toDepartment).transfertEntrants += movement.fte;
+        }
+      }
+    }
+  }
+  return Array.from(rows.values()).map((row) => {
+    row.exits = row.attritions + row.forcedDepartures;
+    row.transferts = row.transfertEntrants + row.transfertSortants;
+    row.net =
+      row.recrutements +
+      row.transfertEntrants -
+      row.attritions -
+      row.forcedDepartures -
+      row.transfertSortants;
+    return row;
+  });
+}
+
+export type MovementRealizationDimension = "function" | "country";
+export type MovementRealizationRow = {
+  key: string;
+  label: string;
+  realized: number;
+  remaining: number;
+  target: number;
+};
+
+/** Réalisé vs reste à faire en ETP, groupé par fonction ou pays et filtrable par type. */
+export function movementRealizationByDimension(
+  movements: WorkforceMovement[],
+  dimension: MovementRealizationDimension,
+  movementType?: MovementType
+): MovementRealizationRow[] {
+  const rows = new Map<string, MovementRealizationRow>();
+  for (const movement of movements) {
+    if (movementType && movement.type !== movementType) continue;
+    const key = dimension === "function" ? movement.function : movement.country;
+    if (!key) continue;
+    const row = rows.get(key) ?? { key, label: key, realized: 0, remaining: 0, target: 0 };
+    const targetFte = movement.lockedPlan?.fte ?? movement.fte;
+    row.target += targetFte;
+    if (movement.status === "Réalisé") row.realized += movement.fte;
+    rows.set(key, row);
+  }
+  return Array.from(rows.values())
+    .map((row) => ({
+      ...row,
+      realized: Math.round(row.realized * 10) / 10,
+      // Le widget doit recomposer exactement la cible : Réalisé + Reste à faire = Cible.
+      remaining: Math.round(Math.max(0, row.target - row.realized) * 10) / 10,
+      target: Math.round(row.target * 10) / 10,
+    }))
+    .sort((a, b) => b.target - a.target);
+}
+
 // ---------- Masse salariale ----------
 
 export type SalaryBridgeBucket = {

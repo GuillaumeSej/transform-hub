@@ -58,6 +58,8 @@ function workforceSeed(): workforceDb.WorkforceSeed {
       massSalary: mockData.workforce.massSalary,
       budgetSalary: mockData.workforce.budgetSalary,
       departments: mockData.workforce.departments,
+      countryBaselines: mockData.workforce.countryBaselines ?? [],
+      workstreamBaselines: mockData.workforce.workstreamBaselines ?? [],
     },
   };
 }
@@ -197,6 +199,9 @@ export function useBeTrackData(companyId?: string | null) {
           massSalary: workforceMeta?.massSalary ?? mockData.workforce.massSalary,
           budgetSalary: workforceMeta?.budgetSalary ?? mockData.workforce.budgetSalary,
           departments: workforceMeta?.departments ?? mockData.workforce.departments,
+          countryBaselines: workforceMeta?.countryBaselines ?? mockData.workforce.countryBaselines,
+          workstreamBaselines:
+            workforceMeta?.workstreamBaselines ?? mockData.workforce.workstreamBaselines,
           employees,
           movements,
         },
