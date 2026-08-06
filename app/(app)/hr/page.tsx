@@ -52,6 +52,8 @@ import {
   SavingsPeriodCumulChart,
 } from "@/components/shared/charts/HrGooduelleCharts";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
+import { DateRangePicker } from "@/components/shared/DateRangePicker";
+import { generateFiscalYears } from "@/lib/fiscalYear";
 import type { MovementAlertKind } from "@/lib/hrEngine";
 import type { WorkforceMovement } from "@/types";
 import {
@@ -122,25 +124,35 @@ export default function HrDashboardPage() {
   const data = useBeTrackData(user?.companyId ?? null);
   const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
-  const [granularity, setGranularity] = useState<"month" | "quarter">("quarter");
+  const [granularity, setGranularity] = useState<"month" | "quarter" | "year">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
 
-  /** Période affichée sur les graphiques à axe temporel (waterfall, trajectoire).
-   *  Tranche les données bridge/trajectory pour n'afficher que les N premiers mois/trimestres. */
-  type TimeRangeOption = { label: string; months: number };
-  const TIME_RANGES: TimeRangeOption[] = [
-    { label: "3 mois", months: 3 },
-    { label: "6 mois", months: 6 },
-    { label: "1 an", months: 12 },
-    { label: "3 ans", months: 36 },
-  ];
-  const [timeRangeMonths, setTimeRangeMonths] = useState(12);
+  // ─── Sélecteur de programme (miroir du dashboard exécutif) ──────────────────────────────────
+  // Le dashboard RH est désormais scopé à UN programme sélectionné, mêmes règles que
+  // app/(app)/dashboard/page.tsx. Le premier programme de l'entreprise est sélectionné par
+  // défaut. Le sélecteur est ajouté au commit 3 pour piloter aussi bien les leviers rattachés
+  // que les périodes FY (via Program.fyStart/fyEnd) et le filtre transverse des mouvements RH.
+  const programs = useMemo(
+    () => [data.program], // BeTrackData.program (mono-programme mock) — TODO multi-programmes
+    [data.program]
+  );
+  const [selectedProgramId, setSelectedProgramId] = useState<string>(programs[0]?.id ?? "");
+  useEffect(() => {
+    if (!selectedProgramId && programs.length > 0) setSelectedProgramId(programs[0].id);
+  }, [programs, selectedProgramId]);
+  const activeProgram = programs.find((p) => p.id === selectedProgramId) ?? programs[0] ?? null;
 
-  /** Nombre de buckets à afficher selon la période et la granularité courante. */
-  const visibleBuckets = useMemo(() => {
-    if (granularity === "quarter") return Math.min(Math.ceil(timeRangeMonths / 3), 12);
-    return Math.min(timeRangeMonths, 12);
-  }, [timeRangeMonths, granularity]);
+  // ─── Range picker + presets FY (Août 2026) ─────────────────────────────────
+  // Bornes de la plage — Programme complet par défaut = fyStart du programme → fyEnd. Presets :
+  // Programme complet · Réalisé à date · FY... (générés à partir des Program.fyStart/fyEnd).
+  const initialFrom = activeProgram?.fyStart ?? "2026-01-01";
+  const initialTo = activeProgram?.fyEnd ?? "2028-12-31";
+  const [dateFromISO, setDateFromISO] = useState<string>(initialFrom);
+  const [dateToISO, setDateToISO] = useState<string>(initialTo);
+  useEffect(() => {
+    setDateFromISO(activeProgram?.fyStart ?? "2026-01-01");
+    setDateToISO(activeProgram?.fyEnd ?? "2028-12-31");
+  }, [activeProgram?.fyStart, activeProgram?.fyEnd]);
 
   // ─── Filtres RH (même pattern que le dashboard exécutif) ────────────────────────────────────
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
@@ -149,6 +161,8 @@ export default function HrDashboardPage() {
   const filterDefs: FilterDef<WorkforceMovement>[] = useMemo(
     () => [
       { key: "type", label: "Type", getValue: (m) => m.type },
+      { key: "workstream", label: "Workstream", getValue: (m) => m.workstream || "—" },
+      { key: "function", label: "Fonction", getValue: (m) => m.function || "—" },
       { key: "department", label: "Département", getValue: (m) => m.department },
       { key: "country", label: "Pays", getValue: (m) => m.country },
       { key: "status", label: "Statut", getValue: (m) => m.status },
@@ -159,19 +173,26 @@ export default function HrDashboardPage() {
 
   const wf = data.workforce;
 
-  // Mouvements filtrés — alimente TOUS les calculs du dashboard quand un filtre est actif.
+  // Mouvements filtrés — alimente TOUS les calculs du dashboard quand un filtre ou le range
+  // picker sont actifs. Le filtre par programme est appliqué en premier (scope), suivi du range
+  // picker (dateFromISO/ToISO) puis des filtres FilterBar (types, workstream, fonction, pays, …).
   const filteredMovements = useMemo(() => {
     const keys = Object.keys(activeFilters);
-    if (keys.length === 0) return wf.movements;
-    return wf.movements.filter((m) =>
-      keys.every((key) => {
+    return wf.movements.filter((m) => {
+      // Scope programme (aujourd'hui mono-programme mock, mais évolutif multi-programmes).
+      if (selectedProgramId && m.programId && m.programId !== selectedProgramId) return false;
+      // Range picker temporel.
+      if (m.plannedDate < dateFromISO || m.plannedDate > dateToISO) return false;
+      // FilterBar (nominal).
+      for (const key of keys) {
         const values = activeFilters[key];
-        if (!values || values.length === 0) return true;
+        if (!values || values.length === 0) continue;
         const def = filterDefs.find((d) => d.key === key);
-        return def ? values.includes(def.getValue(m)) : true;
-      })
-    );
-  }, [wf.movements, activeFilters, filterDefs]);
+        if (def && !values.includes(def.getValue(m))) return false;
+      }
+      return true;
+    });
+  }, [wf.movements, activeFilters, filterDefs, selectedProgramId, dateFromISO, dateToISO]);
 
   const hasActiveFilters = Object.keys(activeFilters).length > 0;
 
@@ -186,24 +207,22 @@ export default function HrDashboardPage() {
     () => hr.movementAlerts(filteredWf, data.levers),
     [filteredWf, data.levers]
   );
-  const bridge = useMemo(() => hr.fteBridge(filteredWf, granularity), [filteredWf, granularity]);
-  const salary = useMemo(() => hr.salaryBridge(filteredWf, "quarter"), [filteredWf]);
+  const bridge = useMemo(
+    () => hr.fteBridge(filteredWf, granularity, { from: dateFromISO, to: dateToISO }),
+    [filteredWf, granularity, dateFromISO, dateToISO]
+  );
+  const salary = useMemo(
+    () => hr.salaryBridge(filteredWf, granularity, { from: dateFromISO, to: dateToISO }),
+    [filteredWf, granularity, dateFromISO, dateToISO]
+  );
   const byDept = useMemo(() => hr.movementsByDepartment(filteredWf), [filteredWf]);
   const byCountry = useMemo(() => hr.movementsByCountry(filteredWf), [filteredWf]);
   const deptDeltas = useMemo(() => hr.deltaByDepartment(filteredWf), [filteredWf]);
   const pse = useMemo(() => hr.pseSummary(filteredWf), [filteredWf]);
 
   // ─── Gooduelle series (Août 2026) ────────────────────────────────────────────
-  // Plage de dates dérivée automatiquement des mouvements : borne min/max des plannedDate. Un
-  // sélecteur de range picker sera ajouté au commit 3 pour permettre à l'utilisateur d'affiner.
-  const dateRange = useMemo(() => {
-    const dates = filteredMovements
-      .map((m) => m.plannedDate)
-      .filter((d): d is string => !!d)
-      .sort();
-    if (dates.length === 0) return { from: "2026-01-01", to: "2028-12-31" };
-    return { from: dates[0], to: dates[dates.length - 1] };
-  }, [filteredMovements]);
+  // Plage de dates pilotée par le range picker + presets FY côté page (voir dateFromISO/ToISO).
+  const dateRange = useMemo(() => ({ from: dateFromISO, to: dateToISO }), [dateFromISO, dateToISO]);
 
   const savingsSeries = useMemo(
     () => salarySavingsSeries(filteredMovements, granularity, dateRange, hr.HR_TODAY),
@@ -445,31 +464,20 @@ export default function HrDashboardPage() {
     );
   };
 
-  /** Sélecteur granularité + période — partagé entre waterfall et trajectoire. */
+  /** Sélecteur granularité seul — partagé entre widgets à axe temporel. Les autres contrôles
+   *  (presets FY, range picker) sont dans la barre transverse au-dessus du grid, pas dans
+   *  chaque CardHeader (voir Août 2026). */
   const timeControls = (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="flex overflow-hidden rounded-md border border-border">
-        {TIME_RANGES.map((r) => (
-          <button
-            key={r.months}
-            onClick={() => setTimeRangeMonths(r.months)}
-            className={`px-2 py-1 text-[11px] font-semibold ${timeRangeMonths === r.months ? "bg-neutral-900 text-white" : "bg-white text-secondary"}`}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-      <div className="flex overflow-hidden rounded-md border border-border">
-        {(["month", "quarter"] as const).map((g) => (
-          <button
-            key={g}
-            onClick={() => setGranularity(g)}
-            className={`px-2.5 py-1 text-[11px] font-semibold ${granularity === g ? "bg-neutral-900 text-white" : "bg-white text-secondary"}`}
-          >
-            {g === "month" ? "Mois" : "Trim."}
-          </button>
-        ))}
-      </div>
+    <div className="flex overflow-hidden rounded-md border border-border">
+      {(["month", "quarter", "year"] as const).map((g) => (
+        <button
+          key={g}
+          onClick={() => setGranularity(g)}
+          className={`px-2.5 py-1 text-[11px] font-semibold ${granularity === g ? "bg-neutral-900 text-white" : "bg-white text-secondary"}`}
+        >
+          {g === "month" ? "Mois" : g === "quarter" ? "Trim." : "Exercice"}
+        </button>
+      ))}
     </div>
   );
 
@@ -482,7 +490,7 @@ export default function HrDashboardPage() {
             <CardHeader title="Waterfall des mouvements" actions={timeControls} />
             <CardBody>
               <FteWaterfallChart
-                buckets={bridge.slice(0, visibleBuckets)}
+                buckets={bridge}
                 baseline={wf.totalFTE}
                 target={target}
                 onBarClick={(label) => setDrillBucket(label)}
@@ -1363,6 +1371,92 @@ export default function HrDashboardPage() {
           )}
         </div>
       </Modal>
+
+      {/* ═══════════════════════════════════════════════════════════════════════════════════════
+          Contrôles transverses — sélecteur programme + presets FY / Réalisé à date / Programme
+          complet + range picker. Pilote uniformément TOUS les widgets à axe temporel via
+          `dateFromISO` / `dateToISO` (dateRange dans les series et bridge/salary).
+          ═══════════════════════════════════════════════════════════════════════════════════════ */}
+      <div className="mb-4 rounded-lg border border-border bg-white p-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {programs.length > 1 && (
+            <div className="inline-flex items-center gap-1">
+              <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                Programme
+              </span>
+              <select
+                value={selectedProgramId}
+                onChange={(e) => setSelectedProgramId(e.target.value)}
+                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
+              >
+                {programs.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="inline-flex items-center gap-1">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+              Période
+            </span>
+            <DateRangePicker
+              fromISO={dateFromISO}
+              toISO={dateToISO}
+              minISO={activeProgram?.fyStart}
+              maxISO={activeProgram?.fyEnd}
+              onChange={({ fromISO, toISO }) => {
+                setDateFromISO(fromISO);
+                setDateToISO(toISO);
+              }}
+              showSummary
+            />
+          </div>
+          {activeProgram && (
+            <div className="inline-flex flex-wrap items-center gap-1">
+              <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                Presets
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFromISO(activeProgram.fyStart);
+                  setDateToISO(activeProgram.fyEnd);
+                }}
+                className="rounded-sm border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-secondary hover:border-black hover:text-primary"
+              >
+                Programme complet
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFromISO(activeProgram.fyStart);
+                  setDateToISO(hr.HR_TODAY);
+                }}
+                className="rounded-sm border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-secondary hover:border-black hover:text-primary"
+              >
+                Réalisé à date
+              </button>
+              {generateFiscalYears(activeProgram, activeProgram.fyStart, activeProgram.fyEnd).map(
+                (fy) => (
+                  <button
+                    key={fy.label}
+                    type="button"
+                    onClick={() => {
+                      setDateFromISO(fy.startISO);
+                      setDateToISO(fy.endISO);
+                    }}
+                    className="rounded-sm border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-secondary hover:border-black hover:text-primary"
+                  >
+                    {fy.label}
+                  </button>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       <div
         data-hr-dashboard-widget-grid
