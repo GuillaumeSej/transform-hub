@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   movementRhythmSeries,
+  movementRhythmAxisDomains,
   netEconomySeries,
   salarySavingsSeries,
   socialCostSeries,
@@ -271,5 +272,49 @@ describe("hrTimeSeries — movementRhythmSeries", () => {
     ];
     const buckets = movementRhythmSeries(movements, "month", range);
     expect(buckets[buckets.length - 1].cumulNet).toBe(hrProgramSummary(movements).fte.target);
+  });
+});
+
+describe("hrTimeSeries — movementRhythmAxisDomains", () => {
+  it("uses stacked positive/negative totals rather than individual series", () => {
+    const domains = movementRhythmAxisDomains([
+      {
+        label: "T1 2026",
+        startISO: "2026-01-01",
+        endISO: "2026-03-31",
+        byType: {
+          Recrutement: 1,
+          Attrition: -1,
+          "Départ forcé": -2,
+          "Transfert entrant": 2,
+          "Transfert sortant": -1,
+        },
+        net: -2,
+        cumulNet: -2,
+      },
+    ]);
+    // Pile positive +3 et négative -4, puis marge/arrondi lisible → ±5.
+    expect(domains.period).toEqual([-5, 5]);
+  });
+
+  it("adds headroom and rounds cumulative values to readable bounds", () => {
+    const domains = movementRhythmAxisDomains([
+      {
+        label: "T4 2028",
+        startISO: "2028-10-01",
+        endISO: "2028-12-31",
+        byType: {
+          Recrutement: 1,
+          Attrition: 0,
+          "Départ forcé": -1,
+          "Transfert entrant": 2,
+          "Transfert sortant": 0,
+        },
+        net: 0,
+        cumulNet: -16.1,
+      },
+    ]);
+    expect(domains.cumulative).toEqual([-20, 20]);
+    expect(domains.cumulative[0]).toBe(-domains.cumulative[1]);
   });
 });

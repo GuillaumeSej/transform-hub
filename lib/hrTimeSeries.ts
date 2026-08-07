@@ -286,6 +286,50 @@ export type MovementRhythmBucket = {
   cumulNet: number;
 };
 
+export type MovementRhythmAxisDomains = {
+  period: [number, number];
+  cumulative: [number, number];
+};
+
+/** Arrondit une borne positive à une graduation lisible (1/2/5 × puissance de 10). */
+function niceAxisMax(value: number, padding: number): number {
+  const padded = Math.max(1, value * padding);
+  const magnitude = 10 ** Math.floor(Math.log10(padded));
+  const normalized = padded / magnitude;
+  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return step * magnitude;
+}
+
+/** Domaines symétriques du graphique rythme des mouvements.
+ *
+ * L'axe période doit considérer les SOMMES empilées positives/négatives par bucket, et non la
+ * plus grande série individuelle. Une marge protège également les barres, points et courbes des
+ * limites du canvas. Les deux domaines sont symétriques afin que leurs zéros coïncident. */
+export function movementRhythmAxisDomains(
+  buckets: MovementRhythmBucket[]
+): MovementRhythmAxisDomains {
+  let periodExtent = 1;
+  let cumulativeExtent = 1;
+  for (const bucket of buckets) {
+    const values = Object.values(bucket.byType);
+    const positiveStack = values.reduce((sum, value) => sum + Math.max(0, value), 0);
+    const negativeStack = values.reduce((sum, value) => sum + Math.min(0, value), 0);
+    periodExtent = Math.max(
+      periodExtent,
+      Math.abs(positiveStack),
+      Math.abs(negativeStack),
+      Math.abs(bucket.net)
+    );
+    cumulativeExtent = Math.max(cumulativeExtent, Math.abs(bucket.cumulNet));
+  }
+  const periodMax = niceAxisMax(periodExtent, 1.2);
+  const cumulativeMax = niceAxisMax(cumulativeExtent, 1.15);
+  return {
+    period: [-periodMax, periodMax],
+    cumulative: [-cumulativeMax, cumulativeMax],
+  };
+}
+
 /** Rythme mensuel/trimestriel/annuel des mouvements décomposé par les 5 types + net + cumul.
  *
  *  Les 5 barres sont visuellement empilées :

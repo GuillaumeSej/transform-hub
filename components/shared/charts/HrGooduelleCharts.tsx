@@ -28,6 +28,7 @@ import type {
   SalarySavingsBucket,
   SocialCostBucket,
 } from "@/lib/hrTimeSeries";
+import { movementRhythmAxisDomains } from "@/lib/hrTimeSeries";
 import type { FteBridgeSummary } from "@/lib/hrEngine";
 import type { MovementType } from "@/types";
 
@@ -305,20 +306,7 @@ export function MovementRhythmChart({
     net: b.net,
     cumulNet: b.cumulNet,
   }));
-  const periodMax = Math.max(
-    1,
-    ...data
-      .flatMap((row) => [
-        row.Recrutement,
-        row.Attrition,
-        row["Départ forcé"],
-        row["Transfert entrant"],
-        row["Transfert sortant"],
-        row.net,
-      ])
-      .map(Math.abs)
-  );
-  const cumulMax = Math.max(1, ...data.map((row) => Math.abs(row.cumulNet)));
+  const axisDomains = movementRhythmAxisDomains(buckets);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -339,8 +327,9 @@ export function MovementRhythmChart({
         />
         <YAxis
           yAxisId="period"
-          domain={[-periodMax, periodMax]}
+          domain={axisDomains.period}
           allowDataOverflow
+          allowDecimals={false}
           tick={{ fontSize: 10 }}
           axisLine={false}
           tickLine={false}
@@ -348,7 +337,7 @@ export function MovementRhythmChart({
         />
         <YAxis
           yAxisId="cumul"
-          domain={[-cumulMax, cumulMax]}
+          domain={axisDomains.cumulative}
           allowDataOverflow
           orientation="right"
           tick={{ fontSize: 10 }}
