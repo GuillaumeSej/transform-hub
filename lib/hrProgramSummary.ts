@@ -1,4 +1,5 @@
 import type { WorkforceMovement } from "@/types";
+import { isActiveMovement } from "@/lib/workforceLogic";
 
 /**
  * Synthèse RH programme — équivalent RH du `programSummary` du dashboard exécutif.
@@ -104,6 +105,7 @@ export function hrProgramSummary(movements: WorkforceMovement[]): HrProgramSumma
   let socialCostReforecast = 0;
 
   for (const m of movements) {
+    if (!isActiveMovement(m)) continue;
     const sign = fteSign(m);
     const isRealized = m.status === "Réalisé";
 

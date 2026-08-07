@@ -251,7 +251,7 @@ export type Employee = {
  *   - `Transfert sortant` (nouveau) : mobilité vers un département hors du périmètre monitoré. */
 export type MovementType =
   "Recrutement" | "Attrition" | "Départ forcé" | "Transfert entrant" | "Transfert sortant";
-export type MovementStatus = "Planifié" | "En cours" | "Réalisé";
+export type MovementStatus = "Réalisé" | "Planifié" | "À faire" | "Abandonné";
 
 /** Dispositif social associé à une réduction de poste. La liste couvre les mécanismes courants
  * tout en gardant `Autre` pour les politiques client spécifiques. */

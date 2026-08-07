@@ -178,7 +178,10 @@ export default function BaseEtpPage() {
           function: m.function ?? "—",
           programId: m.programId ?? "—",
           hrOwner: m.hrOwner,
-          executionStatus: EXECUTION_LABELS[classifyMovementAction(m)],
+          executionStatus:
+            classifyMovementAction(m) === null
+              ? "Abandonné"
+              : EXECUTION_LABELS[classifyMovementAction(m)!],
           fte: m.fte,
           plannedDate: m.plannedDate,
           actualDate: m.actualDate ?? "—",

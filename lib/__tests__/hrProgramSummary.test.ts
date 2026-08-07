@@ -121,6 +121,20 @@ describe("hrProgramSummary", () => {
     ]);
     expect(s.fte.realized).toBe(3 - 2 - 4);
   });
+
+  it("excludes abandoned movements from targets and forecasts", () => {
+    const s = hrProgramSummary([
+      makeMovement({
+        status: "Abandonné",
+        savings: 100000,
+        cost: 20000,
+        lockedPlan: snapshot({ fte: 3, savings: 100000, cost: 20000 }),
+      }),
+    ]);
+    expect(s.salarySavings.target).toBe(0);
+    expect(s.socialCost.target).toBe(0);
+    expect(s.fte.target).toBe(0);
+  });
 });
 
 describe("targetFteFromBaseline", () => {

@@ -415,12 +415,12 @@ function movementStatus(
   const isFuture = plannedYear > 2026 || (plannedYear === 2026 && plannedMonth > 6);
 
   if (isPastYear || isCurrentYearPast) {
-    if (seq % 5 === 0) return { status: "En cours", actual: false, validated: false };
+    if (seq % 5 === 0) return { status: "À faire", actual: false, validated: false };
     return { status: "Réalisé", actual: true, validated: seq % 3 !== 0 };
   }
   if (isCurrentYearRecent) {
     if (seq % 3 === 0) return { status: "Réalisé", actual: true, validated: false };
-    return { status: "En cours", actual: false, validated: false };
+    return { status: "À faire", actual: false, validated: false };
   }
   if (isFuture) return { status: "Planifié", actual: false, validated: false };
   return { status: "Planifié", actual: false, validated: false };
@@ -503,6 +503,9 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
     const day = String(1 + ((seq * 3) % 27)).padStart(2, "0");
     const plannedDate = `${year}-${String(month).padStart(2, "0")}-${day}`;
     const st = movementStatus(year, month, seq);
+    // Quelques mouvements annulés restent visibles dans la synthèse mais sont exclus des
+    // prévisions/KPI par `isActiveMovement` (répartition déterministe, ~1 sur 17).
+    const status = !st.actual && seq % 17 === 0 ? "Abandonné" : st.status;
     const { lockedPlan, reforecast } = makeSnapshots(
       fte,
       opts.salaryImpact,
@@ -526,7 +529,7 @@ function generateMovements(employees: Employee[]): WorkforceMovement[] {
       hrOwner: emp?.hrOwner ?? "Nadia Benali",
       plannedDate,
       actualDate: st.actual ? plannedDate : null,
-      status: st.status,
+      status,
       hrValidated: st.validated,
       inPSE: opts.pse,
       socialScheme: opts.socialScheme,

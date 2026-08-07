@@ -28,7 +28,9 @@ import type { Department, Employee, WorkforceDimensionBaseline, WorkforceMovemen
 // workstream IDs des mouvements sur le référentiel réel des initiatives (WS-PROC, WS-OPS…).
 // v5 (Août 2026) : ajout des baselines ETP pays/workstream dans WorkforceMeta pour alimenter
 // les vues actuel/cible/atterrissage sans extrapoler depuis l'échantillon d'employés détaillés.
-const SCHEMA_VERSION = "5";
+// v6 (Août 2026) : statut mouvement migré vers Réalisé/Planifié/À faire/Abandonné. Les anciens
+// "En cours" sont reseedés en "À faire" et quelques abandons sont conservés hors prévisions.
+const SCHEMA_VERSION = "6";
 
 const employeesDoc = () => doc(db, "leverMeta", "workforceEmployees");
 const movementsDoc = () => doc(db, "leverMeta", "workforceMovements");

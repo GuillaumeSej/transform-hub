@@ -15,12 +15,12 @@ import { EXECUTION_LABELS } from "@/lib/hrExecution";
 
 const STATUS_COLORS: Record<MovementExecutionStatus, string> = {
   realized: "#421799",
-  inProgress: "#806659",
   overdue: "#FF3C47",
-  upcoming: "#CCC1BD",
+  dueSoon: "#FFB1B5",
+  later: "#A99E9A",
 };
 
-const STATUS_ORDER: MovementExecutionStatus[] = ["realized", "inProgress", "overdue", "upcoming"];
+const STATUS_ORDER: MovementExecutionStatus[] = ["realized", "overdue", "dueSoon", "later"];
 
 /** Graphique partagé ETP / masse salariale par statut d'exécution. */
 export function ExecutionStatusChart({
@@ -97,7 +97,7 @@ export function ExecutionStatusChart({
             key={status}
             dataKey={status}
             name={EXECUTION_LABELS[status]}
-            stackId={mode === "fte" ? "volume" : undefined}
+            stackId="status"
             fill={STATUS_COLORS[status]}
             onClick={(entry) => {
               const label = (entry as { label?: string })?.label;

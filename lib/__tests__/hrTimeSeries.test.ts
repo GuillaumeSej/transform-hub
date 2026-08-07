@@ -87,6 +87,19 @@ describe("hrTimeSeries — salarySavingsSeries", () => {
     // Plan = lockedPlan.savings 100000 = €0.1M
     expect(mar.plan).toBeCloseTo(0.1, 3);
   });
+
+  it("excludes abandoned movements", () => {
+    const range = { from: "2026-01-01", to: "2026-12-31" };
+    const buckets = salarySavingsSeries(
+      [makeMovement({ status: "Abandonné", savings: 100000 })],
+      "month",
+      range,
+      "2026-06-22"
+    );
+    expect(buckets.every((bucket) => bucket.plan === 0 && bucket.actualPlusForecast === 0)).toBe(
+      true
+    );
+  });
 });
 
 describe("hrTimeSeries — socialCostSeries", () => {

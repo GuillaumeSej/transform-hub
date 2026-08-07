@@ -157,7 +157,7 @@ const LEGACY_TYPE_ALIASES: Record<string, MovementType> = {
   redeploiement: "Transfert entrant",
   reconversion: "Transfert entrant",
 };
-const MOVEMENT_STATUSES: MovementStatus[] = ["Planifié", "En cours", "Réalisé"];
+const MOVEMENT_STATUSES: MovementStatus[] = ["Réalisé", "Planifié", "À faire", "Abandonné"];
 const SOCIAL_SCHEMES: SocialScheme[] = ["PSE", "RC", "RCC", "PDV", "Autre"];
 
 export type ParsedMovementRow = { values: WorkforceMovement | null; warnings: string[] };
@@ -194,11 +194,16 @@ export function parseMovementRow(
   }
 
   const statusRaw = str(row["Statut"]);
+  const legacyStatus = statusRaw.toLowerCase() === "en cours" ? "À faire" : undefined;
   const status =
-    MOVEMENT_STATUSES.find((s) => s.toLowerCase() === statusRaw.toLowerCase()) ?? "Planifié";
+    MOVEMENT_STATUSES.find((s) => s.toLowerCase() === statusRaw.toLowerCase()) ??
+    legacyStatus ??
+    "Planifié";
   if (statusRaw && status.toLowerCase() !== statusRaw.toLowerCase()) {
     warnings.push(
-      `Mouvements ligne ${rowNumber} : statut "${statusRaw}" inconnu — "Planifié" utilisé`
+      statusRaw.toLowerCase() === "en cours"
+        ? `Mouvements ligne ${rowNumber} : statut historique "En cours" converti en "À faire"`
+        : `Mouvements ligne ${rowNumber} : statut "${statusRaw}" inconnu — "Planifié" utilisé`
     );
   }
 

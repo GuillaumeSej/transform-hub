@@ -39,9 +39,9 @@ describe("movementStatusPatch", () => {
     expect(
       movementStatusPatch(
         { ...movement, actualDate: "2026-10-01", status: "Réalisé", hrValidated: true },
-        "En cours"
+        "À faire"
       )
-    ).toEqual({ status: "En cours", actualDate: null, hrValidated: false });
+    ).toEqual({ status: "À faire", actualDate: null, hrValidated: false });
   });
 });
 

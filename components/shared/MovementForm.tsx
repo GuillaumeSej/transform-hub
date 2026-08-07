@@ -42,7 +42,7 @@ const TYPES: MovementType[] = [
   "Transfert entrant",
   "Transfert sortant",
 ];
-const STATUSES: MovementStatus[] = ["Planifié", "En cours", "Réalisé"];
+const STATUSES: MovementStatus[] = ["Réalisé", "Planifié", "À faire", "Abandonné"];
 const TRANSFER_TYPES: MovementType[] = ["Transfert entrant", "Transfert sortant"];
 const TENURE_TYPES: MovementType[] = ["Départ forcé", "Attrition"];
 const PSE_TYPES: MovementType[] = ["Départ forcé"];

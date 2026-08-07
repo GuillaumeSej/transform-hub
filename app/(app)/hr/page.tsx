@@ -41,6 +41,7 @@ import {
 } from "@/components/shared/charts/FteWaterfallChart";
 import { DepartmentMovementsChart } from "@/components/shared/charts/HrBreakdownCharts";
 import { ExecutionStatusChart } from "@/components/shared/charts/HrExecutionCharts";
+import { MovementStatusMatrix } from "@/components/shared/charts/MovementStatusMatrix";
 import { HrOwnerActionTable } from "@/components/shared/HrOwnerActionTable";
 import {
   EnrPeriodCumulChart,
@@ -59,8 +60,8 @@ import { subscribePrograms } from "@/lib/firestore/admin";
 import { buildMovementTableRows, type HrMovementTableRow } from "@/lib/hrMovementTable";
 import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceLogic";
 import {
-  fteExecutionByDimension,
   EXECUTION_LABELS,
+  movementStatusGroups,
   ownerActionSummary,
   salaryExecutionByDimension,
   type ExecutionDimension,
@@ -264,7 +265,7 @@ export default function HrDashboardPage() {
   );
   const canEditMovements = user?.role === "hr" || user?.role === "cto";
   const socialSchemeOptions = ["—", "PSE", "RC", "RCC", "PDV", "Autre"];
-  const movementStatusOptions: MovementStatus[] = ["Planifié", "En cours", "Réalisé"];
+  const movementStatusOptions: MovementStatus[] = ["Réalisé", "Planifié", "À faire", "Abandonné"];
 
   const movementTableColumns: ColumnDef<HrMovementTableRow>[] = [
     { key: "label", label: "Mouvement", mobile: "primary" },
@@ -373,7 +374,7 @@ export default function HrDashboardPage() {
       const actualDate = String(value) || null;
       data.updateWorkforceMovement(rowId, {
         actualDate,
-        status: actualDate ? "Réalisé" : "En cours",
+        status: actualDate ? "Réalisé" : "À faire",
         ...(actualDate ? {} : { hrValidated: false }),
       });
       return;
@@ -429,11 +430,9 @@ export default function HrDashboardPage() {
         ? (programs.find((program) => program.name === value)?.id ?? value)
         : value;
     const executionValue =
-      status === "upcoming"
-        ? `${EXECUTION_LABELS.dueSoon},${EXECUTION_LABELS.later}`
-        : status === "realized"
-          ? `${EXECUTION_LABELS.realized},${EXECUTION_LABELS.toValidate}`
-          : EXECUTION_LABELS[status];
+      status === "realized"
+        ? `${EXECUTION_LABELS.realized},${EXECUTION_LABELS.toValidate}`
+        : EXECUTION_LABELS[status];
     const params = new URLSearchParams({
       tab: "mouvements",
       [dimensionParam]: dimensionValue,
@@ -665,12 +664,12 @@ export default function HrDashboardPage() {
         )
           ? (instance.view as ExecutionDimension)
           : "function";
-        const rows = fteExecutionByDimension(filteredMovements, dimension, programs);
+        const groups = movementStatusGroups(filteredMovements, dimension, programs);
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title="Impacts ETP par statut"
+              title="Statut des mouvements"
               actions={
                 <ExecutionDimensionToggle
                   value={dimension}
@@ -681,10 +680,17 @@ export default function HrDashboardPage() {
               }
             />
             <CardBody>
-              <ExecutionStatusChart
-                data={rows}
-                mode="fte"
-                onBarClick={(value, status) => goToExecution(value, dimension, status)}
+              <MovementStatusMatrix
+                groups={groups}
+                getInitiativeLabel={(leverId) => {
+                  const lever = data.levers.find((item) => item.id === leverId);
+                  return lever ? `${lever.code} · ${lever.name}` : leverId;
+                }}
+                onMovementClick={(movementId) =>
+                  router.push(
+                    `/hr/etp?tab=mouvements&f_movementId=${encodeURIComponent(movementId)}`
+                  )
+                }
               />
             </CardBody>
           </Card>
@@ -867,7 +873,7 @@ export default function HrDashboardPage() {
               <div className="mb-4 flex items-end gap-3">
                 {[
                   { label: "Postes concernés", value: pse.postes, color: "bg-neutral-300" },
-                  { label: "En cours", value: pse.enCours, color: "bg-rag-amber" },
+                  { label: "À faire / Planifiés", value: pse.enCours, color: "bg-rag-amber" },
                   { label: "Réalisés", value: pse.realises, color: "bg-bp-coral" },
                   { label: "Validés RH", value: pse.valides, color: "bg-rag-green" },
                 ].map((stage) => {

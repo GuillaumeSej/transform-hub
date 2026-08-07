@@ -1,5 +1,6 @@
 import type { MovementType, WorkforceMovement } from "@/types";
 import { fteEffect, type BridgeGranularity, type DateRange } from "@/lib/hrEngine";
+import { isActiveMovement } from "@/lib/workforceLogic";
 
 /**
  * Séries temporelles pour les 4 nouveaux graphiques Gooduelle du Dashboard RH :
@@ -129,6 +130,7 @@ export function salarySavingsSeries(
   for (const b of buckets) map.set(b.key, { actual: 0, forecast: 0, plan: 0 });
 
   for (const m of movements) {
+    if (!isActiveMovement(m)) continue;
     if (!m.plannedDate) continue;
     const b = findBucket(buckets, m.plannedDate);
     if (!b) continue;
@@ -192,6 +194,7 @@ export function socialCostSeries(
   for (const b of buckets) map.set(b.key, 0);
 
   for (const m of movements) {
+    if (!isActiveMovement(m)) continue;
     if (!m.plannedDate) continue;
     const b = findBucket(buckets, m.plannedDate);
     if (!b) continue;
@@ -238,6 +241,7 @@ export function netEconomySeries(
   for (const b of buckets) map.set(b.key, { savings: 0, cost: 0 });
 
   for (const m of movements) {
+    if (!isActiveMovement(m)) continue;
     if (!m.plannedDate) continue;
     const b = findBucket(buckets, m.plannedDate);
     if (!b) continue;
@@ -308,6 +312,7 @@ export function movementRhythmSeries(
   for (const b of buckets) map.set(b.key, emptyByType());
 
   for (const m of movements) {
+    if (!isActiveMovement(m)) continue;
     if (!m.plannedDate) continue;
     const b = findBucket(buckets, m.plannedDate);
     if (!b) continue;
@@ -327,7 +332,7 @@ export function movementRhythmSeries(
     // Le net programme (impact ETP total) = fteEffect appliqué à tous les mouvements du bucket.
     // On le recalcule proprement à partir des mouvements pour rester cohérent avec `fteBridge`.
     const netMovements = movements.filter(
-      (m) => m.plannedDate >= b.startISO && m.plannedDate <= b.endISO
+      (m) => isActiveMovement(m) && m.plannedDate >= b.startISO && m.plannedDate <= b.endISO
     );
     const net = netMovements.reduce((s, m) => s + fteEffect(m), 0);
     cumul += net;

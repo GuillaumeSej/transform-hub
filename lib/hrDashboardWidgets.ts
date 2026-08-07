@@ -109,8 +109,8 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
   },
   {
     type: "fte-execution-status",
-    label: "Impacts ETP par statut",
-    icon: "BarChart3",
+    label: "Statut des mouvements",
+    icon: "LayoutGrid",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
     defaultView: "function",

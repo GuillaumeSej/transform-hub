@@ -1,6 +1,7 @@
 import type { Lever, MovementType, Workforce, WorkforceMovement } from "@/types";
 import { daysBetween } from "@/lib/dateUtils";
 import { STATUS_ORDER } from "@/lib/status-config";
+import { isActiveMovement } from "@/lib/workforceLogic";
 
 /**
  * Moteur de calcul pur du module RH — agrégations de la base ETP et des mouvements pour le
@@ -57,13 +58,15 @@ export function fteEffect(m: WorkforceMovement): number {
 export function currentFTE(wf: Workforce): number {
   return (
     wf.totalFTE +
-    wf.movements.filter((m) => m.status === "Réalisé").reduce((s, m) => s + fteEffect(m), 0)
+    wf.movements
+      .filter((m) => isActiveMovement(m) && m.status === "Réalisé")
+      .reduce((s, m) => s + fteEffect(m), 0)
   );
 }
 
 /** Atterrissage : effectif si TOUS les mouvements du plan se réalisent. */
 export function plannedFTE(wf: Workforce): number {
-  return wf.totalFTE + wf.movements.reduce((s, m) => s + fteEffect(m), 0);
+  return wf.totalFTE + wf.movements.filter(isActiveMovement).reduce((s, m) => s + fteEffect(m), 0);
 }
 
 export function targetFTE(wf: Workforce): number {
@@ -223,6 +226,7 @@ export function fteBridge(
   }
 
   for (const m of wf.movements) {
+    if (!isActiveMovement(m)) continue;
     if (!m.plannedDate) continue;
     if (range && !isInRange(m.plannedDate, range)) continue;
     const bucket = buckets.find((b) => m.plannedDate >= b.startISO && m.plannedDate <= b.endISO);
@@ -286,6 +290,7 @@ export function fteBridgeSummary(wf: Workforce, range?: DateRange): FteBridgeSum
   let opening = wf.totalFTE;
   if (range?.from) {
     for (const m of wf.movements) {
+      if (!isActiveMovement(m)) continue;
       if (!m.plannedDate || m.plannedDate >= range.from) continue;
       if (m.status === "Réalisé") opening += fteEffect(m);
     }
@@ -293,6 +298,7 @@ export function fteBridgeSummary(wf: Workforce, range?: DateRange): FteBridgeSum
 
   const contribs: MovementTypeDelta = EMPTY_TYPE_DELTA();
   for (const m of wf.movements) {
+    if (!isActiveMovement(m)) continue;
     if (!m.plannedDate) continue;
     if (range && !isInRange(m.plannedDate, range)) continue;
     // Filet défensif type legacy → 0 (voir fteEffect / MovementTypeDelta).
@@ -352,6 +358,7 @@ export function movementsByDepartment(wf: Workforce): DepartmentMovements[] {
     return rows.get(dept)!;
   };
   for (const m of wf.movements) {
+    if (!isActiveMovement(m)) continue;
     if (m.type === "Recrutement") {
       const r = row(m.department);
       r.recrutements += m.fte;
@@ -389,6 +396,7 @@ export function movementsByCountry(
 ): { country: string; fte: number; count: number }[] {
   const rows = new Map<string, { country: string; fte: number; count: number }>();
   for (const m of wf.movements) {
+    if (!isActiveMovement(m)) continue;
     const r = rows.get(m.country) ?? { country: m.country, fte: 0, count: 0 };
     r.fte += m.fte;
     r.count += 1;
@@ -401,7 +409,7 @@ export type MovementTypeSummary = { type: MovementType; count: number; fte: numb
 
 export function movementsByType(wf: Workforce): MovementTypeSummary[] {
   return MOVEMENT_TYPES.map((type) => {
-    const list = wf.movements.filter((m) => m.type === type);
+    const list = wf.movements.filter((m) => isActiveMovement(m) && m.type === type);
     return {
       type,
       count: list.length,
@@ -505,6 +513,7 @@ export function ftePositionsByDimension(
   };
 
   for (const movement of wf.movements) {
+    if (!isActiveMovement(movement)) continue;
     for (const contribution of dimensionalContributions(movement, dimension, "target")) {
       ensure(contribution.key).targetDelta += contribution.delta;
     }
@@ -566,6 +575,7 @@ export function movementBreakdownByDimension(
     return rows.get(key)!;
   };
   for (const movement of movements) {
+    if (!isActiveMovement(movement)) continue;
     if (dimension === "country") {
       const row = ensure(movement.country || "Non renseigné");
       if (movement.type === "Recrutement") row.recrutements += movement.fte;
@@ -616,6 +626,7 @@ export function movementRealizationByDimension(
 ): MovementRealizationRow[] {
   const rows = new Map<string, MovementRealizationRow>();
   for (const movement of movements) {
+    if (!isActiveMovement(movement)) continue;
     if (movementType && movement.type !== movementType) continue;
     const key = dimension === "function" ? movement.function : movement.country;
     if (!key) continue;
@@ -671,7 +682,7 @@ export function salaryBridge(
 /** Économies salariales annualisées des seuls mouvements réalisés (€). */
 export function realizedSalarySavings(wf: Workforce): number {
   return wf.movements
-    .filter((m) => m.status === "Réalisé")
+    .filter((m) => isActiveMovement(m) && m.status === "Réalisé")
     .reduce((s, m) => s + Math.max(0, -m.salaryImpact), 0);
 }
 
@@ -687,10 +698,10 @@ export type PseSummary = {
 };
 
 export function pseSummary(wf: Workforce): PseSummary {
-  const pse = wf.movements.filter((m) => m.inPSE);
+  const pse = wf.movements.filter((m) => isActiveMovement(m) && m.inPSE);
   return {
     postes: Math.round(pse.reduce((s, m) => s + m.fte, 0) * 10) / 10,
-    enCours: pse.filter((m) => m.status === "En cours").length,
+    enCours: pse.filter((m) => m.status === "À faire" || m.status === "Planifié").length,
     realises: pse.filter((m) => m.status === "Réalisé").length,
     valides: pse.filter((m) => m.hrValidated).length,
     coutTotal: pse.reduce((s, m) => s + m.cost, 0),
@@ -711,7 +722,7 @@ export type DepartmentDelta = {
 export function deltaByDepartment(wf: Workforce): DepartmentDelta[] {
   return wf.departments.map((d) => {
     const delta = wf.movements
-      .filter((m) => m.department === d.name || m.toDepartment === d.name)
+      .filter((m) => isActiveMovement(m) && (m.department === d.name || m.toDepartment === d.name))
       .reduce((s, m) => {
         if ((m.type === "Attrition" || m.type === "Départ forcé") && m.department === d.name) {
           return s - m.fte;
@@ -774,6 +785,7 @@ export function fteTrajectory(
   let runningPlanned = wf.totalFTE;
 
   for (const m of wf.movements) {
+    if (!isActiveMovement(m)) continue;
     const month = Number(m.plannedDate.slice(5, 7)) - 1;
     if (Number.isNaN(month) || month < 0 || month > 11) continue;
     const idx = granularity === "month" ? month : Math.floor(month / 3);
@@ -784,6 +796,7 @@ export function fteTrajectory(
   for (let i = 0; i < bucketCount; i++) {
     const plannedDelta = wf.movements
       .filter((m) => {
+        if (!isActiveMovement(m)) return false;
         const month = Number(m.plannedDate.slice(5, 7)) - 1;
         const idx = granularity === "month" ? month : Math.floor(month / 3);
         return idx === i;
@@ -793,6 +806,7 @@ export function fteTrajectory(
 
     const actualDelta = wf.movements
       .filter((m) => {
+        if (!isActiveMovement(m)) return false;
         if (m.status !== "Réalisé") return false;
         const month = Number(m.plannedDate.slice(5, 7)) - 1;
         const idx = granularity === "month" ? month : Math.floor(month / 3);
@@ -829,6 +843,7 @@ export function movementAlerts(
   const alerts: MovementAlert[] = [];
 
   for (const m of wf.movements) {
+    if (!isActiveMovement(m)) continue;
     if (m.status === "Réalisé" && !m.hrValidated) {
       alerts.push({
         movement: m,

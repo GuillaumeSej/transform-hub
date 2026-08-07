@@ -167,7 +167,7 @@ describe("hrEngine — plannedFTE", () => {
       totalFTE: 150,
       movements: [
         makeMovement({ type: "Départ forcé", fte: 10, status: "Planifié" }),
-        makeMovement({ id: "M2", type: "Recrutement", fte: 4, status: "En cours" }),
+        makeMovement({ id: "M2", type: "Recrutement", fte: 4, status: "À faire" }),
         makeMovement({ id: "M3", type: "Attrition", fte: 2, status: "Réalisé" }),
       ],
     });

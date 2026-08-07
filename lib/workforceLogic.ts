@@ -42,6 +42,12 @@ export function movementStatusPatch(
   };
 }
 
+/** Un mouvement abandonné est conservé dans la base et les exports mais exclu des prévisions,
+ * trajectoires, KPI et alertes opérationnelles. */
+export function isActiveMovement(movement: WorkforceMovement): boolean {
+  return movement.status !== "Abandonné";
+}
+
 /** Synchronise le nouveau dispositif social et le booléen PSE historique. */
 export function movementSocialSchemePatch(
   socialScheme: SocialScheme | undefined

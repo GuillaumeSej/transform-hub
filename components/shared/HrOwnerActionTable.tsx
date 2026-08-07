@@ -4,9 +4,8 @@ import type { OwnerActionStatus, OwnerActionCell, OwnerActionRow } from "@/lib/h
 
 const COLUMNS: { key: OwnerActionStatus; label: string; className: string }[] = [
   { key: "overdue", label: "En retard", className: "text-bp-coral" },
-  { key: "inProgress", label: "En cours", className: "text-bp-warm-brown" },
-  { key: "dueSoon", label: "À venir ≤ 90 j", className: "text-primary" },
-  { key: "later", label: "Plus lointains", className: "text-secondary" },
+  { key: "dueSoon", label: "À venir < 90 j", className: "text-primary" },
+  { key: "later", label: "À venir > 90 j", className: "text-secondary" },
   { key: "realized", label: "Réalisés", className: "text-bp-purple" },
   { key: "toValidate", label: "À valider RH", className: "text-bp-coral" },
 ];

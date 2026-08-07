@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyMovementAction,
   classifyMovementExecution,
-  fteExecutionByDimension,
+  movementStatusGroups,
   ownerActionSummary,
   salaryExecutionByDimension,
 } from "@/lib/hrExecution";
@@ -34,79 +34,72 @@ function movement(overrides: Partial<WorkforceMovement>): WorkforceMovement {
 
 const programs = [{ id: "p1", name: "Transformation 2026" }] as Program[];
 
-describe("classifyMovementExecution", () => {
-  it("prioritizes realized, then overdue, in progress and upcoming", () => {
+describe("movement execution classification", () => {
+  it("returns the four requested statuses and excludes abandoned movements", () => {
     expect(classifyMovementExecution(movement({ status: "Réalisé" }), "2026-06-22")).toBe(
       "realized"
     );
     expect(classifyMovementExecution(movement({ plannedDate: "2026-06-01" }), "2026-06-22")).toBe(
       "overdue"
     );
-    expect(classifyMovementExecution(movement({ status: "En cours" }), "2026-06-22")).toBe(
-      "inProgress"
-    );
-    expect(classifyMovementExecution(movement({ status: "Planifié" }), "2026-06-22")).toBe(
-      "upcoming"
-    );
-  });
-});
-
-describe("classifyMovementAction", () => {
-  it("splits upcoming movements at 90 days and flags pending validation", () => {
-    expect(classifyMovementAction(movement({ plannedDate: "2026-09-01" }), "2026-06-22", 90)).toBe(
+    expect(classifyMovementExecution(movement({ plannedDate: "2026-09-20" }), "2026-06-22")).toBe(
       "dueSoon"
     );
-    expect(classifyMovementAction(movement({ plannedDate: "2027-01-01" }), "2026-06-22", 90)).toBe(
+    expect(classifyMovementExecution(movement({ plannedDate: "2026-09-21" }), "2026-06-22")).toBe(
       "later"
     );
-    expect(
-      classifyMovementAction(movement({ status: "Réalisé", hrValidated: false }), "2026-06-22", 90)
-    ).toBe("toValidate");
+    expect(classifyMovementExecution(movement({ status: "Abandonné" }), "2026-06-22")).toBeNull();
+  });
+
+  it("flags realized movements awaiting RH validation", () => {
+    expect(classifyMovementAction(movement({ status: "Réalisé", hrValidated: false }))).toBe(
+      "toValidate"
+    );
   });
 });
 
 describe("execution aggregations", () => {
-  it("aggregates positive ETP volume and signed net impact", () => {
-    const rows = fteExecutionByDimension(
-      [
-        movement({ id: "M1", type: "Départ forcé", fte: 2, status: "Réalisé" }),
-        movement({ id: "M2", type: "Recrutement", fte: 3, status: "Réalisé" }),
-      ],
+  it("groups movement cells by dimension and excludes abandoned movements", () => {
+    const groups = movementStatusGroups(
+      [movement({ id: "M1", status: "Réalisé" }), movement({ id: "M2", status: "Abandonné" })],
       "program",
       programs
     );
-    expect(rows[0].realized).toMatchObject({ volume: 5, net: 1, count: 2 });
+    expect(groups[0].cells).toHaveLength(1);
+    expect(groups[0].cells[0].execution).toBe("realized");
   });
 
-  it("uses reforecast salary impact for non-realized movements", () => {
+  it("builds a stacked salary series with reforecast values", () => {
     const rows = salaryExecutionByDimension(
       [
         movement({
-          status: "En cours",
+          status: "À faire",
+          plannedDate: "2026-06-01",
           reforecast: { fte: 2, salaryImpact: -120000, savings: 120000, cost: 20000 },
         }),
       ],
       "function",
-      programs
+      programs,
+      "2026-06-22"
     );
-    expect(rows[0].inProgress.volume).toBeCloseTo(-0.12);
+    expect(rows[0].overdue.volume).toBeCloseTo(-0.12);
   });
 });
 
 describe("ownerActionSummary", () => {
-  it("sorts owners by overdue then due soon and exposes the next due date", () => {
+  it("sorts by overdue then due soon and ignores abandoned movements", () => {
     const rows = ownerActionSummary(
       [
         movement({ id: "M1", hrOwner: "Nadia", plannedDate: "2026-06-01" }),
         movement({ id: "M2", hrOwner: "Nadia", plannedDate: "2026-08-01" }),
-        movement({ id: "M3", hrOwner: "Petra", plannedDate: "2027-01-01" }),
+        movement({ id: "M3", hrOwner: "Petra", status: "Abandonné" }),
       ],
       "2026-06-22",
       90
     );
+    expect(rows).toHaveLength(1);
     expect(rows[0].owner).toBe("Nadia");
     expect(rows[0].overdue.count).toBe(1);
     expect(rows[0].dueSoon.count).toBe(1);
-    expect(rows[0].nextDueDate).toBe("2026-06-01");
   });
 });
