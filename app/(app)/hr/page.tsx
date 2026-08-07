@@ -794,7 +794,8 @@ export default function HrDashboardPage() {
             <CardBody>
               <EnrPeriodCumulChart buckets={enrSeries} />
               <p className="mt-2 text-[11px] text-tertiary">
-                Barres = colonne Coût social, comptabilisée une seule fois · courbe = cumul
+                Réalisé + prévision vs plan initial · la colonne Coût social est comptabilisée une
+                seule fois
               </p>
             </CardBody>
           </Card>
@@ -807,7 +808,8 @@ export default function HrDashboardPage() {
             <CardBody>
               <NetEconomyChart buckets={netEcoSeries} />
               <p className="mt-2 text-[11px] text-tertiary">
-                Économies staff costs chargés diminuées des ENR · courbe = cumul net
+                Synthèse : économies staff costs récurrentes − coûts sociaux one-off, par période et
+                en cumul, comparées au plan initial
               </p>
             </CardBody>
           </Card>

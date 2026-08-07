@@ -100,17 +100,16 @@ describe("hrTimeSeries — salarySavingsSeries", () => {
     expect(mar.plan).toBeCloseTo(0.1 / 12, 3);
   });
 
-  it("excludes abandoned movements", () => {
+  it("excludes abandoned movements from actual+forecast but preserves them in the initial plan", () => {
     const range = { from: "2026-01-01", to: "2026-12-31" };
     const buckets = salarySavingsSeries(
-      [makeMovement({ status: "Abandonné", savings: 100000 })],
+      [makeMovement({ status: "Abandonné", salaryImpact: -120000 })],
       "month",
       range,
       "2026-06-22"
     );
-    expect(buckets.every((bucket) => bucket.plan === 0 && bucket.actualPlusForecast === 0)).toBe(
-      true
-    );
+    expect(buckets.every((bucket) => bucket.actualPlusForecast === 0)).toBe(true);
+    expect(buckets.some((bucket) => bucket.plan > 0)).toBe(true);
   });
 });
 
@@ -127,9 +126,9 @@ describe("hrTimeSeries — socialCostSeries", () => {
     );
     const feb = buckets.find((b) => b.label.startsWith("févr."))!;
     const apr = buckets.find((b) => b.label.startsWith("avr."))!;
-    expect(feb.enr).toBeCloseTo(0.02, 3);
-    expect(apr.enr).toBeCloseTo(0.03, 3);
-    expect(apr.cumulEnr).toBeCloseTo(0.05, 3);
+    expect(feb.actualForecast).toBeCloseTo(0.02, 3);
+    expect(apr.actualForecast).toBeCloseTo(0.03, 3);
+    expect(apr.cumulActualForecast).toBeCloseTo(0.05, 3);
   });
 
   it("uses movement.cost rather than lockedPlan/reforecast cost and actualDate when realized", () => {
@@ -148,8 +147,9 @@ describe("hrTimeSeries — socialCostSeries", () => {
       "month",
       range
     );
-    expect(buckets.find((b) => b.label.startsWith("févr."))?.enr).toBe(0);
-    expect(buckets.find((b) => b.label.startsWith("avr."))?.enr).toBeCloseTo(0.03, 3);
+    expect(buckets.find((b) => b.label.startsWith("févr."))?.actualForecast).toBe(0);
+    expect(buckets.find((b) => b.label.startsWith("avr."))?.actualForecast).toBeCloseTo(0.03, 3);
+    expect(buckets.find((b) => b.label.startsWith("févr."))?.plan).toBeCloseTo(0.01, 3);
   });
 });
 
@@ -163,9 +163,9 @@ describe("hrTimeSeries — netEconomySeries", () => {
     );
     const feb = buckets.find((b) => b.label.startsWith("févr."))!;
     const mar = buckets.find((b) => b.label.startsWith("mars"))!;
-    expect(feb.net).toBeCloseTo(-0.02, 3);
-    expect(mar.net).toBeCloseTo(0.01, 3);
-    expect(mar.cumulNet).toBeCloseTo(-0.01, 3);
+    expect(feb.actualForecast).toBeCloseTo(-0.02, 3);
+    expect(mar.actualForecast).toBeCloseTo(0.01, 3);
+    expect(mar.cumulActualForecast).toBeCloseTo(-0.01, 3);
   });
 
   it("handles negative periods (cost > savings)", () => {
@@ -176,7 +176,36 @@ describe("hrTimeSeries — netEconomySeries", () => {
       range
     );
     const feb = buckets.find((b) => b.label.startsWith("févr."))!;
-    expect(feb.net).toBeCloseTo(-0.02, 3);
+    expect(feb.actualForecast).toBeCloseTo(-0.02, 3);
+  });
+
+  it("reconciles net exactly with savings minus ENR for period and cumulative values", () => {
+    const range = { from: "2026-01-01", to: "2026-12-31" };
+    const movements = [
+      makeMovement({ plannedDate: "2026-02-01", salaryImpact: -120000, cost: 30000 }),
+      makeMovement({
+        id: "M2",
+        plannedDate: "2026-04-01",
+        salaryImpact: 60000,
+        cost: 10000,
+        lockedPlan: { fte: 1, salaryImpact: 48000, savings: 0, cost: 8000 },
+      }),
+    ];
+    const savings = salarySavingsSeries(movements, "month", range, "2026-06-22");
+    const enr = socialCostSeries(movements, "month", range);
+    const net = netEconomySeries(movements, "month", range);
+    net.forEach((bucket, index) => {
+      expect(bucket.actualForecast).toBeCloseTo(
+        savings[index].actualPlusForecast - enr[index].actualForecast,
+        3
+      );
+      expect(bucket.plan).toBeCloseTo(savings[index].plan - enr[index].plan, 3);
+      expect(bucket.cumulActualForecast).toBeCloseTo(
+        savings[index].cumulActualForecast - enr[index].cumulActualForecast,
+        3
+      );
+      expect(bucket.cumulPlan).toBeCloseTo(savings[index].cumulPlan - enr[index].cumulPlan, 3);
+    });
   });
 });
 
@@ -201,7 +230,7 @@ describe("hrTimeSeries — movementRhythmSeries", () => {
     expect(mar.cumulNet).toBe(-3);
   });
 
-  it("transfert entrant is displayed positive, transfert sortant negative for visualization, both net 0 on fteEffect", () => {
+  it("uses the algebraic sum of all visible bars as period net", () => {
     const range = { from: "2026-01-01", to: "2026-12-31" };
     const buckets = movementRhythmSeries(
       [
@@ -214,6 +243,6 @@ describe("hrTimeSeries — movementRhythmSeries", () => {
     const feb = buckets.find((b) => b.label.startsWith("févr."))!;
     expect(feb.byType["Transfert entrant"]).toBe(2);
     expect(feb.byType["Transfert sortant"]).toBe(-3);
-    expect(feb.net).toBe(0); // les transferts n'affectent pas l'ETP total
+    expect(feb.net).toBe(-1);
   });
 });

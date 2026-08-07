@@ -7,11 +7,11 @@ import {
   Cell,
   ComposedChart,
   Legend,
-  Line,
   Pie,
   PieChart,
   ReferenceLine,
   ResponsiveContainer,
+  Scatter,
   Tooltip,
   XAxis,
   YAxis,
@@ -46,24 +46,36 @@ export function DepartmentMovementsChart({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+      <ComposedChart
+        data={chartData}
+        stackOffset="sign"
+        margin={{ top: 4, right: 8, left: -8, bottom: 0 }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
         <XAxis dataKey="dimension" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <Tooltip
-          formatter={(value, name) => [`${Math.abs(Number(value))} ETP`, String(name)]}
+          formatter={(value, name) => [
+            `${String(name) === "Net période" ? Number(value) : Math.abs(Number(value))} ETP`,
+            String(name),
+          ]}
           labelFormatter={(_, payload) =>
             (payload?.[0]?.payload as { fullName?: string })?.fullName ?? ""
           }
         />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <ReferenceLine y={0} stroke="rgba(0,0,0,0.25)" />
-        <Bar dataKey="Recrutements" fill={COLOR_UP} radius={[3, 3, 0, 0]} />
-        <Bar dataKey="Attrition" fill="#FFB1B5" radius={[0, 0, 3, 3]} />
-        <Bar dataKey="Départs forcés" fill={COLOR_DOWN} radius={[0, 0, 3, 3]} />
-        <Bar dataKey="Transferts entrants" fill="#A99E9A" radius={[3, 3, 0, 0]} />
-        <Bar dataKey="Transferts sortants" fill={COLOR_NEUTRAL} radius={[0, 0, 3, 3]} />
-        <Line type="monotone" dataKey="Net" stroke="#320300" strokeWidth={0} dot={{ r: 4 }} />
+        <Bar dataKey="Recrutements" stackId="mouv" fill={COLOR_UP} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="Attrition" stackId="mouv" fill="#FFB1B5" radius={[0, 0, 3, 3]} />
+        <Bar dataKey="Départs forcés" stackId="mouv" fill={COLOR_DOWN} radius={[0, 0, 3, 3]} />
+        <Bar dataKey="Transferts entrants" stackId="mouv" fill="#A99E9A" radius={[3, 3, 0, 0]} />
+        <Bar
+          dataKey="Transferts sortants"
+          stackId="mouv"
+          fill={COLOR_NEUTRAL}
+          radius={[0, 0, 3, 3]}
+        />
+        <Scatter dataKey="Net" name="Net période" fill="#320300" />
       </ComposedChart>
     </ResponsiveContainer>
   );

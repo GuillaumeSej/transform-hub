@@ -18,6 +18,7 @@ import {
   Line,
   ReferenceLine,
   ResponsiveContainer,
+  Scatter,
   Tooltip,
   XAxis,
   YAxis,
@@ -180,15 +181,31 @@ export function EnrPeriodCumulChart({
           labelStyle={{ fontSize: 11, fontWeight: 600 }}
         />
         <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
-        <Bar yAxisId="period" dataKey="enr" name="ENR période" fill={COLOR_ENR} />
+        <Bar
+          yAxisId="period"
+          dataKey="actualForecast"
+          name="ENR réalisé + prévision — période"
+          fill={COLOR_ENR}
+        />
+        <Bar yAxisId="period" dataKey="plan" name="ENR plan initial — période" fill={COLOR_PLAN} />
         <Line
           yAxisId="cumul"
           type="monotone"
-          dataKey="cumulEnr"
-          name="Cumul ENR"
+          dataKey="cumulActualForecast"
+          name="Cumul ENR réalisé + prévision"
           stroke={COLOR_ENR_CUMUL}
           strokeWidth={2}
           dot={{ r: 3 }}
+        />
+        <Line
+          yAxisId="cumul"
+          type="monotone"
+          dataKey="cumulPlan"
+          name="Cumul ENR plan initial"
+          stroke={COLOR_PLAN}
+          strokeWidth={1.5}
+          strokeDasharray="5 4"
+          dot={false}
         />
       </ComposedChart>
     </ResponsiveContainer>
@@ -223,25 +240,51 @@ export function NetEconomyChart({
           textAnchor="end"
           height={40}
         />
-        <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={fmtMEur} />
+        <YAxis
+          yAxisId="period"
+          tick={{ fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          tickFormatter={fmtMEur}
+        />
+        <YAxis
+          yAxisId="cumul"
+          orientation="right"
+          tick={{ fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          tickFormatter={fmtMEur}
+        />
         <Tooltip
           formatter={(value, name) => [fmtMEur(Number(value)), String(name)]}
           labelStyle={{ fontSize: 11, fontWeight: 600 }}
         />
         <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
-        <ReferenceLine y={0} stroke="rgba(0,0,0,0.35)" />
-        <Bar dataKey="net" name="Économie nette">
+        <ReferenceLine yAxisId="period" y={0} stroke="rgba(0,0,0,0.35)" />
+        <Bar yAxisId="period" dataKey="actualForecast" name="Économie nette réalisé + prévision">
           {buckets.map((b, i) => (
-            <Cell key={i} fill={b.net >= 0 ? COLOR_NET_POS : COLOR_NET_NEG} />
+            <Cell key={i} fill={b.actualForecast >= 0 ? COLOR_NET_POS : COLOR_NET_NEG} />
           ))}
         </Bar>
+        <Bar yAxisId="period" dataKey="plan" name="Économie nette plan initial" fill={COLOR_PLAN} />
         <Line
+          yAxisId="cumul"
           type="monotone"
-          dataKey="cumulNet"
-          name="Cumul net"
+          dataKey="cumulActualForecast"
+          name="Cumul net réalisé + prévision"
           stroke={COLOR_NET_CUMUL}
           strokeWidth={2}
           dot={{ r: 3 }}
+        />
+        <Line
+          yAxisId="cumul"
+          type="monotone"
+          dataKey="cumulPlan"
+          name="Cumul net plan initial"
+          stroke={COLOR_PLAN}
+          strokeWidth={1.5}
+          strokeDasharray="5 4"
+          dot={false}
         />
       </ComposedChart>
     </ResponsiveContainer>
@@ -277,7 +320,11 @@ export function MovementRhythmChart({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 20 }}>
+      <ComposedChart
+        data={data}
+        stackOffset="sign"
+        margin={{ top: 8, right: 8, left: 0, bottom: 20 }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
         <XAxis
           dataKey="label"
@@ -288,39 +335,65 @@ export function MovementRhythmChart({
           textAnchor="end"
           height={40}
         />
-        <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={fmtEtp} />
+        <YAxis
+          yAxisId="period"
+          tick={{ fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          tickFormatter={fmtEtp}
+        />
+        <YAxis
+          yAxisId="cumul"
+          orientation="right"
+          tick={{ fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+          tickFormatter={fmtEtp}
+        />
         <Tooltip
           formatter={(value, name) => [`${fmtEtp(Number(value))} ETP`, String(name)]}
           labelStyle={{ fontSize: 11, fontWeight: 600 }}
         />
         <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
-        <ReferenceLine y={0} stroke="rgba(0,0,0,0.35)" />
+        <ReferenceLine yAxisId="period" y={0} stroke="rgba(0,0,0,0.35)" />
         <Bar
           dataKey="Recrutement"
+          yAxisId="period"
           stackId="mouv"
           fill={TYPE_COLORS["Recrutement"]}
           name="Recrutements"
         />
-        <Bar dataKey="Attrition" stackId="mouv" fill={TYPE_COLORS["Attrition"]} name="Attrition" />
+        <Bar
+          yAxisId="period"
+          dataKey="Attrition"
+          stackId="mouv"
+          fill={TYPE_COLORS["Attrition"]}
+          name="Attrition"
+        />
         <Bar
           dataKey="Départ forcé"
+          yAxisId="period"
           stackId="mouv"
           fill={TYPE_COLORS["Départ forcé"]}
           name="Départs forcés"
         />
         <Bar
           dataKey="Transfert entrant"
+          yAxisId="period"
           stackId="mouv"
           fill={TYPE_COLORS["Transfert entrant"]}
           name="Transferts entrants"
         />
         <Bar
           dataKey="Transfert sortant"
+          yAxisId="period"
           stackId="mouv"
           fill={TYPE_COLORS["Transfert sortant"]}
           name="Transferts sortants"
         />
+        <Scatter yAxisId="period" dataKey="net" name="Net période" fill="#320300" />
         <Line
+          yAxisId="cumul"
           type="monotone"
           dataKey="cumulNet"
           name="Cumul net"

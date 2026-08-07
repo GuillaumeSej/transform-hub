@@ -1,5 +1,5 @@
 import type { MovementType, WorkforceMovement } from "@/types";
-import { fteEffect, type BridgeGranularity, type DateRange } from "@/lib/hrEngine";
+import type { BridgeGranularity, DateRange } from "@/lib/hrEngine";
 import { isActiveMovement } from "@/lib/workforceLogic";
 
 /**
@@ -155,14 +155,14 @@ export function salarySavingsSeries(
     let actualForecast = 0;
     let plan = 0;
     for (const movement of movements) {
-      if (!isActiveMovement(movement)) continue;
-      // Économie positive pour une baisse de masse salariale, négative pour un recrutement.
-      actualForecast += recurringImpactForBucket(-movement.salaryImpact, effectDate(movement), b);
       plan += recurringImpactForBucket(
         -(movement.lockedPlan?.salaryImpact ?? movement.salaryImpact),
         movement.plannedDate,
         b
       );
+      if (!isActiveMovement(movement)) continue;
+      // Économie positive pour une baisse de masse salariale, négative pour un recrutement.
+      actualForecast += recurringImpactForBucket(-movement.salaryImpact, effectDate(movement), b);
     }
     actualForecast /= 1_000_000;
     plan /= 1_000_000;
@@ -187,10 +187,10 @@ export type SocialCostBucket = {
   label: string;
   startISO: string;
   endISO: string;
-  /** ENR par période — €M. */
-  enr: number;
-  /** Cumul ENR — €M. */
-  cumulEnr: number;
+  actualForecast: number;
+  plan: number;
+  cumulActualForecast: number;
+  cumulPlan: number;
 };
 
 /** ENR par période, strictement basé sur la colonne `movement.cost`, compté une seule fois. */
@@ -202,28 +202,32 @@ export function socialCostSeries(
   const buckets = generateBuckets(range, granularity);
   if (buckets.length === 0) return [];
 
-  const map = new Map<string, number>();
-  for (const b of buckets) map.set(b.key, 0);
-
-  for (const m of movements) {
-    if (!isActiveMovement(m)) continue;
-    const date = effectDate(m);
-    if (!date) continue;
-    const b = findBucket(buckets, date);
-    if (!b) continue;
-    map.set(b.key, (map.get(b.key) ?? 0) + m.cost);
-  }
-
-  let cumul = 0;
+  let cumulActualForecast = 0;
+  let cumulPlan = 0;
   return buckets.map((b) => {
-    const enr = (map.get(b.key) ?? 0) / 1_000_000;
-    cumul += enr;
+    let actualForecast = 0;
+    let plan = 0;
+    for (const movement of movements) {
+      const planDate = movement.plannedDate;
+      if (planDate >= b.startISO && planDate <= b.endISO) {
+        plan += movement.lockedPlan?.cost ?? movement.cost;
+      }
+      if (!isActiveMovement(movement)) continue;
+      const date = effectDate(movement);
+      if (date >= b.startISO && date <= b.endISO) actualForecast += movement.cost;
+    }
+    actualForecast /= 1_000_000;
+    plan /= 1_000_000;
+    cumulActualForecast += actualForecast;
+    cumulPlan += plan;
     return {
       label: b.label,
       startISO: b.startISO,
       endISO: b.endISO,
-      enr: Math.round(enr * 1000) / 1000,
-      cumulEnr: Math.round(cumul * 1000) / 1000,
+      actualForecast: Math.round(actualForecast * 1000) / 1000,
+      plan: Math.round(plan * 1000) / 1000,
+      cumulActualForecast: Math.round(cumulActualForecast * 1000) / 1000,
+      cumulPlan: Math.round(cumulPlan * 1000) / 1000,
     };
   });
 }
@@ -234,10 +238,10 @@ export type NetEconomyBucket = {
   label: string;
   startISO: string;
   endISO: string;
-  /** Économie nette de la période — €M (signée : positive ou négative). */
-  net: number;
-  /** Cumul économie nette depuis le début de la plage — €M. */
-  cumulNet: number;
+  actualForecast: number;
+  plan: number;
+  cumulActualForecast: number;
+  cumulPlan: number;
 };
 
 /** Économie nette = impact salarial récurrent moins coût social one-off. */
@@ -249,27 +253,20 @@ export function netEconomySeries(
   const buckets = generateBuckets(range, granularity);
   if (buckets.length === 0) return [];
 
-  let cumul = 0;
-  return buckets.map((b) => {
-    let recurringSavings = 0;
-    let oneOffCosts = 0;
-    for (const movement of movements) {
-      if (!isActiveMovement(movement)) continue;
-      recurringSavings += recurringImpactForBucket(-movement.salaryImpact, effectDate(movement), b);
-      if (effectDate(movement) >= b.startISO && effectDate(movement) <= b.endISO) {
-        oneOffCosts += movement.cost;
-      }
-    }
-    const net = (recurringSavings - oneOffCosts) / 1_000_000;
-    cumul += net;
-    return {
-      label: b.label,
-      startISO: b.startISO,
-      endISO: b.endISO,
-      net: Math.round(net * 1000) / 1000,
-      cumulNet: Math.round(cumul * 1000) / 1000,
-    };
-  });
+  const savings = salarySavingsSeries(movements, granularity, range, range.to ?? "9999-12-31");
+  const enr = socialCostSeries(movements, granularity, range);
+  return buckets.map((bucket, index) => ({
+    label: bucket.label,
+    startISO: bucket.startISO,
+    endISO: bucket.endISO,
+    actualForecast:
+      Math.round((savings[index].actualPlusForecast - enr[index].actualForecast) * 1000) / 1000,
+    plan: Math.round((savings[index].plan - enr[index].plan) * 1000) / 1000,
+    cumulActualForecast:
+      Math.round((savings[index].cumulActualForecast - enr[index].cumulActualForecast) * 1000) /
+      1000,
+    cumulPlan: Math.round((savings[index].cumulPlan - enr[index].cumulPlan) * 1000) / 1000,
+  }));
 }
 
 // ---------- Rythme des mouvements ----------
@@ -295,8 +292,8 @@ export type MovementRhythmBucket = {
  *  - Négatives (en-dessous de 0) : Attrition (orange), Départs forcés (rouge)
  *  - Nulles nettement (colonnes empilées visuellement) : Transferts entrants/sortants (gris)
  *
- *  Le "net" est la somme algébrique — les transferts internes n'y contribuent pas (fteEffect = 0).
- *  Un point noir marque le net période, une ligne noire relie les cumuls. */
+ *  Le "net" est la somme algébrique des cinq barres visibles. Un point noir marque le net
+ *  période, une ligne noire relie les cumuls. */
 export function movementRhythmSeries(
   movements: WorkforceMovement[],
   granularity: BridgeGranularity,
@@ -322,9 +319,7 @@ export function movementRhythmSeries(
     const b = findBucket(buckets, m.plannedDate);
     if (!b) continue;
     const cell = map.get(b.key)!;
-    // Les transferts internes sont affichés en volume brut (signé selon direction) pour la
-    // décomposition visuelle : entrants au-dessus (positif = accueil), sortants en-dessous
-    // (négatif = perte pour le département source). Mais leur effet net reste 0 (fteEffect).
+    // Les transferts sont affichés en volume brut signé : entrants positifs, sortants négatifs.
     if (m.type === "Recrutement") cell[m.type] += m.fte;
     else if (m.type === "Attrition" || m.type === "Départ forcé") cell[m.type] -= m.fte;
     else if (m.type === "Transfert entrant") cell[m.type] += m.fte;
@@ -334,12 +329,8 @@ export function movementRhythmSeries(
   let cumul = 0;
   return buckets.map((b) => {
     const byType = map.get(b.key)!;
-    // Le net programme (impact ETP total) = fteEffect appliqué à tous les mouvements du bucket.
-    // On le recalcule proprement à partir des mouvements pour rester cohérent avec `fteBridge`.
-    const netMovements = movements.filter(
-      (m) => isActiveMovement(m) && m.plannedDate >= b.startISO && m.plannedDate <= b.endISO
-    );
-    const net = netMovements.reduce((s, m) => s + fteEffect(m), 0);
+    // Net visuel = somme algébrique exacte des cinq barres.
+    const net = Object.values(byType).reduce((sum, value) => sum + value, 0);
     cumul += net;
     return {
       label: b.label,
