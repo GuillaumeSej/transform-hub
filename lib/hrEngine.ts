@@ -282,7 +282,7 @@ export function bucketByLever(
 export type FteBridgeSummary = {
   opening: number;
   closing: number;
-  contributions: { type: MovementType; delta: number }[];
+  contributions: { type: MovementType; delta: number; count: number }[];
 };
 
 export function fteBridgeSummary(wf: Workforce, range?: DateRange): FteBridgeSummary {
@@ -297,6 +297,13 @@ export function fteBridgeSummary(wf: Workforce, range?: DateRange): FteBridgeSum
   }
 
   const contribs: MovementTypeDelta = EMPTY_TYPE_DELTA();
+  const counts: Record<MovementType, number> = {
+    Recrutement: 0,
+    Attrition: 0,
+    "Départ forcé": 0,
+    "Transfert entrant": 0,
+    "Transfert sortant": 0,
+  };
   for (const m of wf.movements) {
     if (!isActiveMovement(m)) continue;
     if (!m.plannedDate) continue;
@@ -304,6 +311,7 @@ export function fteBridgeSummary(wf: Workforce, range?: DateRange): FteBridgeSum
     // Filet défensif type legacy → 0 (voir fteEffect / MovementTypeDelta).
     const currentContrib = contribs[m.type] ?? 0;
     contribs[m.type] = currentContrib + fteEffect(m);
+    counts[m.type] = (counts[m.type] ?? 0) + 1;
   }
   const closing = opening + Object.values(contribs).reduce((s, v) => s + v, 0);
 
@@ -313,6 +321,7 @@ export function fteBridgeSummary(wf: Workforce, range?: DateRange): FteBridgeSum
     contributions: MOVEMENT_TYPES.map((type) => ({
       type,
       delta: Math.round(contribs[type] * 10) / 10,
+      count: counts[type],
     })),
   };
 }
@@ -425,10 +434,11 @@ export type WorkforceDimension = "department" | "country" | "workstream";
 export type FtePositionRow = {
   key: string;
   label: string;
+  baseline: number;
   current: number;
   target: number;
-  landing: number;
   gapToTarget: number;
+  progressPct: number;
 };
 
 function signedFteForType(type: MovementType, fte: number): number {
@@ -472,9 +482,10 @@ function dimensionalContributions(
 }
 
 /** Positions ETP par département, pays ou workstream.
+ * - Baseline = référence initiale ;
  * - Actuel = baseline + mouvements réalisés ;
  * - Cible = baseline + plan verrouillé de tous les mouvements ;
- * - Atterrissage = actuel + reforecast des mouvements non réalisés. */
+ * - Avancement = (actuel - baseline) / (cible - baseline). */
 export function ftePositionsByDimension(
   wf: Workforce,
   dimension: WorkforceDimension
@@ -494,7 +505,6 @@ export function ftePositionsByDimension(
         baseline: baseline.fte,
         realizedDelta: 0,
         targetDelta: 0,
-        remainingForecastDelta: 0,
       },
     ])
   );
@@ -506,7 +516,6 @@ export function ftePositionsByDimension(
         baseline: 0,
         realizedDelta: 0,
         targetDelta: 0,
-        remainingForecastDelta: 0,
       });
     }
     return rows.get(key)!;
@@ -521,10 +530,6 @@ export function ftePositionsByDimension(
       for (const contribution of dimensionalContributions(movement, dimension, "actual")) {
         ensure(contribution.key).realizedDelta += contribution.delta;
       }
-    } else {
-      for (const contribution of dimensionalContributions(movement, dimension, "reforecast")) {
-        ensure(contribution.key).remainingForecastDelta += contribution.delta;
-      }
     }
   }
 
@@ -532,20 +537,22 @@ export function ftePositionsByDimension(
     .map((row) => {
       const current = row.baseline + row.realizedDelta;
       const target = row.baseline + row.targetDelta;
-      const landing = current + row.remainingForecastDelta;
+      const denominator = target - row.baseline;
+      const progressPct = denominator === 0 ? 100 : ((current - row.baseline) / denominator) * 100;
       return {
         key: row.key,
         label: row.label,
+        baseline: Math.round(row.baseline * 10) / 10,
         current: Math.round(current * 10) / 10,
         target: Math.round(target * 10) / 10,
-        landing: Math.round(landing * 10) / 10,
-        gapToTarget: Math.round((landing - target) * 10) / 10,
+        gapToTarget: Math.round((current - target) * 10) / 10,
+        progressPct: Math.round(progressPct),
       };
     })
     .sort((a, b) => b.current - a.current);
 }
 
-export type MovementBreakdownDimension = "department" | "country";
+export type MovementBreakdownDimension = "department" | "country" | "program";
 export type MovementBreakdownRow = Omit<DepartmentMovements, "department"> & {
   key: string;
   label: string;
@@ -554,7 +561,8 @@ export type MovementBreakdownRow = Omit<DepartmentMovements, "department"> & {
 /** Ventilation prévue des cinq types de mouvements par département ou pays. */
 export function movementBreakdownByDimension(
   movements: WorkforceMovement[],
-  dimension: MovementBreakdownDimension
+  dimension: MovementBreakdownDimension,
+  programLabels: Record<string, string> = {}
 ): MovementBreakdownRow[] {
   const rows = new Map<string, MovementBreakdownRow>();
   const ensure = (key: string) => {
@@ -576,8 +584,14 @@ export function movementBreakdownByDimension(
   };
   for (const movement of movements) {
     if (!isActiveMovement(movement)) continue;
-    if (dimension === "country") {
-      const row = ensure(movement.country || "Non renseigné");
+    if (dimension === "country" || dimension === "program") {
+      const rawKey = dimension === "country" ? movement.country : movement.programId;
+      const key = rawKey
+        ? dimension === "program"
+          ? (programLabels[rawKey] ?? rawKey)
+          : rawKey
+        : "Non renseigné";
+      const row = ensure(key);
       if (movement.type === "Recrutement") row.recrutements += movement.fte;
       if (movement.type === "Attrition") row.attritions += movement.fte;
       if (movement.type === "Départ forcé") row.forcedDepartures += movement.fte;

@@ -30,12 +30,23 @@ function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement 
 }
 
 describe("hrTimeSeries — salarySavingsSeries", () => {
-  it("splits actuals (past + Réalisé) from forecasts (future or non-Réalisé)", () => {
+  it("propagates annual salary impact monthly from actual/planned start dates", () => {
     const range = { from: "2026-01-01", to: "2026-12-31" };
     const buckets = salarySavingsSeries(
       [
-        makeMovement({ id: "M1", status: "Réalisé", plannedDate: "2026-02-15", savings: 100000 }),
-        makeMovement({ id: "M2", status: "Planifié", plannedDate: "2026-09-15", savings: 200000 }),
+        makeMovement({
+          id: "M1",
+          status: "Réalisé",
+          plannedDate: "2026-02-15",
+          actualDate: "2026-03-01",
+          salaryImpact: -120000,
+        }),
+        makeMovement({
+          id: "M2",
+          status: "Planifié",
+          plannedDate: "2026-09-15",
+          salaryImpact: -240000,
+        }),
       ],
       "month",
       range,
@@ -43,9 +54,11 @@ describe("hrTimeSeries — salarySavingsSeries", () => {
     );
     expect(buckets).toHaveLength(12);
     const feb = buckets.find((b) => b.label.startsWith("févr."))!;
+    const mar = buckets.find((b) => b.label.startsWith("mars"))!;
     const sep = buckets.find((b) => b.label.startsWith("sept."))!;
-    expect(feb.actualPlusForecast).toBeCloseTo(0.1, 3);
-    expect(sep.actualPlusForecast).toBeCloseTo(0.2, 3);
+    expect(feb.actualPlusForecast).toBe(0);
+    expect(mar.actualPlusForecast).toBeCloseTo(0.01, 3);
+    expect(sep.actualPlusForecast).toBeCloseTo(0.03, 3);
     expect(sep.isFuture).toBe(true);
     expect(feb.isFuture).toBe(false);
   });
@@ -68,14 +81,14 @@ describe("hrTimeSeries — salarySavingsSeries", () => {
     }
   });
 
-  it("plan uses lockedPlan.savings when present", () => {
+  it("plan uses lockedPlan salary impact and prorates it", () => {
     const range = { from: "2026-01-01", to: "2026-12-31" };
     const buckets = salarySavingsSeries(
       [
         makeMovement({
           id: "M1",
           plannedDate: "2026-03-15",
-          savings: 50000,
+          salaryImpact: -60000,
           lockedPlan: { fte: 1, salaryImpact: -100000, savings: 100000, cost: 10000 },
         }),
       ],
@@ -84,8 +97,7 @@ describe("hrTimeSeries — salarySavingsSeries", () => {
       "2026-06-22"
     );
     const mar = buckets.find((b) => b.label.startsWith("mars"))!;
-    // Plan = lockedPlan.savings 100000 = €0.1M
-    expect(mar.plan).toBeCloseTo(0.1, 3);
+    expect(mar.plan).toBeCloseTo(0.1 / 12, 3);
   });
 
   it("excludes abandoned movements", () => {
@@ -119,30 +131,47 @@ describe("hrTimeSeries — socialCostSeries", () => {
     expect(apr.enr).toBeCloseTo(0.03, 3);
     expect(apr.cumulEnr).toBeCloseTo(0.05, 3);
   });
+
+  it("uses movement.cost rather than lockedPlan/reforecast cost and actualDate when realized", () => {
+    const range = { from: "2026-01-01", to: "2026-12-31" };
+    const buckets = socialCostSeries(
+      [
+        makeMovement({
+          status: "Réalisé",
+          plannedDate: "2026-02-01",
+          actualDate: "2026-04-01",
+          cost: 30000,
+          lockedPlan: { fte: 1, salaryImpact: -1, savings: 1, cost: 10000 },
+          reforecast: { fte: 1, salaryImpact: -1, savings: 1, cost: 50000 },
+        }),
+      ],
+      "month",
+      range
+    );
+    expect(buckets.find((b) => b.label.startsWith("févr."))?.enr).toBe(0);
+    expect(buckets.find((b) => b.label.startsWith("avr."))?.enr).toBeCloseTo(0.03, 3);
+  });
 });
 
 describe("hrTimeSeries — netEconomySeries", () => {
-  it("computes net = savings − cost per period, cumul cumulates", () => {
+  it("computes recurring salary savings minus one-off cost", () => {
     const range = { from: "2026-01-01", to: "2026-12-31" };
     const buckets = netEconomySeries(
-      [
-        makeMovement({ id: "M1", plannedDate: "2026-02-01", savings: 100000, cost: 30000 }),
-        makeMovement({ id: "M2", plannedDate: "2026-03-01", savings: 50000, cost: 40000 }),
-      ],
+      [makeMovement({ id: "M1", plannedDate: "2026-02-01", salaryImpact: -120000, cost: 30000 })],
       "month",
       range
     );
     const feb = buckets.find((b) => b.label.startsWith("févr."))!;
     const mar = buckets.find((b) => b.label.startsWith("mars"))!;
-    expect(feb.net).toBeCloseTo(0.07, 3);
+    expect(feb.net).toBeCloseTo(-0.02, 3);
     expect(mar.net).toBeCloseTo(0.01, 3);
-    expect(mar.cumulNet).toBeCloseTo(0.08, 3);
+    expect(mar.cumulNet).toBeCloseTo(-0.01, 3);
   });
 
   it("handles negative periods (cost > savings)", () => {
     const range = { from: "2026-01-01", to: "2026-06-30" };
     const buckets = netEconomySeries(
-      [makeMovement({ plannedDate: "2026-02-01", savings: 10000, cost: 30000 })],
+      [makeMovement({ plannedDate: "2026-02-01", salaryImpact: -120000, cost: 30000 })],
       "month",
       range
     );

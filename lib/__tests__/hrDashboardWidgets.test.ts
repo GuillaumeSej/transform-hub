@@ -35,6 +35,17 @@ describe("hrDashboardWidgets — buildHrDefaultLayout", () => {
     expect(execution.view).toBe("function");
   });
 
+  it("uses the validated v4 widget order and spans", () => {
+    const layout = buildHrDefaultLayout();
+    const index = (type: HrWidgetInstance["type"]) => layout.findIndex((row) => row.type === type);
+    expect(index("social-cost-enr")).toBeLessThan(index("pse-summary"));
+    expect(index("pse-summary")).toBeLessThan(index("savings-period-cumul"));
+    expect(index("savings-period-cumul")).toBeLessThan(index("net-economy"));
+    expect(index("department-breakdown") + 1).toBe(index("etp-bridge"));
+    expect(index("movement-rhythm")).toBe(index("etp-bridge") + 1);
+    expect(layout.find((row) => row.type === "movement-rhythm")?.span).toBe("XL");
+  });
+
   it("non-builder widgets have no customViews field", () => {
     const layout = buildHrDefaultLayout();
     expect(layout.find((w) => w.type === "fte-waterfall")?.customViews).toBeUndefined();

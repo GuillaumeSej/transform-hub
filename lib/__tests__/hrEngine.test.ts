@@ -318,7 +318,7 @@ describe("hrEngine — movementsByDepartment (5-types)", () => {
 });
 
 describe("hrEngine — ftePositionsByDimension", () => {
-  it("computes current, target and landing by country", () => {
+  it("computes baseline, current, target and progress by country", () => {
     const wf = makeWorkforce({
       countryBaselines: [
         { key: "France", label: "France", fte: 60 },
@@ -348,12 +348,14 @@ describe("hrEngine — ftePositionsByDimension", () => {
     expect(rows.find((row) => row.key === "France")).toMatchObject({
       current: 57,
       target: 57,
-      landing: 57,
+      baseline: 60,
+      progressPct: 100,
     });
     expect(rows.find((row) => row.key === "Germany")).toMatchObject({
       current: 40,
       target: 42,
-      landing: 41.5,
+      baseline: 40,
+      progressPct: 0,
     });
   });
 
@@ -389,6 +391,30 @@ describe("hrEngine — movementBreakdownByDimension", () => {
       "country"
     );
     expect(rows[0]).toMatchObject({ label: "France", recrutements: 2, attritions: 1, net: 1 });
+  });
+
+  it("groups movement breakdown by program label", () => {
+    const rows = movementBreakdownByDimension(
+      [makeMovement({ type: "Recrutement", programId: "p1", fte: 2 })],
+      "program",
+      { p1: "Transformation 2026" }
+    );
+    expect(rows[0]).toMatchObject({ label: "Transformation 2026", recrutements: 2 });
+  });
+
+  it("keeps zero-net transfers visible in the ETP bridge with counts", () => {
+    const summary = fteBridgeSummary(
+      makeWorkforce({
+        movements: [
+          makeMovement({ type: "Transfert entrant", plannedDate: "2026-03-01" }),
+          makeMovement({ id: "M2", type: "Transfert sortant", plannedDate: "2026-03-02" }),
+        ],
+      })
+    );
+    expect(summary.contributions.find((row) => row.type === "Transfert entrant")).toMatchObject({
+      delta: 0,
+      count: 1,
+    });
   });
 });
 

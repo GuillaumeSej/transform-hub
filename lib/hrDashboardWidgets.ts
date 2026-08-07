@@ -138,14 +138,6 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     allowedSpans: ["L", "XL"],
   },
   {
-    type: "savings-period-cumul",
-    // Nouveau — Économies par période et cumul (Actual + forecast vs Plan) avec double axe Y.
-    label: "Économies par période et cumul",
-    icon: "LineChart",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-  },
-  {
     type: "social-cost-enr",
     // Nouveau — ENR (coûts sociaux exceptionnels) par période + courbe cumul.
     label: "Coûts sociaux exceptionnels et cumul",
@@ -155,10 +147,17 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
   },
   {
     type: "pse-summary",
-    label: "Suivi du PSE (Plan de Sauvegarde de l'Emploi)",
+    label: "Départs forcés prévus vs réalisés par dispositif social",
     icon: "ShieldCheck",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "savings-period-cumul",
+    label: "Économies par période et cumul",
+    icon: "LineChart",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
   },
   {
     type: "net-economy",
@@ -169,6 +168,14 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     allowedSpans: ["M", "L", "XL"],
   },
   {
+    type: "department-table",
+    label: "Effectifs par dimension — baseline vs actuel vs cible",
+    icon: "Table2",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+    defaultView: "department",
+  },
+  {
     type: "department-breakdown",
     label: "Mouvements prévus par dimension",
     icon: "Building2",
@@ -177,26 +184,18 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     defaultView: "department",
   },
   {
-    type: "department-table",
-    label: "Effectifs par dimension — actuel vs cible vs atterrissage",
-    icon: "Table2",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-    defaultView: "department",
-  },
-  {
-    type: "movement-rhythm",
-    label: "Détail mensuel des mouvements et cumul net",
-    icon: "Activity",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
-  },
-  {
     type: "etp-bridge",
     label: "Pont ETP — contribution des mouvements",
     icon: "GitBranch",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "movement-rhythm",
+    label: "Détail mensuel des mouvements et cumul net",
+    icon: "Activity",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
   },
   {
     type: "movements-table",
@@ -211,8 +210,7 @@ export function getHrWidgetDef(type: string): HrWidgetDef | undefined {
   return HR_WIDGET_REGISTRY.find((w) => w.type === type);
 }
 
-/** Layout par défaut v2 — ordre cockpit validé en Août 2026, avec paires M+M et suppression des
- * widgets pays/type/masse salariale devenus redondants. */
+/** Layout par défaut v4 — ordre cockpit validé en Août 2026. */
 export function buildHrDefaultLayout(): HrWidgetInstance[] {
   return HR_WIDGET_REGISTRY.map((def) => ({
     instanceId: def.type,
@@ -355,7 +353,7 @@ export function resolveHrActiveCustomView(
 
 // v3 : ajout des vues d'exécution ETP/masse salariale et du plan d'actions RH Owner. L'application
 // n'étant pas encore utilisée, on repart volontairement du nouveau layout par défaut pour tous.
-const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v3";
+const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v4";
 
 /** Clé séparée pour la migration one-shot des widgets Gooduelle (Août 2026). Voir
  *  `migrateHrGooduelleWidgets` ci-dessous — ajoute les 5 nouveaux widgets aux layouts persistés

@@ -94,16 +94,41 @@ function findBucket(buckets: BucketKey[], dateISO: string): BucketKey | undefine
   return buckets.find((b) => dateISO >= b.startISO && dateISO <= b.endISO);
 }
 
+function effectDate(movement: WorkforceMovement): string {
+  return movement.status === "Réalisé"
+    ? (movement.actualDate ?? movement.plannedDate)
+    : movement.plannedDate;
+}
+
+/** Proratisation calendaire d'un impact annuel récurrent sur les mois actifs du bucket. */
+function recurringImpactForBucket(
+  annualImpact: number,
+  startISO: string,
+  bucket: BucketKey
+): number {
+  const startYear = Number(startISO.slice(0, 4));
+  const startMonth = Number(startISO.slice(5, 7));
+  let activeMonths = 0;
+  const cursor = new Date(`${bucket.startISO}T00:00:00Z`);
+  const end = new Date(`${bucket.endISO}T00:00:00Z`);
+  while (cursor <= end) {
+    const year = cursor.getUTCFullYear();
+    const month = cursor.getUTCMonth() + 1;
+    if (year > startYear || (year === startYear && month >= startMonth)) activeMonths += 1;
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return (annualImpact / 12) * activeMonths;
+}
+
 // ---------- Économies salariales : actual + forecast vs plan + cumul ----------
 
 export type SalarySavingsBucket = {
   label: string;
   startISO: string;
   endISO: string;
-  /** Valeurs Actual (m.savings pour Réalisé) + Forecast (reforecast/lockedPlan/brut pour les
-   *  non-réalisés). €M par période. */
+  /** Économie récurrente de période, dérivée de `-salaryImpact / 12` à partir de la date d'effet. */
   actualPlusForecast: number;
-  /** Plan initial (lockedPlan.savings ou m.savings) €M par période. */
+  /** Plan initial récurrent, dérivé de `-(lockedPlan.salaryImpact ?? salaryImpact) / 12`. */
   plan: number;
   /** Cumul Actual+Forecast depuis le début de la plage — €M. */
   cumulActualForecast: number;
@@ -114,9 +139,7 @@ export type SalarySavingsBucket = {
   isFuture: boolean;
 };
 
-/** Économies salariales par période (Actual pour le passé, Forecast pour le futur) vs Plan
- *  initial, plus les cumuls (double axe Y du graphique). Valeurs converties en €M pour
- *  l'affichage cohérent avec le reste du dashboard. */
+/** Économies salariales récurrentes par période et cumul, proratisées mensuellement. */
 export function salarySavingsSeries(
   movements: WorkforceMovement[],
   granularity: BridgeGranularity,
@@ -126,33 +149,23 @@ export function salarySavingsSeries(
   const buckets = generateBuckets(range, granularity);
   if (buckets.length === 0) return [];
 
-  const map = new Map<string, { actual: number; forecast: number; plan: number }>();
-  for (const b of buckets) map.set(b.key, { actual: 0, forecast: 0, plan: 0 });
-
-  for (const m of movements) {
-    if (!isActiveMovement(m)) continue;
-    if (!m.plannedDate) continue;
-    const b = findBucket(buckets, m.plannedDate);
-    if (!b) continue;
-    const cell = map.get(b.key)!;
-    const planValue = m.lockedPlan?.savings ?? m.savings;
-    cell.plan += planValue;
-
-    if (m.status === "Réalisé") {
-      cell.actual += m.savings;
-    } else {
-      // Non réalisé : le forecast est reforecast ?? lockedPlan ?? savings brut.
-      const forecastValue = m.reforecast?.savings ?? m.lockedPlan?.savings ?? m.savings;
-      cell.forecast += forecastValue;
-    }
-  }
-
   let cumulActualForecast = 0;
   let cumulPlan = 0;
   return buckets.map((b) => {
-    const cell = map.get(b.key)!;
-    const actualForecast = (cell.actual + cell.forecast) / 1_000_000;
-    const plan = cell.plan / 1_000_000;
+    let actualForecast = 0;
+    let plan = 0;
+    for (const movement of movements) {
+      if (!isActiveMovement(movement)) continue;
+      // Économie positive pour une baisse de masse salariale, négative pour un recrutement.
+      actualForecast += recurringImpactForBucket(-movement.salaryImpact, effectDate(movement), b);
+      plan += recurringImpactForBucket(
+        -(movement.lockedPlan?.salaryImpact ?? movement.salaryImpact),
+        movement.plannedDate,
+        b
+      );
+    }
+    actualForecast /= 1_000_000;
+    plan /= 1_000_000;
     cumulActualForecast += actualForecast;
     cumulPlan += plan;
     return {
@@ -180,8 +193,7 @@ export type SocialCostBucket = {
   cumulEnr: number;
 };
 
-/** ENR (Éléments Non Récurrents = coûts sociaux one-off) par période, avec cumul. Reflète
- *  reforecast ?? lockedPlan ?? cost brut, converti en €M. */
+/** ENR par période, strictement basé sur la colonne `movement.cost`, compté une seule fois. */
 export function socialCostSeries(
   movements: WorkforceMovement[],
   granularity: BridgeGranularity,
@@ -195,11 +207,11 @@ export function socialCostSeries(
 
   for (const m of movements) {
     if (!isActiveMovement(m)) continue;
-    if (!m.plannedDate) continue;
-    const b = findBucket(buckets, m.plannedDate);
+    const date = effectDate(m);
+    if (!date) continue;
+    const b = findBucket(buckets, date);
     if (!b) continue;
-    const value = m.reforecast?.cost ?? m.lockedPlan?.cost ?? m.cost;
-    map.set(b.key, (map.get(b.key) ?? 0) + value);
+    map.set(b.key, (map.get(b.key) ?? 0) + m.cost);
   }
 
   let cumul = 0;
@@ -228,7 +240,7 @@ export type NetEconomyBucket = {
   cumulNet: number;
 };
 
-/** Économie nette (staff costs économisés − ENR) par période et cumulée. */
+/** Économie nette = impact salarial récurrent moins coût social one-off. */
 export function netEconomySeries(
   movements: WorkforceMovement[],
   granularity: BridgeGranularity,
@@ -237,25 +249,18 @@ export function netEconomySeries(
   const buckets = generateBuckets(range, granularity);
   if (buckets.length === 0) return [];
 
-  const map = new Map<string, { savings: number; cost: number }>();
-  for (const b of buckets) map.set(b.key, { savings: 0, cost: 0 });
-
-  for (const m of movements) {
-    if (!isActiveMovement(m)) continue;
-    if (!m.plannedDate) continue;
-    const b = findBucket(buckets, m.plannedDate);
-    if (!b) continue;
-    const cell = map.get(b.key)!;
-    const savings = m.reforecast?.savings ?? m.lockedPlan?.savings ?? m.savings;
-    const cost = m.reforecast?.cost ?? m.lockedPlan?.cost ?? m.cost;
-    cell.savings += savings;
-    cell.cost += cost;
-  }
-
   let cumul = 0;
   return buckets.map((b) => {
-    const cell = map.get(b.key)!;
-    const net = (cell.savings - cell.cost) / 1_000_000;
+    let recurringSavings = 0;
+    let oneOffCosts = 0;
+    for (const movement of movements) {
+      if (!isActiveMovement(movement)) continue;
+      recurringSavings += recurringImpactForBucket(-movement.salaryImpact, effectDate(movement), b);
+      if (effectDate(movement) >= b.startISO && effectDate(movement) <= b.endISO) {
+        oneOffCosts += movement.cost;
+      }
+    }
+    const net = (recurringSavings - oneOffCosts) / 1_000_000;
     cumul += net;
     return {
       label: b.label,

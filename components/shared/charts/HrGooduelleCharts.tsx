@@ -351,10 +351,11 @@ export function EtpBridgeChart({
 
   type Datum = {
     label: string;
-    kind: "open" | "close" | "positive" | "negative";
+    kind: "open" | "close" | "positive" | "negative" | "zero";
     base: number;
     height: number;
     signedValue: number;
+    count: number;
   };
 
   const data: Datum[] = [];
@@ -365,17 +366,18 @@ export function EtpBridgeChart({
     base: 0,
     height: opening,
     signedValue: opening,
+    count: 0,
   });
   for (const c of contributions) {
-    if (c.delta === 0) continue; // masque les catégories neutres
     const start = running;
     running += c.delta;
     data.push({
       label: c.type,
-      kind: c.delta >= 0 ? "positive" : "negative",
+      kind: c.delta === 0 ? "zero" : c.delta > 0 ? "positive" : "negative",
       base: Math.min(start, running),
       height: Math.abs(c.delta),
       signedValue: c.delta,
+      count: c.count,
     });
   }
   data.push({
@@ -384,6 +386,7 @@ export function EtpBridgeChart({
     base: 0,
     height: closing,
     signedValue: closing,
+    count: 0,
   });
 
   const kindColor: Record<Datum["kind"], string> = {
@@ -391,6 +394,7 @@ export function EtpBridgeChart({
     close: "#320300",
     positive: "#421799",
     negative: "#FF3C47",
+    zero: "#A99E9A",
   };
 
   return (
@@ -417,12 +421,15 @@ export function EtpBridgeChart({
                   {sign}
                   {fmtEtp(d.signedValue)} ETP
                 </div>
+                {d.count > 0 && (
+                  <div className="text-tertiary">Volume concerné : {d.count} mouvement(s)</div>
+                )}
               </div>
             );
           }}
         />
         <Bar dataKey="base" stackId="wf" fill="transparent" isAnimationActive={false} />
-        <Bar dataKey="height" stackId="wf" isAnimationActive={false}>
+        <Bar dataKey="height" stackId="wf" minPointSize={4} isAnimationActive={false}>
           {data.map((d, i) => (
             <Cell key={i} fill={kindColor[d.kind]} />
           ))}

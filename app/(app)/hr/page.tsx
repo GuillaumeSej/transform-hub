@@ -42,6 +42,7 @@ import {
 import { DepartmentMovementsChart } from "@/components/shared/charts/HrBreakdownCharts";
 import { ExecutionStatusChart } from "@/components/shared/charts/HrExecutionCharts";
 import { MovementStatusMatrix } from "@/components/shared/charts/MovementStatusMatrix";
+import { ForcedDepartureStatusChart } from "@/components/shared/charts/ForcedDepartureStatusChart";
 import { HrOwnerActionTable } from "@/components/shared/HrOwnerActionTable";
 import {
   EnrPeriodCumulChart,
@@ -59,6 +60,7 @@ import type { MovementStatus, Program, SocialScheme, WorkforceMovement } from "@
 import { subscribePrograms } from "@/lib/firestore/admin";
 import { buildMovementTableRows, type HrMovementTableRow } from "@/lib/hrMovementTable";
 import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceLogic";
+import { forcedDeparturesBySocialScheme } from "@/lib/hrSocialPlan";
 import {
   EXECUTION_LABELS,
   movementStatusGroups,
@@ -232,7 +234,10 @@ export default function HrDashboardPage() {
     () => hr.salaryBridge(filteredWf, granularity, { from: dateFromISO, to: dateToISO }),
     [filteredWf, granularity, dateFromISO, dateToISO]
   );
-  const pse = useMemo(() => hr.pseSummary(filteredWf), [filteredWf]);
+  const forcedDepartureSocialRows = useMemo(
+    () => forcedDeparturesBySocialScheme(filteredMovements),
+    [filteredMovements]
+  );
 
   // ─── Gooduelle series (Août 2026) ────────────────────────────────────────────
   // Plage de dates pilotée par le range picker + presets FY côté page (voir dateFromISO/ToISO).
@@ -792,7 +797,7 @@ export default function HrDashboardPage() {
             <CardBody>
               <EnrPeriodCumulChart buckets={enrSeries} />
               <p className="mt-2 text-[11px] text-tertiary">
-                Barres = ENR par période générés par les départs forcés · courbe = cumul ENR
+                Barres = colonne Coût social, comptabilisée une seule fois · courbe = cumul
               </p>
             </CardBody>
           </Card>
@@ -838,18 +843,27 @@ export default function HrDashboardPage() {
           </Card>
         );
       case "department-breakdown": {
-        const dimension = instance.view === "country" ? "country" : "department";
-        const rows = hr.movementBreakdownByDimension(filteredMovements, dimension);
+        const dimension =
+          instance.view === "country"
+            ? "country"
+            : instance.view === "program"
+              ? "program"
+              : "department";
+        const programLabels = Object.fromEntries(
+          programs.map((program) => [program.id, program.name])
+        );
+        const rows = hr.movementBreakdownByDimension(filteredMovements, dimension, programLabels);
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title={`Mouvements prévus par ${dimension === "country" ? "pays" : "département"} (ETP)`}
+              title={`Mouvements prévus par ${dimension === "country" ? "pays" : dimension === "program" ? "programme" : "département"} (ETP)`}
               actions={
                 <ViewToggle
                   options={[
                     { value: "department", label: "Département" },
                     { value: "country", label: "Pays" },
+                    { value: "program", label: "Programme" },
                   ]}
                   value={dimension}
                   onChange={(next) =>
@@ -868,40 +882,11 @@ export default function HrDashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Suivi du PSE (Plan de Sauvegarde de l'Emploi)" />
+            <CardHeader title="Départs forcés prévus vs réalisés par dispositif social" />
             <CardBody>
-              <div className="mb-4 flex items-end gap-3">
-                {[
-                  { label: "Postes concernés", value: pse.postes, color: "bg-neutral-300" },
-                  { label: "À faire / Planifiés", value: pse.enCours, color: "bg-rag-amber" },
-                  { label: "Réalisés", value: pse.realises, color: "bg-bp-coral" },
-                  { label: "Validés RH", value: pse.valides, color: "bg-rag-green" },
-                ].map((stage) => {
-                  const max = Math.max(1, pse.postes);
-                  return (
-                    <div key={stage.label} className="flex flex-1 flex-col items-center gap-1.5">
-                      <span className="text-lg font-bold text-primary">{stage.value}</span>
-                      <div
-                        className={`w-full rounded-t-sm ${stage.color}`}
-                        style={{ height: `${Math.max(8, (Number(stage.value) / max) * 90)}px` }}
-                      />
-                      <span className="text-center text-[10px] uppercase tracking-wide text-tertiary">
-                        {stage.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="space-y-1.5 border-t border-border pt-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-secondary">Coût social engagé / provision</span>
-                  <strong>
-                    {fmtCurr(pse.coutEngage / 1_000_000)} / {fmtCurr(pse.coutTotal / 1_000_000)}
-                  </strong>
-                </div>
-                <ProgressBar
-                  pct={pse.coutTotal > 0 ? Math.round((pse.coutEngage / pse.coutTotal) * 100) : 0}
-                />
+              <ForcedDepartureStatusChart data={forcedDepartureSocialRows} />
+              <div className="mt-2 text-[11px] text-tertiary">
+                Une ligne mouvement = un départ. Les abandonnés sont affichés séparément.
               </div>
             </CardBody>
           </Card>
@@ -918,7 +903,7 @@ export default function HrDashboardPage() {
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title="Effectifs par dimension — actuel vs cible vs atterrissage"
+              title="Effectifs par dimension — baseline vs actuel vs cible"
               actions={
                 <ViewToggle
                   options={[
@@ -944,9 +929,9 @@ export default function HrDashboardPage() {
                           : dimension === "country"
                             ? "Pays"
                             : "Workstream",
+                        "Baseline ETP",
                         "Actuel",
                         "Cible",
-                        "Atterrissage plan",
                         "Écart vs cible",
                         "Avancement",
                       ].map((h) => (
@@ -961,9 +946,7 @@ export default function HrDashboardPage() {
                   </thead>
                   <tbody>
                     {positionRows.map((d) => {
-                      const toDo = d.current - d.target;
-                      const done = d.current - d.landing;
-                      const pct = toDo !== 0 ? Math.round((done / toDo) * 100) : 100;
+                      const pct = d.progressPct;
                       return (
                         <tr
                           key={d.key}
@@ -971,13 +954,13 @@ export default function HrDashboardPage() {
                         >
                           <td className="px-3 py-2.5 font-semibold text-primary">{d.label}</td>
                           <td className="px-3 py-2.5 tabular-nums">
+                            {d.baseline.toLocaleString("fr-FR")}
+                          </td>
+                          <td className="px-3 py-2.5 tabular-nums">
                             {d.current.toLocaleString("fr-FR")}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
                             {d.target.toLocaleString("fr-FR")}
-                          </td>
-                          <td className="px-3 py-2.5 tabular-nums">
-                            {d.landing.toLocaleString("fr-FR")}
                           </td>
                           <td
                             className={`px-3 py-2.5 font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
@@ -997,9 +980,7 @@ export default function HrDashboardPage() {
 
               <div className="divide-y divide-border sm:hidden">
                 {positionRows.map((d) => {
-                  const toDo = d.current - d.target;
-                  const done = d.current - d.landing;
-                  const pct = toDo !== 0 ? Math.round((done / toDo) * 100) : 100;
+                  const pct = d.progressPct;
                   return (
                     <div key={d.key} className="p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
@@ -1013,9 +994,9 @@ export default function HrDashboardPage() {
                       </div>
                       <dl className="mb-2 grid grid-cols-3 gap-x-3 gap-y-1.5">
                         {[
+                          { label: "Baseline", value: d.baseline },
                           { label: "Actuel", value: d.current },
                           { label: "Cible", value: d.target },
-                          { label: "Atterrissage", value: d.landing },
                         ].map((item) => (
                           <div key={item.label}>
                             <dt className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
