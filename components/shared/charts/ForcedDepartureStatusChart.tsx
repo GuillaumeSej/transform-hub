@@ -24,12 +24,26 @@ export function ForcedDepartureStatusChart({
       <p className="py-10 text-center text-sm text-tertiary">Aucun départ forcé à afficher.</p>
     );
   }
+  const chartHeight = Math.max(height, data.length * 42 + 90);
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-        <XAxis dataKey="scheme" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-        <YAxis allowDecimals={false} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+    <ResponsiveContainer width="100%" height={chartHeight}>
+      <BarChart data={data} layout="vertical" margin={{ top: 8, right: 16, left: 12, bottom: 20 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" horizontal={false} />
+        <XAxis
+          type="number"
+          allowDecimals={false}
+          tick={{ fontSize: 10 }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          type="category"
+          dataKey="scheme"
+          width={92}
+          tick={{ fontSize: 11 }}
+          axisLine={false}
+          tickLine={false}
+        />
         <Tooltip
           formatter={(value, name) => [`${Number(value)} mouvement(s)`, String(name)]}
           labelFormatter={(label) => `Dispositif : ${label}`}

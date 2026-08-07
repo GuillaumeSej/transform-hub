@@ -35,4 +35,16 @@ describe("forcedDeparturesBySocialScheme", () => {
     expect(rows.find((row) => row.scheme === "PSE")).toMatchObject({ realized: 1, planned: 1 });
     expect(rows.find((row) => row.scheme === "RC")?.abandoned).toBe(1);
   });
+
+  it("sorts schemes by total movement count descending, then by business order", () => {
+    const rows = forcedDeparturesBySocialScheme([
+      movement({ id: "P1", socialScheme: "PSE", status: "Réalisé" }),
+      movement({ id: "P2", socialScheme: "PSE", status: "À faire" }),
+      movement({ id: "P3", socialScheme: "PSE", status: "Planifié" }),
+      movement({ id: "R1", socialScheme: "RC", status: "Réalisé" }),
+      movement({ id: "R2", socialScheme: "RC", status: "À faire" }),
+      movement({ id: "C1", socialScheme: "RCC", status: "Planifié" }),
+    ]);
+    expect(rows.map((row) => row.scheme)).toEqual(["PSE", "RC", "RCC"]);
+  });
 });

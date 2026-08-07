@@ -28,7 +28,11 @@ export function forcedDeparturesBySocialScheme(
     else if (movement.status === "Abandonné") row.abandoned += 1;
     else row.planned += 1;
   }
-  return SCHEME_ORDER.map((scheme) => rows.get(scheme)!).filter(
-    (row) => row.realized + row.planned + row.abandoned > 0
-  );
+  return SCHEME_ORDER.map((scheme) => rows.get(scheme)!)
+    .filter((row) => row.realized + row.planned + row.abandoned > 0)
+    .sort((a, b) => {
+      const totalA = a.realized + a.planned + a.abandoned;
+      const totalB = b.realized + b.planned + b.abandoned;
+      return totalB - totalA || SCHEME_ORDER.indexOf(a.scheme) - SCHEME_ORDER.indexOf(b.scheme);
+    });
 }
