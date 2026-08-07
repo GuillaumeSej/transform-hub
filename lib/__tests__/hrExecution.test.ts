@@ -69,20 +69,36 @@ describe("execution aggregations", () => {
     expect(groups[0].cells[0].execution).toBe("realized");
   });
 
-  it("builds a stacked salary series with reforecast values", () => {
+  it("uses the persisted salaryImpact column for every execution status", () => {
     const rows = salaryExecutionByDimension(
       [
         movement({
+          id: "M1",
           status: "À faire",
           plannedDate: "2026-06-01",
+          salaryImpact: -80000,
           reforecast: { fte: 2, salaryImpact: -120000, savings: 120000, cost: 20000 },
+        }),
+        movement({
+          id: "M2",
+          status: "Planifié",
+          plannedDate: "2026-08-01",
+          salaryImpact: 50000,
+          lockedPlan: { fte: 1, salaryImpact: 90000, savings: 0, cost: 10000 },
         }),
       ],
       "function",
       programs,
       "2026-06-22"
     );
-    expect(rows[0].overdue.volume).toBeCloseTo(-0.12);
+    expect(rows[0].overdue.volume).toBeCloseTo(-0.08);
+    expect(rows[0].dueSoon.volume).toBeCloseTo(0.05);
+    const chartTotal =
+      rows[0].realized.volume +
+      rows[0].overdue.volume +
+      rows[0].dueSoon.volume +
+      rows[0].later.volume;
+    expect(chartTotal).toBeCloseTo((-80000 + 50000) / 1_000_000);
   });
 });
 

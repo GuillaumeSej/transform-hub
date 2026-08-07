@@ -90,11 +90,7 @@ export function executionByDimension(
         ? status === "realized"
           ? movement.fte
           : (movement.reforecast?.fte ?? movement.lockedPlan?.fte ?? movement.fte)
-        : (status === "realized"
-            ? movement.salaryImpact
-            : (movement.reforecast?.salaryImpact ??
-              movement.lockedPlan?.salaryImpact ??
-              movement.salaryImpact)) / 1_000_000;
+        : movement.salaryImpact / 1_000_000;
     row[status].volume += value;
     row[status].net += value;
     row[status].count += 1;
