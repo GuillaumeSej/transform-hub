@@ -339,9 +339,15 @@ export default function HrDashboardPage() {
     {
       key: "comment",
       label: "Commentaire",
-      editable: canEditMovements,
-      type: "textarea",
-      render: (row) => row.comment || "—",
+      render: (row) =>
+        canEditMovements ? (
+          <MovementCommentEditor
+            value={row.comment}
+            onSave={(value) => handleMovementTableUpdate(row.id, "comment", value)}
+          />
+        ) : (
+          row.comment || "—"
+        ),
     },
     {
       key: "salaryImpact",
@@ -548,7 +554,7 @@ export default function HrDashboardPage() {
         key={instance.instanceId}
         data-widget-id={instance.instanceId}
         data-widget-title={def.label}
-        className={`relative ${SPAN_COL_CLASS[instance.span]} ${
+        className={`relative h-full self-stretch ${SPAN_COL_CLASS[instance.span]} ${
           isDragOver ? "outline outline-2 outline-offset-2 outline-bp-coral" : ""
         }`}
         draggable={editMode}
@@ -620,7 +626,11 @@ export default function HrDashboardPage() {
             </button>
           </div>
         )}
-        <div className={editMode ? "pointer-events-none select-none" : ""}>{children}</div>
+        <div
+          className={`h-full [&>div]:h-full ${editMode ? "pointer-events-none select-none" : ""}`}
+        >
+          {children}
+        </div>
       </div>
     );
   };
@@ -808,8 +818,8 @@ export default function HrDashboardPage() {
             <CardBody>
               <NetEconomyChart buckets={netEcoSeries} />
               <p className="mt-2 text-[11px] text-tertiary">
-                Synthèse : économies staff costs récurrentes − coûts sociaux one-off, par période et
-                en cumul, comparées au plan initial
+                Réalisé + prévision : économies staff costs récurrentes − coûts sociaux one-off, par
+                période et en cumul
               </p>
             </CardBody>
           </Card>
@@ -822,8 +832,8 @@ export default function HrDashboardPage() {
             <CardBody>
               <MovementRhythmChart buckets={rhythmSeries} />
               <p className="mt-2 text-[11px] text-tertiary">
-                Barres = mouvements par période · courbe noire = cumul net ETP · échelle centrée sur
-                zéro
+                Barres = flux de mouvements · point/courbe = net ETP cible, transferts neutralisés ·
+                axes centrés sur zéro
               </p>
             </CardBody>
           </Card>
@@ -1609,7 +1619,7 @@ export default function HrDashboardPage() {
 
       <div
         data-hr-dashboard-widget-grid
-        className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-1 grid-flow-row-dense items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-4"
       >
         {layout.map((instance) => renderWidget(instance))}
       </div>
@@ -1672,6 +1682,38 @@ export default function HrDashboardPage() {
         )}
       </Modal>
     </div>
+  );
+}
+
+function MovementCommentEditor({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft !== value) onSave(draft);
+  };
+  return (
+    <textarea
+      rows={2}
+      value={draft}
+      placeholder="Ajouter un commentaire"
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          commit();
+          event.currentTarget.blur();
+        }
+      }}
+      className="min-w-[220px] resize-y rounded-sm border border-border bg-white px-2 py-1.5 text-xs focus:border-bp-coral focus:outline-none"
+    />
   );
 }
 

@@ -91,6 +91,14 @@ function fteSign(m: WorkforceMovement): number {
   }
 }
 
+/** Impact ETP cible d'un mouvement, source unique du KPI et des séries temporelles.
+ * Les transferts restent visibles comme flux bruts dans les graphiques mais sont neutres sur
+ * l'effectif total. Les abandonnés sont exclus de la cible. */
+export function targetMovementFteImpact(movement: WorkforceMovement): number {
+  if (!isActiveMovement(movement)) return 0;
+  return fteSign(movement) * targetValue(movement, "fte");
+}
+
 export function hrProgramSummary(movements: WorkforceMovement[]): HrProgramSummary {
   let fteRealized = 0;
   let fteTarget = 0;
@@ -111,7 +119,7 @@ export function hrProgramSummary(movements: WorkforceMovement[]): HrProgramSumma
 
     // Impact ETP
     if (isRealized) fteRealized += sign * m.fte;
-    fteTarget += sign * targetValue(m, "fte");
+    fteTarget += targetMovementFteImpact(m);
     fteReforecast += sign * reforecastValue(m, "fte");
 
     // Économies salariales — on prend `savings` (déjà ≥ 0 par construction, voir hrFinancials).

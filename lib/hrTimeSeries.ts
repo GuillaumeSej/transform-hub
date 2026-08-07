@@ -1,6 +1,7 @@
 import type { MovementType, WorkforceMovement } from "@/types";
 import type { BridgeGranularity, DateRange } from "@/lib/hrEngine";
 import { isActiveMovement } from "@/lib/workforceLogic";
+import { targetMovementFteImpact } from "@/lib/hrProgramSummary";
 
 /**
  * Séries temporelles pour les 4 nouveaux graphiques Gooduelle du Dashboard RH :
@@ -320,17 +321,21 @@ export function movementRhythmSeries(
     if (!b) continue;
     const cell = map.get(b.key)!;
     // Les transferts sont affichés en volume brut signé : entrants positifs, sortants négatifs.
-    if (m.type === "Recrutement") cell[m.type] += m.fte;
-    else if (m.type === "Attrition" || m.type === "Départ forcé") cell[m.type] -= m.fte;
-    else if (m.type === "Transfert entrant") cell[m.type] += m.fte;
-    else if (m.type === "Transfert sortant") cell[m.type] -= m.fte;
+    const targetFte = m.lockedPlan?.fte ?? m.fte;
+    if (m.type === "Recrutement") cell[m.type] += targetFte;
+    else if (m.type === "Attrition" || m.type === "Départ forcé") cell[m.type] -= targetFte;
+    else if (m.type === "Transfert entrant") cell[m.type] += targetFte;
+    else if (m.type === "Transfert sortant") cell[m.type] -= targetFte;
   }
 
   let cumul = 0;
   return buckets.map((b) => {
     const byType = map.get(b.key)!;
-    // Net visuel = somme algébrique exacte des cinq barres.
-    const net = Object.values(byType).reduce((sum, value) => sum + value, 0);
+    // Net cible = même définition que le KPI Impact ETP. Les transferts sont des flux visibles
+    // mais restent neutres sur l'effectif total.
+    const net = movements
+      .filter((movement) => movement.plannedDate >= b.startISO && movement.plannedDate <= b.endISO)
+      .reduce((sum, movement) => sum + targetMovementFteImpact(movement), 0);
     cumul += net;
     return {
       label: b.label,

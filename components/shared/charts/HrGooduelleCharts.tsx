@@ -18,7 +18,6 @@ import {
   Line,
   ReferenceLine,
   ResponsiveContainer,
-  Scatter,
   Tooltip,
   XAxis,
   YAxis,
@@ -266,7 +265,6 @@ export function NetEconomyChart({
             <Cell key={i} fill={b.actualForecast >= 0 ? COLOR_NET_POS : COLOR_NET_NEG} />
           ))}
         </Bar>
-        <Bar yAxisId="period" dataKey="plan" name="Économie nette plan initial" fill={COLOR_PLAN} />
         <Line
           yAxisId="cumul"
           type="monotone"
@@ -275,16 +273,6 @@ export function NetEconomyChart({
           stroke={COLOR_NET_CUMUL}
           strokeWidth={2}
           dot={{ r: 3 }}
-        />
-        <Line
-          yAxisId="cumul"
-          type="monotone"
-          dataKey="cumulPlan"
-          name="Cumul net plan initial"
-          stroke={COLOR_PLAN}
-          strokeWidth={1.5}
-          strokeDasharray="5 4"
-          dot={false}
         />
       </ComposedChart>
     </ResponsiveContainer>
@@ -317,6 +305,20 @@ export function MovementRhythmChart({
     net: b.net,
     cumulNet: b.cumulNet,
   }));
+  const periodMax = Math.max(
+    1,
+    ...data
+      .flatMap((row) => [
+        row.Recrutement,
+        row.Attrition,
+        row["Départ forcé"],
+        row["Transfert entrant"],
+        row["Transfert sortant"],
+        row.net,
+      ])
+      .map(Math.abs)
+  );
+  const cumulMax = Math.max(1, ...data.map((row) => Math.abs(row.cumulNet)));
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -337,6 +339,8 @@ export function MovementRhythmChart({
         />
         <YAxis
           yAxisId="period"
+          domain={[-periodMax, periodMax]}
+          allowDataOverflow
           tick={{ fontSize: 10 }}
           axisLine={false}
           tickLine={false}
@@ -344,6 +348,8 @@ export function MovementRhythmChart({
         />
         <YAxis
           yAxisId="cumul"
+          domain={[-cumulMax, cumulMax]}
+          allowDataOverflow
           orientation="right"
           tick={{ fontSize: 10 }}
           axisLine={false}
@@ -391,7 +397,16 @@ export function MovementRhythmChart({
           fill={TYPE_COLORS["Transfert sortant"]}
           name="Transferts sortants"
         />
-        <Scatter yAxisId="period" dataKey="net" name="Net période" fill="#320300" />
+        <Line
+          yAxisId="period"
+          type="monotone"
+          dataKey="net"
+          name="Net ETP cible (hors transferts)"
+          stroke="transparent"
+          strokeWidth={0}
+          dot={{ r: 6, fill: "white", stroke: "#320300", strokeWidth: 2.5 }}
+          activeDot={{ r: 7, fill: "white", stroke: "#320300", strokeWidth: 3 }}
+        />
         <Line
           yAxisId="cumul"
           type="monotone"

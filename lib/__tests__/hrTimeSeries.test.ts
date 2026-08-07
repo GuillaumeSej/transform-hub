@@ -5,6 +5,7 @@ import {
   salarySavingsSeries,
   socialCostSeries,
 } from "@/lib/hrTimeSeries";
+import { hrProgramSummary } from "@/lib/hrProgramSummary";
 import type { WorkforceMovement } from "@/types";
 
 function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement {
@@ -243,6 +244,32 @@ describe("hrTimeSeries — movementRhythmSeries", () => {
     const feb = buckets.find((b) => b.label.startsWith("févr."))!;
     expect(feb.byType["Transfert entrant"]).toBe(2);
     expect(feb.byType["Transfert sortant"]).toBe(-3);
-    expect(feb.net).toBe(-1);
+    expect(feb.net).toBe(0);
+  });
+
+  it("reconciles the final cumulative target with the Impact ETP KPI", () => {
+    const range = { from: "2026-01-01", to: "2026-12-31" };
+    const movements = [
+      makeMovement({
+        id: "M1",
+        type: "Départ forcé",
+        plannedDate: "2026-02-01",
+        lockedPlan: { fte: 3, salaryImpact: -1, savings: 1, cost: 0 },
+      }),
+      makeMovement({
+        id: "M2",
+        type: "Recrutement",
+        plannedDate: "2026-03-01",
+        lockedPlan: { fte: 1.5, salaryImpact: 1, savings: 0, cost: 0 },
+      }),
+      makeMovement({
+        id: "M3",
+        type: "Transfert entrant",
+        plannedDate: "2026-04-01",
+        lockedPlan: { fte: 8, salaryImpact: 0, savings: 0, cost: 0 },
+      }),
+    ];
+    const buckets = movementRhythmSeries(movements, "month", range);
+    expect(buckets[buckets.length - 1].cumulNet).toBe(hrProgramSummary(movements).fte.target);
   });
 });

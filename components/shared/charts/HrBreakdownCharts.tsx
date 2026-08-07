@@ -7,11 +7,11 @@ import {
   Cell,
   ComposedChart,
   Legend,
+  Line,
   Pie,
   PieChart,
   ReferenceLine,
   ResponsiveContainer,
-  Scatter,
   Tooltip,
   XAxis,
   YAxis,
@@ -75,7 +75,15 @@ export function DepartmentMovementsChart({
           fill={COLOR_NEUTRAL}
           radius={[0, 0, 3, 3]}
         />
-        <Scatter dataKey="Net" name="Net période" fill="#320300" />
+        <Line
+          type="monotone"
+          dataKey="Net"
+          name="Net période"
+          stroke="transparent"
+          strokeWidth={0}
+          dot={{ r: 6, fill: "white", stroke: "#320300", strokeWidth: 2.5 }}
+          activeDot={{ r: 7, fill: "white", stroke: "#320300", strokeWidth: 3 }}
+        />
       </ComposedChart>
     </ResponsiveContainer>
   );
