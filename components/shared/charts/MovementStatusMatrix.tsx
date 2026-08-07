@@ -8,8 +8,9 @@ const STYLE: Record<MovementExecutionStatus, string> = {
   overdue: "bg-[#FF3C47]",
   dueSoon: "bg-[#FFB1B5]",
   later: "bg-[#A99E9A]",
+  abandoned: "bg-[#806659]",
 };
-const ORDER: MovementExecutionStatus[] = ["overdue", "dueSoon", "later", "realized"];
+const ORDER: MovementExecutionStatus[] = ["overdue", "dueSoon", "later", "realized", "abandoned"];
 
 /** Matrice proche du widget Santé des initiatives : une tuile par mouvement, groupée selon la
  * dimension choisie, avec statut temporel dérivé et drill-down direct. */

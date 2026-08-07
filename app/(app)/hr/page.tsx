@@ -43,10 +43,10 @@ import { DepartmentMovementsChart } from "@/components/shared/charts/HrBreakdown
 import { ExecutionStatusChart } from "@/components/shared/charts/HrExecutionCharts";
 import { MovementStatusMatrix } from "@/components/shared/charts/MovementStatusMatrix";
 import { ForcedDepartureStatusChart } from "@/components/shared/charts/ForcedDepartureStatusChart";
+import { MovementStatusByTypeChart } from "@/components/shared/charts/MovementStatusByTypeChart";
 import { HrOwnerActionTable } from "@/components/shared/HrOwnerActionTable";
 import {
   EnrPeriodCumulChart,
-  EtpBridgeChart,
   MovementRhythmChart,
   NetEconomyChart,
   SavingsPeriodCumulChart,
@@ -63,6 +63,7 @@ import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceL
 import { forcedDeparturesBySocialScheme } from "@/lib/hrSocialPlan";
 import {
   EXECUTION_LABELS,
+  movementStatusByType,
   movementStatusGroups,
   ownerActionSummary,
   salaryExecutionByDimension,
@@ -258,10 +259,6 @@ export default function HrDashboardPage() {
   const rhythmSeries = useMemo(
     () => movementRhythmSeries(filteredMovements, granularity, dateRange),
     [filteredMovements, granularity, dateRange]
-  );
-  const bridgeSummary = useMemo(
-    () => hr.fteBridgeSummary(filteredWf, dateRange),
-    [filteredWf, dateRange]
   );
   const summary = useMemo(() => hrProgramSummary(filteredMovements), [filteredMovements]);
   const movementTableRows = useMemo(
@@ -829,19 +826,60 @@ export default function HrDashboardPage() {
             </CardBody>
           </Card>
         );
-      case "etp-bridge":
+      case "movement-status-by-type": {
+        const [departmentFilter, countryFilter] = (instance.view ?? "all|all").split("|");
+        const rows = movementStatusByType(filteredMovements, {
+          ...(departmentFilter !== "all" ? { department: departmentFilter } : {}),
+          ...(countryFilter !== "all" ? { country: countryFilter } : {}),
+        });
+        const departments = Array.from(
+          new Set(filteredMovements.map((movement) => movement.department).filter(Boolean))
+        ).sort((a, b) => a.localeCompare(b, "fr"));
+        const countries = Array.from(
+          new Set(filteredMovements.map((movement) => movement.country).filter(Boolean))
+        ).sort((a, b) => a.localeCompare(b, "fr"));
+        const setFilter = (department: string, country: string) =>
+          updateLayout(setHrWidgetView(layout, instance.instanceId, `${department}|${country}`));
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title="Pont ETP — contribution des mouvements au résultat net" />
+            <CardHeader
+              title="Statut des mouvements par type"
+              actions={
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={departmentFilter}
+                    onChange={(event) => setFilter(event.target.value, countryFilter)}
+                    className="rounded-sm border border-border bg-white px-2 py-1 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
+                  >
+                    <option value="all">Tous les départements</option>
+                    {departments.map((department) => (
+                      <option key={department} value={department}>
+                        {department}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={countryFilter}
+                    onChange={(event) => setFilter(departmentFilter, event.target.value)}
+                    className="rounded-sm border border-border bg-white px-2 py-1 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
+                  >
+                    <option value="all">Tous les pays</option>
+                    {countries.map((country) => (
+                      <option key={country} value={country}>
+                        {country}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              }
+            />
             <CardBody>
-              <EtpBridgeChart summary={bridgeSummary} />
-              <p className="mt-2 text-[11px] text-tertiary">
-                Décomposition ETP de la période sélectionnée · ouverture → mouvements → clôture
-              </p>
+              <MovementStatusByTypeChart data={rows} />
             </CardBody>
           </Card>
         );
+      }
       case "department-breakdown": {
         const dimension =
           instance.view === "country"

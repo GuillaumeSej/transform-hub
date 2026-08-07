@@ -1,29 +1,27 @@
 import type { Program, WorkforceMovement } from "@/types";
 import { daysBetween } from "@/lib/dateUtils";
 import { HR_TODAY } from "@/lib/hrEngine";
-import { isActiveMovement } from "@/lib/workforceLogic";
 
-export type MovementExecutionStatus = "realized" | "overdue" | "dueSoon" | "later";
-export type MovementActionStatus = MovementExecutionStatus | "toValidate";
+export type MovementExecutionStatus = "realized" | "overdue" | "dueSoon" | "later" | "abandoned";
+export type MovementActionStatus = Exclude<MovementExecutionStatus, "abandoned"> | "toValidate";
 export type OwnerActionStatus = MovementActionStatus;
 export type ExecutionDimension = "function" | "country" | "program";
 
-export const EXECUTION_LABELS: Record<MovementActionStatus, string> = {
+export const EXECUTION_LABELS: Record<MovementExecutionStatus | "toValidate", string> = {
   realized: "Réalisé",
   overdue: "En retard",
   dueSoon: "À venir < 90 j",
   later: "À venir > 90 j",
+  abandoned: "Abandonné",
   toValidate: "À valider RH",
 };
 
-/** Statut opérationnel dérivé de la date : abandonné est hors périmètre, réalisé prime, puis
- * retard, horizon inférieur/égal à 90 jours et horizon plus lointain. */
 export function classifyMovementExecution(
   movement: WorkforceMovement,
   today: string = HR_TODAY,
   dueSoonDays = 90
-): MovementExecutionStatus | null {
-  if (!isActiveMovement(movement)) return null;
+): MovementExecutionStatus {
+  if (movement.status === "Abandonné") return "abandoned";
   if (movement.status === "Réalisé") return "realized";
   if (movement.plannedDate < today) return "overdue";
   return daysBetween(today, movement.plannedDate) <= dueSoonDays ? "dueSoon" : "later";
@@ -34,9 +32,9 @@ export function classifyMovementAction(
   today: string = HR_TODAY,
   dueSoonDays = 90
 ): MovementActionStatus | null {
-  if (!isActiveMovement(movement)) return null;
+  if (movement.status === "Abandonné") return null;
   if (movement.status === "Réalisé" && !movement.hrValidated) return "toValidate";
-  return classifyMovementExecution(movement, today, dueSoonDays);
+  return classifyMovementExecution(movement, today, dueSoonDays) as MovementActionStatus;
 }
 
 export type ExecutionImpactCell = { volume: number; net: number; count: number };
@@ -47,8 +45,8 @@ export type ExecutionImpactRow = {
   overdue: ExecutionImpactCell;
   dueSoon: ExecutionImpactCell;
   later: ExecutionImpactCell;
+  abandoned: ExecutionImpactCell;
 };
-
 const emptyCell = (): ExecutionImpactCell => ({ volume: 0, net: 0, count: 0 });
 
 function dimensionLabel(
@@ -75,7 +73,6 @@ export function executionByDimension(
   const rows = new Map<string, ExecutionImpactRow>();
   for (const movement of movements) {
     const status = classifyMovementExecution(movement, today);
-    if (!status) continue;
     const key = dimensionLabel(movement, dimension, programs);
     const row = rows.get(key) ?? {
       key,
@@ -84,6 +81,7 @@ export function executionByDimension(
       overdue: emptyCell(),
       dueSoon: emptyCell(),
       later: emptyCell(),
+      abandoned: emptyCell(),
     };
     const value =
       mode === "fte"
@@ -133,13 +131,53 @@ export function movementStatusGroups(
   const groups = new Map<string, MovementStatusCell[]>();
   for (const movement of movements) {
     const execution = classifyMovementExecution(movement, today);
-    if (!execution) continue;
     const key = dimensionLabel(movement, dimension, programs);
     groups.set(key, [...(groups.get(key) ?? []), { movement, execution }]);
   }
   return Array.from(groups.entries())
     .map(([key, cells]) => ({ key, label: key, cells }))
     .sort((a, b) => b.cells.length - a.cells.length || a.label.localeCompare(b.label, "fr"));
+}
+
+export type MovementStatusByTypeRow = {
+  type: WorkforceMovement["type"];
+  realized: number;
+  overdue: number;
+  dueSoon: number;
+  later: number;
+  abandoned: number;
+};
+const MOVEMENT_TYPE_ORDER: WorkforceMovement["type"][] = [
+  "Recrutement",
+  "Attrition",
+  "Départ forcé",
+  "Transfert entrant",
+  "Transfert sortant",
+];
+
+export function movementStatusByType(
+  movements: WorkforceMovement[],
+  filters: { department?: string; country?: string } = {},
+  today: string = HR_TODAY
+): MovementStatusByTypeRow[] {
+  const rows = new Map(
+    MOVEMENT_TYPE_ORDER.map((type) => [
+      type,
+      { type, realized: 0, overdue: 0, dueSoon: 0, later: 0, abandoned: 0 },
+    ])
+  );
+  for (const movement of movements) {
+    if (filters.department && movement.department !== filters.department) continue;
+    if (filters.country && movement.country !== filters.country) continue;
+    rows.get(movement.type)![classifyMovementExecution(movement, today)] += 1;
+  }
+  return MOVEMENT_TYPE_ORDER.map((type) => rows.get(type)!).sort((a, b) => {
+    const totalA = a.realized + a.overdue + a.dueSoon + a.later + a.abandoned;
+    const totalB = b.realized + b.overdue + b.dueSoon + b.later + b.abandoned;
+    return (
+      totalB - totalA || MOVEMENT_TYPE_ORDER.indexOf(a.type) - MOVEMENT_TYPE_ORDER.indexOf(b.type)
+    );
+  });
 }
 
 export type OwnerActionCell = { count: number; fte: number };
@@ -152,7 +190,6 @@ export type OwnerActionRow = {
   toValidate: OwnerActionCell;
   nextDueDate: string | null;
 };
-
 const emptyOwnerCell = (): OwnerActionCell => ({ count: 0, fte: 0 });
 
 export function ownerActionSummary(
@@ -180,9 +217,8 @@ export function ownerActionSummary(
       row.realized.count += 1;
       row.realized.fte += movement.fte;
     } else if (movement.status !== "Réalisé") {
-      if (!row.nextDueDate || movement.plannedDate < row.nextDueDate) {
+      if (!row.nextDueDate || movement.plannedDate < row.nextDueDate)
         row.nextDueDate = movement.plannedDate;
-      }
     }
     rows.set(owner, row);
   }

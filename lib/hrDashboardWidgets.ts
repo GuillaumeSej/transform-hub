@@ -46,7 +46,7 @@ export type HrWidgetType =
   | "social-cost-enr"
   | "net-economy"
   | "movement-rhythm"
-  | "etp-bridge"
+  | "movement-status-by-type"
   | "department-breakdown"
   | "fte-execution-status"
   | "salary-execution-status"
@@ -184,11 +184,12 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     defaultView: "department",
   },
   {
-    type: "etp-bridge",
-    label: "Pont ETP — contribution des mouvements",
-    icon: "GitBranch",
+    type: "movement-status-by-type",
+    label: "Statut des mouvements par type",
+    icon: "BarChart3",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+    defaultView: "all|all",
   },
   {
     type: "movement-rhythm",
@@ -351,9 +352,8 @@ export function resolveHrActiveCustomView(
 
 // ─── Persistance localStorage ───────────────────────────────────────────────────────────────────
 
-// v3 : ajout des vues d'exécution ETP/masse salariale et du plan d'actions RH Owner. L'application
-// n'étant pas encore utilisée, on repart volontairement du nouveau layout par défaut pour tous.
-const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v4";
+// v5 : remplacement du Pont ETP par le statut des mouvements par type.
+const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v5";
 
 /** Clé séparée pour la migration one-shot des widgets Gooduelle (Août 2026). Voir
  *  `migrateHrGooduelleWidgets` ci-dessous — ajoute les 5 nouveaux widgets aux layouts persistés
@@ -366,7 +366,7 @@ const NEW_GOODUELLE_WIDGET_TYPES: HrWidgetType[] = [
   "social-cost-enr",
   "net-economy",
   "movement-rhythm",
-  "etp-bridge",
+  "movement-status-by-type",
   "fte-execution-status",
   "salary-execution-status",
   "hr-owner-actions",

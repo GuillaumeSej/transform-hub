@@ -32,15 +32,15 @@ describe("forcedDeparturesBySocialScheme", () => {
       movement({ id: "M3", socialScheme: "RC", status: "Abandonné" }),
       movement({ id: "M4", type: "Recrutement", socialScheme: undefined }),
     ]);
-    expect(rows.find((row) => row.scheme === "PSE")).toMatchObject({ realized: 1, planned: 1 });
+    expect(rows.find((row) => row.scheme === "PSE")).toMatchObject({ realized: 1, dueSoon: 1 });
     expect(rows.find((row) => row.scheme === "RC")?.abandoned).toBe(1);
   });
 
   it("sorts schemes by total movement count descending, then by business order", () => {
     const rows = forcedDeparturesBySocialScheme([
       movement({ id: "P1", socialScheme: "PSE", status: "Réalisé" }),
-      movement({ id: "P2", socialScheme: "PSE", status: "À faire" }),
-      movement({ id: "P3", socialScheme: "PSE", status: "Planifié" }),
+      movement({ id: "P2", socialScheme: "PSE", status: "À faire", plannedDate: "2026-07-01" }),
+      movement({ id: "P3", socialScheme: "PSE", status: "Planifié", plannedDate: "2027-01-01" }),
       movement({ id: "R1", socialScheme: "RC", status: "Réalisé" }),
       movement({ id: "R2", socialScheme: "RC", status: "À faire" }),
       movement({ id: "C1", socialScheme: "RCC", status: "Planifié" }),

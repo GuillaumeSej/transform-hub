@@ -50,7 +50,9 @@ export function ForcedDepartureStatusChart({
         />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <Bar dataKey="realized" name="Réalisés" stackId="status" fill="#421799" />
-        <Bar dataKey="planned" name="Prévus / restant à réaliser" stackId="status" fill="#CCC1BD" />
+        <Bar dataKey="overdue" name="En retard" stackId="status" fill="#FF3C47" />
+        <Bar dataKey="dueSoon" name="À venir < 90 j" stackId="status" fill="#FFB1B5" />
+        <Bar dataKey="later" name="À venir > 90 j" stackId="status" fill="#A99E9A" />
         <Bar dataKey="abandoned" name="Abandonnés" stackId="status" fill="#806659" />
       </BarChart>
     </ResponsiveContainer>

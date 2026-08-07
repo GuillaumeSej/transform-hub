@@ -18,9 +18,16 @@ const STATUS_COLORS: Record<MovementExecutionStatus, string> = {
   overdue: "#FF3C47",
   dueSoon: "#FFB1B5",
   later: "#A99E9A",
+  abandoned: "#806659",
 };
 
-const STATUS_ORDER: MovementExecutionStatus[] = ["realized", "overdue", "dueSoon", "later"];
+const STATUS_ORDER: MovementExecutionStatus[] = [
+  "realized",
+  "overdue",
+  "dueSoon",
+  "later",
+  "abandoned",
+];
 
 /** Graphique partagé ETP / masse salariale par statut d'exécution. */
 export function ExecutionStatusChart({

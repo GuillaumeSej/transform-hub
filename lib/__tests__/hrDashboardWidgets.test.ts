@@ -41,8 +41,8 @@ describe("hrDashboardWidgets — buildHrDefaultLayout", () => {
     expect(index("social-cost-enr")).toBeLessThan(index("pse-summary"));
     expect(index("pse-summary")).toBeLessThan(index("savings-period-cumul"));
     expect(index("savings-period-cumul")).toBeLessThan(index("net-economy"));
-    expect(index("department-breakdown") + 1).toBe(index("etp-bridge"));
-    expect(index("movement-rhythm")).toBe(index("etp-bridge") + 1);
+    expect(index("department-breakdown") + 1).toBe(index("movement-status-by-type"));
+    expect(index("movement-rhythm")).toBe(index("movement-status-by-type") + 1);
     expect(layout.find((row) => row.type === "movement-rhythm")?.span).toBe("XL");
   });
 

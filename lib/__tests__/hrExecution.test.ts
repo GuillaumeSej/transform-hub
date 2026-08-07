@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyMovementAction,
   classifyMovementExecution,
+  movementStatusByType,
   movementStatusGroups,
   ownerActionSummary,
   salaryExecutionByDimension,
@@ -48,7 +49,9 @@ describe("movement execution classification", () => {
     expect(classifyMovementExecution(movement({ plannedDate: "2026-09-21" }), "2026-06-22")).toBe(
       "later"
     );
-    expect(classifyMovementExecution(movement({ status: "Abandonné" }), "2026-06-22")).toBeNull();
+    expect(classifyMovementExecution(movement({ status: "Abandonné" }), "2026-06-22")).toBe(
+      "abandoned"
+    );
   });
 
   it("flags realized movements awaiting RH validation", () => {
@@ -65,8 +68,8 @@ describe("execution aggregations", () => {
       "program",
       programs
     );
-    expect(groups[0].cells).toHaveLength(1);
-    expect(groups[0].cells[0].execution).toBe("realized");
+    expect(groups[0].cells).toHaveLength(2);
+    expect(groups[0].cells.map((cell) => cell.execution).sort()).toEqual(["abandoned", "realized"]);
   });
 
   it("uses the persisted salaryImpact column for every execution status", () => {
@@ -117,5 +120,21 @@ describe("ownerActionSummary", () => {
     expect(rows[0].owner).toBe("Nadia");
     expect(rows[0].overdue.count).toBe(1);
     expect(rows[0].dueSoon.count).toBe(1);
+  });
+
+  it("groups all five movement types and five statuses with department/country filters", () => {
+    const rows = movementStatusByType(
+      [
+        movement({ id: "M1", type: "Recrutement", status: "Réalisé", department: "IT" }),
+        movement({ id: "M2", type: "Attrition", status: "Abandonné", department: "IT" }),
+        movement({ id: "M3", type: "Départ forcé", plannedDate: "2026-06-01", department: "HR" }),
+      ],
+      { department: "IT", country: "France" },
+      "2026-06-22"
+    );
+    expect(rows.find((row) => row.type === "Recrutement")?.realized).toBe(1);
+    expect(rows.find((row) => row.type === "Attrition")?.abandoned).toBe(1);
+    expect(rows.find((row) => row.type === "Départ forcé")?.overdue).toBe(0);
+    expect(rows).toHaveLength(5);
   });
 });

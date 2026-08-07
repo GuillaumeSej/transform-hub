@@ -7,7 +7,7 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import * as hr from "@/lib/hrEngine";
-import { classifyMovementAction, EXECUTION_LABELS } from "@/lib/hrExecution";
+import { classifyMovementExecution, EXECUTION_LABELS } from "@/lib/hrExecution";
 import { fmtCurr } from "@/lib/engine";
 import { Button } from "@/components/shared/Button";
 import { KPICard } from "@/components/shared/KPICard";
@@ -178,10 +178,7 @@ export default function BaseEtpPage() {
           function: m.function ?? "—",
           programId: m.programId ?? "—",
           hrOwner: m.hrOwner,
-          executionStatus:
-            classifyMovementAction(m) === null
-              ? "Abandonné"
-              : EXECUTION_LABELS[classifyMovementAction(m)!],
+          executionStatus: EXECUTION_LABELS[classifyMovementExecution(m)],
           fte: m.fte,
           plannedDate: m.plannedDate,
           actualDate: m.actualDate ?? "—",
