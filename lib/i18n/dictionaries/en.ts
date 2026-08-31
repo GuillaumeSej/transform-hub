@@ -64,8 +64,6 @@ const en: Record<string, string> = {
   "login.error": "Incorrect username or password.",
   "login.errorNotConfigured":
     "Authentication unavailable — email/password sign-in is not enabled on Firebase. Contact an administrator.",
-  "login.demoAccountsTitle": "Demo accounts (password: test123)",
-  "login.demoAccountsNote": "All demo accounts (except admin) belong to Acme Corp.",
 
   // ─── topbar ───────────────────────────────────────────────────────────────
   "topbar.leverDetail": "Initiative detail",

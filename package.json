@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "create-admin": "node scripts/create-admin.js"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.6",

@@ -1,24 +1,19 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
-import { ensureAuthUsersSeeded, signInUser, TEST_USERS } from "@/lib/auth";
+import { signInUser } from "@/lib/auth";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
 import { assetPath } from "@/lib/utils";
 
 /**
- * Écran de connexion — identifiant + mot de passe. Comptes de démo uniquement (voir
- * lib/auth.ts) : 8 comptes de test, un par rôle, mot de passe "test123" pour tous.
- *
- * L'aide-mémoire des comptes de démo n'est plus affiché par défaut (une liste de
- * comptes/mot de passe sur un écran de login est rédhibitoire face à un client) : il
- * n'apparaît qu'avec `?demo=1` dans l'URL, réservé aux démos internes BearingPoint.
- * Lu via window.location plutôt que useSearchParams : l'export statique (output: export)
- * exigerait un boundary <Suspense> pour ce hook, inutilement lourd ici.
+ * Écran de connexion — identifiant + mot de passe contre Firebase Auth (voir lib/auth.ts).
+ * Aucun compte n'est pré-seedé : le premier compte admin se crée via `npm run create-admin`
+ * (scripts/create-admin.js), les suivants via le panneau Admin > Utilisateurs une fois connecté.
  */
 export default function LoginPage() {
   const { login } = useRole();
@@ -27,22 +22,6 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [showDemoAccounts, setShowDemoAccounts] = useState(false);
-
-  useEffect(() => {
-    setShowDemoAccounts(new URLSearchParams(window.location.search).get("demo") === "1");
-  }, []);
-
-  // /login est hors d'AppShell (accessible avant toute connexion) : c'est donc ICI, et pas
-  // seulement dans useStorage.ts (qui ne tourne qu'une fois connecté), qu'il faut garantir que
-  // les comptes de démo existent réellement côté Firebase Auth — sinon un utilisateur qui arrive
-  // directement sur /login (première visite) ne pourrait jamais se connecter. Idempotent, sans
-  // effet sur les visites suivantes.
-  useEffect(() => {
-    ensureAuthUsersSeeded().catch((err) => {
-      console.error("[LoginPage] Échec du seed des comptes de démo Firebase Auth :", err);
-    });
-  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -152,26 +131,6 @@ export default function LoginPage() {
             {t("login.submit")}
           </button>
         </form>
-
-        {showDemoAccounts && (
-          <div className="mt-5 border border-white/10 bg-white/[0.02] p-4 text-[11px] text-white/40">
-            <p className="mb-2 font-semibold uppercase tracking-[0.14em] text-white/50">
-              {t("login.demoAccountsTitle")}
-            </p>
-            <p className="mb-2 text-white/50">{t("login.demoAccountsNote")}</p>
-            <ul className="space-y-0.5">
-              {TEST_USERS.map((u) => (
-                <li key={u.username} className="flex justify-between gap-3">
-                  <span className="font-mono text-white/60">{u.username}</span>
-                  <span>
-                    {t(roles[u.role].short)} ·{" "}
-                    {u.companyId === "c1" ? "Acme Corp" : t("topbar.global")}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </div>
   );

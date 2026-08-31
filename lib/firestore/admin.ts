@@ -22,7 +22,6 @@ import type {
   Program,
 } from "@/types";
 import { hierarchyDomain } from "@/lib/hierarchyLogic";
-import { TEST_USERS } from "@/lib/auth";
 import { DEMO_HIERARCHY_NODES } from "@/data/mockData";
 
 // --- Companies ---
@@ -306,10 +305,6 @@ export async function ensureAdminSeeded(): Promise<void> {
     await setDoc(doc(programsCol(), TEST_PROGRAM_3.id), TEST_PROGRAM_3);
   }
 
-  // Seed test users if missing
-  const usersSnap = await getDocs(usersCol());
-  if (usersSnap.empty) {
-    const batch = TEST_USERS.map((u) => setDoc(doc(usersCol(), u.username), u));
-    await Promise.all(batch);
-  }
+  // Les comptes utilisateurs ne sont plus seedés automatiquement — voir scripts/create-admin.js
+  // pour créer le premier compte admin, puis le panneau Admin > Utilisateurs pour les suivants.
 }

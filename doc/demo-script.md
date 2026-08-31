@@ -11,22 +11,16 @@ et les leviers à utiliser pour illustrer chaque fonctionnalité. Deux parcours 
 
 ## 1. Connexion
 
-URL : page de login BeTrack. Identifiant au format `prenom.nom`, mot de passe `test123` pour tous
-les comptes de démo.
+URL : page de login BeTrack. Aucun compte n'est pré-seedé — préparation avant la démo :
 
-| Identifiant    | Rôle             | Entreprise | Ce que ce compte voit                                           |
-| -------------- | ---------------- | ---------- | --------------------------------------------------------------- |
-| `admin`        | Super-admin      | Toutes     | Gestion multi-entreprises, création de compagnies               |
-| `admin.c1`     | Admin entreprise | Acme Corp  | Tout Acme + configuration (utilisateurs, arborescences, risque) |
-| `test.cto`     | CTO              | Acme Corp  | Vue exécutive complète, tous les leviers                        |
-| `test.sponsor` | Sponsor          | Acme Corp  | Leviers dont il est sponsor                                     |
-| `test.lever`   | Lever Owner      | Acme Corp  | Uniquement ses propres leviers                                  |
-| `test.finance` | Finance          | Acme Corp  | Module Finance, agrégats P&L                                    |
-| `test.hr`      | RH               | Acme Corp  | Dashboard RH, base ETP                                          |
-| `test.ops`     | Ops              | Acme Corp  | Vue opérationnelle                                              |
+1. Créer le premier compte admin : `npm run create-admin` (prompts interactifs, ou
+   `npm run create-admin -- --username admin --password "..." --first Admin --last BeTrack`).
+2. Se connecter avec ce compte, puis créer les comptes de rôle nécessaires à la démo via
+   **Admin > Utilisateurs** (un par rôle : CTO, Sponsor, Lever Owner, Finance, RH, Ops...),
+   rattachés à l'entreprise **Acme Corp** (déjà peuplée par le seed de démo automatique).
 
-Pour la démo "from scratch", utiliser `admin` (super-admin, aucune entreprise associée) afin de
-créer une nouvelle entreprise en direct.
+Pour la démo "from scratch", se connecter avec le compte super-admin (aucune entreprise associée)
+afin de créer une nouvelle entreprise en direct.
 
 ---
 

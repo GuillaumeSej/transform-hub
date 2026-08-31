@@ -752,8 +752,6 @@ export default function DashboardPage() {
     realized: d.realized,
   }));
 
-  // Legacy pnlMap kept for non-dashboard consumers (finance page, etc.)
-  // const pnlMap = engine.pnlImpact(pnlFilteredData);
   // ─── Layout du dashboard (widgets) ────────────────────────────────────────────────────────
   // Personnalisation d'affichage purement locale (localStorage, par navigateur) — voir
   // lib/dashboardWidgets.ts. Le layout par défaut reproduit exactement l'ancien ordre/tailles
