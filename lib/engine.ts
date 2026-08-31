@@ -19,7 +19,8 @@ import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-con
 import type { LeverStatus } from "@/types";
 
 /**
- * Portage fidèle du moteur de calcul `ENGINE` du prototype de Guillaume (legacy/index.html).
+ * Portage fidèle du moteur de calcul `ENGINE` du prototype HTML historique de Guillaume
+ * (depuis retiré du repo).
  * Fonctions pures : prennent les données en paramètre plutôt que de lire un état global mutable.
  */
 
