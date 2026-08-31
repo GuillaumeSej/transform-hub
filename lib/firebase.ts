@@ -40,8 +40,8 @@ export function getAuthInstance(): Auth {
  * ouverte serait remplacée pendant un seed en arrière-plan). L'app secondaire est détruite dans
  * tous les cas (succès ou échec) pour ne pas fuiter de ressources.
  *
- * Utilisé par ensureAuthUsersSeeded() (lib/auth.ts, seed des comptes de démo) et par
- * UsersPanel.tsx lors de la création d'un utilisateur d'entreprise par un admin.
+ * Utilisé par UsersPanel.tsx lors de la création d'un utilisateur d'entreprise par un admin, et
+ * par scripts/create-admin.js lors du bootstrap du premier compte admin.
  */
 export async function withSecondaryAuth<T>(fn: (secondaryAuth: Auth) => Promise<T>): Promise<T> {
   const secondaryApp: FirebaseApp = initializeApp(firebaseConfig, `auth-secondary-${Date.now()}`);

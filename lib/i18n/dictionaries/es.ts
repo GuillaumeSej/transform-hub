@@ -60,8 +60,6 @@ const es: Record<string, string> = {
   "login.error": "Usuario o contraseña incorrectos.",
   "login.errorNotConfigured":
     "Autenticación no disponible — el inicio de sesión con correo/contraseña no está activado en Firebase. Contacte con un administrador.",
-  "login.demoAccountsTitle": "Cuentas de demostración (contraseña: test123)",
-  "login.demoAccountsNote": "Todas las cuentas de demo (excepto admin) pertenecen a Acme Corp.",
 
   // ─── topbar ───────────────────────────────────────────────────────────────
   "topbar.leverDetail": "Detalle de la palanca",
