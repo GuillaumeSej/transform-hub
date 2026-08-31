@@ -1,6 +1,7 @@
 import type { Role, RoleDefinition } from "@/types";
 
-/** Portage fidèle de `roles` (legacy/index.html) — nav différente par persona.
+/** Portage fidèle de `roles` (prototype HTML historique, depuis retiré du repo) — nav différente
+ * par persona.
  *
  * i18n : `label`/`short` (au niveau du rôle) et chaque `nav[].label` sont désormais des CLÉS de
  * traduction (voir `lib/i18n/dictionaries/*.ts`), pas des libellés littéraux — ce fichier reste la

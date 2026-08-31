@@ -8,7 +8,8 @@ import type {
 import type { LegacySubLever } from "@/lib/mockActionMigration";
 
 /**
- * Seed initial — copié fidèlement depuis le prototype de Guillaume (legacy/index.html, `const DB`).
+ * Seed initial — copié fidèlement depuis `const DB` du prototype HTML historique de Guillaume
+ * (depuis retiré du repo).
  * Ne jamais importer ce module directement dans une page/composant : passer par le hook
  * useBeTrackData (lib/hooks/useStorage.ts), qui seed Firestore avec ces données au premier
  * démarrage puis n'y touche plus.
