@@ -45,6 +45,27 @@ service cloud.firestore {
     match /alertStates/{docId} {
       allow read, write: if true;
     }
+    // Plan Stratégique (voir lib/firestore/{strategicAxes,chantiers,chantierActions,
+    // maturityStageConfigs,indicators,indicatorMeasurements}.ts). Même ouverture que le reste de
+    // la démo — sans ces entrées, le `match /{document=**}` ci-dessous les refuserait toutes.
+    match /strategicAxes/{docId} {
+      allow read, write: if true;
+    }
+    match /chantiers/{docId} {
+      allow read, write: if true;
+    }
+    match /chantierActions/{docId} {
+      allow read, write: if true;
+    }
+    match /maturityStageConfigs/{docId} {
+      allow read, write: if true;
+    }
+    match /indicators/{docId} {
+      allow read, write: if true;
+    }
+    match /indicatorMeasurements/{docId} {
+      allow read, write: if true;
+    }
     match /{document=**} {
       allow read, write: if false;
     }

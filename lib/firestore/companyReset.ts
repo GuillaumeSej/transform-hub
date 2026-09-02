@@ -1,7 +1,12 @@
 import { collection, doc, getDocs, query, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { AuditEntry, Comment, Lever } from "@/types";
-import { planCompanyScopedReset, type CompanyResetPlan } from "@/lib/companyResetLogic";
+import {
+  planCompanyScopedReset,
+  STRATEGIC_COLLECTIONS,
+  type CompanyResetPlan,
+  type StrategicCollection,
+} from "@/lib/companyResetLogic";
 
 /**
  * I/O Firestore pour le reset "scopé entreprise" du hub `/admin/companies/detail` (onglet Base de
@@ -51,10 +56,15 @@ export async function planCompanyReset(companyId: string): Promise<CompanyResetP
  * de cette entreprise (voir planCompanyScopedReset — les entrées non attribuables, ex. mouvements
  * RH, sont conservées telles quelles). N'écrit jamais sur les documents d'une autre entreprise. */
 export async function resetCompanyData(companyId: string): Promise<CompanyResetPlan> {
-  const [leverSnap, legacySubLeverSnap, hierarchyNodesSnap] = await Promise.all([
+  const [leverSnap, legacySubLeverSnap, hierarchyNodesSnap, ...strategicSnaps] = await Promise.all([
     getDocs(query(leversCol(), where("companyId", "==", companyId))),
     getDocs(query(subLeversCol(), where("companyId", "==", companyId))),
     getDocs(query(hierarchyNodesCol(), where("companyId", "==", companyId))),
+    // Collections du Plan Stratégique — toutes taguées `companyId` sans exception, donc purgées
+    // par simple requête scopée (voir STRATEGIC_COLLECTIONS).
+    ...STRATEGIC_COLLECTIONS.map((name) =>
+      getDocs(query(collection(db, name), where("companyId", "==", companyId)))
+    ),
   ]);
 
   const { comments, audit } = await readLeverMetaShared();
@@ -70,5 +80,22 @@ export async function resetCompanyData(companyId: string): Promise<CompanyResetP
   batch.set(auditDoc(), { entries: plan.remainingAudit });
   await batch.commit();
 
-  return plan;
+  // Les collections stratégiques sont purgées dans des lots SÉPARÉS et découpés : les mesures
+  // d'indicateurs sont la seule collection de ce périmètre à croître avec le temps (une par
+  // indicateur et par période) et peuvent à elles seules dépasser la limite de 500 écritures d'un
+  // writeBatch Firestore — les agréger au lot principal ferait échouer tout le reset.
+  const strategicRemoved = {} as Record<StrategicCollection, number>;
+  for (let i = 0; i < STRATEGIC_COLLECTIONS.length; i++) {
+    const name = STRATEGIC_COLLECTIONS[i];
+    const docs = strategicSnaps[i].docs;
+    strategicRemoved[name] = docs.length;
+    const CHUNK = 500;
+    for (let start = 0; start < docs.length; start += CHUNK) {
+      const chunkBatch = writeBatch(db);
+      docs.slice(start, start + CHUNK).forEach((d) => chunkBatch.delete(d.ref));
+      await chunkBatch.commit();
+    }
+  }
+
+  return { ...plan, strategicRemoved };
 }

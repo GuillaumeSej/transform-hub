@@ -7,7 +7,17 @@ import type { Role, RoleDefinition } from "@/types";
  * traduction (voir `lib/i18n/dictionaries/*.ts`), pas des libellés littéraux — ce fichier reste la
  * seule source de vérité pour la structure de nav par rôle, résolue via `t()` au point de
  * consommation (Sidebar.tsx, Topbar.tsx, AppShell.tsx, login/page.tsx). Les `id` restent des
- * identifiants internes stables, jamais traduits. */
+ * identifiants internes stables, jamais traduits.
+ *
+ * Type de programme : un item peut être restreint à certains types de programme
+ * (`NavItem.programTypes`) et/ou changer de libellé selon le type actif
+ * (`NavItem.labelByProgramType`) — voir `lib/hooks/useActiveProgram.tsx`. Un item SANS
+ * `programTypes` reste visible pour tous les types (comportement historique). Concrètement :
+ *   - `"levers"` sert les DEUX plans (même route `/levers`, routeur interne selon le type),
+ *     simplement relabelé « Axes stratégiques » en mode stratégique ;
+ *   - `"kpi"` (nouveau) n'existe que pour un Plan Stratégique ;
+ *   - Finance / RH / Base ETP / Workstreams / Opérations n'ont pas de sens sans leviers et sont
+ *     donc réservés au Plan Performance. */
 export const roles: Record<Role, RoleDefinition> = {
   admin: {
     label: "roles.admin.label",
@@ -31,48 +41,106 @@ export const roles: Record<Role, RoleDefinition> = {
     short: "roles.cto.short",
     nav: [
       { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
-      { id: "levers", icon: "Target", label: "nav.leverLibrary" },
-      { id: "finance", icon: "LineChart", label: "nav.financeModule" },
-      { id: "hr", icon: "Users", label: "nav.hrDashboard" },
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      {
+        id: "finance",
+        icon: "LineChart",
+        label: "nav.financeModule",
+        programTypes: ["performance"],
+      },
+      { id: "hr", icon: "Users", label: "nav.hrDashboard", programTypes: ["performance"] },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", programTypes: ["performance"] },
     ],
   },
   sponsor: {
     label: "roles.sponsor.label",
     short: "roles.sponsor.short",
     nav: [
-      { id: "workstreams", icon: "Layers", label: "nav.workstreamDashboard" },
-      { id: "levers", icon: "Target", label: "nav.leverPipeline" },
+      {
+        id: "workstreams",
+        icon: "Layers",
+        label: "nav.workstreamDashboard",
+        programTypes: ["performance"],
+      },
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverPipeline",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
     ],
   },
   lever: {
     label: "roles.lever.label",
     short: "roles.lever.short",
-    nav: [{ id: "levers", icon: "Target", label: "nav.myLevers" }],
+    nav: [
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.myLevers",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+    ],
   },
   finance: {
     label: "roles.finance.label",
     short: "roles.finance.short",
     nav: [
-      { id: "finance", icon: "LineChart", label: "nav.financeModule" },
-      { id: "levers", icon: "Target", label: "nav.leverLibrary" },
+      {
+        id: "finance",
+        icon: "LineChart",
+        label: "nav.financeModule",
+        programTypes: ["performance"],
+      },
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
     ],
   },
   hr: {
     label: "roles.hr.label",
     short: "roles.hr.short",
     nav: [
-      { id: "hr", icon: "PieChart", label: "nav.hrDashboard" },
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
-      { id: "levers", icon: "Target", label: "nav.leverLibrary" },
+      { id: "hr", icon: "PieChart", label: "nav.hrDashboard", programTypes: ["performance"] },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", programTypes: ["performance"] },
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
     ],
   },
   ops: {
     label: "roles.ops.label",
     short: "roles.ops.short",
     nav: [
-      { id: "operations", icon: "Factory", label: "nav.operationsModule" },
-      { id: "levers", icon: "Target", label: "nav.linkedLevers" },
+      {
+        id: "operations",
+        icon: "Factory",
+        label: "nav.operationsModule",
+        programTypes: ["performance"],
+      },
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.linkedLevers",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
     ],
   },
 };
@@ -81,6 +149,7 @@ export const PAGE_ROUTES: Record<string, string> = {
   dashboard: "/dashboard",
   workstreams: "/workstreams",
   levers: "/levers",
+  kpi: "/kpi",
   finance: "/finance",
   hr: "/hr",
   "hr-etp": "/hr/etp",

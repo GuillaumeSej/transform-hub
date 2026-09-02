@@ -12,6 +12,18 @@
  *  - dashboard.*   Executive Dashboard (titres, KPI, widgets, mode édition)
  *  - levers.*      Page Levers (bibliothèque/pipeline/mes leviers) + LeverForm
  *  - topbar.*      Fil d'ariane (Topbar) + éléments de chrome partagés
+ *
+ * Plan Stratégique (second type de programme — axes/chantiers/indicateurs) :
+ *  - indicatorStatus.*    Statut de risque d'un indicateur (sur la trajectoire / à risque)
+ *  - axisStage.*          Libellés génériques d'étape de maturité, HORS référentiel configurable
+ *                         `MaturityStageConfig` (dont les libellés sont saisis par l'admin et ne
+ *                         passent donc jamais par ce dictionnaire)
+ *  - strategicAxes.*      Page « Axes stratégiques » + fiche détail d'un axe
+ *  - kpi.*                Page KPI (saisie de mesures, édition d'objectif)
+ *  - strategicDashboard.* Dashboard stratégique + son registre de widgets
+ *  - adminIndicators.*    Onglet Admin « Indicateurs » (définition, responsables)
+ *  - adminPrograms.*      Fiche de configuration d'un programme stratégique dans l'admin
+ *                         (bouton « Gérer » + ses deux onglets internes)
  */
 const fr: Record<string, string> = {
   // ─── common ───────────────────────────────────────────────────────────────
@@ -34,6 +46,11 @@ const fr: Record<string, string> = {
   "nav.hrDashboard": "Dashboard RH",
   "nav.hrEtp": "Base ETP",
   "nav.operationsModule": "Module Opérations",
+  // Plan Stratégique : `nav.axes` relabelle l'item "levers" (même route /levers), `nav.kpi` est
+  // un item propre au Plan Stratégique — voir lib/nav-config.ts.
+  "nav.axes": "Axes stratégiques",
+  "nav.kpi": "Indicateurs (KPI)",
+  "nav.indicators": "Indicateurs",
   "nav.companies": "Entreprises",
   "nav.users": "Utilisateurs",
   "nav.lifecycle": "Cycle de vie",
@@ -74,11 +91,16 @@ const fr: Record<string, string> = {
 
   // ─── topbar ───────────────────────────────────────────────────────────────
   "topbar.leverDetail": "Détail du levier",
+  // Même route /levers/detail, fiche d'axe quand le programme actif est stratégique.
+  "topbar.axisDetail": "Détail de l'axe",
   "topbar.alerts": "Alertes",
   "topbar.logout": "Se déconnecter",
   "topbar.global": "Global",
   "topbar.language": "Langue",
   "topbar.menu": "Menu",
+  // Sélecteur de programme actif (voir components/shared/ProgramSwitcher.tsx) — affiché
+  // uniquement quand l'utilisateur a plusieurs programmes.
+  "topbar.program": "Programme actif",
 
   // ─── dashboard ────────────────────────────────────────────────────────────
   "dashboard.title": "Tableau de bord exécutif",
@@ -1100,6 +1122,272 @@ const fr: Record<string, string> = {
     "Vous avez des modifications non enregistrées sur cette page. Si vous quittez maintenant, elles seront perdues.",
   "unsavedChanges.stay": "Rester sur cette page",
   "unsavedChanges.leave": "Quitter sans enregistrer",
+
+  // ─── Plan Stratégique — statut d'un indicateur ────────────────────────────
+  "indicatorStatus.onTrack": "Sur la trajectoire",
+  "indicatorStatus.atRisk": "À risque",
+
+  // ─── Plan Stratégique — étapes de maturité (libellés GÉNÉRIQUES) ──────────
+  // Les libellés d'étape réels viennent de `MaturityStageConfig.label` (saisis par l'admin, par
+  // programme) et ne sont donc jamais traduits ici. Ces clés ne couvrent que le chrome autour.
+  "axisStage.label": "Étape de maturité",
+  "axisStage.terminal": "Étape terminale",
+  "axisStage.unknown": "Étape inconnue",
+  "axisStage.none": "Aucune étape configurée",
+
+  // ─── Plan Stratégique — page Axes + fiche détail d'un axe ─────────────────
+  // Portefeuille
+  "strategicAxes.title": "Axes stratégiques",
+  "strategicAxes.count": "axes",
+  "strategicAxes.chantiersCount": "chantiers",
+  "strategicAxes.indicatorsCount": "indicateurs",
+  "strategicAxes.atRiskCount": "à risque",
+  "strategicAxes.newAxis": "Nouvel axe",
+  "strategicAxes.newAxisModalTitle": "Nouvel axe stratégique",
+  "strategicAxes.createAxis": "Créer l'axe",
+  "strategicAxes.axisCreated": "Axe créé",
+  "strategicAxes.axisUpdated": "Axe mis à jour",
+  "strategicAxes.cards": "Cartes",
+  "strategicAxes.kanban": "Kanban",
+  "strategicAxes.kanbanEmptyColumn": "Aucun axe",
+  "strategicAxes.noStage": "Sans étape",
+  "strategicAxes.filterStage": "Étape de maturité",
+  "strategicAxes.filterOwner": "Responsable",
+  "strategicAxes.unassigned": "Non assigné",
+  "strategicAxes.loading": "Chargement des axes…",
+  "strategicAxes.empty": "Aucun axe stratégique dans ce programme.",
+  "strategicAxes.emptyHint": "Créez un premier axe pour décliner la vision en chantiers concrets.",
+  "strategicAxes.noProgram": "Aucun programme stratégique actif.",
+  // Fiche détail d'un axe
+  "strategicAxes.back": "Retour aux axes",
+  "strategicAxes.notFound": "Axe introuvable.",
+  "strategicAxes.owner": "Responsable",
+  "strategicAxes.editAxis": "Modifier l'axe",
+  "strategicAxes.editAxisModalTitle": "Modifier l'axe",
+  "strategicAxes.stageUpdated": "Étape mise à jour",
+  "strategicAxes.summaryTracked": "Indicateurs suivis",
+  "strategicAxes.dependencyAlerts": "Alertes de dépendance entre chantiers",
+  "strategicAxes.dependencyDelay": "jours",
+  // Gantt des chantiers
+  "strategicAxes.ganttSection": "Chantiers de l'axe",
+  "strategicAxes.ganttHint":
+    "Un bloc = un chantier, borné par sa première et sa dernière action. Cliquez sur un bloc ou sur une action pour ouvrir le détail du chantier et ses livrables.",
+  "strategicAxes.noChantiers": "Aucun chantier sur cet axe.",
+  "strategicAxes.chantierUnplanned": "Chantiers sans action planifiée",
+  "strategicAxes.chantierNoDates": "Pas encore de date — ajoutez une action",
+  "strategicAxes.actionsSuffix": "actions",
+  "strategicAxes.newChantier": "Nouveau chantier",
+  "strategicAxes.newChantierModalTitle": "Nouveau chantier",
+  "strategicAxes.createChantier": "Créer le chantier",
+  "strategicAxes.chantierCreated": "Chantier créé",
+  "strategicAxes.chantierDeleted": "Chantier supprimé",
+  "strategicAxes.deleteChantier": "Supprimer le chantier",
+  "strategicAxes.confirmDeleteChantier": "Confirmer la suppression du chantier et de ses actions",
+  // Pop-up chantier / actions / livrables
+  "strategicAxes.chantierModalTitle": "Détail du chantier",
+  "strategicAxes.dependsOn": "Dépend de",
+  "strategicAxes.chantierActions": "Actions du chantier",
+  "strategicAxes.noActions": "Aucune action sur ce chantier.",
+  "strategicAxes.newAction": "Nouvelle action",
+  "strategicAxes.editAction": "Modifier",
+  "strategicAxes.actionCreated": "Action créée",
+  "strategicAxes.actionUpdated": "Action mise à jour",
+  "strategicAxes.actionDeleted": "Action supprimée",
+  "strategicAxes.confirmDelete": "Confirmer",
+  "strategicAxes.actionName": "Nom de l'action",
+  "strategicAxes.actionOwner": "Responsable",
+  "strategicAxes.actionStart": "Début",
+  "strategicAxes.actionEnd": "Fin",
+  "strategicAxes.actionStage": "Étape",
+  "strategicAxes.actionDescription": "Description",
+  "strategicAxes.deliverables": "Livrables attendus",
+  "strategicAxes.deliverablesHint": "Un livrable par ligne.",
+  "strategicAxes.noDeliverables": "Aucun livrable renseigné.",
+  // Indicateurs — LECTURE SEULE ici, la saisie vit sur la page KPI
+  "strategicAxes.indicatorsSection": "Indicateurs de l'axe",
+  "strategicAxes.indicatorsReadOnly":
+    "Lecture seule — la saisie des mesures et l'ajustement des objectifs se font sur la page Indicateurs (KPI).",
+  "strategicAxes.macroIndicators": "Indicateurs macro de l'axe",
+  "strategicAxes.noIndicators": "Aucun indicateur rattaché à cet axe.",
+  "strategicAxes.objective": "Objectif",
+  "strategicAxes.latestValue": "Dernière valeur",
+  "strategicAxes.noMeasurement": "Aucune mesure",
+  "strategicAxes.chartValue": "Valeur",
+  "strategicAxes.chartObjective": "Objectif",
+  "strategicAxes.chartEmpty": "Aucune mesure enregistrée.",
+  "strategicAxes.freq.monthly": "Mensuel",
+  "strategicAxes.freq.quarterly": "Trimestriel",
+  "strategicAxes.freq.semiannual": "Semestriel",
+  "strategicAxes.freq.annual": "Annuel",
+
+  // ─── Plan Stratégique — page KPI (saisie de mesures, édition d'objectif) ───
+  "kpi.title": "Indicateurs (KPI)",
+  "kpi.subtitle":
+    "Renseignez ici la valeur de vos indicateurs pour la période en cours et ajustez leur objectif au fil de l'eau. Seuls les rôles responsables — et les comptes explicitement autorisés — peuvent saisir un indicateur donné.",
+  "kpi.loading": "Chargement des indicateurs…",
+  "kpi.noProgram": "Aucun programme actif.",
+  "kpi.notStrategic":
+    "La page Indicateurs n'est disponible que pour un programme de type Plan Stratégique.",
+  "kpi.empty": "Aucun indicateur défini pour ce programme.",
+  "kpi.emptyHint":
+    "Les indicateurs se définissent depuis l'administration du programme (onglet Indicateurs).",
+  "kpi.summary.tracked": "Indicateurs suivis",
+  "kpi.summary.onTrack": "Sur la trajectoire",
+  "kpi.summary.atRisk": "À risque",
+  "kpi.summary.total": "Cumul des indicateurs",
+  "kpi.summary.indicatorsSuffix": "indicateurs",
+  "kpi.axisUnknown": "Indicateurs sans axe rattaché",
+  "kpi.macroIndicators": "Indicateurs de l'axe",
+  "kpi.chantier": "Chantier",
+  "kpi.kind.quantitative": "Quantitatif",
+  "kpi.kind.qualitative": "Qualitatif",
+  "kpi.frequency.monthly": "Mensuel",
+  "kpi.frequency.quarterly": "Trimestriel",
+  "kpi.frequency.semiannual": "Semestriel",
+  "kpi.frequency.annual": "Annuel",
+  "kpi.chart.value": "Valeur",
+  "kpi.chart.objective": "Objectif",
+  "kpi.chart.empty": "Aucune mesure enregistrée.",
+  "kpi.latestValue": "Dernière valeur",
+  "kpi.noMeasurement": "Aucune mesure enregistrée",
+  "kpi.reportedBy": "saisi par",
+  "kpi.objective": "Objectif / seuil",
+  "kpi.objectiveText": "Objectif (description)",
+  "kpi.objectiveValue": "Valeur cible",
+  "kpi.direction": "Sens d'amélioration",
+  "kpi.direction.up": "Plus haut vaut mieux",
+  "kpi.direction.down": "Plus bas vaut mieux",
+  "kpi.editObjective": "Modifier",
+  "kpi.objectiveSaved": "Objectif mis à jour",
+  "kpi.objectiveRequired": "Renseignez la description de l'objectif.",
+  "kpi.addMeasurement": "Ajouter une mesure",
+  "kpi.period": "Période",
+  "kpi.periodHint":
+    "Période pré-remplie d'après la fréquence de reporting — modifiable pour rattraper une période passée.",
+  "kpi.value": "Valeur",
+  "kpi.noteOptional": "Commentaire (optionnel)",
+  "kpi.qualitativeNote": "Observation de la période",
+  "kpi.measurementSaved": "Mesure enregistrée",
+  "kpi.saveError": "Échec de l'enregistrement",
+  "kpi.periodRequired": "Renseignez une période.",
+  "kpi.valueRequired": "Renseignez une valeur ou un commentaire.",
+  "kpi.valueInvalid": "Valeur numérique invalide.",
+  "kpi.readOnly": "Lecture seule — vous n'êtes pas autorisé à renseigner cet indicateur.",
+  "kpi.authorizedRoles": "Rôles autorisés",
+  "kpi.authorizedUsers": "Comptes autorisés en plus",
+
+  // ─── Type de programme (sélecteur de programme du Topbar) ─────────────────
+  "programType.performance": "Performance",
+  "programType.strategic": "Stratégique",
+
+  // ─── Dashboard stratégique ────────────────────────────────────────────────
+  // Le chrome du mode édition (Personnaliser / Terminer / Ajouter un widget / Réinitialiser)
+  // réutilise les clés `dashboard.*` : elles sont génériques et strictement identiques d'un
+  // dashboard à l'autre — les dupliquer ferait diverger deux libellés censés rester les mêmes.
+  "strategicDashboard.title": "Tableau de bord stratégique",
+  "strategicDashboard.loading": "Chargement du plan stratégique…",
+  "strategicDashboard.noProgram":
+    "Aucun programme n'est actif. Créez-en un dans Admin > Entreprises > Programmes.",
+  "strategicDashboard.noAxes": "Aucun axe stratégique",
+  "strategicDashboard.noAxesHint":
+    "Aucun axe stratégique n'a encore été créé pour ce programme — les indicateurs de ce tableau de bord resteront vides tant qu'aucun axe n'est défini.",
+  "strategicDashboard.axesSuffix": "axes",
+  "strategicDashboard.chantiersSuffix": "chantiers",
+  "strategicDashboard.indicatorsSuffix": "indicateurs",
+  "strategicDashboard.tracked": "Indicateurs suivis",
+  "strategicDashboard.onTrack": "Sur la trajectoire",
+  "strategicDashboard.atRisk": "À risque",
+  "strategicDashboard.cumulative": "Cumul des indicateurs",
+  "strategicDashboard.cumulativeHint": "Somme des dernières valeurs quantitatives",
+  "strategicDashboard.noIndicators": "Aucun indicateur défini pour ce programme",
+  "strategicDashboard.noIndicatorsAtRisk": "Aucun indicateur à risque",
+  "strategicDashboard.noDependencyAlerts": "Aucune alerte de dépendance entre chantiers",
+  "strategicDashboard.delayDays": "jours de décalage",
+  "strategicDashboard.dragToReorder": "Glisser pour réordonner",
+  "strategicDashboard.moveUp": "Monter",
+  "strategicDashboard.moveDown": "Descendre",
+  "strategicDashboard.resizeWidget": "Changer la taille",
+  "strategicDashboard.removeWidget": "Retirer ce widget",
+  // Libellés du registre de widgets (lib/strategicDashboardWidgets.ts, champ `label`).
+  "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
+  "strategicDashboard.widget.indicatorTotal": "Cumul des indicateurs",
+  "strategicDashboard.widget.axisBreakdown": "Répartition par axe",
+  "strategicDashboard.widget.indicatorsAtRisk": "Indicateurs à risque",
+  "strategicDashboard.widget.axisMaturity": "Avancement par étape de maturité",
+  "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendance entre chantiers",
+
+  // ─── Plan Stratégique — fiche de configuration d'un programme (admin) ─────
+  "adminPrograms.manage": "Gérer",
+  "adminPrograms.back": "Tous les programmes",
+  "adminPrograms.tabMaturity": "Étapes de maturité",
+  "adminPrograms.tabIndicators": "Indicateurs",
+
+  // ─── Plan Stratégique — onglet Admin « Indicateurs » ──────────────────────
+  "adminIndicators.intro":
+    "Définissez les indicateurs de ce plan stratégique : leur rattachement (axe, et éventuellement chantier), leur objectif, et qui a le droit de les renseigner. Les mesures elles-mêmes sont saisies par les responsables depuis la page Indicateurs (KPI).",
+  "adminIndicators.new": "Nouvel indicateur",
+  "adminIndicators.createTitle": "Nouvel indicateur",
+  "adminIndicators.editTitle": "Modifier l'indicateur",
+  "adminIndicators.count": "{n} indicateur(s)",
+  "adminIndicators.loading": "Chargement…",
+  "adminIndicators.empty": "Aucun indicateur défini pour ce programme.",
+  "adminIndicators.name": "Nom de l'indicateur",
+  "adminIndicators.namePlaceholder": "Ex. Taux de satisfaction client",
+  "adminIndicators.axis": "Axe de rattachement",
+  "adminIndicators.selectAxis": "Sélectionner…",
+  "adminIndicators.newAxis": "Nouvel axe",
+  "adminIndicators.newAxisTitle": "Créer un axe",
+  "adminIndicators.noAxisHint":
+    "Aucun axe n'existe encore pour ce programme — créez-en un pour rattacher l'indicateur.",
+  "adminIndicators.chantier": "Chantier (optionnel)",
+  "adminIndicators.chantierMacro": "Aucun — indicateur macro de l'axe",
+  "adminIndicators.chantierPickAxisFirst": "Sélectionnez d'abord un axe.",
+  "adminIndicators.newChantier": "Nouveau chantier",
+  "adminIndicators.newChantierTitle": "Créer un chantier",
+  "adminIndicators.noStagesHint": "Configurez d'abord les étapes de maturité de ce programme.",
+  "adminIndicators.kind": "Nature",
+  "adminIndicators.kindQuantitative": "Quantitatif",
+  "adminIndicators.kindQualitative": "Qualitatif",
+  "adminIndicators.frequency": "Fréquence de reporting",
+  "adminIndicators.frequency.monthly": "Mensuelle",
+  "adminIndicators.frequency.quarterly": "Trimestrielle",
+  "adminIndicators.frequency.semiannual": "Semestrielle",
+  "adminIndicators.frequency.annual": "Annuelle",
+  "adminIndicators.objective": "Objectif / seuil",
+  "adminIndicators.objectivePlaceholder": "Ex. 90 % de satisfaction d'ici la fin de l'année",
+  "adminIndicators.objectiveValue": "Valeur cible",
+  "adminIndicators.objectiveValuePlaceholder": "90",
+  "adminIndicators.direction": "Sens d'amélioration",
+  "adminIndicators.directionUp": "Plus haut vaut mieux",
+  "adminIndicators.directionDown": "Plus bas vaut mieux",
+  "adminIndicators.unit": "Unité (optionnel)",
+  "adminIndicators.unitPlaceholder": "%, k€, jours…",
+  "adminIndicators.responsibleRoles": "Rôles autorisés à renseigner",
+  "adminIndicators.responsibleRolesHint":
+    "Au moins un rôle est requis. Les administrateurs sont toujours autorisés, quel que soit ce choix.",
+  "adminIndicators.additionalUsers": "Comptes additionnels autorisés",
+  "adminIndicators.additionalUsersHint":
+    "Comptes autorisés en plus des rôles ci-dessus, au cas par cas.",
+  "adminIndicators.additionalUsersEmpty": "Aucun utilisateur pour cette entreprise.",
+  "adminIndicators.columnName": "Indicateur",
+  "adminIndicators.columnScope": "Axe / Chantier",
+  "adminIndicators.columnKind": "Nature",
+  "adminIndicators.columnFrequency": "Fréquence",
+  "adminIndicators.columnObjective": "Objectif",
+  "adminIndicators.columnResponsibles": "Responsables",
+  "adminIndicators.columnActions": "Actions",
+  "adminIndicators.macroBadge": "Macro",
+  "adminIndicators.validationTitle": "Champs obligatoires manquants",
+  "adminIndicators.validationBody": "Complétez les champs suivants :",
+  "adminIndicators.created": "Indicateur créé",
+  "adminIndicators.updated": "Indicateur mis à jour",
+  "adminIndicators.deleted": "Indicateur supprimé",
+  "adminIndicators.axisCreated": "Axe créé",
+  "adminIndicators.chantierCreated": "Chantier créé",
+  "adminIndicators.saveErrorTitle": "Enregistrement impossible",
+  "adminIndicators.saveError": "L'indicateur n'a pas pu être enregistré.",
+  "adminIndicators.deleteErrorTitle": "Suppression impossible",
+  "adminIndicators.deleteError": "L'indicateur n'a pas pu être supprimé.",
 };
 
 export default fr;

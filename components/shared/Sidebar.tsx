@@ -8,6 +8,7 @@ import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Avatar } from "@/components/shared/Avatar";
 import { GuardedLink } from "@/components/shared/GuardedLink";
 import { useRole } from "@/lib/hooks/useRole";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Role } from "@/types";
 
@@ -31,7 +32,15 @@ export function Sidebar({
   const pathname = usePathname();
   const { user } = useRole();
   const { t } = useTranslation();
-  const nav = roles[role].nav;
+  const { programType } = useActiveProgram();
+  // Nav filtrée par TYPE de programme actif : un item sans `programTypes` reste visible partout
+  // (comportement historique — c'est le cas de tous les items Performance existants), un item
+  // restreint n'apparaît que pour les types listés. `programType` vaut "performance" tant qu'aucun
+  // programme stratégique n'est actif (voir useActiveProgram), donc la nav d'un utilisateur
+  // Performance est strictement identique à ce qu'elle était avant.
+  const nav = roles[role].nav.filter(
+    (item) => !item.programTypes || item.programTypes.includes(programType)
+  );
 
   return (
     <aside
@@ -83,7 +92,10 @@ export function Sidebar({
               )}
             >
               {Icon && <Icon size={15} className="w-4 text-center" />}
-              <span>{t(item.label)}</span>
+              {/* Libellé alternatif selon le type de programme actif (ex. « Bibliothèque des
+                  leviers » → « Axes stratégiques » sur la même route /levers) — repli sur `label`
+                  quand aucune surcharge n'est définie pour ce type. */}
+              <span>{t(item.labelByProgramType?.[programType] ?? item.label)}</span>
               {item.badge === "alerts" && alertCount > 0 && (
                 <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
                   {alertCount}

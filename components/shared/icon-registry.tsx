@@ -30,6 +30,7 @@ import {
   LayoutGrid,
   LineChart,
   ShieldCheck,
+  Sigma,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
@@ -70,4 +71,5 @@ export const ICON_REGISTRY: Record<string, LucideIcon> = {
   TrendingDown,
   Unlink,
   Gauge,
+  Sigma,
 };

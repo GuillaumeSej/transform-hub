@@ -1,11 +1,62 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FolderKanban, Plus, Pencil, Trash2 } from "lucide-react";
-import type { Program } from "@/types";
+import {
+  ArrowLeft,
+  FolderKanban,
+  Gauge,
+  Pencil,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
+  Workflow,
+} from "lucide-react";
+import type { Program, ProgramType } from "@/types";
 import { subscribePrograms, saveProgram, deleteProgram } from "@/lib/firestore/admin";
+import { ensureDefaultMaturityStages } from "@/lib/firestore/maturityStageConfigs";
+import { resolveProgramType } from "@/lib/axisLogic";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { MaturityStagesEditor } from "@/components/admin/MaturityStagesEditor";
+import { IndicatorsEditor } from "@/components/admin/IndicatorsEditor";
+
+/** Libellés des deux types de programme. Le type est choisi À LA CRÉATION et figé ensuite : il
+ *  détermine la nature même des entités du programme (leviers financiers vs axes/chantiers/
+ *  indicateurs) — le basculer après coup laisserait des données orphelines sans équivalent dans
+ *  l'autre modèle. */
+const PROGRAM_TYPE_OPTIONS: { value: ProgramType; label: string; hint: string }[] = [
+  {
+    value: "performance",
+    label: "Plan Performance",
+    hint: "Leviers financiers, cycle de vie L1-L5, impacts CAPEX/OPEX.",
+  },
+  {
+    value: "strategic",
+    label: "Plan Stratégique",
+    hint: "Axes, chantiers et indicateurs (3-5-15), étapes de maturité configurables.",
+  },
+];
+
+/** Sous-écrans d'administration propres à un programme STRATÉGIQUE. Le plan les veut accessibles
+ *  « depuis la fiche du programme, pas depuis l'entreprise » : comme il n'existe pas de route de
+ *  détail par programme, ce panneau bascule en place (liste → fiche) et rend ces deux onglets,
+ *  sur le même pattern visuel que les onglets de `CompanyDetailClient`. */
+type ProgramTabId = "maturity" | "indicators";
+
+const PROGRAM_TABS: {
+  id: ProgramTabId;
+  key: string;
+  fallback: string;
+  icon: typeof Workflow;
+}[] = [
+  {
+    id: "maturity",
+    key: "adminPrograms.tabMaturity",
+    fallback: "Étapes de maturité",
+    icon: Workflow,
+  },
+  { id: "indicators", key: "adminPrograms.tabIndicators", fallback: "Indicateurs", icon: Gauge },
+];
 
 /**
  * Gestion des programmes pour UNE entreprise déjà sélectionnée. Extrait de
@@ -26,8 +77,16 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
   }, [companyId]);
 
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", sponsor: "", target: "" });
+  const [form, setForm] = useState<{
+    name: string;
+    sponsor: string;
+    target: string;
+    type: ProgramType;
+  }>({ name: "", sponsor: "", target: "", type: "performance" });
   const [showForm, setShowForm] = useState(false);
+  /** Programme stratégique dont on affiche la fiche de configuration (null = liste). */
+  const [managedProgramId, setManagedProgramId] = useState<string | null>(null);
+  const [programTab, setProgramTab] = useState<ProgramTabId>("maturity");
 
   // Un programme est "en cours d'édition" (dirty) si le formulaire est ouvert avec au moins un
   // champ rempli — évite de bloquer inutilement la navigation quand l'utilisateur a juste
@@ -39,13 +98,19 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
 
   const startCreate = () => {
     setEditId(null);
-    setForm({ name: "", sponsor: "", target: "" });
+    setForm({ name: "", sponsor: "", target: "", type: "performance" });
     setShowForm(true);
   };
 
   const startEdit = (p: Program) => {
     setEditId(p.id);
-    setForm({ name: p.name, sponsor: p.sponsor, target: String(p.target) });
+    // `type` est chargé pour l'affichage en lecture seule uniquement — jamais réécrit (voir save).
+    setForm({
+      name: p.name,
+      sponsor: p.sponsor,
+      target: String(p.target),
+      type: resolveProgramType(p),
+    });
     setShowForm(true);
   };
 
@@ -55,6 +120,8 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
     if (editId) {
       const existing = programs.find((p) => p.id === editId);
       if (existing) {
+        // Le patch d'édition n'inclut JAMAIS `type` : le type est figé à la création (l'étalement
+        // via `...existing` conserve la valeur d'origine telle quelle).
         await saveProgram({
           ...existing,
           name: form.name,
@@ -76,14 +143,84 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
         baselineEBIT: 0,
         revenue: 0,
         createdAt: new Date().toISOString().slice(0, 10),
+        type: form.type,
       });
+      // Un plan stratégique démarre avec un jeu d'étapes de maturité par défaut, que l'admin
+      // pourra ensuite étendre à N étapes (voir MaturityStagesEditor). Idempotent.
+      if (form.type === "strategic") {
+        await ensureDefaultMaturityStages(companyId, id);
+      }
     }
     setShowForm(false);
   };
 
   const remove = async (id: string) => {
+    if (id === managedProgramId) setManagedProgramId(null);
     await deleteProgram(id);
   };
+
+  const openManage = (p: Program) => {
+    setShowForm(false);
+    setProgramTab("maturity");
+    setManagedProgramId(p.id);
+  };
+
+  // Fiche de configuration d'un programme stratégique — remplace la liste tant qu'elle est
+  // ouverte (pas de route dédiée : ce panneau est lui-même un onglet de `CompanyDetailClient`,
+  // imbriquer une seconde barre d'onglets sous un en-tête « retour » reste lisible, là où un
+  // dépliage inline à la HierarchyEditor mêlerait deux éditeurs complets aux lignes de la liste).
+  const managedProgram = managedProgramId
+    ? programs.find((p) => p.id === managedProgramId && resolveProgramType(p) === "strategic")
+    : undefined;
+
+  if (managedProgram) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-1">
+          <button
+            onClick={() => setManagedProgramId(null)}
+            className="inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-bp-coral"
+          >
+            <ArrowLeft size={12} /> {t("adminPrograms.back", "Tous les programmes")}
+          </button>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <FolderKanban size={22} className="text-bp-coral" />
+            <h1 className="text-xl font-bold text-text-primary">{managedProgram.name}</h1>
+            <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+              Stratégique
+            </span>
+          </div>
+        </div>
+
+        <div className="flex snap-x gap-2 overflow-x-auto border-b border-border pb-2">
+          {PROGRAM_TABS.map((tabDef) => {
+            const Icon = tabDef.icon;
+            const active = programTab === tabDef.id;
+            return (
+              <button
+                key={tabDef.id}
+                onClick={() => setProgramTab(tabDef.id)}
+                className={`flex min-h-10 shrink-0 snap-start items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  active
+                    ? "bg-bp-coral text-white"
+                    : "border border-border text-text-secondary hover:bg-bg-elevated"
+                }`}
+              >
+                <Icon size={14} /> {t(tabDef.key, tabDef.fallback)}
+              </button>
+            );
+          })}
+        </div>
+
+        {programTab === "maturity" && (
+          <MaturityStagesEditor companyId={companyId} programId={managedProgram.id} />
+        )}
+        {programTab === "indicators" && (
+          <IndicatorsEditor companyId={companyId} programId={managedProgram.id} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -145,6 +282,48 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
               />
             </div>
           </div>
+
+          {/* Type de programme — sélectionnable UNIQUEMENT à la création, figé ensuite : il
+              détermine la nature des entités du programme (leviers vs axes/chantiers). */}
+          {editId ? (
+            <div className="text-xs text-text-secondary">
+              Type de programme :{" "}
+              <span className="font-semibold text-text-primary">
+                {PROGRAM_TYPE_OPTIONS.find((o) => o.value === form.type)?.label ?? form.type}
+              </span>{" "}
+              — figé à la création, non modifiable.
+            </div>
+          ) : (
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-medium text-text-secondary">Type de programme</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {PROGRAM_TYPE_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex cursor-pointer gap-2 rounded-lg border p-3 text-sm transition ${
+                      form.type === option.value
+                        ? "border-bp-coral bg-bp-coral/5"
+                        : "border-border hover:bg-bg-surface"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="programType"
+                      value={option.value}
+                      checked={form.type === option.value}
+                      onChange={() => setForm((f) => ({ ...f, type: option.value }))}
+                      className="mt-0.5 accent-bp-coral"
+                    />
+                    <span>
+                      <span className="block font-medium text-text-primary">{option.label}</span>
+                      <span className="block text-xs text-text-secondary">{option.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
           <div className="flex gap-2">
             <button
               onClick={save}
@@ -196,12 +375,27 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
                 <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary md:table-cell">
                   {p.id}
                 </td>
-                <td className="px-4 py-2.5 font-medium text-text-primary">{p.name}</td>
+                <td className="px-4 py-2.5 font-medium text-text-primary">
+                  {p.name}
+                  {resolveProgramType(p) === "strategic" && (
+                    <span className="ml-2 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                      Stratégique
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-2.5 text-text-secondary">{p.sponsor}</td>
                 <td className="px-4 py-2.5 text-right font-medium text-text-primary">
                   €{p.target}M
                 </td>
-                <td className="px-4 py-2.5 text-right">
+                <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                  {resolveProgramType(p) === "strategic" && (
+                    <button
+                      onClick={() => openManage(p)}
+                      className="mr-3 inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-secondary hover:bg-bg-surface hover:text-bp-coral"
+                    >
+                      <SlidersHorizontal size={13} /> {t("adminPrograms.manage", "Gérer")}
+                    </button>
+                  )}
                   <button
                     onClick={() => startEdit(p)}
                     className="mr-2 text-text-secondary hover:text-bp-coral"
@@ -234,7 +428,14 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
           <div key={p.id} className="p-3">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <div className="font-medium text-text-primary">{p.name}</div>
+                <div className="font-medium text-text-primary">
+                  {p.name}
+                  {resolveProgramType(p) === "strategic" && (
+                    <span className="ml-2 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                      Stratégique
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-text-secondary">{p.sponsor}</div>
               </div>
               <div className="text-right">
@@ -242,6 +443,14 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
               </div>
             </div>
             <div className="mt-2 flex items-center justify-end gap-3">
+              {resolveProgramType(p) === "strategic" && (
+                <button
+                  onClick={() => openManage(p)}
+                  className="mr-auto inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-secondary hover:bg-bg-surface hover:text-bp-coral"
+                >
+                  <SlidersHorizontal size={13} /> {t("adminPrograms.manage", "Gérer")}
+                </button>
+              )}
               <button
                 onClick={() => startEdit(p)}
                 className="text-text-secondary hover:text-bp-coral"
