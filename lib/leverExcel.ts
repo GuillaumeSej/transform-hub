@@ -1,6 +1,6 @@
 import * as engine from "@/lib/engine";
-import { STATUS_LABEL } from "@/lib/status-config";
-import type { Alert, BeTrackData, Lever, RiskLevel } from "@/types";
+import { DEFAULT_LIFECYCLE_STAGES, resolveStatusLabel } from "@/lib/status-config";
+import type { Alert, BeTrackData, Lever, LifecycleStage, RiskLevel } from "@/types";
 
 /**
  * Mapping Lever -> ligne Excel, utilisé par `ExportButton` (type="excel") pour générer
@@ -13,7 +13,15 @@ export function leverToExcelRow(
   lever: Lever,
   data: BeTrackData,
   alerts: Alert[],
-  riskThresholds?: { level: RiskLevel; minAmount: number }[]
+  riskThresholds?: { level: RiskLevel; minAmount: number }[],
+  /** Référentiel de cycle de vie ACTIF de l'entreprise (voir `subscribeLifecycleConfig` /
+   *  `useLifecycleLabels`) — la colonne "Statut" doit toujours écrire le libellé RÉELLEMENT
+   *  affiché sur la plateforme pour ce levier (Kanban, dropdown de statut...), jamais un libellé
+   *  Excel figé qui diverge silencieusement dès que le cycle de vie par défaut ou personnalisé
+   *  change. Absent = référentiel par défaut (`DEFAULT_LIFECYCLE_STAGES`), déjà celui réellement
+   *  affiché pour toute entreprise sans personnalisation — voir `lib/leverExcelImport.ts` pour le
+   *  mapping inverse, qui accepte ce même libellé au ré-import. */
+  lifecycleStages: LifecycleStage[] = DEFAULT_LIFECYCLE_STAGES
 ): Record<string, string | number> {
   const ws = data.workstreams.find((w) => w.id === lever.ws);
   const pnl = data.pnlAccounts.find((p) => p.id === lever.pnlMap);
@@ -34,7 +42,7 @@ export function leverToExcelRow(
     "Compte P&L impacté": pnl?.name ?? lever.pnlMap,
     "Date de départ": lever.start,
     "Date de fin estimée": lever.end,
-    Statut: STATUS_LABEL[lever.status],
+    Statut: resolveStatusLabel(lever.status, lifecycleStages),
     "Progression (%)": lever.progress,
     Risque: engine.computeLeverRisk(lever.id, alerts, riskThresholds),
     "Impact estimé brut (€M)": lever.grossSavings,

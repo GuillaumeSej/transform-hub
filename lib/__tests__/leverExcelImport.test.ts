@@ -360,4 +360,71 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     expect(preview.toUpsert).toEqual([]);
     expect(preview.errors).toEqual([]);
   });
+
+  describe("Statut — cohérence avec le référentiel de cycle de vie réellement affiché (voir lib/status-config.ts)", () => {
+    // Le cycle de vie par défaut affiché sur la plateforme (Kanban, dropdown de statut, stepper du
+    // détail levier) utilise DEFAULT_LIFECYCLE_STAGES (libellés courts), pas le STATUS_LABEL
+    // historique (libellés longs) — voir lib/hooks/useLifecycleLabels.ts. Un import doit accepter
+    // les deux, sinon un utilisateur qui tape ce qu'il voit à l'écran est bloqué.
+    it("accepts the short default label actually displayed on the platform (DEFAULT_LIFECYCLE_STAGES)", () => {
+      const preview = validateLeverImportRows(
+        { ...emptySheets, leviers: [baseLeverRow({ Statut: "Exécuté" })] },
+        ctx(),
+        "c1"
+      );
+      expect(preview.errors).toEqual([]);
+      expect(preview.toUpsert[0].status).toBe("in_progress");
+    });
+
+    it("still accepts the legacy long-form label (STATUS_LABEL) for backward compatibility with old files/templates", () => {
+      const preview = validateLeverImportRows(
+        { ...emptySheets, leviers: [baseLeverRow({ Statut: "En cours d'exécution" })] },
+        ctx(),
+        "c1"
+      );
+      expect(preview.errors).toEqual([]);
+      expect(preview.toUpsert[0].status).toBe("in_progress");
+    });
+
+    it("accepts a genuine per-company custom lifecycle label when the caller passes it", () => {
+      const customStages = [
+        { key: "idea" as const, label: "Piste identifiée", validationRequired: false },
+        { key: "qualified" as const, label: "Cas d'usage validé", validationRequired: false },
+        { key: "validated" as const, label: "Lancement décidé", validationRequired: true },
+        { key: "in_progress" as const, label: "Déploiement", validationRequired: false },
+        { key: "delivered" as const, label: "Bénéfices constatés", validationRequired: false },
+      ];
+
+      const rejected = validateLeverImportRows(
+        { ...emptySheets, leviers: [baseLeverRow({ Statut: "Déploiement" })] },
+        ctx(),
+        "c1"
+        // pas de lifecycleStages custom passé -> le libellé personnalisé n'est pas (encore) connu
+      );
+      expect(rejected.errors[0].reason).toMatch(/Statut/);
+
+      const accepted = validateLeverImportRows(
+        { ...emptySheets, leviers: [baseLeverRow({ Statut: "Déploiement" })] },
+        ctx(),
+        "c1",
+        [],
+        customStages
+      );
+      expect(accepted.errors).toEqual([]);
+      expect(accepted.toUpsert[0].status).toBe("in_progress");
+    });
+
+    it("still rejects a genuinely unknown Statut, listing the labels actually shown on screen", () => {
+      const preview = validateLeverImportRows(
+        { ...emptySheets, leviers: [baseLeverRow({ Statut: "Statut bidon" })] },
+        ctx(),
+        "c1"
+      );
+      expect(preview.errors[0].reason).toMatch(/Statut "Statut bidon" inconnu/);
+      // Les libellés suggérés sont ceux du référentiel par défaut réellement affiché (courts),
+      // pas le vocabulaire Excel historique que l'utilisateur ne voit jamais à l'écran.
+      expect(preview.errors[0].reason).toContain("Identifié");
+      expect(preview.errors[0].reason).toContain("Exécuté");
+    });
+  });
 });
