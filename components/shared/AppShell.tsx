@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { cleanupLegacyStorage } from "@/lib/legacyStorageCleanup";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
@@ -23,6 +24,10 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { role, user, loading } = useRole();
+  // Type du programme actif — le garde-fou de routes ci-dessous doit appliquer EXACTEMENT le même
+  // filtre que la Sidebar, sinon une page masquée dans la nav (ex. /hr en mode stratégique)
+  // resterait accessible en tapant son URL directement.
+  const { programType, loading: programsLoading } = useActiveProgram();
   const router = useRouter();
   const pathname = usePathname();
   const data = useBeTrackData(user?.companyId ?? null);
@@ -48,7 +53,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     // Un rôle ne peut naviguer que vers les pages listées dans sa nav (+ le détail levier, qui
     // n'est jamais dans la sidebar). Le Lever Owner en particulier n'a pas accès à un dashboard.
-    const allowedRoutes = new Set(roles[role].nav.map((item) => PAGE_ROUTES[item.id]));
+    //
+    // Le périmètre autorisé suit le TYPE du programme actif, comme la Sidebar. Tant que les
+    // programmes ne sont pas chargés, on retient la nav NON filtrée (surensemble des deux types) :
+    // filtrer trop tôt sur le repli "performance" éjecterait un utilisateur légitimement arrivé
+    // sur /kpi avec un programme stratégique. Ce surensemble est exactement le comportement
+    // historique, donc rien ne change pour le Plan Performance.
+    const navItems = programsLoading
+      ? roles[role].nav
+      : roles[role].nav.filter(
+          (item) => !item.programTypes || item.programTypes.includes(programType)
+        );
+    const allowedRoutes = new Set(navItems.map((item) => PAGE_ROUTES[item.id]));
     const isLeverDetail = pathname.startsWith("/levers/");
     // Hub de détail entreprise (/admin/companies/detail?id=...) : jamais dans la nav (on y accède
     // en cliquant "Gérer" depuis la liste, comme pour /levers/detail ci-dessus) et réservé au
@@ -57,12 +73,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     const isCompanyDetail = pathname === "/admin/companies/detail";
     const companyDetailAllowed = isCompanyDetail && role === "admin";
     if (!isLeverDetail && !companyDetailAllowed && !allowedRoutes.has(pathname)) {
-      router.replace(PAGE_ROUTES[roles[role].nav[0]?.id] ?? "/levers");
+      // Repli sur la première page RÉELLEMENT autorisée (nav filtrée) : renvoyer vers
+      // `roles[role].nav[0]` sans filtre pourrait pointer une page elle-même interdite pour le
+      // type de programme actif (ex. /workstreams pour un sponsor en mode stratégique) et
+      // provoquer une boucle de redirection.
+      router.replace(PAGE_ROUTES[navItems[0]?.id] ?? "/levers");
       return;
     }
     cleanupLegacyStorage();
     setReady(true);
-  }, [role, loading, router, pathname]);
+  }, [role, loading, router, pathname, programType, programsLoading]);
 
   if (loading || !role || !ready) return null;
 

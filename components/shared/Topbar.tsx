@@ -4,10 +4,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRole } from "@/lib/hooks/useRole";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 import { roles } from "@/lib/nav-config";
 import { ResetDemoButton } from "@/components/shared/ResetDemoButton";
+import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 import { Avatar } from "@/components/shared/Avatar";
 import type { Alert, Company, Role } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
@@ -17,11 +19,21 @@ import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
 const CRUMBS: Record<string, string> = {
   "/dashboard": "nav.executiveDashboard",
   "/levers": "nav.leverLibrary",
+  "/kpi": "nav.kpi",
   "/workstreams": "nav.workstreamDashboard",
   "/finance": "nav.financeModule",
   "/hr": "nav.hrDashboard",
   "/hr/etp": "nav.hrEtp",
   "/operations": "nav.operationsModule",
+};
+
+/** Fil d'ariane des routes PARTAGÉES entre les deux types de programme : `/levers` sert aussi le
+ *  portefeuille d'axes stratégiques (même route, contenu routé selon le programme actif), il ne
+ *  doit donc pas s'annoncer « Bibliothèque des leviers » dans ce contexte — même relabeling que la
+ *  nav (`NavItem.labelByProgramType`, voir lib/nav-config.ts). Vide pour "performance" : le
+ *  comportement historique reste strictement inchangé. */
+const STRATEGIC_CRUMBS: Record<string, string> = {
+  "/levers": "nav.axes",
 };
 
 /** Petit sélecteur de langue (texte seul, pas de drapeaux) — disponible pour tous les profils,
@@ -102,8 +114,15 @@ export function Topbar({
   const { logout, user } = useRole();
   const { t } = useTranslation();
   const { confirmDiscard } = useUnsavedChanges();
+  const { programType } = useActiveProgram();
   const isLeverDetail = pathname.startsWith("/levers/") && pathname !== "/levers";
-  const label = isLeverDetail ? t("topbar.leverDetail") : t(CRUMBS[pathname] ?? "", "BeTrack");
+  const isStrategic = programType === "strategic";
+  const label = isLeverDetail
+    ? t(isStrategic ? "topbar.axisDetail" : "topbar.leverDetail")
+    : t(
+        (isStrategic ? STRATEGIC_CRUMBS[pathname] : undefined) ?? CRUMBS[pathname] ?? "",
+        "BeTrack"
+      );
 
   const companyLabel = user?.companyId
     ? (companies.find((c) => c.id === user.companyId)?.name ?? user.companyId)
@@ -141,6 +160,11 @@ export function Topbar({
         >
           <Avatar initials={initials || "?"} size="sm" />
         </span>
+        {/* Sélecteur de programme actif — contrairement au sélecteur de langue, il reste visible
+            sur téléphone : le programme actif pilote désormais la nav entière (voir
+            ProgramSwitcher), c'est un contrôle de contexte, pas un réglage. Il s'efface de
+            lui-même quand l'utilisateur n'a qu'un seul programme. */}
+        <ProgramSwitcher />
         {/* Sélecteur de langue — desktop uniquement : sur téléphone il encombrait la barre pour
             une action rarissime en situation de consultation (la langue se choisit au login). */}
         <span className="hidden sm:block">
