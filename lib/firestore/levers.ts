@@ -62,13 +62,20 @@ function normalizeDependencies(deps: unknown): LeverDependency[] {
     .filter((d): d is LeverDependency => d !== null);
 }
 
-/** Filter items by companyId — null companyId = admin (sees everything). */
-function byCompany<T extends { companyId?: string | null }>(
+/** Filtre les items par companyId — `companyId` null/undefined = admin global (voit tout, aucun
+ * filtrage). Pour un `companyId` donné, ne garde QUE les items explicitement tagués à cette
+ * entreprise : un item sans `companyId` (orphelin — ancienne donnée jamais migrée, voir
+ * `migrateCompanyIds`) n'est plus considéré visible pour toutes les entreprises. `createLever`
+ * (lib/leversLogic.ts) renseigne toujours `companyId` à la création via le formulaire, donc une
+ * entreprise fraîchement créée ne doit voir aucun levier tant qu'elle n'en a pas créé elle-même —
+ * un leak-through ici ferait apparaître les orphelins (ou pire, les leviers d'une autre entreprise
+ * mal taguée) chez tout le monde. */
+export function byCompany<T extends { companyId?: string | null }>(
   items: T[],
   companyId?: string | null
 ): T[] {
   if (!companyId) return items;
-  return items.filter((item) => !item.companyId || item.companyId === companyId);
+  return items.filter((item) => item.companyId === companyId);
 }
 
 /** Subscribe to levers, optionally filtered by companyId. */
@@ -110,18 +117,19 @@ export function subscribeAuditLog(cb: (audit: AuditEntry[]) => void): Unsubscrib
 }
 
 /** Filtre le journal d'audit pour un admin d'entreprise : ne garde que les entrées dont l'entité
- * (un id de levier, ou l'id de levier parent pour un commentaire) appartient à `companyId`. Les
- * entrées sans lien avec un levier connu (ex. mouvements RH, employés — pas encore multi-tenant)
- * restent visibles telles quelles. `companyId` null = aucun filtrage (super-admin). */
+ * (un id de levier, ou l'id de levier parent pour un commentaire) appartient EXPLICITEMENT à
+ * `companyId` — un levier orphelin (sans companyId) n'est plus considéré comme appartenant à
+ * `companyId` (voir `byCompany` ci-dessus, même durcissement). Les entrées sans lien avec un levier
+ * connu (ex. mouvements RH, employés — pas encore multi-tenant) restent visibles telles quelles, ce
+ * périmètre n'étant pas encore taggué par entreprise. `companyId` null = aucun filtrage
+ * (super-admin). */
 export function filterAuditByCompany(
   audit: AuditEntry[],
   levers: Lever[],
   companyId: string | null
 ): AuditEntry[] {
   if (!companyId) return audit;
-  const leverIds = new Set(
-    levers.filter((l) => !l.companyId || l.companyId === companyId).map((l) => l.id)
-  );
+  const leverIds = new Set(levers.filter((l) => l.companyId === companyId).map((l) => l.id));
   return audit.filter((entry) => {
     const entity = entry.entity;
     const isLeverEntity = /^L\d+$/i.test(entity);
