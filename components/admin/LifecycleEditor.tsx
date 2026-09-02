@@ -6,6 +6,7 @@ import type { LifecycleStage, LeverStatus } from "@/types";
 import { DEFAULT_LIFECYCLE_STAGES, STATUS_LEVEL } from "@/lib/status-config";
 import { subscribeLifecycleConfig, saveLifecycleConfig } from "@/lib/firestore/admin";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
  * Édition des étapes du cycle de vie pour UNE entreprise déjà sélectionnée. Extrait de
@@ -14,6 +15,7 @@ import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
  * source de vérité pour ce CRUD.
  */
 export function LifecycleEditor({ companyId }: { companyId: string }) {
+  const { t } = useTranslation();
   const [stages, setStages] = useState<LifecycleStage[]>(structuredClone(DEFAULT_LIFECYCLE_STAGES));
   // Snapshot du dernier état persisté — utilisé pour détecter les modifs non enregistrées.
   const [savedStages, setSavedStages] = useState<LifecycleStage[]>(() =>
@@ -54,8 +56,10 @@ export function LifecycleEditor({ companyId }: { companyId: string }) {
   return (
     <div className="space-y-6">
       <p className="max-w-2xl text-sm text-text-secondary">
-        Personnalisez les étapes du cycle de vie des leviers pour cette entreprise. Vous pouvez
-        renommer, réordonner, activer/désactiver les validations et ajuster le nombre d&apos;étapes.
+        {t(
+          "adminLifecycleEditor.intro",
+          "Personnalisez les étapes du cycle de vie des leviers pour cette entreprise. Vous pouvez renommer, réordonner, activer/désactiver les validations et ajuster le nombre d'étapes."
+        )}
       </p>
 
       {/* Desktop/tablette (>= sm). En dessous de sm, remplacé par des cartes empilées
@@ -66,19 +70,19 @@ export function LifecycleEditor({ companyId }: { companyId: string }) {
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
               <th className="px-4 py-2.5 w-12 text-center text-xs font-semibold text-text-secondary">
-                Ordre
+                {t("adminLifecycleEditor.colOrder", "Ordre")}
               </th>
               <th className="px-4 py-2.5 w-16 text-center text-xs font-semibold text-text-secondary">
-                Clé
+                {t("adminLifecycleEditor.colKey", "Clé")}
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                Libellé
+                {t("adminLifecycleEditor.colLabel", "Libellé")}
               </th>
               <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
-                Validation (gate)
+                {t("adminLifecycleEditor.colValidation", "Validation (gate)")}
               </th>
               <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
-                Ordre
+                {t("adminLifecycleEditor.colOrder", "Ordre")}
               </th>
             </tr>
           </thead>
@@ -111,7 +115,9 @@ export function LifecycleEditor({ companyId }: { companyId: string }) {
                         : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                     }`}
                   >
-                    {stage.validationRequired ? "Oui" : "Non"}
+                    {stage.validationRequired
+                      ? t("adminLifecycleEditor.yes", "Oui")
+                      : t("adminLifecycleEditor.no", "Non")}
                   </button>
                 </td>
                 <td className="px-4 py-2.5 text-center">
@@ -160,7 +166,10 @@ export function LifecycleEditor({ companyId }: { companyId: string }) {
                     : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                 }`}
               >
-                Validation : {stage.validationRequired ? "Oui" : "Non"}
+                {t("adminLifecycleEditor.validationPrefix", "Validation :")}{" "}
+                {stage.validationRequired
+                  ? t("adminLifecycleEditor.yes", "Oui")
+                  : t("adminLifecycleEditor.no", "Non")}
               </button>
               <div>
                 <button
@@ -194,13 +203,13 @@ export function LifecycleEditor({ companyId }: { companyId: string }) {
           }}
           className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
         >
-          <Save size={14} /> Enregistrer
+          <Save size={14} /> {t("common.save", "Enregistrer")}
         </button>
         <button
           onClick={resetToDefault}
           className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
         >
-          <RotateCcw size={14} /> Réinitialiser
+          <RotateCcw size={14} /> {t("dashboard.reset", "Réinitialiser")}
         </button>
       </div>
     </div>

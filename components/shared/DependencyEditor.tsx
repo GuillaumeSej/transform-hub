@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/shared/Button";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   DEPENDENCY_TYPES,
   DEPENDENCY_TYPE_DESCRIPTION,
@@ -30,6 +31,7 @@ export function DependencyEditor({
   /** ids à exclure des cibles possibles (l'entité éditée elle-même, typiquement) */
   excludeIds?: string[];
 }) {
+  const { t } = useTranslation();
   const [draftTarget, setDraftTarget] = useState("");
   const [draftType, setDraftType] = useState<DependencyType>("FS");
 
@@ -50,7 +52,9 @@ export function DependencyEditor({
   return (
     <div>
       {value.length === 0 && (
-        <p className="mb-2 text-xs text-tertiary">Aucune dépendance pour l&apos;instant.</p>
+        <p className="mb-2 text-xs text-tertiary">
+          {t("shared.dependencyEditor.noDependencies", "Aucune dépendance pour l'instant.")}
+        </p>
       )}
       {value.map((dep) => (
         <div
@@ -82,7 +86,7 @@ export function DependencyEditor({
             type="button"
             onClick={() => onChange(value.filter((d) => d.targetId !== dep.targetId))}
             className="p-1 text-tertiary hover:text-primary hover:underline"
-            aria-label="Retirer la dépendance"
+            aria-label={t("shared.dependencyEditor.removeDependencyAria", "Retirer la dépendance")}
           >
             <X size={13} />
           </button>
@@ -95,7 +99,9 @@ export function DependencyEditor({
           onChange={(e) => setDraftTarget(e.target.value)}
           className={`${inputClass} min-w-0 flex-1`}
         >
-          <option value="">Choisir un levier…</option>
+          <option value="">
+            {t("shared.dependencyEditor.choosePlaceholder", "Choisir un levier…")}
+          </option>
           {options.map((opt) => (
             <option key={opt.id} value={opt.id}>
               {opt.label}
@@ -121,7 +127,7 @@ export function DependencyEditor({
           onClick={addDraft}
           disabled={!draftTarget}
         >
-          <Plus size={12} /> Ajouter
+          <Plus size={12} /> {t("common.add", "Ajouter")}
         </Button>
       </div>
       <p className="mt-1.5 text-[10.5px] text-tertiary">{DEPENDENCY_TYPE_DESCRIPTION[draftType]}</p>

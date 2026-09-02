@@ -6,6 +6,7 @@ import { FileSpreadsheet, Download, Upload } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/lib/hooks/useToast";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   employeeToExcelRow,
   movementToExcelRow,
@@ -30,6 +31,7 @@ type Preview = {
  */
 export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackData> }) {
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
 
@@ -90,8 +92,10 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
     );
     XLSX.writeFile(wb, `base_etp_${new Date().toISOString().slice(0, 10)}.xlsx`);
     showToast(
-      "Export Excel généré",
-      `${data.workforce.employees.length} employés · ${data.workforce.movements.length} mouvements`,
+      t("shared.excelIO.exportSuccessTitle", "Export Excel généré"),
+      t("shared.hrExcelButtons.exportSuccessBody", "{emp} employés · {mov} mouvements")
+        .replace("{emp}", String(data.workforce.employees.length))
+        .replace("{mov}", String(data.workforce.movements.length)),
       "success"
     );
   };
@@ -103,7 +107,14 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
     const movSheet = XLSX.utils.aoa_to_sheet([MOV_HEADERS]);
     XLSX.utils.book_append_sheet(wb, movSheet, "Mouvements");
     XLSX.writeFile(wb, `template_base_etp.xlsx`);
-    showToast("Template téléchargé", "Remplissez les colonnes puis importez le fichier", "success");
+    showToast(
+      t("shared.excelIO.templateDownloadedTitle", "Template téléchargé"),
+      t(
+        "shared.hrExcelButtons.templateDownloadedBody",
+        "Remplissez les colonnes puis importez le fichier"
+      ),
+      "success"
+    );
   };
 
   const handleFile = async (file: File) => {
@@ -168,8 +179,14 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
       }
     });
     showToast(
-      "Import Excel terminé",
-      `${empCount} employé(s) · ${movCreated} mouvement(s) créé(s), ${movUpdated} mis à jour`,
+      t("shared.excelIO.importDoneTitle", "Import Excel terminé"),
+      t(
+        "shared.hrExcelButtons.importDoneBody",
+        "{emp} employé(s) · {created} mouvement(s) créé(s), {updated} mis à jour"
+      )
+        .replace("{emp}", String(empCount))
+        .replace("{created}", String(movCreated))
+        .replace("{updated}", String(movUpdated)),
       "success"
     );
     setPreview(null);
@@ -178,10 +195,10 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
   return (
     <>
       <Button variant="outline" onClick={downloadTemplate}>
-        <Download size={13} /> Template Excel
+        <Download size={13} /> {t("shared.excelIO.templateButton", "Template Excel")}
       </Button>
       <Button variant="outline" onClick={exportExcel}>
-        <FileSpreadsheet size={13} /> Exporter Excel
+        <FileSpreadsheet size={13} /> {t("shared.hrExcelButtons.exportButton", "Exporter Excel")}
       </Button>
       <input
         ref={fileInputRef}
@@ -195,25 +212,28 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
         }}
       />
       <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-        <Upload size={13} /> Importer Excel
+        <Upload size={13} /> {t("shared.hrExcelButtons.importButton", "Importer Excel")}
       </Button>
 
       <Modal
         open={preview !== null}
         onOpenChange={(open) => !open && setPreview(null)}
-        title={`Prévisualisation de l'import — ${preview?.fileName ?? ""}`}
+        title={t("shared.excelIO.previewTitle", "Prévisualisation de l'import — {file}").replace(
+          "{file}",
+          preview?.fileName ?? ""
+        )}
         maxWidth="640px"
         footer={
           <>
             <Button variant="ghost" onClick={() => setPreview(null)}>
-              Annuler
+              {t("common.cancel", "Annuler")}
             </Button>
             <Button
               variant="primary"
               disabled={(preview?.employees.length ?? 0) + (preview?.movements.length ?? 0) === 0}
               onClick={confirmImport}
             >
-              Confirmer l&apos;import
+              {t("shared.excelIO.confirmImportButton", "Confirmer l'import")}
             </Button>
           </>
         }
@@ -221,23 +241,26 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
         <div className="mb-3 flex flex-wrap gap-4 text-[13px]">
           <span>
             <strong className="text-rag-green-dark">{preview?.employees.length ?? 0}</strong>{" "}
-            employé(s)
+            {t("shared.hrExcelButtons.employeesUnit", "employé(s)")}
           </span>
           <span>
             <strong className="text-rag-green-dark">{preview?.movements.length ?? 0}</strong>{" "}
-            mouvement(s)
+            {t("shared.hrExcelButtons.movementsUnit", "mouvement(s)")}
           </span>
           <span>
-            <strong className="text-rag-red">{preview?.ignored ?? 0}</strong> ligne(s) ignorée(s)
+            <strong className="text-rag-red">{preview?.ignored ?? 0}</strong>{" "}
+            {t("shared.hrExcelButtons.ignoredRowsUnit", "ligne(s) ignorée(s)")}
           </span>
           <span>
             <strong className="text-rag-amber">{preview?.warnings.length ?? 0}</strong>{" "}
-            avertissement(s)
+            {t("shared.hrExcelButtons.warningsUnit", "avertissement(s)")}
           </span>
         </div>
         <div className="max-h-[320px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
           {preview?.warnings.length === 0 ? (
-            <p className="text-tertiary">Aucune anomalie détectée.</p>
+            <p className="text-tertiary">
+              {t("shared.excelIO.noAnomalies", "Aucune anomalie détectée.")}
+            </p>
           ) : (
             preview?.warnings.map((w, i) => (
               <div key={i} className="text-secondary">

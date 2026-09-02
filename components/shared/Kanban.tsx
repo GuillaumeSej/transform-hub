@@ -5,6 +5,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { fmtCurr } from "@/lib/engine";
 import { STATUS_CYCLE, STATUS_LABEL } from "@/lib/status-config";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Lever, LeverStatus } from "@/types";
 
 /** Vue kanban du pipeline de leviers par statut — porté depuis `.kanban`/`.kcard` du prototype legacy.
@@ -21,6 +22,7 @@ export function Kanban({
   stageOrder?: LeverStatus[];
   stageLabel?: (status: LeverStatus) => string;
 }) {
+  const { t } = useTranslation();
   const COLUMNS: { status: LeverStatus; label: string }[] = stageOrder.map((status) => ({
     status,
     label: stageLabel(status),
@@ -44,7 +46,9 @@ export function Kanban({
               </div>
             </div>
             {list.length === 0 && (
-              <div className="py-5 text-center text-[11px] text-tertiary">Aucun</div>
+              <div className="py-5 text-center text-[11px] text-tertiary">
+                {t("shared.kanban.noItems", "Aucun")}
+              </div>
             )}
             {list.map((l) => (
               <button

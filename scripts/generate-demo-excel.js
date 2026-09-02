@@ -206,13 +206,15 @@ const LEVER_SPONSORS = [
   ["Directeur Commercial", "DC"],
   ["Directrice RH", "DRH"],
 ];
-const LEVER_STATUS_LABELS = [
-  "Levier identifié",
-  "Business case validé",
-  "Implémentation planifiée",
-  "En cours d'exécution",
-  "Valeur réalisée",
-];
+// Libellés RÉELLEMENT affichés sur la plateforme pour le cycle de vie par défaut
+// (DEFAULT_LIFECYCLE_STAGES dans lib/status-config.ts, résolus via resolveStatusLabel/
+// useLifecycleLabels — Kanban, dropdown de statut du formulaire, stepper du détail levier) plutôt
+// que les anciens libellés longs "Excel" (STATUS_LABEL) : sans ça, une démo qui importe ce fichier
+// puis affiche les leviers montre un texte différent de celui tapé dans Excel, ce qui est
+// justement le bug rapporté par le PO. lib/leverExcelImport.ts accepte de toute façon les deux
+// formes (courte affichée + longue historique) à l'import, donc ce choix ne casse rien côté
+// validation — seule la cohérence Excel <-> écran change.
+const LEVER_STATUS_LABELS = ["Identifié", "Validé", "Planifié", "Exécuté", "Réalisé"];
 const LEVER_NAME_TEMPLATES = [
   "Regroupement fournisseurs {n}",
   "Réduction temps d'arrêt {n}",
@@ -257,11 +259,11 @@ for (let i = 0; i < LEVER_COUNT; i++) {
     LEVER_NAME_SUFFIXES[i % LEVER_NAME_SUFFIXES.length]
   );
   const progress =
-    status === "En cours d'exécution"
+    status === "Exécuté"
       ? 25 + (i % 6) * 10
-      : status === "Valeur réalisée"
+      : status === "Réalisé"
         ? 100
-        : status === "Implémentation planifiée"
+        : status === "Planifié"
           ? 5 + (i % 3) * 5
           : 0;
   const netSavings = Math.round((0.6 + (i % 9) * 0.45) * 100) / 100;

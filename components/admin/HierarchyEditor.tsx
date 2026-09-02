@@ -44,6 +44,7 @@ import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 let nodeSeq = 0;
 const EMPTY_NODE_FORM = {
@@ -74,15 +75,19 @@ function ancestryLabel(
   return path.map((p) => p.label).join(" › ");
 }
 
-const SEMANTICS: Record<HierarchyDomain, { value: HierarchySemantic; label: string }[]> = {
-  financial: [{ value: "pnl", label: "Ligne P&L" }],
-  geographic: [
-    { value: "continent", label: "Continent" },
-    { value: "region", label: "Région" },
-    { value: "country", label: "Pays" },
-    { value: "legal_entity", label: "Entité légale" },
-  ],
-};
+function semantics(
+  t: (key: string, fallback?: string) => string
+): Record<HierarchyDomain, { value: HierarchySemantic; label: string }[]> {
+  return {
+    financial: [{ value: "pnl", label: t("adminHierarchy.semantic.pnl", "Ligne P&L") }],
+    geographic: [
+      { value: "continent", label: t("adminHierarchy.semantic.continent", "Continent") },
+      { value: "region", label: t("adminHierarchy.semantic.region", "Région") },
+      { value: "country", label: t("adminHierarchy.semantic.country", "Pays") },
+      { value: "legal_entity", label: t("adminHierarchy.semantic.legalEntity", "Entité légale") },
+    ],
+  };
+}
 
 function TreeBranch({ node }: { node: HierarchyTreeNode }) {
   return (
@@ -117,6 +122,8 @@ export function HierarchyEditor({
   companyId: string;
   domain?: HierarchyDomain;
 }) {
+  const { t } = useTranslation();
+  const SEMANTICS = semantics(t);
   const { showToast } = useToast();
   const [levels, setLevels] = useState<HierarchyLevelDef[]>([]);
   const [nodes, setNodes] = useState<HierarchyNode[]>([]);
@@ -197,7 +204,14 @@ export function HierarchyEditor({
   const addLevel = () => {
     const order = levels.length;
     const key = `level_${order}_${Date.now()}`;
-    setLevels((prev) => [...prev, { key, label: `Niveau ${order + 1}`, order }]);
+    setLevels((prev) => [
+      ...prev,
+      {
+        key,
+        label: t("adminHierarchy.newLevelName", "Niveau {n}").replace("{n}", String(order + 1)),
+        order,
+      },
+    ]);
     setLevelsDirty(true);
   };
 
@@ -255,15 +269,21 @@ export function HierarchyEditor({
       setLevels(sanitized);
       setLevelsDirty(false);
       showToast(
-        "Structure enregistrée",
-        "Les niveaux sont maintenant persistés dans Firebase.",
+        t("adminHierarchy.toastLevelsSavedTitle", "Structure enregistrée"),
+        t(
+          "adminHierarchy.toastLevelsSavedBody",
+          "Les niveaux sont maintenant persistés dans Firebase."
+        ),
         "success"
       );
     } catch (error) {
       console.error("[betrack] échec de sauvegarde des niveaux :", error);
       showToast(
-        "Enregistrement impossible",
-        "La structure n'a pas été enregistrée dans Firebase.",
+        t("adminHierarchy.toastSaveFailedTitle", "Enregistrement impossible"),
+        t(
+          "adminHierarchy.toastLevelsSaveFailedBody",
+          "La structure n'a pas été enregistrée dans Firebase."
+        ),
         "error"
       );
     } finally {
@@ -293,12 +313,22 @@ export function HierarchyEditor({
     try {
       await saveHierarchyNode(node);
       setNodeForm((prev) => ({ ...prev, [level.key]: { ...EMPTY_NODE_FORM } }));
-      showToast("Valeur enregistrée", `${node.label} est enregistrée dans Firebase.`, "success");
+      showToast(
+        t("adminHierarchy.toastNodeSavedTitle", "Valeur enregistrée"),
+        t("adminHierarchy.toastNodeSavedBody", "{name} est enregistrée dans Firebase.").replace(
+          "{name}",
+          node.label
+        ),
+        "success"
+      );
     } catch (error) {
       console.error("[betrack] échec de sauvegarde du nœud :", error);
       showToast(
-        "Enregistrement impossible",
-        "La valeur n'a pas été enregistrée dans Firebase.",
+        t("adminHierarchy.toastSaveFailedTitle", "Enregistrement impossible"),
+        t(
+          "adminHierarchy.toastNodeSaveFailedBody",
+          "La valeur n'a pas été enregistrée dans Firebase."
+        ),
         "error"
       );
     } finally {
@@ -309,12 +339,19 @@ export function HierarchyEditor({
   const removeNode = async (id: string) => {
     try {
       await deleteHierarchyNode(id);
-      showToast("Valeur supprimée", "La suppression est enregistrée dans Firebase.", "success");
+      showToast(
+        t("adminHierarchy.toastNodeDeletedTitle", "Valeur supprimée"),
+        t("adminHierarchy.toastNodeDeletedBody", "La suppression est enregistrée dans Firebase."),
+        "success"
+      );
     } catch (error) {
       console.error("[betrack] échec de suppression du nœud :", error);
       showToast(
-        "Suppression impossible",
-        "La valeur est toujours présente dans Firebase.",
+        t("adminHierarchy.toastDeleteFailedTitle", "Suppression impossible"),
+        t(
+          "adminHierarchy.toastNodeDeleteFailedBody",
+          "La valeur est toujours présente dans Firebase."
+        ),
         "error"
       );
     }
@@ -325,15 +362,21 @@ export function HierarchyEditor({
     try {
       await deleteHierarchyNodesBatch(orphanNodes.map((node) => node.id));
       showToast(
-        "Données orphelines nettoyées",
-        `${orphanNodes.length} valeur(s) sans niveau enregistré ont été supprimées de Firebase.`,
+        t("adminHierarchy.toastOrphansCleanedTitle", "Données orphelines nettoyées"),
+        t(
+          "adminHierarchy.toastOrphansCleanedBody",
+          "{n} valeur(s) sans niveau enregistré ont été supprimées de Firebase."
+        ).replace("{n}", String(orphanNodes.length)),
         "success"
       );
     } catch (error) {
       console.error("[betrack] échec de nettoyage des nœuds orphelins :", error);
       showToast(
-        "Nettoyage impossible",
-        "Les valeurs orphelines sont toujours présentes dans Firebase.",
+        t("adminHierarchy.toastCleanupFailedTitle", "Nettoyage impossible"),
+        t(
+          "adminHierarchy.toastOrphansCleanupFailedBody",
+          "Les valeurs orphelines sont toujours présentes dans Firebase."
+        ),
         "error"
       );
     }
@@ -350,8 +393,11 @@ export function HierarchyEditor({
     XLSX.utils.book_append_sheet(wb, sheet, "Arborescence");
     XLSX.writeFile(wb, "template_arborescence.xlsx");
     showToast(
-      "Template téléchargé",
-      'Une ligne par nœud : "Niveau" (libellé ou clé configuré(e)), "Code", "Libellé", "Code parent" (vide pour le niveau macro).',
+      t("adminHierarchy.toastTemplateDownloadedTitle", "Template téléchargé"),
+      t(
+        "adminHierarchy.toastTemplateDownloadedBody",
+        'Une ligne par nœud : "Niveau" (libellé ou clé configuré(e)), "Code", "Libellé", "Code parent" (vide pour le niveau macro).'
+      ),
       "success"
     );
   };
@@ -363,7 +409,14 @@ export function HierarchyEditor({
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Arborescence");
     const company = companies.find((c) => c.id === companyId);
     XLSX.writeFile(wb, `arborescence_${company?.name ?? companyId}.xlsx`);
-    showToast("Export Excel généré", `${rows.length} nœud(s) exporté(s)`, "success");
+    showToast(
+      t("adminHierarchy.toastExportGeneratedTitle", "Export Excel généré"),
+      t("adminHierarchy.toastExportGeneratedBody", "{n} nœud(s) exporté(s)").replace(
+        "{n}",
+        String(rows.length)
+      ),
+      "success"
+    );
   };
 
   const handleImportFile = async (file: File) => {
@@ -386,8 +439,17 @@ export function HierarchyEditor({
     try {
       await saveHierarchyNodesBatch(importPreview.toCreate);
       showToast(
-        "Import Excel terminé",
-        `${importPreview.toCreate.length} nœud(s) créé(s)${importPreview.errors.length > 0 ? ` · ${importPreview.errors.length} ligne(s) ignorée(s)` : ""}`,
+        t("adminHierarchy.toastImportDoneTitle", "Import Excel terminé"),
+        t("adminHierarchy.toastImportDoneBody", "{n} nœud(s) créé(s)").replace(
+          "{n}",
+          String(importPreview.toCreate.length)
+        ) +
+          (importPreview.errors.length > 0
+            ? t("adminHierarchy.toastImportDoneErrorsSuffix", " · {n} ligne(s) ignorée(s)").replace(
+                "{n}",
+                String(importPreview.errors.length)
+              )
+            : ""),
         "success"
       );
       setImportPreview(null);
@@ -400,13 +462,21 @@ export function HierarchyEditor({
     <div className="space-y-6">
       <p className="max-w-2xl text-sm text-text-secondary">
         {domain === "financial"
-          ? "Configurez les lignes du P&L puis les niveaux de maille financière jusqu'au centre de coût ou à la maille la plus fine. Le niveau marqué Ligne P&L alimente directement le module Finance."
-          : "Configurez librement le découpage géographique de l'entreprise : continent, région, pays, entité légale ou tout autre niveau propre au client."}
+          ? t(
+              "adminHierarchy.introFinancial",
+              "Configurez les lignes du P&L puis les niveaux de maille financière jusqu'au centre de coût ou à la maille la plus fine. Le niveau marqué Ligne P&L alimente directement le module Finance."
+            )
+          : t(
+              "adminHierarchy.introGeographic",
+              "Configurez librement le découpage géographique de l'entreprise : continent, région, pays, entité légale ou tout autre niveau propre au client."
+            )}
       </p>
 
       {/* Section 1 : niveaux */}
       <section className="space-y-3">
-        <h2 className="text-sm font-bold text-text-primary">1. Niveaux de l&apos;arborescence</h2>
+        <h2 className="text-sm font-bold text-text-primary">
+          {t("adminHierarchy.section1Title", "1. Niveaux de l'arborescence")}
+        </h2>
         {/* Desktop/tablette (>= sm). En dessous de sm, remplacé par des cartes (voir plus bas) —
          * l'input libellé + la clé + les boutons de réordre/suppression ne tiennent pas sur une
          * ligne à 375px sans scroll horizontal. */}
@@ -415,22 +485,22 @@ export function HierarchyEditor({
             <thead>
               <tr className="bg-bg-elevated border-b border-border">
                 <th className="px-4 py-2.5 w-16 text-center text-xs font-semibold text-text-secondary">
-                  Ordre
+                  {t("adminHierarchy.colOrder", "Ordre")}
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Libellé
+                  {t("adminHierarchy.colLabel", "Libellé")}
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Usage standard
+                  {t("adminHierarchy.colStandardUsage", "Usage standard")}
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Clé
+                  {t("adminHierarchy.colKey", "Clé")}
                 </th>
                 <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
-                  Réordonner
+                  {t("adminHierarchy.colReorder", "Réordonner")}
                 </th>
                 <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
-                  Actions
+                  {t("adminHierarchy.colActions", "Actions")}
                 </th>
               </tr>
             </thead>
@@ -438,7 +508,11 @@ export function HierarchyEditor({
               {sortedLevels.map((level, idx) => (
                 <tr key={level.key} className="border-b border-border hover:bg-bg-elevated/50">
                   <td className="px-4 py-2.5 text-center text-xs font-mono text-text-secondary">
-                    {idx === 0 ? "Macro" : idx === sortedLevels.length - 1 ? "Fin" : level.order}
+                    {idx === 0
+                      ? t("adminHierarchy.orderMacro", "Macro")
+                      : idx === sortedLevels.length - 1
+                        ? t("adminHierarchy.orderEnd", "Fin")
+                        : level.order}
                   </td>
                   <td className="px-4 py-2.5">
                     <input
@@ -453,7 +527,9 @@ export function HierarchyEditor({
                       onChange={(e) => setLevelSemantic(level.key, e.target.value)}
                       className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1.5 text-xs"
                     >
-                      <option value="">Aucun / personnalisé</option>
+                      <option value="">
+                        {t("adminHierarchy.semanticNoneDesktop", "Aucun / personnalisé")}
+                      </option>
                       {SEMANTICS[domain].map((semantic) => (
                         <option key={semantic.value} value={semantic.value}>
                           {semantic.label}
@@ -495,8 +571,10 @@ export function HierarchyEditor({
               {sortedLevels.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-sm text-text-secondary">
-                    Aucun niveau configuré — l&apos;entreprise utilise le champ texte libre
-                    &quot;Centre de coût&quot; historique.
+                    {t(
+                      "adminHierarchy.noLevelsConfigured",
+                      'Aucun niveau configuré — l\'entreprise utilise le champ texte libre "Centre de coût" historique.'
+                    )}
                   </td>
                 </tr>
               )}
@@ -510,7 +588,11 @@ export function HierarchyEditor({
             <div key={level.key} className="p-3">
               <div className="mb-2 flex items-center justify-between gap-2 text-xs text-text-secondary">
                 <span className="font-mono">
-                  {idx === 0 ? "Macro" : idx === sortedLevels.length - 1 ? "Fin" : level.order}
+                  {idx === 0
+                    ? t("adminHierarchy.orderMacro", "Macro")
+                    : idx === sortedLevels.length - 1
+                      ? t("adminHierarchy.orderEnd", "Fin")
+                      : level.order}
                 </span>
                 <code className="rounded bg-bg-surface px-1.5 py-0.5">{level.key}</code>
               </div>
@@ -524,7 +606,9 @@ export function HierarchyEditor({
                 onChange={(e) => setLevelSemantic(level.key, e.target.value)}
                 className="mb-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-1.5 text-sm"
               >
-                <option value="">Usage personnalisé</option>
+                <option value="">
+                  {t("adminHierarchy.semanticNoneMobile", "Usage personnalisé")}
+                </option>
                 {SEMANTICS[domain].map((semantic) => (
                   <option key={semantic.value} value={semantic.value}>
                     {semantic.label}
@@ -559,8 +643,10 @@ export function HierarchyEditor({
           ))}
           {sortedLevels.length === 0 && (
             <div className="px-4 py-6 text-center text-sm text-text-secondary">
-              Aucun niveau configuré — l&apos;entreprise utilise le champ texte libre &quot;Centre
-              de coût&quot; historique.
+              {t(
+                "adminHierarchy.noLevelsConfigured",
+                'Aucun niveau configuré — l\'entreprise utilise le champ texte libre "Centre de coût" historique.'
+              )}
             </div>
           )}
         </div>
@@ -569,14 +655,17 @@ export function HierarchyEditor({
             onClick={addLevel}
             className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
           >
-            <Plus size={14} /> Ajouter un niveau
+            <Plus size={14} /> {t("adminHierarchy.addLevel", "Ajouter un niveau")}
           </button>
           <button
             onClick={saveLevels}
             disabled={!companyId || !levelsDirty || savingLevels}
             className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:opacity-40"
           >
-            <Save size={14} /> {savingLevels ? "Enregistrement…" : "Enregistrer la structure"}
+            <Save size={14} />{" "}
+            {savingLevels
+              ? t("adminHierarchy.saving", "Enregistrement…")
+              : t("adminHierarchy.saveStructure", "Enregistrer la structure")}
           </button>
         </div>
       </section>
@@ -586,20 +675,23 @@ export function HierarchyEditor({
         <section className="space-y-4">
           {levelsDirty && (
             <div className="rounded-lg border border-rag-amber bg-rag-amber-light px-3 py-2 text-xs text-rag-amber">
-              Enregistrez d&apos;abord la structure des niveaux. Les valeurs ne peuvent pas être
-              ajoutées à un niveau non persisté.
+              {t(
+                "adminHierarchy.levelsDirtyWarning",
+                "Enregistrez d'abord la structure des niveaux. Les valeurs ne peuvent pas être ajoutées à un niveau non persisté."
+              )}
             </div>
           )}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-bold text-text-primary">
-              2. Valeurs de l&apos;arborescence
+              {t("adminHierarchy.section2Title", "2. Valeurs de l'arborescence")}
             </h2>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={downloadTemplate}>
-                <Download size={13} /> Template Excel
+                <Download size={13} /> {t("adminHierarchy.templateExcel", "Template Excel")}
               </Button>
               <Button variant="outline" onClick={exportTree} disabled={nodes.length === 0}>
-                <FileSpreadsheet size={13} /> Exporter l&apos;arborescence
+                <FileSpreadsheet size={13} />{" "}
+                {t("adminHierarchy.exportTree", "Exporter l'arborescence")}
               </Button>
               <input
                 ref={fileInputRef}
@@ -613,16 +705,15 @@ export function HierarchyEditor({
                 }}
               />
               <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                <Upload size={13} /> Importer un fichier
+                <Upload size={13} /> {t("adminHierarchy.importFile", "Importer un fichier")}
               </Button>
             </div>
           </div>
           <p className="max-w-2xl text-xs text-text-secondary">
-            Le fichier contient une ligne par nœud avec les colonnes &quot;Niveau&quot; (libellé ou
-            clé d&apos;un niveau configuré ci-dessus), &quot;Code&quot;, &quot;Libellé&quot; et
-            &quot;Code parent&quot; (code d&apos;un nœud du niveau immédiatement au-dessus — vide
-            pour le niveau macro). L&apos;ordre des lignes importe peu : les parents sont résolus
-            par code, quel que soit l&apos;ordre du fichier.
+            {t(
+              "adminHierarchy.importFileHint",
+              'Le fichier contient une ligne par nœud avec les colonnes "Niveau" (libellé ou clé d\'un niveau configuré ci-dessus), "Code", "Libellé" et "Code parent" (code d\'un nœud du niveau immédiatement au-dessus — vide pour le niveau macro). L\'ordre des lignes importe peu : les parents sont résolus par code, quel que soit l\'ordre du fichier.'
+            )}
           </p>
           {sortedLevels.map((level) => {
             const pLevel = parentLevel(level);
@@ -636,7 +727,12 @@ export function HierarchyEditor({
                   {level.label}{" "}
                   {pLevel && (
                     <span className="font-normal text-text-tertiary">
-                      (enfant de {pLevel.label})
+                      (
+                      {t("adminHierarchy.childOf", "enfant de {name}").replace(
+                        "{name}",
+                        pLevel.label
+                      )}
+                      )
                     </span>
                   )}
                 </div>
@@ -648,23 +744,26 @@ export function HierarchyEditor({
                     <thead>
                       <tr className="border-b border-border">
                         <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
-                          Code
+                          {t("adminHierarchy.colCode", "Code")}
                         </th>
                         <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
-                          Libellé
+                          {t("adminHierarchy.colLabel", "Libellé")}
                         </th>
                         {pLevel && (
                           <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
-                            Parent ({pLevel.label})
+                            {t("adminHierarchy.colParent", "Parent ({name})").replace(
+                              "{name}",
+                              pLevel.label
+                            )}
                           </th>
                         )}
                         {isPnl && (
                           <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
-                            Baseline / signe
+                            {t("adminHierarchy.colBaselineSign", "Baseline / signe")}
                           </th>
                         )}
                         <th className="px-4 py-2 text-center text-xs font-semibold text-text-secondary">
-                          Actions
+                          {t("adminHierarchy.colActions", "Actions")}
                         </th>
                       </tr>
                     </thead>
@@ -684,7 +783,9 @@ export function HierarchyEditor({
                             <td className="px-4 py-2 text-xs text-secondary">
                               {n.financial?.baseline ?? 0} €M ·{" "}
                               {n.financial?.sign === -1 ? "−" : "+"}
-                              {n.financial?.computed ? " · Calculée" : ""}
+                              {n.financial?.computed
+                                ? t("adminHierarchy.computedSuffix", " · Calculée")
+                                : ""}
                             </td>
                           )}
                           <td className="px-4 py-2 text-center">
@@ -702,7 +803,7 @@ export function HierarchyEditor({
                           <input
                             value={form.code}
                             onChange={(e) => setFormField(level.key, "code", e.target.value)}
-                            placeholder="Code"
+                            placeholder={t("adminHierarchy.codePlaceholder", "Code")}
                             className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
                           />
                         </td>
@@ -710,7 +811,7 @@ export function HierarchyEditor({
                           <input
                             value={form.label}
                             onChange={(e) => setFormField(level.key, "label", e.target.value)}
-                            placeholder="Libellé"
+                            placeholder={t("adminHierarchy.labelPlaceholder", "Libellé")}
                             className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
                           />
                         </td>
@@ -721,7 +822,9 @@ export function HierarchyEditor({
                               onChange={(e) => setFormField(level.key, "parentId", e.target.value)}
                               className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
                             >
-                              <option value="">Sélectionner…</option>
+                              <option value="">
+                                {t("leverForm.selectPlaceholder", "Sélectionner…")}
+                              </option>
                               {parentOptions.map((p) => (
                                 <option key={p.id} value={p.id}>
                                   {ancestryLabel(p.id, nodes, sortedLevels)} ({p.code})
@@ -736,7 +839,7 @@ export function HierarchyEditor({
                               <input
                                 type="number"
                                 step="0.1"
-                                placeholder="Baseline €M"
+                                placeholder={t("adminHierarchy.baselinePlaceholder", "Baseline €M")}
                                 value={form.baseline}
                                 onChange={(e) =>
                                   setNodeForm((prev) => ({
@@ -756,8 +859,12 @@ export function HierarchyEditor({
                                 }
                                 className="rounded-lg border border-border px-2 py-1 text-xs"
                               >
-                                <option value="1">Positif</option>
-                                <option value="-1">Négatif</option>
+                                <option value="1">
+                                  {t("adminHierarchy.signPositive", "Positif")}
+                                </option>
+                                <option value="-1">
+                                  {t("adminHierarchy.signNegative", "Négatif")}
+                                </option>
                               </select>
                               <label className="flex items-center gap-1 text-[10px] text-secondary">
                                 <input
@@ -770,7 +877,7 @@ export function HierarchyEditor({
                                     }))
                                   }
                                 />{" "}
-                                Imputable aux leviers
+                                {t("adminHierarchy.selectableDesktop", "Imputable aux leviers")}
                               </label>
                             </div>
                           </td>
@@ -782,7 +889,9 @@ export function HierarchyEditor({
                             className="rounded-lg bg-bp-coral px-2.5 py-1 text-xs font-semibold text-white hover:bg-bp-coral/90"
                           >
                             <Plus size={12} className="inline" />{" "}
-                            {savingNodeKey === level.key ? "Enregistrement…" : "Ajouter"}
+                            {savingNodeKey === level.key
+                              ? t("adminHierarchy.saving", "Enregistrement…")
+                              : t("common.add", "Ajouter")}
                           </button>
                         </td>
                       </tr>
@@ -792,7 +901,10 @@ export function HierarchyEditor({
                             colSpan={(pLevel ? 4 : 3) + (isPnl ? 1 : 0)}
                             className="px-4 py-3 text-center text-xs text-text-secondary"
                           >
-                            Aucune valeur pour ce niveau pour le moment.
+                            {t(
+                              "adminHierarchy.noValuesForLevel",
+                              "Aucune valeur pour ce niveau pour le moment."
+                            )}
                           </td>
                         </tr>
                       )}
@@ -813,13 +925,15 @@ export function HierarchyEditor({
                         </div>
                         {pLevel && (
                           <div className="mt-0.5 text-xs text-text-secondary">
-                            Parent :{" "}
+                            {t("adminHierarchy.parentPrefix", "Parent :")}{" "}
                             {n.parentId ? ancestryLabel(n.parentId, nodes, sortedLevels) : "—"}
                           </div>
                         )}
                         {isPnl && (
                           <div className="mt-1 text-xs text-secondary">
-                            Baseline : {n.financial?.baseline ?? 0} €M · signe{" "}
+                            {t("adminHierarchy.baselinePrefix", "Baseline :")}{" "}
+                            {n.financial?.baseline ?? 0} €M ·{" "}
+                            {t("adminHierarchy.signPrefix", "signe")}{" "}
                             {n.financial?.sign === -1 ? "−" : "+"}
                           </div>
                         )}
@@ -834,20 +948,23 @@ export function HierarchyEditor({
                   ))}
                   {levelNodes.length === 0 && (
                     <div className="px-4 py-3 text-center text-xs text-text-secondary">
-                      Aucune valeur pour ce niveau pour le moment.
+                      {t(
+                        "adminHierarchy.noValuesForLevel",
+                        "Aucune valeur pour ce niveau pour le moment."
+                      )}
                     </div>
                   )}
                   <div className="space-y-2 p-3">
                     <input
                       value={form.code}
                       onChange={(e) => setFormField(level.key, "code", e.target.value)}
-                      placeholder="Code"
+                      placeholder={t("adminHierarchy.codePlaceholder", "Code")}
                       className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
                     />
                     <input
                       value={form.label}
                       onChange={(e) => setFormField(level.key, "label", e.target.value)}
-                      placeholder="Libellé"
+                      placeholder={t("adminHierarchy.labelPlaceholder", "Libellé")}
                       className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
                     />
                     {pLevel && (
@@ -856,7 +973,9 @@ export function HierarchyEditor({
                         onChange={(e) => setFormField(level.key, "parentId", e.target.value)}
                         className="w-full rounded-lg border border-border bg-bg-surface px-2 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral"
                       >
-                        <option value="">Sélectionner…</option>
+                        <option value="">
+                          {t("leverForm.selectPlaceholder", "Sélectionner…")}
+                        </option>
                         {parentOptions.map((p) => (
                           <option key={p.id} value={p.id}>
                             {ancestryLabel(p.id, nodes, sortedLevels)} ({p.code})
@@ -869,7 +988,7 @@ export function HierarchyEditor({
                         <input
                           type="number"
                           step="0.1"
-                          placeholder="Baseline €M"
+                          placeholder={t("adminHierarchy.baselinePlaceholder", "Baseline €M")}
                           value={form.baseline}
                           onChange={(e) =>
                             setNodeForm((prev) => ({
@@ -889,8 +1008,12 @@ export function HierarchyEditor({
                           }
                           className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
                         >
-                          <option value="1">Signe positif</option>
-                          <option value="-1">Signe négatif</option>
+                          <option value="1">
+                            {t("adminHierarchy.signPositiveMobile", "Signe positif")}
+                          </option>
+                          <option value="-1">
+                            {t("adminHierarchy.signNegativeMobile", "Signe négatif")}
+                          </option>
                         </select>
                         <label className="col-span-2 flex items-center gap-1 text-xs text-secondary">
                           <input
@@ -903,7 +1026,7 @@ export function HierarchyEditor({
                               }))
                             }
                           />{" "}
-                          Ligne imputable aux leviers
+                          {t("adminHierarchy.selectableMobile", "Ligne imputable aux leviers")}
                         </label>
                       </div>
                     )}
@@ -912,7 +1035,7 @@ export function HierarchyEditor({
                       disabled={levelsDirty || savingNodeKey === level.key}
                       className="w-full rounded-lg bg-bp-coral px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
                     >
-                      <Plus size={12} className="inline" /> Ajouter
+                      <Plus size={12} className="inline" /> {t("common.add", "Ajouter")}
                     </button>
                   </div>
                 </div>
@@ -924,11 +1047,12 @@ export function HierarchyEditor({
 
       <section className="rounded-xl border border-border bg-neutral-50 p-4">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-primary">
-          <GitBranch size={16} className="text-bp-coral" /> Aperçu live de l&apos;arborescence
+          <GitBranch size={16} className="text-bp-coral" />{" "}
+          {t("adminHierarchy.livePreviewTitle", "Aperçu live de l'arborescence")}
         </h2>
         {forest.length === 0 ? (
           <p className="text-xs text-secondary">
-            Ajoutez des valeurs pour visualiser les branches.
+            {t("adminHierarchy.addValuesHint", "Ajoutez des valeurs pour visualiser les branches.")}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -940,18 +1064,23 @@ export function HierarchyEditor({
         {orphanNodes.length > 0 && (
           <div className="mt-4 rounded-lg border border-rag-amber bg-rag-amber-light p-3 text-xs text-secondary">
             <strong className="block text-rag-amber">
-              {orphanNodes.length} valeur(s) orpheline(s) détectée(s)
+              {t(
+                "adminHierarchy.orphansDetected",
+                "{n} valeur(s) orpheline(s) détectée(s)"
+              ).replace("{n}", String(orphanNodes.length))}
             </strong>
             <p className="mt-1">
-              Ces documents existent dans Firebase mais leur niveau n&apos;est pas enregistré dans
-              la structure. Ils ne sont pas affichés dans l&apos;arbre valide.
+              {t(
+                "adminHierarchy.orphansExplain",
+                "Ces documents existent dans Firebase mais leur niveau n'est pas enregistré dans la structure. Ils ne sont pas affichés dans l'arbre valide."
+              )}
             </p>
             <button
               type="button"
               onClick={() => void removeOrphanNodes()}
               className="mt-2 rounded-md border border-rag-amber px-2.5 py-1 font-semibold text-rag-amber hover:bg-white"
             >
-              Supprimer ces valeurs de Firebase
+              {t("adminHierarchy.removeOrphans", "Supprimer ces valeurs de Firebase")}
             </button>
           </div>
         )}
@@ -960,19 +1089,22 @@ export function HierarchyEditor({
       <Modal
         open={importPreview !== null}
         onOpenChange={(open) => !open && setImportPreview(null)}
-        title={`Prévisualisation de l'import — ${importFileName}`}
+        title={t(
+          "adminHierarchy.importPreviewTitle",
+          "Prévisualisation de l'import — {file}"
+        ).replace("{file}", importFileName)}
         maxWidth="640px"
         footer={
           <>
             <Button variant="ghost" onClick={() => setImportPreview(null)}>
-              Annuler
+              {t("common.cancel", "Annuler")}
             </Button>
             <Button
               variant="primary"
               disabled={importing || (importPreview?.toCreate.length ?? 0) === 0}
               onClick={() => void confirmImport()}
             >
-              Confirmer l&apos;import
+              {t("adminHierarchy.confirmImport", "Confirmer l'import")}
             </Button>
           </>
         }
@@ -980,20 +1112,23 @@ export function HierarchyEditor({
         <div className="mb-3 flex flex-wrap gap-4 text-[13px]">
           <span>
             <strong className="text-rag-green-dark">{importPreview?.toCreate.length ?? 0}</strong>{" "}
-            nœud(s) prêt(s) à créer
+            {t("adminHierarchy.nodesReadyToCreate", "nœud(s) prêt(s) à créer")}
           </span>
           <span>
-            <strong className="text-rag-red">{importPreview?.errors.length ?? 0}</strong> ligne(s)
-            en erreur
+            <strong className="text-rag-red">{importPreview?.errors.length ?? 0}</strong>{" "}
+            {t("adminHierarchy.rowsInError", "ligne(s) en erreur")}
           </span>
         </div>
         <div className="max-h-[320px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
           {importPreview?.errors.length === 0 ? (
-            <p className="text-tertiary">Aucune anomalie détectée.</p>
+            <p className="text-tertiary">
+              {t("adminHierarchy.noAnomalies", "Aucune anomalie détectée.")}
+            </p>
           ) : (
             importPreview?.errors.map((e, i) => (
               <div key={i} className="text-secondary">
-                Ligne {e.rowNumber} : {e.reason}
+                {t("adminHierarchy.rowLabel", "Ligne {n} :").replace("{n}", String(e.rowNumber))}{" "}
+                {e.reason}
               </div>
             ))
           )}

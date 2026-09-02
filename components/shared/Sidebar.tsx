@@ -57,7 +57,7 @@ export function Sidebar({
           className="h-[22px] w-auto"
         />
         <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/50">
-          BeTrack · Transformation
+          {t("login.tagline", "BeTrack · Transformation")}
         </div>
       </div>
 

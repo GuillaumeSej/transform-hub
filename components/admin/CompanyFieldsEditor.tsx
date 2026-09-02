@@ -3,13 +3,18 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import type { Role, RiskLevel, RecognitionMode } from "@/types";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
-const RISK_LEVELS: { value: RiskLevel; label: string }[] = [
-  { value: "critical", label: "Critique" },
-  { value: "high", label: "Élevé" },
-  { value: "medium", label: "Moyen" },
-  { value: "low", label: "Faible" },
-];
+function riskLevels(
+  t: (key: string, fallback?: string) => string
+): { value: RiskLevel; label: string }[] {
+  return [
+    { value: "critical", label: t("adminCompanyFields.riskCritical", "Critique") },
+    { value: "high", label: t("adminCompanyFields.riskHigh", "Élevé") },
+    { value: "medium", label: t("adminCompanyFields.riskMedium", "Moyen") },
+    { value: "low", label: t("adminCompanyFields.riskLow", "Faible") },
+  ];
+}
 
 /** Seuils par défaut affichés quand `riskThresholds` n'est pas défini — mêmes ordres de grandeur
  *  que DEFAULT_RISK_THRESHOLDS (lib/engine.ts), mais exprimés ici en €K (UI) plutôt qu'en € brut
@@ -79,6 +84,8 @@ export function CompanyFieldsEditor({
   value: CompanyFormState;
   onChange: (patch: Partial<CompanyFormState>) => void;
 }) {
+  const { t } = useTranslation();
+  const RISK_LEVELS = riskLevels(t);
   const [newLevel, setNewLevel] = useState("");
 
   const addLevel = () => {
@@ -125,25 +132,31 @@ export function CompanyFieldsEditor({
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className="text-xs font-medium text-text-secondary">Nom</label>
+          <label className="text-xs font-medium text-text-secondary">
+            {t("adminCompanyFields.name", "Nom")}
+          </label>
           <input
             value={value.name}
             onChange={(e) => onChange({ name: e.target.value })}
             className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-            placeholder="Nom de l'entreprise"
+            placeholder={t("adminCompanyFields.namePlaceholder", "Nom de l'entreprise")}
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-text-secondary">Secteur</label>
+          <label className="text-xs font-medium text-text-secondary">
+            {t("adminCompanyFields.industry", "Secteur")}
+          </label>
           <input
             value={value.industry}
             onChange={(e) => onChange({ industry: e.target.value })}
             className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-            placeholder="Industrie / Secteur"
+            placeholder={t("adminCompanyFields.industryPlaceholder", "Industrie / Secteur")}
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-text-secondary">Début exercice</label>
+          <label className="text-xs font-medium text-text-secondary">
+            {t("adminCompanyFields.fyStart", "Début exercice")}
+          </label>
           <input
             type="date"
             value={value.fyStart}
@@ -152,7 +165,9 @@ export function CompanyFieldsEditor({
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-text-secondary">Fin exercice</label>
+          <label className="text-xs font-medium text-text-secondary">
+            {t("adminCompanyFields.fyEnd", "Fin exercice")}
+          </label>
           <input
             type="date"
             value={value.fyEnd}
@@ -164,19 +179,19 @@ export function CompanyFieldsEditor({
 
       <div className="border-t border-border pt-3 space-y-3">
         <div className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-          Paramètres avancés
+          {t("adminCompanyFields.advancedSettings", "Paramètres avancés")}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="text-xs font-medium text-text-secondary">
-              Budget CAPEX total (€M) — optionnel
+              {t("adminCompanyFields.capexBudgetLabel", "Budget CAPEX total (€M) — optionnel")}
             </label>
             <input
               type="number"
               value={value.capexBudget}
               onChange={(e) => onChange({ capexBudget: e.target.value })}
               className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              placeholder="Non renseigné"
+              placeholder={t("finance.notProvided", "Non renseigné")}
             />
           </div>
           <div className="flex items-end pb-2">
@@ -187,12 +202,15 @@ export function CompanyFieldsEditor({
                 onChange={(e) => onChange({ actionPlanEnabled: e.target.checked })}
                 className="h-4 w-4 rounded border-border accent-bp-coral"
               />
-              Module &quot;Plan d&apos;action&quot; activé
+              {t("adminCompanyFields.actionPlanToggle", 'Module "Plan d\'action" activé')}
             </label>
           </div>
           <div>
             <label className="text-xs font-medium text-text-secondary">
-              Taux de charges sociales patronales (%) — optionnel
+              {t(
+                "adminCompanyFields.socialChargesLabel",
+                "Taux de charges sociales patronales (%) — optionnel"
+              )}
             </label>
             <input
               type="number"
@@ -202,17 +220,18 @@ export function CompanyFieldsEditor({
               value={value.socialChargesRate}
               onChange={(e) => onChange({ socialChargesRate: e.target.value })}
               className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              placeholder="Défaut : 45%"
+              placeholder={t("adminCompanyFields.socialChargesPlaceholder", "Défaut : 45%")}
             />
             <p className="mt-1 text-[11px] text-text-secondary">
-              Utilisé pour le &quot;salaire chargé&quot; (brut + charges) dans le calcul EUR des
-              mouvements RH (Vision mouvement). Non renseigné = 45% par défaut (ordre de grandeur
-              France, cadre) — à ajuster selon la politique RH réelle du client.
+              {t(
+                "adminCompanyFields.socialChargesHint",
+                'Utilisé pour le "salaire chargé" (brut + charges) dans le calcul EUR des mouvements RH (Vision mouvement). Non renseigné = 45% par défaut (ordre de grandeur France, cadre) — à ajuster selon la politique RH réelle du client.'
+              )}
             </p>
           </div>
           <div>
             <label className="text-xs font-medium text-text-secondary">
-              Mode de reconnaissance par défaut
+              {t("adminCompanyFields.defaultRecognitionLabel", "Mode de reconnaissance par défaut")}
             </label>
             <select
               value={value.defaultRecognition ?? "smoothing"}
@@ -223,28 +242,38 @@ export function CompanyFieldsEditor({
               }
               className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
             >
-              <option value="smoothing">Lissé</option>
-              <option value="one_shot">One-shot</option>
+              <option value="smoothing">
+                {t("adminCompanyFields.recognitionSmoothed", "Lissé")}
+              </option>
+              <option value="one_shot">
+                {t("adminCompanyFields.recognitionOneShot", "One-shot")}
+              </option>
             </select>
             <p className="mt-1 text-[11px] text-text-secondary">
-              Appliqué par défaut aux nouvelles lignes d&apos;impact, surchargeable pour chaque
-              ligne d&apos;impact individuellement.
+              {t(
+                "adminCompanyFields.defaultRecognitionHint",
+                "Appliqué par défaut aux nouvelles lignes d'impact, surchargeable pour chaque ligne d'impact individuellement."
+              )}
             </p>
           </div>
         </div>
 
         <div>
           <label className="text-xs font-medium text-text-secondary">
-            Seuils de risque (€K) — cumul des montants d&apos;alertes ouvertes à partir duquel un
-            levier passe à ce niveau de risque
+            {t(
+              "adminCompanyFields.riskThresholdsLabel",
+              "Seuils de risque (€K) — cumul des montants d'alertes ouvertes à partir duquel un levier passe à ce niveau de risque"
+            )}
           </label>
           <div className="mt-2 overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-bg-surface border-b border-border">
-                  <th className="px-3 py-2 text-left font-semibold text-text-secondary">Niveau</th>
                   <th className="px-3 py-2 text-left font-semibold text-text-secondary">
-                    Seuil (€K)
+                    {t("adminCompanyFields.colLevel", "Niveau")}
+                  </th>
+                  <th className="px-3 py-2 text-left font-semibold text-text-secondary">
+                    {t("adminCompanyFields.colThreshold", "Seuil (€K)")}
                   </th>
                 </tr>
               </thead>
@@ -270,13 +299,17 @@ export function CompanyFieldsEditor({
 
         <div>
           <label className="text-xs font-medium text-text-secondary">
-            Niveaux de confidentialité (du moins au plus restreint)
+            {t(
+              "adminCompanyFields.confidentialityLevelsLabel",
+              "Niveaux de confidentialité (du moins au plus restreint)"
+            )}
           </label>
           {value.confidentialityLevels.length === 0 && (
             <p className="mt-1 rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
-              La confidentialité n&apos;est pas encore activée pour cette entreprise. Ajoutez un
-              premier niveau ci-dessous (ex. Public, Confidentiel) pour pouvoir restreindre
-              l&apos;accès à certains leviers par rôle ou par utilisateur.
+              {t(
+                "adminCompanyFields.confidentialityEmpty",
+                "La confidentialité n'est pas encore activée pour cette entreprise. Ajoutez un premier niveau ci-dessous (ex. Public, Confidentiel) pour pouvoir restreindre l'accès à certains leviers par rôle ou par utilisateur."
+              )}
             </p>
           )}
           <div className="mt-1 flex flex-wrap gap-2">
@@ -305,14 +338,14 @@ export function CompanyFieldsEditor({
                   addLevel();
                 }
               }}
-              placeholder="Ex : Confidentiel"
+              placeholder={t("adminCompanyFields.newLevelPlaceholder", "Ex : Confidentiel")}
               className="w-full max-w-xs rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
             />
             <button
               onClick={addLevel}
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
             >
-              Ajouter le niveau
+              {t("adminCompanyFields.addLevel", "Ajouter le niveau")}
             </button>
           </div>
         </div>
@@ -320,15 +353,17 @@ export function CompanyFieldsEditor({
         {value.confidentialityLevels.length > 0 && (
           <div>
             <label className="text-xs font-medium text-text-secondary">
-              Habilitations par profil — un levier au niveau X n&apos;est visible que par les
-              profils habilités pour X (un levier sans niveau reste visible par tous)
+              {t(
+                "adminCompanyFields.clearanceLabel",
+                "Habilitations par profil — un levier au niveau X n'est visible que par les profils habilités pour X (un levier sans niveau reste visible par tous)"
+              )}
             </label>
             <div className="mt-2 overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-bg-surface border-b border-border">
                     <th className="px-3 py-2 text-left font-semibold text-text-secondary">
-                      Profil
+                      {t("adminCompanyFields.colProfile", "Profil")}
                     </th>
                     {value.confidentialityLevels.map((level) => (
                       <th

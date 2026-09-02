@@ -6,11 +6,13 @@ import type { Company } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { useRole } from "@/lib/hooks/useRole";
 import { LifecycleEditor } from "@/components/admin/LifecycleEditor";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /** Page globale de configuration du cycle de vie — garde son propre sélecteur d'entreprise ; la
  * logique d'édition vit dans LifecycleEditor, partagée avec l'onglet "Cycle de vie" du hub
  * `/admin/companies/detail`. Reste accessible à admin ET admin_entreprise (inchangé). */
 export default function AdminLifecyclePage() {
+  const { t } = useTranslation();
   const { role, user } = useRole();
   const isEntAdmin = role === "admin_entreprise";
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -35,11 +37,15 @@ export default function AdminLifecyclePage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Workflow size={22} className="text-bp-coral" />
-        <h1 className="text-xl font-bold text-text-primary">Configuration du Cycle de Vie</h1>
+        <h1 className="text-xl font-bold text-text-primary">
+          {t("adminLifecycle.title", "Configuration du Cycle de Vie")}
+        </h1>
       </div>
 
       <div className="flex items-center gap-3">
-        <label className="text-sm font-medium text-text-secondary">Entreprise :</label>
+        <label className="text-sm font-medium text-text-secondary">
+          {t("adminLifecycle.companyLabel", "Entreprise :")}
+        </label>
         {isEntAdmin ? (
           <span className="text-sm font-medium text-text-primary">
             {companies.find((c) => c.id === user?.companyId)?.name ?? user?.companyId}

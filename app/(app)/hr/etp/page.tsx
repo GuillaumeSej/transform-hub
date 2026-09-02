@@ -17,6 +17,7 @@ import { HrExcelButtons } from "@/components/shared/HrExcelButtons";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import type { Employee, WorkforceMovement } from "@/types";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type EtpRow = {
   id: string;
@@ -73,7 +74,28 @@ type MovementRow = {
   movement: WorkforceMovement;
 };
 
+function alertKindLabels(
+  t: (key: string, fallback?: string) => string
+): Record<hr.MovementAlertKind | "none", string> {
+  return {
+    overdue: t("hr.alert.overdue", "En retard"),
+    due: t("hr.alert.due", "Échéance proche"),
+    toValidate: t("hr.alert.toValidate", "À valider"),
+    leverMismatch: t("hr.alert.leverMismatch", "Désynchronisé levier"),
+    none: t("etp.alert.none", "Aucune"),
+  };
+}
+
+function alertKindLabel(
+  labels: Record<hr.MovementAlertKind | "none", string>,
+  kind: hr.MovementAlertKind | null
+): string {
+  return labels[kind ?? "none"];
+}
+
 export default function BaseEtpPage() {
+  const { t } = useTranslation();
+  const ALERT_LABELS = alertKindLabels(t);
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
@@ -118,14 +140,16 @@ export default function BaseEtpPage() {
         fte: e.fte,
         salary: e.salary,
         hrOwner: e.hrOwner,
-        hasMovement: m ? "Oui" : "Non",
+        hasMovement: m ? t("etp.yes", "Oui") : t("etp.no", "Non"),
         movementType: m?.type ?? "—",
         leverCode: lever?.code ?? "—",
         leverId: lever?.id ?? null,
         plannedDate: m?.plannedDate ?? "—",
         actualDate: m?.actualDate ?? "—",
-        movementStatus: m ? `${m.status}${m.hrValidated ? " ✓RH" : ""}` : "—",
-        pse: m?.inPSE ? "Oui" : "Non",
+        movementStatus: m
+          ? `${m.status}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`
+          : "—",
+        pse: m?.inPSE ? t("etp.yes", "Oui") : t("etp.no", "Non"),
         movement: m,
         alertKind: m ? (alertByMovement.get(m.id) ?? null) : null,
         employee: e,
@@ -138,7 +162,7 @@ export default function BaseEtpPage() {
         const lever = data.levers.find((l) => l.id === m.leverId);
         return {
           id: m.id,
-          matricule: "— à recruter —",
+          matricule: t("etp.toRecruit", "— à recruter —"),
           name: m.label,
           department: m.department,
           direction: "—",
@@ -148,14 +172,14 @@ export default function BaseEtpPage() {
           fte: m.fte,
           salary: m.salaryImpact,
           hrOwner: m.hrOwner,
-          hasMovement: "Oui",
+          hasMovement: t("etp.yes", "Oui"),
           movementType: m.type,
           leverCode: lever?.code ?? "—",
           leverId: lever?.id ?? null,
           plannedDate: m.plannedDate,
           actualDate: m.actualDate ?? "—",
-          movementStatus: `${m.status}${m.hrValidated ? " ✓RH" : ""}`,
-          pse: "Non",
+          movementStatus: `${m.status}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`,
+          pse: t("etp.no", "Non"),
           movement: m,
           alertKind: alertByMovement.get(m.id) ?? null,
           employee: null,
@@ -163,7 +187,7 @@ export default function BaseEtpPage() {
       });
 
     return [...baseRows, ...recruitmentRows];
-  }, [wf, data.levers, alertByMovement]);
+  }, [wf, data.levers, alertByMovement, t]);
 
   const movementRows: MovementRow[] = useMemo(
     () =>
@@ -182,7 +206,7 @@ export default function BaseEtpPage() {
           fte: m.fte,
           plannedDate: m.plannedDate,
           actualDate: m.actualDate ?? "—",
-          status: `${m.status}${m.hrValidated ? " ✓RH" : ""}`,
+          status: `${m.status}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`,
           hrValidated: m.hrValidated,
           leverCode: lever?.code ?? "—",
           leverId: lever?.id ?? null,
@@ -194,74 +218,88 @@ export default function BaseEtpPage() {
           movement: m,
         };
       }),
-    [wf.movements, data.levers, alertByMovement]
+    [wf.movements, data.levers, alertByMovement, t]
   );
 
   const etpFilterDefs: FilterDef<EtpRow>[] = useMemo(
     () => [
-      { key: "f_department", label: "Département", getValue: (r) => r.department },
-      { key: "f_direction", label: "Direction", getValue: (r) => r.direction },
-      { key: "f_country", label: "Pays", getValue: (r) => r.country },
-      { key: "f_func", label: "Fonction", getValue: (r) => r.func },
-      { key: "f_level", label: "Niveau", getValue: (r) => r.level },
-      { key: "f_hrOwner", label: "RH local", getValue: (r) => r.hrOwner },
-      { key: "f_hasMovement", label: "Mouvement prévu", getValue: (r) => r.hasMovement },
-      { key: "f_lever", label: "Levier lié", getValue: (r) => r.leverCode },
+      {
+        key: "f_department",
+        label: t("hr.department", "Département"),
+        getValue: (r) => r.department,
+      },
+      {
+        key: "f_direction",
+        label: t("etp.filter.direction", "Direction"),
+        getValue: (r) => r.direction,
+      },
+      { key: "f_country", label: t("dashboard.country", "Pays"), getValue: (r) => r.country },
+      { key: "f_func", label: t("dashboard.function", "Fonction"), getValue: (r) => r.func },
+      { key: "f_level", label: t("levers.columnStatus", "Niveau"), getValue: (r) => r.level },
+      {
+        key: "f_hrOwner",
+        label: t("etp.filter.hrOwnerLocal", "RH local"),
+        getValue: (r) => r.hrOwner,
+      },
+      {
+        key: "f_hasMovement",
+        label: t("etp.filter.hasMovement", "Mouvement prévu"),
+        getValue: (r) => r.hasMovement,
+      },
+      { key: "f_lever", label: t("etp.linkedLever", "Levier lié"), getValue: (r) => r.leverCode },
       { key: "f_pse", label: "PSE", getValue: (r) => r.pse },
       {
         key: "f_alert",
-        label: "Alerte",
-        getValue: (r) =>
-          r.alertKind === "overdue"
-            ? "En retard"
-            : r.alertKind === "due"
-              ? "Échéance proche"
-              : r.alertKind === "toValidate"
-                ? "À valider"
-                : r.alertKind === "leverMismatch"
-                  ? "Désynchronisé levier"
-                  : "Aucune",
+        label: t("etp.alertLabel", "Alerte"),
+        getValue: (r) => alertKindLabel(ALERT_LABELS, r.alertKind),
       },
     ],
-    []
+    [t, ALERT_LABELS]
   );
 
   const movementFilterDefs: FilterDef<MovementRow>[] = useMemo(
     () => [
-      { key: "f_type", label: "Type", getValue: (r) => r.type },
-      { key: "f_department", label: "Département", getValue: (r) => r.department },
-      { key: "f_country", label: "Pays", getValue: (r) => r.country },
-      { key: "f_function", label: "Fonction", getValue: (r) => r.function },
-      { key: "f_program", label: "Programme", getValue: (r) => r.programId },
-      { key: "f_hrOwner", label: "RH Owner", getValue: (r) => r.hrOwner },
+      { key: "f_type", label: t("etp.filter.type", "Type"), getValue: (r) => r.type },
+      {
+        key: "f_department",
+        label: t("hr.department", "Département"),
+        getValue: (r) => r.department,
+      },
+      { key: "f_country", label: t("dashboard.country", "Pays"), getValue: (r) => r.country },
+      {
+        key: "f_function",
+        label: t("dashboard.function", "Fonction"),
+        getValue: (r) => r.function,
+      },
+      {
+        key: "f_program",
+        label: t("dashboard.program", "Programme"),
+        getValue: (r) => r.programId,
+      },
+      {
+        key: "f_hrOwner",
+        label: t("etp.filter.hrOwnerMovement", "RH Owner"),
+        getValue: (r) => r.hrOwner,
+      },
       {
         key: "f_execution",
-        label: "État d'exécution",
+        label: t("etp.filter.executionStatus", "État d'exécution"),
         getValue: (r) => r.executionStatus,
       },
-      { key: "f_status", label: "Statut", getValue: (r) => r.status },
+      { key: "f_status", label: t("hr.status", "Statut"), getValue: (r) => r.status },
       {
         key: "f_hrValidated",
-        label: "Validé RH",
-        getValue: (r) => (r.hrValidated ? "Oui" : "Non"),
+        label: t("etp.hrValidated", "Validé RH"),
+        getValue: (r) => (r.hrValidated ? t("etp.yes", "Oui") : t("etp.no", "Non")),
       },
-      { key: "f_lever", label: "Levier lié", getValue: (r) => r.leverCode },
+      { key: "f_lever", label: t("etp.linkedLever", "Levier lié"), getValue: (r) => r.leverCode },
       {
         key: "f_alert",
-        label: "Alerte",
-        getValue: (r) =>
-          r.alertKind === "overdue"
-            ? "En retard"
-            : r.alertKind === "due"
-              ? "Échéance proche"
-              : r.alertKind === "toValidate"
-                ? "À valider"
-                : r.alertKind === "leverMismatch"
-                  ? "Désynchronisé levier"
-                  : "Aucune",
+        label: t("etp.alertLabel", "Alerte"),
+        getValue: (r) => alertKindLabel(ALERT_LABELS, r.alertKind),
       },
     ],
-    []
+    [t, ALERT_LABELS]
   );
 
   const etpActiveFilters: ActiveFilters = useMemo(() => {
@@ -337,7 +375,7 @@ export default function BaseEtpPage() {
       patch.id = String(value);
     } else return;
     data.upsertEmployee({ ...row.employee, ...patch });
-    showToast("Employé mis à jour", row.employee.name, "success");
+    showToast(t("etp.toast.employeeUpdated", "Employé mis à jour"), row.employee.name, "success");
   };
 
   const departmentOptions = useMemo(
@@ -369,7 +407,7 @@ export default function BaseEtpPage() {
   const etpColumns: ColumnDef<EtpRow>[] = [
     {
       key: "matricule",
-      label: "Matricule",
+      label: t("etp.column.matricule", "Matricule"),
       width: "110px",
       editable: true,
       render: (r) => (
@@ -382,63 +420,74 @@ export default function BaseEtpPage() {
         </span>
       ),
     },
-    { key: "name", label: "Nom", editable: true, render: (r) => <strong>{r.name}</strong> },
+    {
+      key: "name",
+      label: t("etp.column.name", "Nom"),
+      editable: true,
+      render: (r) => <strong>{r.name}</strong>,
+    },
     {
       key: "department",
-      label: "Département",
+      label: t("hr.department", "Département"),
       editable: true,
       options: departmentOptions,
       allowCustom: true,
     },
     {
       key: "direction",
-      label: "Direction",
+      label: t("etp.filter.direction", "Direction"),
       editable: true,
       options: directionOptions,
       allowCustom: true,
     },
     {
       key: "country",
-      label: "Pays",
+      label: t("dashboard.country", "Pays"),
       editable: true,
       options: countryOptions,
       allowCustom: true,
     },
     {
       key: "func",
-      label: "Fonction",
+      label: t("dashboard.function", "Fonction"),
       editable: true,
       options: funcOptions,
       allowCustom: true,
     },
     {
       key: "level",
-      label: "Niveau",
+      label: t("levers.columnStatus", "Niveau"),
       editable: true,
       options: ["Global", "Régional", "Local"],
     },
-    { key: "fte", label: "ETP", align: "right", editable: true, type: "number" },
+    {
+      key: "fte",
+      label: t("etp.column.fte", "ETP"),
+      align: "right",
+      editable: true,
+      type: "number",
+    },
     {
       key: "salary",
-      label: "Salaire (€)",
+      label: t("etp.column.salaryEur", "Salaire (€)"),
       align: "right",
       editable: true,
       type: "number",
       render: (r) => r.salary.toLocaleString("fr-FR"),
     },
-    { key: "hrOwner", label: "RH local", editable: true },
+    { key: "hrOwner", label: t("etp.filter.hrOwnerLocal", "RH local"), editable: true },
   ];
 
   const movementColumns: ColumnDef<MovementRow>[] = [
     {
       key: "id",
-      label: "ID",
+      label: t("etp.column.id", "ID"),
       width: "100px",
       render: (r) => <span className="font-mono text-[11px] text-secondary">{r.id}</span>,
     },
     {
       key: "label",
-      label: "Libellé",
+      label: t("etp.column.label", "Libellé"),
       render: (r) => (
         <button
           onClick={(e) => {
@@ -451,20 +500,20 @@ export default function BaseEtpPage() {
         </button>
       ),
     },
-    { key: "type", label: "Type" },
-    { key: "department", label: "Département" },
-    { key: "country", label: "Pays" },
-    { key: "fte", label: "ETP", align: "right" },
-    { key: "plannedDate", label: "Date prévue" },
-    { key: "actualDate", label: "Date réelle" },
-    { key: "status", label: "Statut" },
+    { key: "type", label: t("etp.filter.type", "Type") },
+    { key: "department", label: t("hr.department", "Département") },
+    { key: "country", label: t("dashboard.country", "Pays") },
+    { key: "fte", label: t("etp.column.fte", "ETP"), align: "right" },
+    { key: "plannedDate", label: t("etp.column.plannedDate", "Date prévue") },
+    { key: "actualDate", label: t("etp.column.actualDate", "Date réelle") },
+    { key: "status", label: t("hr.status", "Statut") },
     {
       key: "hrValidated",
-      label: "Validé RH",
+      label: t("etp.hrValidated", "Validé RH"),
       render: (r) =>
         r.hrValidated ? (
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rag-green-dark">
-            <CheckCircle2 size={13} /> Validé
+            <CheckCircle2 size={13} /> {t("etp.validatedLabel", "Validé")}
           </span>
         ) : (
           <Button
@@ -473,16 +522,20 @@ export default function BaseEtpPage() {
             onClick={(e) => {
               e.stopPropagation();
               data.validateMovement(r.movement.id);
-              showToast("Mouvement validé", r.movement.label, "success");
+              showToast(
+                t("etp.toast.movementValidated", "Mouvement validé"),
+                r.movement.label,
+                "success"
+              );
             }}
           >
-            ✓ Valider
+            {t("etp.validateAction", "✓ Valider")}
           </Button>
         ),
     },
     {
       key: "leverCode",
-      label: "Levier lié",
+      label: t("etp.linkedLever", "Levier lié"),
       render: (r) =>
         r.leverId ? (
           <button
@@ -500,22 +553,22 @@ export default function BaseEtpPage() {
     },
     {
       key: "alertKind",
-      label: "Alerte",
+      label: t("etp.alertLabel", "Alerte"),
       render: (r) => {
         if (r.alertKind === "overdue")
-          return <span className="text-[11px] text-rag-red">En retard</span>;
+          return <span className="text-[11px] text-rag-red">{ALERT_LABELS.overdue}</span>;
         if (r.alertKind === "due")
-          return <span className="text-[11px] text-rag-amber">Échéance proche</span>;
+          return <span className="text-[11px] text-rag-amber">{ALERT_LABELS.due}</span>;
         if (r.alertKind === "toValidate")
-          return <span className="text-[11px] text-rag-amber">À valider</span>;
+          return <span className="text-[11px] text-rag-amber">{ALERT_LABELS.toValidate}</span>;
         if (r.alertKind === "leverMismatch")
-          return <span className="text-[11px] text-rag-red">Désynchronisé levier</span>;
+          return <span className="text-[11px] text-rag-red">{ALERT_LABELS.leverMismatch}</span>;
         return <span className="text-[11px] text-tertiary">—</span>;
       },
     },
     {
       key: "savings",
-      label: "Économie salaire chargé",
+      label: t("etp.column.savingsLoaded", "Économie salaire chargé"),
       align: "right",
       render: (r) =>
         r.savings > 0 ? (
@@ -530,13 +583,13 @@ export default function BaseEtpPage() {
     },
     {
       key: "cost",
-      label: "Coûts sociaux associés",
+      label: t("etp.column.socialCosts", "Coûts sociaux associés"),
       align: "right",
       render: (r) => <span className="text-rag-amber">{fmtCurr(r.cost / 1_000_000)}</span>,
     },
     {
       key: "netImpact",
-      label: "Impact net 1ère année",
+      label: t("etp.column.netImpactY1", "Impact net 1ère année"),
       align: "right",
       render: (r) => (
         <span
@@ -553,48 +606,55 @@ export default function BaseEtpPage() {
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
         <div>
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            Base ETP
+            {t("nav.hrEtp", "Base ETP")}
           </h1>
           <div className="mt-2.5 text-[13px] text-secondary">
-            {wf.employees.length} employés sur le périmètre transformation · {wf.movements.length}{" "}
-            mouvements suivis
+            {t(
+              "etp.employeesSummary",
+              "{n} employés sur le périmètre transformation · {m} mouvements suivis"
+            )
+              .replace("{n}", String(wf.employees.length))
+              .replace("{m}", String(wf.movements.length))}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <HrExcelButtons data={data} />
           <Button variant="primary" onClick={() => setMovementModal({})}>
-            <Plus size={13} /> Nouveau mouvement
+            <Plus size={13} /> {t("etp.newMovement", "Nouveau mouvement")}
           </Button>
         </div>
       </div>
 
       <div className="mb-5 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2">
         <KPICard
-          label="Effectif actuel"
+          label={t("etp.kpi.currentHeadcount", "Effectif actuel")}
           value={hr.currentFTE(wf).toLocaleString("fr-FR")}
           icon={Users}
         />
         <KPICard
-          label="Effectif cible"
+          label={t("etp.kpi.targetHeadcount", "Effectif cible")}
           value={hr.targetFTE(wf).toLocaleString("fr-FR")}
           icon={Users}
           accent="green"
         />
         <KPICard
-          label="Atterrissage plan"
+          label={t("hr.landingPlan", "Atterrissage plan")}
           value={hr.plannedFTE(wf).toLocaleString("fr-FR")}
           icon={Users}
           accent="brown"
-          sub={`écart cible : ${(hr.plannedFTE(wf) - hr.targetFTE(wf)).toLocaleString("fr-FR")} ETP`}
+          sub={t("etp.kpi.landingPlanSub", "écart cible : {n} ETP").replace(
+            "{n}",
+            (hr.plannedFTE(wf) - hr.targetFTE(wf)).toLocaleString("fr-FR")
+          )}
         />
         <KPICard
-          label="Mouvements à venir"
+          label={t("etp.kpi.upcomingMovements", "Mouvements à venir")}
           value={String(plannedCount)}
           icon={Users}
           accent="amber"
         />
         <KPICard
-          label="À valider RH"
+          label={t("etp.kpi.toValidateHr", "À valider RH")}
           value={String(toValidateCount)}
           icon={CheckCircle2}
           accent={toValidateCount > 0 ? "red" : "default"}
@@ -610,7 +670,7 @@ export default function BaseEtpPage() {
               : "text-tertiary hover:text-primary"
           }`}
         >
-          Base ETP
+          {t("nav.hrEtp", "Base ETP")}
         </button>
         <button
           onClick={() => setTab("mouvements")}
@@ -620,7 +680,7 @@ export default function BaseEtpPage() {
               : "text-tertiary hover:text-primary"
           }`}
         >
-          Suivi des mouvements
+          {t("etp.tab.movementsTracking", "Suivi des mouvements")}
         </button>
       </div>
 
@@ -638,7 +698,10 @@ export default function BaseEtpPage() {
             data={filteredEmployees}
             columns={etpColumns}
             onCellUpdate={handleCellUpdate}
-            searchPlaceholder="Rechercher (nom, matricule, fonction...)"
+            searchPlaceholder={t(
+              "etp.searchPlaceholderEtp",
+              "Rechercher (nom, matricule, fonction...)"
+            )}
             defaultSort={{ key: "department", direction: "asc" }}
           />
         </>
@@ -657,7 +720,10 @@ export default function BaseEtpPage() {
           <EditableTable
             data={filteredMovements}
             columns={movementColumns}
-            searchPlaceholder="Rechercher (libellé, type, département...)"
+            searchPlaceholder={t(
+              "etp.searchPlaceholderMovements",
+              "Rechercher (libellé, type, département...)"
+            )}
             defaultSort={{ key: "plannedDate", direction: "desc" }}
           />
         </>
@@ -666,7 +732,11 @@ export default function BaseEtpPage() {
       <Modal
         open={movementModal !== null}
         onOpenChange={(open) => !open && setMovementModal(null)}
-        title={movementModal?.movement ? "Modifier le mouvement" : "Nouveau mouvement"}
+        title={
+          movementModal?.movement
+            ? t("etp.modal.editMovement", "Modifier le mouvement")
+            : t("etp.newMovement", "Nouveau mouvement")
+        }
         maxWidth="640px"
       >
         {movementModal && (
@@ -674,15 +744,27 @@ export default function BaseEtpPage() {
             data={data}
             companyId={user?.companyId}
             initialValues={movementModal.movement}
-            submitLabel={movementModal.movement ? "Enregistrer" : "Créer le mouvement"}
+            submitLabel={
+              movementModal.movement
+                ? t("common.save", "Enregistrer")
+                : t("etp.form.createMovement", "Créer le mouvement")
+            }
             onCancel={() => setMovementModal(null)}
             onSubmit={(values: MovementFormValues) => {
               if (movementModal.movement) {
                 data.updateWorkforceMovement(movementModal.movement.id, values);
-                showToast("Mouvement mis à jour", values.label, "success");
+                showToast(
+                  t("etp.toast.movementUpdated", "Mouvement mis à jour"),
+                  values.label,
+                  "success"
+                );
               } else {
                 data.createWorkforceMovement(values);
-                showToast("Mouvement créé", values.label, "success");
+                showToast(
+                  t("etp.toast.movementCreated", "Mouvement créé"),
+                  values.label,
+                  "success"
+                );
               }
               setMovementModal(null);
             }}

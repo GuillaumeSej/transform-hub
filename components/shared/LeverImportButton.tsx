@@ -14,6 +14,7 @@ import type { BeTrackData, Workstream } from "@/types";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/lib/hooks/useToast";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const SHEET_NAMES = { leviers: "Leviers", actions: "Actions", impacts: "Impacts" } as const;
 
@@ -55,6 +56,7 @@ export function LeverImportButton({
   onCreateWorkstreams: (workstreams: Workstream[]) => void;
 }) {
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<LeverImportPreview | null>(null);
   const [fileName, setFileName] = useState("");
@@ -135,8 +137,11 @@ export function LeverImportButton({
 
     XLSX.writeFile(wb, "template_leviers.xlsx");
     showToast(
-      "Template téléchargé",
-      "3 feuilles : Leviers (Code = clé), Actions (Code Levier = FK), Impacts (Code Levier + Nom de l'action = FK). Supprimez la ligne d'exemple avant de remplir.",
+      t("shared.excelIO.templateDownloadedTitle", "Template téléchargé"),
+      t(
+        "shared.leverImportButton.templateDownloadedBody",
+        "3 feuilles : Leviers (Code = clé), Actions (Code Levier = FK), Impacts (Code Levier + Nom de l'action = FK). Supprimez la ligne d'exemple avant de remplir."
+      ),
       "success"
     );
   };
@@ -167,11 +172,22 @@ export function LeverImportButton({
       const { createdCount, updatedCount } = onImport(preview.toUpsert);
       const wsNote =
         preview.toCreateWorkstreams.length > 0
-          ? ` · ${preview.toCreateWorkstreams.length} workstream(s) créé(s)`
+          ? ` · ${t("shared.leverImportButton.workstreamsCreatedNote", "{n} workstream(s) créé(s)").replace("{n}", String(preview.toCreateWorkstreams.length))}`
+          : "";
+      const errNote =
+        preview.errors.length > 0
+          ? ` · ${t("shared.leverImportButton.ignoredRowsNote", "{n} ligne(s) ignorée(s)").replace("{n}", String(preview.errors.length))}`
           : "";
       showToast(
-        "Import Excel terminé",
-        `${createdCount} levier(s) créé(s) · ${updatedCount} mis à jour${wsNote}${preview.errors.length > 0 ? ` · ${preview.errors.length} ligne(s) ignorée(s)` : ""}`,
+        t("shared.excelIO.importDoneTitle", "Import Excel terminé"),
+        t(
+          "shared.leverImportButton.importDoneBody",
+          "{created} levier(s) créé(s) · {updated} mis à jour"
+        )
+          .replace("{created}", String(createdCount))
+          .replace("{updated}", String(updatedCount)) +
+          wsNote +
+          errNote,
         "success"
       );
       setPreview(null);
@@ -183,7 +199,7 @@ export function LeverImportButton({
   return (
     <>
       <Button variant="outline" onClick={downloadTemplate}>
-        <Download size={13} /> Template Excel
+        <Download size={13} /> {t("shared.excelIO.templateButton", "Template Excel")}
       </Button>
       <input
         ref={fileInputRef}
@@ -197,58 +213,72 @@ export function LeverImportButton({
         }}
       />
       <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-        <Upload size={13} /> Importer un fichier
+        <Upload size={13} /> {t("shared.leverImportButton.importButton", "Importer un fichier")}
       </Button>
 
       <Modal
         open={preview !== null}
         onOpenChange={(open) => !open && setPreview(null)}
-        title={`Prévisualisation de l'import — ${fileName}`}
+        title={t("shared.excelIO.previewTitle", "Prévisualisation de l'import — {file}").replace(
+          "{file}",
+          fileName
+        )}
         maxWidth="720px"
         footer={
           <>
             <Button variant="ghost" onClick={() => setPreview(null)}>
-              Annuler
+              {t("common.cancel", "Annuler")}
             </Button>
             <Button
               variant="primary"
               disabled={importing || (preview?.toUpsert.length ?? 0) === 0}
               onClick={confirmImport}
             >
-              Confirmer l&apos;import
+              {t("shared.excelIO.confirmImportButton", "Confirmer l'import")}
             </Button>
           </>
         }
       >
         <div className="mb-3 flex flex-wrap gap-4 text-[13px]">
           <span>
-            <strong className="text-rag-green-dark">{preview?.createCount ?? 0}</strong> levier(s) à
-            créer
+            <strong className="text-rag-green-dark">{preview?.createCount ?? 0}</strong>{" "}
+            {t("shared.leverImportButton.createCountLabel", "levier(s) à créer")}
           </span>
           <span>
-            <strong className="text-bp-coral">{preview?.updateCount ?? 0}</strong> levier(s) à
-            mettre à jour
+            <strong className="text-bp-coral">{preview?.updateCount ?? 0}</strong>{" "}
+            {t("shared.leverImportButton.updateCountLabel", "levier(s) à mettre à jour")}
           </span>
           <span>
-            <strong className="text-rag-red">{preview?.errors.length ?? 0}</strong> ligne(s) en
-            erreur
+            <strong className="text-rag-red">{preview?.errors.length ?? 0}</strong>{" "}
+            {t("shared.leverImportButton.errorRowsLabel", "ligne(s) en erreur")}
           </span>
         </div>
         {preview && preview.toCreateWorkstreams.length > 0 && (
           <div className="mb-3 rounded-md border border-bp-coral/30 bg-bp-coral/5 p-2.5 text-xs text-secondary">
             <strong className="text-primary">{preview.toCreateWorkstreams.length}</strong>{" "}
-            workstream(s) référencé(s) dans le fichier n&apos;existe(nt) pas encore pour cette
-            entreprise et {preview.toCreateWorkstreams.length > 1 ? "seront créés" : "sera créé"}{" "}
-            automatiquement : {preview.toCreateWorkstreams.map((w) => w.name).join(", ")}.
+            {t(
+              "shared.leverImportButton.workstreamsNoteIntro",
+              "workstream(s) référencé(s) dans le fichier n'existe(nt) pas encore pour cette entreprise et"
+            )}{" "}
+            {preview.toCreateWorkstreams.length > 1
+              ? t("shared.leverImportButton.willBeCreatedPlural", "seront créés")
+              : t("shared.leverImportButton.willBeCreatedSingular", "sera créé")}{" "}
+            {t(
+              "shared.leverImportButton.workstreamsNoteOutro",
+              "automatiquement : {names}."
+            ).replace("{names}", preview.toCreateWorkstreams.map((w) => w.name).join(", "))}
           </div>
         )}
         <div className="max-h-[360px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
           {preview?.errors.length === 0 ? (
-            <p className="text-tertiary">Aucune anomalie détectée.</p>
+            <p className="text-tertiary">
+              {t("shared.excelIO.noAnomalies", "Aucune anomalie détectée.")}
+            </p>
           ) : (
             preview?.errors.map((e, i) => (
               <div key={i} className="text-secondary">
-                [{e.sheet}] Ligne {e.rowNumber} : {e.reason}
+                [{e.sheet}] {t("shared.leverImportButton.lineLabel", "Ligne")} {e.rowNumber} :{" "}
+                {e.reason}
               </div>
             ))
           )}

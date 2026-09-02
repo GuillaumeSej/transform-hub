@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/shared/Button";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import {
   computeMovementFinancials,
@@ -62,7 +63,7 @@ export function MovementForm({
   initialValues,
   onSubmit,
   onCancel,
-  submitLabel = "Créer le mouvement",
+  submitLabel,
 }: {
   data: BeTrackData;
   /** Entreprise courante — utilisée pour résoudre Company.socialChargesRate (taux de charges
@@ -73,6 +74,9 @@ export function MovementForm({
   onCancel: () => void;
   submitLabel?: string;
 }) {
+  const { t: translate } = useTranslation();
+  const resolvedSubmitLabel =
+    submitLabel ?? translate("etp.form.createMovement", "Créer le mouvement");
   const today = new Date().toISOString().slice(0, 10);
   const employees = data.workforce.employees;
   const departments = data.workforce.departments;
@@ -255,20 +259,20 @@ export function MovementForm({
       }}
     >
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Type de mouvement">
+        <Field label={translate("shared.movementForm.movementType", "Type de mouvement")}>
           <select
             className={inputClass}
             value={values.type}
             onChange={(e) => applyType(e.target.value as MovementType)}
           >
-            {TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {TYPES.map((movementType) => (
+              <option key={movementType} value={movementType}>
+                {movementType}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Levier rattaché">
+        <Field label={translate("shared.movementForm.linkedLever", "Levier rattaché")}>
           <select
             className={inputClass}
             value={values.leverId}
@@ -293,16 +297,26 @@ export function MovementForm({
 
         {isRecruitment ? (
           <div className="col-span-2 grid grid-cols-2 gap-3">
-            <Field label="Intitulé du poste à recruter">
+            <Field
+              label={translate("shared.movementForm.roleTitle", "Intitulé du poste à recruter")}
+            >
               <input
                 required
                 className={inputClass}
                 value={values.label}
                 onChange={(e) => set("label", e.target.value)}
-                placeholder="ex. Data Engineer (poste créé)"
+                placeholder={translate(
+                  "shared.movementForm.roleTitlePlaceholder",
+                  "ex. Data Engineer (poste créé)"
+                )}
               />
             </Field>
-            <Field label="Salaire brut annuel de référence (€)">
+            <Field
+              label={translate(
+                "shared.movementForm.refGrossSalary",
+                "Salaire brut annuel de référence (€)"
+              )}
+            >
               <input
                 type="number"
                 step="1000"
@@ -327,7 +341,7 @@ export function MovementForm({
           </div>
         ) : (
           <div className="col-span-2">
-            <Field label="Employé">
+            <Field label={translate("shared.movementForm.employee", "Employé")}>
               <select
                 className={inputClass}
                 value={values.empId ?? ""}
@@ -343,7 +357,13 @@ export function MovementForm({
           </div>
         )}
 
-        <Field label={isRecruitment ? "Département d'accueil" : "Département"}>
+        <Field
+          label={
+            isRecruitment
+              ? translate("shared.movementForm.hostDepartment", "Département d'accueil")
+              : translate("hr.department", "Département")
+          }
+        >
           <select
             className={inputClass}
             value={values.department}
@@ -357,13 +377,17 @@ export function MovementForm({
           </select>
         </Field>
         {isTransfer ? (
-          <Field label="Département d'arrivée">
+          <Field
+            label={translate("shared.movementForm.destinationDepartment", "Département d'arrivée")}
+          >
             <select
               className={inputClass}
               value={values.toDepartment ?? ""}
               onChange={(e) => set("toDepartment", e.target.value || undefined)}
             >
-              <option value="">— choisir —</option>
+              <option value="">
+                {translate("shared.movementForm.choosePlaceholder", "— choisir —")}
+              </option>
               {departments.map((d) => (
                 <option key={d.name} value={d.name}>
                   {d.name}
@@ -372,7 +396,7 @@ export function MovementForm({
             </select>
           </Field>
         ) : (
-          <Field label="Pays">
+          <Field label={translate("leverForm.country", "Pays")}>
             <select
               className={inputClass}
               value={values.country}
@@ -387,7 +411,7 @@ export function MovementForm({
           </Field>
         )}
 
-        <Field label="ETP concernés">
+        <Field label={translate("shared.movementForm.fteConcerned", "ETP concernés")}>
           <input
             type="number"
             step="0.1"
@@ -397,7 +421,7 @@ export function MovementForm({
             onChange={(e) => set("fte", Number(e.target.value) || 0)}
           />
         </Field>
-        <Field label="RH local responsable">
+        <Field label={translate("shared.movementForm.hrOwnerResponsible", "RH local responsable")}>
           <input
             className={inputClass}
             value={values.hrOwner}
@@ -405,7 +429,7 @@ export function MovementForm({
           />
         </Field>
 
-        <Field label="Date planifiée">
+        <Field label={translate("shared.movementForm.plannedDate", "Date planifiée")}>
           <input
             type="date"
             className={inputClass}
@@ -413,7 +437,7 @@ export function MovementForm({
             onChange={(e) => set("plannedDate", e.target.value)}
           />
         </Field>
-        <Field label="Date réalisée">
+        <Field label={translate("shared.movementForm.actualDate", "Date réalisée")}>
           <input
             type="date"
             className={inputClass}
@@ -421,7 +445,7 @@ export function MovementForm({
             onChange={(e) => set("actualDate", e.target.value || null)}
           />
         </Field>
-        <Field label="Statut">
+        <Field label={translate("hr.status", "Statut")}>
           <select
             className={inputClass}
             value={values.status}
@@ -443,7 +467,7 @@ export function MovementForm({
           </select>
         </Field>
         {PSE_TYPES.includes(values.type) ? (
-          <Field label="Dispositif social">
+          <Field label={translate("hr.column.socialScheme", "Dispositif social")}>
             <select
               className={inputClass}
               value={values.socialScheme ?? ""}
@@ -463,7 +487,9 @@ export function MovementForm({
                 );
               }}
             >
-              <option value="">— choisir —</option>
+              <option value="">
+                {translate("shared.movementForm.choosePlaceholder", "— choisir —")}
+              </option>
               {SOCIAL_SCHEMES.map((scheme) => (
                 <option key={scheme} value={scheme}>
                   {scheme}
@@ -493,14 +519,22 @@ export function MovementForm({
               className="accent-[#0F172A]"
             />
             <span className="text-xs font-medium text-primary">
-              Nécessite une reconversion (formation lourde)
+              {translate(
+                "shared.movementForm.requiresRetraining",
+                "Nécessite une reconversion (formation lourde)"
+              )}
             </span>
           </label>
         ) : (
           <div />
         )}
 
-        <Field label="Impact masse salariale (€/an, − = économie)">
+        <Field
+          label={translate(
+            "shared.movementForm.salaryImpactField",
+            "Impact masse salariale (€/an, − = économie)"
+          )}
+        >
           <input
             type="number"
             step="1000"
@@ -509,7 +543,12 @@ export function MovementForm({
             onChange={(e) => set("salaryImpact", Number(e.target.value) || 0)}
           />
         </Field>
-        <Field label="Coût social one-off (€ — indemnités, formation, recrutement…)">
+        <Field
+          label={translate(
+            "shared.movementForm.socialCostField",
+            "Coût social one-off (€ — indemnités, formation, recrutement…)"
+          )}
+        >
           <input
             type="number"
             step="1000"
@@ -522,7 +561,10 @@ export function MovementForm({
         <div className="col-span-2 rounded-md border border-border bg-neutral-50 p-3">
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-              Suggestion calculée selon le mécanisme « {values.type} »
+              {translate(
+                "shared.movementForm.suggestionMechanism",
+                "Suggestion calculée selon le mécanisme « {type} »"
+              ).replace("{type}", values.type)}
             </span>
             <Button
               type="button"
@@ -530,12 +572,14 @@ export function MovementForm({
               size="sm"
               onClick={() => applyFinancials(financials)}
             >
-              <RefreshCw size={12} /> Appliquer
+              <RefreshCw size={12} /> {translate("shared.movementForm.apply", "Appliquer")}
             </Button>
           </div>
           <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11.5px]">
             <div className="flex items-center justify-between">
-              <dt className="text-secondary">Salaire chargé annuel</dt>
+              <dt className="text-secondary">
+                {translate("shared.movementForm.annualLoadedSalary", "Salaire chargé annuel")}
+              </dt>
               <dd className="font-semibold text-primary">
                 {fmtCurr(financials.loadedSalary / 1_000_000)}
               </dd>
@@ -543,8 +587,8 @@ export function MovementForm({
             <div className="flex items-center justify-between">
               <dt className="text-secondary">
                 {financials.salarySavings > 0
-                  ? "Économie salaire chargé"
-                  : "Impact masse salariale"}
+                  ? translate("etp.column.savingsLoaded", "Économie salaire chargé")
+                  : translate("shared.movementForm.salaryImpactLabel", "Impact masse salariale")}
               </dt>
               <dd className="font-semibold text-rag-green-dark">
                 {financials.salarySavings > 0
@@ -553,27 +597,43 @@ export function MovementForm({
               </dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-secondary">Coûts sociaux associés</dt>
+              <dt className="text-secondary">
+                {translate("etp.column.socialCosts", "Coûts sociaux associés")}
+              </dt>
               <dd className="font-semibold text-rag-amber">
                 {fmtCurr(financials.socialCost / 1_000_000)}
               </dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-secondary">Impact net 1ère année</dt>
+              <dt className="text-secondary">
+                {translate("etp.column.netImpactY1", "Impact net 1ère année")}
+              </dt>
               <dd className="font-semibold text-primary">
                 {fmtCurr(financials.netFirstYearImpact / 1_000_000)}
               </dd>
             </div>
           </dl>
           <p className="mt-1.5 text-[10px] text-tertiary">
-            Taux de charges patronales appliqué : {Math.round(chargesRate * 100)}%
-            {isRecruitment ? " · salaire brut de référence saisi ci-dessus" : ""} — valeur par
-            défaut estimée, les champs ci-dessus restent modifiables librement.
+            {translate(
+              "shared.movementForm.chargesRateAppliedPrefix",
+              "Taux de charges patronales appliqué : "
+            )}
+            {Math.round(chargesRate * 100)}%
+            {isRecruitment
+              ? translate(
+                  "shared.movementForm.recruitmentGrossSalaryNote",
+                  " · salaire brut de référence saisi ci-dessus"
+                )
+              : ""}{" "}
+            {translate(
+              "shared.movementForm.defaultValueNote",
+              "— valeur par défaut estimée, les champs ci-dessus restent modifiables librement."
+            )}
           </p>
         </div>
 
         <div className="col-span-2">
-          <Field label="Commentaire">
+          <Field label={translate("hr.column.comment", "Commentaire")}>
             <textarea
               rows={3}
               className={inputClass}
@@ -586,10 +646,10 @@ export function MovementForm({
 
       <div className="mt-6 flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
-          Annuler
+          {translate("common.cancel", "Annuler")}
         </Button>
         <Button type="submit" variant="primary">
-          {submitLabel}
+          {resolvedSubmitLabel}
         </Button>
       </div>
     </form>

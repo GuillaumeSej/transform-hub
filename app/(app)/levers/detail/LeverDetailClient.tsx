@@ -17,6 +17,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
@@ -45,16 +46,19 @@ import type { ActionStatus, Company, LeverAction, RecognitionMode } from "@/type
 
 const TABS = ["overview", "plan", "impact", "collab"] as const;
 type Tab = (typeof TABS)[number];
-const TAB_LABELS: Record<Tab, string> = {
-  overview: "Overview",
-  plan: "Plan d'action",
-  impact: "Impact",
-  collab: "Collaboration",
-};
+function tabLabels(t: (key: string, fallback?: string) => string): Record<Tab, string> {
+  return {
+    overview: "Overview",
+    plan: t("leverDetail.tab.plan", "Plan d'action"),
+    impact: "Impact",
+    collab: t("leverDetail.tab.collab", "Collaboration"),
+  };
+}
 
 type CascadeProposal = CascadeResult & { checked: Record<string, boolean> };
 
 export default function LeverDetailClient() {
+  const { t } = useTranslation();
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
   const [actionPlanEnabled, setActionPlanEnabled] = useState(true);
@@ -110,12 +114,12 @@ export default function LeverDetailClient() {
   if (!lever) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
-        Levier introuvable.{" "}
+        {t("leverDetail.notFound", "Levier introuvable.")}{" "}
         <button
           onClick={() => router.push("/levers")}
           className="font-medium text-bp-coral hover:underline"
         >
-          Retour au pipeline
+          {t("leverDetail.backToPipeline", "Retour au pipeline")}
         </button>
       </div>
     );
@@ -126,13 +130,15 @@ export default function LeverDetailClient() {
   if (!canView) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
-        Accès restreint — ce levier est classé « {lever.confidentialityLevel} », un niveau de
-        confidentialité auquel votre profil n&apos;est pas habilité.{" "}
+        {t(
+          "leverDetail.restrictedAccess",
+          "Accès restreint — ce levier est classé « {level} », un niveau de confidentialité auquel votre profil n'est pas habilité."
+        ).replace("{level}", lever.confidentialityLevel ?? "")}{" "}
         <button
           onClick={() => router.push("/levers")}
           className="font-medium text-bp-coral hover:underline"
         >
-          Retour au pipeline
+          {t("leverDetail.backToPipeline", "Retour au pipeline")}
         </button>
       </div>
     );
@@ -194,7 +200,7 @@ export default function LeverDetailClient() {
             <StageBadge status="cancelled" label={lifecycle.label("cancelled")} />
           )}
           <Button variant="outline" onClick={() => setEditOpen(true)}>
-            <Pencil size={13} /> Modifier le levier
+            <Pencil size={13} /> {t("leverDetail.editLever", "Modifier le levier")}
           </Button>
         </div>
       </div>
@@ -223,7 +229,7 @@ export default function LeverDetailClient() {
                       if (isAuto || isCurrent) return;
                       data.updateLever(lever.id, { status: s });
                       showToast(
-                        "Niveau mis à jour",
+                        t("leverDetail.statusUpdated", "Niveau mis à jour"),
                         `${lever.name} : ${lifecycle.shortLabel(s)}`,
                         "success"
                       );
@@ -231,8 +237,14 @@ export default function LeverDetailClient() {
                     disabled={isAuto}
                     title={
                       isAuto
-                        ? "Cette étape est atteinte automatiquement quand le plan d'action est à 100 %"
-                        : `Passer en « ${lifecycle.shortLabel(s)} »`
+                        ? t(
+                            "leverDetail.autoStageHint",
+                            "Cette étape est atteinte automatiquement quand le plan d'action est à 100 %"
+                          )
+                        : t("leverDetail.moveToStage", "Passer en « {stage} »").replace(
+                            "{stage}",
+                            lifecycle.shortLabel(s)
+                          )
                     }
                     className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 transition ${
                       isCurrent
@@ -257,8 +269,11 @@ export default function LeverDetailClient() {
           {hasAnyActions && STATUS_ORDER[lever.status] < STATUS_ORDER.in_progress && (
             <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
               <span className="flex items-center gap-1.5 text-xs text-info-blue">
-                <Info size={13} /> Des actions sont planifiées sur ce levier — il peut passer en «{" "}
-                {lifecycle.shortLabel("in_progress")} ».
+                <Info size={13} />{" "}
+                {t(
+                  "leverDetail.actionsPlannedHint",
+                  "Des actions sont planifiées sur ce levier — il peut passer en « {stage} »."
+                ).replace("{stage}", lifecycle.shortLabel("in_progress"))}
               </span>
               <Button
                 variant="outline"
@@ -266,32 +281,40 @@ export default function LeverDetailClient() {
                 onClick={() => {
                   data.updateLever(lever.id, { status: "in_progress" });
                   showToast(
-                    "Niveau mis à jour",
+                    t("leverDetail.statusUpdated", "Niveau mis à jour"),
                     `${lever.name} : ${lifecycle.shortLabel("in_progress")}`,
                     "success"
                   );
                 }}
               >
-                Passer en « {lifecycle.shortLabel("in_progress")} »
+                {t("leverDetail.moveToStage", "Passer en « {stage} »").replace(
+                  "{stage}",
+                  lifecycle.shortLabel("in_progress")
+                )}
               </Button>
             </div>
           )}
         </div>
       )}
 
-      <Modal open={editOpen} onOpenChange={setEditOpen} title="Modifier le levier" maxWidth="760px">
+      <Modal
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        title={t("leverDetail.editLever", "Modifier le levier")}
+        maxWidth="760px"
+      >
         <LeverForm
           data={data}
           lifecycle={lifecycle}
           companyId={user?.companyId}
           initialValues={lever}
-          submitLabel="Enregistrer les modifications"
+          submitLabel={t("leverDetail.saveChanges", "Enregistrer les modifications")}
           onCancel={() => setEditOpen(false)}
           onSubmit={(values: LeverFormValues) => {
             const oldEnd = lever.end;
             data.updateLever(lever.id, values);
             setEditOpen(false);
-            showToast("Levier mis à jour", lever.name, "success");
+            showToast(t("leverForm.updated", "Levier mis à jour"), lever.name, "success");
             if (values.end > oldEnd) checkCascade(lever.id, oldEnd, values.end);
           }}
         />
@@ -300,7 +323,11 @@ export default function LeverDetailClient() {
       <Modal
         open={actionModal !== null}
         onOpenChange={(open) => !open && setActionModal(null)}
-        title={actionModal?.mode === "edit" ? "Modifier l'action" : "Nouvelle action"}
+        title={
+          actionModal?.mode === "edit"
+            ? t("leverDetail.editAction", "Modifier l'action")
+            : t("leverDetail.newAction", "Nouvelle action")
+        }
         maxWidth="min(1400px, 96vw)"
       >
         {actionModal && (
@@ -308,14 +335,18 @@ export default function LeverDetailClient() {
             data={data}
             companyDefaultRecognition={defaultRecognition}
             initialValues={actionModal.action}
-            submitLabel={actionModal.mode === "edit" ? "Enregistrer" : "Créer l'action"}
+            submitLabel={
+              actionModal.mode === "edit"
+                ? t("common.save", "Enregistrer")
+                : t("leverDetail.createAction", "Créer l'action")
+            }
             onCancel={() => setActionModal(null)}
             onDelete={
               actionModal.action
                 ? () => {
                     data.deleteAction(actionScope, actionModal.action!.id);
                     setActionModal(null);
-                    showToast("Action supprimée", "", "success");
+                    showToast(t("leverDetail.actionDeleted", "Action supprimée"), "", "success");
                   }
                 : undefined
             }
@@ -327,7 +358,9 @@ export default function LeverDetailClient() {
               }
               setActionModal(null);
               showToast(
-                actionModal.action ? "Action mise à jour" : "Action créée",
+                actionModal.action
+                  ? t("leverDetail.actionUpdated", "Action mise à jour")
+                  : t("leverDetail.actionCreated", "Action créée"),
                 values.name,
                 "success"
               );
@@ -346,17 +379,19 @@ export default function LeverDetailClient() {
       <Modal
         open={depsModalOpen}
         onOpenChange={setDepsModalOpen}
-        title="Gérer les dépendances du levier"
+        title={t("leverDetail.manageDependenciesTitle", "Gérer les dépendances du levier")}
         maxWidth="560px"
         footer={
           <Button variant="primary" onClick={() => setDepsModalOpen(false)}>
-            Terminé
+            {t("leverDetail.finished", "Terminé")}
           </Button>
         }
       >
         <p className="mb-3 text-xs text-secondary">
-          Les dépendances sont suivies et alertées, mais les dates des leviers ne sont jamais
-          modifiées automatiquement en cas de retard.
+          {t(
+            "leverDetail.depsHint",
+            "Les dépendances sont suivies et alertées, mais les dates des leviers ne sont jamais modifiées automatiquement en cas de retard."
+          )}
         </p>
         <DependencyEditor
           data={data}
@@ -369,12 +404,12 @@ export default function LeverDetailClient() {
       <Modal
         open={cascadeProposal !== null}
         onOpenChange={(open) => !open && setCascadeProposal(null)}
-        title="Impact du retard sur les dépendances"
+        title={t("leverDetail.cascadeTitle", "Impact du retard sur les dépendances")}
         maxWidth="560px"
         footer={
           <>
             <Button variant="ghost" onClick={() => setCascadeProposal(null)}>
-              Ne rien décaler
+              {t("leverDetail.noShift", "Ne rien décaler")}
             </Button>
             {(cascadeProposal?.shifts.length ?? 0) > 0 && (
               <Button
@@ -386,19 +421,25 @@ export default function LeverDetailClient() {
                   if (selected.length > 0) {
                     data.applyCascadeShift(selected);
                     showToast(
-                      "Décalage appliqué",
-                      `${selected.length} élément(s) redaté(s)`,
+                      t("leverDetail.shiftApplied", "Décalage appliqué"),
+                      t("leverDetail.itemsRescheduled", "{n} élément(s) redaté(s)").replace(
+                        "{n}",
+                        String(selected.length)
+                      ),
                       "success"
                     );
                   }
                   setCascadeProposal(null);
                 }}
               >
-                Décaler la sélection (
-                {cascadeProposal
-                  ? cascadeProposal.shifts.filter((s) => cascadeProposal.checked[s.id]).length
-                  : 0}
-                )
+                {t("leverDetail.shiftSelection", "Décaler la sélection ({n})").replace(
+                  "{n}",
+                  String(
+                    cascadeProposal
+                      ? cascadeProposal.shifts.filter((s) => cascadeProposal.checked[s.id]).length
+                      : 0
+                  )
+                )}
               </Button>
             )}
           </>
@@ -406,10 +447,14 @@ export default function LeverDetailClient() {
       >
         {(cascadeProposal?.shifts.length ?? 0) > 0 && (
           <>
-            <p className="mb-2 text-[13px] font-semibold text-primary">Décalages proposés</p>
+            <p className="mb-2 text-[13px] font-semibold text-primary">
+              {t("leverDetail.proposedShifts", "Décalages proposés")}
+            </p>
             <p className="mb-3 text-xs text-secondary">
-              Cochez ceux à redater du même nombre de jours. Rien n&apos;est appliqué sans votre
-              confirmation.
+              {t(
+                "leverDetail.checkToReschedule",
+                "Cochez ceux à redater du même nombre de jours. Rien n'est appliqué sans votre confirmation."
+              )}
             </p>
             <div className="space-y-2">
               {cascadeProposal?.shifts.map((s) => (
@@ -432,8 +477,10 @@ export default function LeverDetailClient() {
                     <span className="font-semibold text-primary">{s.name}</span>
                     <span className="mt-1 block text-tertiary">
                       {s.oldStart} → {s.oldEnd}{" "}
-                      <span className="mx-1 font-semibold text-primary">devient</span> {s.newStart}{" "}
-                      → {s.newEnd}
+                      <span className="mx-1 font-semibold text-primary">
+                        {t("leverDetail.becomes", "devient")}
+                      </span>{" "}
+                      {s.newStart} → {s.newEnd}
                     </span>
                   </span>
                 </label>
@@ -444,11 +491,14 @@ export default function LeverDetailClient() {
         {(cascadeProposal?.impactedLevers.length ?? 0) > 0 && (
           <>
             <p className="mb-2 mt-4 flex items-center gap-1.5 text-[13px] font-semibold text-primary">
-              <TriangleAlert size={14} className="text-rag-amber" /> Leviers impactés — alerte seule
+              <TriangleAlert size={14} className="text-rag-amber" />{" "}
+              {t("leverDetail.impactedLevers", "Leviers impactés — alerte seule")}
             </p>
             <p className="mb-3 text-xs text-secondary">
-              Ces leviers dépendent de l&apos;élément retardé. Leurs dates ne sont{" "}
-              <strong>jamais modifiées automatiquement</strong> : rapprochez-vous de leur owner.
+              {t(
+                "leverDetail.impactedLeversHint",
+                "Ces leviers dépendent de l'élément retardé. Leurs dates ne sont jamais modifiées automatiquement : rapprochez-vous de leur owner."
+              )}
             </p>
             <div className="space-y-1.5">
               {cascadeProposal?.impactedLevers.map((l) => (
@@ -472,18 +522,18 @@ export default function LeverDetailClient() {
       </Modal>
 
       <div className="mb-4 flex snap-x flex-nowrap gap-0 overflow-x-auto rounded-t-lg border-b-[1.5px] border-border bg-white px-4">
-        {TABS.map((t) => (
+        {TABS.map((tabKey) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tabKey}
+            onClick={() => setTab(tabKey)}
             className={`-mb-[1.5px] border-b-[2.5px] px-4 py-3 text-[12.5px] font-semibold transition ${
-              tab === t
+              tab === tabKey
                 ? "border-bp-coral text-primary"
                 : "border-transparent text-secondary hover:text-primary"
             }`}
           >
-            {TAB_LABELS[t]}
-            {t === "collab" && ` (${comments.length})`}
+            {tabLabels(t)[tabKey]}
+            {tabKey === "collab" && ` (${comments.length})`}
           </button>
         ))}
       </div>
@@ -497,25 +547,35 @@ export default function LeverDetailClient() {
                 pct={lever.progress}
                 size={140}
                 strokeWidth={12}
-                label="Progression"
+                label={t("leverDetail.progressLabel", "Progression")}
               />
               <div className="flex flex-1 flex-wrap gap-x-8 gap-y-4">
-                <BigStat label="Réalisé à date" value={engine.fmtCurr(real)} accent />
                 <BigStat
-                  label={`Plan initial (figé à « ${lifecycle.label("validated")} »)`}
+                  label={t("leverDetail.realizedToDate", "Réalisé à date")}
+                  value={engine.fmtCurr(real)}
+                  accent
+                />
+                <BigStat
+                  label={t("leverDetail.lockedPlan", "Plan initial (figé à « {stage} »)").replace(
+                    "{stage}",
+                    lifecycle.label("validated")
+                  )}
                   value={lever.lockedPlan ? engine.fmtCurr(lever.lockedPlan.netSavings) : "—"}
                 />
                 <BigStat
-                  label="Planifié (réactualisé)"
+                  label={t("leverDetail.plannedReforecast", "Planifié (réactualisé)")}
                   value={lever.reforecast ? engine.fmtCurr(lever.reforecast.netSavings) : "—"}
                 />
-                <BigStat label="Net savings visé" value={engine.fmtCurr(lever.netSavings)} />
                 <BigStat
-                  label="Maturité"
+                  label={t("leverDetail.netSavingsTarget", "Net savings visé")}
+                  value={engine.fmtCurr(lever.netSavings)}
+                />
+                <BigStat
+                  label={t("levers.columnMaturity", "Maturité")}
                   value={<StageBadge status={lever.status} label={lifecycle.label(lever.status)} />}
                 />
                 <BigStat
-                  label="Risque"
+                  label={t("leverForm.risk", "Risque")}
                   value={
                     <StatusBadge risk={engine.computeLeverRisk(lever.id, alerts, riskThresholds)} />
                   }
@@ -524,14 +584,14 @@ export default function LeverDetailClient() {
             </div>
 
             {/* ── 2. Description (remontée avant les blocs identité) ──────── */}
-            <Collapsible title="Description">
+            <Collapsible title={t("leverDetail.descriptionTitle", "Description")}>
               <p className="mb-2 text-[13px] leading-relaxed text-secondary">{lever.description}</p>
             </Collapsible>
 
             {/* ── 3. Identité ─────────────────────────────────────────────── */}
-            <Collapsible title="Identité">
+            <Collapsible title={t("leverDetail.identityTitle", "Identité")}>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <OverviewField label="Code">
+                <OverviewField label={t("leverDetail.codeLabel", "Code")}>
                   <span className="font-mono text-[13px] text-primary">{lever.code}</span>
                 </OverviewField>
                 <OverviewField label="Type">{lever.type}</OverviewField>
@@ -554,14 +614,20 @@ export default function LeverDetailClient() {
             </Collapsible>
 
             {/* ── 4. Périmètre ─────────────────────────────────────────────── */}
-            <Collapsible title="Périmètre">
+            <Collapsible title={t("leverDetail.scopeTitle", "Périmètre")}>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <OverviewField label="Région">
+                <OverviewField label={t("leverForm.geography", "Région")}>
                   {lever.geography} · {lever.country}
                 </OverviewField>
-                <OverviewField label="Fonction">{lever.function}</OverviewField>
-                <OverviewField label="Entité légale">{lever.entity}</OverviewField>
-                <OverviewField label="Centres de coût impactés">
+                <OverviewField label={t("dashboard.function", "Fonction")}>
+                  {lever.function}
+                </OverviewField>
+                <OverviewField label={t("leverDetail.legalEntity", "Entité légale")}>
+                  {lever.entity}
+                </OverviewField>
+                <OverviewField
+                  label={t("leverDetail.impactedCostCenters", "Centres de coût impactés")}
+                >
                   <span className="text-[12px] text-secondary">
                     {Array.from(
                       new Set(
@@ -577,34 +643,37 @@ export default function LeverDetailClient() {
             </Collapsible>
 
             {/* ── 5. Planning ─────────────────────────────────────────────── */}
-            <Collapsible title="Planning">
+            <Collapsible title={t("leverDetail.planningTitle", "Planning")}>
               <div className="flex flex-wrap items-center gap-3 text-[12.5px] text-primary">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-neutral-50 px-3 py-1">
-                  <span className="text-tertiary">Début</span>
+                  <span className="text-tertiary">{t("leverDetail.start", "Début")}</span>
                   <span className="font-medium">{lever.start}</span>
-                  <span className="text-tertiary">→ Fin</span>
+                  <span className="text-tertiary">→ {t("leverDetail.end", "Fin")}</span>
                   <span className="font-medium">{lever.end}</span>
                 </span>
                 <span className="text-tertiary">·</span>
                 <span className="text-tertiary">
-                  Mis à jour le <span className="font-medium text-primary">{lever.lastUpdate}</span>
+                  {t("leverDetail.updatedOn", "Mis à jour le")}{" "}
+                  <span className="font-medium text-primary">{lever.lastUpdate}</span>
                 </span>
               </div>
             </Collapsible>
 
             {/* ── Courbe en J + Gantt des actions (si le levier a des actions avec impacts) ── */}
             {(lever.actions ?? []).some((a) => (a.impacts ?? []).length > 0) && (
-              <Collapsible title="Courbe en J & Timeline des actions">
+              <Collapsible
+                title={t("leverDetail.jcurveTimelineTitle", "Courbe en J & Timeline des actions")}
+              >
                 <JCurveChart
                   data={jCurveData}
                   paybackMonth={paybackMonth}
-                  labelPlan="Plan"
-                  labelReforecast="Reforecast"
-                  labelActual="Réalisé"
+                  labelPlan={t("chart.pnl.plan", "Plan")}
+                  labelReforecast={t("dashboard.kpi.reforecast", "Reforecast")}
+                  labelActual={t("levers.realized", "Réalisé")}
                 />
                 {(lever.actions ?? []).length > 0 && (
                   <>
-                    <SectionTitle>Timeline des actions</SectionTitle>
+                    <SectionTitle>{t("lever.actionTimeline", "Timeline des actions")}</SectionTitle>
                     <ActionGantt
                       actions={lever.actions ?? []}
                       onActionClick={(action) => setActionModal({ mode: "edit", action })}
@@ -616,7 +685,7 @@ export default function LeverDetailClient() {
                   <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-border bg-neutral-50 p-3 sm:grid-cols-3 lg:grid-cols-5">
                     <div className="text-center">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
-                        Gain brut
+                        {t("lever.grossGain", "Gain brut")}
                       </div>
                       <div className="mt-0.5 text-[15px] font-bold text-primary">
                         {engine.fmtCurr(consolidatedKPIs.grossSavings ?? 0)}
@@ -624,7 +693,7 @@ export default function LeverDetailClient() {
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
-                        Coût total
+                        {t("lever.totalCost", "Coût total")}
                       </div>
                       <div className="mt-0.5 text-[15px] font-bold text-bp-coral">
                         {engine.fmtCurr(
@@ -636,7 +705,7 @@ export default function LeverDetailClient() {
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
-                        Gain net
+                        {t("lever.netGain", "Gain net")}
                       </div>
                       <div className="mt-0.5 text-[15px] font-bold text-rag-green-dark">
                         {engine.fmtCurr(consolidatedKPIs.netSavings ?? 0)}
@@ -660,7 +729,7 @@ export default function LeverDetailClient() {
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
-                        Payback
+                        {t("lever.payback", "Payback")}
                       </div>
                       <div className="mt-0.5 text-[15px] font-bold text-primary">
                         {paybackMonth ?? "—"}
@@ -674,10 +743,14 @@ export default function LeverDetailClient() {
             <Collapsible
               title={
                 <span className="inline-flex items-center gap-1.5">
-                  <Link2 size={13} /> Dépendances
+                  <Link2 size={13} /> {t("leverDetail.dependenciesTitle", "Dépendances")}
                   {leverAlerts.length > 0 && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-rag-red-light px-2 py-0.5 text-[10px] font-bold normal-case text-rag-red">
-                      <TriangleAlert size={10} /> {leverAlerts.length} alerte(s)
+                      <TriangleAlert size={10} />{" "}
+                      {t("alerts.count", "{n} alerte(s)").replace(
+                        "{n}",
+                        String(leverAlerts.length)
+                      )}
                     </span>
                   )}
                 </span>
@@ -688,17 +761,20 @@ export default function LeverDetailClient() {
                   onClick={() => setDepsModalOpen(true)}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-bp-coral hover:underline"
                 >
-                  <Pencil size={11} /> Gérer les dépendances
+                  <Pencil size={11} />{" "}
+                  {t("leverDetail.manageDependencies", "Gérer les dépendances")}
                 </button>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                    Ce levier dépend de
+                    {t("leverDetail.dependsOn", "Ce levier dépend de")}
                   </div>
                   {lever.dependencies.length === 0 && (
-                    <p className="text-xs text-tertiary">Aucune dépendance amont.</p>
+                    <p className="text-xs text-tertiary">
+                      {t("leverDetail.noUpstreamDep", "Aucune dépendance amont.")}
+                    </p>
                   )}
                   {lever.dependencies.map((d) => {
                     const target = data.levers.find((l) => l.id === d.targetId);
@@ -738,10 +814,12 @@ export default function LeverDetailClient() {
                 </div>
                 <div>
                   <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                    Dépendent de ce levier
+                    {t("leverDetail.dependsOnThis", "Dépendent de ce levier")}
                   </div>
                   {dependents.length === 0 && (
-                    <p className="text-xs text-tertiary">Aucun levier ne dépend de celui-ci.</p>
+                    <p className="text-xs text-tertiary">
+                      {t("leverDetail.noDownstreamDep", "Aucun levier ne dépend de celui-ci.")}
+                    </p>
                   )}
                   {dependents.map((dep) => (
                     <button
@@ -782,8 +860,10 @@ export default function LeverDetailClient() {
         <Card>
           <CardBody>
             <div className="rounded-lg border border-dashed border-border bg-bg-surface p-10 text-center text-secondary">
-              Module non activé — le Plan d&apos;action a été désactivé pour votre entreprise
-              (paramétrable dans Admin &gt; Entreprises).
+              {t(
+                "leverDetail.actionPlanDisabled",
+                "Module non activé — le Plan d'action a été désactivé pour votre entreprise (paramétrable dans Admin > Entreprises)."
+              )}
             </div>
           </CardBody>
         </Card>
@@ -794,7 +874,10 @@ export default function LeverDetailClient() {
           <CardBody>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="text-[13px] font-semibold text-primary">
-                Plan d&apos;action — {lever.name}
+                {t("leverDetail.actionPlanTitle", "Plan d'action — {name}").replace(
+                  "{name}",
+                  lever.name
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex overflow-hidden rounded-md border border-border">
@@ -823,22 +906,32 @@ export default function LeverDetailClient() {
 
             <div className="mb-4 flex flex-wrap items-center gap-4 rounded-md border border-border bg-neutral-50 px-3 py-2 text-xs">
               <span className="font-semibold text-primary">
-                {actions.length} action{actions.length > 1 ? "s" : ""}
+                {t("leverDetail.actionsCount", "{n} action(s)").replace(
+                  "{n}",
+                  String(actions.length)
+                )}
               </span>
               <span className="text-secondary">
-                À faire : {actions.filter((a) => a.status === "todo").length}
+                {t("leverDetail.todo", "À faire")} :{" "}
+                {actions.filter((a) => a.status === "todo").length}
               </span>
               <span className="text-info-blue">
-                En cours : {actions.filter((a) => a.status === "in_progress").length}
+                {t("leverDetail.inProgress", "En cours")} :{" "}
+                {actions.filter((a) => a.status === "in_progress").length}
               </span>
               <span className="text-rag-green-dark">
-                Fait : {actions.filter((a) => a.status === "done").length}
+                {t("leverDetail.completed", "Fait")} :{" "}
+                {actions.filter((a) => a.status === "done").length}
               </span>
               <span className="text-rag-red">
-                En retard : {actions.filter((a) => a.status === "delayed").length}
+                {t("leverDetail.late", "En retard")} :{" "}
+                {actions.filter((a) => a.status === "delayed").length}
               </span>
               <span className="ml-auto font-bold text-primary">
-                {engine.actionProgress(actions)}% du plan
+                {t("leverDetail.percentOfPlan", "{pct}% du plan").replace(
+                  "{pct}",
+                  String(engine.actionProgress(actions))
+                )}
               </span>
             </div>
 
@@ -860,8 +953,10 @@ export default function LeverDetailClient() {
 
             <p className="mt-4 flex items-start gap-1.5 text-[11px] text-tertiary">
               <Info size={12} className="mt-px shrink-0" />
-              Repousser la date de fin d&apos;une action peut retarder ce plan : l&apos;outil
-              alertera les leviers dépendants sans modifier automatiquement leurs dates.
+              {t(
+                "leverDetail.delayActionHint",
+                "Repousser la date de fin d'une action peut retarder ce plan : l'outil alertera les leviers dépendants sans modifier automatiquement leurs dates."
+              )}
             </p>
           </CardBody>
         </Card>
@@ -870,25 +965,37 @@ export default function LeverDetailClient() {
       {tab === "impact" && (
         <Card>
           <CardBody>
-            <SectionTitle first>Impact financier</SectionTitle>
+            <SectionTitle first>
+              {t("leverDetail.financialImpactTitle", "Impact financier")}
+            </SectionTitle>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-              <Stat label={`Plan initial (net, figé à « ${lifecycle.label("validated")} »)`} accent>
+              <Stat
+                label={t(
+                  "leverDetail.lockedPlanNet",
+                  "Plan initial (net, figé à « {stage} »)"
+                ).replace("{stage}", lifecycle.label("validated"))}
+                accent
+              >
                 {lever.lockedPlan ? engine.fmtCurr(lever.lockedPlan.netSavings) : "—"}
               </Stat>
-              <Stat label="Réalisé à date (€)">{engine.fmtCurr(real)}</Stat>
-              <Stat label="Réactualisé (net)">
+              <Stat label={t("leverDetail.realizedToDateEuro", "Réalisé à date (€)")}>
+                {engine.fmtCurr(real)}
+              </Stat>
+              <Stat label={t("leverDetail.reforecastNet", "Réactualisé (net)")}>
                 {lever.reforecast ? engine.fmtCurr(lever.reforecast.netSavings) : "—"}
               </Stat>
               <Stat label="CAPEX">{engine.fmtCurr(consolidatedKPIs?.capex ?? lever.capex)}</Stat>
               <Stat label="One-off">
                 {engine.fmtCurr(consolidatedKPIs?.opexOneOff ?? lever.opexOneOff)}
               </Stat>
-              <Stat label="OPEX récurrent /an">
+              <Stat label={t("leverDetail.opexRecYear", "OPEX récurrent /an")}>
                 {engine.fmtCurr(consolidatedKPIs?.opexRec ?? lever.opexRec)}
               </Stat>
             </div>
 
-            <SectionTitle>Impacts par action</SectionTitle>
+            <SectionTitle>
+              {t("leverDetail.impactsByActionTitle", "Impacts par action")}
+            </SectionTitle>
             <ActionImpactTable
               actions={actions}
               fallbackPnlMap={lever.pnlMap}
@@ -899,15 +1006,19 @@ export default function LeverDetailClient() {
               }
             />
 
-            <SectionTitle>Impact RH</SectionTitle>
+            <SectionTitle>{t("leverDetail.hrImpactTitle", "Impact RH")}</SectionTitle>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Stat label="Impact estimé (ETP)">
+              <Stat label={t("leverForm.fteImpact", "Impact estimé (ETP)")}>
                 {(consolidatedKPIs?.fteImpact ?? lever.fteImpact) > 0
                   ? `+${consolidatedKPIs?.fteImpact ?? lever.fteImpact}`
                   : (consolidatedKPIs?.fteImpact ?? lever.fteImpact)}
               </Stat>
-              <Stat label="Réalisé à date (ETP)">{realFte > 0 ? `+${realFte}` : realFte}</Stat>
-              <Stat label="Population impactée">{lever.popImpacted}</Stat>
+              <Stat label={t("leverDetail.realizedToDateFte", "Réalisé à date (ETP)")}>
+                {realFte > 0 ? `+${realFte}` : realFte}
+              </Stat>
+              <Stat label={t("leverForm.popImpacted", "Population impactée")}>
+                {lever.popImpacted}
+              </Stat>
             </div>
           </CardBody>
         </Card>
@@ -918,7 +1029,7 @@ export default function LeverDetailClient() {
           <CardBody>
             {comments.length === 0 && (
               <p className="py-6 text-center text-xs text-tertiary">
-                Aucun commentaire pour le moment
+                {t("leverDetail.noComments", "Aucun commentaire pour le moment")}
               </p>
             )}
             {comments.map((c, i) => (
@@ -934,7 +1045,7 @@ export default function LeverDetailClient() {
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Ajouter un commentaire..."
+                placeholder={t("leverDetail.addCommentPlaceholder", "Ajouter un commentaire...")}
                 rows={2}
                 className="w-full rounded-sm border border-border px-3 py-2 text-xs focus:border-black focus:outline-none"
               />
@@ -947,10 +1058,10 @@ export default function LeverDetailClient() {
                   if (!comment.trim() || !user) return;
                   data.addComment(lever.id, comment, user);
                   setComment("");
-                  showToast("Commentaire ajouté", "", "success");
+                  showToast(t("leverDetail.commentAdded", "Commentaire ajouté"), "", "success");
                 }}
               >
-                <Send size={12} /> Envoyer
+                <Send size={12} /> {t("leverDetail.send", "Envoyer")}
               </Button>
             </div>
           </CardBody>
@@ -973,6 +1084,7 @@ function ActionImpactTable({
   fallbackEntity: string;
   pnlAccountName: (id: string) => string;
 }) {
+  const { t } = useTranslation();
   type Row = {
     id: string;
     actionName: string;
@@ -990,14 +1102,14 @@ function ActionImpactTable({
       id: `${action.id}-${impact.id}`,
       actionName: action.name,
       label: impact.label,
-      type: impact.type === "saving" ? "Gain" : "Coût",
+      type: impact.type === "saving" ? t("action.saving", "Gain") : t("action.cost", "Coût"),
       nature:
         impact.type === "saving"
           ? impact.nature === "opex_rec"
-            ? "Récurrent"
+            ? t("leverDetail.impactTable.recurrent", "Récurrent")
             : "One-off"
           : impact.nature === "opex_rec"
-            ? "OPEX récurrent"
+            ? t("leverDetail.impactTable.opexRec", "OPEX récurrent")
             : impact.nature === "capex"
               ? "CAPEX"
               : "One-off",
@@ -1013,11 +1125,16 @@ function ActionImpactTable({
     { key: "actionName", label: "Action", render: (r) => <strong>{r.actionName}</strong> },
     { key: "label", label: "Impact" },
     { key: "type", label: "Type" },
-    { key: "nature", label: "Nature" },
-    { key: "pnlName", label: "Compte P&L" },
-    { key: "costCenter", label: "Centre de coût" },
-    { key: "entity", label: "Entité (P&L)" },
-    { key: "amount", label: "Montant €M", align: "right", render: (r) => r.amount.toFixed(2) },
+    { key: "nature", label: t("leverDetail.impactTable.nature", "Nature") },
+    { key: "pnlName", label: t("leverDetail.impactTable.pnlAccount", "Compte P&L") },
+    { key: "costCenter", label: t("leverForm.costCenter", "Centre de coût") },
+    { key: "entity", label: t("leverDetail.impactTable.entityPnl", "Entité (P&L)") },
+    {
+      key: "amount",
+      label: t("leverDetail.impactTable.amount", "Montant €M"),
+      align: "right",
+      render: (r) => r.amount.toFixed(2),
+    },
     { key: "fte", label: "ETP", align: "right" },
   ];
 

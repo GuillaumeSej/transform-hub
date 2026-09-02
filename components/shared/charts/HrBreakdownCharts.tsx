@@ -17,6 +17,7 @@ import {
   YAxis,
 } from "recharts";
 import type { MovementBreakdownRow, MovementRealizationRow } from "@/lib/hrEngine";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 // Palette catégorielle validée (dataviz, tous checks PASS sur surface claire).
 export const HR_CATEGORICAL = ["#FF3C47", "#421799", "#320300", "#FFB1B5", "#421799", "#A99E9A"];
@@ -33,6 +34,8 @@ export function DepartmentMovementsChart({
   data: MovementBreakdownRow[];
   height?: number;
 }) {
+  const { t } = useTranslation();
+  const netPeriodLabel = t("chart.movementType.netPeriod", "Net période");
   const chartData = data.map((d) => ({
     dimension: d.label,
     fullName: d.label,
@@ -56,7 +59,7 @@ export function DepartmentMovementsChart({
         <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(value, name) => [
-            `${String(name) === "Net période" ? Number(value) : Math.abs(Number(value))} ETP`,
+            `${String(name) === netPeriodLabel ? Number(value) : Math.abs(Number(value))} ${t("etp.column.fte", "ETP")}`,
             String(name),
           ]}
           labelFormatter={(_, payload) =>
@@ -65,12 +68,37 @@ export function DepartmentMovementsChart({
         />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <ReferenceLine y={0} stroke="rgba(0,0,0,0.25)" />
-        <Bar dataKey="Recrutements" stackId="mouv" fill={COLOR_UP} radius={[3, 3, 0, 0]} />
-        <Bar dataKey="Attrition" stackId="mouv" fill="#FFB1B5" radius={[0, 0, 3, 3]} />
-        <Bar dataKey="Départs forcés" stackId="mouv" fill={COLOR_DOWN} radius={[0, 0, 3, 3]} />
-        <Bar dataKey="Transferts entrants" stackId="mouv" fill="#A99E9A" radius={[3, 3, 0, 0]} />
+        <Bar
+          dataKey="Recrutements"
+          name={t("chart.movementType.recruitments", "Recrutements")}
+          stackId="mouv"
+          fill={COLOR_UP}
+          radius={[3, 3, 0, 0]}
+        />
+        <Bar
+          dataKey="Attrition"
+          name={t("chart.movementType.attrition", "Attrition")}
+          stackId="mouv"
+          fill="#FFB1B5"
+          radius={[0, 0, 3, 3]}
+        />
+        <Bar
+          dataKey="Départs forcés"
+          name={t("chart.movementType.forcedDepartures", "Départs forcés")}
+          stackId="mouv"
+          fill={COLOR_DOWN}
+          radius={[0, 0, 3, 3]}
+        />
+        <Bar
+          dataKey="Transferts entrants"
+          name={t("chart.movementType.transfersIn", "Transferts entrants")}
+          stackId="mouv"
+          fill="#A99E9A"
+          radius={[3, 3, 0, 0]}
+        />
         <Bar
           dataKey="Transferts sortants"
+          name={t("chart.movementType.transfersOut", "Transferts sortants")}
           stackId="mouv"
           fill={COLOR_NEUTRAL}
           radius={[0, 0, 3, 3]}
@@ -78,7 +106,7 @@ export function DepartmentMovementsChart({
         <Line
           type="monotone"
           dataKey="Net"
-          name="Net période"
+          name={netPeriodLabel}
           stroke="transparent"
           strokeWidth={0}
           dot={{ r: 6, fill: "white", stroke: "#320300", strokeWidth: 2.5 }}
@@ -97,6 +125,8 @@ export function MovementRealizationChart({
   data: MovementRealizationRow[];
   height?: number;
 }) {
+  const { t } = useTranslation();
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
@@ -105,19 +135,32 @@ export function MovementRealizationChart({
         <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(value, name) => [
-            `${Number(value).toLocaleString("fr-FR")} ETP`,
+            `${Number(value).toLocaleString("fr-FR")} ${t("etp.column.fte", "ETP")}`,
             String(name),
           ]}
         />
         <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Bar dataKey="realized" name="Réalisé" stackId="total" fill="#421799" />
-        <Bar dataKey="remaining" name="Reste à faire" stackId="total" fill="#CCC1BD" />
+        <Bar
+          dataKey="realized"
+          name={t("chart.bar.realized", "Réalisé")}
+          stackId="total"
+          fill="#421799"
+        />
+        <Bar
+          dataKey="remaining"
+          name={t("shared.movementRealizationChart.remaining", "Reste à faire")}
+          stackId="total"
+          fill="#CCC1BD"
+        />
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
-const defaultFteFormat = (v: number) => `${v.toLocaleString("fr-FR")} ETP`;
+/** Formateur ETP par défaut (module scope, pas d'accès direct à `t`) — reçoit `t` en paramètre et
+ * renvoie le formateur, appelé depuis le corps des composants ci-dessous. */
+const defaultFteFormat = (t: (key: string, fallback?: string) => string) => (v: number) =>
+  `${v.toLocaleString("fr-FR")} ${t("etp.column.fte", "ETP")}`;
 
 /** Donut générique (mouvements par pays par défaut) — palette catégorielle validée, ordre fixe.
  * `formatValue` permet de réutiliser ce composant pour n'importe quelle métrique du builder
@@ -127,13 +170,16 @@ export function HrDonutChart({
   data,
   height = 240,
   onSliceClick,
-  formatValue = defaultFteFormat,
+  formatValue,
 }: {
   data: { name: string; value: number }[];
   height?: number;
   onSliceClick?: (name: string) => void;
   formatValue?: (value: number) => string;
 }) {
+  const { t } = useTranslation();
+  const resolvedFormatValue = formatValue ?? defaultFteFormat(t);
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <PieChart>
@@ -154,7 +200,7 @@ export function HrDonutChart({
             <Cell key={entry.name} fill={HR_CATEGORICAL[i % HR_CATEGORICAL.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(value) => formatValue(Number(value))} />
+        <Tooltip formatter={(value) => resolvedFormatValue(Number(value))} />
         <Legend
           wrapperStyle={{ fontSize: 11 }}
           layout="vertical"
@@ -172,7 +218,7 @@ export function HrDonutChart({
 export function HrPivotBarChart({
   data,
   height = 260,
-  formatValue = defaultFteFormat,
+  formatValue,
   onBarClick,
 }: {
   data: { label: string; value: number }[];
@@ -180,13 +226,16 @@ export function HrPivotBarChart({
   formatValue?: (value: number) => string;
   onBarClick?: (label: string) => void;
 }) {
+  const { t } = useTranslation();
+  const resolvedFormatValue = formatValue ?? defaultFteFormat(t);
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-        <Tooltip formatter={(value) => formatValue(Number(value))} />
+        <Tooltip formatter={(value) => resolvedFormatValue(Number(value))} />
         <Bar
           dataKey="value"
           fill={HR_CATEGORICAL[0]}

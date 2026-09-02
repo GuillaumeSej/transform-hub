@@ -56,6 +56,47 @@ export function buildClearancePatch(
   return {};
 }
 
+export type UserFormInput = {
+  username: string;
+  firstName: string;
+  lastName: string;
+  name: string;
+  password: string;
+  role: Role;
+  companyId: string;
+};
+
+/**
+ * Détermine les libellés des champs obligatoires manquants du formulaire utilisateur — à vérifier
+ * AVANT tout appel Firebase Auth/Firestore dans save(). Fonction pure (testable sans
+ * React/Firestore), même logique d'extraction que buildClearancePatch ci-dessus.
+ *  - Identifiant : toujours requis.
+ *  - Nom affiché OU Prénom + Nom : l'un des deux doit être renseigné (le second sert de repli à
+ *    l'écriture du champ `name`, voir save()).
+ *  - Mot de passe : toujours requis — pré-rempli à "test" par défaut, mais ne doit pas pouvoir
+ *    être vidé puis enregistré.
+ *  - Entreprise : requise seulement quand le champ est affiché, càd rôle non-admin ET aucun
+ *    `fixedCompanyId` imposé par le contexte (scope du hub `/admin/companies/detail`, ou
+ *    admin_entreprise limité à sa propre entreprise sur la page globale).
+ *  Rôle n'apparaît jamais dans le résultat : le <select> a toujours une valeur par défaut valide
+ *  et ne peut pas être vidé par l'utilisateur.
+ */
+export function missingRequiredFields(
+  form: UserFormInput,
+  fixedCompanyId: string | undefined
+): string[] {
+  const missing: string[] = [];
+  if (!form.username.trim()) missing.push("Identifiant");
+  if (!form.name.trim() && !`${form.firstName} ${form.lastName}`.trim()) {
+    missing.push("Nom affiché (ou Prénom + Nom)");
+  }
+  if (!form.password.trim()) missing.push("Mot de passe");
+  if (form.role !== "admin" && !fixedCompanyId && !form.companyId.trim()) {
+    missing.push("Entreprise");
+  }
+  return missing;
+}
+
 /**
  * Gestion des utilisateurs — extrait de `admin/users/page.tsx` pour être réutilisable tel quel
  * par le hub `/admin/companies/detail` (onglet Utilisateurs), pré-filtré sur une entreprise donnée
@@ -148,11 +189,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   };
 
   const save = async () => {
-    if (
-      !form.username.trim() ||
-      (!form.name.trim() && !`${form.firstName} ${form.lastName}`.trim())
-    )
+    const missing = missingRequiredFields(form, fixedCompanyId);
+    if (missing.length > 0) {
+      showToast(
+        "Champs obligatoires manquants",
+        `Merci de renseigner : ${missing.join(", ")}.`,
+        "error"
+      );
       return;
+    }
     const normalizedUsername = form.username.trim().toLowerCase();
     const newUser: AuthUser = {
       username: normalizedUsername,
@@ -248,12 +293,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-text-secondary">Identifiant</label>
+              <label className="text-xs font-medium text-text-secondary">
+                Identifiant <span className="text-red-500">*</span>
+              </label>
               <input
                 value={form.username}
                 onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                 placeholder="prenom.nom"
+                required
               />
             </div>
             <div>
@@ -275,29 +323,44 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-text-secondary">Nom affiché</label>
+              <label className="text-xs font-medium text-text-secondary">
+                Nom affiché <span className="text-red-500">*</span>
+              </label>
               <input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                 placeholder="Prénom Nom"
+                required={!form.firstName.trim() && !form.lastName.trim()}
               />
             </div>
+            <div className="col-span-2 -mt-2">
+              <p className="text-xs text-text-secondary">
+                <span className="text-red-500">*</span> Nom affiché requis, sauf si Prénom et Nom
+                sont tous les deux renseignés.
+              </p>
+            </div>
             <div>
-              <label className="text-xs font-medium text-text-secondary">Mot de passe</label>
+              <label className="text-xs font-medium text-text-secondary">
+                Mot de passe <span className="text-red-500">*</span>
+              </label>
               <input
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                 placeholder="test"
+                required
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-text-secondary">Rôle</label>
+              <label className="text-xs font-medium text-text-secondary">
+                Rôle <span className="text-red-500">*</span>
+              </label>
               <select
                 value={form.role}
                 onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                required
               >
                 {availableRoles.map((r) => (
                   <option key={r.value} value={r.value}>
@@ -308,12 +371,18 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             </div>
             {form.role !== "admin" && !fixedCompanyId && (
               <div>
-                <label className="text-xs font-medium text-text-secondary">Entreprise</label>
+                <label className="text-xs font-medium text-text-secondary">
+                  Entreprise <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={form.companyId}
                   onChange={(e) => setForm((f) => ({ ...f, companyId: e.target.value }))}
                   className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                  required
                 >
+                  <option value="" disabled>
+                    Sélectionner une entreprise
+                  </option>
                   {companies.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}

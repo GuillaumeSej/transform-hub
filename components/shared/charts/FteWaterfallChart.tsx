@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import type { FteBridgeBucket } from "@/lib/hrEngine";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 // Polarité validée (dataviz) : réductions en corail, ajouts en bleu — ΔE CVD 81.6.
 const COLOR_DOWN = "#FF3C47";
@@ -38,9 +39,9 @@ export function FteWaterfallChart({
   baseline,
   target,
   height = 280,
-  unit = "ETP",
+  unit,
   decimals = 0,
-  targetLabel = "Cible",
+  targetLabel,
   onBarClick,
 }: {
   buckets: Pick<FteBridgeBucket, "label" | "delta">[];
@@ -53,8 +54,16 @@ export function FteWaterfallChart({
   targetLabel?: string;
   onBarClick?: (label: string) => void;
 }) {
+  const { t } = useTranslation();
+  const resolvedUnit = unit ?? t("etp.column.fte", "ETP");
+  const resolvedTargetLabel = targetLabel ?? t("chart.bar.target", "Cible");
+
   if (buckets.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucun mouvement planifié.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("shared.fteWaterfallChart.noMovements", "Aucun mouvement planifié.")}
+      </p>
+    );
   }
 
   const fmt = (v: number) =>
@@ -82,8 +91,10 @@ export function FteWaterfallChart({
   if (values.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-tertiary">
-        Données ETP indisponibles — vérifier les types de mouvements RH (typologie 5-types Gooduelle
-        attendue).
+        {t(
+          "shared.fteWaterfallChart.dataUnavailable",
+          "Données ETP indisponibles — vérifier les types de mouvements RH (typologie 5-types Gooduelle attendue)."
+        )}
       </p>
     );
   }
@@ -118,14 +129,18 @@ export function FteWaterfallChart({
                 <div className="font-semibold text-primary">{d.label}</div>
                 <div className="font-semibold text-primary">
                   {d.delta > 0 ? "+" : ""}
-                  {fmt(d.delta)} {unit}
+                  {fmt(d.delta)} {resolvedUnit}
                 </div>
                 <div className="text-tertiary">
-                  Fin de période : {fmt(d.cumulative)} {unit}
+                  {t("shared.fteWaterfallChart.endOfPeriod", "Fin de période")} :{" "}
+                  {fmt(d.cumulative)} {resolvedUnit}
                 </div>
                 {onBarClick && (
                   <div className="mt-1 text-[10px] text-tertiary">
-                    Cliquer pour le détail par levier
+                    {t(
+                      "shared.fteWaterfallChart.clickForDetail",
+                      "Cliquer pour le détail par levier"
+                    )}
                   </div>
                 )}
               </div>
@@ -156,7 +171,7 @@ export function FteWaterfallChart({
           stroke="rgba(0,0,0,0.35)"
           strokeWidth={1}
           label={{
-            value: `Baseline ${fmt(baseline)}`,
+            value: `${t("finance.baseline", "Baseline")} ${fmt(baseline)}`,
             fontSize: 10,
             position: "insideTopLeft",
             fill: "#806659",
@@ -168,7 +183,7 @@ export function FteWaterfallChart({
           strokeDasharray="5 4"
           strokeWidth={1.5}
           label={{
-            value: `${targetLabel} ${fmt(target)}`,
+            value: `${resolvedTargetLabel} ${fmt(target)}`,
             fontSize: 10,
             position: "insideBottomLeft",
             fill: COLOR_TARGET,
@@ -181,26 +196,33 @@ export function FteWaterfallChart({
 
 /** Légende de polarité affichée sous la waterfall (identité jamais portée par la couleur seule). */
 export function FteWaterfallLegend({
-  downLabel = "Réductions (suppressions)",
-  upLabel = "Recrutements",
+  downLabel,
+  upLabel,
 }: {
   downLabel?: string;
   upLabel?: string;
 }) {
+  const { t } = useTranslation();
+  const resolvedDownLabel =
+    downLabel ?? t("shared.fteWaterfallChart.reductionsLabel", "Réductions (suppressions)");
+  const resolvedUpLabel = upLabel ?? t("chart.movementType.recruitments", "Recrutements");
+
   return (
     <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-secondary">
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_DOWN }} /> {downLabel}
+        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_DOWN }} />{" "}
+        {resolvedDownLabel}
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_UP }} /> {upLabel}
+        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_UP }} />{" "}
+        {resolvedUpLabel}
       </span>
       <span className="inline-flex items-center gap-1.5">
         <span
           className="inline-block h-0 w-4 border-t-2 border-dashed"
           style={{ borderColor: COLOR_TARGET }}
         />{" "}
-        Cible
+        {t("chart.bar.target", "Cible")}
       </span>
     </div>
   );

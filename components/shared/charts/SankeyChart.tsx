@@ -1,6 +1,7 @@
 "use client";
 
 import { ResponsiveContainer, Sankey, Tooltip } from "recharts";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type SankeyDatum = {
   nodes: { name: string }[];
@@ -46,8 +47,13 @@ export function SankeyChart({
   height?: number;
   onNodeClick?: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   if (data.links.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucun levier à représenter.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("chart.emptyLevers", "Aucun levier à représenter.")}
+      </p>
+    );
   }
 
   return (
@@ -125,7 +131,12 @@ export function SankeyChart({
           );
         }}
       >
-        <Tooltip formatter={(value) => [`${value} levier(s)`, ""]} />
+        <Tooltip
+          formatter={(value) => [
+            t("adminCompanyDb.leverCount", "{n} levier(s)").replace("{n}", String(value)),
+            "",
+          ]}
+        />
       </Sankey>
     </ResponsiveContainer>
   );

@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type JCurvePoint = {
   month: string;
@@ -27,9 +28,9 @@ export function JCurveChart({
   data,
   height = 280,
   paybackMonth,
-  labelPlan = "Plan",
-  labelReforecast = "Reforecast",
-  labelActual = "Réalisé",
+  labelPlan,
+  labelReforecast,
+  labelActual,
 }: {
   data: JCurvePoint[];
   height?: number;
@@ -38,8 +39,17 @@ export function JCurveChart({
   labelReforecast?: string;
   labelActual?: string;
 }) {
+  const { t } = useTranslation();
+  const resolvedLabelPlan = labelPlan ?? t("chart.pnl.plan", "Plan");
+  const resolvedLabelReforecast = labelReforecast ?? t("dashboard.kpi.reforecast", "Reforecast");
+  const resolvedLabelActual = labelActual ?? t("chart.bar.realized", "Réalisé");
+
   if (data.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucune donnée à afficher.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("chart.noDataToDisplay", "Aucune donnée à afficher.")}
+      </p>
+    );
   }
 
   // Séparer les données en zones positive/négative pour la coloration
@@ -99,14 +109,19 @@ export function JCurveChart({
             stroke="#2E7D32"
             strokeWidth={1.5}
             strokeDasharray="6 3"
-            label={{ value: "Payback", position: "top", fontSize: 10, fill: "#2E7D32" }}
+            label={{
+              value: t("lever.payback", "Payback"),
+              position: "top",
+              fontSize: 10,
+              fill: "#2E7D32",
+            }}
           />
         )}
         {/* Plan */}
         <Line
           type="monotone"
           dataKey="plan"
-          name={labelPlan}
+          name={resolvedLabelPlan}
           stroke="#806659"
           strokeWidth={2}
           strokeDasharray="6 4"
@@ -116,7 +131,7 @@ export function JCurveChart({
         <Line
           type="monotone"
           dataKey="reforecast"
-          name={labelReforecast}
+          name={resolvedLabelReforecast}
           stroke="#320300"
           strokeWidth={1.5}
           strokeDasharray="2 3"
@@ -126,7 +141,7 @@ export function JCurveChart({
         <Line
           type="monotone"
           dataKey="actual"
-          name={labelActual}
+          name={resolvedLabelActual}
           stroke="#FF3C47"
           strokeWidth={2.5}
           dot={{ r: 3 }}

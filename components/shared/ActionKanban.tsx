@@ -2,14 +2,19 @@
 
 import { cn } from "@/lib/utils";
 import { fmtCurr } from "@/lib/engine";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ActionStatus, LeverAction } from "@/types";
 
-const COLUMNS: { status: ActionStatus; label: string }[] = [
-  { status: "todo", label: "À faire" },
-  { status: "in_progress", label: "En cours" },
-  { status: "done", label: "Fait" },
-  { status: "delayed", label: "En retard" },
-];
+function getColumns(
+  t: (key: string, fallback?: string) => string
+): { status: ActionStatus; label: string }[] {
+  return [
+    { status: "todo", label: t("leverDetail.todo", "À faire") },
+    { status: "in_progress", label: t("leverDetail.inProgress", "En cours") },
+    { status: "done", label: t("leverDetail.completed", "Fait") },
+    { status: "delayed", label: t("leverDetail.late", "En retard") },
+  ];
+}
 
 /** Kanban du plan d'action — même langage visuel que components/shared/Kanban.tsx, changement de
  * statut via un petit groupe de boutons sur la carte (pas de drag-and-drop, garde le composant
@@ -23,6 +28,8 @@ export function ActionKanban({
   onStatusChange: (actionId: string, status: ActionStatus) => void;
   onCardClick: (action: LeverAction) => void;
 }) {
+  const { t } = useTranslation();
+  const COLUMNS = getColumns(t);
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 min-[901px]:grid-cols-4">
       {COLUMNS.map((col) => {
@@ -41,7 +48,9 @@ export function ActionKanban({
               </div>
             </div>
             {list.length === 0 && (
-              <div className="py-5 text-center text-[11px] text-tertiary">Aucune action</div>
+              <div className="py-5 text-center text-[11px] text-tertiary">
+                {t("shared.actionKanban.noItems", "Aucune action")}
+              </div>
             )}
             {list.map((a) => (
               <div key={a.id} className="mb-2 rounded-sm border border-border bg-white p-2.5">

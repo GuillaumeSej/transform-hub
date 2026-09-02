@@ -1,5 +1,8 @@
+"use client";
+
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 // Brand BearingPoint : le filet d'accent (élément graphique) peut porter la famille
 // rouge/taupe ; les icônes restent encre sur fond neutre (jamais colorées).
@@ -63,6 +66,7 @@ export function KPICard({
    *  (1100px, voir dashboard) — au-dessus, identique aux autres cartes. */
   hero?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       role={onClick ? "button" : undefined}
@@ -141,7 +145,7 @@ export function KPICard({
               <div
                 className="absolute -top-0.5 h-2.5 w-[2px] bg-neutral-700"
                 style={{ left: `${Math.min(100, Math.max(0, barMarkerPct))}%` }}
-                title="Reforecast"
+                title={t("dashboard.kpi.reforecast", "Reforecast")}
               />
             )}
           </div>

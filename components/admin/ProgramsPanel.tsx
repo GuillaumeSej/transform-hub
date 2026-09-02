@@ -5,6 +5,7 @@ import { FolderKanban, Plus, Pencil, Trash2 } from "lucide-react";
 import type { Program } from "@/types";
 import { subscribePrograms, saveProgram, deleteProgram } from "@/lib/firestore/admin";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
  * Gestion des programmes pour UNE entreprise déjà sélectionnée. Extrait de
@@ -14,6 +15,7 @@ import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
  * source de vérité pour ce CRUD.
  */
 export function ProgramsPanel({ companyId }: { companyId: string }) {
+  const { t } = useTranslation();
   const [programs, setPrograms] = useState<Program[]>([]);
 
   useEffect(() => {
@@ -88,42 +90,52 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <FolderKanban size={22} className="text-bp-coral" />
-          <h1 className="text-xl font-bold text-text-primary">Gestion des Programmes</h1>
+          <h1 className="text-xl font-bold text-text-primary">
+            {t("adminProgramsPanel.title", "Gestion des Programmes")}
+          </h1>
         </div>
         <button
           onClick={startCreate}
           className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
         >
-          <Plus size={14} /> Ajouter
+          <Plus size={14} /> {t("common.add", "Ajouter")}
         </button>
       </div>
 
       {showForm && (
         <div className="rounded-xl border border-border bg-bg-elevated p-4 space-y-3">
           <div className="text-sm font-semibold text-text-primary">
-            {editId ? "Modifier le programme" : "Nouveau programme"}
+            {editId
+              ? t("adminProgramsPanel.editTitle", "Modifier le programme")
+              : t("adminProgramsPanel.newTitle", "Nouveau programme")}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-text-secondary">Nom du programme</label>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("adminProgramsPanel.nameLabel", "Nom du programme")}
+              </label>
               <input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder="Nom"
+                placeholder={t("adminProgramsPanel.namePlaceholder", "Nom")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-text-secondary">Sponsor</label>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("adminProgramsPanel.sponsor", "Sponsor")}
+              </label>
               <input
                 value={form.sponsor}
                 onChange={(e) => setForm((f) => ({ ...f, sponsor: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder="Sponsor"
+                placeholder={t("adminProgramsPanel.sponsor", "Sponsor")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-text-secondary">Cible (€M)</label>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("adminProgramsPanel.targetLabel", "Cible (€M)")}
+              </label>
               <input
                 type="number"
                 value={form.target}
@@ -138,19 +150,21 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
               onClick={save}
               className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
             >
-              Enregistrer
+              {t("common.save", "Enregistrer")}
             </button>
             <button
               onClick={() => setShowForm(false)}
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
             >
-              Annuler
+              {t("common.cancel", "Annuler")}
             </button>
           </div>
         </div>
       )}
 
-      <div className="text-xs text-text-secondary">{programs.length} programme(s)</div>
+      <div className="text-xs text-text-secondary">
+        {t("adminProgramsPanel.count", "{n} programme(s)").replace("{n}", String(programs.length))}
+      </div>
 
       {/* Desktop/tablette (>= sm). En dessous de sm, remplacé par des cartes empilées
        * verticalement — même pattern que LifecycleEditor/UsersPanel pour éviter tout scroll
@@ -163,16 +177,16 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
                 ID
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                Programme
+                {t("adminProgramsPanel.colProgram", "Programme")}
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                Sponsor
+                {t("adminProgramsPanel.sponsor", "Sponsor")}
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
-                Cible
+                {t("adminProgramsPanel.colTarget", "Cible")}
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
-                Actions
+                {t("adminProgramsPanel.colActions", "Actions")}
               </th>
             </tr>
           </thead>
@@ -206,7 +220,7 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
             {programs.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-sm text-text-secondary">
-                  Aucun programme pour cette entreprise.
+                  {t("adminProgramsPanel.empty", "Aucun programme pour cette entreprise.")}
                 </td>
               </tr>
             )}
@@ -245,7 +259,7 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
         ))}
         {programs.length === 0 && (
           <div className="p-4 text-center text-sm text-text-secondary">
-            Aucun programme pour cette entreprise.
+            {t("adminProgramsPanel.empty", "Aucun programme pour cette entreprise.")}
           </div>
         )}
       </div>

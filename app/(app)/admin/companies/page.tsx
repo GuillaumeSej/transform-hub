@@ -12,10 +12,12 @@ import {
   DEFAULT_COMPANY_FORM,
   type CompanyFormState,
 } from "@/components/admin/CompanyFieldsEditor";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const DEFAULT_FORM: CompanyFormState = DEFAULT_COMPANY_FORM;
 
 export default function AdminCompaniesPage() {
+  const { t } = useTranslation();
   const { showToast } = useToast();
   const router = useRouter();
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -106,7 +108,11 @@ export default function AdminCompaniesPage() {
       setShowForm(false);
     } catch (err) {
       console.error("[betrack] échec de l'enregistrement de l'entreprise :", err);
-      showToast("Échec de l'enregistrement", "L'entreprise n'a pas pu être sauvegardée.", "error");
+      showToast(
+        t("adminCompanies.saveFailedTitle", "Échec de l'enregistrement"),
+        t("adminCompanies.saveFailedBody", "L'entreprise n'a pas pu être sauvegardée."),
+        "error"
+      );
     }
   };
 
@@ -119,20 +125,24 @@ export default function AdminCompaniesPage() {
       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Building2 size={22} className="text-bp-coral" />
-          <h1 className="text-xl font-bold text-text-primary">Gestion des Entreprises</h1>
+          <h1 className="text-xl font-bold text-text-primary">
+            {t("adminCompanies.title", "Gestion des Entreprises")}
+          </h1>
         </div>
         <button
           onClick={startCreate}
           className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
         >
-          <Plus size={14} /> Ajouter
+          <Plus size={14} /> {t("common.add", "Ajouter")}
         </button>
       </div>
 
       {showForm && (
         <div className="rounded-xl border border-border bg-bg-elevated p-4 space-y-3">
           <div className="text-sm font-semibold text-text-primary">
-            {editId ? "Modifier l'entreprise" : "Nouvelle entreprise"}
+            {editId
+              ? t("adminCompanies.editTitle", "Modifier l'entreprise")
+              : t("adminCompanies.newTitle", "Nouvelle entreprise")}
           </div>
           <CompanyFieldsEditor
             value={form}
@@ -144,13 +154,13 @@ export default function AdminCompaniesPage() {
               onClick={save}
               className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
             >
-              Enregistrer
+              {t("common.save", "Enregistrer")}
             </button>
             <button
               onClick={() => setShowForm(false)}
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
             >
-              Annuler
+              {t("common.cancel", "Annuler")}
             </button>
           </div>
         </div>
@@ -161,19 +171,19 @@ export default function AdminCompaniesPage() {
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
               <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
-                ID
+                {t("adminCompanies.column.id", "ID")}
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                Nom
+                {t("adminCompanies.column.name", "Nom")}
               </th>
               <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
-                Secteur
+                {t("adminCompanies.column.industry", "Secteur")}
               </th>
               <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
-                Créé le
+                {t("adminCompanies.column.createdAt", "Créé le")}
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
-                Actions
+                {t("adminCompanies.column.actions", "Actions")}
               </th>
             </tr>
           </thead>
@@ -194,14 +204,17 @@ export default function AdminCompaniesPage() {
                   <Link
                     href={`/admin/companies/detail?id=${c.id}`}
                     className="mr-3 inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-secondary hover:border-bp-coral hover:text-bp-coral"
-                    title="Voir le détail complet de l'entreprise"
+                    title={t(
+                      "adminCompanies.viewDetailTitle",
+                      "Voir le détail complet de l'entreprise"
+                    )}
                   >
-                    <ExternalLink size={12} /> Gérer
+                    <ExternalLink size={12} /> {t("adminCompanies.manage", "Gérer")}
                   </Link>
                   <button
                     onClick={() => startEdit(c)}
                     className="mr-2 text-text-secondary hover:text-bp-coral"
-                    title="Modification rapide"
+                    title={t("adminCompanies.quickEditTitle", "Modification rapide")}
                   >
                     <Pencil size={14} />
                   </button>
@@ -217,7 +230,7 @@ export default function AdminCompaniesPage() {
             {companies.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-text-secondary">
-                  Aucune entreprise enregistrée.
+                  {t("adminCompanies.empty", "Aucune entreprise enregistrée.")}
                 </td>
               </tr>
             )}

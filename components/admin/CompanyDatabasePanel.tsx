@@ -9,6 +9,7 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { planCompanyReset, resetCompanyData } from "@/lib/firestore/companyReset";
 import type { CompanyResetPlan } from "@/lib/companyResetLogic";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
  * Onglet "Base de données" du hub `/admin/companies/detail` (global admin uniquement) : permet un
@@ -26,6 +27,7 @@ import type { CompanyResetPlan } from "@/lib/companyResetLogic";
  * reset.
  */
 export function CompanyDatabasePanel({ company }: { company: Company }) {
+  const { t } = useTranslation();
   const { showToast } = useToast();
   // Instance dédiée du hook de données globales, uniquement pour exposer resetToMockData() ici —
   // même mécanisme que AppShell (voir components/shared/AppShell.tsx::onReset).
@@ -46,7 +48,11 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
       setScopedPlan(plan);
     } catch (err) {
       console.error("[betrack] échec du calcul du plan de reset :", err);
-      showToast("Erreur", "Impossible de calculer l'impact du reset.", "error");
+      showToast(
+        t("adminCompanyDb.toastErrorTitle", "Erreur"),
+        t("adminCompanyDb.toastPlanError", "Impossible de calculer l'impact du reset."),
+        "error"
+      );
       setScopedOpen(false);
     } finally {
       setScopedLoading(false);
@@ -58,15 +64,25 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
     try {
       await resetCompanyData(company.id);
       showToast(
-        "Données réinitialisées",
-        `Les leviers et la hiérarchie de ${company.name} ont été supprimés.`,
+        t("adminCompanyDb.toastResetSuccessTitle", "Données réinitialisées"),
+        t(
+          "adminCompanyDb.toastScopedSuccessBody",
+          "Les leviers et la hiérarchie de {name} ont été supprimés."
+        ).replace("{name}", company.name),
         "success"
       );
       setScopedOpen(false);
       setScopedPlan(null);
     } catch (err) {
       console.error("[betrack] échec du reset scopé entreprise :", err);
-      showToast("Erreur", "Le reset a échoué, voir la console pour le détail.", "error");
+      showToast(
+        t("adminCompanyDb.toastErrorTitle", "Erreur"),
+        t(
+          "adminCompanyDb.toastResetFailBody",
+          "Le reset a échoué, voir la console pour le détail."
+        ),
+        "error"
+      );
     } finally {
       setScopedBusy(false);
     }
@@ -76,19 +92,29 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Database size={20} className="text-bp-coral" />
-        <h2 className="text-sm font-bold text-text-primary">Base de données — {company.name}</h2>
+        <h2 className="text-sm font-bold text-text-primary">
+          {t("adminCompanyDb.title", "Base de données — {name}").replace("{name}", company.name)}
+        </h2>
       </div>
 
       <div className="rounded-xl border border-border bg-bg-elevated p-5 space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-          Réinitialiser cette entreprise
+          {t("adminCompanyDb.resetSectionTitle", "Réinitialiser cette entreprise")}
         </h3>
         <p className="max-w-2xl text-sm text-text-secondary">
-          Supprime les leviers et la hiérarchie financière de <strong>{company.name}</strong>{" "}
-          uniquement — les autres entreprises ne sont pas affectées. Action irréversible.
+          {t(
+            "adminCompanyDb.resetBodyPrefix",
+            "Supprime les leviers et la hiérarchie financière de"
+          )}{" "}
+          <strong>{company.name}</strong>{" "}
+          {t(
+            "adminCompanyDb.resetBodySuffix",
+            "uniquement — les autres entreprises ne sont pas affectées. Action irréversible."
+          )}
         </p>
         <Button variant="danger" size="sm" onClick={openScopedModal}>
-          <Trash2 size={14} /> Réinitialiser {company.name}
+          <Trash2 size={14} />{" "}
+          {t("adminCompanyDb.resetButton", "Réinitialiser {name}").replace("{name}", company.name)}
         </Button>
       </div>
 
@@ -96,16 +122,23 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
         <div className="flex items-center gap-2 text-red-700">
           <AlertTriangle size={16} />
           <h3 className="text-xs font-semibold uppercase tracking-wide">
-            Zone de danger — toutes les entreprises
+            {t("adminCompanyDb.dangerZoneTitle", "Zone de danger — toutes les entreprises")}
           </h3>
         </div>
         <p className="max-w-2xl text-sm text-text-secondary">
-          Réinitialise l&apos;intégralité des données de démonstration (leviers, commentaires,
-          audit, effectifs) pour <strong>toutes les entreprises</strong>, sans distinction. À
-          réserver aux environnements de démo/test.
+          {t(
+            "adminCompanyDb.dangerZoneBodyPrefix",
+            "Réinitialise l'intégralité des données de démonstration (leviers, commentaires, audit, effectifs) pour"
+          )}{" "}
+          <strong>{t("adminCompanyDb.allCompanies", "toutes les entreprises")}</strong>
+          {t(
+            "adminCompanyDb.dangerZoneBodySuffix",
+            ", sans distinction. À réserver aux environnements de démo/test."
+          )}
         </p>
         <Button variant="danger" size="sm" onClick={() => setGlobalOpen(true)}>
-          <RotateCcw size={14} /> Réinitialiser toutes les données de démo
+          <RotateCcw size={14} />{" "}
+          {t("adminCompanyDb.resetAllButton", "Réinitialiser toutes les données de démo")}
         </Button>
       </div>
 
@@ -116,43 +149,71 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
           setScopedOpen(open);
           if (!open) setScopedPlan(null);
         }}
-        title={`Réinitialiser ${company.name} ?`}
+        title={t("adminCompanyDb.scopedModalTitle", "Réinitialiser {name} ?").replace(
+          "{name}",
+          company.name
+        )}
         footer={
           <>
             <Button variant="ghost" onClick={() => setScopedOpen(false)} disabled={scopedBusy}>
-              Annuler
+              {t("common.cancel", "Annuler")}
             </Button>
             <Button
               variant="danger"
               onClick={confirmScopedReset}
               disabled={scopedLoading || scopedBusy || !scopedPlan}
             >
-              {scopedBusy ? "Suppression…" : "Confirmer la suppression"}
+              {scopedBusy
+                ? t("adminCompanyDb.deleting", "Suppression…")
+                : t("adminCompanyDb.confirmDelete", "Confirmer la suppression")}
             </Button>
           </>
         }
       >
         {scopedLoading || !scopedPlan ? (
-          <p className="text-sm text-text-secondary">Calcul de l&apos;impact en cours…</p>
+          <p className="text-sm text-text-secondary">
+            {t("adminCompanyDb.calculatingImpact", "Calcul de l'impact en cours…")}
+          </p>
         ) : (
           <div className="space-y-3 text-sm text-text-secondary">
             <p>
-              Cette action est <strong>irréversible</strong> et supprimera, pour{" "}
-              <strong>{company.name}</strong> uniquement :
+              {t("adminCompanyDb.scopedIntroPrefix", "Cette action est")}{" "}
+              <strong>{t("adminCompanyDb.irreversibleWord", "irréversible")}</strong>{" "}
+              {t("adminCompanyDb.scopedIntroMiddle", "et supprimera, pour")}{" "}
+              <strong>{company.name}</strong>{" "}
+              {t("adminCompanyDb.scopedIntroSuffix", "uniquement :")}
             </p>
             <ul className="list-disc space-y-1 pl-5">
-              <li>{scopedPlan.leverIds.length} levier(s)</li>
               <li>
-                {scopedPlan.removedCommentKeys.length} fil(s) de commentaires liés à ces leviers
+                {t("adminCompanyDb.leverCount", "{n} levier(s)").replace(
+                  "{n}",
+                  String(scopedPlan.leverIds.length)
+                )}
               </li>
               <li>
-                {scopedPlan.removedAuditCount} entrée(s) d&apos;historique liées à ces leviers
+                {t(
+                  "adminCompanyDb.commentThreadCount",
+                  "{n} fil(s) de commentaires liés à ces leviers"
+                ).replace("{n}", String(scopedPlan.removedCommentKeys.length))}
               </li>
-              <li>tous les nœuds de hiérarchie financière de cette entreprise</li>
+              <li>
+                {t(
+                  "adminCompanyDb.auditEntryCount",
+                  "{n} entrée(s) d'historique liées à ces leviers"
+                ).replace("{n}", String(scopedPlan.removedAuditCount))}
+              </li>
+              <li>
+                {t(
+                  "adminCompanyDb.allHierarchyNodes",
+                  "tous les nœuds de hiérarchie financière de cette entreprise"
+                )}
+              </li>
             </ul>
             <p>
-              Les données des autres entreprises, ainsi que les entrées d&apos;audit/commentaires
-              non rattachées à un levier de {company.name}, ne sont pas affectées.
+              {t(
+                "adminCompanyDb.unaffectedNote",
+                "Les données des autres entreprises, ainsi que les entrées d'audit/commentaires non rattachées à un levier de {name}, ne sont pas affectées."
+              ).replace("{name}", company.name)}
             </p>
           </div>
         )}
@@ -162,11 +223,11 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
       <Modal
         open={globalOpen}
         onOpenChange={setGlobalOpen}
-        title="Réinitialiser toutes les données de démo ?"
+        title={t("adminCompanyDb.globalModalTitle", "Réinitialiser toutes les données de démo ?")}
         footer={
           <>
             <Button variant="ghost" onClick={() => setGlobalOpen(false)}>
-              Annuler
+              {t("common.cancel", "Annuler")}
             </Button>
             <Button
               variant="danger"
@@ -174,23 +235,32 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
                 globalData.resetToMockData().finally(() => {
                   setGlobalOpen(false);
                   showToast(
-                    "Données réinitialisées",
-                    "Toutes les entreprises sont revenues au jeu de données de démo initial.",
+                    t("adminCompanyDb.toastResetSuccessTitle", "Données réinitialisées"),
+                    t(
+                      "adminCompanyDb.toastGlobalSuccessBody",
+                      "Toutes les entreprises sont revenues au jeu de données de démo initial."
+                    ),
                     "success"
                   );
                   window.location.reload();
                 });
               }}
             >
-              Réinitialiser tout
+              {t("adminCompanyDb.resetAllConfirm", "Réinitialiser tout")}
             </Button>
           </>
         }
       >
         <p className="text-sm text-text-secondary">
-          Toutes les modifications effectuées dans cette session, pour{" "}
-          <strong>toutes les entreprises</strong> (leviers, commentaires, audit, effectifs), seront
-          définitivement perdues et remplacées par le jeu de données de démo initial.
+          {t(
+            "adminCompanyDb.globalBodyPrefix",
+            "Toutes les modifications effectuées dans cette session, pour"
+          )}{" "}
+          <strong>{t("adminCompanyDb.allCompanies", "toutes les entreprises")}</strong>{" "}
+          {t(
+            "adminCompanyDb.globalBodySuffix",
+            "(leviers, commentaires, audit, effectifs), seront définitivement perdues et remplacées par le jeu de données de démo initial."
+          )}
         </p>
       </Modal>
     </div>

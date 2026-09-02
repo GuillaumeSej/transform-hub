@@ -1,6 +1,9 @@
+"use client";
+
 import { CircleAlert, CircleCheck, CircleUser, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip } from "@/components/shared/Tooltip";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Alert } from "@/types";
 
 const ICONS = { red: CircleAlert, amber: TriangleAlert, green: CircleCheck, blue: CircleUser };
@@ -41,6 +44,7 @@ export function AlertItem({
     auto?: string;
   };
 }) {
+  const { t } = useTranslation();
   const Icon = ICONS[alert.type];
   const resolved = alert.resolved ?? false;
   return (
@@ -69,7 +73,9 @@ export function AlertItem({
             }}
             onClick={(e) => e.stopPropagation()}
             className="h-3.5 w-3.5 cursor-pointer accent-bp-coral"
-            title={resolved ? "Résolu / vu" : "À traiter"}
+            title={
+              resolved ? t("alerts.resolved", "Résolu / vu") : t("alerts.toProcess", "À traiter")
+            }
           />
         </div>
       )}
@@ -125,7 +131,7 @@ export function AlertItem({
               <span>·</span>
               <Tooltip text={tooltips?.auto ?? ""} position="bottom">
                 <span className="rounded-sm bg-neutral-100 px-1 py-px text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
-                  Auto
+                  {t("alerts.auto", "Auto")}
                 </span>
               </Tooltip>
             </>

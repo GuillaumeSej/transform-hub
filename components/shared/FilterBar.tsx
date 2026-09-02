@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { X } from "lucide-react";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type FilterDef<T> = {
   key: string;
@@ -22,6 +23,7 @@ export function FilterBar<T>({
   active: ActiveFilters;
   onChange: (next: ActiveFilters) => void;
 }) {
+  const { t } = useTranslation();
   const optionsMap = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const def of defs) {
@@ -82,7 +84,7 @@ export function FilterBar<T>({
             onClick={() => onChange({})}
             className="text-xs font-medium text-bp-coral hover:underline"
           >
-            Tout effacer
+            {t("shared.filterBar.clearAll", "Tout effacer")}
           </button>
         )}
       </div>

@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { ExecutionImpactRow, MovementExecutionStatus } from "@/lib/hrExecution";
 import { EXECUTION_LABELS } from "@/lib/hrExecution";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const STATUS_COLORS: Record<MovementExecutionStatus, string> = {
   realized: "#421799",
@@ -41,17 +42,24 @@ export function ExecutionStatusChart({
   height?: number;
   onBarClick?: (dimensionValue: string, status: MovementExecutionStatus) => void;
 }) {
+  const { t } = useTranslation();
+
   if (data.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucun mouvement à afficher.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("shared.executionStatusChart.noData", "Aucun mouvement à afficher.")}
+      </p>
+    );
   }
   const chartData = data.map((row) => ({
     label: row.label,
     ...Object.fromEntries(STATUS_ORDER.map((status) => [status, row[status].volume])),
     meta: row,
   }));
+  const fteUnit = t("etp.column.fte", "ETP");
   const formatValue = (value: number) =>
     mode === "fte"
-      ? `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} ETP`
+      ? `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} ${fteUnit}`
       : `${value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} M€`;
 
   return (
@@ -87,9 +95,13 @@ export function ExecutionStatusChart({
                   <div key={status} className="flex items-center justify-between gap-5 py-0.5">
                     <span style={{ color: STATUS_COLORS[status] }}>{EXECUTION_LABELS[status]}</span>
                     <span className="font-semibold tabular-nums text-primary">
-                      {formatValue(row[status].volume)} · {row[status].count} mvt
+                      {formatValue(row[status].volume)} ·{" "}
+                      {t("shared.executionStatusChart.movementCount", "{n} mvt").replace(
+                        "{n}",
+                        String(row[status].count)
+                      )}
                       {mode === "fte"
-                        ? ` · net ${row[status].net > 0 ? "+" : ""}${row[status].net.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`
+                        ? ` · ${t("shared.executionStatusChart.net", "net")} ${row[status].net > 0 ? "+" : ""}${row[status].net.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`
                         : ""}
                     </span>
                   </div>

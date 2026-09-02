@@ -6,6 +6,7 @@ import { toPng } from "html-to-image";
 import pptxgen from "pptxgenjs";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /** Sélecteur du conteneur de grille (voir `app/(app)/dashboard/page.tsx`) et des widgets qu'il
  * contient — ne référence AUCUN type de widget précis : que ce soit un widget du registre actuel
@@ -86,6 +87,7 @@ export function DashboardExportButton({
   fileNamePrefix?: string;
 }) {
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const [exporting, setExporting] = useState(false);
   const disabled = exporting || layout.length === 0;
 
@@ -96,8 +98,11 @@ export function DashboardExportButton({
     const nodes = grid ? Array.from(grid.querySelectorAll<HTMLElement>(WIDGET_SELECTOR)) : [];
     if (nodes.length === 0) {
       showToast(
-        "Export impossible",
-        "Aucun widget affiché sur le dashboard à exporter pour le moment.",
+        t("shared.dashboardExportButton.impossibleTitle", "Export impossible"),
+        t(
+          "shared.dashboardExportButton.noWidgets",
+          "Aucun widget affiché sur le dashboard à exporter pour le moment."
+        ),
         "error"
       );
       return;
@@ -178,22 +183,37 @@ export function DashboardExportButton({
 
       if (failures > 0) {
         showToast(
-          "Export PowerPoint généré (partiel)",
-          `${nodes.length - failures} / ${nodes.length} widgets exportés, ${failures} en échec`,
+          t(
+            "shared.dashboardExportButton.partialSuccessTitle",
+            "Export PowerPoint généré (partiel)"
+          ),
+          t(
+            "shared.dashboardExportButton.partialSuccessBody",
+            "{done} / {total} widgets exportés, {failed} en échec"
+          )
+            .replace("{done}", String(nodes.length - failures))
+            .replace("{total}", String(nodes.length))
+            .replace("{failed}", String(failures)),
           "default"
         );
       } else {
         showToast(
-          "Export PowerPoint généré",
-          `${nodes.length} widget${nodes.length > 1 ? "s" : ""} exporté${nodes.length > 1 ? "s" : ""}`,
+          t("shared.dashboardExportButton.successTitle", "Export PowerPoint généré"),
+          t("shared.dashboardExportButton.successBody", "{n} widget(s) exporté(s)").replace(
+            "{n}",
+            String(nodes.length)
+          ),
           "success"
         );
       }
     } catch (err) {
       console.error("[betrack] échec de l'export PowerPoint :", err);
       showToast(
-        "Échec de l'export",
-        "Impossible de générer le support PowerPoint. Réessayez.",
+        t("shared.dashboardExportButton.failureTitle", "Échec de l'export"),
+        t(
+          "shared.dashboardExportButton.failureBody",
+          "Impossible de générer le support PowerPoint. Réessayez."
+        ),
         "error"
       );
     } finally {
@@ -204,7 +224,9 @@ export function DashboardExportButton({
   return (
     <Button variant="outline" onClick={handleExport} disabled={disabled} title="Export COPIL deck">
       {exporting ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
-      {exporting ? "Export en cours..." : "Export COPIL deck"}
+      {exporting
+        ? t("shared.dashboardExportButton.exporting", "Export en cours...")
+        : "Export COPIL deck"}
     </Button>
   );
 }

@@ -163,12 +163,15 @@ export function Topbar({
           {alertsOpen && (
             <div className="absolute right-0 top-10 z-30 w-[calc(100vw-1rem)] max-w-[340px] overflow-hidden rounded-lg border border-border bg-white shadow-xl">
               <div className="border-b border-border px-4 py-3 text-xs font-bold text-primary">
-                Notifications à traiter · {alertCount}
+                {t("shared.topbar.notificationsToProcess", "Notifications à traiter · {n}").replace(
+                  "{n}",
+                  String(alertCount)
+                )}
               </div>
               <div className="max-h-[360px] overflow-y-auto">
                 {alerts.length === 0 ? (
                   <p className="px-4 py-6 text-center text-xs text-tertiary">
-                    Aucune notification à traiter.
+                    {t("shared.topbar.noNotifications", "Aucune notification à traiter.")}
                   </p>
                 ) : (
                   alerts.map((alert) => (
@@ -193,7 +196,10 @@ export function Topbar({
                         {alert.desc}
                       </span>
                       <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
-                        {alert.source === "auto" ? "Automatique" : "Manuelle"} · {alert.scope}
+                        {alert.source === "auto"
+                          ? t("shared.topbar.sourceAuto", "Automatique")
+                          : t("shared.topbar.sourceManual", "Manuelle")}{" "}
+                        · {alert.scope}
                       </span>
                     </button>
                   ))

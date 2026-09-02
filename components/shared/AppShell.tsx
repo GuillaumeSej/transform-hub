@@ -10,6 +10,7 @@ import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
 import { useNotifications } from "@/lib/hooks/useNotifications";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
  * Coquille de l'app (sidebar + topbar) + garde d'authentification : redirige vers /login si
@@ -20,6 +21,7 @@ import { useNotifications } from "@/lib/hooks/useNotifications";
  * les données Firestore. Un admin (companyId null) voit toutes les données.
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const { role, user, loading } = useRole();
   const router = useRouter();
   const pathname = usePathname();
@@ -76,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div
           className="fixed inset-0 z-40 flex lg:hidden"
           role="dialog"
-          aria-label="Navigation principale"
+          aria-label={t("shared.appShell.mobileNavLabel", "Navigation principale")}
         >
           <div
             className="fixed inset-0 bg-black/50"

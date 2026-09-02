@@ -1,4 +1,9 @@
-import { STATUS_LABEL } from "@/lib/status-config";
+import {
+  DEFAULT_LIFECYCLE_STAGES,
+  resolveStatusLabel,
+  STATUS_LABEL,
+  STATUS_SHORT_LABEL,
+} from "@/lib/status-config";
 import type {
   ActionImpact,
   ActionStatus,
@@ -8,6 +13,7 @@ import type {
   LeverAction,
   LeverDependency,
   LeverStatus,
+  LifecycleStage,
   RecognitionMode,
   SavingType,
   Workstream,
@@ -167,7 +173,43 @@ function reverseLabelMap<T extends string>(map: Record<T, string>): Map<string, 
   return m;
 }
 
-const STATUS_BY_LABEL = reverseLabelMap(STATUS_LABEL);
+const ALL_STATUSES = Object.keys(STATUS_LABEL) as LeverStatus[];
+
+/**
+ * Libellés "Statut" acceptés à l'import. Le cycle de vie des leviers est configurable par
+ * entreprise (`LifecycleStage[]`, éditable dans /admin/lifecycle et résolu via
+ * `resolveStatusLabel`/`useLifecycleLabels`) : c'est CE référentiel — pas le seul `STATUS_LABEL`
+ * statique — qui est réellement affiché à l'écran (Kanban, dropdown de statut du formulaire,
+ * stepper du détail levier). `STATUS_LABEL` (libellés longs) reste néanmoins toujours accepté en
+ * plus, pour rester compatible avec le template Excel et d'anciens fichiers déjà en circulation.
+ * Sans config entreprise (`lifecycleStages` absent), le référentiel par défaut
+ * (`DEFAULT_LIFECYCLE_STAGES`, libellés courts) est celui réellement affiché par défaut — voir
+ * `lib/hooks/useLifecycleLabels.ts` — donc toujours inclus lui aussi, pour qu'un import ne
+ * casse jamais simplement parce que l'utilisateur a tapé ce qu'il voit à l'écran plutôt que le
+ * libellé historique. `STATUS_SHORT_LABEL` est ajouté pour la même raison (badges Kanban).
+ */
+function buildStatusByLabel(lifecycleStages?: LifecycleStage[]): Map<string, LeverStatus> {
+  const m = new Map<string, LeverStatus>();
+  ALL_STATUSES.forEach((status) => {
+    m.set(STATUS_LABEL[status].toLowerCase(), status);
+    m.set(STATUS_SHORT_LABEL[status].toLowerCase(), status);
+    m.set(resolveStatusLabel(status, DEFAULT_LIFECYCLE_STAGES).toLowerCase(), status);
+    if (lifecycleStages) {
+      m.set(resolveStatusLabel(status, lifecycleStages).toLowerCase(), status);
+    }
+  });
+  return m;
+}
+
+/** Libellés à afficher dans le message d'erreur : ceux réellement visibles à l'écran pour le
+ *  cycle de vie actif (entreprise cible si connu, sinon référentiel par défaut) — plus utiles à
+ *  l'utilisateur qu'un vocabulaire Excel historique qu'il ne voit jamais dans l'app. */
+function activeStatusLabels(lifecycleStages?: LifecycleStage[]): string[] {
+  return ALL_STATUSES.map((status) =>
+    resolveStatusLabel(status, lifecycleStages ?? DEFAULT_LIFECYCLE_STAGES)
+  );
+}
+
 const ACTION_STATUS_BY_LABEL = reverseLabelMap(ACTION_STATUS_LABEL);
 const IMPACT_TYPE_BY_LABEL = reverseLabelMap(IMPACT_TYPE_LABEL);
 const IMPACT_NATURE_BY_LABEL = reverseLabelMap(IMPACT_NATURE_LABEL);
@@ -314,10 +356,17 @@ export function validateLeverImportRows(
    *  dates propres qu'un import de leviers n'a pas vocation à définir — il doit déjà exister (créé
    *  dans Admin > Entreprises > Programmes). Colonne vide = levier non rattaché (comportement
    *  historique, modifiable ensuite manuellement dans la fiche du levier). */
-  programs: { id: string; name: string }[] = []
+  programs: { id: string; name: string }[] = [],
+  /** Référentiel de cycle de vie ACTIF de l'entreprise cible (voir `subscribeLifecycleConfig` /
+   *  `useLifecycleLabels`), quand l'appelant le connaît — ses libellés personnalisés sont alors
+   *  acceptés en plus des libellés par défaut. Absent = référentiel par défaut uniquement (déjà
+   *  celui réellement affiché pour toute entreprise sans personnalisation, voir
+   *  `buildStatusByLabel` ci-dessus). */
+  lifecycleStages?: LifecycleStage[]
 ): LeverImportPreview {
   const errors: LeverImportError[] = [];
   const resolvedCompanyId = companyId ?? null;
+  const STATUS_BY_LABEL = buildStatusByLabel(lifecycleStages);
 
   // ---------- Feuille "Leviers" ----------
   type ParsedLever = { rowNumber: number; code: string; values: LeverImportRow };
@@ -380,7 +429,7 @@ export function validateLeverImportRows(
       errors.push({
         sheet: "Leviers",
         rowNumber,
-        reason: `Statut "${statusRaw}" inconnu (attendu : ${Object.values(STATUS_LABEL).join(", ")})`,
+        reason: `Statut "${statusRaw}" inconnu (attendu : ${activeStatusLabels(lifecycleStages).join(", ")})`,
       });
       return;
     }
