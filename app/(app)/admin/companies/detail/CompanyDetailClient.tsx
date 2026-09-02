@@ -30,6 +30,7 @@ import { LifecycleEditor } from "@/components/admin/LifecycleEditor";
 import { ProgramsPanel } from "@/components/admin/ProgramsPanel";
 import { CompanyDataHistoryPanel } from "@/components/admin/CompanyDataHistoryPanel";
 import { CompanyDatabasePanel } from "@/components/admin/CompanyDatabasePanel";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type TabId =
   | "settings"
@@ -47,16 +48,32 @@ function companyFormEquals(a: CompanyFormState, b: CompanyFormState): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-const TABS: { id: TabId; label: string; icon: typeof Building2 }[] = [
-  { id: "settings", label: "Paramètres", icon: Building2 },
-  { id: "users", label: "Utilisateurs", icon: Users },
-  { id: "financial-hierarchy", label: "Arborescence financière", icon: Network },
-  { id: "geographic-hierarchy", label: "Arborescence géographique", icon: Globe2 },
-  { id: "projects", label: "Programmes", icon: FolderKanban },
-  { id: "lifecycle", label: "Cycle de vie", icon: Workflow },
-  { id: "data", label: "Données & Historique", icon: BarChart3 },
-  { id: "database", label: "Base de données", icon: Database },
-];
+function companyDetailTabs(
+  t: (key: string, fallback?: string) => string
+): { id: TabId; label: string; icon: typeof Building2 }[] {
+  return [
+    { id: "settings", label: t("adminCompanies.tab.settings", "Paramètres"), icon: Building2 },
+    { id: "users", label: t("nav.users", "Utilisateurs"), icon: Users },
+    {
+      id: "financial-hierarchy",
+      label: t("nav.hierarchy", "Arborescence financière"),
+      icon: Network,
+    },
+    {
+      id: "geographic-hierarchy",
+      label: t("adminCompanies.tab.geoHierarchy", "Arborescence géographique"),
+      icon: Globe2,
+    },
+    { id: "projects", label: t("adminCompanies.tab.programs", "Programmes"), icon: FolderKanban },
+    { id: "lifecycle", label: t("nav.lifecycle", "Cycle de vie"), icon: Workflow },
+    {
+      id: "data",
+      label: t("adminCompanies.tab.dataHistory", "Données & Historique"),
+      icon: BarChart3,
+    },
+    { id: "database", label: t("adminCompanies.tab.database", "Base de données"), icon: Database },
+  ];
+}
 
 /**
  * Hub de détail d'une entreprise (`/admin/companies/detail?id=...`) — GLOBAL ADMIN UNIQUEMENT (voir
@@ -69,6 +86,8 @@ const TABS: { id: TabId; label: string; icon: typeof Building2 }[] = [
  * cette entreprise ; aucune logique CRUD n'est dupliquée ici.
  */
 export default function CompanyDetailClient() {
+  const { t } = useTranslation();
+  const TABS = companyDetailTabs(t);
   const searchParams = useSearchParams();
   const router = useRouter();
   const { role } = useRole();
@@ -191,8 +210,8 @@ export default function CompanyDetailClient() {
     } catch (err) {
       console.error("[betrack] échec de l'enregistrement des paramètres entreprise :", err);
       showToast(
-        "Échec de l'enregistrement",
-        "Les paramètres n'ont pas pu être sauvegardés.",
+        t("adminCompanies.saveFailedTitle", "Échec de l'enregistrement"),
+        t("adminCompanies.settingsSaveFailedBody", "Les paramètres n'ont pas pu être sauvegardés."),
         "error"
       );
     } finally {
@@ -209,10 +228,11 @@ export default function CompanyDetailClient() {
           href="/admin/companies"
           className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-bp-coral"
         >
-          <ArrowLeft size={14} /> Retour à la liste des entreprises
+          <ArrowLeft size={14} />{" "}
+          {t("adminCompanies.backToList", "Retour à la liste des entreprises")}
         </GuardedLink>
         <div className="rounded-xl border border-border bg-bg-elevated p-8 text-center text-sm text-text-secondary">
-          Aucune entreprise sélectionnée.
+          {t("adminCompanies.noneSelected", "Aucune entreprise sélectionnée.")}
         </div>
       </div>
     );
@@ -225,10 +245,14 @@ export default function CompanyDetailClient() {
           href="/admin/companies"
           className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-bp-coral"
         >
-          <ArrowLeft size={14} /> Retour à la liste des entreprises
+          <ArrowLeft size={14} />{" "}
+          {t("adminCompanies.backToList", "Retour à la liste des entreprises")}
         </GuardedLink>
         <div className="rounded-xl border border-border bg-bg-elevated p-8 text-center text-sm text-text-secondary">
-          Entreprise introuvable ({companyId}).
+          {t("adminCompanies.notFound", "Entreprise introuvable ({id}).").replace(
+            "{id}",
+            companyId
+          )}
         </div>
       </div>
     );
@@ -241,11 +265,13 @@ export default function CompanyDetailClient() {
           href="/admin/companies"
           className="inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-bp-coral"
         >
-          <ArrowLeft size={12} /> Toutes les entreprises
+          <ArrowLeft size={12} /> {t("adminCompanies.allCompanies", "Toutes les entreprises")}
         </GuardedLink>
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Building2 size={22} className="text-bp-coral" />
-          <h1 className="text-xl font-bold text-text-primary">{company?.name ?? "Entreprise"}</h1>
+          <h1 className="text-xl font-bold text-text-primary">
+            {company?.name ?? t("adminCompanies.fallbackName", "Entreprise")}
+          </h1>
           {company && (
             <span className="rounded-full bg-bg-surface px-2 py-0.5 text-xs text-text-secondary">
               {company.industry}
@@ -255,27 +281,27 @@ export default function CompanyDetailClient() {
       </div>
 
       <div className="flex snap-x gap-2 overflow-x-auto border-b border-border pb-2">
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
+        {TABS.map((tabDef) => {
+          const Icon = tabDef.icon;
+          const active = tab === tabDef.id;
           return (
             <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
+              key={tabDef.id}
+              onClick={() => setTab(tabDef.id)}
               className={`flex min-h-10 shrink-0 snap-start items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 active
                   ? "bg-bp-coral text-white"
                   : "border border-border text-text-secondary hover:bg-bg-elevated"
               }`}
             >
-              <Icon size={14} /> {t.label}
+              <Icon size={14} /> {tabDef.label}
             </button>
           );
         })}
       </div>
 
       {!company ? (
-        <p className="text-sm text-text-secondary">Chargement…</p>
+        <p className="text-sm text-text-secondary">{t("adminCompanies.loading", "Chargement…")}</p>
       ) : (
         <div>
           {tab === "settings" && (
@@ -289,7 +315,9 @@ export default function CompanyDetailClient() {
                 disabled={saving}
                 className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:opacity-50"
               >
-                {saving ? "Enregistrement…" : "Enregistrer"}
+                {saving
+                  ? t("adminCompanies.saving", "Enregistrement…")
+                  : t("common.save", "Enregistrer")}
               </button>
             </div>
           )}

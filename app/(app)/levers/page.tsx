@@ -219,20 +219,40 @@ export default function LeversPage() {
         label: "Workstream",
         getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       },
-      { key: "f_status", label: "Maturité", getValue: (l) => lifecycle.label(l.status) },
+      {
+        key: "f_status",
+        label: t("levers.columnMaturity", "Maturité"),
+        getValue: (l) => lifecycle.label(l.status),
+      },
       { key: "f_owner", label: "Owner", getValue: (l) => l.owner },
       { key: "f_sponsor", label: "Sponsor", getValue: (l) => l.sponsor },
       ...(geographyFilterDefs.length > 0
         ? geographyFilterDefs
         : [
-            { key: "f_geography", label: "Région", getValue: (l: Lever) => l.geography },
-            { key: "f_country", label: "Pays", getValue: (l: Lever) => l.country },
-            { key: "f_entity", label: "Entité", getValue: (l: Lever) => l.entity },
+            {
+              key: "f_geography",
+              label: t("leverForm.geography", "Région"),
+              getValue: (l: Lever) => l.geography,
+            },
+            {
+              key: "f_country",
+              label: t("dashboard.country", "Pays"),
+              getValue: (l: Lever) => l.country,
+            },
+            {
+              key: "f_entity",
+              label: t("leverForm.entity", "Entité"),
+              getValue: (l: Lever) => l.entity,
+            },
           ]),
-      { key: "f_function", label: "Fonction", getValue: (l) => l.function },
+      {
+        key: "f_function",
+        label: t("dashboard.function", "Fonction"),
+        getValue: (l) => l.function,
+      },
       {
         key: "f_costCenter",
-        label: "Centre de coût / Poste de dépense",
+        label: t("levers.filter.costCenter", "Centre de coût / Poste de dépense"),
         getValue: (l) => {
           const actionCenters = (l.actions ?? [])
             .flatMap((action) => action.impacts ?? [])
@@ -245,7 +265,7 @@ export default function LeversPage() {
       },
       {
         key: "f_risk",
-        label: "Risque",
+        label: t("leverForm.risk", "Risque"),
         // Recalculé depuis les alertes (voir engine.computeLeverRisk), pas la valeur stockée —
         // les options proposées doivent refléter le risque réellement affiché.
         getValue: (l) => engine.computeLeverRisk(l.id, alerts, riskThresholds),
@@ -255,24 +275,27 @@ export default function LeversPage() {
         : [
             {
               key: "f_pnl",
-              label: "Compte P&L",
+              label: t("leverForm.pnlAccount", "Compte P&L impacté"),
               getValue: (l: Lever) =>
                 data.pnlAccounts.find((p) => p.id === l.pnlMap)?.name ?? l.pnlMap,
             },
           ]),
       {
         key: "f_alerts",
-        label: "Alerte dépendance",
-        getValue: (l) => (alertedLeverIds.has(l.id) ? "En alerte" : "Sans alerte"),
+        label: t("levers.filter.dependencyAlert", "Alerte dépendance"),
+        getValue: (l) =>
+          alertedLeverIds.has(l.id)
+            ? t("levers.filter.hasAlert", "En alerte")
+            : t("levers.filter.noAlert", "Sans alerte"),
       },
       {
         key: "f_endMonth",
-        label: "Mois de fin",
+        label: t("levers.filter.endMonth", "Mois de fin"),
         getValue: (l) => engine.leverEndMonthLabel(l),
       },
       {
         key: "f_endQuarter",
-        label: "Trimestre de fin",
+        label: t("levers.filter.endQuarter", "Trimestre de fin"),
         getValue: (l) => engine.leverEndQuarterLabel(l),
       },
     ],
@@ -367,7 +390,9 @@ export default function LeversPage() {
               const macroLabel = resolveMacroLabel(r);
               const fullDetail = path.map((p) => p.label).join(" › ");
               return (
-                <Tooltip text={fullDetail || macroLabel || "Non renseigné"}>
+                <Tooltip
+                  text={fullDetail || macroLabel || t("levers.notProvided", "Non renseigné")}
+                >
                   <span>{macroLabel || "—"}</span>
                 </Tooltip>
               );
@@ -417,7 +442,11 @@ export default function LeversPage() {
       render: (r) => (
         <span className="inline-flex items-center gap-1 font-mono text-[11px] text-secondary">
           {r.hasAlert && (
-            <TriangleAlert size={12} className="text-rag-red" aria-label="Alerte dépendance" />
+            <TriangleAlert
+              size={12}
+              className="text-rag-red"
+              aria-label={t("levers.filter.dependencyAlert", "Alerte dépendance")}
+            />
           )}
           {r.code}
         </span>
@@ -484,7 +513,7 @@ export default function LeversPage() {
     },
     {
       key: "realized",
-      label: "Réalisé",
+      label: t("levers.realized", "Réalisé"),
       align: "right",
       // Visible dans la vue carte mobile : avec Net Savings, c'est LA paire que DG/CTO
       // regardent (réalisé vs engagé) — le reste du détail financier reste desktop.

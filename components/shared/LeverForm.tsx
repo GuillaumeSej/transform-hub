@@ -351,7 +351,7 @@ export function LeverForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         {hasGeographyHierarchy && (
           <div className="col-span-1 sm:col-span-2 md:col-span-3">
-            <Field label="Maille géographique configurée">
+            <Field label={t("leverForm.geographyMesh", "Maille géographique configurée")}>
               <select
                 className={inputClass}
                 value={values.geographyLeafId ?? ""}

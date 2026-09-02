@@ -2,6 +2,7 @@
 
 import type { LeverAction, RecognitionMode } from "@/types";
 import { Tooltip } from "@/components/shared/Tooltip";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const STATUS_FILL: Record<string, string> = {
   done: "opacity-100",
@@ -38,8 +39,14 @@ export function ActionGantt({
    * les lignes d'impact qui ne surchargent pas explicitement `recognition`. */
   defaultRecognition?: RecognitionMode;
 }) {
+  const { t } = useTranslation();
+
   if (actions.length === 0) {
-    return <p className="py-6 text-center text-sm text-tertiary">Aucune action définie.</p>;
+    return (
+      <p className="py-6 text-center text-sm text-tertiary">
+        {t("shared.actionGantt.noActions", "Aucune action définie.")}
+      </p>
+    );
   }
 
   // Calculer l'intervalle temporel global — inclut les dates de milestone CAPEX/gain pour que les
@@ -98,10 +105,10 @@ export function ActionGantt({
           const fmtAmount =
             Math.abs(net) >= 1 ? `€${net.toFixed(1)}M` : `€${Math.round(net * 1000)}K`;
           const statusLabels: Record<string, string> = {
-            done: "Terminé",
-            in_progress: "En cours",
-            todo: "À faire",
-            delayed: "En retard",
+            done: t("leverDetail.finished", "Terminé"),
+            in_progress: t("leverDetail.inProgress", "En cours"),
+            todo: t("leverDetail.todo", "À faire"),
+            delayed: t("leverDetail.late", "En retard"),
           };
 
           return (
@@ -163,7 +170,12 @@ export function ActionGantt({
                   <span key={impact.id}>
                     {impact.capexDeploymentDate && (
                       <Tooltip
-                        text={`CAPEX ${impact.amount}€M engagé au ${impact.capexDeploymentDate}`}
+                        text={t(
+                          "shared.actionGantt.capexTooltip",
+                          "CAPEX {amount}€M engagé au {date}"
+                        )
+                          .replace("{amount}", String(impact.amount))
+                          .replace("{date}", impact.capexDeploymentDate)}
                         className="absolute"
                         style={{ left: `${pctOf(impact.capexDeploymentDate)}%`, top: "50%" }}
                       >
@@ -173,7 +185,12 @@ export function ActionGantt({
                     {impact.gainDate &&
                       (mode === "one_shot" ? (
                         <Tooltip
-                          text={`Gain ${impact.amount}€M encaissé (one-shot) au ${impact.gainDate}`}
+                          text={t(
+                            "shared.actionGantt.gainOneShotTooltip",
+                            "Gain {amount}€M encaissé (one-shot) au {date}"
+                          )
+                            .replace("{amount}", String(impact.amount))
+                            .replace("{date}", impact.gainDate)}
                           className="absolute"
                           style={{ left: `${pctOf(impact.gainDate)}%`, top: "50%" }}
                         >
@@ -186,7 +203,12 @@ export function ActionGantt({
                             left: `${startPct}%`,
                             width: `${Math.max(0, pctOf(impact.gainDate) - startPct)}%`,
                           }}
-                          title={`Gain ${impact.amount}€M lissé jusqu'au ${impact.gainDate}`}
+                          title={t(
+                            "shared.actionGantt.gainSmoothedTitle",
+                            "Gain {amount}€M lissé jusqu'au {date}"
+                          )
+                            .replace("{amount}", String(impact.amount))
+                            .replace("{date}", impact.gainDate)}
                         />
                       ))}
                   </span>
@@ -212,14 +234,15 @@ export function ActionGantt({
         <div className="mt-2 flex flex-wrap items-center gap-4 text-[10px] text-tertiary">
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2 w-2 rotate-45 border border-white bg-info-blue" />{" "}
-            Milestone CAPEX
+            {t("shared.actionGantt.legendCapex", "Milestone CAPEX")}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-rag-green" /> Gain encaissé
-            (one-shot)
+            <span className="inline-block h-2 w-2 rounded-full bg-rag-green" />{" "}
+            {t("shared.actionGantt.legendGainOneShot", "Gain encaissé (one-shot)")}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-1.5 w-3 rounded-sm bg-rag-green/40" /> Gain lissé
+            <span className="inline-block h-1.5 w-3 rounded-sm bg-rag-green/40" />{" "}
+            {t("shared.actionGantt.legendGainSmoothed", "Gain lissé")}
           </span>
         </div>
       )}

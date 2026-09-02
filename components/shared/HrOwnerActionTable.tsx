@@ -1,21 +1,49 @@
 "use client";
 
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { OwnerActionStatus, OwnerActionCell, OwnerActionRow } from "@/lib/hrExecution";
 
-const COLUMNS: { key: OwnerActionStatus; label: string; className: string }[] = [
-  { key: "overdue", label: "En retard", className: "text-bp-coral" },
-  { key: "dueSoon", label: "À venir < 90 j", className: "text-primary" },
-  { key: "later", label: "À venir > 90 j", className: "text-secondary" },
-  { key: "realized", label: "Réalisés", className: "text-bp-purple" },
-  { key: "toValidate", label: "À valider RH", className: "text-bp-coral" },
-];
+function getColumns(
+  t: (key: string, fallback?: string) => string
+): { key: OwnerActionStatus; label: string; className: string }[] {
+  return [
+    { key: "overdue", label: t("hr.alert.overdue", "En retard"), className: "text-bp-coral" },
+    {
+      key: "dueSoon",
+      label: t("shared.hrOwnerActionTable.dueSoon", "À venir < 90 j"),
+      className: "text-primary",
+    },
+    {
+      key: "later",
+      label: t("shared.hrOwnerActionTable.later", "À venir > 90 j"),
+      className: "text-secondary",
+    },
+    {
+      key: "realized",
+      label: t("shared.hrOwnerActionTable.realized", "Réalisés"),
+      className: "text-bp-purple",
+    },
+    {
+      key: "toValidate",
+      label: t("shared.hrOwnerActionTable.toValidateHr", "À valider RH"),
+      className: "text-bp-coral",
+    },
+  ];
+}
 
-function CellValue({ value }: { value: OwnerActionCell }) {
+function CellValue({
+  value,
+  t,
+}: {
+  value: OwnerActionCell;
+  t: (key: string, fallback?: string) => string;
+}) {
   return (
     <span className="inline-flex flex-col leading-tight">
       <strong className="text-[13px] tabular-nums">{value.count}</strong>
       <span className="text-[9.5px] text-tertiary">
-        {value.fte.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} ETP
+        {value.fte.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}{" "}
+        {t("shared.hrOwnerActionTable.fteAbbrev", "ETP")}
       </span>
     </span>
   );
@@ -28,8 +56,14 @@ export function HrOwnerActionTable({
   rows: OwnerActionRow[];
   onCellClick?: (owner: string, status: OwnerActionStatus) => void;
 }) {
+  const { t } = useTranslation();
+  const COLUMNS = getColumns(t);
   if (rows.length === 0) {
-    return <p className="py-8 text-center text-sm text-tertiary">Aucun mouvement à piloter.</p>;
+    return (
+      <p className="py-8 text-center text-sm text-tertiary">
+        {t("shared.hrOwnerActionTable.empty", "Aucun mouvement à piloter.")}
+      </p>
+    );
   }
   return (
     <div className="overflow-x-auto">
@@ -37,7 +71,7 @@ export function HrOwnerActionTable({
         <thead>
           <tr>
             <th className="border-b border-border bg-neutral-50 px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-secondary">
-              RH Owner
+              {t("shared.hrOwnerActionTable.rhOwner", "RH Owner")}
             </th>
             {COLUMNS.map((column) => (
               <th
@@ -48,7 +82,7 @@ export function HrOwnerActionTable({
               </th>
             ))}
             <th className="border-b border-border bg-neutral-50 px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-secondary">
-              Prochaine échéance
+              {t("shared.hrOwnerActionTable.nextDueDate", "Prochaine échéance")}
             </th>
           </tr>
         </thead>
@@ -67,7 +101,7 @@ export function HrOwnerActionTable({
                     onClick={() => onCellClick?.(row.owner, column.key)}
                     className="rounded-sm px-2 py-1 hover:bg-neutral-100 disabled:cursor-default disabled:opacity-35"
                   >
-                    <CellValue value={row[column.key]} />
+                    <CellValue value={row[column.key]} t={t} />
                   </button>
                 </td>
               ))}

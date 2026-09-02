@@ -31,6 +31,7 @@ import type {
 import { movementRhythmAxisDomains } from "@/lib/hrTimeSeries";
 import type { FteBridgeSummary } from "@/lib/hrEngine";
 import type { MovementType } from "@/types";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /** Palette 5-types alignée sur les tokens dataviz BeTrack / BearingPoint : famille rouge,
  *  taupes et violet de secours. Vert et orange sont volontairement exclus par la charte. */
@@ -65,8 +66,14 @@ export function SavingsPeriodCumulChart({
   buckets: SalarySavingsBucket[];
   height?: number;
 }) {
+  const { t } = useTranslation();
+
   if (buckets.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucune donnée à afficher.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("chart.noDataToDisplay", "Aucune donnée à afficher.")}
+      </p>
+    );
   }
 
   return (
@@ -105,15 +112,20 @@ export function SavingsPeriodCumulChart({
         <Bar
           yAxisId="period"
           dataKey="actualPlusForecast"
-          name="Réalisé + prévision — période"
+          name={t("shared.hrGooduelleCharts.actualForecastPeriod", "Réalisé + prévision — période")}
           fill={COLOR_SAVINGS}
         />
-        <Bar yAxisId="period" dataKey="plan" name="Plan initial — période" fill={COLOR_PLAN} />
+        <Bar
+          yAxisId="period"
+          dataKey="plan"
+          name={t("shared.hrGooduelleCharts.planPeriod", "Plan initial — période")}
+          fill={COLOR_PLAN}
+        />
         <Line
           yAxisId="cumul"
           type="monotone"
           dataKey="cumulActualForecast"
-          name="Cumul réalisé + prévision"
+          name={t("shared.hrGooduelleCharts.cumulActualForecast", "Cumul réalisé + prévision")}
           stroke={COLOR_SAVINGS}
           strokeWidth={2}
           dot={{ r: 3 }}
@@ -122,7 +134,7 @@ export function SavingsPeriodCumulChart({
           yAxisId="cumul"
           type="monotone"
           dataKey="cumulPlan"
-          name="Cumul plan initial"
+          name={t("shared.hrGooduelleCharts.cumulPlan", "Cumul plan initial")}
           stroke={COLOR_PLAN}
           strokeWidth={1.5}
           strokeDasharray="5 4"
@@ -144,8 +156,14 @@ export function EnrPeriodCumulChart({
   buckets: SocialCostBucket[];
   height?: number;
 }) {
+  const { t } = useTranslation();
+
   if (buckets.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucune donnée à afficher.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("chart.noDataToDisplay", "Aucune donnée à afficher.")}
+      </p>
+    );
   }
 
   return (
@@ -184,15 +202,26 @@ export function EnrPeriodCumulChart({
         <Bar
           yAxisId="period"
           dataKey="actualForecast"
-          name="ENR réalisé + prévision — période"
+          name={t(
+            "shared.hrGooduelleCharts.enrActualForecastPeriod",
+            "ENR réalisé + prévision — période"
+          )}
           fill={COLOR_ENR}
         />
-        <Bar yAxisId="period" dataKey="plan" name="ENR plan initial — période" fill={COLOR_PLAN} />
+        <Bar
+          yAxisId="period"
+          dataKey="plan"
+          name={t("shared.hrGooduelleCharts.enrPlanPeriod", "ENR plan initial — période")}
+          fill={COLOR_PLAN}
+        />
         <Line
           yAxisId="cumul"
           type="monotone"
           dataKey="cumulActualForecast"
-          name="Cumul ENR réalisé + prévision"
+          name={t(
+            "shared.hrGooduelleCharts.enrCumulActualForecast",
+            "Cumul ENR réalisé + prévision"
+          )}
           stroke={COLOR_ENR_CUMUL}
           strokeWidth={2}
           dot={{ r: 3 }}
@@ -201,7 +230,7 @@ export function EnrPeriodCumulChart({
           yAxisId="cumul"
           type="monotone"
           dataKey="cumulPlan"
-          name="Cumul ENR plan initial"
+          name={t("shared.hrGooduelleCharts.enrCumulPlan", "Cumul ENR plan initial")}
           stroke={COLOR_PLAN}
           strokeWidth={1.5}
           strokeDasharray="5 4"
@@ -223,8 +252,14 @@ export function NetEconomyChart({
   buckets: NetEconomyBucket[];
   height?: number;
 }) {
+  const { t } = useTranslation();
+
   if (buckets.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucune donnée à afficher.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("chart.noDataToDisplay", "Aucune donnée à afficher.")}
+      </p>
+    );
   }
 
   return (
@@ -261,7 +296,14 @@ export function NetEconomyChart({
         />
         <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
         <ReferenceLine yAxisId="period" y={0} stroke="rgba(0,0,0,0.35)" />
-        <Bar yAxisId="period" dataKey="actualForecast" name="Économie nette réalisé + prévision">
+        <Bar
+          yAxisId="period"
+          dataKey="actualForecast"
+          name={t(
+            "shared.hrGooduelleCharts.netEconomyActualForecast",
+            "Économie nette réalisé + prévision"
+          )}
+        >
           {buckets.map((b, i) => (
             <Cell key={i} fill={b.actualForecast >= 0 ? COLOR_NET_POS : COLOR_NET_NEG} />
           ))}
@@ -270,7 +312,10 @@ export function NetEconomyChart({
           yAxisId="cumul"
           type="monotone"
           dataKey="cumulActualForecast"
-          name="Cumul net réalisé + prévision"
+          name={t(
+            "shared.hrGooduelleCharts.netCumulActualForecast",
+            "Cumul net réalisé + prévision"
+          )}
           stroke={COLOR_NET_CUMUL}
           strokeWidth={2}
           dot={{ r: 3 }}
@@ -291,8 +336,14 @@ export function MovementRhythmChart({
   buckets: MovementRhythmBucket[];
   height?: number;
 }) {
+  const { t } = useTranslation();
+
   if (buckets.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucune donnée à afficher.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("chart.noDataToDisplay", "Aucune donnée à afficher.")}
+      </p>
+    );
   }
 
   // Structure de données pour Recharts : chaque bucket devient un objet avec les 5 keys typed.
@@ -346,7 +397,10 @@ export function MovementRhythmChart({
           tickFormatter={fmtEtp}
         />
         <Tooltip
-          formatter={(value, name) => [`${fmtEtp(Number(value))} ETP`, String(name)]}
+          formatter={(value, name) => [
+            `${fmtEtp(Number(value))} ${t("etp.column.fte", "ETP")}`,
+            String(name),
+          ]}
           labelStyle={{ fontSize: 11, fontWeight: 600 }}
         />
         <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
@@ -356,41 +410,41 @@ export function MovementRhythmChart({
           yAxisId="period"
           stackId="mouv"
           fill={TYPE_COLORS["Recrutement"]}
-          name="Recrutements"
+          name={t("chart.movementType.recruitments", "Recrutements")}
         />
         <Bar
           yAxisId="period"
           dataKey="Attrition"
           stackId="mouv"
           fill={TYPE_COLORS["Attrition"]}
-          name="Attrition"
+          name={t("chart.movementType.attrition", "Attrition")}
         />
         <Bar
           dataKey="Départ forcé"
           yAxisId="period"
           stackId="mouv"
           fill={TYPE_COLORS["Départ forcé"]}
-          name="Départs forcés"
+          name={t("chart.movementType.forcedDepartures", "Départs forcés")}
         />
         <Bar
           dataKey="Transfert entrant"
           yAxisId="period"
           stackId="mouv"
           fill={TYPE_COLORS["Transfert entrant"]}
-          name="Transferts entrants"
+          name={t("chart.movementType.transfersIn", "Transferts entrants")}
         />
         <Bar
           dataKey="Transfert sortant"
           yAxisId="period"
           stackId="mouv"
           fill={TYPE_COLORS["Transfert sortant"]}
-          name="Transferts sortants"
+          name={t("chart.movementType.transfersOut", "Transferts sortants")}
         />
         <Line
           yAxisId="period"
           type="monotone"
           dataKey="net"
-          name="Net ETP cible (hors transferts)"
+          name={t("shared.hrGooduelleCharts.netTargetFte", "Net ETP cible (hors transferts)")}
           stroke="transparent"
           strokeWidth={0}
           dot={{ r: 6, fill: "white", stroke: "#320300", strokeWidth: 2.5 }}
@@ -400,7 +454,7 @@ export function MovementRhythmChart({
           yAxisId="cumul"
           type="monotone"
           dataKey="cumulNet"
-          name="Cumul net"
+          name={t("shared.hrGooduelleCharts.cumulNet", "Cumul net")}
           stroke={COLOR_INK}
           strokeWidth={2}
           dot={{ r: 3, fill: COLOR_INK }}
@@ -424,6 +478,7 @@ export function EtpBridgeChart({
   summary: FteBridgeSummary;
   height?: number;
 }) {
+  const { t } = useTranslation();
   const { opening, closing, contributions } = summary;
 
   type Datum = {
@@ -438,7 +493,7 @@ export function EtpBridgeChart({
   const data: Datum[] = [];
   let running = opening;
   data.push({
-    label: "ETP ouverture",
+    label: t("shared.hrGooduelleCharts.etpOpening", "ETP ouverture"),
     kind: "open",
     base: 0,
     height: opening,
@@ -458,7 +513,7 @@ export function EtpBridgeChart({
     });
   }
   data.push({
-    label: "ETP après sélection",
+    label: t("shared.hrGooduelleCharts.etpClosing", "ETP après sélection"),
     kind: "close",
     base: 0,
     height: closing,
@@ -496,10 +551,15 @@ export function EtpBridgeChart({
                 <div className="font-semibold text-primary">{d.label}</div>
                 <div className="text-secondary">
                   {sign}
-                  {fmtEtp(d.signedValue)} ETP
+                  {fmtEtp(d.signedValue)} {t("etp.column.fte", "ETP")}
                 </div>
                 {d.count > 0 && (
-                  <div className="text-tertiary">Volume concerné : {d.count} mouvement(s)</div>
+                  <div className="text-tertiary">
+                    {t(
+                      "shared.hrGooduelleCharts.volumeConcerned",
+                      "Volume concerné : {n} mouvement(s)"
+                    ).replace("{n}", String(d.count))}
+                  </div>
                 )}
               </div>
             );

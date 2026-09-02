@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type {
   ActionImpact,
   ActionStatus,
@@ -16,18 +17,27 @@ const selectClass =
   "w-full rounded-sm border border-border bg-white px-1.5 py-1.5 text-[12px] focus:border-bp-coral focus:outline-none";
 
 const ACTION_STATUSES: ActionStatus[] = ["todo", "in_progress", "done", "delayed"];
-const STATUS_LABELS: Record<ActionStatus, string> = {
-  todo: "À faire",
-  in_progress: "En cours",
-  done: "Terminé",
-  delayed: "En retard",
-};
 
-const SAVING_TYPE_LABELS: Record<SavingType, string> = {
-  cost_reduction: "Réduction de coût",
-  revenue_increase: "Augmentation du CA",
-  working_capital: "Impact BFR",
-};
+function actionStatusLabels(
+  t: (key: string, fallback?: string) => string
+): Record<ActionStatus, string> {
+  return {
+    todo: t("leverDetail.todo", "À faire"),
+    in_progress: t("leverDetail.inProgress", "En cours"),
+    done: t("leverDetail.finished", "Terminé"),
+    delayed: t("leverDetail.late", "En retard"),
+  };
+}
+
+function savingTypeLabels(
+  t: (key: string, fallback?: string) => string
+): Record<SavingType, string> {
+  return {
+    cost_reduction: t("shared.actionForm.savingCostReduction", "Réduction de coût"),
+    revenue_increase: t("shared.actionForm.savingRevenueIncrease", "Augmentation du CA"),
+    working_capital: t("shared.actionForm.savingWorkingCapital", "Impact BFR"),
+  };
+}
 
 function generateId(): string {
   return "IMP" + Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -54,7 +64,7 @@ export function ActionForm({
   data,
   companyDefaultRecognition = "smoothing",
   initialValues,
-  submitLabel = "Créer l'action",
+  submitLabel,
   onSubmit,
   onCancel,
   onDelete,
@@ -69,6 +79,10 @@ export function ActionForm({
   onCancel?: () => void;
   onDelete?: () => void;
 }) {
+  const { t } = useTranslation();
+  const STATUS_LABELS = actionStatusLabels(t);
+  const SAVING_TYPE_LABELS = savingTypeLabels(t);
+  const resolvedSubmitLabel = submitLabel ?? t("leverDetail.createAction", "Créer l'action");
   const [name, setName] = useState(initialValues?.name ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [owner, setOwner] = useState(initialValues?.owner ?? "");
@@ -120,18 +134,18 @@ export function ActionForm({
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
-            Nom de l&apos;action
+            {t("shared.actionForm.actionName", "Nom de l'action")}
           </label>
           <input
             className={inputClass}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Ex: Lancer le RFP"
+            placeholder={t("shared.actionForm.actionNamePlaceholder", "Ex: Lancer le RFP")}
           />
         </div>
         <div className="col-span-2">
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
-            Description
+            {t("leverForm.sectionDescription", "Description")}
           </label>
           <textarea
             className={inputClass}
@@ -142,13 +156,13 @@ export function ActionForm({
         </div>
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
-            Owner
+            {t("shared.actionForm.owner", "Owner")}
           </label>
           <input className={inputClass} value={owner} onChange={(e) => setOwner(e.target.value)} />
         </div>
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
-            Statut
+            {t("hr.status", "Statut")}
           </label>
           <select
             className={selectClass}
@@ -164,7 +178,7 @@ export function ActionForm({
         </div>
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
-            Date début
+            {t("shared.actionForm.startDate", "Date début")}
           </label>
           <input
             className={inputClass}
@@ -175,7 +189,7 @@ export function ActionForm({
         </div>
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
-            Date fin
+            {t("shared.actionForm.endDate", "Date fin")}
           </label>
           <input
             className={inputClass}
@@ -190,14 +204,14 @@ export function ActionForm({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wide text-secondary">
-            Lignes d&apos;impact
+            {t("action.impacts", "Lignes d'impact")}
           </span>
           <button
             type="button"
             onClick={addImpact}
             className="rounded-sm bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral transition hover:bg-bp-coral/20"
           >
-            + Ajouter
+            + {t("common.add", "Ajouter")}
           </button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto rounded-md border border-border">
@@ -206,45 +220,48 @@ export function ActionForm({
               <thead>
                 <tr className="border-b border-border bg-neutral-50">
                   <th className="sticky left-0 z-10 w-[90px] min-w-[90px] bg-neutral-50 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Type
+                    {t("shared.actionForm.type", "Type")}
                   </th>
                   <th className="w-[160px] min-w-[160px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Description
+                    {t("leverForm.sectionDescription", "Description")}
                   </th>
                   <th className="w-[110px] min-w-[110px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Nature
+                    {t("leverDetail.impactTable.nature", "Nature")}
                   </th>
                   <th className="w-[90px] min-w-[90px] px-2 py-1.5 text-right text-xs font-semibold uppercase tracking-wide text-secondary">
                     €M
                   </th>
                   <th className="w-[70px] min-w-[70px] px-2 py-1.5 text-right text-xs font-semibold uppercase tracking-wide text-secondary">
-                    ETP
+                    {t("shared.actionForm.fteColumn", "ETP")}
                   </th>
                   <th className="w-[130px] min-w-[130px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Type de gain
+                    {t("shared.actionForm.savingType", "Type de gain")}
                   </th>
                   <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Date CAPEX
+                    {t("shared.actionForm.capexDate", "Date CAPEX")}
                   </th>
                   <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Date gain
+                    {t("shared.actionForm.gainDate", "Date gain")}
                   </th>
                   <th className="w-[130px] min-w-[130px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Reconnaissance
+                    {t("shared.actionForm.recognition", "Reconnaissance")}
                   </th>
                   <th className="w-[150px] min-w-[150px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Poste de coût
+                    {t("shared.actionForm.costLine", "Poste de coût")}
                   </th>
                   <th className="w-[110px] min-w-[110px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Centre de coût
+                    {t("leverForm.costCenter", "Centre de coût")}
                   </th>
                   <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Entité (P&amp;L)
+                    {t("leverDetail.impactTable.entityPnl", "Entité (P&L)")}
                   </th>
                   <th className="w-[180px] min-w-[180px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    Commentaire
+                    {t("hr.column.comment", "Commentaire")}
                   </th>
-                  <th className="w-[40px] min-w-[40px] px-2 py-1.5" aria-label="Actions" />
+                  <th
+                    className="w-[40px] min-w-[40px] px-2 py-1.5"
+                    aria-label={t("shared.actionForm.actionsColumnAria", "Actions")}
+                  />
                 </tr>
               </thead>
               <tbody>
@@ -268,8 +285,8 @@ export function ActionForm({
                           updateImpact(idx, patch);
                         }}
                       >
-                        <option value="cost">Coût</option>
-                        <option value="saving">Gain</option>
+                        <option value="cost">{t("action.cost", "Coût")}</option>
+                        <option value="saving">{t("action.saving", "Gain")}</option>
                       </select>
                     </td>
 
@@ -278,7 +295,10 @@ export function ActionForm({
                         className={inputClass}
                         value={imp.label}
                         onChange={(e) => updateImpact(idx, { label: e.target.value })}
-                        placeholder="Description..."
+                        placeholder={t(
+                          "shared.actionForm.descriptionPlaceholder",
+                          "Description..."
+                        )}
                       />
                     </td>
 
@@ -295,14 +315,22 @@ export function ActionForm({
                       >
                         {imp.type === "cost" ? (
                           <>
-                            <option value="capex">CAPEX</option>
-                            <option value="opex_rec">OPEX réc.</option>
-                            <option value="oneoff">One-off</option>
+                            <option value="capex">{t("leverForm.capex", "CAPEX")}</option>
+                            <option value="opex_rec">
+                              {t("shared.actionForm.opexRecShort", "OPEX réc.")}
+                            </option>
+                            <option value="oneoff">
+                              {t("shared.actionForm.oneOff", "One-off")}
+                            </option>
                           </>
                         ) : (
                           <>
-                            <option value="opex_rec">Récurrent</option>
-                            <option value="oneoff">One-off</option>
+                            <option value="opex_rec">
+                              {t("leverDetail.impactTable.recurrent", "Récurrent")}
+                            </option>
+                            <option value="oneoff">
+                              {t("shared.actionForm.oneOff", "One-off")}
+                            </option>
                           </>
                         )}
                       </select>
@@ -366,7 +394,10 @@ export function ActionForm({
                           onChange={(e) =>
                             updateImpact(idx, { capexDeploymentDate: e.target.value || undefined })
                           }
-                          title="Date à laquelle le CAPEX est engagé à 100%"
+                          title={t(
+                            "shared.actionForm.capexDeploymentTitle",
+                            "Date à laquelle le CAPEX est engagé à 100%"
+                          )}
                         />
                       ) : (
                         <span className="text-tertiary">—</span>
@@ -382,7 +413,10 @@ export function ActionForm({
                           onChange={(e) =>
                             updateImpact(idx, { gainDate: e.target.value || undefined })
                           }
-                          title="Date d'encaissement réel du gain"
+                          title={t(
+                            "shared.actionForm.gainDateTitle",
+                            "Date d'encaissement réel du gain"
+                          )}
                         />
                       ) : (
                         <span className="text-tertiary">—</span>
@@ -402,11 +436,19 @@ export function ActionForm({
                           }
                         >
                           <option value="">
-                            Défaut (
-                            {companyDefaultRecognition === "one_shot" ? "one-shot" : "lissé"})
+                            {t("shared.actionForm.recognitionDefault", "Défaut ({value})").replace(
+                              "{value}",
+                              companyDefaultRecognition === "one_shot"
+                                ? t("shared.actionForm.oneShotLower", "one-shot")
+                                : t("shared.actionForm.smoothedLower", "lissé")
+                            )}
                           </option>
-                          <option value="smoothing">Lissé</option>
-                          <option value="one_shot">One-shot</option>
+                          <option value="smoothing">
+                            {t("shared.actionForm.smoothed", "Lissé")}
+                          </option>
+                          <option value="one_shot">
+                            {t("shared.actionForm.oneShot", "One-shot")}
+                          </option>
                         </select>
                       ) : (
                         <span className="text-tertiary">—</span>
@@ -435,7 +477,7 @@ export function ActionForm({
                         onChange={(e) =>
                           updateImpact(idx, { costCenter: e.target.value || undefined })
                         }
-                        placeholder="CC..."
+                        placeholder={t("shared.actionForm.costCenterPlaceholder", "CC...")}
                       />
                     </td>
 
@@ -464,7 +506,9 @@ export function ActionForm({
                             comments: text
                               ? [
                                   {
-                                    user: owner.trim() || "Utilisateur démo",
+                                    user:
+                                      owner.trim() ||
+                                      t("shared.actionForm.demoUser", "Utilisateur démo"),
                                     ts: new Date().toISOString().slice(0, 10),
                                     text,
                                   },
@@ -472,7 +516,10 @@ export function ActionForm({
                               : [],
                           });
                         }}
-                        placeholder="Méthode de calcul, hypothèses..."
+                        placeholder={t(
+                          "shared.actionForm.calcMethodPlaceholder",
+                          "Méthode de calcul, hypothèses..."
+                        )}
                       />
                     </td>
 
@@ -482,7 +529,10 @@ export function ActionForm({
                           type="button"
                           onClick={() => removeImpact(idx)}
                           className="text-tertiary transition hover:text-bp-coral"
-                          aria-label="Supprimer cette ligne d'impact"
+                          aria-label={t(
+                            "shared.actionForm.deleteImpactRowAria",
+                            "Supprimer cette ligne d'impact"
+                          )}
                         >
                           ×
                         </button>
@@ -504,7 +554,7 @@ export function ActionForm({
             onClick={onDelete}
             className="rounded-md px-3 py-2 text-[12px] font-semibold text-rag-red transition hover:bg-rag-red-light"
           >
-            Supprimer
+            {t("common.delete", "Supprimer")}
           </button>
         )}
         <div className="flex-1" />
@@ -514,7 +564,7 @@ export function ActionForm({
             onClick={onCancel}
             className="rounded-md px-4 py-2 text-[12px] font-semibold text-secondary hover:bg-neutral-100"
           >
-            Annuler
+            {t("common.cancel", "Annuler")}
           </button>
         )}
         <button
@@ -523,7 +573,7 @@ export function ActionForm({
           disabled={!name.trim() || !start || !end}
           className="rounded-md bg-bp-coral px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-bp-red-brick disabled:opacity-40"
         >
-          {submitLabel}
+          {resolvedSubmitLabel}
         </button>
       </div>
     </div>

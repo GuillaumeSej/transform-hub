@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /** Compte les mois, trimestres et années couverts par une plage — sert au libellé indicatif
  *  "N mois · N trimestres · N années" du DateRangePicker. */
@@ -33,8 +34,8 @@ export function DateRangePicker({
   onChange,
   minISO,
   maxISO,
-  ariaLabelFrom = "Date de début",
-  ariaLabelTo = "Date de fin",
+  ariaLabelFrom,
+  ariaLabelTo,
   showSummary = true,
 }: {
   fromISO: string;
@@ -46,18 +47,22 @@ export function DateRangePicker({
   ariaLabelTo?: string;
   showSummary?: boolean;
 }) {
+  const { t } = useTranslation();
   const summary = useMemo(() => summarizeRange(fromISO, toISO), [fromISO, toISO]);
   const inputClass =
     "rounded-sm border border-border px-2 py-1 text-xs focus:border-black focus:outline-none";
+  const resolvedAriaLabelFrom =
+    ariaLabelFrom ?? t("shared.dateRangePicker.fromLabel", "Date de début");
+  const resolvedAriaLabelTo = ariaLabelTo ?? t("shared.dateRangePicker.toLabel", "Date de fin");
 
   return (
     <div className="inline-flex flex-col gap-1">
       <div className="inline-flex items-center gap-2">
         <label className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-          Du
+          {t("dashboard.widgets.dateFrom", "Du")}
           <input
             type="date"
-            aria-label={ariaLabelFrom}
+            aria-label={resolvedAriaLabelFrom}
             className={inputClass}
             value={fromISO}
             min={minISO}
@@ -66,10 +71,10 @@ export function DateRangePicker({
           />
         </label>
         <label className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-          Au
+          {t("dashboard.widgets.dateTo", "Au")}
           <input
             type="date"
-            aria-label={ariaLabelTo}
+            aria-label={resolvedAriaLabelTo}
             className={inputClass}
             value={toISO}
             min={minISO}
@@ -80,8 +85,11 @@ export function DateRangePicker({
       </div>
       {showSummary && summary.months > 0 && (
         <span className="text-[10.5px] text-tertiary">
-          {summary.months} mois · {summary.quarters} trimestres · {summary.years}{" "}
-          {summary.years > 1 ? "années" : "année"}
+          {summary.months} {t("shared.dateRangePicker.monthsUnit", "mois")} · {summary.quarters}{" "}
+          {t("shared.dateRangePicker.quartersUnit", "trimestres")} · {summary.years}{" "}
+          {summary.years > 1
+            ? t("shared.dateRangePicker.yearsUnit", "années")
+            : t("shared.dateRangePicker.yearUnit", "année")}
         </span>
       )}
     </div>

@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { generateAlerts } from "@/lib/alertEngine";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import { leverToExcelRow } from "@/lib/leverExcel";
 import type { BeTrackData, Company } from "@/types";
 
@@ -25,6 +26,7 @@ export function ExportButton({
   riskThresholds?: Company["riskThresholds"];
 }) {
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const alerts = useMemo(() => generateAlerts(data), [data]);
 
   const exportExcel = (d: BeTrackData) => {
@@ -37,7 +39,14 @@ export function ExportButton({
       workbook,
       `leviers_${d.program.id}_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
-    showToast("Export Excel généré", `${rows.length} leviers exportés`, "success");
+    showToast(
+      t("shared.excelIO.exportSuccessTitle", "Export Excel généré"),
+      t("shared.exportButton.successBody", "{n} leviers exportés").replace(
+        "{n}",
+        String(rows.length)
+      ),
+      "success"
+    );
   };
 
   return (

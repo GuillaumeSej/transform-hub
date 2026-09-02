@@ -15,6 +15,7 @@ import { subscribeCompanies, subscribeUsers, subscribePrograms } from "@/lib/fir
 import { subscribeLevers } from "@/lib/firestore/levers";
 import { subscribeEmployees, subscribeMovements } from "@/lib/firestore/workforce";
 import { useRole } from "@/lib/hooks/useRole";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 function StatusDot({ filled }: { filled: boolean }) {
   return (
@@ -36,6 +37,7 @@ type CompanyStats = {
 };
 
 export default function AdminDataPage() {
+  const { t } = useTranslation();
   const { user } = useRole();
   const companyId = user?.companyId ?? null;
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -107,25 +109,27 @@ export default function AdminDataPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Database size={22} className="text-bp-coral" />
-        <h1 className="text-xl font-bold text-text-primary">Vue d&apos;ensemble des Données</h1>
+        <h1 className="text-xl font-bold text-text-primary">
+          {t("adminData.title", "Vue d'ensemble des Données")}
+        </h1>
       </div>
 
       <div className="rounded-xl border border-border bg-bg-elevated p-5 space-y-4">
         <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-          Résumé global
+          {t("adminData.globalSummary", "Résumé global")}
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Building2 size={14} />
-              <span className="text-xs font-semibold">Entreprises</span>
+              <span className="text-xs font-semibold">{t("nav.companies", "Entreprises")}</span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{visibleCompanies.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Users size={14} />
-              <span className="text-xs font-semibold">Utilisateurs</span>
+              <span className="text-xs font-semibold">{t("nav.users", "Utilisateurs")}</span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{visibleUsers.length}</div>
             <div className="flex flex-wrap gap-1">
@@ -142,28 +146,32 @@ export default function AdminDataPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Briefcase size={14} />
-              <span className="text-xs font-semibold">Programmes</span>
+              <span className="text-xs font-semibold">{t("adminData.programs", "Programmes")}</span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{visiblePrograms.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Target size={14} />
-              <span className="text-xs font-semibold">Leviers</span>
+              <span className="text-xs font-semibold">
+                {t("dashboard.tableHeader.leverCount", "Leviers")}
+              </span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{levers.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <FileSpreadsheet size={14} />
-              <span className="text-xs font-semibold">Employés</span>
+              <span className="text-xs font-semibold">{t("adminData.employees", "Employés")}</span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{employees.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Activity size={14} />
-              <span className="text-xs font-semibold">Mouvements</span>
+              <span className="text-xs font-semibold">
+                {t("adminData.movements", "Mouvements")}
+              </span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{movements.length}</div>
           </div>
@@ -172,11 +180,11 @@ export default function AdminDataPage() {
 
       <div className="space-y-4">
         <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-          Par entreprise
+          {t("adminData.byCompany", "Par entreprise")}
         </h2>
         {visibleCompanies.length === 0 && (
           <div className="rounded-xl border border-border bg-bg-elevated p-8 text-center text-sm text-text-secondary">
-            Aucune entreprise enregistrée.
+            {t("adminData.noCompanies", "Aucune entreprise enregistrée.")}
           </div>
         )}
         {companyStats.map((cs) => (
@@ -193,11 +201,15 @@ export default function AdminDataPage() {
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <StatusDot filled={cs.hasLevers} />
-                  <span className="text-[10px] text-text-secondary">Leviers</span>
+                  <span className="text-[10px] text-text-secondary">
+                    {t("dashboard.tableHeader.leverCount", "Leviers")}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <StatusDot filled={cs.hasEmployees} />
-                  <span className="text-[10px] text-text-secondary">Employés</span>
+                  <span className="text-[10px] text-text-secondary">
+                    {t("adminData.employees", "Employés")}
+                  </span>
                 </div>
               </div>
             </div>
@@ -205,7 +217,7 @@ export default function AdminDataPage() {
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-text-secondary">
                   <Users size={12} />
-                  <span className="text-xs font-semibold">Utilisateurs</span>
+                  <span className="text-xs font-semibold">{t("nav.users", "Utilisateurs")}</span>
                 </div>
                 <div className="text-lg font-bold text-text-primary">{cs.users}</div>
                 <div className="flex flex-wrap gap-1">
@@ -222,28 +234,36 @@ export default function AdminDataPage() {
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-text-secondary">
                   <Briefcase size={12} />
-                  <span className="text-xs font-semibold">Programmes</span>
+                  <span className="text-xs font-semibold">
+                    {t("adminData.programs", "Programmes")}
+                  </span>
                 </div>
                 <div className="text-lg font-bold text-text-primary">{cs.programs}</div>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-text-secondary">
                   <Target size={12} />
-                  <span className="text-xs font-semibold">Leviers</span>
+                  <span className="text-xs font-semibold">
+                    {t("dashboard.tableHeader.leverCount", "Leviers")}
+                  </span>
                 </div>
                 <div className="text-lg font-bold text-text-primary">{cs.levers}</div>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-text-secondary">
                   <FileSpreadsheet size={12} />
-                  <span className="text-xs font-semibold">Employés</span>
+                  <span className="text-xs font-semibold">
+                    {t("adminData.employees", "Employés")}
+                  </span>
                 </div>
                 <div className="text-lg font-bold text-text-primary">{cs.employees}</div>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-text-secondary">
                   <Activity size={12} />
-                  <span className="text-xs font-semibold">Mouvements</span>
+                  <span className="text-xs font-semibold">
+                    {t("adminData.movements", "Mouvements")}
+                  </span>
                 </div>
                 <div className="text-lg font-bold text-text-primary">{movements.length}</div>
               </div>

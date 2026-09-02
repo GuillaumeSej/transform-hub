@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type SCurvePoint = {
   month: string;
@@ -27,9 +28,9 @@ export function SCurveChart({
   data,
   height = 260,
   onPointClick,
-  labelActual = "Réalisé",
-  labelPlanned = "Plan initial",
-  labelReforecast = "Réactualisé",
+  labelActual,
+  labelPlanned,
+  labelReforecast,
 }: {
   data: SCurvePoint[];
   height?: number;
@@ -38,6 +39,10 @@ export function SCurveChart({
   labelPlanned?: string;
   labelReforecast?: string;
 }) {
+  const { t } = useTranslation();
+  const resolvedLabelActual = labelActual ?? t("chart.scurve.actual", "Réalisé");
+  const resolvedLabelPlanned = labelPlanned ?? t("chart.scurve.planned", "Plan initial");
+  const resolvedLabelReforecast = labelReforecast ?? t("chart.scurve.reforecast", "Réactualisé");
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart
@@ -67,7 +72,7 @@ export function SCurveChart({
         <Line
           type="monotone"
           dataKey="actual"
-          name={labelActual}
+          name={resolvedLabelActual}
           stroke="#FF3C47"
           strokeWidth={2.5}
           dot={{ r: 3 }}
@@ -77,7 +82,7 @@ export function SCurveChart({
         <Line
           type="monotone"
           dataKey="planned"
-          name={labelPlanned}
+          name={resolvedLabelPlanned}
           stroke="#806659"
           strokeWidth={2}
           strokeDasharray="6 4"
@@ -86,7 +91,7 @@ export function SCurveChart({
         <Line
           type="monotone"
           dataKey="reforecast"
-          name={labelReforecast}
+          name={resolvedLabelReforecast}
           stroke="#320300"
           strokeWidth={2}
           strokeDasharray="2 3"

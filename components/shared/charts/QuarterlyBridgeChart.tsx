@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type QuarterBridgePoint = { quarter: string; delta: number; cumulative: number };
 
@@ -26,9 +27,9 @@ export function QuarterlyBridgeChart({
   height = 240,
   onBarClick,
   plannedCumulative,
-  barLabel = "Économies de la période",
-  labelCumulative = "Cumulé",
-  labelPlanned = "Plan initial",
+  barLabel,
+  labelCumulative,
+  labelPlanned,
 }: {
   data: QuarterBridgePoint[];
   height?: number;
@@ -42,8 +43,17 @@ export function QuarterlyBridgeChart({
   /** Label de la ligne plan initial. */
   labelPlanned?: string;
 }) {
+  const { t } = useTranslation();
+  const resolvedBarLabel = barLabel ?? t("chart.bridge.periodSavings", "Économies de la période");
+  const resolvedLabelCumulative = labelCumulative ?? t("chart.bridge.cumulative", "Cumulé");
+  const resolvedLabelPlanned = labelPlanned ?? t("chart.bridge.planned", "Plan initial");
+
   if (data.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucun levier à représenter.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("chart.emptyLevers", "Aucun levier à représenter.")}
+      </p>
+    );
   }
 
   const chartData = data.map((d, i) => ({
@@ -71,7 +81,7 @@ export function QuarterlyBridgeChart({
         />
         <Bar
           dataKey="delta"
-          name={barLabel}
+          name={resolvedBarLabel}
           fill="#FF3C47"
           radius={[3, 3, 0, 0]}
           onClick={(d) => {
@@ -83,7 +93,7 @@ export function QuarterlyBridgeChart({
         <Line
           type="monotone"
           dataKey="cumulative"
-          name={labelCumulative}
+          name={resolvedLabelCumulative}
           stroke="#806659"
           strokeWidth={2}
           dot={{ r: 3 }}
@@ -92,7 +102,7 @@ export function QuarterlyBridgeChart({
           <Line
             type="monotone"
             dataKey="planned"
-            name={labelPlanned}
+            name={resolvedLabelPlanned}
             stroke="#320300"
             strokeWidth={1.5}
             strokeDasharray="4 4"

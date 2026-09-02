@@ -309,7 +309,11 @@ export default function DashboardPage() {
 
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
-      { key: "status", label: "Statut", getValue: (l) => lifecycle.label(l.status) },
+      {
+        key: "status",
+        label: t("hr.status", "Statut"),
+        getValue: (l) => lifecycle.label(l.status),
+      },
       {
         key: "ws",
         label: "Workstream",
@@ -318,12 +322,18 @@ export default function DashboardPage() {
       { key: "owner", label: "Owner", getValue: (l) => l.owner },
       ...(geographyFilterDefs.length > 0
         ? geographyFilterDefs
-        : [{ key: "geography", label: "Géographie", getValue: (l: Lever) => l.geography }]),
-      { key: "function", label: "Fonction", getValue: (l) => l.function },
+        : [
+            {
+              key: "geography",
+              label: t("dashboard.geography", "Géographie"),
+              getValue: (l: Lever) => l.geography,
+            },
+          ]),
+      { key: "function", label: t("dashboard.function", "Fonction"), getValue: (l) => l.function },
       { key: "type", label: "Type", getValue: (l) => l.type },
       ...hierarchyFilterDefs,
     ],
-    [data.workstreams, lifecycle, geographyFilterDefs, hierarchyFilterDefs]
+    [data.workstreams, lifecycle, geographyFilterDefs, hierarchyFilterDefs, t]
   );
 
   // Clés de filtre "activées" indépendamment d'une valeur choisie (voir FilterBar : activer une
@@ -666,7 +676,13 @@ export default function DashboardPage() {
       target: p.target,
     })),
     ...(programMap["Non assigné"]
-      ? [{ label: "Non assigné", realized: programMap["Non assigné"], target: 0 }]
+      ? [
+          {
+            label: t("leverForm.notAssigned", "Non assigné"),
+            realized: programMap["Non assigné"],
+            target: 0,
+          },
+        ]
       : []),
   ];
 
@@ -908,7 +924,7 @@ export default function DashboardPage() {
              * fonctionne pas au toucher, remplacé sur mobile par les boutons haut/bas ci-dessous. */}
             <span
               className="hidden cursor-grab px-0.5 text-tertiary active:cursor-grabbing sm:inline-flex"
-              title="Glisser pour réordonner"
+              title={t("dashboard.widgetShell.dragToReorder", "Glisser pour réordonner")}
             >
               <GripVertical size={14} />
             </span>
@@ -917,7 +933,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => moveWidgetBy(instance.instanceId, "up")}
                 className="rounded p-0.5 text-tertiary hover:bg-neutral-100 hover:text-primary"
-                title="Monter"
+                title={t("dashboard.widgetShell.moveUp", "Monter")}
               >
                 <ChevronUp size={14} />
               </button>
@@ -925,7 +941,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => moveWidgetBy(instance.instanceId, "down")}
                 className="rounded p-0.5 text-tertiary hover:bg-neutral-100 hover:text-primary"
-                title="Descendre"
+                title={t("dashboard.widgetShell.moveDown", "Descendre")}
               >
                 <ChevronDown size={14} />
               </button>
@@ -944,7 +960,7 @@ export default function DashboardPage() {
                 )
               }
               className="hidden items-center gap-1 rounded px-1.5 py-0.5 hover:bg-neutral-100 hover:text-primary sm:flex"
-              title="Changer la taille"
+              title={t("dashboard.widgetShell.changeSize", "Changer la taille")}
             >
               <Maximize2 size={12} />
               {instance.span}
@@ -953,7 +969,7 @@ export default function DashboardPage() {
               type="button"
               onClick={() => updateLayout(removeWidget(layout, instance.instanceId))}
               className="flex items-center rounded px-1 py-0.5 text-tertiary hover:bg-neutral-100 hover:text-bp-coral"
-              title="Retirer ce widget"
+              title={t("dashboard.widgetShell.removeWidget", "Retirer ce widget")}
             >
               <X size={13} />
             </button>
@@ -1420,12 +1436,12 @@ export default function DashboardPage() {
                   <thead>
                     <tr>
                       {[
-                        "Workstream",
+                        t("dashboard.workstream", "Workstream"),
                         "Sponsor",
-                        "Leviers",
-                        "Réalisé / Cible",
-                        "Progression",
-                        "Risque",
+                        t("dashboard.tableHeader.leverCount", "Leviers"),
+                        t("dashboard.tableHeader.realizedTarget", "Réalisé / Cible"),
+                        t("dashboard.tableHeader.progress", "Progression"),
+                        t("dashboard.tableHeader.risk", "Risque"),
                         "CAPEX",
                       ].map((h) => (
                         <th
@@ -1774,15 +1790,29 @@ export default function DashboardPage() {
                           <div className="mb-2 flex items-start justify-between gap-2">
                             <div>
                               <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
-                                Règle de planning
+                                {t("dashboard.dependency.planningRule", "Règle de planning")}
                               </div>
                               <div className="mt-1 text-[11px] font-semibold text-primary">
                                 {a.type === "FS" &&
-                                  "La cible doit finir avant le début de la source"}
+                                  t(
+                                    "dashboard.dependency.rule.fs",
+                                    "La cible doit finir avant le début de la source"
+                                  )}
                                 {a.type === "SF" &&
-                                  "La cible doit démarrer avant la fin de la source"}
-                                {a.type === "SS" && "Les deux éléments doivent démarrer ensemble"}
-                                {a.type === "FF" && "Les deux éléments doivent finir ensemble"}
+                                  t(
+                                    "dashboard.dependency.rule.sf",
+                                    "La cible doit démarrer avant la fin de la source"
+                                  )}
+                                {a.type === "SS" &&
+                                  t(
+                                    "dashboard.dependency.rule.ss",
+                                    "Les deux éléments doivent démarrer ensemble"
+                                  )}
+                                {a.type === "FF" &&
+                                  t(
+                                    "dashboard.dependency.rule.ff",
+                                    "Les deux éléments doivent finir ensemble"
+                                  )}
                               </div>
                             </div>
                             <DependencyTypeBadge type={a.type} />
@@ -1958,8 +1988,10 @@ export default function DashboardPage() {
         </div>
         <div className="rounded-lg border border-border bg-white p-10 text-center">
           <p className="mx-auto max-w-md text-sm text-secondary">
-            Aucun programme n&apos;a encore été créé pour votre entreprise. Créez-en un dans Admin
-            &gt; Entreprises &gt; Programmes, puis rattachez-y des leviers.
+            {t(
+              "dashboard.noProgram",
+              "Aucun programme n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers."
+            )}
           </p>
         </div>
       </div>
@@ -2212,23 +2244,31 @@ export default function DashboardPage() {
       <Modal
         open={builderChoiceType !== null}
         onOpenChange={(open) => !open && setBuilderChoiceType(null)}
-        title="Ce graphique est déjà sur votre dashboard"
+        title={t(
+          "dashboard.builderModal.alreadyOnDashboard",
+          "Ce graphique est déjà sur votre dashboard"
+        )}
       >
         <div className="flex flex-col gap-3">
           <p className="text-sm text-secondary">
-            Ajoutez-le comme nouveau bloc séparé, ou ajoutez cette vue au sélecteur d&apos;un bloc
-            déjà présent (petit bouton en haut du graphique) plutôt que de dupliquer.
+            {t(
+              "dashboard.builderModal.addOrExtend",
+              "Ajoutez-le comme nouveau bloc séparé, ou ajoutez cette vue au sélecteur d'un bloc déjà présent (petit bouton en haut du graphique) plutôt que de dupliquer."
+            )}
           </p>
           <button
             type="button"
             onClick={() => builderChoiceType && openBuilderConfig(builderChoiceType, null)}
             className="w-full rounded-md border border-border-strong p-3 text-left text-[12.5px] font-semibold text-primary transition hover:border-bp-coral"
           >
-            Ajouter comme nouveau widget
+            {t("dashboard.builderModal.addAsNewWidget", "Ajouter comme nouveau widget")}
           </button>
           <div className="flex flex-col gap-2">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
-              Ou ajouter une vue à un bloc existant
+              {t(
+                "dashboard.builderModal.addViewToExisting",
+                "Ou ajouter une vue à un bloc existant"
+              )}
             </div>
             {layout
               .filter((w) => w.type === builderChoiceType)
@@ -2243,10 +2283,18 @@ export default function DashboardPage() {
                     }
                     className="w-full rounded-md border border-border p-2.5 text-left text-[12.5px] transition hover:border-bp-coral"
                   >
-                    <span className="font-semibold text-primary">Bloc existant n°{i + 1}</span>
+                    <span className="font-semibold text-primary">
+                      {t("dashboard.builderModal.existingBlock", "Bloc existant n°{n}").replace(
+                        "{n}",
+                        String(i + 1)
+                      )}
+                    </span>
                     {active && (
                       <span className="mt-0.5 block text-[11px] text-tertiary">
-                        Vue actuelle : {describeCustomView(active, hierarchyLevels)}
+                        {t("dashboard.builderModal.currentView", "Vue actuelle : {view}").replace(
+                          "{view}",
+                          describeCustomView(active, hierarchyLevels)
+                        )}
                       </span>
                     )}
                   </button>
@@ -2262,27 +2310,35 @@ export default function DashboardPage() {
       <Modal
         open={builderConfigType !== null}
         onOpenChange={(open) => !open && closeBuilderConfig()}
-        title={builderTargetInstanceId ? "Ajouter une vue" : "Configurer le widget"}
+        title={
+          builderTargetInstanceId
+            ? t("dashboard.builderModal.addView", "Ajouter une vue")
+            : t("dashboard.builderModal.configureWidget", "Configurer le widget")
+        }
         footer={
           <>
             <Button variant="ghost" onClick={closeBuilderConfig}>
-              Annuler
+              {t("common.cancel", "Annuler")}
             </Button>
             <Button variant="primary" onClick={confirmBuilderConfig} disabled={!builderConfigValid}>
-              {builderTargetInstanceId ? "Ajouter la vue" : "Ajouter le widget"}
+              {builderTargetInstanceId
+                ? t("dashboard.builderModal.addViewBtn", "Ajouter la vue")
+                : t("dashboard.builderModal.addWidgetBtn", "Ajouter le widget")}
             </Button>
           </>
         }
       >
         <div className="flex flex-col gap-4">
           <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-primary">
-            Indicateur (métrique)
+            {t("dashboard.builderModal.metric", "Indicateur (métrique)")}
             <select
               value={builderMetric}
               onChange={(e) => setBuilderMetric(e.target.value)}
               className="rounded-md border border-border-strong px-2.5 py-2 text-[13px] font-normal text-primary"
             >
-              <option value="">— Choisir —</option>
+              <option value="">
+                {t("dashboard.builderModal.choosePlaceholder", "— Choisir —")}
+              </option>
               {METRIC_REGISTRY.map((m) => (
                 <option key={m.key} value={m.key}>
                   {m.label}
@@ -2297,9 +2353,9 @@ export default function DashboardPage() {
             >
               {requiredDimCount === 2
                 ? i === 0
-                  ? "Dimension primaire"
-                  : "Dimension secondaire"
-                : "Dimension"}
+                  ? t("dashboard.builderModal.primaryDimension", "Dimension primaire")
+                  : t("dashboard.builderModal.secondaryDimension", "Dimension secondaire")
+                : t("dashboard.builderModal.dimension", "Dimension")}
               <select
                 value={builderDims[i] ?? ""}
                 onChange={(e) => {
@@ -2309,7 +2365,9 @@ export default function DashboardPage() {
                 }}
                 className="rounded-md border border-border-strong px-2.5 py-2 text-[13px] font-normal text-primary"
               >
-                <option value="">— Choisir —</option>
+                <option value="">
+                  {t("dashboard.builderModal.choosePlaceholder", "— Choisir —")}
+                </option>
                 {getAvailableDimensions(hierarchyLevels).map((d) => (
                   <option key={d.key} value={d.key}>
                     {d.label}
@@ -2321,10 +2379,19 @@ export default function DashboardPage() {
           {!builderConfigValid && (
             <p className="text-[11.5px] text-tertiary">
               {builderMetric === ""
-                ? "Choisissez un indicateur pour continuer."
+                ? t(
+                    "dashboard.builderModal.chooseMetricHint",
+                    "Choisissez un indicateur pour continuer."
+                  )
                 : selectedDims.length < requiredDimCount
-                  ? `Choisissez encore ${requiredDimCount - selectedDims.length} dimension(s).`
-                  : "Les dimensions choisies doivent être différentes."}
+                  ? t(
+                      "dashboard.builderModal.chooseMoreDims",
+                      "Choisissez encore {n} dimension(s)."
+                    ).replace("{n}", String(requiredDimCount - selectedDims.length))
+                  : t(
+                      "dashboard.builderModal.dimsMustDiffer",
+                      "Les dimensions choisies doivent être différentes."
+                    )}
             </p>
           )}
         </div>
@@ -2407,6 +2474,7 @@ function DashboardPager({
   onNext: () => void;
   label: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="mt-3 flex items-center justify-center gap-3 border-t border-border pt-3">
       <button
@@ -2414,7 +2482,7 @@ function DashboardPager({
         onClick={onPrevious}
         disabled={page === 0}
         className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
-        aria-label="Page précédente"
+        aria-label={t("dashboard.pager.previous", "Page précédente")}
       >
         <ChevronLeft size={14} />
       </button>
@@ -2426,7 +2494,7 @@ function DashboardPager({
         onClick={onNext}
         disabled={page >= pageCount - 1}
         className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
-        aria-label="Page suivante"
+        aria-label={t("dashboard.pager.next", "Page suivante")}
       >
         <ChevronRight size={14} />
       </button>

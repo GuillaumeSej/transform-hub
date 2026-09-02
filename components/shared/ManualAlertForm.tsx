@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { AlertType, BeTrackData, ManualAlertInput } from "@/types";
 
 const fieldClass =
@@ -19,8 +20,15 @@ export function ManualAlertForm({
   data: BeTrackData;
   onSubmit: (input: ManualAlertInput) => void;
 }) {
+  const { t } = useTranslation();
   const scopes = [
-    ...data.workstreams.map((item) => ({ id: item.id, label: `Workstream · ${item.name}` })),
+    ...data.workstreams.map((item) => ({
+      id: item.id,
+      label: t("shared.manualAlertForm.workstreamPrefix", "Workstream · {name}").replace(
+        "{name}",
+        item.name
+      ),
+    })),
     ...data.levers.map((item) => ({ id: item.id, label: `${item.code} · ${item.name}` })),
   ];
   const [type, setType] = useState<AlertType>("amber");
@@ -52,41 +60,47 @@ export function ManualAlertForm({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="Créer une alerte manuelle"
+      title={t("shared.manualAlertForm.title", "Créer une alerte manuelle")}
       maxWidth="560px"
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Annuler
+            {t("common.cancel", "Annuler")}
           </Button>
           <Button onClick={submit} disabled={!scope || !title.trim() || !desc.trim()}>
-            Créer et notifier
+            {t("shared.manualAlertForm.createAndNotify", "Créer et notifier")}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         <label className="block text-xs font-semibold text-secondary">
-          Sévérité
+          {t("shared.manualAlertForm.severity", "Sévérité")}
           <select
             className={`${fieldClass} mt-1`}
             value={type}
             onChange={(e) => setType(e.target.value as AlertType)}
           >
-            <option value="red">Critique</option>
-            <option value="amber">À surveiller</option>
-            <option value="green">Positive</option>
-            <option value="blue">Information</option>
+            <option value="red">{t("adminCompanyFields.riskCritical", "Critique")}</option>
+            <option value="amber">{t("dep.watch", "À surveiller")}</option>
+            <option value="green">
+              {t("shared.manualAlertForm.severityPositive", "Positive")}
+            </option>
+            <option value="blue">
+              {t("shared.manualAlertForm.severityInformation", "Information")}
+            </option>
           </select>
         </label>
         <label className="block text-xs font-semibold text-secondary">
-          Périmètre
+          {t("leverDetail.scopeTitle", "Périmètre")}
           <select
             className={`${fieldClass} mt-1`}
             value={scope}
             onChange={(e) => setScope(e.target.value)}
           >
-            <option value="">Choisir un levier ou workstream</option>
+            <option value="">
+              {t("shared.manualAlertForm.choosePlaceholder", "Choisir un levier ou workstream")}
+            </option>
             {scopes.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.label}
@@ -95,7 +109,7 @@ export function ManualAlertForm({
           </select>
         </label>
         <label className="block text-xs font-semibold text-secondary">
-          Titre
+          {t("shared.manualAlertForm.titleLabel", "Titre")}
           <input
             className={`${fieldClass} mt-1`}
             value={title}
@@ -103,7 +117,7 @@ export function ManualAlertForm({
           />
         </label>
         <label className="block text-xs font-semibold text-secondary">
-          Description
+          {t("leverForm.sectionDescription", "Description")}
           <textarea
             className={`${fieldClass} mt-1 min-h-24`}
             value={desc}
@@ -111,7 +125,7 @@ export function ManualAlertForm({
           />
         </label>
         <label className="block text-xs font-semibold text-secondary">
-          Impact financier en euros (optionnel)
+          {t("shared.manualAlertForm.impactAmount", "Impact financier en euros (optionnel)")}
           <input
             className={`${fieldClass} mt-1`}
             type="number"
@@ -128,9 +142,15 @@ export function ManualAlertForm({
           />
           <span>
             <strong className="block text-primary">
-              Masquer les alertes automatiques de ce périmètre
+              {t(
+                "shared.manualAlertForm.suppressAutoAlerts",
+                "Masquer les alertes automatiques de ce périmètre"
+              )}
             </strong>
-            Laissez décoché pour conserver les alertes automatiques existantes et futures.
+            {t(
+              "shared.manualAlertForm.suppressAutoAlertsHint",
+              "Laissez décoché pour conserver les alertes automatiques existantes et futures."
+            )}
           </span>
         </label>
       </div>

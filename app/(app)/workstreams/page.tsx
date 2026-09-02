@@ -15,6 +15,7 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import type { Company, Lever } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { canUserViewLever } from "@/lib/leversLogic";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type Row = Lever & { realized: number; wsName: string; statusLabel: string };
 
@@ -23,6 +24,7 @@ type Row = Lever & { realized: number; wsName: string; statusLabel: string };
  * owner, contrairement au Lever Owner), avec un bandeau d'indicateurs de suivi au-dessus.
  */
 export default function WorkstreamsPage() {
+  const { t } = useTranslation();
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
   const lifecycle = useLifecycleLabels(user?.companyId);
@@ -47,7 +49,11 @@ export default function WorkstreamsPage() {
 
   const columns: ColumnDef<Row>[] = [
     { key: "code", label: "Code", width: "90px" },
-    { key: "name", label: "Levier", render: (r) => <strong>{r.name}</strong> },
+    {
+      key: "name",
+      label: t("levers.columnName", "Levier"),
+      render: (r) => <strong>{r.name}</strong>,
+    },
     { key: "wsName", label: "Workstream" },
     {
       key: "owner",
@@ -65,12 +71,21 @@ export default function WorkstreamsPage() {
       align: "right",
       render: (r) => r.netSavings.toFixed(1),
     },
-    { key: "realized", label: "Réalisé", align: "right", render: (r) => r.realized.toFixed(1) },
+    {
+      key: "realized",
+      label: t("levers.realized", "Réalisé"),
+      align: "right",
+      render: (r) => r.realized.toFixed(1),
+    },
     { key: "progress", label: "Progress", render: (r) => <ProgressBar pct={r.progress} /> },
-    { key: "risk", label: "Risque", render: (r) => <StatusBadge risk={r.risk} /> },
+    {
+      key: "risk",
+      label: t("leverForm.risk", "Risque"),
+      render: (r) => <StatusBadge risk={r.risk} />,
+    },
     {
       key: "statusLabel",
-      label: "Niveau",
+      label: t("levers.columnStatus", "Niveau"),
       render: (r) => <StageBadge status={r.status} label={lifecycle.label(r.status)} />,
     },
   ];
@@ -79,17 +94,23 @@ export default function WorkstreamsPage() {
     <div className="animate-fade-up">
       <div className="mb-5">
         <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-          Workstream Dashboard
+          {t("nav.workstreamDashboard", "Workstream Dashboard")}
         </h1>
         <div className="mt-2.5 text-[13px] text-secondary">
-          Vue de tous les leviers du programme, tous workstreams confondus.
+          {t(
+            "workstreams.subtitle",
+            "Vue de tous les leviers du programme, tous workstreams confondus."
+          )}
         </div>
       </div>
 
       <div className="mb-5 grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 lg:grid-cols-5">
-        <Kpi label="Leviers" value={String(summary.leverCount)} />
         <Kpi
-          label="Savings réalisés / cible"
+          label={t("dashboard.tableHeader.leverCount", "Leviers")}
+          value={String(summary.leverCount)}
+        />
+        <Kpi
+          label={t("workstreams.savingsRealizedTarget", "Savings réalisés / cible")}
           value={`${engine.fmtCurr(summary.realized)} / ${engine.fmtCurr(summary.target)}`}
           sub={`${summary.progressPct}%`}
         />
@@ -104,7 +125,10 @@ export default function WorkstreamsPage() {
             data={rows}
             columns={columns}
             onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
-            searchPlaceholder="Rechercher (nom, code, owner...)"
+            searchPlaceholder={t(
+              "workstreams.searchPlaceholder",
+              "Rechercher (nom, code, owner...)"
+            )}
             defaultSort={{ key: "risk", direction: "desc" }}
           />
         </CardBody>

@@ -2,6 +2,7 @@
 
 import type { MovementExecutionStatus, MovementStatusGroup } from "@/lib/hrExecution";
 import { EXECUTION_LABELS } from "@/lib/hrExecution";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const STYLE: Record<MovementExecutionStatus, string> = {
   realized: "bg-[#421799]",
@@ -23,8 +24,13 @@ export function MovementStatusMatrix({
   onMovementClick: (movementId: string) => void;
   getInitiativeLabel?: (leverId: string) => string;
 }) {
+  const { t } = useTranslation();
   if (groups.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucun mouvement à afficher.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("shared.executionStatusChart.noData", "Aucun mouvement à afficher.")}
+      </p>
+    );
   }
   const maxRows = Math.max(...groups.map((group) => Math.ceil(group.cells.length / 4)));
   return (
@@ -48,7 +54,7 @@ export function MovementStatusMatrix({
                         type="button"
                         onClick={() => onMovementClick(movement.id)}
                         className={`h-[18px] rounded-[2px] transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-black ${STYLE[execution]}`}
-                        title={`${movement.label} · ${movement.type}\n${EXECUTION_LABELS[execution]} · ${movement.fte} ETP\nInitiative : ${getInitiativeLabel?.(movement.leverId) ?? movement.leverId}\nRH Owner : ${movement.hrOwner}\nDate prévue : ${movement.plannedDate}`}
+                        title={`${movement.label} · ${movement.type}\n${EXECUTION_LABELS[execution]} · ${movement.fte} ETP\n${t("shared.movementStatusMatrix.initiativeLabel", "Initiative")} : ${getInitiativeLabel?.(movement.leverId) ?? movement.leverId}\n${t("etp.filter.hrOwnerMovement", "RH Owner")} : ${movement.hrOwner}\n${t("etp.column.plannedDate", "Date prévue")} : ${movement.plannedDate}`}
                         aria-label={`${movement.label} ${EXECUTION_LABELS[execution]}`}
                       />
                     ))}

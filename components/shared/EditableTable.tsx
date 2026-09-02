@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type ColumnDef<T> = {
   key: keyof T & string;
@@ -44,12 +45,15 @@ export function EditableTable<T extends { id: string }>({
   columns,
   onCellUpdate,
   onRowClick,
-  searchPlaceholder = "Rechercher...",
+  searchPlaceholder,
   showTotalsRow = false,
   totalsConfig,
   defaultSort,
   className,
 }: EditableTableProps<T>) {
+  const { t } = useTranslation();
+  const resolvedSearchPlaceholder =
+    searchPlaceholder ?? t("shared.editableTable.searchPlaceholder", "Rechercher...");
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [sort, setSort] = useState(defaultSort ?? null);
@@ -150,7 +154,7 @@ export function EditableTable<T extends { id: string }>({
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={searchPlaceholder}
+          placeholder={resolvedSearchPlaceholder}
           className="min-w-[220px] rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none"
         />
         {filterableColumns.map((c) => (
@@ -160,7 +164,9 @@ export function EditableTable<T extends { id: string }>({
             onChange={(e) => setColumnFilters((prev) => ({ ...prev, [c.key]: e.target.value }))}
             className="rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none"
           >
-            <option value="">{c.label} (tous)</option>
+            <option value="">
+              {c.label} {t("shared.editableTable.allSuffix", "(tous)")}
+            </option>
             {c.options!.map((opt) => (
               <option key={opt} value={opt}>
                 {opt}
@@ -173,12 +179,15 @@ export function EditableTable<T extends { id: string }>({
             onClick={resetFilters}
             className="text-xs font-medium text-bp-coral hover:underline"
           >
-            Réinitialiser filtres
+            {t("shared.editableTable.resetFilters", "Réinitialiser filtres")}
           </button>
         )}
         <span className="ml-auto text-xs text-secondary">
-          <strong className="text-primary">{filtered.length}</strong> résultat
-          {filtered.length > 1 ? "s" : ""} sur {data.length}
+          <strong className="text-primary">{filtered.length}</strong>{" "}
+          {t("shared.editableTable.resultCount", "résultat(s) sur {total}").replace(
+            "{total}",
+            String(data.length)
+          )}
         </span>
       </div>
 
@@ -225,12 +234,12 @@ export function EditableTable<T extends { id: string }>({
                   colSpan={columns.length}
                   className="px-3 py-10 text-center text-sm text-tertiary"
                 >
-                  Aucun résultat pour ces filtres.{" "}
+                  {t("shared.editableTable.noResults", "Aucun résultat pour ces filtres.")}{" "}
                   <button
                     onClick={resetFilters}
                     className="font-medium text-bp-coral hover:underline"
                   >
-                    Réinitialiser
+                    {t("dashboard.reset", "Réinitialiser")}
                   </button>
                 </td>
               </tr>
@@ -310,7 +319,11 @@ export function EditableTable<T extends { id: string }>({
                                 {opt}
                               </option>
                             ))}
-                            {c.allowCustom && <option value="__custom__">Autre...</option>}
+                            {c.allowCustom && (
+                              <option value="__custom__">
+                                {t("shared.editableTable.customOption", "Autre...")}
+                              </option>
+                            )}
                           </select>
                         ) : c.type === "textarea" ? (
                           <textarea
@@ -346,7 +359,14 @@ export function EditableTable<T extends { id: string }>({
                               }
                               if (e.key === "Enter") commitEdit(row, c);
                             }}
-                            placeholder={isCustomMode ? "Saisir une nouvelle valeur..." : undefined}
+                            placeholder={
+                              isCustomMode
+                                ? t(
+                                    "shared.editableTable.customPlaceholder",
+                                    "Saisir une nouvelle valeur..."
+                                  )
+                                : undefined
+                            }
                             className="w-full rounded-sm border-[1.5px] border-bp-coral px-1.5 py-0.5 text-xs"
                           />
                         )
@@ -383,9 +403,9 @@ export function EditableTable<T extends { id: string }>({
       <div className="divide-y divide-border rounded-lg border border-border bg-white sm:hidden">
         {filtered.length === 0 && (
           <div className="px-3 py-10 text-center text-sm text-tertiary">
-            Aucun résultat pour ces filtres.{" "}
+            {t("shared.editableTable.noResults", "Aucun résultat pour ces filtres.")}{" "}
             <button onClick={resetFilters} className="font-medium text-bp-coral hover:underline">
-              Réinitialiser
+              {t("dashboard.reset", "Réinitialiser")}
             </button>
           </div>
         )}

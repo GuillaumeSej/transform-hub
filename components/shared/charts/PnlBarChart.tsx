@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type PnlBarPoint = { account: string; plan: number; realized: number };
 
@@ -34,15 +35,23 @@ function TruncatedYTick(props: any) {
  *  sur le plan (gris). La portion grise visible = ce qui reste à réaliser pour atteindre le plan. */
 export function PnlBarChart({
   data,
-  labelPlan = "Plan",
-  labelRealized = "Réalisé",
+  labelPlan,
+  labelRealized,
 }: {
   data: PnlBarPoint[];
   labelPlan?: string;
   labelRealized?: string;
 }) {
+  const { t } = useTranslation();
+  const resolvedLabelPlan = labelPlan ?? t("chart.pnl.plan", "Plan");
+  const resolvedLabelRealized = labelRealized ?? t("chart.pnl.realized", "Réalisé");
+
   if (data.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucun impact à afficher.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("shared.pnlBarChart.empty", "Aucun impact à afficher.")}
+      </p>
+    );
   }
 
   const chartData = data.map((d) => ({
@@ -79,14 +88,14 @@ export function PnlBarChart({
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <Bar
           dataKey="realized"
-          name={labelRealized}
+          name={resolvedLabelRealized}
           stackId="a"
           fill="#FF3C47"
           radius={[0, 0, 0, 0]}
         />
         <Bar
           dataKey="remaining"
-          name={labelPlan}
+          name={resolvedLabelPlan}
           stackId="a"
           fill="rgba(168,154,147,0.3)"
           radius={[0, 4, 4, 0]}

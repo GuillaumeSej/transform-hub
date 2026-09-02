@@ -3,6 +3,7 @@
 import * as engine from "@/lib/engine";
 import type { Marimekko2DColumn } from "@/lib/engine";
 import { Tooltip } from "@/components/shared/Tooltip";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const COLORS = [
   "#806659",
@@ -31,8 +32,13 @@ export function MarimekkoChart({
   height?: number;
   onSegmentClick?: (primaryKey: string, secondaryKey: string) => void;
 }) {
+  const { t } = useTranslation();
   if (data.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucun levier à représenter.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("chart.emptyLevers", "Aucun levier à représenter.")}
+      </p>
+    );
   }
   return (
     <div className="flex w-full items-stretch gap-0.5" style={{ height }}>
@@ -45,7 +51,11 @@ export function MarimekkoChart({
           {col.segments.map((seg, i) => (
             <Tooltip
               key={seg.key}
-              text={`${col.label} — ${seg.label} : ${engine.fmtCurr(seg.value)} (${seg.count} levier${seg.count > 1 ? "s" : ""})`}
+              text={`${col.label} — ${seg.label} : ${engine.fmtCurr(seg.value)} (${seg.count} ${
+                seg.count > 1
+                  ? t("levers.count", "leviers")
+                  : t("shared.marimekkoChart.leverSingular", "levier")
+              })`}
               style={{ height: `${seg.heightPct}%` }}
               className="flex w-full"
             >

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { EditableTable, type ColumnDef } from "../EditableTable";
+import { I18nProvider } from "@/lib/i18n/useTranslation";
 
 // Attendu par react-dom/test-utils pour piloter React sans avertissement — sans emballage
 // @testing-library/react ici (voir commentaire de fichier), on le déclare nous-mêmes.
@@ -49,7 +50,11 @@ afterEach(() => {
 function render(onCellUpdate: (rowId: string, field: keyof Row, value: string | number) => void) {
   act(() => {
     root = createRoot(container);
-    root.render(<EditableTable data={rows} columns={columns} onCellUpdate={onCellUpdate} />);
+    root.render(
+      <I18nProvider>
+        <EditableTable data={rows} columns={columns} onCellUpdate={onCellUpdate} />
+      </I18nProvider>
+    );
   });
 }
 
@@ -157,11 +162,13 @@ describe("EditableTable — commit de l'édition inline", () => {
     act(() => {
       root = createRoot(container);
       root.render(
-        <EditableTable
-          data={[{ ...rows[0], budget: 10 }]}
-          columns={numericColumns as unknown as ColumnDef<Row>[]}
-          onCellUpdate={onCellUpdate}
-        />
+        <I18nProvider>
+          <EditableTable
+            data={[{ ...rows[0], budget: 10 }]}
+            columns={numericColumns as unknown as ColumnDef<Row>[]}
+            onCellUpdate={onCellUpdate}
+          />
+        </I18nProvider>
       );
     });
 

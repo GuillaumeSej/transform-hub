@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type WorkstreamBarPoint = {
   label: string;
@@ -42,17 +43,26 @@ function TruncatedTick(props: any) {
  *  Labels tronqués avec tooltip SVG natif au hover. */
 export function WorkstreamBarChart({
   data,
-  labelTarget = "Cible",
-  labelRealized = "Réalisé",
-  labelReforecast = "Reprévision",
+  labelTarget,
+  labelRealized,
+  labelReforecast,
 }: {
   data: WorkstreamBarPoint[];
   labelTarget?: string;
   labelRealized?: string;
   labelReforecast?: string;
 }) {
+  const { t } = useTranslation();
+  const resolvedLabelTarget = labelTarget ?? t("chart.bar.target", "Cible");
+  const resolvedLabelRealized = labelRealized ?? t("chart.bar.realized", "Réalisé");
+  const resolvedLabelReforecast = labelReforecast ?? t("chart.bar.reforecast", "Reprévision");
+
   if (data.length === 0) {
-    return <p className="py-10 text-center text-sm text-tertiary">Aucun levier à représenter.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-tertiary">
+        {t("chart.emptyLevers", "Aucun levier à représenter.")}
+      </p>
+    );
   }
 
   // Calculer la partie "remaining" (cible - réalisé) pour l'empilement
@@ -85,7 +95,7 @@ export function WorkstreamBarChart({
           {/* Barre réalisé (bas de la pile) — coral */}
           <Bar
             dataKey="realized"
-            name={labelRealized}
+            name={resolvedLabelRealized}
             stackId="a"
             fill="#FF3C47"
             radius={[0, 0, 0, 0]}
@@ -93,7 +103,7 @@ export function WorkstreamBarChart({
           {/* Barre remaining (haut de la pile) — gris transparent */}
           <Bar
             dataKey="remaining"
-            name={labelTarget}
+            name={resolvedLabelTarget}
             stackId="a"
             fill="rgba(168,154,147,0.3)"
             radius={[4, 4, 0, 0]}
@@ -106,7 +116,7 @@ export function WorkstreamBarChart({
       ) && (
         <div className="mt-1 flex items-center gap-1.5 text-[10px] text-secondary">
           <span className="inline-block h-[2px] w-3 bg-neutral-800" />
-          <span>{labelReforecast}</span>
+          <span>{resolvedLabelReforecast}</span>
         </div>
       )}
     </div>

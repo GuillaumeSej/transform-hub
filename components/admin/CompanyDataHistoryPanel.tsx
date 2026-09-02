@@ -6,6 +6,7 @@ import type { Company, AuthUser, Program, Lever, AuditEntry } from "@/types";
 import { subscribeUsers, subscribePrograms } from "@/lib/firestore/admin";
 import { subscribeLevers, subscribeAuditLog, filterAuditByCompany } from "@/lib/firestore/levers";
 import { subscribeEmployees, subscribeMovements } from "@/lib/firestore/workforce";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const ACTION_COLORS: Record<string, string> = {
   created: "bg-green-100 text-green-700",
@@ -16,14 +17,16 @@ const ACTION_COLORS: Record<string, string> = {
   commented: "bg-gray-100 text-gray-600",
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  created: "Création",
-  updated: "Modification",
-  deleted: "Suppression",
-  completed: "Achèvement",
-  validated: "Validation",
-  commented: "Commentaire",
-};
+function actionLabels(t: (key: string, fallback?: string) => string): Record<string, string> {
+  return {
+    created: t("adminCompanyHistory.action.created", "Création"),
+    updated: t("adminCompanyHistory.action.updated", "Modification"),
+    deleted: t("adminCompanyHistory.action.deleted", "Suppression"),
+    completed: t("adminCompanyHistory.action.completed", "Achèvement"),
+    validated: t("adminCompanyHistory.action.validated", "Validation"),
+    commented: t("adminCompanyHistory.action.commented", "Commentaire"),
+  };
+}
 
 function formatTimestamp(ts: string): string {
   try {
@@ -49,6 +52,8 @@ function formatTimestamp(ts: string): string {
  * admin_entreprise sur history).
  */
 export function CompanyDataHistoryPanel({ company }: { company: Company }) {
+  const { t } = useTranslation();
+  const ACTION_LABELS = actionLabels(t);
   const companyId = company.id;
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -120,13 +125,18 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
     <div className="space-y-6">
       <div className="rounded-xl border border-border bg-bg-elevated p-5 space-y-4">
         <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">
-          Résumé des données — {company.name}
+          {t("adminCompanyHistory.summaryTitle", "Résumé des données — {name}").replace(
+            "{name}",
+            company.name
+          )}
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Users size={14} />
-              <span className="text-xs font-semibold">Utilisateurs</span>
+              <span className="text-xs font-semibold">
+                {t("adminCompanyHistory.users", "Utilisateurs")}
+              </span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{cUsers.length}</div>
             <div className="flex flex-wrap gap-1">
@@ -143,28 +153,36 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Briefcase size={14} />
-              <span className="text-xs font-semibold">Programmes</span>
+              <span className="text-xs font-semibold">
+                {t("adminCompanyHistory.programs", "Programmes")}
+              </span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{cPrograms.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Target size={14} />
-              <span className="text-xs font-semibold">Leviers</span>
+              <span className="text-xs font-semibold">
+                {t("adminCompanyHistory.levers", "Leviers")}
+              </span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{levers.length}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <FileSpreadsheet size={14} />
-              <span className="text-xs font-semibold">Employés (global)</span>
+              <span className="text-xs font-semibold">
+                {t("adminCompanyHistory.employeesGlobal", "Employés (global)")}
+              </span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{employeesCount}</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Activity size={14} />
-              <span className="text-xs font-semibold">Mouvements (global)</span>
+              <span className="text-xs font-semibold">
+                {t("adminCompanyHistory.movementsGlobal", "Mouvements (global)")}
+              </span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{movementsCount}</div>
           </div>
@@ -174,13 +192,15 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
       <div className="space-y-3">
         <div className="flex items-center gap-3">
           <History size={18} className="text-bp-coral" />
-          <h2 className="text-sm font-bold text-text-primary">Historique des modifications</h2>
+          <h2 className="text-sm font-bold text-text-primary">
+            {t("adminCompanyHistory.title", "Historique des modifications")}
+          </h2>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher..."
+            placeholder={t("adminCompanyHistory.searchPlaceholder", "Rechercher...")}
             className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral w-56"
           />
           <select
@@ -188,25 +208,31 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
             onChange={(e) => setActionFilter(e.target.value)}
             className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
           >
-            <option value="all">Toutes les actions</option>
-            <option value="created">Création</option>
-            <option value="updated">Modification</option>
-            <option value="deleted">Suppression</option>
-            <option value="completed">Achèvement</option>
-            <option value="validated">Validation</option>
-            <option value="commented">Commentaire</option>
+            <option value="all">{t("adminCompanyHistory.allActions", "Toutes les actions")}</option>
+            <option value="created">{ACTION_LABELS.created}</option>
+            <option value="updated">{ACTION_LABELS.updated}</option>
+            <option value="deleted">{ACTION_LABELS.deleted}</option>
+            <option value="completed">{ACTION_LABELS.completed}</option>
+            <option value="validated">{ACTION_LABELS.validated}</option>
+            <option value="commented">{ACTION_LABELS.commented}</option>
           </select>
           <select
             value={entityFilter}
             onChange={(e) => setEntityFilter(e.target.value)}
             className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
           >
-            <option value="all">Toutes les entités</option>
-            <option value="lever">Leviers</option>
-            <option value="movement">Mouvements RH</option>
-            <option value="employee">Employés</option>
+            <option value="all">
+              {t("adminCompanyHistory.allEntities", "Toutes les entités")}
+            </option>
+            <option value="lever">{t("adminCompanyHistory.levers", "Leviers")}</option>
+            <option value="movement">
+              {t("adminCompanyHistory.movementsHr", "Mouvements RH")}
+            </option>
+            <option value="employee">{t("adminCompanyHistory.employees", "Employés")}</option>
           </select>
-          <span className="text-xs text-text-secondary">{sorted.length} entrée(s)</span>
+          <span className="text-xs text-text-secondary">
+            {t("adminCompanyHistory.count", "{n} entrée(s)").replace("{n}", String(sorted.length))}
+          </span>
         </div>
 
         <div className="rounded-xl border border-border overflow-x-auto">
@@ -214,25 +240,25 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
             <thead>
               <tr className="bg-bg-elevated border-b border-border">
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Date
+                  {t("adminCompanyHistory.colDate", "Date")}
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Utilisateur
+                  {t("adminCompanyHistory.colUser", "Utilisateur")}
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Action
+                  {t("adminCompanyHistory.colAction", "Action")}
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Entité
+                  {t("adminCompanyHistory.colEntity", "Entité")}
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Champ
+                  {t("adminCompanyHistory.colField", "Champ")}
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Ancien
+                  {t("adminCompanyHistory.colOld", "Ancien")}
                 </th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                  Nouveau
+                  {t("adminCompanyHistory.colNew", "Nouveau")}
                 </th>
               </tr>
             </thead>
@@ -271,7 +297,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
               {sorted.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-sm text-text-secondary">
-                    Aucune entrée dans l&apos;historique.
+                    {t("adminCompanyHistory.empty", "Aucune entrée dans l'historique.")}
                   </td>
                 </tr>
               )}

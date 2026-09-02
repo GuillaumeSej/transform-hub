@@ -1,4 +1,7 @@
+"use client";
+
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /** KPI RH — miroir de `KPICard` du dashboard exécutif, adapté aux valeurs numériques du module
  *  RH (ETP entiers, montants en €M/€K). Affiche `value` en gros chiffre, avec `sub` (cible +
@@ -22,6 +25,7 @@ export function HrKPICard({
   accent?: "default" | "green" | "amber" | "red" | "brown";
   className?: string;
 }) {
+  const { t } = useTranslation();
   const accentClass: Record<string, string> = {
     default: "border-black",
     green: "border-rag-green-dark",
@@ -53,7 +57,7 @@ export function HrKPICard({
             <div
               className="absolute -top-0.5 h-2.5 w-[2px] bg-neutral-700"
               style={{ left: `${Math.min(100, Math.max(0, barMarkerPct))}%` }}
-              title="Reforecast"
+              title={t("dashboard.kpi.reforecast", "Reforecast")}
             />
           )}
         </div>
