@@ -528,6 +528,151 @@ export type Program = {
   baselineEBIT: number;
   revenue: number;
   createdAt: string;
+  /** Type de programme, choisi À LA CRÉATION et figé ensuite (voir components/admin/
+   *  ProgramsPanel.tsx). `undefined` = "performance" (comportement historique, avant
+   *  l'introduction du Plan Stratégique) — toujours lire via `resolveProgramType()`
+   *  (lib/axisLogic.ts) plutôt que de tester `type === "performance"` directement. */
+  type?: ProgramType;
+};
+
+// ─── Plan Stratégique (méthodologie 3-5-15 : Vision → Axes → Chantiers → Actions) ─────────────
+//
+// Modèle PARALLÈLE au modèle Performance (Lever/LeverAction), volontairement pas généricisé :
+// un axe stratégique n'a pas de notion financière (CAPEX/OPEX/gains) et son cycle de vie
+// (MaturityStageConfig, configurable par PROGRAMME) n'a rien à voir avec le cycle de vie des
+// leviers (LifecycleConfig, union fermée LeverStatus, scopé par ENTREPRISE).
+
+/** Un programme est soit un Plan Performance (leviers financiers), soit un Plan Stratégique
+ *  (axes/chantiers/indicateurs). Une même entreprise peut porter les deux simultanément. */
+export type ProgramType = "performance" | "strategic";
+
+/** Une étape du cycle de maturité d'un axe/chantier — à la CMMI/PPAP, nombre d'étapes libre et
+ *  configurable PAR PROGRAMME (deux programmes de la même entreprise peuvent avoir des cycles de
+ *  longueurs différentes). À ne pas confondre avec `LifecycleStage`, qui est l'équivalent
+ *  Performance : union fermée `LeverStatus`, scopé entreprise, non extensible. */
+export type MaturityStageConfig = {
+  /** Slug libre (ex. "planned", "in_progress") — PAS une union fermée. */
+  id: string;
+  programId: string;
+  companyId: string;
+  /** 1..N, définit l'ordre du cycle. */
+  order: number;
+  label: string;
+  /** État de sortie hors cycle linéaire (ex. "Atteint" / "Non atteint"). */
+  isTerminal?: boolean;
+};
+
+export type StrategicAxis = {
+  id: string;
+  companyId: string;
+  programId: string;
+  name: string;
+  description?: string;
+  owner?: string;
+  color?: string;
+  /** Référence un `MaturityStageConfig.id` du programme. Explicite (jamais dérivé en base) pour
+   *  laisser ouverte la décision "stage de l'axe piloté vs dérivé de ses chantiers". */
+  stage: string;
+  /** Optionnel dès le départ pour éviter une migration le jour où la confidentialité par
+   *  programme sera tranchée (même champ que `Lever.confidentialityLevel`). */
+  confidentialityLevel?: string;
+  createdAt: string;
+  lastUpdate: string;
+};
+
+/** Même sémantique planning que `DependencyType` côté leviers, mais entre CHANTIERS (et
+ *  potentiellement inter-axes du même programme). */
+export type ChantierDependencyType = "FS" | "SS" | "FF" | "SF";
+
+export type ChantierDependency = {
+  /** Id du chantier bloqueur. */
+  targetId: string;
+  type: ChantierDependencyType;
+};
+
+/** Un chantier = un regroupement d'actions concrètes qui font avancer un axe. Niveau
+ *  intermédiaire absent du modèle Performance : c'est lui qui structure le Gantt (un bloc de
+ *  Gantt = un chantier, pas une action isolée). */
+export type Chantier = {
+  id: string;
+  companyId: string;
+  programId: string;
+  axisId: string;
+  name: string;
+  description?: string;
+  /** Référence un `MaturityStageConfig.id` du programme (même référentiel que l'axe). */
+  stage: string;
+  dependencies: ChantierDependency[];
+  confidentialityLevel?: string;
+  createdAt: string;
+  lastUpdate: string;
+};
+
+export type ChantierAction = {
+  id: string;
+  companyId: string;
+  chantierId: string;
+  name: string;
+  description?: string;
+  owner?: string;
+  start: string; // ISO date
+  end: string; // ISO date
+  /** Référence un `MaturityStageConfig.id`, comme le chantier — pas de `ActionStatus` dédié. */
+  status: string;
+  /** Livrables attendus — texte libre par livrable (v1 simple, pas d'objets riches). */
+  deliverables?: string[];
+};
+
+export type IndicatorKind = "quantitative" | "qualitative";
+export type IndicatorFrequency = "monthly" | "quarterly" | "semiannual" | "annual";
+/** Sens d'amélioration attendu : "up" = plus haut vaut mieux, "down" = plus bas vaut mieux. */
+export type IndicatorDirection = "up" | "down";
+export type IndicatorRiskStatus = "on_track" | "at_risk";
+
+export type Indicator = {
+  id: string;
+  companyId: string;
+  programId: string;
+  axisId: string;
+  /** Optionnel — absent = indicateur "macro" rattaché directement à l'axe. */
+  chantierId?: string;
+  name: string;
+  kind: IndicatorKind;
+  frequency: IndicatorFrequency;
+  /** Objectif exprimé en texte libre (toujours renseigné, y compris pour un indicateur
+   *  qualitatif où `objectiveValue` n'a pas de sens). */
+  objective: string;
+  objectiveValue?: number;
+  direction?: IndicatorDirection;
+  unit?: string;
+  /** Rôles autorisés à renseigner cet indicateur — au moins un attendu. Liste DIRECTE de rôles
+   *  (pas d'indirection par niveaux comme la confidentialité : c'est une autorisation, pas une
+   *  échelle ordonnée). */
+  responsibleRoles: Role[];
+  /** Comptes individuels autorisés EN PLUS des rôles (username, voir AuthUser.username). */
+  additionalAuthorizedUserIds?: string[];
+  /** Statut calculé automatiquement (dernière mesure vs objectif) — voir
+   *  `lib/axisLogic.ts::computeIndicatorStatus`. */
+  status: IndicatorRiskStatus;
+  /** Surcharge manuelle du responsable, prioritaire sur `status` (voir `resolveIndicatorStatus`). */
+  statusOverride?: IndicatorRiskStatus;
+  confidentialityLevel?: string;
+  createdAt: string;
+  lastUpdate: string;
+};
+
+export type IndicatorMeasurement = {
+  id: string;
+  companyId: string;
+  indicatorId: string;
+  /** Période de reporting, format libre aligné sur `Indicator.frequency` (ex. "2026-03",
+   *  "2026-Q1"). Sert de clé de tri chronologique — d'où un format lexicographiquement ordonné. */
+  period: string;
+  value?: number;
+  note?: string;
+  /** Username de l'auteur de la mesure. */
+  reportedBy: string;
+  reportedAt: string;
 };
 
 /** Configuration du cycle de vie par entreprise — chaque client peut personnaliser le
@@ -567,6 +712,13 @@ export type NavItem = {
   icon: string;
   label: string;
   badge?: "alerts";
+  /** Types de programme pour lesquels cet item est pertinent. `undefined` = tous les types
+   *  (comportement historique). Ex. `["performance"]` sur Finance/RH/Workstreams/Opérations,
+   *  qui n'ont pas de sens sans leviers. */
+  programTypes?: ProgramType[];
+  /** Surcharge du `label` selon le type de programme actif — ex. l'item "levers" s'intitule
+   *  "Axes stratégiques" quand le programme actif est stratégique (même route, même page). */
+  labelByProgramType?: Partial<Record<ProgramType, string>>;
 };
 
 export type RoleDefinition = {

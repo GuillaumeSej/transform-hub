@@ -1,4 +1,4 @@
-import type { Alert, BeTrackData, Lever } from "@/types";
+import type { Alert, BeTrackData, Lever, ProgramType } from "@/types";
 import { realizedSavings, underperformers, dependencyAlerts } from "@/lib/engine";
 
 /**
@@ -33,9 +33,24 @@ function fmtImpact(v: number): string {
   return `${v > 0 ? "+" : ""}€${Math.round(v * 1000)}K`;
 }
 
-export function generateAlerts(data: BeTrackData): Alert[] {
+/**
+ * @param programType Type du programme dont on génère les alertes — voir `useActiveProgram`.
+ *   Passé EXPLICITEMENT par l'appelant plutôt que déduit ici : `BeTrackData` ne porte aucune
+ *   référence au `Program` sélectionné. Non renseigné = "performance", c'est-à-dire le
+ *   comportement historique inchangé pour tous les appelants existants.
+ *
+ *   Pour un Plan Stratégique, les alertes de SEUIL FINANCIER (dépassement de coûts
+ *   CAPEX/OPEX, savings réduits) ne sont pas générées : ce plan n'a aucune notion financière au
+ *   niveau chantier/action. Les alertes de cascade de dépendance, elles, restent générées (côté
+ *   stratégique, l'équivalent inter-chantiers vit dans `axisLogic.chantierDependencyAlerts`).
+ */
+export function generateAlerts(
+  data: BeTrackData,
+  programType: ProgramType = "performance"
+): Alert[] {
   const auto: Alert[] = [];
   const active = data.levers.filter((l) => l.status !== "cancelled");
+  const financialAlertsEnabled = programType !== "strategic";
 
   // ── 1. Leviers en retard (dès qu'il y a un écart) ──────────────────────────
   const underperf = underperformers(data);
@@ -79,8 +94,8 @@ export function generateAlerts(data: BeTrackData): Alert[] {
     });
   }
 
-  // ── 3. Dépassement de coûts (dès le 1er €) ─────────────────────────────────
-  for (const l of active) {
+  // ── 3. Dépassement de coûts (dès le 1er €) — Plan Performance uniquement ───
+  for (const l of financialAlertsEnabled ? active : []) {
     if (!l.reforecast || !l.lockedPlan) continue;
     const planCost = implCosts(l.lockedPlan);
     const refCost = implCosts(l.reforecast);
@@ -103,8 +118,8 @@ export function generateAlerts(data: BeTrackData): Alert[] {
     }
   }
 
-  // ── 4. Savings réduits (dès le 1er €) ───────────────────────────────────────
-  for (const l of active) {
+  // ── 4. Savings réduits (dès le 1er €) — Plan Performance uniquement ─────────
+  for (const l of financialAlertsEnabled ? active : []) {
     if (!l.reforecast || !l.lockedPlan) continue;
     if (l.reforecast.netSavings < l.lockedPlan.netSavings) {
       const delta = l.lockedPlan.netSavings - l.reforecast.netSavings;

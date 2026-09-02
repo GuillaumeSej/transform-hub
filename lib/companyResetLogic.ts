@@ -27,7 +27,28 @@ export type CompanyResetPlan = {
   remainingAudit: AuditEntry[];
   removedCommentKeys: string[];
   removedAuditCount: number;
+  /** Nombre de documents supprimés dans chaque collection du Plan Stratégique (axes, chantiers,
+   *  actions, étapes de maturité, indicateurs, mesures). Renseigné par la couche I/O (voir
+   *  `lib/firestore/companyReset.ts`) — la planification pure n'a pas ces documents en entrée :
+   *  contrairement aux leviers, ils sont TOUS tagués `companyId` sans exception, donc leur
+   *  suppression est une requête directe qui n'a besoin d'aucune règle de filtrage métier.
+   *  Absent = reset planifié mais pas encore exécuté. */
+  strategicRemoved?: Record<StrategicCollection, number>;
 };
+
+/** Collections du Plan Stratégique purgées par un reset d'entreprise. Toutes portent un
+ *  `companyId` obligatoire (voir types/index.ts), d'où une purge par simple requête scopée —
+ *  aucune donnée « partagée / non attribuable » à épargner comme pour comments/audit. */
+export const STRATEGIC_COLLECTIONS = [
+  "strategicAxes",
+  "chantiers",
+  "chantierActions",
+  "maturityStageConfigs",
+  "indicators",
+  "indicatorMeasurements",
+] as const;
+
+export type StrategicCollection = (typeof STRATEGIC_COLLECTIONS)[number];
 
 export function planCompanyScopedReset(
   levers: Lever[],
