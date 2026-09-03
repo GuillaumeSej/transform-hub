@@ -106,11 +106,12 @@ formats d'import changent, ne jamais les éditer à la main.
    configuration de l'entreprise, pas les pages opérationnelles.
 4. **Import des données**, connecté avec ce nouvel utilisateur :
    - Leviers + Actions + Impacts via Bibliothèque des leviers > Importer un fichier >
-     [`demo/leviers_demo.xlsx`](../demo/leviers_demo.xlsx) (7 leviers, dont 4 workstreams
-     auto-créés et 1 dépendance).
+     [`demo/leviers_demo.xlsx`](../demo/leviers_demo.xlsx) (30 leviers, 6 actions, 4 impacts —
+     6 workstreams auto-créés et 21 leviers porteurs d'au moins une dépendance).
    - Base ETP + mouvements via Base ETP > Importer Excel >
-     [`demo/base_etp_demo.xlsx`](../demo/base_etp_demo.xlsx) (12 employés, 6 mouvements liés aux
-     leviers importés).
+     [`demo/base_etp_demo.xlsx`](../demo/base_etp_demo.xlsx) (100 employés, 20 mouvements liés
+     aux leviers importés). À importer APRÈS les leviers : la colonne "Levier (code)" des
+     mouvements référence les codes `AC-0xx` créés à l'étape précédente.
 5. **Vérifier les affichages** : dashboard exécutif (KPIs, filtres dynamiques selon les niveaux
    configurés, graphique P&L par compte), bibliothèque des leviers (colonne P&L macro + tooltip),
    Focus Levier (sections repliables, risque calculé).
@@ -118,7 +119,18 @@ formats d'import changent, ne jamais les éditer à la main.
 Ce parcours a été validé de bout en bout deux fois : sur une entreprise fictive ("NordicRetail",
 via import direct de fichiers legacy) et sur une entreprise "DemoCheck" créée uniquement à partir
 des 4 fichiers ci-dessus (tous importés sans une seule ligne en erreur), avant suppression des
-données de test.
+données de test. Il est en plus verrouillé par un test automatisé
+([`lib/__tests__/demoSetupFlow.test.ts`](../lib/__tests__/demoSetupFlow.test.ts)) qui rejoue les
+4 fichiers DANS CET ORDRE en chaînant réellement les étapes (les comptes P&L des leviers sont
+dérivés de l'arborescence importée juste avant, les mouvements RH résolvent les leviers importés)
+— une régénération d'un seul fichier qui le ferait diverger des autres casse ce test.
+
+> **Erreur la plus fréquente** — sauter l'étape 2 et saisir un ou deux comptes P&L à la main :
+> l'import des leviers échoue alors sur TOUTES les lignes avec
+> `Compte P&L "COGS" introuvable (attendu : <vos comptes>)`, puis en cascade sur les feuilles
+> Actions et Impacts. Les comptes P&L proposés viennent exclusivement des nœuds du niveau marqué
+> `semantic: "pnl"` (usage standard "Ligne P&L") — il faut donc bien importer
+> `arborescence_financiere_demo.xlsx` avant les leviers.
 
 ### Leviers de démo pour illustrer les moteurs de risque
 
