@@ -682,11 +682,24 @@ const MOVEMENT_HEADERS = [
   "Commentaire",
 ];
 
-// 20 mouvements — cycle Suppression / Redéploiement / Reconversion / Recrutement, référencent des
-// matricules réels de la base ci-dessus (sauf les recrutements, sans matricule existant) et des
-// codes leviers AC-001..AC-030 pour que l'impact RH remonte sur des leviers réellement importés.
-const MOVEMENT_TYPES_POOL = ["Suppression", "Redéploiement", "Reconversion", "Recrutement"];
-const MOVEMENT_STATUS_POOL = ["Planifié", "En cours", "Réalisé"];
+// 20 mouvements — cycle Départ forcé / Transfert entrant / Transfert sortant / Recrutement,
+// référencent des matricules réels de la base ci-dessus (sauf les recrutements, sans matricule
+// existant) et des codes leviers AC-001..AC-030 pour que l'impact RH remonte sur des leviers
+// réellement importés.
+//
+// Types et statuts DOIVENT rester ceux de la typologie courante (MOVEMENT_TYPES /
+// MOVEMENT_STATUSES dans lib/hrExcel.ts) : l'ancienne typologie 4-types
+// (Suppression / Redéploiement / Reconversion) et le statut "En cours" restent acceptés à
+// l'import par rétrocompatibilité, mais chaque ligne concernée déclenche un avertissement de
+// conversion — un fichier de démo doit s'importer sans le moindre avertissement (verrouillé par
+// lib/__tests__/demoSetupFlow.test.ts).
+const MOVEMENT_TYPES_POOL = [
+  "Départ forcé",
+  "Transfert entrant",
+  "Transfert sortant",
+  "Recrutement",
+];
+const MOVEMENT_STATUS_POOL = ["Planifié", "À faire", "Réalisé"];
 const MOVEMENT_COUNT = 20;
 const MOVEMENT_ROWS = [];
 for (let i = 0; i < MOVEMENT_COUNT; i++) {
@@ -706,8 +719,8 @@ for (let i = 0; i < MOVEMENT_COUNT; i++) {
   const actualDate = status === "Réalisé" ? plannedDate : "";
   const baseSalary = empRow ? empRow[13] : 45000;
   const salaryImpact =
-    type === "Suppression" ? -baseSalary : type === "Recrutement" ? baseSalary : 0;
-  const savings = type === "Suppression" ? baseSalary : 0;
+    type === "Départ forcé" ? -baseSalary : type === "Recrutement" ? baseSalary : 0;
+  const savings = type === "Départ forcé" ? baseSalary : 0;
   const cost = 2000 + (i % 6) * 1500;
 
   MOVEMENT_ROWS.push([
@@ -717,7 +730,7 @@ for (let i = 0; i < MOVEMENT_COUNT; i++) {
     type,
     1,
     department,
-    type === "Redéploiement" ? EMP_DEPTS[(i + 1) % EMP_DEPTS.length].dept : "",
+    type === "Transfert entrant" ? EMP_DEPTS[(i + 1) % EMP_DEPTS.length].dept : "",
     country,
     hrOwner,
     leverCode,
