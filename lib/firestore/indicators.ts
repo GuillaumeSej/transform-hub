@@ -24,6 +24,7 @@ export function subscribeIndicators(
   cb: (indicators: Indicator[]) => void
 ): Unsubscribe {
   const scopedQuery = query(indicatorsCol(), where("companyId", "==", companyId));
+  const handleError = onListenerError("indicators");
   return onSnapshot(
     scopedQuery,
     { includeMetadataChanges: true },
@@ -31,7 +32,12 @@ export function subscribeIndicators(
       if (snap.metadata.hasPendingWrites) return;
       cb(snap.docs.map((d) => d.data() as Indicator));
     },
-    onListenerError("indicators")
+    (error) => {
+      handleError(error);
+      // Ne jamais laisser un appelant attendre indéfiniment un premier résultat qui ne viendra
+      // jamais (permission-denied, règles pas encore déployées) — voir useStrategicData.
+      cb([]);
+    }
   );
 }
 

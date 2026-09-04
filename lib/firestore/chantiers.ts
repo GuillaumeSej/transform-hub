@@ -24,6 +24,7 @@ export function subscribeChantiers(
   cb: (chantiers: Chantier[]) => void
 ): Unsubscribe {
   const scopedQuery = query(chantiersCol(), where("companyId", "==", companyId));
+  const handleError = onListenerError("chantiers");
   return onSnapshot(
     scopedQuery,
     { includeMetadataChanges: true },
@@ -31,7 +32,12 @@ export function subscribeChantiers(
       if (snap.metadata.hasPendingWrites) return;
       cb(snap.docs.map((d) => d.data() as Chantier));
     },
-    onListenerError("chantiers")
+    (error) => {
+      handleError(error);
+      // Ne jamais laisser un appelant attendre indéfiniment un premier résultat qui ne viendra
+      // jamais (permission-denied, règles pas encore déployées) — voir useStrategicData.
+      cb([]);
+    }
   );
 }
 

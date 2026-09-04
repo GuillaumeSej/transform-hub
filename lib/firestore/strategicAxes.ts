@@ -28,6 +28,7 @@ export function subscribeStrategicAxes(
   cb: (axes: StrategicAxis[]) => void
 ): Unsubscribe {
   const scopedQuery = query(strategicAxesCol(), where("companyId", "==", companyId));
+  const handleError = onListenerError("strategicAxes");
   return onSnapshot(
     scopedQuery,
     { includeMetadataChanges: true },
@@ -35,7 +36,12 @@ export function subscribeStrategicAxes(
       if (snap.metadata.hasPendingWrites) return;
       cb(snap.docs.map((d) => d.data() as StrategicAxis));
     },
-    onListenerError("strategicAxes")
+    (error) => {
+      handleError(error);
+      // Ne jamais laisser un appelant attendre indéfiniment un premier résultat qui ne viendra
+      // jamais (permission-denied, règles pas encore déployées) — voir useStrategicData.
+      cb([]);
+    }
   );
 }
 
