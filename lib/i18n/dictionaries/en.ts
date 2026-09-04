@@ -57,6 +57,19 @@ const en: Record<string, string> = {
   "roles.hr.short": "HR",
   "roles.ops.label": "Operations Manager",
   "roles.ops.short": "Ops",
+  // Strategic Plan profiles (3-5-15 org chart: axes -> workstreams/"chantiers")
+  "roles.strategicLead.label": "Strategic Plan Lead",
+  "roles.strategicLead.short": "Lead",
+  "roles.axisSponsor.label": "Axis Sponsor",
+  "roles.axisSponsor.short": "Axis Sponsor",
+  "roles.chantierOwner.label": "Workstream Owner",
+  "roles.chantierOwner.short": "WS Owner",
+  "roles.chantierContributor.label": "Workstream Contributor",
+  "roles.chantierContributor.short": "Contributor",
+  "roles.internalComm.label": "Internal Communication",
+  "roles.internalComm.short": "Comms",
+  "roles.budgetControl.label": "Management Control",
+  "roles.budgetControl.short": "Controlling",
 
   // ─── login ────────────────────────────────────────────────────────────────
   "login.tagline": "BeTrack · Transformation",
@@ -600,6 +613,10 @@ const en: Record<string, string> = {
 
   // ─── shared ───────────────────────────────────────────────────────────────
   "shared.appShell.mobileNavLabel": "Main navigation",
+  "shared.appShell.strategicDependencyTitle": "Dependency at risk · {chantier}",
+  "shared.appShell.strategicIndicatorTitle": "Indicator at risk · {name}",
+  "shared.appShell.strategicIndicatorDesc":
+    "The latest measurement misses the target: {objective}.",
 
   // ─── shared (shared components: Modal, Topbar, Sidebar, ResetDemoButton…) ──
   "shared.resetDemoButton.label": "Reset demo data",
@@ -1124,6 +1141,9 @@ const en: Record<string, string> = {
   "strategicAxes.axisUpdated": "Axis updated",
   "strategicAxes.cards": "Cards",
   "strategicAxes.kanban": "Kanban",
+  "strategicAxes.chantiersView": "Workstreams",
+  "strategicAxes.axisNoChantier": "No workstream",
+  "strategicAxes.chantierAlerted": "Dependency alert",
   "strategicAxes.kanbanEmptyColumn": "No axis",
   "strategicAxes.noStage": "No stage",
   "strategicAxes.filterStage": "Maturity stage",
@@ -1176,8 +1196,17 @@ const en: Record<string, string> = {
   "strategicAxes.actionStage": "Stage",
   "strategicAxes.actionDescription": "Description",
   "strategicAxes.deliverables": "Expected deliverables",
-  "strategicAxes.deliverablesHint": "One deliverable per line.",
+  "strategicAxes.deliverablesHint":
+    "One field per deliverable; each deliverable can be split into dated sub-steps.",
   "strategicAxes.noDeliverables": "No deliverable specified.",
+  "strategicAxes.deliverableLabel": "Deliverable title",
+  "strategicAxes.addDeliverable": "Add a deliverable",
+  "strategicAxes.removeDeliverable": "Remove deliverable",
+  "strategicAxes.noPhases": "No sub-step.",
+  "strategicAxes.phaseStart": "Start",
+  "strategicAxes.phaseEnd": "End",
+  "strategicAxes.addPhase": "Add a sub-step",
+  "strategicAxes.removePhase": "Remove sub-step",
   // Indicators — READ ONLY here, data entry lives on the KPI page
   "strategicAxes.indicatorsSection": "Indicators of this axis",
   "strategicAxes.indicatorsReadOnly":
@@ -1209,6 +1238,12 @@ const en: Record<string, string> = {
   "kpi.summary.atRisk": "At risk",
   "kpi.summary.total": "Indicator total",
   "kpi.summary.indicatorsSuffix": "indicators",
+
+  // ─── Business KPIs (axis-level indicators) — KPI page AND strategic dashboard ───
+  "businessKpis.title": "Business KPIs",
+  "businessKpis.empty":
+    "No business KPI defined — add an indicator attached directly to an axis from the Admin > Indicators tab.",
+  "businessKpis.noValue": "No measurement",
   "kpi.axisUnknown": "Indicators without an axis",
   "kpi.macroIndicators": "Axis indicators",
   "kpi.chantier": "Work package",
@@ -1270,7 +1305,6 @@ const en: Record<string, string> = {
   "strategicDashboard.onTrack": "On track",
   "strategicDashboard.atRisk": "At risk",
   "strategicDashboard.cumulative": "Indicator total",
-  "strategicDashboard.cumulativeHint": "Sum of the latest quantitative values",
   "strategicDashboard.noIndicators": "No indicator defined for this program",
   "strategicDashboard.noIndicatorsAtRisk": "No indicator at risk",
   "strategicDashboard.noDependencyAlerts": "No dependency alert between work packages",
@@ -1282,7 +1316,7 @@ const en: Record<string, string> = {
   "strategicDashboard.removeWidget": "Remove this widget",
   // Widget registry labels (lib/strategicDashboardWidgets.ts, `label` field).
   "strategicDashboard.widget.indicatorStatus": "Indicators · on track",
-  "strategicDashboard.widget.indicatorTotal": "Indicator total",
+  "strategicDashboard.widget.businessKpis": "Business KPIs",
   "strategicDashboard.widget.axisBreakdown": "Breakdown by axis",
   "strategicDashboard.widget.indicatorsAtRisk": "Indicators at risk",
   "strategicDashboard.widget.axisMaturity": "Progress by maturity stage",
@@ -1314,6 +1348,8 @@ const en: Record<string, string> = {
   "adminIndicators.chantier": "Workstream (optional)",
   "adminIndicators.chantierMacro": "None — macro indicator of the axis",
   "adminIndicators.chantierPickAxisFirst": "Select an axis first.",
+  "adminIndicators.chantierLevelHint":
+    "Some workstreams have their own KPIs: feel free to attach the indicator to the relevant workstream rather than the axis, and to assign it to its workstream owner.",
   "adminIndicators.newChantier": "New workstream",
   "adminIndicators.newChantierTitle": "Create a workstream",
   "adminIndicators.noStagesHint": "Configure this program's maturity stages first.",

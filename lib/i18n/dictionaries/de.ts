@@ -54,6 +54,19 @@ const de: Record<string, string> = {
   "roles.hr.short": "HR",
   "roles.ops.label": "Betriebsleiter",
   "roles.ops.short": "Ops",
+  // Profile des Strategieplans (Organigramm 3-5-15: Achsen -> Arbeitspakete)
+  "roles.strategicLead.label": "Leiter des Strategieplans",
+  "roles.strategicLead.short": "Leitung",
+  "roles.axisSponsor.label": "Achsen-Sponsor",
+  "roles.axisSponsor.short": "Sponsor",
+  "roles.chantierOwner.label": "Arbeitspaket-Verantwortlicher",
+  "roles.chantierOwner.short": "AP-Leitung",
+  "roles.chantierContributor.label": "Arbeitspaket-Mitwirkender",
+  "roles.chantierContributor.short": "Mitwirkend",
+  "roles.internalComm.label": "Interne Kommunikation",
+  "roles.internalComm.short": "Kommunikation",
+  "roles.budgetControl.label": "Controlling",
+  "roles.budgetControl.short": "Controlling",
 
   // ─── login ────────────────────────────────────────────────────────────────
   "login.tagline": "BeTrack · Transformation",
@@ -586,6 +599,9 @@ const de: Record<string, string> = {
 
   // ─── shared ───────────────────────────────────────────────────────────────
   "shared.appShell.mobileNavLabel": "Hauptnavigation",
+  "shared.appShell.strategicDependencyTitle": "Abhängigkeit gefährdet · {chantier}",
+  "shared.appShell.strategicIndicatorTitle": "Indikator gefährdet · {name}",
+  "shared.appShell.strategicIndicatorDesc": "Die letzte Messung verfehlt das Ziel: {objective}.",
 
   // ─── shared (gemeinsame Komponenten: Modal, Topbar, Sidebar, ResetDemoButton…) ─
   "shared.resetDemoButton.label": "Demodaten zurücksetzen",
@@ -1113,6 +1129,9 @@ const de: Record<string, string> = {
   "strategicAxes.axisUpdated": "Achse aktualisiert",
   "strategicAxes.cards": "Karten",
   "strategicAxes.kanban": "Kanban",
+  "strategicAxes.chantiersView": "Arbeitspakete",
+  "strategicAxes.axisNoChantier": "Kein Arbeitspaket",
+  "strategicAxes.chantierAlerted": "Abhängigkeitswarnung",
   "strategicAxes.kanbanEmptyColumn": "Keine Achse",
   "strategicAxes.noStage": "Ohne Stufe",
   "strategicAxes.filterStage": "Reifegrad",
@@ -1167,8 +1186,17 @@ const de: Record<string, string> = {
   "strategicAxes.actionStage": "Stufe",
   "strategicAxes.actionDescription": "Beschreibung",
   "strategicAxes.deliverables": "Erwartete Liefergegenstände",
-  "strategicAxes.deliverablesHint": "Ein Liefergegenstand pro Zeile.",
+  "strategicAxes.deliverablesHint":
+    "Ein Feld pro Liefergegenstand; jeder Liefergegenstand kann in datierte Teilschritte gegliedert werden.",
   "strategicAxes.noDeliverables": "Kein Liefergegenstand erfasst.",
+  "strategicAxes.deliverableLabel": "Bezeichnung des Liefergegenstands",
+  "strategicAxes.addDeliverable": "Liefergegenstand hinzufügen",
+  "strategicAxes.removeDeliverable": "Liefergegenstand entfernen",
+  "strategicAxes.noPhases": "Kein Teilschritt.",
+  "strategicAxes.phaseStart": "Beginn",
+  "strategicAxes.phaseEnd": "Ende",
+  "strategicAxes.addPhase": "Teilschritt hinzufügen",
+  "strategicAxes.removePhase": "Teilschritt entfernen",
   // Indikatoren — hier NUR LESEND, die Erfassung erfolgt auf der KPI-Seite
   "strategicAxes.indicatorsSection": "Indikatoren dieser Achse",
   "strategicAxes.indicatorsReadOnly":
@@ -1201,6 +1229,12 @@ const de: Record<string, string> = {
   "kpi.summary.atRisk": "Gefährdet",
   "kpi.summary.total": "Summe der Indikatoren",
   "kpi.summary.indicatorsSuffix": "Indikatoren",
+
+  // ─── Business-KPIs (Indikatoren auf Achsenebene) — KPI-Seite UND Strategie-Dashboard ───
+  "businessKpis.title": "Business-KPIs",
+  "businessKpis.empty":
+    "Kein Business-KPI definiert — fügen Sie im Reiter Admin > Indikatoren einen direkt einer Achse zugeordneten Indikator hinzu.",
+  "businessKpis.noValue": "Keine Messung",
   "kpi.axisUnknown": "Indikatoren ohne Achse",
   "kpi.macroIndicators": "Indikatoren der Achse",
   "kpi.chantier": "Arbeitspaket",
@@ -1263,7 +1297,6 @@ const de: Record<string, string> = {
   "strategicDashboard.onTrack": "Im Plan",
   "strategicDashboard.atRisk": "Gefährdet",
   "strategicDashboard.cumulative": "Summe der Indikatoren",
-  "strategicDashboard.cumulativeHint": "Summe der letzten quantitativen Werte",
   "strategicDashboard.noIndicators": "Für dieses Programm ist kein Indikator definiert",
   "strategicDashboard.noIndicatorsAtRisk": "Kein Indikator gefährdet",
   "strategicDashboard.noDependencyAlerts": "Keine Abhängigkeitswarnung zwischen Arbeitspaketen",
@@ -1275,7 +1308,7 @@ const de: Record<string, string> = {
   "strategicDashboard.removeWidget": "Dieses Widget entfernen",
   // Beschriftungen aus dem Widget-Register (lib/strategicDashboardWidgets.ts, Feld `label`).
   "strategicDashboard.widget.indicatorStatus": "Indikatoren · im Plan",
-  "strategicDashboard.widget.indicatorTotal": "Summe der Indikatoren",
+  "strategicDashboard.widget.businessKpis": "Business-KPIs",
   "strategicDashboard.widget.axisBreakdown": "Verteilung nach Achse",
   "strategicDashboard.widget.indicatorsAtRisk": "Gefährdete Indikatoren",
   "strategicDashboard.widget.axisMaturity": "Fortschritt nach Reifegrad",
@@ -1308,6 +1341,8 @@ const de: Record<string, string> = {
   "adminIndicators.chantier": "Arbeitspaket (optional)",
   "adminIndicators.chantierMacro": "Keines — Makro-Indikator der Achse",
   "adminIndicators.chantierPickAxisFirst": "Wählen Sie zuerst eine Achse.",
+  "adminIndicators.chantierLevelHint":
+    "Manche Arbeitspakete haben eigene KPIs: Ordnen Sie den Indikator ruhig dem betreffenden Arbeitspaket statt der Achse zu und übertragen Sie ihn dessen Verantwortlichem.",
   "adminIndicators.newChantier": "Neues Arbeitspaket",
   "adminIndicators.newChantierTitle": "Arbeitspaket anlegen",
   "adminIndicators.noStagesHint": "Konfigurieren Sie zuerst die Reifegrade dieses Programms.",

@@ -76,6 +76,19 @@ const fr: Record<string, string> = {
   "roles.hr.short": "RH",
   "roles.ops.label": "Responsable Opérations",
   "roles.ops.short": "Ops",
+  // Profils du Plan Stratégique (organigramme 3-5-15 : axes → chantiers)
+  "roles.strategicLead.label": "Pilote du plan stratégique",
+  "roles.strategicLead.short": "Pilote",
+  "roles.axisSponsor.label": "Sponsor d'axe",
+  "roles.axisSponsor.short": "Sponsor axe",
+  "roles.chantierOwner.label": "Responsable de chantier",
+  "roles.chantierOwner.short": "Resp. chantier",
+  "roles.chantierContributor.label": "Contributeur chantier",
+  "roles.chantierContributor.short": "Contributeur",
+  "roles.internalComm.label": "Communication interne",
+  "roles.internalComm.short": "Com. interne",
+  "roles.budgetControl.label": "Contrôle de gestion",
+  "roles.budgetControl.short": "Contrôle gestion",
 
   // ─── login ────────────────────────────────────────────────────────────────
   "login.tagline": "BeTrack · Transformation",
@@ -622,6 +635,10 @@ const fr: Record<string, string> = {
 
   // ─── shared (composants partagés) ──────────────────────────────────────────
   "shared.appShell.mobileNavLabel": "Navigation principale",
+  "shared.appShell.strategicDependencyTitle": "Dépendance à risque · {chantier}",
+  "shared.appShell.strategicIndicatorTitle": "Indicateur à risque · {name}",
+  "shared.appShell.strategicIndicatorDesc":
+    "La dernière mesure est en dehors de l'objectif : {objective}.",
 
   // ─── shared (composants partagés : Modal, Topbar, Sidebar, ResetDemoButton…) ─
   "shared.resetDemoButton.label": "Réinitialiser les données démo",
@@ -1149,6 +1166,9 @@ const fr: Record<string, string> = {
   "strategicAxes.axisUpdated": "Axe mis à jour",
   "strategicAxes.cards": "Cartes",
   "strategicAxes.kanban": "Kanban",
+  "strategicAxes.chantiersView": "Chantiers",
+  "strategicAxes.axisNoChantier": "Aucun chantier",
+  "strategicAxes.chantierAlerted": "Dépendance en alerte",
   "strategicAxes.kanbanEmptyColumn": "Aucun axe",
   "strategicAxes.noStage": "Sans étape",
   "strategicAxes.filterStage": "Étape de maturité",
@@ -1201,8 +1221,17 @@ const fr: Record<string, string> = {
   "strategicAxes.actionStage": "Étape",
   "strategicAxes.actionDescription": "Description",
   "strategicAxes.deliverables": "Livrables attendus",
-  "strategicAxes.deliverablesHint": "Un livrable par ligne.",
+  "strategicAxes.deliverablesHint":
+    "Un champ par livrable ; chaque livrable peut être découpé en sous-étapes datées.",
   "strategicAxes.noDeliverables": "Aucun livrable renseigné.",
+  "strategicAxes.deliverableLabel": "Intitulé du livrable",
+  "strategicAxes.addDeliverable": "Ajouter un livrable",
+  "strategicAxes.removeDeliverable": "Supprimer le livrable",
+  "strategicAxes.noPhases": "Aucune sous-étape.",
+  "strategicAxes.phaseStart": "Début",
+  "strategicAxes.phaseEnd": "Fin",
+  "strategicAxes.addPhase": "Ajouter une sous-étape",
+  "strategicAxes.removePhase": "Supprimer la sous-étape",
   // Indicateurs — LECTURE SEULE ici, la saisie vit sur la page KPI
   "strategicAxes.indicatorsSection": "Indicateurs de l'axe",
   "strategicAxes.indicatorsReadOnly":
@@ -1236,6 +1265,12 @@ const fr: Record<string, string> = {
   "kpi.summary.atRisk": "À risque",
   "kpi.summary.total": "Cumul des indicateurs",
   "kpi.summary.indicatorsSuffix": "indicateurs",
+
+  // ─── KPI business (indicateurs de niveau axe) — page KPI ET dashboard stratégique ───
+  "businessKpis.title": "KPI business",
+  "businessKpis.empty":
+    "Aucun KPI business défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs.",
+  "businessKpis.noValue": "Aucune mesure",
   "kpi.axisUnknown": "Indicateurs sans axe rattaché",
   "kpi.macroIndicators": "Indicateurs de l'axe",
   "kpi.chantier": "Chantier",
@@ -1298,7 +1333,6 @@ const fr: Record<string, string> = {
   "strategicDashboard.onTrack": "Sur la trajectoire",
   "strategicDashboard.atRisk": "À risque",
   "strategicDashboard.cumulative": "Cumul des indicateurs",
-  "strategicDashboard.cumulativeHint": "Somme des dernières valeurs quantitatives",
   "strategicDashboard.noIndicators": "Aucun indicateur défini pour ce programme",
   "strategicDashboard.noIndicatorsAtRisk": "Aucun indicateur à risque",
   "strategicDashboard.noDependencyAlerts": "Aucune alerte de dépendance entre chantiers",
@@ -1310,7 +1344,7 @@ const fr: Record<string, string> = {
   "strategicDashboard.removeWidget": "Retirer ce widget",
   // Libellés du registre de widgets (lib/strategicDashboardWidgets.ts, champ `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
-  "strategicDashboard.widget.indicatorTotal": "Cumul des indicateurs",
+  "strategicDashboard.widget.businessKpis": "KPI business",
   "strategicDashboard.widget.axisBreakdown": "Répartition par axe",
   "strategicDashboard.widget.indicatorsAtRisk": "Indicateurs à risque",
   "strategicDashboard.widget.axisMaturity": "Avancement par étape de maturité",
@@ -1342,6 +1376,8 @@ const fr: Record<string, string> = {
   "adminIndicators.chantier": "Chantier (optionnel)",
   "adminIndicators.chantierMacro": "Aucun — indicateur macro de l'axe",
   "adminIndicators.chantierPickAxisFirst": "Sélectionnez d'abord un axe.",
+  "adminIndicators.chantierLevelHint":
+    "Certains chantiers ont leurs propres KPI : n'hésitez pas à rattacher l'indicateur au chantier concerné plutôt qu'à l'axe, et à le confier à son responsable de chantier.",
   "adminIndicators.newChantier": "Nouveau chantier",
   "adminIndicators.newChantierTitle": "Créer un chantier",
   "adminIndicators.noStagesHint": "Configurez d'abord les étapes de maturité de ce programme.",
