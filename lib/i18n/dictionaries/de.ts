@@ -12,6 +12,7 @@ const de: Record<string, string> = {
   "common.close": "Schließen",
   "common.search": "Suchen",
   "common.choose": "Auswählen…",
+  "common.optional": "(optional)",
 
   // ─── nav ──────────────────────────────────────────────────────────────────
   "nav.executiveDashboard": "Management-Dashboard",
@@ -810,6 +811,15 @@ const de: Record<string, string> = {
   "adminCompanyFields.clearanceLabel":
     "Freigaben nach Profil — ein Hebel der Stufe X ist nur für Profile sichtbar, die für X freigegeben sind (ein Hebel ohne Stufe bleibt für alle sichtbar)",
   "adminCompanyFields.colProfile": "Profil",
+  "adminCompanyFields.directionsLabel": "Direktionen / Abteilungen",
+  "adminCompanyFields.directionsEmpty":
+    "Für dieses Unternehmen ist noch keine Direktion/Abteilung konfiguriert. Fügen Sie eine hinzu, um Benutzer zuzuordnen und im Strategieplan nach Direktion zu filtern.",
+  "adminCompanyFields.newDirectionPlaceholder": "Z. B.: Industriedirektion",
+  "adminCompanyFields.addDirection": "Direktion hinzufügen",
+
+  // ─── adminUsers (Admin > Benutzer) ─────────────────────────────────────
+  "adminUsers.directionLabel": "Direktion / Abteilung (optional)",
+  "adminUsers.directionUnassigned": "Nicht angegeben",
 
   // ─── shared (gemeinsam genutzte Komponenten) ───────────────────────────────
   "shared.dashboardExportButton.impossibleTitle": "Export nicht möglich",
@@ -1227,6 +1237,105 @@ const de: Record<string, string> = {
   "strategicAxes.freq.semiannual": "Halbjährlich",
   "strategicAxes.freq.annual": "Jährlich",
 
+  "strategicAxes.chantierSaveErrorTitle": "Speichern fehlgeschlagen",
+  "strategicAxes.chantierSaveError": "Das Vorhaben konnte nicht gespeichert werden.",
+  "strategicAxes.actionSaveErrorTitle": "Speichern fehlgeschlagen",
+  "strategicAxes.actionSaveError": "Die Aktion konnte nicht gespeichert werden.",
+  "strategicAxes.atRiskPopoverTitle": "Gefährdete Indikatoren",
+  "strategicAxes.filterDirection": "Bereich",
+  "strategicAxes.filterPerson": "Person",
+  "strategicAxes.filterSponsor": "Sponsor",
+
+  // ─── Strategieplan — eigene Vorhaben-Detailseite (Runde 4) ─────────────────
+  "strategicChantierDetail.title": "Vorhabenblatt",
+  "strategicChantierDetail.back": "← Zurück zur Achse",
+  "strategicChantierDetail.notFound": "Vorhaben nicht gefunden.",
+  "strategicChantierDetail.successCriteria": "Erfolgskriterien",
+  "strategicChantierDetail.sponsor": "Sponsor",
+  "strategicChantierDetail.pilote": "Leitung",
+
+  "strategicChantierDetail.effort.title": "Aufwandsbewertungsraster",
+  "strategicChantierDetail.effort.financialImpact": "Finanzielle Auswirkung",
+  "strategicChantierDetail.effort.financialImpact.option1": "<5k€",
+  "strategicChantierDetail.effort.financialImpact.option2": "5-40k€",
+  "strategicChantierDetail.effort.financialImpact.option3": "40-100k€",
+  "strategicChantierDetail.effort.financialImpact.option4": ">100k€",
+  "strategicChantierDetail.effort.humanImpact": "Personelle Auswirkung",
+  "strategicChantierDetail.effort.humanImpact.option1": "1-2 VZÄ",
+  "strategicChantierDetail.effort.humanImpact.option2": "3-4 VZÄ",
+  "strategicChantierDetail.effort.humanImpact.option3": "5-6 VZÄ",
+  "strategicChantierDetail.effort.humanImpact.option4": ">7 VZÄ",
+  "strategicChantierDetail.effort.duration": "Dauer",
+  "strategicChantierDetail.effort.duration.option1": "<2 Monate",
+  "strategicChantierDetail.effort.duration.option2": "2-6 Monate",
+  "strategicChantierDetail.effort.duration.option3": "6-12 Monate",
+  "strategicChantierDetail.effort.duration.option4": ">1 Jahr",
+  "strategicChantierDetail.effort.changeManagement": "Change Management",
+  "strategicChantierDetail.effort.changeManagement.option1": "Sehr wenig Veränderung",
+  "strategicChantierDetail.effort.changeManagement.option2": "Wenig Veränderung",
+  "strategicChantierDetail.effort.changeManagement.option3": "Erhebliche Veränderung",
+  "strategicChantierDetail.effort.changeManagement.option4": "Große Veränderung",
+
+  "strategicChantierDetail.raci.title": "RACI",
+  "strategicChantierDetail.raci.responsible": "Durchführend (R)",
+  "strategicChantierDetail.raci.accountable": "Verantwortlich (A)",
+  "strategicChantierDetail.raci.consulted": "Konsultiert (C)",
+  "strategicChantierDetail.raci.informed": "Informiert (I)",
+  "strategicChantierDetail.raci.noAccountableHint": 'Kein „Verantwortlich" (A) zugewiesen.',
+  "strategicChantierDetail.raci.addRow": "Zeile hinzufügen",
+  "strategicChantierDetail.raci.removeRow": "Diese Zeile entfernen",
+  "strategicChantierDetail.raci.empty": "Niemand zugewiesen.",
+  "strategicChantierDetail.raci.letter": "RACI-Buchstabe",
+
+  "strategicChantierDetail.prerequisites.title": "Voraussetzungen",
+  "strategicChantierDetail.prerequisites.kindAction": "Aktion des Plans",
+  "strategicChantierDetail.prerequisites.kindExternal": "Externe Voraussetzung",
+  "strategicChantierDetail.prerequisites.blockedBy": "Blockiert durch:",
+  "strategicChantierDetail.prerequisites.addRow": "Voraussetzung hinzufügen",
+  "strategicChantierDetail.prerequisites.kind": "Typ",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Aktion auswählen",
+  "strategicChantierDetail.prerequisites.externalPlaceholder":
+    "Z. B. Einstellung des Projektleiters",
+  "strategicChantierDetail.prerequisites.done": "Erledigt",
+  "strategicChantierDetail.prerequisites.removeRow": "Diese Voraussetzung entfernen",
+  "strategicChantierDetail.prerequisites.none": "Keine Voraussetzungen.",
+  "strategicChantierDetail.prerequisites.noOtherActions":
+    "Keine weitere Aktion in diesem Workstream.",
+
+  "strategicChantierDetail.dependencies.title": "Abhängigkeiten",
+  "strategicChantierDetail.dependencies.none": "Keine Abhängigkeiten.",
+
+  "strategicChantierDetail.raci.chantierTitle": "RACI des Workstreams",
+  "strategicChantierDetail.raci.deliverableTitle": "RACI des Liefergegenstands",
+
+  "strategicChantierDetail.timeline.title": "Zeitleiste der Liefergegenstände",
+  "strategicChantierDetail.timeline.empty": "Noch kein phasierter Liefergegenstand.",
+
+  "strategicChantierDetail.actionFocused": "Über den Link geöffnete Aktion",
+  "strategicChantierDetail.actionForm.missingHint": "Name und Daten ausfüllen, um zu speichern.",
+  "strategicChantierDetail.successCriteria.placeholder": "Wir sind im [Jahr] zufrieden, wenn...",
+
+  // ─── Strategieplan — Excel-Import (Runde 4) ─────────────────────────────────
+  "strategicImport.title": "Strategieplan importieren",
+  "strategicImport.uploadButton": "Datei importieren",
+  "strategicImport.templateButton": "Vorlage herunterladen",
+  "strategicImport.previewTitle": "Import-Vorschau — {file}",
+  "strategicImport.confirmButton": "Import bestätigen",
+  "strategicImport.successMessage": "Import abgeschlossen",
+  "strategicImport.errorRow": "fehlerhafte Zeile(n)",
+  "strategicImport.lineLabel": "Zeile",
+  "strategicImport.axesCountLabel": "Achse(n) zu erstellen",
+  "strategicImport.chantiersCountLabel": "Arbeitspaket(e) zu erstellen",
+  "strategicImport.actionsCountLabel": "Aktion(en) zu erstellen",
+  "strategicImport.indicatorsCountLabel": "Indikator(en) zu erstellen",
+  "strategicImport.templateDownloadedTitle": "Vorlage heruntergeladen",
+  "strategicImport.templateDownloadedBody":
+    "5 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencode = FK), Aktionen (Arbeitspaketcode = FK), Ergebnisse (Aktionscode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.",
+  "strategicImport.ignoredRowsNote": "{n} Zeile(n) ignoriert",
+  "strategicImport.importDoneBody":
+    "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Aktion(en) · {indicators} Indikator(en) erstellt",
+  "strategicImport.errorTitle": "Import fehlgeschlagen",
+
   // ─── Strategieplan — KPI-Seite (Messwerterfassung, Zielbearbeitung) ────────
   "kpi.title": "Indikatoren (KPI)",
   "kpi.subtitle":
@@ -1262,6 +1371,7 @@ const de: Record<string, string> = {
   "kpi.chart.empty": "Keine Messung erfasst.",
   "kpi.chart.viewFull": "Vollständige Historie anzeigen",
   "kpi.chart.fullHistory": "Vollständige Historie",
+  "kpi.chart.progressToTarget": "Fortschritt zum Zielwert",
   "kpi.latestValue": "Letzter Wert",
   "kpi.noMeasurement": "Keine Messung erfasst",
   "kpi.reportedBy": "erfasst von",

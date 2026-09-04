@@ -15,6 +15,7 @@ const en: Record<string, string> = {
   "common.close": "Close",
   "common.search": "Search",
   "common.choose": "Choose…",
+  "common.optional": "(optional)",
 
   // ─── nav ──────────────────────────────────────────────────────────────────
   "nav.executiveDashboard": "Executive Dashboard",
@@ -825,6 +826,15 @@ const en: Record<string, string> = {
   "adminCompanyFields.clearanceLabel":
     "Clearance by profile — an initiative at level X is only visible to profiles cleared for X (an initiative with no level remains visible to everyone)",
   "adminCompanyFields.colProfile": "Profile",
+  "adminCompanyFields.directionsLabel": "Directions / departments",
+  "adminCompanyFields.directionsEmpty":
+    "No direction/department configured for this company yet. Add one to enable assigning users and filtering by direction on the Strategic Plan.",
+  "adminCompanyFields.newDirectionPlaceholder": "E.g.: Industrial Direction",
+  "adminCompanyFields.addDirection": "Add direction",
+
+  // ─── adminUsers (Admin > Users) ─────────────────────────────────────
+  "adminUsers.directionLabel": "Direction / department (optional)",
+  "adminUsers.directionUnassigned": "Not set",
 
   // ─── shared (shared components) ────────────────────────────────────────────
   "shared.dashboardExportButton.impossibleTitle": "Export not possible",
@@ -1237,6 +1247,103 @@ const en: Record<string, string> = {
   "strategicAxes.freq.semiannual": "Semi-annual",
   "strategicAxes.freq.annual": "Annual",
 
+  "strategicAxes.chantierSaveErrorTitle": "Save failed",
+  "strategicAxes.chantierSaveError": "The workstream could not be saved.",
+  "strategicAxes.actionSaveErrorTitle": "Save failed",
+  "strategicAxes.actionSaveError": "The action could not be saved.",
+  "strategicAxes.atRiskPopoverTitle": "At-risk indicators",
+  "strategicAxes.filterDirection": "Direction",
+  "strategicAxes.filterPerson": "Person",
+  "strategicAxes.filterSponsor": "Sponsor",
+
+  // ─── Strategic Plan — dedicated workstream detail page (round 4) ───────────
+  "strategicChantierDetail.title": "Workstream sheet",
+  "strategicChantierDetail.back": "← Back to axis",
+  "strategicChantierDetail.notFound": "Workstream not found.",
+  "strategicChantierDetail.successCriteria": "Success criteria",
+  "strategicChantierDetail.sponsor": "Sponsor",
+  "strategicChantierDetail.pilote": "Lead",
+
+  "strategicChantierDetail.effort.title": "Effort scoring grid",
+  "strategicChantierDetail.effort.financialImpact": "Financial impact",
+  "strategicChantierDetail.effort.financialImpact.option1": "<5k€",
+  "strategicChantierDetail.effort.financialImpact.option2": "5-40k€",
+  "strategicChantierDetail.effort.financialImpact.option3": "40-100k€",
+  "strategicChantierDetail.effort.financialImpact.option4": ">100k€",
+  "strategicChantierDetail.effort.humanImpact": "Human impact",
+  "strategicChantierDetail.effort.humanImpact.option1": "1-2 FTE",
+  "strategicChantierDetail.effort.humanImpact.option2": "3-4 FTE",
+  "strategicChantierDetail.effort.humanImpact.option3": "5-6 FTE",
+  "strategicChantierDetail.effort.humanImpact.option4": ">7 FTE",
+  "strategicChantierDetail.effort.duration": "Duration",
+  "strategicChantierDetail.effort.duration.option1": "<2 months",
+  "strategicChantierDetail.effort.duration.option2": "2-6 months",
+  "strategicChantierDetail.effort.duration.option3": "6-12 months",
+  "strategicChantierDetail.effort.duration.option4": ">1 year",
+  "strategicChantierDetail.effort.changeManagement": "Change management",
+  "strategicChantierDetail.effort.changeManagement.option1": "Very little change",
+  "strategicChantierDetail.effort.changeManagement.option2": "Some change",
+  "strategicChantierDetail.effort.changeManagement.option3": "Significant change",
+  "strategicChantierDetail.effort.changeManagement.option4": "Major change",
+
+  "strategicChantierDetail.raci.title": "RACI",
+  "strategicChantierDetail.raci.responsible": "Responsible (R)",
+  "strategicChantierDetail.raci.accountable": "Accountable (A)",
+  "strategicChantierDetail.raci.consulted": "Consulted (C)",
+  "strategicChantierDetail.raci.informed": "Informed (I)",
+  "strategicChantierDetail.raci.noAccountableHint": "No « Accountable » (A) is assigned.",
+  "strategicChantierDetail.raci.addRow": "Add a row",
+  "strategicChantierDetail.raci.removeRow": "Remove this row",
+  "strategicChantierDetail.raci.empty": "No one assigned.",
+  "strategicChantierDetail.raci.letter": "RACI letter",
+
+  "strategicChantierDetail.prerequisites.title": "Prerequisites",
+  "strategicChantierDetail.prerequisites.kindAction": "Plan action",
+  "strategicChantierDetail.prerequisites.kindExternal": "External prerequisite",
+  "strategicChantierDetail.prerequisites.blockedBy": "Blocked by:",
+  "strategicChantierDetail.prerequisites.addRow": "Add a prerequisite",
+  "strategicChantierDetail.prerequisites.kind": "Type",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choose an action",
+  "strategicChantierDetail.prerequisites.externalPlaceholder": "E.g. Hire the project lead",
+  "strategicChantierDetail.prerequisites.done": "Done",
+  "strategicChantierDetail.prerequisites.removeRow": "Remove this prerequisite",
+  "strategicChantierDetail.prerequisites.none": "No prerequisites.",
+  "strategicChantierDetail.prerequisites.noOtherActions": "No other action on this workstream.",
+
+  "strategicChantierDetail.dependencies.title": "Dependencies",
+  "strategicChantierDetail.dependencies.none": "No dependencies.",
+
+  "strategicChantierDetail.raci.chantierTitle": "Workstream RACI",
+  "strategicChantierDetail.raci.deliverableTitle": "Deliverable RACI",
+
+  "strategicChantierDetail.timeline.title": "Deliverables timeline",
+  "strategicChantierDetail.timeline.empty": "No phased deliverable yet.",
+
+  "strategicChantierDetail.actionFocused": "Action opened from the link",
+  "strategicChantierDetail.actionForm.missingHint": "Fill in the name and dates to save.",
+  "strategicChantierDetail.successCriteria.placeholder": "We'll be happy in [year] if...",
+
+  // ─── Strategic Plan — Excel import (round 4) ────────────────────────────────
+  "strategicImport.title": "Import a strategic plan",
+  "strategicImport.uploadButton": "Import a file",
+  "strategicImport.templateButton": "Download template",
+  "strategicImport.previewTitle": "Import preview — {file}",
+  "strategicImport.confirmButton": "Confirm import",
+  "strategicImport.successMessage": "Import complete",
+  "strategicImport.errorRow": "row(s) with errors",
+  "strategicImport.lineLabel": "Row",
+  "strategicImport.axesCountLabel": "axis/axes to create",
+  "strategicImport.chantiersCountLabel": "workstream(s) to create",
+  "strategicImport.actionsCountLabel": "action(s) to create",
+  "strategicImport.indicatorsCountLabel": "indicator(s) to create",
+  "strategicImport.templateDownloadedTitle": "Template downloaded",
+  "strategicImport.templateDownloadedBody":
+    "5 sheets: Axes (Code = key), Workstreams (Axis Code = FK), Actions (Workstream Code = FK), Deliverables (Action Code = FK, optional), Indicators (Axis Code OR Workstream Code = FK). Delete the example rows before filling in.",
+  "strategicImport.ignoredRowsNote": "{n} row(s) ignored",
+  "strategicImport.importDoneBody":
+    "{axes} axis/axes · {chantiers} workstream(s) · {actions} action(s) · {indicators} indicator(s) created",
+  "strategicImport.errorTitle": "Import failed",
+
   // ─── Strategic Plan — KPI page (measurement entry, objective editing) ──────
   "kpi.title": "Indicators (KPI)",
   "kpi.subtitle":
@@ -1271,6 +1378,7 @@ const en: Record<string, string> = {
   "kpi.chart.empty": "No measurement recorded.",
   "kpi.chart.viewFull": "View full history",
   "kpi.chart.fullHistory": "Full history",
+  "kpi.chart.progressToTarget": "Progress toward target",
   "kpi.latestValue": "Latest value",
   "kpi.noMeasurement": "No measurement recorded",
   "kpi.reportedBy": "reported by",

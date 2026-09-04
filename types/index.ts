@@ -53,6 +53,10 @@ export type AuthUser = {
    *  string[] (peut être vide = "aucun") = liste explicite des niveaux autorisés pour CET
    *  utilisateur. Sans effet pour admin/admin_entreprise (toujours accès total). */
   confidentialityClearance?: "all" | string[];
+  /** Direction/service métier de rattachement (round 4, filtres Plan Stratégique — voir
+   *  `Company.directions`). Contraint à la liste de l'entreprise via un `<select>`, jamais du texte
+   *  libre, pour que le filtre par direction matche réellement une valeur existante. */
+  direction?: string;
 };
 
 // Cycle de vie unique d'un levier, affiché partout en L1-L5 (voir lib/status-config.ts) :
@@ -488,6 +492,11 @@ export type Company = {
    *  restreint (ex. ["Public", "Restreint", "Confidentiel", "Secret"]). Un levier sans
    *  confidentialityLevel n'est restreint pour personne. */
   confidentialityLevels?: string[];
+  /** Liste des directions/services métier de l'entreprise (round 4, filtres Plan Stratégique) —
+   *  même pattern que `confidentialityLevels` juste au-dessus : une liste éditable par l'admin,
+   *  référencée par `AuthUser.direction`. Non conditionnée au type de programme (comme
+   *  `confidentialityLevels`), donc sans impact sur le Plan Performance. */
+  directions?: string[];
   /** Pour chaque rôle, la liste des niveaux de confidentialityLevels auxquels il a accès
    *  (en plus des leviers sans niveau défini, toujours visibles). admin/admin_entreprise ne
    *  sont jamais filtrés (accès total) — pas besoin de les lister ici. */
@@ -629,6 +638,30 @@ export type ChantierDependency = {
   type: ChantierDependencyType;
 };
 
+/** Lettre RACI standard (Responsable/Autorité/Consulté/Informé), assignée à une personne sur un
+ *  chantier ou un livrable — round 4, demande PO. */
+export type RaciLetter = "R" | "A" | "C" | "I";
+
+/** `userId` stocke un `AuthUser.username` (pas d'uid Firebase) — même convention que
+ *  `Indicator.additionalAuthorizedUserIds` : c'est la clé primaire "métier" déjà utilisée partout
+ *  ailleurs dans l'app pour référencer une personne (voir `canFillIndicator`). */
+export type RaciAssignment = { userId: string; letter: RaciLetter };
+
+/** Échelon 1-4 d'une dimension de la grille d'effort (voir `ChantierEffort`) — mêmes 4 échelons
+ *  pour les 4 dimensions, libellés distincts par dimension (voir `strategicChantierDetail.effort.*`
+ *  dans les dictionnaires i18n). */
+export type EffortScore = 1 | 2 | 3 | 4;
+
+/** Grille de notation d'effort d'un chantier — visible UNIQUEMENT sur la fiche chantier dédiée
+ *  (round 4), nulle part ailleurs (Kanban, Gantt, cartes d'axe). Les 4 dimensions sont
+ *  indépendantes et toutes optionnelles : un chantier peut être noté progressivement. */
+export type ChantierEffort = {
+  financialImpact?: EffortScore;
+  humanImpact?: EffortScore;
+  duration?: EffortScore;
+  changeManagement?: EffortScore;
+};
+
 /** Un chantier = un regroupement d'actions concrètes qui font avancer un axe. Niveau
  *  intermédiaire absent du modèle Performance : c'est lui qui structure le Gantt (un bloc de
  *  Gantt = un chantier, pas une action isolée). */
@@ -649,6 +682,19 @@ export type Chantier = {
    *  chantiers créés avant l'introduction de ce champ). */
   responsibleRoles?: Role[];
   confidentialityLevel?: string;
+  /** Sponsor COMEX explicite (round 4, format fiche chantier PERIAL) — remplace l'ancienne
+   *  heuristique "responsable dérivé des actions" (`deriveChantierOwner`), incapable de représenter
+   *  un sponsor distinct du pilote opérationnel. `AuthUser.username`, saisi via `UserPicker`. */
+  sponsorName?: string;
+  /** Pilote opérationnel du chantier (distinct du sponsor). `AuthUser.username`. */
+  pilote?: string;
+  /** Critère de succès en texte libre ("On sera content en [année] si..."), demande PO explicite. */
+  successCriteria?: string;
+  /** RACI du chantier (personnes attachées, pas rôles applicatifs — voir `RaciAssignment`). */
+  raci?: RaciAssignment[];
+  /** Grille de notation d'effort — voir `ChantierEffort`, affichée uniquement sur la fiche
+   *  chantier dédiée. */
+  effort?: ChantierEffort;
   createdAt: string;
   lastUpdate: string;
 };
@@ -671,6 +717,9 @@ export type Deliverable = {
   id: string;
   label: string;
   phases: DeliverablePhase[];
+  /** RACI du livrable — indépendant du RACI du chantier (un livrable peut avoir des personnes
+   *  différentes de celles pilotant le chantier dans son ensemble). */
+  raci?: RaciAssignment[];
 };
 
 export type ChantierAction = {
@@ -680,12 +729,35 @@ export type ChantierAction = {
   name: string;
   description?: string;
   owner?: string;
+  /** Distinct de `owner` (qui exécute) : qui porte/arbitre l'action côté COMEX/direction. Round 4,
+   *  demande PO (fiche chantier façon PERIAL). */
+  sponsor?: string;
   start: string; // ISO date
   end: string; // ISO date
   /** Référence un `MaturityStageConfig.id`, comme le chantier — pas de `ActionStatus` dédié. */
   status: string;
   /** Livrables attendus, chacun avec ses propres sous-étapes temporelles. */
   deliverables?: Deliverable[];
+  /** Conditions go/no-go avant de pouvoir démarrer cette action — voir `canStartAction`
+   *  (lib/axisLogic.ts). v1 purement informatif : rien n'intercepte aujourd'hui un changement de
+   *  statut, donc un prérequis non satisfait n'empêche pas la transition, il l'affiche seulement. */
+  prerequisites?: ActionPrerequisite[];
+};
+
+/** Un prérequis peut cibler une autre action du plan ("action", satisfait quand son étape est
+ *  terminale) ou un événement hors plan ("external", ex. un recrutement — satisfait via `done`). */
+export type ActionPrerequisiteKind = "action" | "external";
+
+export type ActionPrerequisite = {
+  id: string;
+  kind: ActionPrerequisiteKind;
+  /** Requis quand `kind === "action"` — id d'une `ChantierAction`. */
+  targetActionId?: string;
+  /** Requis quand `kind === "external"` — libellé libre (ex. "Recrutement du chef de projet"). */
+  label?: string;
+  /** Pertinent seulement pour `kind === "external"` : un prérequis "action" dérive sa satisfaction
+   *  de l'étape de l'action cible, il n'a pas de `done` propre. */
+  done?: boolean;
 };
 
 export type IndicatorKind = "quantitative" | "qualitative";

@@ -5,12 +5,16 @@ import {
   ChevronDown,
   ChevronUp,
   GripVertical,
+  Layers,
   LayoutGrid,
+  ListChecks,
   Maximize2,
   Plus,
   RotateCcw,
+  Target,
   TriangleAlert,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -67,6 +71,44 @@ import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
  * par retard décroissant) : c'est la fonctionnalité explicitement jugée « super importante » par
  * le PO, elle ne doit pas se noyer dans la grille.
  */
+
+/** Puce de statistique d'en-tête (icône + valeur + libellé) — remplace l'ancienne ligne de texte
+ *  brute « Programme X · N axes · M chantiers · K indicateurs » par des chips visuellement
+ *  distinctes, dans le même esprit que le bandeau d'en-tête du Plan Performance (passe de polish
+ *  round 4, point 1). Purement présentationnel, local à ce fichier : ne mérite pas un composant
+ *  partagé pour un seul appelant. */
+function DashboardStatChip({
+  icon: Icon,
+  value,
+  label,
+  tone = "neutral",
+}: {
+  icon: LucideIcon;
+  value: number;
+  label: string;
+  /** "amber" réservé au signal "à risque" — même token que `IndicatorStatusBadge`, jamais un
+   *  vert/rouge littéral (charte BearingPoint, voir skill dataviz). */
+  tone?: "neutral" | "amber";
+}) {
+  return (
+    <span
+      className={
+        tone === "amber"
+          ? "inline-flex items-center gap-1.5 rounded-full bg-rag-amber-light px-2.5 py-1 text-[11px] font-semibold text-rag-amber"
+          : "inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-semibold text-secondary"
+      }
+    >
+      <Icon
+        size={12}
+        className={tone === "amber" ? "text-rag-amber" : "text-tertiary"}
+        aria-hidden
+      />
+      <span className={tone === "amber" ? "text-rag-amber" : "text-primary"}>{value}</span>
+      {label}
+    </span>
+  );
+}
+
 export function StrategicDashboardView() {
   const { user } = useRole();
   const { activeProgram, activeProgramId, programs, loading: programsLoading } = useActiveProgram();
@@ -142,6 +184,7 @@ export function StrategicDashboardView() {
     onTrack: t("indicatorStatus.onTrack"),
     atRisk: t("indicatorStatus.atRisk"),
     fullHistory: t("kpi.chart.fullHistory"),
+    progressToTarget: t("kpi.chart.progressToTarget"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────
@@ -293,6 +336,7 @@ export function StrategicDashboardView() {
                   showTotal={false}
                   labels={summaryLabels}
                   className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                  radialHero
                 />
               )}
             </CardBody>
@@ -540,11 +584,33 @@ export function StrategicDashboardView() {
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
             {t("strategicDashboard.title")}
           </h1>
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
-            {t("dashboard.program")} <strong>{activeProgram.name}</strong> · {axes.length}{" "}
-            {t("strategicDashboard.axesSuffix")} · {chantiers.length}{" "}
-            {t("strategicDashboard.chantiersSuffix")} · {counts.total}{" "}
-            {t("strategicDashboard.indicatorsSuffix")}
+          <div className="mt-2 text-[13px] text-secondary">
+            {t("dashboard.program")} <strong className="text-primary">{activeProgram.name}</strong>
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <DashboardStatChip
+              icon={Target}
+              value={axes.length}
+              label={t("strategicDashboard.axesSuffix")}
+            />
+            <DashboardStatChip
+              icon={Layers}
+              value={chantiers.length}
+              label={t("strategicDashboard.chantiersSuffix")}
+            />
+            <DashboardStatChip
+              icon={ListChecks}
+              value={counts.total}
+              label={t("strategicDashboard.indicatorsSuffix")}
+            />
+            {counts.atRisk > 0 && (
+              <DashboardStatChip
+                icon={TriangleAlert}
+                value={counts.atRisk}
+                label={t("strategicDashboard.atRisk").toLowerCase()}
+                tone="amber"
+              />
+            )}
           </div>
         </div>
         {/* Personnalisation : desktop uniquement, comme sur le dashboard exécutif (le

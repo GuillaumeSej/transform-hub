@@ -52,8 +52,10 @@ export function AxisForm({
     try {
       await onSubmit({
         name: name.trim(),
-        description: description.trim() || undefined,
-        owner: owner.trim() || undefined,
+        // Clés OMISES (jamais `undefined`) quand vides : `setDoc` rejette toute valeur
+        // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
+        ...(description.trim() ? { description: description.trim() } : {}),
+        ...(owner.trim() ? { owner: owner.trim() } : {}),
         color,
         stage,
       });

@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   canFillIndicator,
   canManageChantier,
+  canStartAction,
+  chantierAtRiskIndicators,
   chantierBounds,
   chantierDependencyAlerts,
+  computeIndicatorDelta,
   computeIndicatorStatus,
   countOnTrackAtRisk,
   latestMeasurement,
@@ -11,7 +14,14 @@ import {
   resolveProgramType,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
-import type { AuthUser, Chantier, ChantierAction, Indicator, IndicatorMeasurement } from "@/types";
+import type {
+  AuthUser,
+  Chantier,
+  ChantierAction,
+  Indicator,
+  IndicatorMeasurement,
+  MaturityStageConfig,
+} from "@/types";
 
 const baseIndicator: Indicator = {
   id: "IND001",
@@ -406,5 +416,186 @@ describe("canManageChantier", () => {
   it("blocks an anonymous user, even on an unrestricted chantier", () => {
     expect(canManageChantier(makeChantier("CH1"), null)).toBe(false);
     expect(canManageChantier(makeChantier("CH1"), undefined)).toBe(false);
+  });
+});
+
+// ─── Écart d'un indicateur par rapport à sa cible (round 4, point 1) ───────────────────────────
+
+describe("computeIndicatorDelta", () => {
+  it("computes a favorable signed delta for an 'up' indicator above its objective", () => {
+    const indicator = makeIndicator({ direction: "up", objectiveValue: 80 });
+    const delta = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-03", 82));
+    expect(delta).toBeDefined();
+    expect(delta?.delta).toBe(2);
+    expect(delta?.deltaPct).toBeCloseTo(2.5);
+    expect(delta?.favorable).toBe(true);
+    expect(delta?.progressPct).toBeCloseTo(100); // 82/80 clampé à 100
+  });
+
+  it("computes an unfavorable delta for an 'up' indicator below its objective, progress under 100", () => {
+    const indicator = makeIndicator({ direction: "up", objectiveValue: 80 });
+    const delta = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-03", 40));
+    expect(delta?.delta).toBe(-40);
+    expect(delta?.favorable).toBe(false);
+    expect(delta?.progressPct).toBeCloseTo(50); // 40/80
+  });
+
+  it("inverts the progress framing for a 'down' indicator (lower is better)", () => {
+    // Objectif 5, valeur 10 : deux fois pire que la cible → progrès = 5/10 = 50%, non favorable.
+    const indicator = makeIndicator({ direction: "down", objectiveValue: 5 });
+    const delta = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-03", 10));
+    expect(delta?.delta).toBe(5);
+    expect(delta?.favorable).toBe(false);
+    expect(delta?.progressPct).toBeCloseTo(50);
+
+    // Valeur déjà sous la cible : favorable, progrès clampé à 100 (pas 200%).
+    const better = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-03", 2));
+    expect(better?.favorable).toBe(true);
+    expect(better?.progressPct).toBe(100);
+  });
+
+  it("returns undefined when there is no measurement (same guard as computeIndicatorStatus)", () => {
+    const indicator = makeIndicator({ objectiveValue: 80 });
+    expect(computeIndicatorDelta(indicator, undefined)).toBeUndefined();
+    expect(computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-03", undefined))).toBe(
+      undefined
+    );
+  });
+
+  it("returns undefined when the indicator has no objectiveValue", () => {
+    const indicator = makeIndicator({ objectiveValue: undefined });
+    expect(
+      computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-03", 50))
+    ).toBeUndefined();
+  });
+
+  it("avoids a division by zero when the objective is 0 (up direction)", () => {
+    const indicator = makeIndicator({ direction: "up", objectiveValue: 0 });
+    const delta = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-03", 5));
+    expect(delta?.deltaPct).toBe(0);
+    expect(delta?.progressPct).toBe(100);
+  });
+});
+
+// ─── Indicateurs à risque d'un chantier, avec leur écart (round 4, point 2) ────────────────────
+
+describe("chantierAtRiskIndicators", () => {
+  it("returns only the at-risk indicators of the given chantier, each with its delta", () => {
+    const indicators = [
+      makeIndicator({ id: "IND001", chantierId: "CH1", status: "at_risk", objectiveValue: 80 }),
+      makeIndicator({ id: "IND002", chantierId: "CH1", status: "on_track", objectiveValue: 80 }),
+      // Autre chantier : ne doit pas apparaître même s'il est à risque.
+      makeIndicator({ id: "IND003", chantierId: "CH2", status: "at_risk", objectiveValue: 80 }),
+    ];
+    const measurements = [makeMeasurement("IND001", "2026-03", 40)];
+
+    const result = chantierAtRiskIndicators("CH1", indicators, measurements);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].indicator.id).toBe("IND001");
+    expect(result[0].delta?.delta).toBe(-40);
+  });
+
+  it("returns an empty list when the chantier has no at-risk indicator", () => {
+    const indicators = [
+      makeIndicator({ id: "IND001", chantierId: "CH1", status: "on_track" }),
+      makeIndicator({
+        id: "IND002",
+        chantierId: "CH1",
+        status: "at_risk",
+        statusOverride: "on_track",
+      }),
+    ];
+    expect(chantierAtRiskIndicators("CH1", indicators, [])).toEqual([]);
+  });
+
+  it("honors the manual status override, like resolveIndicatorStatus", () => {
+    const indicators = [
+      makeIndicator({
+        id: "IND001",
+        chantierId: "CH1",
+        status: "on_track",
+        statusOverride: "at_risk",
+      }),
+    ];
+    const result = chantierAtRiskIndicators("CH1", indicators, []);
+    expect(result).toHaveLength(1);
+    // Pas de mesure : le delta reste undefined, mais l'indicateur est bien remonté.
+    expect(result[0].delta).toBeUndefined();
+  });
+});
+
+// ─── Prérequis d'action, go/no-go (round 4, point 5) ───────────────────────────────────────────
+
+function makeStages(): MaturityStageConfig[] {
+  return [
+    { id: "planned", programId: "p1", companyId: "c1", order: 1, label: "Planifié" },
+    { id: "in_progress", programId: "p1", companyId: "c1", order: 2, label: "En cours" },
+    { id: "done", programId: "p1", companyId: "c1", order: 3, label: "Réalisé", isTerminal: true },
+  ];
+}
+
+describe("canStartAction", () => {
+  it("is not blocked when there are no prerequisites", () => {
+    expect(canStartAction({ prerequisites: [] }, [], makeStages())).toEqual({
+      blocked: false,
+      reasons: [],
+    });
+    expect(canStartAction({}, [], makeStages())).toEqual({ blocked: false, reasons: [] });
+  });
+
+  it("is satisfied by an action-kind prerequisite once the target action reaches a terminal stage", () => {
+    const target = makeAction("CH1", "2026-01-01", "2026-01-31", "target-action");
+    const stages = makeStages();
+
+    const blocked = canStartAction(
+      { prerequisites: [{ id: "pr1", kind: "action", targetActionId: "target-action" }] },
+      [{ ...target, status: "in_progress" }],
+      stages
+    );
+    expect(blocked).toEqual({ blocked: true, reasons: [expect.stringContaining("target-action")] });
+
+    const unblocked = canStartAction(
+      { prerequisites: [{ id: "pr1", kind: "action", targetActionId: "target-action" }] },
+      [{ ...target, status: "done" }],
+      stages
+    );
+    expect(unblocked).toEqual({ blocked: false, reasons: [] });
+  });
+
+  it("never throws and reports an explicit reason when the target action was deleted", () => {
+    const result = canStartAction(
+      { prerequisites: [{ id: "pr1", kind: "action", targetActionId: "GHOST-DELETED" }] },
+      [], // le référentiel d'actions ne contient plus la cible
+      makeStages()
+    );
+    expect(result.blocked).toBe(true);
+    expect(result.reasons).toHaveLength(1);
+    expect(result.reasons[0]).not.toBe("");
+  });
+
+  it("treats an external prerequisite as unsatisfied when done is false, satisfied when true", () => {
+    const stages = makeStages();
+    const notDone = canStartAction(
+      {
+        prerequisites: [
+          { id: "pr1", kind: "external", label: "Recrutement du chef de projet", done: false },
+        ],
+      },
+      [],
+      stages
+    );
+    expect(notDone).toEqual({ blocked: true, reasons: ["Recrutement du chef de projet"] });
+
+    const done = canStartAction(
+      {
+        prerequisites: [
+          { id: "pr1", kind: "external", label: "Recrutement du chef de projet", done: true },
+        ],
+      },
+      [],
+      stages
+    );
+    expect(done).toEqual({ blocked: false, reasons: [] });
   });
 });

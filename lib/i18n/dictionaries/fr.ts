@@ -19,6 +19,8 @@
  *                         `MaturityStageConfig` (dont les libellés sont saisis par l'admin et ne
  *                         passent donc jamais par ce dictionnaire)
  *  - strategicAxes.*      Page « Axes stratégiques » + fiche détail d'un axe
+ *  - strategicChantierDetail.* Fiche chantier dédiée (round 4 : succès, effort, RACI, prérequis)
+ *  - strategicImport.*    Import Excel d'un plan stratégique complet (round 4)
  *  - kpi.*                Page KPI (saisie de mesures, édition d'objectif)
  *  - strategicDashboard.* Dashboard stratégique + son registre de widgets
  *  - adminIndicators.*    Onglet Admin « Indicateurs » (définition, responsables)
@@ -34,6 +36,7 @@ const fr: Record<string, string> = {
   "common.close": "Fermer",
   "common.search": "Rechercher",
   "common.choose": "Choisir…",
+  "common.optional": "(optionnel)",
 
   // ─── nav ──────────────────────────────────────────────────────────────────
   "nav.executiveDashboard": "Tableau de bord exécutif",
@@ -847,6 +850,15 @@ const fr: Record<string, string> = {
   "adminCompanyFields.clearanceLabel":
     "Habilitations par profil — un levier au niveau X n'est visible que par les profils habilités pour X (un levier sans niveau reste visible par tous)",
   "adminCompanyFields.colProfile": "Profil",
+  "adminCompanyFields.directionsLabel": "Directions / services",
+  "adminCompanyFields.directionsEmpty":
+    "Aucune direction/service configuré pour cette entreprise. Ajoutez-en pour permettre le rattachement des utilisateurs et le filtrage par direction sur le Plan Stratégique.",
+  "adminCompanyFields.newDirectionPlaceholder": "Ex : Direction Industrielle",
+  "adminCompanyFields.addDirection": "Ajouter la direction",
+
+  // ─── adminUsers (Admin > Utilisateurs) ─────────────────────────────────────
+  "adminUsers.directionLabel": "Direction / service (optionnel)",
+  "adminUsers.directionUnassigned": "Non renseigné",
 
   // ─── shared (composants partagés — DashboardExportButton, DateRangePicker, ExportButton,
   //     FilterBar, HrExcelButtons, LeverImportButton) ──────────────────────────
@@ -1262,6 +1274,111 @@ const fr: Record<string, string> = {
   "strategicAxes.freq.semiannual": "Semestriel",
   "strategicAxes.freq.annual": "Annuel",
 
+  // Round 4 : messages d'erreur des écritures désormais protégées par try/catch (voir
+  // `AxisDetailClient.tsx` — ChantierForm onSubmit — et
+  // `app/(app)/levers/chantier/ChantierDetailClient.tsx` — ChantierActionForm onSubmit), et
+  // déclencheurs des popover/filtres à venir (voir round 4, points 2 et 8).
+  "strategicAxes.chantierSaveErrorTitle": "Enregistrement impossible",
+  "strategicAxes.chantierSaveError": "Le chantier n'a pas pu être enregistré.",
+  "strategicAxes.actionSaveErrorTitle": "Enregistrement impossible",
+  "strategicAxes.actionSaveError": "L'action n'a pas pu être enregistrée.",
+  "strategicAxes.atRiskPopoverTitle": "Indicateurs à risque",
+  "strategicAxes.filterDirection": "Direction",
+  "strategicAxes.filterPerson": "Personne",
+  "strategicAxes.filterSponsor": "Sponsor",
+
+  // ─── Plan Stratégique — fiche chantier dédiée (round 4) ────────────────────
+  // Réservation de clés : la page (app/(app)/levers/chantier/ChantierDetailClient.tsx) n'est pour
+  // l'instant qu'un squelette de sections vides, remplies par les workstreams parallèles suivants
+  // (prérequis, RACI, grille d'effort, assemblage final — voir plan round 4, point 9).
+  "strategicChantierDetail.title": "Fiche chantier",
+  "strategicChantierDetail.back": "← Retour à l'axe",
+  "strategicChantierDetail.notFound": "Chantier introuvable.",
+  "strategicChantierDetail.successCriteria": "Critères de succès",
+  "strategicChantierDetail.sponsor": "Sponsor",
+  "strategicChantierDetail.pilote": "Pilote",
+
+  "strategicChantierDetail.effort.title": "Grille de notation d'effort",
+  "strategicChantierDetail.effort.financialImpact": "Impact financier",
+  "strategicChantierDetail.effort.financialImpact.option1": "<5k€",
+  "strategicChantierDetail.effort.financialImpact.option2": "5-40k€",
+  "strategicChantierDetail.effort.financialImpact.option3": "40-100k€",
+  "strategicChantierDetail.effort.financialImpact.option4": ">100k€",
+  "strategicChantierDetail.effort.humanImpact": "Impact humain",
+  "strategicChantierDetail.effort.humanImpact.option1": "1-2 ETP",
+  "strategicChantierDetail.effort.humanImpact.option2": "3-4 ETP",
+  "strategicChantierDetail.effort.humanImpact.option3": "5-6 ETP",
+  "strategicChantierDetail.effort.humanImpact.option4": ">7 ETP",
+  "strategicChantierDetail.effort.duration": "Durée",
+  "strategicChantierDetail.effort.duration.option1": "<2 mois",
+  "strategicChantierDetail.effort.duration.option2": "2-6 mois",
+  "strategicChantierDetail.effort.duration.option3": "6-12 mois",
+  "strategicChantierDetail.effort.duration.option4": ">1 an",
+  "strategicChantierDetail.effort.changeManagement": "Conduite du changement",
+  "strategicChantierDetail.effort.changeManagement.option1": "Très peu de changement",
+  "strategicChantierDetail.effort.changeManagement.option2": "Peu de changement",
+  "strategicChantierDetail.effort.changeManagement.option3": "Changement important",
+  "strategicChantierDetail.effort.changeManagement.option4": "Changement majeur",
+
+  "strategicChantierDetail.raci.title": "RACI",
+  "strategicChantierDetail.raci.responsible": "Responsable (R)",
+  "strategicChantierDetail.raci.accountable": "Autorité (A)",
+  "strategicChantierDetail.raci.consulted": "Consulté (C)",
+  "strategicChantierDetail.raci.informed": "Informé (I)",
+  "strategicChantierDetail.raci.noAccountableHint": "Aucun « Autorité » (A) n'est assigné.",
+  "strategicChantierDetail.raci.addRow": "Ajouter une ligne",
+  "strategicChantierDetail.raci.removeRow": "Retirer cette ligne",
+  "strategicChantierDetail.raci.empty": "Aucune personne assignée.",
+  "strategicChantierDetail.raci.letter": "Lettre RACI",
+
+  "strategicChantierDetail.prerequisites.title": "Prérequis",
+  "strategicChantierDetail.prerequisites.kindAction": "Action du plan",
+  "strategicChantierDetail.prerequisites.kindExternal": "Prérequis externe",
+  "strategicChantierDetail.prerequisites.blockedBy": "Bloqué par :",
+  "strategicChantierDetail.prerequisites.addRow": "Ajouter un prérequis",
+  "strategicChantierDetail.prerequisites.kind": "Type",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choisir une action",
+  "strategicChantierDetail.prerequisites.externalPlaceholder": "Ex. Recrutement du chef de projet",
+  "strategicChantierDetail.prerequisites.done": "Fait",
+  "strategicChantierDetail.prerequisites.removeRow": "Retirer ce prérequis",
+  "strategicChantierDetail.prerequisites.none": "Aucun prérequis.",
+  "strategicChantierDetail.prerequisites.noOtherActions": "Aucune autre action sur ce chantier.",
+
+  "strategicChantierDetail.dependencies.title": "Dépendances",
+  "strategicChantierDetail.dependencies.none": "Aucune dépendance.",
+
+  "strategicChantierDetail.raci.chantierTitle": "RACI du chantier",
+  "strategicChantierDetail.raci.deliverableTitle": "RACI du livrable",
+
+  "strategicChantierDetail.timeline.title": "Timeline des livrables",
+  "strategicChantierDetail.timeline.empty": "Aucun livrable phasé pour l'instant.",
+
+  "strategicChantierDetail.actionFocused": "Action ouverte depuis le lien",
+  "strategicChantierDetail.actionForm.missingHint":
+    "Renseignez le nom et les dates pour enregistrer.",
+  "strategicChantierDetail.successCriteria.placeholder": "On sera content en [année] si...",
+
+  // ─── Plan Stratégique — import Excel (round 4, mirror de shared.leverImportButton.*) ──────
+  "strategicImport.title": "Importer un plan stratégique",
+  "strategicImport.uploadButton": "Importer un fichier",
+  "strategicImport.templateButton": "Télécharger le modèle",
+  "strategicImport.previewTitle": "Prévisualisation de l'import — {file}",
+  "strategicImport.confirmButton": "Confirmer l'import",
+  "strategicImport.successMessage": "Import terminé",
+  "strategicImport.errorRow": "ligne(s) en erreur",
+  "strategicImport.lineLabel": "Ligne",
+  "strategicImport.axesCountLabel": "axe(s) à créer",
+  "strategicImport.chantiersCountLabel": "chantier(s) à créer",
+  "strategicImport.actionsCountLabel": "action(s) à créer",
+  "strategicImport.indicatorsCountLabel": "indicateur(s) à créer",
+  "strategicImport.templateDownloadedTitle": "Modèle téléchargé",
+  "strategicImport.templateDownloadedBody":
+    "5 feuilles : Axes (Code = clé), Chantiers (Code Axe = FK), Actions (Code Chantier = FK), Livrables (Code Action = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK). Supprimez les lignes d'exemple avant de remplir.",
+  "strategicImport.ignoredRowsNote": "{n} ligne(s) ignorée(s)",
+  "strategicImport.importDoneBody":
+    "{axes} axe(s) · {chantiers} chantier(s) · {actions} action(s) · {indicators} indicateur(s) créé(s)",
+  "strategicImport.errorTitle": "Échec de l'import",
+
   // ─── Plan Stratégique — page KPI (saisie de mesures, édition d'objectif) ───
   "kpi.title": "Indicateurs (KPI)",
   "kpi.subtitle":
@@ -1298,6 +1415,9 @@ const fr: Record<string, string> = {
   "kpi.chart.empty": "Aucune mesure enregistrée.",
   "kpi.chart.viewFull": "Voir l'historique complet",
   "kpi.chart.fullHistory": "Historique complet",
+  // Étiquette de la barre de progression-vers-la-cible affichée à côté de l'écart signé (round 4,
+  // point 1 : rendre visuellement lisible un écart comme "82 % pour une cible à 80 %").
+  "kpi.chart.progressToTarget": "Progression vers la cible",
   "kpi.latestValue": "Dernière valeur",
   "kpi.noMeasurement": "Aucune mesure enregistrée",
   "kpi.reportedBy": "saisi par",

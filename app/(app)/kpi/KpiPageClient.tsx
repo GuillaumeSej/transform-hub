@@ -247,6 +247,7 @@ function IndicatorCard({
             <IndicatorChart
               measurements={measurements}
               objectiveValue={indicator.objectiveValue}
+              direction={indicator.direction}
               unit={indicator.unit}
               qualitative={!quantitative}
               frequency={indicator.frequency}
@@ -256,6 +257,7 @@ function IndicatorCard({
               emptyLabel={t("kpi.chart.empty")}
               labelViewFull={t("kpi.chart.viewFull")}
               fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
+              labelProgress={t("kpi.chart.progressToTarget")}
             />
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-text-secondary">
               <span className="font-semibold uppercase tracking-wide">{t("kpi.latestValue")}</span>
@@ -514,6 +516,7 @@ export function KpiPageClient() {
     fullHistory: t("kpi.chart.fullHistory"),
     chartValue: t("kpi.chart.value"),
     chartObjective: t("kpi.chart.objective"),
+    progressToTarget: t("kpi.chart.progressToTarget"),
   };
 
   const header = (

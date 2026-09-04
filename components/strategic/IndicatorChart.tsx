@@ -13,7 +13,8 @@ import {
   YAxis,
 } from "recharts";
 import { Modal } from "@/components/shared/Modal";
-import { recentMeasurementWindow } from "@/lib/axisLogic";
+import { IndicatorDeltaStat } from "@/components/strategic/IndicatorDeltaStat";
+import { computeIndicatorDelta, recentMeasurementWindow } from "@/lib/axisLogic";
 import type { Indicator, IndicatorMeasurement } from "@/types";
 
 /**
@@ -41,6 +42,10 @@ export type IndicatorChartProps = {
   measurements: IndicatorMeasurement[];
   /** Valeur cible — matérialisée par une `ReferenceLine` horizontale. Absente = pas de ligne. */
   objectiveValue?: number;
+  /** Sens d'amélioration de l'indicateur — nécessaire pour calculer l'écart signé affiché à côté
+   *  de la `ReferenceLine` (voir `computeIndicatorDelta`). Absente = traité comme "up" (plus haut
+   *  vaut mieux), même convention par défaut que `lib/axisLogic.ts`. */
+  direction?: Indicator["direction"];
   /** Suffixe d'unité affiché sur l'axe et dans l'infobulle (ex. "%", "j", "NPS"). */
   unit?: string;
   /** true = indicateur qualitatif : rendu en liste de notes datées, pas en courbe. */
@@ -66,6 +71,9 @@ export type IndicatorChartProps = {
   /** Bouton d'agrandissement + titre de la modale d'historique complet. */
   labelViewFull?: string;
   fullHistoryTitle?: string;
+  /** Sous-libellé de la barre de progression-vers-la-cible affichée à côté de l'écart signé
+   *  (voir `IndicatorDeltaStat`) — repli français. */
+  labelProgress?: string;
 };
 
 function formatValue(value: number | string, unit?: string): string {
@@ -75,6 +83,7 @@ function formatValue(value: number | string, unit?: string): string {
 export function IndicatorChart({
   measurements,
   objectiveValue,
+  direction,
   unit,
   qualitative = false,
   height,
@@ -86,6 +95,7 @@ export function IndicatorChart({
   emptyLabel = "Aucune mesure enregistrée.",
   labelViewFull = "Voir l'historique complet",
   fullHistoryTitle = "Historique complet",
+  labelProgress,
 }: IndicatorChartProps) {
   // Hook appelé avant tout retour anticipé (repli qualitatif / absence de mesure).
   const [fullHistoryOpen, setFullHistoryOpen] = useState(false);
@@ -136,6 +146,7 @@ export function IndicatorChart({
           <IndicatorChart
             measurements={measurements}
             objectiveValue={objectiveValue}
+            direction={direction}
             unit={unit}
             qualitative={qualitative}
             height={360}
@@ -144,6 +155,7 @@ export function IndicatorChart({
             labelValue={labelValue}
             labelObjective={labelObjective}
             emptyLabel={emptyLabel}
+            labelProgress={labelProgress}
           />
         </Modal>
       </div>
@@ -181,6 +193,15 @@ export function IndicatorChart({
   }
 
   const data = sorted.map((m) => ({ period: m.period, value: m.value ?? null }));
+
+  // Écart signé vs la cible (round 4, point 1) : calculé sur la DERNIÈRE mesure de tout
+  // l'historique (`all`, pas `sorted`/fenêtré) — l'écart affiché ne doit pas changer selon que la
+  // fenêtre "récente" masque ou non la mesure la plus récente. `undefined` (pas d'objectif chiffré,
+  // ou dernière mesure sans valeur) : `IndicatorDeltaStat` ne rend alors rien.
+  const deltaStat =
+    !compact && objectiveValue !== undefined
+      ? computeIndicatorDelta({ objectiveValue, direction }, all[all.length - 1])
+      : undefined;
 
   // Sparkline : pas d'axe visible, donc pas de domaine par défaut lisible — on le calcule pour que
   // la courbe occupe toute la hauteur disponible ET que la ligne d'objectif reste dans le cadre
@@ -263,5 +284,24 @@ export function IndicatorChart({
 
   if (compact) return chart;
 
-  return <>{withZoom(chart)}</>;
+  // L'écart signé s'affiche AU-DESSUS du graphique, aligné à droite comme le libellé de la
+  // `ReferenceLine` juste en dessous ("insideTopRight") — même coin visuel, sans superposer du
+  // texte sur la courbe recharts (positionnement fiable en HTML plutôt qu'en overlay SVG).
+  const chartWithDelta = deltaStat ? (
+    <div className="space-y-1.5">
+      <div className="flex justify-end">
+        <IndicatorDeltaStat
+          delta={deltaStat}
+          unit={unit}
+          compact
+          labels={{ progress: labelProgress }}
+        />
+      </div>
+      {chart}
+    </div>
+  ) : (
+    chart
+  );
+
+  return <>{withZoom(chartWithDelta)}</>;
 }

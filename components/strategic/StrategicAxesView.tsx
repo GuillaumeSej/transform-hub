@@ -7,25 +7,84 @@ import { Button } from "@/components/shared/Button";
 import { Card, CardBody } from "@/components/shared/Card";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
+import { Popover } from "@/components/shared/Popover";
+import { AtRiskIndicatorPopoverContent } from "@/components/strategic/AtRiskIndicatorPopoverContent";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisKanban } from "@/components/strategic/AxisKanban";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
+import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
 import {
+  chantierAtRiskIndicators,
   chantierDependencyAlerts,
   chantierProgress,
+  computeIndicatorDelta,
+  latestMeasurement,
   resolveIndicatorStatus,
+  type IndicatorDelta,
 } from "@/lib/axisLogic";
+import { saveChantierAction } from "@/lib/firestore/chantierActions";
+import { saveChantier } from "@/lib/firestore/chantiers";
+import { saveIndicator } from "@/lib/firestore/indicators";
+import { saveStrategicAxis } from "@/lib/firestore/strategicAxes";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMaturityStages, resolveMaturityStageLabel } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
+import type { StrategicImportPreview } from "@/lib/strategicExcelImport";
+import type {
+  Chantier,
+  ChantierAction,
+  Indicator,
+  IndicatorMeasurement,
+  StrategicAxis,
+} from "@/types";
 
 /** Nombre d'actions listées en clair sur une carte chantier avant repli « +N autres ». Au-delà,
  *  la carte cesse d'être lisible d'un coup d'œil — le détail complet est dans la pop-up. */
 const CARD_ACTIONS_SHOWN = 4;
+
+/**
+ * Indicateurs à risque D'UN AXE (macro + tous ses chantiers confondus), chacun avec son écart
+ * calculé — pendant de `chantierAtRiskIndicators` (lib/axisLogic.ts) mais à la maille AXE, pour le
+ * badge "N à risque" des cartes de portefeuille (vues "cartes" et "kanban") plutôt que la maille
+ * chantier. Gardée LOCALE à ce fichier (pas dans `lib/axisLogic.ts`) : c'est un simple filtre
+ * d'agrégation d'affichage, pas une règle métier partagée entre plusieurs écrans.
+ */
+function axisAtRiskIndicators(
+  axisId: string,
+  indicators: Indicator[],
+  measurements: IndicatorMeasurement[]
+): { indicator: Indicator; delta: IndicatorDelta | undefined }[] {
+  return indicators
+    .filter((indicator) => indicator.axisId === axisId)
+    .filter((indicator) => resolveIndicatorStatus(indicator) === "at_risk")
+    .map((indicator) => ({
+      indicator,
+      delta: computeIndicatorDelta(indicator, latestMeasurement(indicator.id, measurements)),
+    }));
+}
+
+/** Une ligne par personne référencée (owner OU sponsor) sur une action de chantier — alimente à la
+ *  fois les OPTIONS des filtres chantier (round 4, point 8 : Direction/Personne/Sponsor) via
+ *  `FilterBar` (qui calcule ses options en mappant CHAQUE ligne through `def.getValue`) et,
+ *  indépendamment, l'ensemble de correspondance utilisé pour le filtrage réel (voir
+ *  `chantierFacetsById` ci-dessous). Une ligne par (action, rôle) plutôt qu'une par chantier : un
+ *  chantier a souvent PLUSIEURS personnes (un owner par action, éventuellement un sponsor
+ *  distinct) — un unique champ par chantier perdrait des valeurs de filtre valides. */
+type ChantierPersonFacetRow = {
+  chantierId: string;
+  /** Direction résolue de la personne (vide si le champ owner/sponsor ne correspond à aucun
+   *  `AuthUser.username` connu — voir doc-comment de `chantierFacets` plus bas). */
+  direction: string;
+  /** Nom affiché de la personne (résolu si possible, sinon le texte brut du champ owner/sponsor —
+   *  contrairement à `direction`, qui elle reste vide sans correspondance). */
+  person: string;
+  /** Rempli UNIQUEMENT pour une ligne issue du champ `sponsor` (jamais `owner`) — c'est le filtre
+   *  "Sponsor" du plan, distinct de "Personne" qui couvre owner ET sponsor. */
+  sponsor: string;
+};
 
 /**
  * Page « Axes stratégiques » — portefeuille des axes du programme actif, servie sur la MÊME route
@@ -46,9 +105,9 @@ const CARD_ACTIONS_SHOWN = 4;
  *
  * Le clic sur un axe pousse `/levers/detail?id=<axisId>` — même motif d'URL que les leviers, ce
  * qui laisse `LeverDetailClient` aiguiller vers `AxisDetailClient` selon le type de programme. Le
- * clic sur un chantier y ajoute `&chantier=<chantierId>`, que `AxisDetailClient` interprète pour
- * ouvrir directement la pop-up de ce chantier (paramètre ignoré si inconnu : la fiche d'axe
- * s'ouvre alors simplement sans pop-up).
+ * clic sur un chantier navigue directement vers sa fiche dédiée (`/levers/chantier?id=<chantierId>`,
+ * round 4, point 9) — l'id d'axe n'est plus nécessaire en paramètre, le document chantier porte
+ * déjà `axisId` (le lien retour de la fiche chantier le résout).
  */
 export function StrategicAxesView() {
   const { user } = useRole();
@@ -129,6 +188,98 @@ export function StrategicAxesView() {
     return map;
   }, [data.chantiers, data.chantierActions, data.indicators]);
 
+  /**
+   * Facettes Direction/Personne/Sponsor de CHAQUE chantier (round 4, point 8), dérivées des
+   * `owner`/`sponsor` de ses actions résolus contre `data.users` (source unique, voir
+   * `useStrategicData`). Résolution PAR USERNAME uniquement : `ChantierAction.owner`/`sponsor`
+   * peuvent encore être du texte libre saisi avant la conversion `UserPicker` de ce round (la
+   * fiche chantier qui bascule `owner`/`sponsor` sur `UserPicker` n'est pas encore construite —
+   * prochaine passe d'intégration) — un champ qui ne correspond à AUCUN `AuthUser.username` ne
+   * fait simplement matcher aucune valeur de Direction (on ne peut pas deviner une direction sans
+   * utilisateur résolu), mais reste filtrable par "Personne"/"Sponsor" via son texte brut.
+   *
+   * `rows` (une ligne par personne référencée sur une action) alimente les OPTIONS de `FilterBar`
+   * (qui les calcule en mappant CHAQUE ligne) ; `byId` (ensembles par chantier) alimente le
+   * filtrage réel plus bas — un chantier a souvent plusieurs personnes, un simple
+   * `FilterDef<Chantier>.getValue` à valeur unique perdrait des correspondances valides.
+   */
+  const { chantierFacetRows, chantierFacetsById } = useMemo(() => {
+    const usersByUsername = new Map(data.users.map((u) => [u.username, u]));
+    const rows: ChantierPersonFacetRow[] = [];
+    const byId = new Map<
+      string,
+      { directions: Set<string>; persons: Set<string>; sponsors: Set<string> }
+    >();
+    const entry = (chantierId: string) => {
+      const existing = byId.get(chantierId);
+      if (existing) return existing;
+      const created = {
+        directions: new Set<string>(),
+        persons: new Set<string>(),
+        sponsors: new Set<string>(),
+      };
+      byId.set(chantierId, created);
+      return created;
+    };
+    for (const chantier of data.chantiers) entry(chantier.id);
+    for (const action of data.chantierActions) {
+      const facets = entry(action.chantierId);
+      if (action.owner) {
+        const user = usersByUsername.get(action.owner);
+        const direction = user?.direction ?? "";
+        const person = user?.name ?? action.owner;
+        if (direction) facets.directions.add(direction);
+        if (person) facets.persons.add(person);
+        rows.push({ chantierId: action.chantierId, direction, person, sponsor: "" });
+      }
+      if (action.sponsor) {
+        const user = usersByUsername.get(action.sponsor);
+        const direction = user?.direction ?? "";
+        const person = user?.name ?? action.sponsor;
+        const sponsor = user?.name ?? action.sponsor;
+        if (direction) facets.directions.add(direction);
+        if (person) facets.persons.add(person);
+        if (sponsor) facets.sponsors.add(sponsor);
+        rows.push({ chantierId: action.chantierId, direction, person, sponsor });
+      }
+    }
+    return { chantierFacetRows: rows, chantierFacetsById: byId };
+  }, [data.chantiers, data.chantierActions, data.users]);
+
+  const chantierFilterDefs: FilterDef<ChantierPersonFacetRow>[] = useMemo(
+    () => [
+      {
+        key: "cf_direction",
+        label: t("strategicAxes.filterDirection"),
+        getValue: (r) => r.direction,
+      },
+      { key: "cf_person", label: t("strategicAxes.filterPerson"), getValue: (r) => r.person },
+      { key: "cf_sponsor", label: t("strategicAxes.filterSponsor"), getValue: (r) => r.sponsor },
+    ],
+    [t]
+  );
+
+  /** Filtres chantier — état purement LOCAL (pas d'URL, contrairement aux filtres d'axe) : ils ne
+   *  s'appliquent qu'à la vue "chantiers" et n'ont pas besoin d'être partageables par lien pour ce
+   *  round. Pas besoin du contournement `openFilterKeys` des filtres d'axe (voir plus haut) non
+   *  plus : ici l'état EST directement l'objet remonté par `FilterBar.onChange`, sans réécriture
+   *  intermédiaire susceptible d'en perdre une partie. */
+  const [chantierFilters, setChantierFilters] = useState<ActiveFilters>({});
+
+  const chantierMatchesFilters = (chantier: Chantier): boolean =>
+    Object.entries(chantierFilters).every(([key, values]) => {
+      if (values.length === 0) return true;
+      const facets = chantierFacetsById.get(chantier.id);
+      if (!facets) return false;
+      const set =
+        key === "cf_direction"
+          ? facets.directions
+          : key === "cf_person"
+            ? facets.persons
+            : facets.sponsors;
+      return values.some((v) => set.has(v));
+    });
+
   // Les dépendances sont évaluées sur TOUT le programme (un chantier peut dépendre du chantier
   // d'un autre axe — cas explicitement prévu par le modèle), exactement comme `AxisDetailClient`.
   const alertedChantierIds = useMemo(() => {
@@ -207,9 +358,29 @@ export function StrategicAxesView() {
 
   const openAxis = (axisId: string) => router.push(`/levers/detail?id=${axisId}`);
 
-  /** Même destination que `openAxis`, plus le chantier à ouvrir en pop-up sur la fiche d'axe. */
-  const openChantier = (axisId: string, chantierId: string) =>
-    router.push(`/levers/detail?id=${axisId}&chantier=${chantierId}`);
+  /** Fiche chantier dédiée (round 4, point 9) — l'id d'axe n'est plus nécessaire en paramètre, le
+   *  document chantier porte déjà `axisId` (le lien retour de la fiche chantier le résout). */
+  const openChantier = (chantierId: string) => router.push(`/levers/chantier?id=${chantierId}`);
+
+  /**
+   * Écrit les entités validées par `StrategicImportButton` (round 4, point 3) — la librairie
+   * d'import (`lib/strategicExcelImport.ts`) reste pure et n'appelle jamais Firestore, c'est donc
+   * ICI, dans l'appelant, qu'on boucle sur les `save*` déjà existants. Les ids sont déjà alloués
+   * par l'importeur (voir doc-comment en tête de ce fichier) : un `Promise.all` global suffit,
+   * l'ordre d'écriture n'a aucune incidence (Firestore n'impose aucune contrainte d'intégrité
+   * référentielle). En cas d'erreur, l'exception remonte telle quelle à `StrategicImportButton`,
+   * qui affiche déjà son propre toast d'échec — pas de gestion d'erreur dupliquée ici. Les
+   * abonnements `onSnapshot` de `useStrategicData` reprennent la main automatiquement, sans état
+   * local à rafraîchir.
+   */
+  const handleImport = async (toCreate: StrategicImportPreview["toCreate"]) => {
+    await Promise.all([
+      ...toCreate.axes.map((axis) => saveStrategicAxis(axis)),
+      ...toCreate.chantiers.map((chantier) => saveChantier(chantier)),
+      ...toCreate.actions.map((action) => saveChantierAction(action)),
+      ...toCreate.indicators.map((indicator) => saveIndicator(indicator)),
+    ]);
+  };
 
   if (!programsLoading && !activeProgramId) {
     return (
@@ -232,9 +403,23 @@ export function StrategicAxesView() {
             {t("strategicAxes.indicatorsCount")}
           </div>
         </div>
-        <Button variant="primary" onClick={() => setNewAxisOpen(true)}>
-          <Plus size={13} /> {t("strategicAxes.newAxis")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <StrategicImportButton
+            data={{
+              axes: data.axes,
+              chantiers: data.chantiers,
+              actions: data.chantierActions,
+              indicators: data.indicators,
+            }}
+            companyId={user?.companyId}
+            programId={activeProgramId}
+            maturityStages={stages}
+            onImport={handleImport}
+          />
+          <Button variant="primary" onClick={() => setNewAxisOpen(true)}>
+            <Plus size={13} /> {t("strategicAxes.newAxis")}
+          </Button>
+        </div>
       </div>
 
       <Modal
@@ -310,18 +495,40 @@ export function StrategicAxesView() {
           stages={stages}
           onCardClick={openAxis}
           counts={countsOf}
+          atRiskItemsOf={(axisId) =>
+            axisAtRiskIndicators(axisId, data.indicators, data.measurements)
+          }
           labels={{
             emptyColumn: t("strategicAxes.kanbanEmptyColumn"),
             chantiers: t("strategicAxes.chantiersCount"),
             indicators: t("strategicAxes.indicatorsCount"),
             atRisk: t("strategicAxes.atRiskCount"),
             noStage: t("strategicAxes.noStage"),
+            atRiskPopoverTitle: t("strategicAxes.atRiskPopoverTitle"),
+            progress: t("kpi.chart.progressToTarget"),
           }}
         />
       ) : view === "chantiers" ? (
         <div className="flex flex-col gap-3">
+          {/* Filtres CHANTIER (round 4, point 8) — Direction/Personne/Sponsor, indépendants des
+              filtres d'axe ci-dessus et scopés à cette vue uniquement (voir doc-comment de
+              `chantierFacetRows`). */}
+          <Card>
+            <CardBody flush>
+              <div className="flex flex-wrap items-center gap-2 p-3">
+                <FilterBar
+                  items={chantierFacetRows}
+                  defs={chantierFilterDefs}
+                  active={chantierFilters}
+                  onChange={setChantierFilters}
+                />
+              </div>
+            </CardBody>
+          </Card>
           {filteredAxes.map((axis) => {
-            const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
+            const axisChantiers = (chantiersByAxis.get(axis.id) ?? []).filter(
+              chantierMatchesFilters
+            );
             return (
               <div key={axis.id} className="rounded-lg border border-border bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2.5 border-b border-border pb-2.5">
@@ -355,11 +562,22 @@ export function StrategicAxesView() {
                       const shownActions = chantierActions.slice(0, CARD_ACTIONS_SHOWN);
                       const hiddenActions = chantierActions.length - shownActions.length;
                       const progress = chantierProgress(chantier.id, data.chantierActions, stages);
+                      // Popover-cliquable (round 4, point 2) : le badge "N à risque" est un vrai
+                      // <button>, donc la carte NE PEUT PLUS être elle-même un <button> (imbrication
+                      // invalide) — `role="button"` + gestion clavier reproduit le même comportement.
                       return (
-                        <button
+                        <div
                           key={chantier.id}
-                          onClick={() => openChantier(axis.id, chantier.id)}
-                          className={`flex h-full flex-col rounded-md border bg-white p-3 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm ${
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openChantier(chantier.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openChantier(chantier.id);
+                            }
+                          }}
+                          className={`flex h-full cursor-pointer flex-col rounded-md border bg-white p-3 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm ${
                             isAlerted ? "border-rag-amber bg-rag-amber-light/40" : "border-border"
                           }`}
                         >
@@ -381,9 +599,30 @@ export function StrategicAxesView() {
                               {c.actions} {t("strategicAxes.actionsSuffix")}
                             </span>
                             {c.atRisk > 0 && (
-                              <span className="rounded-full bg-rag-amber-light px-2 py-0.5 font-semibold text-rag-amber">
-                                {c.atRisk} {t("strategicAxes.atRiskCount")}
-                              </span>
+                              <Popover
+                                trigger={({ toggle }) => (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggle();
+                                    }}
+                                    className="rounded-full bg-rag-amber-light px-2 py-0.5 font-semibold text-rag-amber hover:brightness-95"
+                                  >
+                                    {c.atRisk} {t("strategicAxes.atRiskCount")}
+                                  </button>
+                                )}
+                              >
+                                <AtRiskIndicatorPopoverContent
+                                  items={chantierAtRiskIndicators(
+                                    chantier.id,
+                                    data.indicators,
+                                    data.measurements
+                                  )}
+                                  title={t("strategicAxes.atRiskPopoverTitle")}
+                                  progressLabel={t("kpi.chart.progressToTarget")}
+                                />
+                              </Popover>
                             )}
                           </div>
 
@@ -434,7 +673,7 @@ export function StrategicAxesView() {
                               )}
                             </ul>
                           )}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -447,11 +686,22 @@ export function StrategicAxesView() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filteredAxes.map((axis) => {
             const c = countsOf(axis.id);
+            // Même conversion bouton -> div que la vue "chantiers" (voir plus haut) : le badge
+            // "N à risque" est un Popover-déclencheur, donc un vrai <button>, qui ne peut pas être
+            // imbriqué dans un <button> parent.
             return (
-              <button
+              <div
                 key={axis.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => openAxis(axis.id)}
-                className="flex h-full flex-col rounded-lg border border-border bg-white p-4 text-left shadow-sm transition hover:-translate-y-px hover:border-black hover:shadow-md"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openAxis(axis.id);
+                  }
+                }}
+                className="flex h-full cursor-pointer flex-col rounded-lg border border-border bg-white p-4 text-left shadow-sm transition hover:-translate-y-px hover:border-black hover:shadow-md"
               >
                 <div className="flex items-start gap-2.5">
                   <span
@@ -482,12 +732,29 @@ export function StrategicAxesView() {
                     {c.indicators} {t("strategicAxes.indicatorsCount")}
                   </span>
                   {c.atRisk > 0 && (
-                    <span className="rounded-full bg-rag-amber-light px-2 py-0.5 font-semibold text-rag-amber">
-                      {c.atRisk} {t("strategicAxes.atRiskCount")}
-                    </span>
+                    <Popover
+                      trigger={({ toggle }) => (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggle();
+                          }}
+                          className="rounded-full bg-rag-amber-light px-2 py-0.5 font-semibold text-rag-amber hover:brightness-95"
+                        >
+                          {c.atRisk} {t("strategicAxes.atRiskCount")}
+                        </button>
+                      )}
+                    >
+                      <AtRiskIndicatorPopoverContent
+                        items={axisAtRiskIndicators(axis.id, data.indicators, data.measurements)}
+                        title={t("strategicAxes.atRiskPopoverTitle")}
+                        progressLabel={t("kpi.chart.progressToTarget")}
+                      />
+                    </Popover>
                   )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>

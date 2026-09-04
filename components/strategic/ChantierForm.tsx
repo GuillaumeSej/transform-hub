@@ -50,7 +50,9 @@ export function ChantierForm({
     try {
       await onSubmit({
         name: name.trim(),
-        description: description.trim() || undefined,
+        // Clé OMISE (jamais `undefined`) quand le champ est vide : `setDoc` rejette toute valeur
+        // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
+        ...(description.trim() ? { description: description.trim() } : {}),
         axisId,
         stage,
       });
