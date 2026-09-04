@@ -6,7 +6,10 @@ import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
-import { IndicatorStatusSummary } from "@/components/strategic/IndicatorStatusSummary";
+import {
+  BusinessKpiCards,
+  IndicatorStatusSummary,
+} from "@/components/strategic/IndicatorStatusSummary";
 import { canFillIndicator, latestMeasurement, resolveIndicatorStatus } from "@/lib/axisLogic";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
@@ -494,6 +497,14 @@ export function KpiPageClient() {
     />
   );
 
+  const businessKpiLabels = {
+    empty: t("businessKpis.empty"),
+    noValue: t("businessKpis.noValue"),
+    objective: t("kpi.objectiveValue"),
+    onTrack: t("indicatorStatus.onTrack"),
+    atRisk: t("indicatorStatus.atRisk"),
+  };
+
   const header = (
     <div className="flex flex-wrap items-center gap-3">
       <LineChart size={22} className="text-bp-coral" />
@@ -536,17 +547,31 @@ export function KpiPageClient() {
       {header}
       <p className="max-w-3xl text-sm text-text-secondary">{t("kpi.subtitle")}</p>
 
+      {/* Pas de « cumul des indicateurs » ici : sommer des indicateurs hétérogènes n'a de sens que
+          sur un Plan Performance (tout y est en euros économisés). Le haut de page porte donc le
+          compteur on-track/à risque, puis les KPI business (indicateurs de niveau axe). */}
       <IndicatorStatusSummary
         indicators={indicators}
         measurements={measurements}
+        showTotal={false}
         labels={{
           tracked: t("kpi.summary.tracked"),
           onTrack: t("kpi.summary.onTrack"),
           atRisk: t("kpi.summary.atRisk"),
-          total: t("kpi.summary.total"),
           indicatorsSuffix: t("kpi.summary.indicatorsSuffix"),
         }}
       />
+
+      <Card className="mb-0">
+        <CardHeader title={t("businessKpis.title")} />
+        <CardBody>
+          <BusinessKpiCards
+            indicators={indicators}
+            measurements={measurements}
+            labels={businessKpiLabels}
+          />
+        </CardBody>
+      </Card>
 
       {indicators.length === 0 ? (
         <Card>

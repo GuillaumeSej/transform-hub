@@ -6,7 +6,7 @@
  * intégralement câblé sur les métriques financières (CAPEX/OPEX/savings, S-Curve, bridge, P&L,
  * Marimekko sur les économies) et son builder générique repose sur `lib/dashboardPivot.ts`, lui
  * aussi financier. Aucun de ces widgets n'a de sens pour un plan stratégique, dont les métriques
- * sont d'une autre nature (cumul d'indicateurs, on-track/à risque, répartition par axe). Même
+ * sont d'une autre nature (KPI business, on-track/à risque, répartition par axe). Même
  * politique de duplication que `StageBadge`/`AxisStageBadge` : cloner deux domaines distincts
  * plutôt que génériciser prématurément.
  *
@@ -35,8 +35,13 @@ export { SPAN_COL_CLASS, WIDGET_SPANS, cycleSpan, moveWidget };
 export type { WidgetSpan };
 
 export type StrategicDashboardWidgetType =
-  /** Cumul des dernières valeurs des indicateurs quantitatifs du programme. */
-  | "indicator-total"
+  /** KPI business : une carte par indicateur de niveau axe (macro). Remplace l'ancien widget
+   *  "indicator-total" (cumul des dernières valeurs quantitatives), retiré à la demande du PO :
+   *  sommer des indicateurs hétérogènes n'a de sens que sur un Plan Performance, où tout est
+   *  exprimé en euros économisés. Un layout personnalisé encore porteur de l'ancien type est
+   *  simplement ignoré au chargement (`loadStrategicDashboardLayout` retombe sur le layout par
+   *  défaut si un type n'existe plus au registre). */
+  | "business-kpis"
   /** Compteur "X sur la trajectoire · Y à risque". */
   | "indicator-status"
   /** Répartition des indicateurs (ou des chantiers) par axe stratégique. */
@@ -77,9 +82,9 @@ export const STRATEGIC_DASHBOARD_WIDGET_REGISTRY: StrategicDashboardWidgetDef[] 
     allowedSpans: ["M", "L", "XL"],
   },
   {
-    type: "indicator-total",
-    label: "strategicDashboard.widget.indicatorTotal",
-    icon: "Sigma",
+    type: "business-kpis",
+    label: "strategicDashboard.widget.businessKpis",
+    icon: "Target",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
   },
