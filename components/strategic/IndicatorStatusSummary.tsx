@@ -4,15 +4,26 @@ import { useMemo, useState } from "react";
 import { Activity, Sigma, TrendingDown } from "lucide-react";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
+import { RadialProgress } from "@/components/shared/RadialProgress";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
+import { IndicatorDeltaStat } from "@/components/strategic/IndicatorDeltaStat";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import {
+  computeIndicatorDelta,
   countOnTrackAtRisk,
   latestMeasurement,
   resolveIndicatorStatus,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
 import type { Indicator, IndicatorMeasurement } from "@/types";
+
+/** Teinte "favorable" du gabarit RAG binaire de l'app (voir `IndicatorStatusBadge` /
+ *  `IndicatorDeltaStat`) — la charte BearingPoint n'utilise pas un vert littéral : `--green` est
+ *  quasi noir, `--green-light` un gris clair. Repris ici en dur (comme la couleur par défaut de
+ *  `RadialProgress`) plutôt qu'en `var(--green)`, un attribut SVG `stroke` ne résolvant pas les
+ *  variables CSS de façon fiable sur tous les moteurs de rendu. */
+const RADIAL_ON_TRACK_COLOR = "#1a1a1a";
+const RADIAL_ON_TRACK_TRACK = "#f0f0f0";
 
 /**
  * Compteur d'ensemble « N indicateurs suivis · X sur la trajectoire · Y à risque ». Affiché en tête
@@ -38,6 +49,7 @@ export function IndicatorStatusSummary({
   showTotal = false,
   labels,
   className,
+  radialHero = false,
 }: {
   indicators: Indicator[];
   measurements: IndicatorMeasurement[];
@@ -52,6 +64,14 @@ export function IndicatorStatusSummary({
     indicatorsSuffix?: string;
   };
   className?: string;
+  /**
+   * Bandeau `RadialProgress` (jauge de progression, même langage visuel que le Plan Performance,
+   * voir `LeverDetailClientPerformance.tsx`) mis en avant AU-DESSUS de la grille de cartes — défaut
+   * `false` pour ne rien changer aux appelants existants (page KPI, fiche d'axe) : la grille de
+   * `KPICard` en dessous reste identique quoi qu'il arrive, seul ce bandeau est additif. Activé
+   * explicitement par le dashboard stratégique (polish round 4, point 1).
+   */
+  radialHero?: boolean;
 }) {
   const { total, onTrack, atRisk } = countOnTrackAtRisk(indicators);
   const cumulative = sumLatestQuantitativeValues(indicators, measurements);
@@ -67,37 +87,57 @@ export function IndicatorStatusSummary({
   };
 
   return (
-    <div
-      className={
-        className ??
-        "grid grid-cols-1 gap-3 sm:grid-cols-2 " + (showTotal ? "lg:grid-cols-3" : "lg:grid-cols-2")
-      }
-    >
-      <KPICard
-        label={l.onTrack}
-        value={`${onTrack} / ${total}`}
-        icon={Activity}
-        accent="green"
-        sub={`${total} ${l.indicatorsSuffix} ${l.tracked.toLowerCase()}`}
-        barPct={onTrackPct}
-      />
-      <KPICard
-        label={l.atRisk}
-        value={String(atRisk)}
-        icon={TrendingDown}
-        accent="amber"
-        sub={`${Math.round(atRiskPct)}% du portefeuille d'indicateurs`}
-        barPct={atRiskPct}
-      />
-      {showTotal && (
-        <KPICard
-          label={l.total}
-          value={totalUnit ? `${cumulative} ${totalUnit}` : String(cumulative)}
-          icon={Sigma}
-          sub="Somme des dernières valeurs quantitatives"
-        />
+    <>
+      {radialHero && total > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-neutral-50 p-3.5">
+          <RadialProgress
+            pct={onTrackPct}
+            size={80}
+            strokeWidth={7}
+            color={RADIAL_ON_TRACK_COLOR}
+            trackColor={RADIAL_ON_TRACK_TRACK}
+            label={l.onTrack}
+            sublabel={`${onTrack}/${total}`}
+          />
+          <p className="max-w-sm flex-1 text-[12px] leading-relaxed text-secondary">
+            {atRisk} {l.atRisk.toLowerCase()} · {total} {l.indicatorsSuffix}{" "}
+            {l.tracked.toLowerCase()}
+          </p>
+        </div>
       )}
-    </div>
+      <div
+        className={
+          className ??
+          "grid grid-cols-1 gap-3 sm:grid-cols-2 " +
+            (showTotal ? "lg:grid-cols-3" : "lg:grid-cols-2")
+        }
+      >
+        <KPICard
+          label={l.onTrack}
+          value={`${onTrack} / ${total}`}
+          icon={Activity}
+          accent="green"
+          sub={`${total} ${l.indicatorsSuffix} ${l.tracked.toLowerCase()}`}
+          barPct={onTrackPct}
+        />
+        <KPICard
+          label={l.atRisk}
+          value={String(atRisk)}
+          icon={TrendingDown}
+          accent="amber"
+          sub={`${Math.round(atRiskPct)}% du portefeuille d'indicateurs`}
+          barPct={atRiskPct}
+        />
+        {showTotal && (
+          <KPICard
+            label={l.total}
+            value={totalUnit ? `${cumulative} ${totalUnit}` : String(cumulative)}
+            icon={Sigma}
+            sub="Somme des dernières valeurs quantitatives"
+          />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -181,6 +221,7 @@ type BusinessKpiLabels = {
   fullHistory?: string;
   chartValue?: string;
   chartObjective?: string;
+  progressToTarget?: string;
 };
 
 function resolveBusinessKpiLabels(labels?: BusinessKpiLabels): Required<BusinessKpiLabels> {
@@ -195,6 +236,7 @@ function resolveBusinessKpiLabels(labels?: BusinessKpiLabels): Required<Business
     fullHistory: labels?.fullHistory ?? "Historique complet",
     chartValue: labels?.chartValue ?? "Valeur",
     chartObjective: labels?.chartObjective ?? "Objectif",
+    progressToTarget: labels?.progressToTarget ?? "Progression vers la cible",
   };
 }
 
@@ -221,6 +263,11 @@ function BusinessKpiCard({
   const value =
     latest?.value !== undefined ? `${latest.value}${unitSuffix}` : (latest?.note ?? l.noValue);
 
+  // Écart signé + progression vers la cible (round 4, point 1) : `undefined` (pas d'objectif
+  // chiffré, ou dernière mesure sans valeur numérique) → `IndicatorDeltaStat` ne rend rien, la
+  // carte retombe sur son seul libellé d'objectif texte déjà affiché plus bas.
+  const delta = computeIndicatorDelta(indicator, latest);
+
   // Une carte sans aucune mesure n'ouvre rien : la modale n'aurait qu'un graphique vide à montrer.
   const hasHistory = measurements.length > 0;
 
@@ -245,12 +292,20 @@ function BusinessKpiCard({
         <IndicatorChart
           measurements={measurements}
           objectiveValue={indicator.objectiveValue}
+          direction={indicator.direction}
           unit={indicator.unit}
           qualitative={indicator.kind === "qualitative"}
           frequency={indicator.frequency}
           compact
         />
       </div>
+      {/* Progression vers la cible — la sparkline dit "où on va", ce bloc dit "à quel point on est
+          proche" (le constat du PO : 82 % contre une cible à 80 % n'est PAS un grand écart). */}
+      {delta && (
+        <div className="mt-1.5">
+          <IndicatorDeltaStat delta={delta} unit={indicator.unit} compact />
+        </div>
+      )}
       <div className="mt-auto pt-1 text-[11px] text-tertiary">
         {indicator.objectiveValue !== undefined
           ? `${l.objective} : ${indicator.objectiveValue}${unitSuffix}`
@@ -285,6 +340,7 @@ function BusinessKpiCard({
         <IndicatorChart
           measurements={measurements}
           objectiveValue={indicator.objectiveValue}
+          direction={indicator.direction}
           unit={indicator.unit}
           qualitative={indicator.kind === "qualitative"}
           height={360}
@@ -293,6 +349,7 @@ function BusinessKpiCard({
           labelValue={l.chartValue}
           labelObjective={l.chartObjective}
           emptyLabel={l.noValue}
+          labelProgress={l.progressToTarget}
         />
       </Modal>
     </>
