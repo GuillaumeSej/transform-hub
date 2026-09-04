@@ -11,6 +11,7 @@ const es: Record<string, string> = {
   "common.close": "Cerrar",
   "common.search": "Buscar",
   "common.choose": "Elegir…",
+  "common.optional": "(opcional)",
 
   // ─── nav ──────────────────────────────────────────────────────────────────
   "nav.executiveDashboard": "Dashboard Ejecutivo",
@@ -811,6 +812,15 @@ const es: Record<string, string> = {
   "adminCompanyFields.clearanceLabel":
     "Habilitaciones por perfil — una palanca de nivel X solo es visible para los perfiles habilitados para X (una palanca sin nivel sigue siendo visible para todos)",
   "adminCompanyFields.colProfile": "Perfil",
+  "adminCompanyFields.directionsLabel": "Direcciones / departamentos",
+  "adminCompanyFields.directionsEmpty":
+    "Todavía no hay ninguna dirección/departamento configurado para esta empresa. Añada uno para poder asignar usuarios y filtrar por dirección en el Plan Estratégico.",
+  "adminCompanyFields.newDirectionPlaceholder": "Ej.: Dirección Industrial",
+  "adminCompanyFields.addDirection": "Añadir dirección",
+
+  // ─── adminUsers (Admin > Usuarios) ─────────────────────────────────────
+  "adminUsers.directionLabel": "Dirección / departamento (opcional)",
+  "adminUsers.directionUnassigned": "No especificado",
 
   // ─── shared (componentes compartidos) ──────────────────────────────────────
   "shared.dashboardExportButton.impossibleTitle": "Exportación no disponible",
@@ -1226,6 +1236,104 @@ const es: Record<string, string> = {
   "strategicAxes.freq.semiannual": "Semestral",
   "strategicAxes.freq.annual": "Anual",
 
+  "strategicAxes.chantierSaveErrorTitle": "No se pudo guardar",
+  "strategicAxes.chantierSaveError": "No se pudo guardar el proyecto.",
+  "strategicAxes.actionSaveErrorTitle": "No se pudo guardar",
+  "strategicAxes.actionSaveError": "No se pudo guardar la acción.",
+  "strategicAxes.atRiskPopoverTitle": "Indicadores en riesgo",
+  "strategicAxes.filterDirection": "Dirección",
+  "strategicAxes.filterPerson": "Persona",
+  "strategicAxes.filterSponsor": "Patrocinador",
+
+  // ─── Plan Estratégico — ficha de proyecto dedicada (ronda 4) ───────────────
+  "strategicChantierDetail.title": "Ficha de proyecto",
+  "strategicChantierDetail.back": "← Volver al eje",
+  "strategicChantierDetail.notFound": "Proyecto no encontrado.",
+  "strategicChantierDetail.successCriteria": "Criterios de éxito",
+  "strategicChantierDetail.sponsor": "Patrocinador",
+  "strategicChantierDetail.pilote": "Responsable",
+
+  "strategicChantierDetail.effort.title": "Cuadrícula de puntuación de esfuerzo",
+  "strategicChantierDetail.effort.financialImpact": "Impacto financiero",
+  "strategicChantierDetail.effort.financialImpact.option1": "<5k€",
+  "strategicChantierDetail.effort.financialImpact.option2": "5-40k€",
+  "strategicChantierDetail.effort.financialImpact.option3": "40-100k€",
+  "strategicChantierDetail.effort.financialImpact.option4": ">100k€",
+  "strategicChantierDetail.effort.humanImpact": "Impacto humano",
+  "strategicChantierDetail.effort.humanImpact.option1": "1-2 ETC",
+  "strategicChantierDetail.effort.humanImpact.option2": "3-4 ETC",
+  "strategicChantierDetail.effort.humanImpact.option3": "5-6 ETC",
+  "strategicChantierDetail.effort.humanImpact.option4": ">7 ETC",
+  "strategicChantierDetail.effort.duration": "Duración",
+  "strategicChantierDetail.effort.duration.option1": "<2 meses",
+  "strategicChantierDetail.effort.duration.option2": "2-6 meses",
+  "strategicChantierDetail.effort.duration.option3": "6-12 meses",
+  "strategicChantierDetail.effort.duration.option4": ">1 año",
+  "strategicChantierDetail.effort.changeManagement": "Gestión del cambio",
+  "strategicChantierDetail.effort.changeManagement.option1": "Muy poco cambio",
+  "strategicChantierDetail.effort.changeManagement.option2": "Poco cambio",
+  "strategicChantierDetail.effort.changeManagement.option3": "Cambio importante",
+  "strategicChantierDetail.effort.changeManagement.option4": "Cambio mayor",
+
+  "strategicChantierDetail.raci.title": "RACI",
+  "strategicChantierDetail.raci.responsible": "Responsable (R)",
+  "strategicChantierDetail.raci.accountable": "Aprobador (A)",
+  "strategicChantierDetail.raci.consulted": "Consultado (C)",
+  "strategicChantierDetail.raci.informed": "Informado (I)",
+  "strategicChantierDetail.raci.noAccountableHint": "No hay ningún « Aprobador » (A) asignado.",
+  "strategicChantierDetail.raci.addRow": "Añadir una línea",
+  "strategicChantierDetail.raci.removeRow": "Quitar esta línea",
+  "strategicChantierDetail.raci.empty": "Nadie asignado.",
+  "strategicChantierDetail.raci.letter": "Letra RACI",
+
+  "strategicChantierDetail.prerequisites.title": "Prerrequisitos",
+  "strategicChantierDetail.prerequisites.kindAction": "Acción del plan",
+  "strategicChantierDetail.prerequisites.kindExternal": "Prerrequisito externo",
+  "strategicChantierDetail.prerequisites.blockedBy": "Bloqueado por:",
+  "strategicChantierDetail.prerequisites.addRow": "Añadir un prerrequisito",
+  "strategicChantierDetail.prerequisites.kind": "Tipo",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Elegir una acción",
+  "strategicChantierDetail.prerequisites.externalPlaceholder":
+    "Ej. Contratación del jefe de proyecto",
+  "strategicChantierDetail.prerequisites.done": "Hecho",
+  "strategicChantierDetail.prerequisites.removeRow": "Quitar este prerrequisito",
+  "strategicChantierDetail.prerequisites.none": "Sin prerrequisitos.",
+  "strategicChantierDetail.prerequisites.noOtherActions": "Ninguna otra acción en este workstream.",
+
+  "strategicChantierDetail.dependencies.title": "Dependencias",
+  "strategicChantierDetail.dependencies.none": "Sin dependencias.",
+
+  "strategicChantierDetail.raci.chantierTitle": "RACI del workstream",
+  "strategicChantierDetail.raci.deliverableTitle": "RACI del entregable",
+
+  "strategicChantierDetail.timeline.title": "Cronología de entregables",
+  "strategicChantierDetail.timeline.empty": "Ningún entregable con fases todavía.",
+
+  "strategicChantierDetail.actionFocused": "Acción abierta desde el enlace",
+  "strategicChantierDetail.actionForm.missingHint": "Complete el nombre y las fechas para guardar.",
+  "strategicChantierDetail.successCriteria.placeholder": "Estaremos satisfechos en [año] si...",
+
+  // ─── Plan Estratégico — importación Excel (ronda 4) ─────────────────────────
+  "strategicImport.title": "Importar un plan estratégico",
+  "strategicImport.uploadButton": "Importar un archivo",
+  "strategicImport.templateButton": "Descargar plantilla",
+  "strategicImport.previewTitle": "Vista previa de la importación — {file}",
+  "strategicImport.confirmButton": "Confirmar la importación",
+  "strategicImport.successMessage": "Importación completada",
+  "strategicImport.errorRow": "línea(s) con error",
+  "strategicImport.lineLabel": "Línea",
+  "strategicImport.axesCountLabel": "eje(s) a crear",
+  "strategicImport.chantiersCountLabel": "proyecto(s) a crear",
+  "strategicImport.actionsCountLabel": "acción(es) a crear",
+  "strategicImport.indicatorsCountLabel": "indicador(es) a crear",
+  "strategicImport.templateDownloadedTitle": "Plantilla descargada",
+  "strategicImport.templateDownloadedBody":
+    "5 hojas: Ejes (Code = clave), Proyectos (Code Eje = FK), Acciones (Code Proyecto = FK), Entregables (Code Acción = FK, opcional), Indicadores (Code Eje O Code Proyecto = FK). Elimine las filas de ejemplo antes de completar.",
+  "strategicImport.ignoredRowsNote": "{n} línea(s) ignorada(s)",
+  "strategicImport.importDoneBody":
+    "{axes} eje(s) · {chantiers} proyecto(s) · {actions} acción(es) · {indicators} indicador(es) creado(s)",
+  "strategicImport.errorTitle": "Fallo en la importación",
+
   // ─── Plan Estratégico — página KPI (registro de medidas, edición de objetivo) ─
   "kpi.title": "Indicadores (KPI)",
   "kpi.subtitle":
@@ -1262,6 +1370,7 @@ const es: Record<string, string> = {
   "kpi.chart.empty": "Ninguna medida registrada.",
   "kpi.chart.viewFull": "Ver el historial completo",
   "kpi.chart.fullHistory": "Historial completo",
+  "kpi.chart.progressToTarget": "Progreso hacia el objetivo",
   "kpi.latestValue": "Último valor",
   "kpi.noMeasurement": "Ninguna medida registrada",
   "kpi.reportedBy": "registrado por",
