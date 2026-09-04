@@ -155,6 +155,7 @@ export default function CompanyDetailClient() {
           ? String(Math.round(company.socialChargesRate * 100))
           : "",
       confidentialityLevels: company.confidentialityLevels ?? [],
+      directions: company.directions ?? [],
       roleClearance: company.roleClearance ?? {},
       defaultRecognition: company.defaultRecognition ?? "smoothing",
       riskThresholds: company.riskThresholds?.map((t) => ({
@@ -182,6 +183,7 @@ export default function CompanyDetailClient() {
           ? String(Math.round(company.socialChargesRate * 100))
           : "",
       confidentialityLevels: company.confidentialityLevels ?? [],
+      directions: company.directions ?? [],
       roleClearance: company.roleClearance ?? {},
       defaultRecognition: company.defaultRecognition ?? "smoothing",
       riskThresholds: company.riskThresholds?.map((t) => ({
@@ -224,6 +226,7 @@ export default function CompanyDetailClient() {
         actionPlanEnabled: form.actionPlanEnabled,
         ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
         confidentialityLevels: form.confidentialityLevels,
+        directions: form.directions,
         roleClearance: form.roleClearance,
         defaultRecognition: form.defaultRecognition ?? "smoothing",
         ...(form.riskThresholds

@@ -47,6 +47,10 @@ export type CompanyFormState = {
    *  s'applique (voir Company.socialChargesRate). */
   socialChargesRate: string;
   confidentialityLevels: string[];
+  /** Directions/services métier de l'entreprise (round 4, filtres Plan Stratégique) — même
+   *  pattern éditable que `confidentialityLevels` juste au-dessus, référencé par
+   *  `AuthUser.direction`. Additif/optionnel, sans impact sur le Plan Performance. */
+  directions: string[];
   roleClearance: Partial<Record<Role, string[]>>;
   /** Mode de reconnaissance par défaut des nouvelles lignes d'impact (voir
    *  Company.defaultRecognition). Non défini = "smoothing". */
@@ -66,6 +70,7 @@ export const DEFAULT_COMPANY_FORM: CompanyFormState = {
   actionPlanEnabled: true,
   socialChargesRate: "",
   confidentialityLevels: [],
+  directions: [],
   roleClearance: {},
   defaultRecognition: "smoothing",
   riskThresholds: undefined,
@@ -87,6 +92,7 @@ export function CompanyFieldsEditor({
   const { t } = useTranslation();
   const RISK_LEVELS = riskLevels(t);
   const [newLevel, setNewLevel] = useState("");
+  const [newDirection, setNewDirection] = useState("");
 
   const addLevel = () => {
     const level = newLevel.trim();
@@ -105,6 +111,17 @@ export function CompanyFieldsEditor({
         ])
       ),
     });
+  };
+
+  const addDirection = () => {
+    const direction = newDirection.trim();
+    if (!direction || value.directions.includes(direction)) return;
+    onChange({ directions: [...value.directions, direction] });
+    setNewDirection("");
+  };
+
+  const removeDirection = (direction: string) => {
+    onChange({ directions: value.directions.filter((d) => d !== direction) });
   };
 
   const toggleClearance = (role: Role, level: string) => {
@@ -346,6 +363,59 @@ export function CompanyFieldsEditor({
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
             >
               {t("adminCompanyFields.addLevel", "Ajouter le niveau")}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-text-secondary">
+            {t("adminCompanyFields.directionsLabel", "Directions / services")}
+          </label>
+          {value.directions.length === 0 && (
+            <p className="mt-1 rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
+              {t(
+                "adminCompanyFields.directionsEmpty",
+                "Aucune direction/service configuré pour cette entreprise. Ajoutez-en pour permettre le rattachement des utilisateurs et le filtrage par direction sur le Plan Stratégique."
+              )}
+            </p>
+          )}
+          <div className="mt-1 flex flex-wrap gap-2">
+            {value.directions.map((direction) => (
+              <span
+                key={direction}
+                className="flex items-center gap-1 rounded-full bg-bg-surface border border-border px-2.5 py-1 text-xs text-text-primary"
+              >
+                {direction}
+                <button
+                  onClick={() => removeDirection(direction)}
+                  className="text-text-secondary hover:text-red-500"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={newDirection}
+              onChange={(e) => setNewDirection(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addDirection();
+                }
+              }}
+              placeholder={t(
+                "adminCompanyFields.newDirectionPlaceholder",
+                "Ex : Direction Industrielle"
+              )}
+              className="w-full max-w-xs rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+            />
+            <button
+              onClick={addDirection}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
+            >
+              {t("adminCompanyFields.addDirection", "Ajouter la direction")}
             </button>
           </div>
         </div>

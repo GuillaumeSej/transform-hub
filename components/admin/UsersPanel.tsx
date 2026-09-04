@@ -9,6 +9,7 @@ import { withSecondaryAuth } from "@/lib/firebase";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const ALL_ROLES: { value: Role; label: string }[] = [
   { value: "admin", label: "Administrator" },
@@ -114,6 +115,7 @@ export function missingRequiredFields(
  * vérité pour ce CRUD — ne pas dupliquer la logique ailleurs.
  */
 export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {}) {
+  const { t } = useTranslation();
   const { role, user } = useRole();
   const { showToast } = useToast();
   const isEntAdmin = role === "admin_entreprise";
@@ -150,6 +152,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     password: "test",
     clearanceMode: "inherit" as ClearanceMode,
     clearanceLevels: [] as string[],
+    /** Direction/service métier de rattachement (round 4, filtres Plan Stratégique) — contrainte
+     *  au `Company.directions` de l'entreprise sélectionnée, jamais du texte libre (voir
+     *  `AuthUser.direction`). "" = non renseigné, toujours optionnel : ne JAMAIS entrer dans
+     *  `missingRequiredFields`/`UserFormInput`, volontairement absent de ce type. */
+    direction: "",
   });
   const [showForm, setShowForm] = useState(false);
 
@@ -177,6 +184,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       password: "test",
       clearanceMode: "inherit",
       clearanceLevels: [],
+      direction: "",
     });
     setShowForm(true);
   };
@@ -193,6 +201,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       password: u.password,
       clearanceMode: clearanceModeOf(u.confidentialityClearance),
       clearanceLevels: Array.isArray(u.confidentialityClearance) ? u.confidentialityClearance : [],
+      direction: u.direction ?? "",
     });
     setShowForm(true);
   };
@@ -217,6 +226,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       name: form.name || `${form.firstName} ${form.lastName}`.trim(),
       companyId: form.role === "admin" ? null : (fixedCompanyId ?? form.companyId),
       ...buildClearancePatch(form.role, form.clearanceMode, form.clearanceLevels),
+      // "" (non renseigné) omet la clé plutôt que de la mettre à `undefined` — même précaution que
+      // buildClearancePatch en mode "inherit" : Firestore setDoc() rejette toute valeur de champ
+      // explicitement `undefined`, et setDoc remplace le document entier, donc omettre la clé ici
+      // efface bien un `direction` précédemment enregistré si l'admin repasse à "Non renseigné".
+      ...(form.direction.trim() !== "" ? { direction: form.direction.trim() } : {}),
     };
     try {
       // Crée le compte Firebase Auth correspondant AVANT d'écrire le profil Firestore — sur une
@@ -374,6 +388,23 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 {availableRoles.map((r) => (
                   <option key={r.value} value={r.value}>
                     {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("adminUsers.directionLabel", "Direction / service (optionnel)")}
+              </label>
+              <select
+                value={form.direction}
+                onChange={(e) => setForm((f) => ({ ...f, direction: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+              >
+                <option value="">{t("adminUsers.directionUnassigned", "Non renseigné")}</option>
+                {(formCompany?.directions ?? []).map((direction) => (
+                  <option key={direction} value={direction}>
+                    {direction}
                   </option>
                 ))}
               </select>

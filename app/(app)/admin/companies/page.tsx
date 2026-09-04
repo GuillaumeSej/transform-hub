@@ -48,6 +48,7 @@ export default function AdminCompaniesPage() {
       socialChargesRate:
         c.socialChargesRate != null ? String(Math.round(c.socialChargesRate * 100)) : "",
       confidentialityLevels: c.confidentialityLevels ?? [],
+      directions: c.directions ?? [],
       roleClearance: c.roleClearance ?? {},
       defaultRecognition: c.defaultRecognition ?? "smoothing",
       riskThresholds: c.riskThresholds?.map((t) => ({
@@ -76,6 +77,7 @@ export default function AdminCompaniesPage() {
       actionPlanEnabled: form.actionPlanEnabled,
       ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
       confidentialityLevels: form.confidentialityLevels,
+      directions: form.directions,
       roleClearance: form.roleClearance,
       ...(form.defaultRecognition !== undefined
         ? { defaultRecognition: form.defaultRecognition }
