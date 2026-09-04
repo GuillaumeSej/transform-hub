@@ -240,14 +240,22 @@ function IndicatorCard({
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {/* ── Lecture : graphique + dernière valeur ─────────────────────────────────────── */}
           <div className="space-y-3">
+            {/* Fenêtré par défaut sur les dernières périodes (calibré par `frequency`, voir
+                `axisLogic.recentMeasurementWindow`) : sur un plan pluriannuel, empiler tout
+                l'historique écrase la tendance récente. Le bouton d'agrandissement du graphique
+                ouvre l'historique complet depuis le lancement du plan. */}
             <IndicatorChart
               measurements={measurements}
               objectiveValue={indicator.objectiveValue}
               unit={indicator.unit}
               qualitative={!quantitative}
+              frequency={indicator.frequency}
+              windowMeasurements="recent"
               labelValue={t("kpi.chart.value")}
               labelObjective={t("kpi.chart.objective")}
               emptyLabel={t("kpi.chart.empty")}
+              labelViewFull={t("kpi.chart.viewFull")}
+              fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
             />
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-text-secondary">
               <span className="font-semibold uppercase tracking-wide">{t("kpi.latestValue")}</span>
@@ -503,6 +511,9 @@ export function KpiPageClient() {
     objective: t("kpi.objectiveValue"),
     onTrack: t("indicatorStatus.onTrack"),
     atRisk: t("indicatorStatus.atRisk"),
+    fullHistory: t("kpi.chart.fullHistory"),
+    chartValue: t("kpi.chart.value"),
+    chartObjective: t("kpi.chart.objective"),
   };
 
   const header = (
