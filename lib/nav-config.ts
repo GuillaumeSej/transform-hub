@@ -16,6 +16,9 @@ import type { Role, RoleDefinition } from "@/types";
  *   - `"levers"` sert les DEUX plans (même route `/levers`, routeur interne selon le type),
  *     simplement relabelé « Axes stratégiques » en mode stratégique ;
  *   - `"kpi"` (nouveau) n'existe que pour un Plan Stratégique ;
+ *   - `"effectifs"` (ETP mobilisés par grande fonction sur les chantiers) n'existe que pour un
+ *     Plan Stratégique lui aussi — à ne pas confondre avec `"hr"`/`"hr-etp"` ci-dessous, qui
+ *     restent réservés au Plan Performance et portent une tout autre donnée ;
  *   - Finance / RH / Base ETP / Workstreams / Opérations n'ont pas de sens sans leviers et sont
  *     donc réservés au Plan Performance. */
 export const roles: Record<Role, RoleDefinition> = {
@@ -48,6 +51,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
       {
         id: "finance",
         icon: "LineChart",
@@ -75,6 +79,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   lever: {
@@ -88,6 +93,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   finance: {
@@ -107,6 +113,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   hr: {
@@ -122,6 +129,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   ops: {
@@ -141,6 +149,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
 
@@ -168,6 +177,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   axis_sponsor: {
@@ -181,6 +191,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   chantier_owner: {
@@ -194,6 +205,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   chantier_contributor: {
@@ -207,6 +219,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   internal_comm: {
@@ -220,6 +233,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   budget_control: {
@@ -233,6 +247,7 @@ export const roles: Record<Role, RoleDefinition> = {
         labelByProgramType: { strategic: "nav.axes" },
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
 };
@@ -242,6 +257,7 @@ export const PAGE_ROUTES: Record<string, string> = {
   workstreams: "/workstreams",
   levers: "/levers",
   kpi: "/kpi",
+  effectifs: "/effectifs",
   finance: "/finance",
   hr: "/hr",
   "hr-etp": "/hr/etp",

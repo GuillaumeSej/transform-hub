@@ -7,6 +7,7 @@ import type {
   Indicator,
   IndicatorMeasurement,
   IndicatorRiskStatus,
+  MaturityStageConfig,
   Program,
   ProgramType,
 } from "@/types";
@@ -39,6 +40,55 @@ export function latestMeasurement(
     if (!latest || m.period > latest.period) latest = m;
   }
   return latest;
+}
+
+/** Copie triée chronologiquement des mesures (`period` est lexicographiquement ordonnée, voir
+ *  `IndicatorMeasurement.period`). Ne mute jamais l'entrée : les mesures arrivent dans l'ordre
+ *  arbitraire de Firestore et sont partagées entre plusieurs composants. */
+export function sortMeasurementsByPeriod<T extends { period: string }>(measurements: T[]): T[] {
+  return [...measurements].sort((a, b) => a.period.localeCompare(b.period));
+}
+
+/**
+ * Nombre de points affichés dans la vue « récente » d'un graphique d'indicateur, par fréquence de
+ * reporting.
+ *
+ * Le PO veut un aperçu par défaut sur « la dernière année / le dernier semestre », et l'historique
+ * complet seulement à la demande. On raisonne en NOMBRE DE POINTS et non en date glissante
+ * calculée depuis `new Date()` : les périodes sont des chaînes de formats hétérogènes
+ * (`"2026-03"`, `"2026-Q1"`, `"2026-S1"`, `"2026"`) qu'il faudrait parser différemment selon la
+ * fréquence, et un plan saisi en retard (ou une démo datée) afficherait alors un graphique vide
+ * alors qu'il a de l'historique. Le nombre de points est calibré pour couvrir ~12 mois là où c'est
+ * possible, et à défaut les 3 dernières périodes (annuel / semestriel, où 12 mois ne feraient
+ * qu'un ou deux points — trop peu pour lire une tendance).
+ */
+export const RECENT_MEASUREMENT_POINTS: Record<Indicator["frequency"], number> = {
+  monthly: 12,
+  quarterly: 4,
+  semiannual: 3,
+  annual: 3,
+};
+
+/** Taille de fenêtre appliquée quand la fréquence de l'indicateur n'est pas connue de l'appelant
+ *  (12 points = l'hypothèse la plus fréquente, un indicateur mensuel sur un an). */
+export const DEFAULT_RECENT_MEASUREMENT_POINTS = 12;
+
+/**
+ * Découpe l'historique d'un indicateur en une fenêtre d'affichage « récente » + le reste.
+ *
+ * Retourne `all` (tout l'historique trié, pour la vue « historique complet »), `visible` (la
+ * fenêtre récente) et `hidden` (le nombre de mesures antérieures masquées — un appelant s'en sert
+ * pour n'afficher le bouton d'agrandissement QUE s'il y a effectivement quelque chose de plus à
+ * voir).
+ */
+export function recentMeasurementWindow<T extends { period: string }>(
+  measurements: T[],
+  frequency?: Indicator["frequency"]
+): { all: T[]; visible: T[]; hidden: number } {
+  const all = sortMeasurementsByPeriod(measurements);
+  const size = frequency ? RECENT_MEASUREMENT_POINTS[frequency] : DEFAULT_RECENT_MEASUREMENT_POINTS;
+  const visible = all.length > size ? all.slice(all.length - size) : all;
+  return { all, visible, hidden: all.length - visible.length };
 }
 
 /**
@@ -285,4 +335,79 @@ export function chantierDependencyAlerts(
   }
 
   return alerts;
+}
+
+// ─── Avancement d'un chantier ──────────────────────────────────────────────────────────────────
+
+/**
+ * Ratio d'avancement (0 → 1) d'une étape de maturité DANS le cycle du programme. Une étape
+ * terminale vaut 1 ; les étapes de cycle sont réparties linéairement d'après leur position.
+ *
+ * Avec le référentiel par défaut (Défini / Validé / Planifié / Réalisé*) on obtient donc
+ * 0 / 0,33 / 0,67 / 1 : la première étape du cycle ne vaut jamais rien de commencé, la terminale
+ * vaut le plein. Si le programme n'a AUCUNE étape terminale, le dernier maillon du cycle vaut 1
+ * (sinon aucun chantier ne pourrait jamais atteindre 100 %).
+ *
+ * Étape inconnue du référentiel (supprimée depuis son affectation) : 0 — même parti pris
+ * défensif que `resolveMaturityStageLabel`, on ne devine pas un avancement.
+ */
+export function maturityStageProgressRatio(stageId: string, stages: MaturityStageConfig[]): number {
+  const stage = stages.find((s) => s.id === stageId);
+  if (!stage) return 0;
+  if (stage.isTerminal) return 1;
+  const cycle = stages.filter((s) => !s.isTerminal);
+  const position = cycle.findIndex((s) => s.id === stage.id);
+  if (position < 0) return 0;
+  const hasTerminal = stages.length > cycle.length;
+  const steps = hasTerminal ? cycle.length : Math.max(1, cycle.length - 1);
+  return Math.min(1, position / steps);
+}
+
+export type ChantierProgress = {
+  /** Avancement pondéré, en pourcentage entier (0-100). */
+  pct: number;
+  /** Nombre total d'actions du chantier. */
+  total: number;
+  /** Actions ayant atteint une étape TERMINALE du programme. */
+  done: number;
+};
+
+/**
+ * Avancement d'un chantier, dérivé de ses actions — il n'existe aucun champ « % d'avancement »
+ * saisi à la main sur `Chantier`, et on n'en introduit pas : la seule donnée fiable est l'étape de
+ * maturité de chaque action.
+ *
+ * Définition retenue, volontairement simple et explicable au comité : moyenne des avancements
+ * d'étape des actions (`maturityStageProgressRatio`), PONDÉRÉE PAR LEUR DURÉE. Une action de six
+ * mois pèse donc six fois une action d'un mois — sans quoi un chantier constitué d'un long
+ * déploiement et de trois jalons courts afficherait un avancement dicté par les jalons.
+ *
+ * Un chantier sans action retourne 0 % (et `total: 0`, ce qui permet à l'appelant de distinguer
+ * « pas commencé » de « rien à mesurer »).
+ */
+export function chantierProgress(
+  chantierId: string,
+  actions: ChantierAction[],
+  stages: MaturityStageConfig[]
+): ChantierProgress {
+  const own = actions.filter((a) => a.chantierId === chantierId);
+  if (own.length === 0) return { pct: 0, total: 0, done: 0 };
+
+  let weighted = 0;
+  let totalWeight = 0;
+  let done = 0;
+  for (const action of own) {
+    // Durée en jours, plancher à 1 : une action d'un seul jour (ou aux dates incohérentes) doit
+    // peser quelque chose plutôt que d'être neutralisée.
+    const weight = Math.max(1, daysBetween(action.start, action.end) + 1);
+    weighted += maturityStageProgressRatio(action.status, stages) * weight;
+    totalWeight += weight;
+    if (stages.find((s) => s.id === action.status)?.isTerminal) done += 1;
+  }
+
+  return {
+    pct: Math.round((weighted / totalWeight) * 100),
+    total: own.length,
+    done,
+  };
 }

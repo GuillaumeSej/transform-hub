@@ -1,7 +1,10 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { Activity, Sigma, TrendingDown } from "lucide-react";
 import { KPICard } from "@/components/shared/KPICard";
+import { Modal } from "@/components/shared/Modal";
+import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import {
   countOnTrackAtRisk,
@@ -107,6 +110,11 @@ export function IndicatorStatusSummary({
  * Remplace le cumul des indicateurs retiré de la page KPI et du dashboard stratégique : un chiffre
  * agrégé sans signification y cède la place aux valeurs réelles suivies, chacune avec son statut.
  *
+ * Chaque carte porte une SPARKLINE (`IndicatorChart` en mode `compact`) sous la valeur courante :
+ * le PO ne veut pas d'un chiffre nu mais du chemin parcouru. Un clic sur la carte ouvre
+ * l'historique COMPLET depuis le lancement du plan dans une modale — la sparkline, elle, reste
+ * volontairement fenêtrée sur les dernières périodes (elle n'a pas la place d'en montrer plus).
+ *
  * Vit dans ce fichier — et non dans un composant partagé dédié — parce qu'il partage exactement le
  * même rôle et les mêmes entrées (`indicators` + `measurements` d'un périmètre) que
  * `IndicatorStatusSummary`, et qu'il est consommé par ses deux mêmes appelants (page KPI et
@@ -126,26 +134,24 @@ export function BusinessKpiCards({
   indicators: Indicator[];
   measurements: IndicatorMeasurement[];
   /** Libellés traduits fournis par l'appelant — repli français. */
-  labels?: {
-    empty?: string;
-    noValue?: string;
-    objective?: string;
-    onTrack?: string;
-    atRisk?: string;
-  };
+  labels?: BusinessKpiLabels;
   className?: string;
 }) {
   const macro = indicators.filter((indicator) => !!indicator.axisId && !indicator.chantierId);
 
-  const l = {
-    empty:
-      labels?.empty ??
-      "Aucun KPI business défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs.",
-    noValue: labels?.noValue ?? "Aucune mesure",
-    objective: labels?.objective ?? "Objectif",
-    onTrack: labels?.onTrack ?? "Sur la trajectoire",
-    atRisk: labels?.atRisk ?? "À risque",
-  };
+  const l = resolveBusinessKpiLabels(labels);
+
+  /** Mesures indexées par indicateur : `IndicatorChart` attend l'historique DÉJÀ filtré, et un
+   *  `filter` par carte re-parcourrait tout le tableau de mesures du programme à chaque rendu. */
+  const measurementsByIndicator = useMemo(() => {
+    const map = new Map<string, IndicatorMeasurement[]>();
+    for (const m of measurements) {
+      const bucket = map.get(m.indicatorId);
+      if (bucket) bucket.push(m);
+      else map.set(m.indicatorId, [m]);
+    }
+    return map;
+  }, [measurements]);
 
   if (macro.length === 0) {
     return <p className="text-xs leading-relaxed text-tertiary">{l.empty}</p>;
@@ -153,41 +159,142 @@ export function BusinessKpiCards({
 
   return (
     <div className={className ?? "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"}>
-      {macro.map((indicator) => {
-        const latest = latestMeasurement(indicator.id, measurements);
-        const status = resolveIndicatorStatus(indicator);
-        const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
-        const value =
-          latest?.value !== undefined
-            ? `${latest.value}${unitSuffix}`
-            : (latest?.note ?? l.noValue);
-        return (
-          <div
-            key={indicator.id}
-            className="flex flex-col rounded-lg border border-border bg-white p-3 shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-secondary">
-                {indicator.name}
-              </span>
-              <IndicatorStatusBadge
-                status={status}
-                label={status === "at_risk" ? l.atRisk : l.onTrack}
-                className="flex-shrink-0"
-              />
-            </div>
-            <div className="mt-1.5 truncate text-xl font-bold leading-tight tracking-tight text-primary">
-              {value}
-            </div>
-            <div className="mt-auto pt-1 text-[11px] text-tertiary">
-              {indicator.objectiveValue !== undefined
-                ? `${l.objective} : ${indicator.objectiveValue}${unitSuffix}`
-                : indicator.objective}
-              {latest ? ` · ${latest.period}` : ""}
-            </div>
-          </div>
-        );
-      })}
+      {macro.map((indicator) => (
+        <BusinessKpiCard
+          key={indicator.id}
+          indicator={indicator}
+          measurements={measurementsByIndicator.get(indicator.id) ?? []}
+          labels={l}
+        />
+      ))}
     </div>
+  );
+}
+
+type BusinessKpiLabels = {
+  empty?: string;
+  noValue?: string;
+  objective?: string;
+  onTrack?: string;
+  atRisk?: string;
+  /** Titre de la modale d'historique complet (le nom de l'indicateur y est ajouté). */
+  fullHistory?: string;
+  chartValue?: string;
+  chartObjective?: string;
+};
+
+function resolveBusinessKpiLabels(labels?: BusinessKpiLabels): Required<BusinessKpiLabels> {
+  return {
+    empty:
+      labels?.empty ??
+      "Aucun KPI business défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs.",
+    noValue: labels?.noValue ?? "Aucune mesure",
+    objective: labels?.objective ?? "Objectif",
+    onTrack: labels?.onTrack ?? "Sur la trajectoire",
+    atRisk: labels?.atRisk ?? "À risque",
+    fullHistory: labels?.fullHistory ?? "Historique complet",
+    chartValue: labels?.chartValue ?? "Valeur",
+    chartObjective: labels?.chartObjective ?? "Objectif",
+  };
+}
+
+/**
+ * Une carte « KPI business ». Extraite en composant à part entière parce qu'elle porte désormais
+ * un état propre (l'ouverture de sa modale d'historique) : un `useState` ne peut pas vivre dans le
+ * `.map()` de `BusinessKpiCards`.
+ */
+function BusinessKpiCard({
+  indicator,
+  /** Mesures DE CET indicateur uniquement (déjà filtrées par l'appelant). */
+  measurements,
+  labels: l,
+}: {
+  indicator: Indicator;
+  measurements: IndicatorMeasurement[];
+  labels: Required<BusinessKpiLabels>;
+}) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const latest = latestMeasurement(indicator.id, measurements);
+  const status = resolveIndicatorStatus(indicator);
+  const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
+  const value =
+    latest?.value !== undefined ? `${latest.value}${unitSuffix}` : (latest?.note ?? l.noValue);
+
+  // Une carte sans aucune mesure n'ouvre rien : la modale n'aurait qu'un graphique vide à montrer.
+  const hasHistory = measurements.length > 0;
+
+  const content = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-secondary">
+          {indicator.name}
+        </span>
+        <IndicatorStatusBadge
+          status={status}
+          label={status === "at_risk" ? l.atRisk : l.onTrack}
+          className="flex-shrink-0"
+        />
+      </div>
+      <div className="mt-1.5 truncate text-xl font-bold leading-tight tracking-tight text-primary">
+        {value}
+      </div>
+      {/* Sparkline : la tendance des dernières périodes, sans axes ni infobulle — le détail
+          chiffré se lit dans la modale d'historique complet. */}
+      <div className="mt-1.5">
+        <IndicatorChart
+          measurements={measurements}
+          objectiveValue={indicator.objectiveValue}
+          unit={indicator.unit}
+          qualitative={indicator.kind === "qualitative"}
+          frequency={indicator.frequency}
+          compact
+        />
+      </div>
+      <div className="mt-auto pt-1 text-[11px] text-tertiary">
+        {indicator.objectiveValue !== undefined
+          ? `${l.objective} : ${indicator.objectiveValue}${unitSuffix}`
+          : indicator.objective}
+        {latest ? ` · ${latest.period}` : ""}
+      </div>
+    </>
+  );
+
+  const cardClass = "flex flex-col rounded-lg border border-border bg-white p-3 shadow-sm";
+
+  if (!hasHistory) {
+    return <div className={cardClass}>{content}</div>;
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setHistoryOpen(true)}
+        className={`${cardClass} text-left transition hover:border-bp-coral hover:shadow-md`}
+        title={`${l.fullHistory} — ${indicator.name}`}
+      >
+        {content}
+      </button>
+      <Modal
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        title={`${l.fullHistory} — ${indicator.name}`}
+        maxWidth="820px"
+      >
+        <IndicatorChart
+          measurements={measurements}
+          objectiveValue={indicator.objectiveValue}
+          unit={indicator.unit}
+          qualitative={indicator.kind === "qualitative"}
+          height={360}
+          windowMeasurements="all"
+          frequency={indicator.frequency}
+          labelValue={l.chartValue}
+          labelObjective={l.chartObjective}
+          emptyLabel={l.noValue}
+        />
+      </Modal>
+    </>
   );
 }

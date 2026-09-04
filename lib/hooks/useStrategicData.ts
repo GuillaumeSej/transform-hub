@@ -18,10 +18,16 @@ import {
   saveIndicatorMeasurement,
   deleteIndicatorMeasurement,
 } from "@/lib/firestore/indicatorMeasurements";
+import {
+  subscribeChantierStaffing,
+  saveChantierStaffing,
+  deleteChantierStaffing,
+} from "@/lib/firestore/chantierStaffing";
 import { computeIndicatorStatus } from "@/lib/axisLogic";
 import type {
   Chantier,
   ChantierAction,
+  ChantierStaffing,
   Indicator,
   IndicatorMeasurement,
   StrategicAxis,
@@ -29,7 +35,7 @@ import type {
 
 /**
  * Point d'accès React unique aux données du Plan Stratégique (axes / chantiers / actions /
- * indicateurs / mesures), pour UNE entreprise et UN programme. Pendant stratégique de
+ * indicateurs / mesures / staffing), pour UNE entreprise et UN programme. Pendant stratégique de
  * `useBeTrackData` (lib/hooks/useStorage.ts), volontairement beaucoup plus simple : pas de seed,
  * pas de migration, pas de repli mockData — le Plan Stratégique est une fonctionnalité neuve, il
  * n'y a aucune donnée historique à rattraper.
@@ -53,7 +59,9 @@ export type StrategicData = {
   chantierActions: ChantierAction[];
   indicators: Indicator[];
   measurements: IndicatorMeasurement[];
-  /** true tant que les cinq abonnements n'ont pas tous répondu au moins une fois. */
+  /** Lignes de staffing (ETP par fonction) des chantiers du programme actif. */
+  staffing: ChantierStaffing[];
+  /** true tant que les six abonnements n'ont pas tous répondu au moins une fois. */
   loading: boolean;
 
   // ── Mutations ──────────────────────────────────────────────────────────────────────────────
@@ -105,6 +113,14 @@ export type StrategicData = {
       Partial<Pick<IndicatorMeasurement, "value" | "note">>
   ) => Promise<IndicatorMeasurement>;
   removeMeasurement: (id: string) => Promise<void>;
+
+  /** Ajoute une ligne de staffing sur un chantier. Pas d'`updateStaffing` : une ligne n'a que
+   *  deux champs signifiants (fonction + ETP), on la corrige en la supprimant/ressaisissant. */
+  createStaffing: (
+    input: Pick<ChantierStaffing, "axisId" | "chantierId" | "function" | "fte"> &
+      Partial<Pick<ChantierStaffing, "note">>
+  ) => Promise<ChantierStaffing>;
+  removeStaffing: (id: string) => Promise<void>;
 };
 
 /** Identifiant d'entité : suffixe aléatoire plutôt qu'un compteur `L###` comme côté leviers — il
@@ -123,6 +139,7 @@ export function useStrategicData(
   const [allActions, setAllActions] = useState<ChantierAction[]>([]);
   const [allIndicators, setAllIndicators] = useState<Indicator[]>([]);
   const [allMeasurements, setAllMeasurements] = useState<IndicatorMeasurement[]>([]);
+  const [allStaffing, setAllStaffing] = useState<ChantierStaffing[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -132,13 +149,21 @@ export function useStrategicData(
       setAllActions([]);
       setAllIndicators([]);
       setAllMeasurements([]);
+      setAllStaffing([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    // `loading` ne retombe qu'une fois les cinq collections arrivées : afficher un écran
+    // `loading` ne retombe qu'une fois les six collections arrivées : afficher un écran
     // partiellement peuplé (axes sans indicateurs) donnerait de faux compteurs "0 à risque".
-    const pending = new Set(["axes", "chantiers", "actions", "indicators", "measurements"]);
+    const pending = new Set([
+      "axes",
+      "chantiers",
+      "actions",
+      "indicators",
+      "measurements",
+      "staffing",
+    ]);
     const settle = (key: string) => {
       pending.delete(key);
       if (pending.size === 0) setLoading(false);
@@ -164,6 +189,10 @@ export function useStrategicData(
       subscribeIndicatorMeasurements(companyId, (v) => {
         setAllMeasurements(v);
         settle("measurements");
+      }),
+      subscribeChantierStaffing(companyId, (v) => {
+        setAllStaffing(v);
+        settle("staffing");
       }),
     ];
     return () => unsubs.forEach((unsub) => unsub());
@@ -192,6 +221,13 @@ export function useStrategicData(
     const ids = new Set(indicators.map((i) => i.id));
     return allMeasurements.filter((m) => ids.has(m.indicatorId));
   }, [allMeasurements, indicators]);
+  // Le staffing porte son propre `programId` (comme axes/chantiers/indicateurs) : filtrage direct,
+  // sans passer par la liste des chantiers — une ligne dont le chantier vient d'être supprimé
+  // reste ainsi visible dans les agrégats plutôt que de disparaître silencieusement.
+  const staffing = useMemo(
+    () => allStaffing.filter((s) => s.programId === programId),
+    [allStaffing, programId]
+  );
 
   // Refs toujours à jour : les mutations doivent lire l'état le plus récent sans être recréées à
   // chaque rendu (même motivation que les refs de `useBeTrackData`).
@@ -352,12 +388,37 @@ export function useStrategicData(
     await deleteIndicatorMeasurement(id);
   }, []);
 
+  const createStaffing = useCallback<StrategicData["createStaffing"]>(
+    async (input) => {
+      if (!companyId || !programId) throw new Error("createStaffing: companyId/programId manquant");
+      const { note, ...rest } = input;
+      const entry: ChantierStaffing = {
+        ...rest,
+        id: newId("ST"),
+        companyId,
+        programId,
+        createdAt: nowDate(),
+        // `note` OMISE plutôt que passée à `undefined` : Firestore rejette `undefined` à
+        // l'écriture (pas d'`ignoreUndefinedProperties` sur cette instance).
+        ...(note && note.trim() !== "" ? { note: note.trim() } : {}),
+      };
+      await saveChantierStaffing(entry);
+      return entry;
+    },
+    [companyId, programId]
+  );
+
+  const removeStaffing = useCallback<StrategicData["removeStaffing"]>(async (id) => {
+    await deleteChantierStaffing(id);
+  }, []);
+
   return {
     axes,
     chantiers,
     chantierActions,
     indicators,
     measurements,
+    staffing,
     loading,
     createAxis,
     updateAxis,
@@ -373,5 +434,7 @@ export function useStrategicData(
     removeIndicator,
     addMeasurement,
     removeMeasurement,
+    createStaffing,
+    removeStaffing,
   };
 }

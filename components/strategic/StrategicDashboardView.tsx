@@ -141,6 +141,7 @@ export function StrategicDashboardView() {
     objective: t("kpi.objectiveValue"),
     onTrack: t("indicatorStatus.onTrack"),
     atRisk: t("indicatorStatus.atRisk"),
+    fullHistory: t("kpi.chart.fullHistory"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────

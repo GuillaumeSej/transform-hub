@@ -740,6 +740,51 @@ export type IndicatorMeasurement = {
   reportedAt: string;
 };
 
+// ─── Staffing des chantiers (ETP par grande fonction) ─────────────────────────────────────────
+//
+// Répond au besoin « combien d'ETP, et de quelle direction métier, sont mobilisés sur ce
+// chantier / cet axe / ce programme ? ». Volontairement DISJOINT de `Role` (ligne 1) : `Role`
+// dit qui a le droit de se connecter et d'agir dans l'app, `StaffingFunction` dit à quelle
+// direction métier appartient une personne staffée. Les deux référentiels n'ont ni la même
+// granularité ni le même cycle de vie — les confondre obligerait à créer un rôle de connexion
+// « Juridique » ou « Achats » pour pouvoir staffer ces fonctions.
+
+/** Grandes fonctions/directions métier mobilisables sur un chantier. Union fermée (et non texte
+ *  libre) : c'est la clé d'agrégation de la page Effectifs — un libellé libre produirait autant
+ *  de « fonctions » que d'orthographes saisies. "autre" est la porte de sortie pour les cas non
+ *  couverts, précisable via `ChantierStaffing.note`. */
+export type StaffingFunction =
+  | "rh"
+  | "finance"
+  | "it"
+  | "marketing"
+  | "commercial"
+  | "juridique"
+  | "operations"
+  | "achats"
+  | "autre";
+
+/** Une ligne de staffing = UNE fonction et son volume d'ETP sur UN chantier. Plusieurs lignes
+ *  coexistent sur un même chantier (1 RH + 1 Finance = 2 ETP), et rien n'interdit deux lignes de
+ *  la même fonction (deux vagues de renfort saisies séparément) : les agrégats somment `fte`, ils
+ *  ne comptent pas les lignes. */
+export type ChantierStaffing = {
+  id: string;
+  companyId: string;
+  programId: string;
+  /** Dénormalisé depuis le chantier : la page Effectifs agrège par axe sans avoir à recharger ni
+   *  à joindre la collection `chantiers`. Un chantier ne change jamais d'axe dans l'UI actuelle,
+   *  cette copie ne peut donc pas diverger. */
+  axisId: string;
+  chantierId: string;
+  function: StaffingFunction;
+  /** Nombre d'ETP, décimal accepté (0.5 = mi-temps). Positif. */
+  fte: number;
+  /** Précision libre (nom de la personne, périmètre, fonction réelle derrière "autre"…). */
+  note?: string;
+  createdAt: string;
+};
+
 /** Configuration du cycle de vie par entreprise — chaque client peut personnaliser le
  *  nombre d'étapes, leur nom, et les étapes de validation requises. */
 export type LifecycleStage = {
