@@ -4,6 +4,8 @@ import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, FolderKanban } from "lucide-react";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useRole } from "@/lib/hooks/useRole";
+import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { resolveProgramType } from "@/lib/axisLogic";
 
@@ -24,13 +26,36 @@ import { resolveProgramType } from "@/lib/axisLogic";
 export function ProgramSwitcher() {
   const { programs, activeProgram, activeProgramId, setActiveProgramId } = useActiveProgram();
   const { t } = useTranslation();
+  const { role } = useRole();
+  const { confirmDiscard } = useUnsavedChanges();
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
   if (programs.length < 2) return null;
 
-  const select = (id: string) => {
+  const select = async (id: string) => {
+    const program = programs.find((p) => p.id === id);
+
+    // Global admin : sa navigation ne dépend PAS du type de programme (voir lib/nav-config.ts —
+    // « Gestion des Entreprises » / « Cycle de vie » ne sont gated par aucun `programTypes`), donc
+    // changer de programme actif depuis une page admin ne produisait strictement rien de visible.
+    // On lui donne l'effet utile attendu : ouvrir la fiche de l'entreprise du programme choisi,
+    // directement sur l'onglet « Programmes » — et, pour un programme stratégique, directement en
+    // mode « Gérer » (étapes de maturité / indicateurs), l'écran qu'il cherchait de toute façon.
+    if (role === "admin" && program) {
+      // Navigation potentiellement destructrice (l'admin peut être en train d'éditer une fiche
+      // entreprise) — même garde que les liens de nav et la cloche de notifications.
+      const proceed = await confirmDiscard();
+      if (!proceed) return;
+      setActiveProgramId(id);
+      setOpen(false);
+      const params = new URLSearchParams({ id: program.companyId, tab: "projects" });
+      if (resolveProgramType(program) === "strategic") params.set("manageProgram", program.id);
+      router.push(`/admin/companies/detail?${params.toString()}`);
+      return;
+    }
+
     setActiveProgramId(id);
     setOpen(false);
     // Le dashboard exécutif porte SON scope dans l'URL (`?program=`, pour rester partageable) et
@@ -76,7 +101,7 @@ export function ProgramSwitcher() {
               <button
                 key={p.id}
                 type="button"
-                onClick={() => select(p.id)}
+                onClick={() => void select(p.id)}
                 className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-xs font-medium transition hover:bg-neutral-50 ${
                   active ? "font-semibold text-primary" : "text-secondary"
                 }`}

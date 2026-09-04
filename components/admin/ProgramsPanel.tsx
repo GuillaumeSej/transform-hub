@@ -64,8 +64,18 @@ const PROGRAM_TABS: {
  * la nav, voir lib/nav-config.ts) — le hub `/admin/companies/detail` le rend directement, scopé via
  * `companyId`, sans sélecteur ni filtre entreprise (contrairement à l'ancienne page globale). Seule
  * source de vérité pour ce CRUD.
+ *
+ * `initialManagedProgramId` : ouvre d'emblée la fiche « Gérer » de ce programme (s'il est bien
+ * stratégique) plutôt que la liste — alimenté par `?manageProgram=` quand le global admin arrive
+ * ici via le sélecteur de programme du Topbar (voir components/shared/ProgramSwitcher.tsx).
  */
-export function ProgramsPanel({ companyId }: { companyId: string }) {
+export function ProgramsPanel({
+  companyId,
+  initialManagedProgramId,
+}: {
+  companyId: string;
+  initialManagedProgramId?: string | null;
+}) {
   const { t } = useTranslation();
   const [programs, setPrograms] = useState<Program[]>([]);
 
@@ -85,8 +95,20 @@ export function ProgramsPanel({ companyId }: { companyId: string }) {
   }>({ name: "", sponsor: "", target: "", type: "performance" });
   const [showForm, setShowForm] = useState(false);
   /** Programme stratégique dont on affiche la fiche de configuration (null = liste). */
-  const [managedProgramId, setManagedProgramId] = useState<string | null>(null);
+  const [managedProgramId, setManagedProgramId] = useState<string | null>(
+    initialManagedProgramId ?? null
+  );
   const [programTab, setProgramTab] = useState<ProgramTabId>("maturity");
+
+  // Ré-appliqué quand le paramètre d'URL change (arrivée successive sur deux programmes différents
+  // depuis le Topbar sans remontage du composant). Une valeur absente ne referme jamais une fiche
+  // déjà ouverte : seul un choix explicite de l'utilisateur (« Tous les programmes ») le fait.
+  useEffect(() => {
+    if (!initialManagedProgramId) return;
+    setManagedProgramId(initialManagedProgramId);
+    setProgramTab("maturity");
+    setShowForm(false);
+  }, [initialManagedProgramId]);
 
   // Un programme est "en cours d'édition" (dirty) si le formulaire est ouvert avec au moins un
   // champ rempli — évite de bloquer inutilement la navigation quand l'utilisateur a juste

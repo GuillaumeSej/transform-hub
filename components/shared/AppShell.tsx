@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useStrategicData } from "@/lib/hooks/useStrategicData";
+import {
+  chantierDependencyAlerts,
+  latestMeasurement,
+  resolveIndicatorStatus,
+} from "@/lib/axisLogic";
 import { cleanupLegacyStorage } from "@/lib/legacyStorageCleanup";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { Sidebar } from "@/components/shared/Sidebar";
@@ -12,6 +18,7 @@ import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import type { Alert } from "@/types";
 
 /**
  * Coquille de l'app (sidebar + topbar) + garde d'authentification : redirige vers /login si
@@ -27,13 +34,110 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Type du programme actif — le garde-fou de routes ci-dessous doit appliquer EXACTEMENT le même
   // filtre que la Sidebar, sinon une page masquée dans la nav (ex. /hr en mode stratégique)
   // resterait accessible en tapant son URL directement.
-  const { programType, loading: programsLoading } = useActiveProgram();
+  const { programType, activeProgramId, loading: programsLoading } = useActiveProgram();
   const router = useRouter();
   const pathname = usePathname();
   const data = useBeTrackData(user?.companyId ?? null);
   const notifications = useNotifications(data, user);
   const [ready, setReady] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // ── Notifications : un jeu d'alertes PAR TYPE DE PROGRAMME ────────────────────────────────
+  // La cloche du Topbar affichait jusqu'ici les alertes du Plan Performance (financières, leviers)
+  // quel que soit le programme actif — sans aucun sens sur un Plan Stratégique, qui a ses propres
+  // signaux (cascades de dépendance entre chantiers, indicateurs à risque). Tant que les
+  // programmes chargent, `isStrategic` reste faux : on garde le comportement historique plutôt que
+  // de vider la cloche le temps du chargement (même prudence que le filtre de nav ci-dessous).
+  const isStrategic = !programsLoading && programType === "strategic";
+  // `companyId` passé à null hors mode stratégique : `useStrategicData` n'ouvre alors AUCUN
+  // abonnement Firestore — un Plan Performance ne paie donc rien pour ce hook (on ne peut pas
+  // appeler un hook conditionnellement, mais on peut le neutraliser par ses arguments).
+  const strategic = useStrategicData(
+    isStrategic ? (user?.companyId ?? null) : null,
+    activeProgramId
+  );
+
+  const strategicNotifications = useMemo(() => {
+    const alerts: Alert[] = [];
+    // Route d'atterrissage par alerte : le clic sur une notification ne peut pas passer par
+    // `getLeverById` en mode stratégique (les scopes sont des chantiers/indicateurs, pas des
+    // leviers). On mémorise donc la destination au moment où l'alerte est construite, là où on a
+    // encore le contexte (axe parent du chantier).
+    const routes: Record<string, string> = {};
+    if (!isStrategic) return { alerts, routes };
+
+    const today = new Date().toISOString().slice(0, 10);
+    const companyId = user?.companyId ?? null;
+    const axisIdByChantier = new Map(strategic.chantiers.map((c) => [c.id, c.axisId]));
+
+    // 1. Cascades de dépendance entre chantiers — signalement pur (aucune date n'est modifiée),
+    //    voir lib/axisLogic.ts. `desc` reprend le message déjà formulé par le moteur (il nomme les
+    //    deux chantiers et le nombre de jours), le titre porte le chantier impacté.
+    for (const dep of chantierDependencyAlerts(strategic.chantiers, strategic.chantierActions)) {
+      const id = `strategic-dep-${dep.sourceId}-${dep.type}-${dep.targetId}`;
+      const axisId = axisIdByChantier.get(dep.sourceId);
+      alerts.push({
+        id,
+        type: "amber",
+        ts: today,
+        createdAt: today,
+        scope: dep.sourceId,
+        scopeLabel: dep.sourceName,
+        title: t(
+          "shared.appShell.strategicDependencyTitle",
+          "Dépendance à risque · {chantier}"
+        ).replace("{chantier}", dep.sourceName),
+        desc: dep.message,
+        actorRole: "",
+        resolved: false,
+        source: "auto",
+        companyId,
+      });
+      routes[id] = axisId ? `/levers/detail?id=${axisId}` : "/levers";
+    }
+
+    // 2. Indicateurs à risque — statut EFFECTIF (surcharge manuelle du responsable comprise).
+    for (const indicator of strategic.indicators) {
+      if (resolveIndicatorStatus(indicator) !== "at_risk") continue;
+      const id = `strategic-indicator-${indicator.id}`;
+      const latest = latestMeasurement(indicator.id, strategic.measurements);
+      alerts.push({
+        id,
+        type: "red",
+        ts: latest?.reportedAt?.slice(0, 10) ?? today,
+        createdAt: latest?.reportedAt?.slice(0, 10) ?? today,
+        scope: indicator.id,
+        scopeLabel: indicator.name,
+        title: t("shared.appShell.strategicIndicatorTitle", "Indicateur à risque · {name}").replace(
+          "{name}",
+          indicator.name
+        ),
+        desc: t(
+          "shared.appShell.strategicIndicatorDesc",
+          "La dernière mesure est en dehors de l'objectif : {objective}."
+        ).replace("{objective}", indicator.objective),
+        actorRole: indicator.responsibleRoles[0] ?? "",
+        resolved: false,
+        source: "auto",
+        companyId,
+      });
+      routes[id] = "/kpi";
+    }
+
+    return { alerts, routes };
+  }, [
+    isStrategic,
+    strategic.chantiers,
+    strategic.chantierActions,
+    strategic.indicators,
+    strategic.measurements,
+    user?.companyId,
+    t,
+  ]);
+
+  // Alertes réellement affichées (cloche du Topbar + badge de nav) : celles du plan actif, jamais
+  // les deux mélangées. Le Plan Performance conserve exactement son comportement historique.
+  const shellAlerts = isStrategic ? strategicNotifications.alerts : notifications.unresolvedAlerts;
 
   // Le drawer mobile ne doit jamais rester ouvert après une navigation (changement de page) — au
   // cas où la fermeture au clic sur un lien de nav (via Sidebar.onNavigate) n'aurait pas suffi
@@ -91,7 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Sidebar fixe — visible seulement à partir de `lg` (1024px). En dessous, remplacée par le
           bouton hamburger du Topbar + ce drawer coulissant. */}
       <div className="hidden lg:flex">
-        <Sidebar alertCount={notifications.unresolvedAlerts.length} role={role} />
+        <Sidebar alertCount={shellAlerts.length} role={role} />
       </div>
 
       {mobileNavOpen && (
@@ -106,7 +210,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setMobileNavOpen(false)}
           />
           <Sidebar
-            alertCount={notifications.unresolvedAlerts.length}
+            alertCount={shellAlerts.length}
             role={role}
             onNavigate={() => setMobileNavOpen(false)}
             className="relative z-10 h-dvh w-[min(248px,85vw)] min-w-0 shadow-xl"
@@ -116,9 +220,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
-          alertCount={notifications.unresolvedAlerts.length}
-          alerts={notifications.unresolvedAlerts}
+          alertCount={shellAlerts.length}
+          alerts={shellAlerts}
           onAlertClick={(alert) => {
+            if (isStrategic) {
+              // Une alerte stratégique ne pointe jamais un levier : cascade de dépendance → fiche
+              // de l'axe portant le chantier impacté, indicateur à risque → page Indicateurs.
+              router.push(strategicNotifications.routes[alert.id] ?? "/levers");
+              return;
+            }
             const leverId = data.getLeverById(alert.scope)?.id;
             router.push(leverId ? `/levers/detail?id=${leverId}` : "/levers");
           }}
