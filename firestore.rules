@@ -66,6 +66,10 @@ service cloud.firestore {
     match /indicatorMeasurements/{docId} {
       allow read, write: if true;
     }
+    // Staffing des chantiers en ETP par grande fonction (voir lib/firestore/chantierStaffing.ts).
+    match /chantierStaffing/{docId} {
+      allow read, write: if true;
+    }
     match /{document=**} {
       allow read, write: if false;
     }
