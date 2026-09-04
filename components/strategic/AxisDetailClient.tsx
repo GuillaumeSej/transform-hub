@@ -10,15 +10,18 @@ import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { ChantierForm, type ChantierFormValues } from "@/components/strategic/ChantierForm";
 import { ChantierGantt } from "@/components/strategic/ChantierGantt";
+import { ChantierStaffingEditor } from "@/components/strategic/ChantierStaffingEditor";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import { IndicatorStatusSummary } from "@/components/strategic/IndicatorStatusSummary";
 import {
+  chantierBounds,
   chantierDependencyAlerts,
+  chantierProgress,
   latestMeasurement,
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
-import { addDays } from "@/lib/dateUtils";
+import { addDays, parseISO } from "@/lib/dateUtils";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { resolveMaturityStageLabel, useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
@@ -62,6 +65,55 @@ const INPUT_CLASS =
  *  même ligne. */
 const SMALL_INPUT_CLASS =
   "mt-0.5 rounded-md border border-border bg-white px-2 py-1 text-[12px] text-primary outline-none focus:border-bp-coral";
+
+/**
+ * Date ISO ("2026-09-03") → « 3 sept. 2026 ». Le PO refusait l'affichage brut des dates dans la
+ * pop-up de chantier (« 2026-09-03 → 2027-12-31 »). Même locale câblée que `formatTimestamp`
+ * (app/(app)/admin/history/page.tsx), et même repli défensif : une date illisible est réaffichée
+ * telle quelle plutôt que remplacée par « Invalid Date ».
+ */
+function formatDay(iso: string): string {
+  const time = parseISO(iso);
+  if (Number.isNaN(time)) return iso;
+  return new Date(time).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** « 3 sept. 2026 → 31 déc. 2027 ». */
+function formatRange(start: string, end: string): string {
+  return `${formatDay(start)} → ${formatDay(end)}`;
+}
+
+/**
+ * Responsable d'un chantier. `Chantier` n'a PAS de champ dédié (seulement `responsibleRoles`, une
+ * habilitation par rôle et non une personne nommée) : on dérive donc le responsable de ses
+ * actions — le nom le plus fréquent parmi elles, à égalité celui de l'action la plus ancienne
+ * (l'ordre d'insertion de la `Map` reflétant l'ordre chronologique de la liste reçue).
+ *
+ * Dérivation plutôt qu'ajout d'un champ `owner` sur `Chantier` : un champ non saisissable (le
+ * formulaire de chantier n'en a pas) resterait vide sur 100 % des données existantes, là où la
+ * dérivation affiche immédiatement l'information juste. Le jour où le chantier aura son propre
+ * responsable, ce helper devient le repli.
+ */
+function deriveChantierOwner(actions: ChantierAction[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const action of actions) {
+    const owner = action.owner?.trim();
+    if (owner) counts.set(owner, (counts.get(owner) ?? 0) + 1);
+  }
+  let best: string | undefined;
+  let bestCount = 0;
+  counts.forEach((count, owner) => {
+    if (count > bestCount) {
+      best = owner;
+      bestCount = count;
+    }
+  });
+  return best;
+}
 
 /** Ids générés côté client pour les livrables et leurs sous-étapes, sur le modèle de `makeActionId`
  *  (lib/leverExcelImport.ts) : jamais affichés, seulement des clés stables de liste et de patch. Le
@@ -511,6 +563,16 @@ export function AxisDetailClient() {
       ? activeChantierActions.find((a) => a.id === actionForm.actionId)
       : undefined;
 
+  // Synthèse de tête de pop-up : période, responsable, avancement — les trois questions du PO
+  // devant une fiche de chantier ("qui, jusqu'à quand, où on en est").
+  const activeChantierBounds = activeChantier
+    ? chantierBounds(activeChantier.id, activeChantierActions)
+    : undefined;
+  const activeChantierProgress = activeChantier
+    ? chantierProgress(activeChantier.id, activeChantierActions, stages)
+    : undefined;
+  const activeChantierOwner = deriveChantierOwner(activeChantierActions);
+
   const actionFormLabels = {
     name: t("strategicAxes.actionName"),
     owner: t("strategicAxes.actionOwner"),
@@ -574,10 +636,13 @@ export function AxisDetailClient() {
             objectiveValue={indicator.objectiveValue}
             unit={indicator.unit}
             qualitative={indicator.kind === "qualitative"}
+            frequency={indicator.frequency}
             height={160}
             labelValue={t("strategicAxes.chartValue")}
             labelObjective={t("strategicAxes.chartObjective")}
             emptyLabel={t("strategicAxes.chartEmpty")}
+            labelViewFull={t("kpi.chart.viewFull")}
+            fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
           />
         </div>
       </div>
@@ -756,6 +821,7 @@ export function AxisDetailClient() {
             chantiers={axisChantiers}
             actions={axisActions}
             stages={stages}
+            axisColor={axis.color}
             alertedChantierIds={alertedChantierIds}
             onChantierClick={(c) => openChantier(c.id)}
             onActionClick={(action, c) => openChantier(c.id, action.id)}
@@ -764,6 +830,12 @@ export function AxisDetailClient() {
               unplannedTitle: t("strategicAxes.chantierUnplanned"),
               noDates: t("strategicAxes.chantierNoDates"),
               actionsSuffix: t("strategicAxes.actionsSuffix"),
+              scale: t("strategicAxes.ganttScale"),
+              scaleMonth: t("strategicAxes.ganttScaleMonth"),
+              scaleQuarter: t("strategicAxes.ganttScaleQuarter"),
+              scaleSemester: t("strategicAxes.ganttScaleSemester"),
+              progress: t("strategicAxes.progress"),
+              alerted: t("strategicAxes.chantierAlerted"),
             }}
           />
         </CardBody>
@@ -822,6 +894,58 @@ export function AxisDetailClient() {
             {activeChantier.description && (
               <p className="text-[13px] text-secondary">{activeChantier.description}</p>
             )}
+
+            {/* ── Synthèse : responsable / période / avancement ─────────────────────────── */}
+            <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-neutral-50 p-3 sm:grid-cols-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                  {t("strategicAxes.chantierOwner")}
+                </div>
+                <div className="mt-0.5 truncate text-[13px] font-semibold text-primary">
+                  {activeChantierOwner ?? t("strategicAxes.unassigned")}
+                </div>
+                {activeChantierOwner && (
+                  <div className="text-[10px] text-tertiary">
+                    {t("strategicAxes.ownerFromActions")}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                  {t("strategicAxes.chantierPeriod")}
+                </div>
+                <div className="mt-0.5 text-[13px] font-semibold text-primary">
+                  {activeChantierBounds
+                    ? formatRange(activeChantierBounds.start, activeChantierBounds.end)
+                    : t("strategicAxes.chantierNoDates")}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                  {t("strategicAxes.progress")}
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${activeChantierProgress?.pct ?? 0}%`,
+                        backgroundColor: axis.color ?? "var(--bp-warm-taupe)",
+                      }}
+                    />
+                  </div>
+                  <span className="shrink-0 text-[13px] font-bold text-primary">
+                    {activeChantierProgress?.pct ?? 0}%
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[10px] text-tertiary">
+                  {activeChantierProgress?.done ?? 0} / {activeChantierProgress?.total ?? 0}{" "}
+                  {t("strategicAxes.actionsCompleted")}
+                </div>
+              </div>
+            </div>
 
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-[12px] font-bold uppercase tracking-wide text-primary">
@@ -882,10 +1006,12 @@ export function AxisDetailClient() {
                           <div className="text-[13px] font-semibold text-primary">
                             {action.name}
                           </div>
-                          <div className="mt-0.5 text-[11px] text-tertiary">
-                            {action.start} → {action.end}
-                            {action.owner ? ` · ${action.owner}` : ""} ·{" "}
-                            {resolveMaturityStageLabel(action.status, stages)}
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">
+                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-secondary">
+                              {formatRange(action.start, action.end)}
+                            </span>
+                            {action.owner && <span>· {action.owner}</span>}
+                            <AxisStageBadge stageId={action.status} stages={stages} />
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
@@ -943,7 +1069,7 @@ export function AxisDetailClient() {
                                         key={p.id}
                                         className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] text-secondary"
                                       >
-                                        {p.start} → {p.end}
+                                        {formatRange(p.start, p.end)}
                                         {p.note ? ` · ${p.note}` : ""}
                                       </span>
                                     ))}
@@ -959,6 +1085,16 @@ export function AxisDetailClient() {
                 })}
               </ul>
             )}
+
+            {/* Effectifs mobilisés sur le chantier — composant fourni par le lot « Effectifs »
+                (édition des ETP par fonction), volontairement rendu APRÈS les actions et AVANT la
+                suppression du chantier. */}
+            <ChantierStaffingEditor
+              companyId={user?.companyId ?? ""}
+              programId={activeProgramId ?? ""}
+              axisId={axis.id}
+              chantierId={activeChantier.id}
+            />
 
             <div className="border-t border-border pt-3">
               <Button

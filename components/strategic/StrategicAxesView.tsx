@@ -10,14 +10,22 @@ import { Modal } from "@/components/shared/Modal";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisKanban } from "@/components/strategic/AxisKanban";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
-import { chantierDependencyAlerts, resolveIndicatorStatus } from "@/lib/axisLogic";
+import {
+  chantierDependencyAlerts,
+  chantierProgress,
+  resolveIndicatorStatus,
+} from "@/lib/axisLogic";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMaturityStages, resolveMaturityStageLabel } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Chantier, StrategicAxis } from "@/types";
+import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
+
+/** Nombre d'actions listées en clair sur une carte chantier avant repli « +N autres ». Au-delà,
+ *  la carte cesse d'être lisible d'un coup d'œil — le détail complet est dans la pop-up. */
+const CARD_ACTIONS_SHOWN = 4;
 
 /**
  * Page « Axes stratégiques » — portefeuille des axes du programme actif, servie sur la MÊME route
@@ -88,6 +96,19 @@ export function StrategicAxesView() {
     return map;
   }, [data.chantiers]);
 
+  // Actions de CHAQUE chantier, triées par date de début : la vue « chantiers » en affiche les
+  // NOMS sur la carte (le PO pilote au quotidien sur « ce qu'il y a à faire », pas sur un compte).
+  const actionsByChantier = useMemo(() => {
+    const map = new Map<string, ChantierAction[]>();
+    for (const action of data.chantierActions) {
+      const list = map.get(action.chantierId);
+      if (list) list.push(action);
+      else map.set(action.chantierId, [action]);
+    }
+    map.forEach((list) => list.sort((a, b) => a.start.localeCompare(b.start)));
+    return map;
+  }, [data.chantierActions]);
+
   // Actions + indicateurs à risque rattachés à CHAQUE chantier. Un indicateur sans `chantierId`
   // est « macro » (rattaché directement à l'axe) : il ne compte pour aucun chantier.
   const chantierCounts = useMemo(() => {
@@ -133,15 +154,35 @@ export function StrategicAxesView() {
     [stages, t]
   );
 
+  /**
+   * Filtres OUVERTS mais encore sans valeur cochée — état purement local, indispensable au
+   * fonctionnement des boutons « Étape de maturité » / « Responsable ».
+   *
+   * Bug corrigé : `FilterBar` signale l'ouverture d'un filtre en remontant `{ f_stage: [] }`, or
+   * `setFilters` n'écrit dans l'URL que les clés AYANT des valeurs (`v.length > 0`) et
+   * `activeFilters` était dérivé EXCLUSIVEMENT de l'URL. Un filtre ouvert-mais-vide n'avait donc
+   * aucune représentation persistante : le clic était annulé au rendu suivant et le panneau de
+   * valeurs ne s'affichait jamais — d'où l'impression que le bouton ne faisait rien.
+   *
+   * Les valeurs cochées, elles, restent dans l'URL (lien partageable, survit au rafraîchissement) :
+   * seule l'ouverture — qui n'a pas à être partagée — vit en mémoire.
+   */
+  const [openFilterKeys, setOpenFilterKeys] = useState<string[]>([]);
+
   const activeFilters: ActiveFilters = useMemo(() => {
     const result: ActiveFilters = {};
+    for (const key of openFilterKeys) {
+      if (filterDefs.some((def) => def.key === key)) result[key] = [];
+    }
+    // L'URL prime : un filtre porté par l'URL est ouvert ET pré-coché, même après un partage de lien.
     searchParams.forEach((value, key) => {
       if (filterDefs.some((def) => def.key === key)) result[key] = value.split(",").filter(Boolean);
     });
     return result;
-  }, [searchParams, filterDefs]);
+  }, [searchParams, filterDefs, openFilterKeys]);
 
   const setFilters = (next: ActiveFilters) => {
+    setOpenFilterKeys(Object.keys(next));
     const params = new URLSearchParams(searchParams.toString());
     Array.from(params.keys())
       .filter((k) => k.startsWith("f_"))
@@ -310,6 +351,10 @@ export function StrategicAxesView() {
                     {axisChantiers.map((chantier) => {
                       const c = chantierCounts.get(chantier.id) ?? { actions: 0, atRisk: 0 };
                       const isAlerted = alertedChantierIds.has(chantier.id);
+                      const chantierActions = actionsByChantier.get(chantier.id) ?? [];
+                      const shownActions = chantierActions.slice(0, CARD_ACTIONS_SHOWN);
+                      const hiddenActions = chantierActions.length - shownActions.length;
+                      const progress = chantierProgress(chantier.id, data.chantierActions, stages);
                       return (
                         <button
                           key={chantier.id}
@@ -341,6 +386,54 @@ export function StrategicAxesView() {
                               </span>
                             )}
                           </div>
+
+                          {/* Avancement pondéré par la durée des actions (voir chantierProgress). */}
+                          <div className="mt-2 flex items-center gap-1.5">
+                            <div className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-100">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${progress.pct}%`,
+                                  backgroundColor: axis.color ?? "var(--bp-warm-taupe)",
+                                }}
+                              />
+                            </div>
+                            <span className="shrink-0 text-[10px] font-bold text-secondary">
+                              {progress.pct}%
+                            </span>
+                          </div>
+
+                          {/* Les actions À FAIRE, nommées — la maille de pilotage quotidien. */}
+                          {chantierActions.length === 0 ? (
+                            <p className="mt-2 text-[11px] text-tertiary">
+                              {t("strategicAxes.cardNoActions")}
+                            </p>
+                          ) : (
+                            <ul className="mt-2 space-y-1">
+                              {shownActions.map((action) => (
+                                <li
+                                  key={action.id}
+                                  className="flex items-start gap-1.5 text-[11px] leading-snug text-secondary"
+                                >
+                                  <span
+                                    aria-hidden
+                                    className="mt-[5px] h-1 w-1 shrink-0 rounded-full"
+                                    style={{
+                                      backgroundColor: axis.color ?? "var(--bp-warm-taupe)",
+                                    }}
+                                  />
+                                  <span className="min-w-0 flex-1 truncate" title={action.name}>
+                                    {action.name}
+                                  </span>
+                                </li>
+                              ))}
+                              {hiddenActions > 0 && (
+                                <li className="pl-2.5 text-[10.5px] font-medium text-tertiary">
+                                  +{hiddenActions} {t("strategicAxes.moreActionsSuffix")}
+                                </li>
+                              )}
+                            </ul>
+                          )}
                         </button>
                       );
                     })}

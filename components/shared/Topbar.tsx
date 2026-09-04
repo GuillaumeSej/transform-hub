@@ -20,6 +20,7 @@ const CRUMBS: Record<string, string> = {
   "/dashboard": "nav.executiveDashboard",
   "/levers": "nav.leverLibrary",
   "/kpi": "nav.kpi",
+  "/effectifs": "nav.effectifs",
   "/workstreams": "nav.workstreamDashboard",
   "/finance": "nav.financeModule",
   "/hr": "nav.hrDashboard",
