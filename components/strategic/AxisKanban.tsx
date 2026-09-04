@@ -1,6 +1,9 @@
 "use client";
 
-import type { MaturityStageConfig, StrategicAxis } from "@/types";
+import { Popover } from "@/components/shared/Popover";
+import { AtRiskIndicatorPopoverContent } from "@/components/strategic/AtRiskIndicatorPopoverContent";
+import type { IndicatorDelta } from "@/lib/axisLogic";
+import type { Indicator, MaturityStageConfig, StrategicAxis } from "@/types";
 
 /**
  * Vue kanban du portefeuille d'axes — une colonne par étape de maturité du programme. Clone
@@ -19,6 +22,7 @@ export function AxisKanban({
   stages,
   onCardClick,
   counts,
+  atRiskItemsOf,
   labels,
 }: {
   axes: StrategicAxis[];
@@ -27,12 +31,17 @@ export function AxisKanban({
   onCardClick: (id: string) => void;
   /** Compteurs par axe, calculés par l'appelant (chantiers / indicateurs / indicateurs à risque). */
   counts?: (axisId: string) => { chantiers: number; indicators: number; atRisk: number };
+  /** Indicateurs à risque D'UN AXE, écart calculé — alimente le contenu du `Popover` déclenché par
+   *  le badge "N à risque" (round 4, point 2), même contrat que `StrategicAxesView.axisAtRiskIndicators`. */
+  atRiskItemsOf?: (axisId: string) => { indicator: Indicator; delta: IndicatorDelta | undefined }[];
   labels?: {
     emptyColumn?: string;
     chantiers?: string;
     indicators?: string;
     atRisk?: string;
     noStage?: string;
+    atRiskPopoverTitle?: string;
+    progress?: string;
   };
 }) {
   const l = {
@@ -41,6 +50,8 @@ export function AxisKanban({
     indicators: labels?.indicators ?? "indicateurs",
     atRisk: labels?.atRisk ?? "à risque",
     noStage: labels?.noStage ?? "Sans étape",
+    atRiskPopoverTitle: labels?.atRiskPopoverTitle ?? "Indicateurs à risque",
+    progress: labels?.progress,
   };
 
   // Les axes dont l'étape ne correspond à aucune étape connue (étape supprimée du référentiel
@@ -77,11 +88,22 @@ export function AxisKanban({
           )}
           {col.list.map((axis) => {
             const c = counts?.(axis.id);
+            // Même conversion bouton -> div que `StrategicAxesView` (vues "cartes"/"chantiers") : le
+            // badge "N à risque" est un Popover-déclencheur, donc un vrai <button>, qui ne peut pas
+            // être imbriqué dans un <button> parent (imbrication invalide en HTML).
             return (
-              <button
+              <div
                 key={axis.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onCardClick(axis.id)}
-                className="mb-2 block w-full rounded-sm border border-border bg-white p-2.5 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onCardClick(axis.id);
+                  }
+                }}
+                className="mb-2 block w-full cursor-pointer rounded-sm border border-border bg-white p-2.5 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm"
               >
                 <div className="flex items-start gap-2">
                   <span
@@ -107,13 +129,30 @@ export function AxisKanban({
                       {c.indicators} {l.indicators}
                     </span>
                     {c.atRisk > 0 && (
-                      <span className="rounded-full bg-rag-amber-light px-2 py-0.5 font-semibold text-rag-amber">
-                        {c.atRisk} {l.atRisk}
-                      </span>
+                      <Popover
+                        trigger={({ toggle }) => (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggle();
+                            }}
+                            className="rounded-full bg-rag-amber-light px-2 py-0.5 font-semibold text-rag-amber hover:brightness-95"
+                          >
+                            {c.atRisk} {l.atRisk}
+                          </button>
+                        )}
+                      >
+                        <AtRiskIndicatorPopoverContent
+                          items={atRiskItemsOf?.(axis.id) ?? []}
+                          title={l.atRiskPopoverTitle}
+                          progressLabel={l.progress}
+                        />
+                      </Popover>
                     )}
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>
