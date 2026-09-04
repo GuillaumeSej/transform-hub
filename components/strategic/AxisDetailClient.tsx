@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Plus, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Modal } from "@/components/shared/Modal";
@@ -10,436 +10,47 @@ import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { ChantierForm, type ChantierFormValues } from "@/components/strategic/ChantierForm";
 import { ChantierGantt } from "@/components/strategic/ChantierGantt";
-import { ChantierStaffingEditor } from "@/components/strategic/ChantierStaffingEditor";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import { IndicatorStatusSummary } from "@/components/strategic/IndicatorStatusSummary";
 import {
-  chantierBounds,
   chantierDependencyAlerts,
-  chantierProgress,
   latestMeasurement,
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
-import { addDays, parseISO } from "@/lib/dateUtils";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { resolveMaturityStageLabel, useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type {
-  ChantierAction,
-  Deliverable,
-  DeliverablePhase,
-  Indicator,
-  MaturityStageConfig,
-} from "@/types";
+import type { Indicator } from "@/types";
 
 /**
  * Fiche d'identité d'un axe stratégique — servie sur la même route que la fiche levier
  * (`/levers/detail?id=…`, voir le routeur `LeverDetailClient`), l'id étant résolu parmi les axes
  * du programme actif plutôt que parmi les leviers.
  *
- * Trois blocs, dans cet ordre :
+ * Quatre blocs, dans cet ordre :
  *  1. compteur d'ensemble des indicateurs de l'axe (`IndicatorStatusSummary`) + alertes de cascade
  *     de dépendance entre chantiers ;
- *  2. Gantt des chantiers (`ChantierGantt`) avec la pop-up de détail chantier/actions/livrables ;
- *  3. indicateurs de l'axe EN LECTURE SEULE — macro d'abord, puis groupés par chantier.
+ *  2. Gantt des chantiers (`ChantierGantt`) — PUREMENT NAVIGATIONNEL depuis le round 4 (voir plus
+ *     bas) : un clic sur un bloc chantier ou une action navigue vers la fiche chantier dédiée
+ *     (`/levers/chantier?id=…`), qui porte désormais tout le détail (round 4, point 9) ;
+ *  3. modale "nouveau chantier", qui crée puis navigue vers cette même fiche dédiée ;
+ *  4. indicateurs de l'axe EN LECTURE SEULE — macro d'abord, puis groupés par chantier.
+ *
+ * Round 4 : la pop-up de détail chantier (actions/livrables/RACI/effort/prérequis) a été RETIRÉE
+ * d'ici — voir `app/(app)/levers/chantier/ChantierDetailClient.tsx`, qui porte désormais tout ce
+ * contenu sur sa propre route (décision PO : format "fiche PERIAL", incompatible avec une modale
+ * 720px). Cette fiche d'axe ne garde que ce qui reste au niveau AXE (pas chantier) : en-tête,
+ * stepper d'étape, indicateurs, Gantt navigationnel.
  *
  * La lecture seule des indicateurs est une décision de conception explicite (voir plan, section
  * « Page KPI ») : la saisie d'une mesure et la ré-édition de l'objectif/seuil vivent à UN SEUL
  * endroit, la page KPI, pour éviter deux flux de saisie divergents sur la même donnée. Cette page
  * reste une fiche d'identité, comme la fiche levier côté Performance.
  */
-
-type ChantierActionFormValues = Pick<
-  ChantierAction,
-  "name" | "description" | "owner" | "start" | "end" | "status" | "deliverables"
->;
-
-const INPUT_CLASS =
-  "mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral";
-
-/** Variante compacte, sans `w-full` : les deux dates d'une sous-étape de livrable tiennent sur une
- *  même ligne. */
-const SMALL_INPUT_CLASS =
-  "mt-0.5 rounded-md border border-border bg-white px-2 py-1 text-[12px] text-primary outline-none focus:border-bp-coral";
-
-/**
- * Date ISO ("2026-09-03") → « 3 sept. 2026 ». Le PO refusait l'affichage brut des dates dans la
- * pop-up de chantier (« 2026-09-03 → 2027-12-31 »). Même locale câblée que `formatTimestamp`
- * (app/(app)/admin/history/page.tsx), et même repli défensif : une date illisible est réaffichée
- * telle quelle plutôt que remplacée par « Invalid Date ».
- */
-function formatDay(iso: string): string {
-  const time = parseISO(iso);
-  if (Number.isNaN(time)) return iso;
-  return new Date(time).toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-/** « 3 sept. 2026 → 31 déc. 2027 ». */
-function formatRange(start: string, end: string): string {
-  return `${formatDay(start)} → ${formatDay(end)}`;
-}
-
-/**
- * Responsable d'un chantier. `Chantier` n'a PAS de champ dédié (seulement `responsibleRoles`, une
- * habilitation par rôle et non une personne nommée) : on dérive donc le responsable de ses
- * actions — le nom le plus fréquent parmi elles, à égalité celui de l'action la plus ancienne
- * (l'ordre d'insertion de la `Map` reflétant l'ordre chronologique de la liste reçue).
- *
- * Dérivation plutôt qu'ajout d'un champ `owner` sur `Chantier` : un champ non saisissable (le
- * formulaire de chantier n'en a pas) resterait vide sur 100 % des données existantes, là où la
- * dérivation affiche immédiatement l'information juste. Le jour où le chantier aura son propre
- * responsable, ce helper devient le repli.
- */
-function deriveChantierOwner(actions: ChantierAction[]): string | undefined {
-  const counts = new Map<string, number>();
-  for (const action of actions) {
-    const owner = action.owner?.trim();
-    if (owner) counts.set(owner, (counts.get(owner) ?? 0) + 1);
-  }
-  let best: string | undefined;
-  let bestCount = 0;
-  counts.forEach((count, owner) => {
-    if (count > bestCount) {
-      best = owner;
-      bestCount = count;
-    }
-  });
-  return best;
-}
-
-/** Ids générés côté client pour les livrables et leurs sous-étapes, sur le modèle de `makeActionId`
- *  (lib/leverExcelImport.ts) : jamais affichés, seulement des clés stables de liste et de patch. Le
- *  compteur de module évite la collision de deux créations dans la même milliseconde. */
-let deliverableSeq = 0;
-function makeDeliverableId(): string {
-  deliverableSeq += 1;
-  return `deliverable-${Date.now()}-${deliverableSeq}`;
-}
-function makePhaseId(): string {
-  deliverableSeq += 1;
-  return `phase-${Date.now()}-${deliverableSeq}`;
-}
-
-/** Normalise `ChantierAction.deliverables` en `Deliverable[]`. Défensif à l'égard des actions
- *  écrites AVANT ce modèle, où un livrable était une simple chaîne (`string[]`) : ces documents
- *  Firestore existent déjà et feraient planter la lecture de `.phases`. */
-function normalizeDeliverables(raw: ChantierAction["deliverables"]): Deliverable[] {
-  return (raw ?? []).map((d, i) =>
-    typeof d === "string"
-      ? { id: `legacy-${i}`, label: d, phases: [] }
-      : { ...d, phases: d.phases ?? [] }
-  );
-}
-
-/** Formulaire d'action de chantier, rendu INLINE dans la pop-up du chantier (et non dans une
- *  seconde `Modal`) : deux dialogues Radix superposés piègent le focus et ferment le mauvais
- *  niveau à l'Échap. Volontairement distinct de `components/shared/ActionForm.tsx`, entièrement
- *  bâti autour des lignes d'impact financières (CAPEX/gains/centre de coût) qui n'existent pas
- *  ici — les seuls champs communs sont le nom et les deux dates. */
-function ChantierActionForm({
-  initial,
-  stages,
-  onSubmit,
-  onCancel,
-  labels,
-}: {
-  initial?: Partial<ChantierActionFormValues>;
-  stages: MaturityStageConfig[];
-  onSubmit: (values: ChantierActionFormValues) => void | Promise<void>;
-  onCancel: () => void;
-  labels: {
-    name: string;
-    owner: string;
-    start: string;
-    end: string;
-    stage: string;
-    description: string;
-    deliverables: string;
-    deliverablesHint: string;
-    noDeliverables: string;
-    deliverableLabel: string;
-    addDeliverable: string;
-    removeDeliverable: string;
-    noPhases: string;
-    phaseStart: string;
-    phaseEnd: string;
-    addPhase: string;
-    removePhase: string;
-    submit: string;
-    cancel: string;
-  };
-}) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [name, setName] = useState(initial?.name ?? "");
-  const [owner, setOwner] = useState(initial?.owner ?? "");
-  const [start, setStart] = useState(initial?.start ?? today);
-  const [end, setEnd] = useState(initial?.end ?? addDays(today, 30));
-  const [status, setStatus] = useState(initial?.status ?? stages[0]?.id ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  // Un champ de saisie PAR livrable (plus de convention « une ligne = un livrable »), chacun
-  // portant ses propres sous-étapes temporelles.
-  const [deliverables, setDeliverables] = useState<Deliverable[]>(() =>
-    normalizeDeliverables(initial?.deliverables)
-  );
-  const [submitting, setSubmitting] = useState(false);
-
-  const canSubmit = name.trim().length > 0 && start.length > 0 && end.length > 0 && !submitting;
-
-  const patchDeliverable = (id: string, patch: Partial<Deliverable>) =>
-    setDeliverables((list) => list.map((d) => (d.id === id ? { ...d, ...patch } : d)));
-
-  const patchPhase = (deliverableId: string, phaseId: string, patch: Partial<DeliverablePhase>) =>
-    setDeliverables((list) =>
-      list.map((d) =>
-        d.id === deliverableId
-          ? { ...d, phases: d.phases.map((p) => (p.id === phaseId ? { ...p, ...patch } : p)) }
-          : d
-      )
-    );
-
-  const addDeliverable = () =>
-    setDeliverables((list) => [...list, { id: makeDeliverableId(), label: "", phases: [] }]);
-
-  const removeDeliverable = (id: string) =>
-    setDeliverables((list) => list.filter((d) => d.id !== id));
-
-  /** Une nouvelle sous-étape reprend par défaut les bornes de l'action : c'est la plage la plus
-   *  probable, et cela évite deux champs date vides que l'on filtrerait au submit. */
-  const addPhase = (deliverableId: string) =>
-    setDeliverables((list) =>
-      list.map((d) =>
-        d.id === deliverableId
-          ? { ...d, phases: [...d.phases, { id: makePhaseId(), start, end }] }
-          : d
-      )
-    );
-
-  const removePhase = (deliverableId: string, phaseId: string) =>
-    setDeliverables((list) =>
-      list.map((d) =>
-        d.id === deliverableId ? { ...d, phases: d.phases.filter((p) => p.id !== phaseId) } : d
-      )
-    );
-
-  const submit = async () => {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    try {
-      // Même esprit que l'ancien `.filter(Boolean)` sur les lignes : un livrable sans intitulé
-      // n'est pas écrit, et une sous-étape dont une borne a été vidée est ignorée.
-      const parsed = deliverables
-        .map((d) => ({
-          ...d,
-          label: d.label.trim(),
-          phases: d.phases.filter((p) => p.start.length > 0 && p.end.length > 0),
-        }))
-        .filter((d) => d.label.length > 0);
-      await onSubmit({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        owner: owner.trim() || undefined,
-        start,
-        end,
-        status,
-        deliverables: parsed.length > 0 ? parsed : undefined,
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="space-y-3 rounded-md border border-border bg-neutral-50 p-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <label className="text-xs font-medium text-secondary" htmlFor="ca-name">
-            {labels.name}
-          </label>
-          <input
-            id="ca-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className={INPUT_CLASS}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-secondary" htmlFor="ca-owner">
-            {labels.owner}
-          </label>
-          <input
-            id="ca-owner"
-            value={owner}
-            onChange={(e) => setOwner(e.target.value)}
-            className={INPUT_CLASS}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-secondary" htmlFor="ca-stage">
-            {labels.stage}
-          </label>
-          <select
-            id="ca-stage"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className={INPUT_CLASS}
-          >
-            {stages.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-medium text-secondary" htmlFor="ca-start">
-            {labels.start}
-          </label>
-          <input
-            id="ca-start"
-            type="date"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            className={INPUT_CLASS}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-secondary" htmlFor="ca-end">
-            {labels.end}
-          </label>
-          <input
-            id="ca-end"
-            type="date"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            className={INPUT_CLASS}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-secondary" htmlFor="ca-description">
-          {labels.description}
-        </label>
-        <textarea
-          id="ca-description"
-          rows={2}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className={INPUT_CLASS}
-        />
-      </div>
-
-      <div>
-        <span className="text-xs font-medium text-secondary">{labels.deliverables}</span>
-        <p className="mt-0.5 text-[11px] text-tertiary">{labels.deliverablesHint}</p>
-
-        {deliverables.length === 0 ? (
-          <p className="mt-2 text-[12px] text-tertiary">{labels.noDeliverables}</p>
-        ) : (
-          <ul className="mt-2 space-y-2">
-            {deliverables.map((d, i) => (
-              <li key={d.id} className="rounded-md border border-border bg-white p-2.5">
-                <div className="flex items-start gap-2">
-                  <input
-                    aria-label={`${labels.deliverableLabel} ${i + 1}`}
-                    value={d.label}
-                    onChange={(e) => patchDeliverable(d.id, { label: e.target.value })}
-                    placeholder={labels.deliverableLabel}
-                    className="w-full min-w-0 rounded-md border border-border bg-white px-2 py-1.5 text-[13px] text-primary outline-none focus:border-bp-coral"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={labels.removeDeliverable}
-                    title={labels.removeDeliverable}
-                    onClick={() => removeDeliverable(d.id)}
-                  >
-                    <Trash2 size={12} />
-                  </Button>
-                </div>
-
-                <div className="mt-2 space-y-1.5 border-l border-border pl-2.5">
-                  {d.phases.length === 0 && (
-                    <p className="text-[11px] text-tertiary">{labels.noPhases}</p>
-                  )}
-                  {d.phases.map((p) => (
-                    <div key={p.id} className="flex flex-wrap items-end gap-2">
-                      <div>
-                        <label
-                          className="text-[10.5px] font-medium text-tertiary"
-                          htmlFor={`ca-phase-${p.id}-start`}
-                        >
-                          {labels.phaseStart}
-                        </label>
-                        <input
-                          id={`ca-phase-${p.id}-start`}
-                          type="date"
-                          value={p.start}
-                          onChange={(e) => patchPhase(d.id, p.id, { start: e.target.value })}
-                          className={`block ${SMALL_INPUT_CLASS}`}
-                        />
-                      </div>
-                      <div>
-                        <label
-                          className="text-[10.5px] font-medium text-tertiary"
-                          htmlFor={`ca-phase-${p.id}-end`}
-                        >
-                          {labels.phaseEnd}
-                        </label>
-                        <input
-                          id={`ca-phase-${p.id}-end`}
-                          type="date"
-                          value={p.end}
-                          onChange={(e) => patchPhase(d.id, p.id, { end: e.target.value })}
-                          className={`block ${SMALL_INPUT_CLASS}`}
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={labels.removePhase}
-                        title={labels.removePhase}
-                        onClick={() => removePhase(d.id, p.id)}
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button variant="ghost" size="sm" onClick={() => addPhase(d.id)}>
-                    <Plus size={12} /> {labels.addPhase}
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="mt-2">
-          <Button variant="outline" size="sm" onClick={addDeliverable}>
-            <Plus size={12} /> {labels.addDeliverable}
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        <Button variant="primary" size="sm" onClick={submit} disabled={!canSubmit}>
-          {labels.submit}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          {labels.cancel}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 export function AxisDetailClient() {
   const { user } = useRole();
@@ -449,25 +60,12 @@ export function AxisDetailClient() {
   const searchParams = useSearchParams();
   const { showToast } = useToast();
   const id = searchParams.get("id") ?? "";
-  /** Chantier à ouvrir d'emblée, passé par la vue portefeuille (voir le `useEffect` plus bas). */
-  const requestedChantierId = searchParams.get("chantier") ?? "";
 
   const data = useStrategicData(user?.companyId ?? null, activeProgramId);
   const stages = useMaturityStages(activeProgramId);
 
   const [editAxisOpen, setEditAxisOpen] = useState(false);
   const [newChantierOpen, setNewChantierOpen] = useState(false);
-  const [chantierModal, setChantierModal] = useState<{
-    chantierId: string;
-    focusActionId?: string;
-  } | null>(null);
-  const [actionForm, setActionForm] = useState<{
-    mode: "create" | "edit";
-    actionId?: string;
-  } | null>(null);
-  /** Suppression en deux temps (clic → « Confirmer »), plutôt qu'un `window.confirm()` natif —
-   *  aucun autre écran de l'app n'utilise de dialogue natif. */
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const axis = useMemo(() => data.axes.find((a) => a.id === id), [data.axes, id]);
   const axisChantiers = useMemo(
@@ -491,28 +89,17 @@ export function AxisDetailClient() {
     const all = chantierDependencyAlerts(data.chantiers, data.chantierActions);
     return all.filter((a) => chantierIds.has(a.sourceId) || chantierIds.has(a.targetId));
   }, [data.chantiers, data.chantierActions, chantierIds]);
-  const alertedChantierIds = useMemo(
-    () => new Set(alerts.flatMap((a) => [a.sourceId, a.targetId])),
-    [alerts]
-  );
 
-  const openChantier = useCallback((chantierId: string, focusActionId?: string) => {
-    setChantierModal({ chantierId, focusActionId });
-    setActionForm(null);
-    setPendingDelete(null);
-  }, []);
-
-  /** Ouverture directe d'un chantier depuis l'URL (`/levers/detail?id=…&chantier=…`), utilisée par
-   *  la vue « chantiers groupés par axe » du portefeuille. UNE seule fois : le garde-fou `ref`
-   *  évite de rouvrir la pop-up si l'utilisateur la referme alors que le paramètre est toujours
-   *  dans l'URL. Le chantier doit appartenir à cet axe — sinon on ignore silencieusement. */
-  const autoOpenedChantierRef = useRef(false);
-  useEffect(() => {
-    if (autoOpenedChantierRef.current || !requestedChantierId) return;
-    if (!axisChantiers.some((c) => c.id === requestedChantierId)) return;
-    autoOpenedChantierRef.current = true;
-    openChantier(requestedChantierId);
-  }, [requestedChantierId, axisChantiers, openChantier]);
+  /** Navigation vers la fiche chantier dédiée (round 4, point 9) — l'id d'axe n'est plus nécessaire
+   *  en paramètre, le document chantier porte déjà `axisId` (le lien retour de la fiche chantier le
+   *  résout). `focusActionId` optionnel : ouverture ciblée sur une action précise, lue par
+   *  `ChantierDetailClient` via `?action=…`. */
+  const openChantier = (chantierId: string, focusActionId?: string) =>
+    router.push(
+      focusActionId
+        ? `/levers/chantier?id=${chantierId}&action=${focusActionId}`
+        : `/levers/chantier?id=${chantierId}`
+    );
 
   if (data.loading) {
     return (
@@ -548,51 +135,6 @@ export function AxisDetailClient() {
       `${axis.name} : ${resolveMaturityStageLabel(stageId, stages)}`,
       "success"
     );
-  };
-
-  const activeChantier = chantierModal
-    ? axisChantiers.find((c) => c.id === chantierModal.chantierId)
-    : undefined;
-  const activeChantierActions = activeChantier
-    ? axisActions
-        .filter((a) => a.chantierId === activeChantier.id)
-        .sort((a, b) => a.start.localeCompare(b.start))
-    : [];
-  const editedAction =
-    actionForm?.mode === "edit"
-      ? activeChantierActions.find((a) => a.id === actionForm.actionId)
-      : undefined;
-
-  // Synthèse de tête de pop-up : période, responsable, avancement — les trois questions du PO
-  // devant une fiche de chantier ("qui, jusqu'à quand, où on en est").
-  const activeChantierBounds = activeChantier
-    ? chantierBounds(activeChantier.id, activeChantierActions)
-    : undefined;
-  const activeChantierProgress = activeChantier
-    ? chantierProgress(activeChantier.id, activeChantierActions, stages)
-    : undefined;
-  const activeChantierOwner = deriveChantierOwner(activeChantierActions);
-
-  const actionFormLabels = {
-    name: t("strategicAxes.actionName"),
-    owner: t("strategicAxes.actionOwner"),
-    start: t("strategicAxes.actionStart"),
-    end: t("strategicAxes.actionEnd"),
-    stage: t("strategicAxes.actionStage"),
-    description: t("strategicAxes.actionDescription"),
-    deliverables: t("strategicAxes.deliverables"),
-    deliverablesHint: t("strategicAxes.deliverablesHint"),
-    noDeliverables: t("strategicAxes.noDeliverables"),
-    deliverableLabel: t("strategicAxes.deliverableLabel"),
-    addDeliverable: t("strategicAxes.addDeliverable"),
-    removeDeliverable: t("strategicAxes.removeDeliverable"),
-    noPhases: t("strategicAxes.noPhases"),
-    phaseStart: t("strategicAxes.phaseStart"),
-    phaseEnd: t("strategicAxes.phaseEnd"),
-    addPhase: t("strategicAxes.addPhase"),
-    removePhase: t("strategicAxes.removePhase"),
-    submit: t("common.save"),
-    cancel: t("common.cancel"),
   };
 
   /** Carte d'un indicateur — LECTURE SEULE (voir en-tête de fichier) : graphique, dernière valeur,
@@ -634,6 +176,7 @@ export function AxisDetailClient() {
           <IndicatorChart
             measurements={measures}
             objectiveValue={indicator.objectiveValue}
+            direction={indicator.direction}
             unit={indicator.unit}
             qualitative={indicator.kind === "qualitative"}
             frequency={indicator.frequency}
@@ -643,6 +186,7 @@ export function AxisDetailClient() {
             emptyLabel={t("strategicAxes.chartEmpty")}
             labelViewFull={t("kpi.chart.viewFull")}
             fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
+            labelProgress={t("kpi.chart.progressToTarget")}
           />
         </div>
       </div>
@@ -820,9 +364,10 @@ export function AxisDetailClient() {
           <ChantierGantt
             chantiers={axisChantiers}
             actions={axisActions}
+            allActions={data.chantierActions}
             stages={stages}
             axisColor={axis.color}
-            alertedChantierIds={alertedChantierIds}
+            alerts={alerts}
             onChantierClick={(c) => openChantier(c.id)}
             onActionClick={(action, c) => openChantier(c.id, action.id)}
             labels={{
@@ -836,6 +381,7 @@ export function AxisDetailClient() {
               scaleSemester: t("strategicAxes.ganttScaleSemester"),
               progress: t("strategicAxes.progress"),
               alerted: t("strategicAxes.chantierAlerted"),
+              blockedBy: t("strategicChantierDetail.prerequisites.blockedBy"),
             }}
           />
         </CardBody>
@@ -854,276 +400,21 @@ export function AxisDetailClient() {
           submitLabel={t("strategicAxes.createChantier")}
           onCancel={() => setNewChantierOpen(false)}
           onSubmit={async (values: ChantierFormValues) => {
-            const created = await data.createChantier(values);
-            setNewChantierOpen(false);
-            showToast(t("strategicAxes.chantierCreated"), created.name, "success");
-            openChantier(created.id);
+            try {
+              const created = await data.createChantier(values);
+              setNewChantierOpen(false);
+              showToast(t("strategicAxes.chantierCreated"), created.name, "success");
+              openChantier(created.id);
+            } catch (error) {
+              console.error("[betrack] échec de création du chantier :", error);
+              showToast(
+                t("strategicAxes.chantierSaveErrorTitle"),
+                t("strategicAxes.chantierSaveError"),
+                "error"
+              );
+            }
           }}
         />
-      </Modal>
-
-      {/* ── Pop-up de détail d'un chantier (bloc Gantt OU action cliquée) ──────────────────── */}
-      <Modal
-        open={activeChantier !== undefined}
-        onOpenChange={(open) => {
-          if (!open) {
-            setChantierModal(null);
-            setActionForm(null);
-            setPendingDelete(null);
-          }
-        }}
-        title={activeChantier?.name ?? t("strategicAxes.chantierModalTitle")}
-        maxWidth="720px"
-      >
-        {activeChantier && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <AxisStageBadge stageId={activeChantier.stage} stages={stages} />
-              {activeChantier.dependencies.length > 0 && (
-                <span className="text-[11px] text-tertiary">
-                  {t("strategicAxes.dependsOn")} :{" "}
-                  {activeChantier.dependencies
-                    .map(
-                      (d) =>
-                        `${data.chantiers.find((c) => c.id === d.targetId)?.name ?? d.targetId} (${d.type})`
-                    )
-                    .join(", ")}
-                </span>
-              )}
-            </div>
-            {activeChantier.description && (
-              <p className="text-[13px] text-secondary">{activeChantier.description}</p>
-            )}
-
-            {/* ── Synthèse : responsable / période / avancement ─────────────────────────── */}
-            <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-neutral-50 p-3 sm:grid-cols-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                  {t("strategicAxes.chantierOwner")}
-                </div>
-                <div className="mt-0.5 truncate text-[13px] font-semibold text-primary">
-                  {activeChantierOwner ?? t("strategicAxes.unassigned")}
-                </div>
-                {activeChantierOwner && (
-                  <div className="text-[10px] text-tertiary">
-                    {t("strategicAxes.ownerFromActions")}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                  {t("strategicAxes.chantierPeriod")}
-                </div>
-                <div className="mt-0.5 text-[13px] font-semibold text-primary">
-                  {activeChantierBounds
-                    ? formatRange(activeChantierBounds.start, activeChantierBounds.end)
-                    : t("strategicAxes.chantierNoDates")}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                  {t("strategicAxes.progress")}
-                </div>
-                <div className="mt-1 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${activeChantierProgress?.pct ?? 0}%`,
-                        backgroundColor: axis.color ?? "var(--bp-warm-taupe)",
-                      }}
-                    />
-                  </div>
-                  <span className="shrink-0 text-[13px] font-bold text-primary">
-                    {activeChantierProgress?.pct ?? 0}%
-                  </span>
-                </div>
-                <div className="mt-0.5 text-[10px] text-tertiary">
-                  {activeChantierProgress?.done ?? 0} / {activeChantierProgress?.total ?? 0}{" "}
-                  {t("strategicAxes.actionsCompleted")}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-[12px] font-bold uppercase tracking-wide text-primary">
-                {t("strategicAxes.chantierActions")}
-              </h4>
-              {!actionForm && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setActionForm({ mode: "create" })}
-                >
-                  <Plus size={12} /> {t("strategicAxes.newAction")}
-                </Button>
-              )}
-            </div>
-
-            {actionForm && (
-              <ChantierActionForm
-                key={actionForm.actionId ?? "new"}
-                initial={editedAction}
-                stages={stages}
-                labels={actionFormLabels}
-                onCancel={() => setActionForm(null)}
-                onSubmit={async (values) => {
-                  if (actionForm.mode === "edit" && actionForm.actionId) {
-                    await data.updateChantierAction(actionForm.actionId, values);
-                    showToast(t("strategicAxes.actionUpdated"), values.name, "success");
-                  } else {
-                    await data.createChantierAction({
-                      ...values,
-                      chantierId: activeChantier.id,
-                    });
-                    showToast(t("strategicAxes.actionCreated"), values.name, "success");
-                  }
-                  setActionForm(null);
-                }}
-              />
-            )}
-
-            {activeChantierActions.length === 0 && !actionForm ? (
-              <p className="py-4 text-center text-[13px] text-tertiary">
-                {t("strategicAxes.noActions")}
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {activeChantierActions.map((action) => {
-                  const isFocused = chantierModal?.focusActionId === action.id;
-                  const actionDeliverables = normalizeDeliverables(action.deliverables);
-                  return (
-                    <li
-                      key={action.id}
-                      className={`rounded-md border p-3 ${
-                        isFocused ? "border-bp-coral ring-1 ring-bp-coral/40" : "border-border"
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-[13px] font-semibold text-primary">
-                            {action.name}
-                          </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">
-                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-secondary">
-                              {formatRange(action.start, action.end)}
-                            </span>
-                            {action.owner && <span>· {action.owner}</span>}
-                            <AxisStageBadge stageId={action.status} stages={stages} />
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setActionForm({ mode: "edit", actionId: action.id })}
-                          >
-                            <Pencil size={12} /> {t("strategicAxes.editAction")}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={async () => {
-                              if (pendingDelete !== action.id) {
-                                setPendingDelete(action.id);
-                                return;
-                              }
-                              await data.removeChantierAction(action.id);
-                              setPendingDelete(null);
-                              showToast(t("strategicAxes.actionDeleted"), action.name, "success");
-                            }}
-                          >
-                            <Trash2 size={12} />{" "}
-                            {pendingDelete === action.id
-                              ? t("strategicAxes.confirmDelete")
-                              : t("common.delete")}
-                          </Button>
-                        </div>
-                      </div>
-
-                      {action.description && (
-                        <p className="mt-1.5 text-[12px] text-secondary">{action.description}</p>
-                      )}
-
-                      <div className="mt-2">
-                        <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                          {t("strategicAxes.deliverables")}
-                        </div>
-                        {actionDeliverables.length === 0 ? (
-                          <p className="text-[12px] text-tertiary">
-                            {t("strategicAxes.noDeliverables")}
-                          </p>
-                        ) : (
-                          <ul className="mt-1 space-y-1.5 text-[12px] text-primary">
-                            {actionDeliverables.map((d) => (
-                              <li key={d.id}>
-                                <span className="font-medium">{d.label}</span>
-                                {/* Mini-timeline textuelle : une puce par sous-étape, dans
-                                    l'ordre de saisie. */}
-                                {d.phases.length > 0 && (
-                                  <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
-                                    {d.phases.map((p) => (
-                                      <span
-                                        key={p.id}
-                                        className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] text-secondary"
-                                      >
-                                        {formatRange(p.start, p.end)}
-                                        {p.note ? ` · ${p.note}` : ""}
-                                      </span>
-                                    ))}
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            {/* Effectifs mobilisés sur le chantier — composant fourni par le lot « Effectifs »
-                (édition des ETP par fonction), volontairement rendu APRÈS les actions et AVANT la
-                suppression du chantier. */}
-            <ChantierStaffingEditor
-              companyId={user?.companyId ?? ""}
-              programId={activeProgramId ?? ""}
-              axisId={axis.id}
-              chantierId={activeChantier.id}
-            />
-
-            <div className="border-t border-border pt-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={async () => {
-                  if (pendingDelete !== activeChantier.id) {
-                    setPendingDelete(activeChantier.id);
-                    return;
-                  }
-                  // Les actions du chantier sont retirées d'abord : elles ne portent pas de
-                  // `programId` et ne seraient plus rattachables à rien une fois le chantier parti.
-                  for (const action of activeChantierActions) {
-                    await data.removeChantierAction(action.id);
-                  }
-                  await data.removeChantier(activeChantier.id);
-                  setPendingDelete(null);
-                  setChantierModal(null);
-                  showToast(t("strategicAxes.chantierDeleted"), activeChantier.name, "success");
-                }}
-              >
-                <Trash2 size={12} />{" "}
-                {pendingDelete === activeChantier.id
-                  ? t("strategicAxes.confirmDeleteChantier")
-                  : t("strategicAxes.deleteChantier")}
-              </Button>
-            </div>
-          </div>
-        )}
       </Modal>
 
       {/* ── Indicateurs de l'axe (lecture seule) ───────────────────────────────────────────── */}

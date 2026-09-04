@@ -1,10 +1,28 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { TriangleAlert } from "lucide-react";
-import { Tooltip } from "@/components/shared/Tooltip";
-import { chantierBounds, chantierProgress } from "@/lib/axisLogic";
-import { parseISO } from "@/lib/dateUtils";
+import { Lock, TriangleAlert } from "lucide-react";
+import {
+  formatTimelineDay,
+  packTimelineLanes,
+  timelineColumns,
+  timelinePctOf,
+  timelineRange,
+  timelineYearBands,
+  TimelineBar,
+  TimelineGridColumns,
+  TimelineHeaderRow,
+  TimelineScaleToggle,
+  hexToRgb,
+  withAlpha,
+  type TimelineScale,
+} from "@/components/strategic/TimelineBars";
+import {
+  canStartAction,
+  chantierBounds,
+  chantierProgress,
+  type ChantierDependencyAlert,
+} from "@/lib/axisLogic";
 import { resolveMaturityStageLabel } from "@/lib/hooks/useMaturityStages";
 import type { Chantier, ChantierAction, MaturityStageConfig } from "@/types";
 
@@ -31,9 +49,14 @@ import type { Chantier, ChantierAction, MaturityStageConfig } from "@/types";
  *     l'échelle mensuelle produisait ~30 colonnes vides et illisibles, d'où le TRIMESTRE par
  *     défaut.
  *
+ * Round 4, point 9 : le calcul de grille de colonnes + le rendu d'une barre colorée sont EXTRAITS
+ * dans `components/strategic/TimelineBars.tsx` (partagés avec la timeline de livrables de la fiche
+ * chantier dédiée) — seule la mise en page PROPRE à ce Gantt (colonne d'identité du chantier avec
+ * avancement, couloirs d'actions nommées, badge cadenas de prérequis) reste ici.
+ *
  * Aucune donnée n'est chargée ni écrite ici : les clics remontent à l'appelant
- * (`AxisDetailClient`), qui ouvre la même pop-up de détail de chantier dans les deux cas (clic sur
- * le bloc chantier OU sur une action).
+ * (`AxisDetailClient`), qui navigue vers la fiche chantier dédiée dans les deux cas (clic sur le
+ * bloc chantier OU sur une action).
  */
 
 export type ChantierGanttLabels = {
@@ -50,12 +73,10 @@ export type ChantierGanttLabels = {
   scaleSemester?: string;
   progress?: string;
   alerted?: string;
+  /** Préfixe affiché devant la liste des raisons de blocage dans l'infobulle d'une action bloquée
+   *  (round 4, point 5 — prérequis go/no-go). */
+  blockedBy?: string;
 };
-
-/** Maille des colonnes de l'axe temporel. */
-type Scale = "month" | "quarter" | "semester";
-
-const SCALE_MONTHS: Record<Scale, number> = { month: 1, quarter: 3, semester: 6 };
 
 type Row = {
   chantier: Chantier;
@@ -65,7 +86,7 @@ type Row = {
 
 type PlannedRow = Row & { bounds: { start: string; end: string } };
 
-const ROW_LABEL_WIDTH = "w-52";
+const ROW_LABEL_WIDTH = "w-64";
 
 /** Couleur de repli quand l'axe n'a pas de couleur choisie — le taupe de la palette BearingPoint
  *  (`--bp-warm-taupe`), en dur parce qu'on a besoin de la composante hex pour calculer les
@@ -74,95 +95,38 @@ const FALLBACK_COLOR = "#a99e9a";
 
 const ALERT_COLOR = "#f5a623";
 
-/** `#rgb` / `#rrggbb` → `[r, g, b]` ; `null` pour toute autre notation (l'appelant retombe alors
- *  sur la couleur brute, sans transparence calculée). */
-function hexToRgb(color: string): [number, number, number] | null {
-  const hex = color.trim().replace("#", "");
-  if (hex.length === 3 && /^[0-9a-f]{3}$/i.test(hex)) {
-    return [
-      parseInt(hex[0] + hex[0], 16),
-      parseInt(hex[1] + hex[1], 16),
-      parseInt(hex[2] + hex[2], 16),
-    ];
-  }
-  if (hex.length === 6 && /^[0-9a-f]{6}$/i.test(hex)) {
-    return [
-      parseInt(hex.slice(0, 2), 16),
-      parseInt(hex.slice(2, 4), 16),
-      parseInt(hex.slice(4, 6), 16),
-    ];
-  }
-  return null;
-}
-
-function withAlpha(color: string, alpha: number): string {
-  const rgb = hexToRgb(color);
-  return rgb ? `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})` : color;
-}
-
-/** Noir ou blanc selon la luminance du fond — les couleurs d'axe vont du bordeaux très sombre
- *  (#320300) au taupe clair (#B8A99A) : un texte blanc câblé en dur serait illisible sur la
- *  moitié de la palette. */
-function readableTextColor(color: string): string {
-  const rgb = hexToRgb(color);
-  if (!rgb) return "#ffffff";
-  const luminance = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
-  return luminance > 0.6 ? "#1f1512" : "#ffffff";
-}
-
-/** Libellé d'une colonne de l'axe temporel, selon la maille choisie. Formatage `fr-FR` comme
- *  partout ailleurs dans l'app (cf. `formatTimestamp`, app/(app)/admin/history/page.tsx). */
-function columnLabel(date: Date, scale: Scale): string {
-  if (scale === "month") return date.toLocaleDateString("fr-FR", { month: "short" });
-  if (scale === "quarter") return `T${Math.floor(date.getMonth() / 3) + 1}`;
-  return `S${Math.floor(date.getMonth() / 6) + 1}`;
-}
-
-function formatDay(iso: string): string {
-  const time = parseISO(iso);
-  if (Number.isNaN(time)) return iso;
-  return new Date(time).toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-/**
- * Répartit les actions (déjà triées par date de début) en « couloirs » : deux actions qui se
- * chevauchent dans le temps ne peuvent pas partager la même ligne sans se recouvrir. La plupart
- * des chantiers étant séquentiels, un seul couloir suffit et la ligne reste compacte.
- */
-function packLanes(items: ChantierAction[]): ChantierAction[][] {
-  const lanes: ChantierAction[][] = [];
-  for (const item of items) {
-    const lane = lanes.find((l) => parseISO(l[l.length - 1].end) <= parseISO(item.start));
-    if (lane) lane.push(item);
-    else lanes.push([item]);
-  }
-  return lanes;
-}
-
-const CHANTIER_BAR_HEIGHT = 24;
-const ACTION_LANE_HEIGHT = 20;
+// Round 4, point 9 : blocs de chantier/action agrandis pour que les livrables/actions restent
+// lisibles à l'intérieur (demande PO explicite, format PERIAL).
+const CHANTIER_BAR_HEIGHT = 40;
+const ACTION_LANE_HEIGHT = 32;
+/** Hauteur réelle d'une barre d'action DANS son couloir (le couloir laisse un peu d'air
+ *  au-dessus/en dessous, comme l'espacement `LANES_TOP` ci-dessous). */
+const ACTION_BAR_HEIGHT = 24;
 const LANES_TOP = CHANTIER_BAR_HEIGHT + 6;
 
 export function ChantierGantt({
   chantiers,
   actions,
+  allActions,
   stages,
   axisColor,
   onChantierClick,
   onActionClick,
-  alertedChantierIds,
+  alerts,
   labels,
 }: {
   chantiers: Chantier[];
   /** Toutes les actions du programme — filtrées par chantier ici (les bornes d'un chantier ne
    *  sont pas stockées, elles se dérivent de ses actions). */
   actions: ChantierAction[];
+  /** Univers complet des actions du programme, utilisé pour résoudre les prérequis "action"
+   *  (`canStartAction`) — une action prérequise peut appartenir à un autre chantier que celui de
+   *  l'action qui la référence. Repli sur `actions` si absent (couvre le cas où l'appelant n'a que
+   *  les actions de cet axe sous la main). */
+  allActions?: ChantierAction[];
   /** Référentiel d'étapes du programme, pour afficher le libellé d'étape sous le nom du chantier
-   *  et calculer l'avancement (`chantierProgress`). */
+   *  et calculer l'avancement (`chantierProgress`), ainsi que la satisfaction des prérequis
+   *  (`canStartAction`). */
   stages: MaturityStageConfig[];
   /** Couleur de l'axe (`StrategicAxis.color`) — teinte de tous les blocs de ce Gantt. */
   axisColor?: string;
@@ -170,9 +134,10 @@ export function ChantierGantt({
   /** Clic sur une action : l'appelant ouvre la MÊME pop-up que pour son chantier, focalisée sur
    *  l'action cliquée. */
   onActionClick?: (action: ChantierAction, chantier: Chantier) => void;
-  /** Chantiers concernés par une alerte de cascade de dépendance — teintés en ambre et marqués
-   *  d'un triangle dans le Gantt pour que l'alerte affichée au-dessus soit localisable. */
-  alertedChantierIds?: Set<string>;
+  /** Alertes de cascade de dépendance entre chantiers (`chantierDependencyAlerts`, tableau complet
+   *  — round 4, point 2) : les chantiers concernés sont teintés en ambre et marqués d'un triangle,
+   *  et l'infobulle du bloc chantier détaille le(s) message(s) précis plutôt qu'un texte générique. */
+  alerts?: ChantierDependencyAlert[];
   labels?: ChantierGanttLabels;
 }) {
   const l = {
@@ -186,10 +151,31 @@ export function ChantierGantt({
     scaleSemester: labels?.scaleSemester ?? "Semestre",
     progress: labels?.progress ?? "Avancement",
     alerted: labels?.alerted ?? "Dépendance en alerte",
+    blockedBy: labels?.blockedBy ?? "Bloqué par :",
   };
 
+  const effectiveAllActions = allActions ?? actions;
+
+  // Dérivé de `alerts` : ensemble rapide des chantiers concernés (teinte ambre) + détail par
+  // chantier (message(s) précis affichés dans l'infobulle, voir round 4 point 2).
+  const alertedChantierIds = useMemo(
+    () => new Set((alerts ?? []).flatMap((a) => [a.sourceId, a.targetId])),
+    [alerts]
+  );
+  const alertsByChantier = useMemo(() => {
+    const map = new Map<string, ChantierDependencyAlert[]>();
+    for (const alert of alerts ?? []) {
+      for (const chantierId of [alert.sourceId, alert.targetId]) {
+        const list = map.get(chantierId);
+        if (list) list.push(alert);
+        else map.set(chantierId, [alert]);
+      }
+    }
+    return map;
+  }, [alerts]);
+
   // Trimestre par défaut : meilleur compromis lisibilité/détail sur un plan de 2-3 ans.
-  const [scale, setScale] = useState<Scale>("quarter");
+  const [scale, setScale] = useState<TimelineScale>("quarter");
 
   const color = axisColor && hexToRgb(axisColor) ? axisColor : FALLBACK_COLOR;
 
@@ -208,62 +194,23 @@ export function ChantierGantt({
   const planned = rows.filter((r): r is PlannedRow => r.bounds !== undefined);
   const unplanned = rows.filter((r) => r.bounds === undefined);
 
-  // Échelle temporelle commune à toutes les lignes — calculée sur les bornes des chantiers, pas
-  // sur celles des actions (une action ne peut pas sortir des bornes de son propre chantier), puis
-  // ARRONDIE aux limites de colonne de la maille active : les blocs s'alignent ainsi sur la grille
-  // au lieu de flotter au milieu d'une colonne.
-  const { minTime, maxTime } = useMemo(() => {
-    const times = planned.flatMap((r) => [parseISO(r.bounds.start), parseISO(r.bounds.end)]);
-    if (times.length === 0) return { minTime: 0, maxTime: 1 };
-    const step = SCALE_MONTHS[scale];
-    const rawMin = new Date(Math.min(...times));
-    const rawMax = new Date(Math.max(...times));
-    const start = new Date(rawMin.getFullYear(), Math.floor(rawMin.getMonth() / step) * step, 1);
-    const end = new Date(
-      rawMax.getFullYear(),
-      Math.floor(rawMax.getMonth() / step) * step + step,
-      1
-    );
-    return { minTime: start.getTime(), maxTime: end.getTime() };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, scale]);
+  const { minTime, maxTime } = useMemo(
+    () =>
+      timelineRange(
+        planned.map((r) => r.bounds),
+        scale
+      ),
+    [planned, scale]
+  );
 
-  const range = Math.max(1, maxTime - minTime);
-  const pctOf = (iso: string) => ((parseISO(iso) - minTime) / range) * 100;
+  const pctOf = useMemo(() => timelinePctOf(minTime, maxTime), [minTime, maxTime]);
 
-  /** Colonnes de la grille temporelle, à la maille active. */
-  const columns = useMemo(() => {
-    if (planned.length === 0)
-      return [] as { key: string; label: string; year: number; left: number; width: number }[];
-    const step = SCALE_MONTHS[scale];
-    const out: { key: string; label: string; year: number; left: number; width: number }[] = [];
-    const cur = new Date(minTime);
-    while (cur.getTime() < maxTime) {
-      const next = new Date(cur.getFullYear(), cur.getMonth() + step, 1);
-      out.push({
-        key: `${cur.getFullYear()}-${cur.getMonth()}`,
-        label: columnLabel(cur, scale),
-        year: cur.getFullYear(),
-        left: ((cur.getTime() - minTime) / range) * 100,
-        width: ((next.getTime() - cur.getTime()) / range) * 100,
-      });
-      cur.setMonth(cur.getMonth() + step);
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minTime, maxTime, range, scale, planned.length]);
+  const columns = useMemo(
+    () => (planned.length === 0 ? [] : timelineColumns(minTime, maxTime, scale)),
+    [minTime, maxTime, scale, planned.length]
+  );
 
-  /** Bandeau des années, au-dessus des colonnes — sans lui, une suite de « T1 T2 T3 T4 T1 … » sur
-   *  trois ans ne dit plus de quelle année on parle. */
-  const yearBands = useMemo(() => {
-    const bands: { year: number; left: number; width: number }[] = [];
-    for (const col of columns) {
-      const last = bands[bands.length - 1];
-      if (last && last.year === col.year) last.width += col.width;
-      else bands.push({ year: col.year, left: col.left, width: col.width });
-    }
-    return bands;
-  }, [columns]);
+  const yearBands = useMemo(() => timelineYearBands(columns), [columns]);
 
   if (rows.length === 0) {
     return <p className="py-6 text-center text-sm text-tertiary">{l.empty}</p>;
@@ -271,7 +218,7 @@ export function ChantierGantt({
 
   const openChantier = (chantier: Chantier) => onChantierClick?.(chantier);
 
-  const scaleOptions: { value: Scale; label: string }[] = [
+  const scaleOptions: { value: TimelineScale; label: string }[] = [
     { value: "month", label: l.scaleMonth },
     { value: "quarter", label: l.scaleQuarter },
     { value: "semester", label: l.scaleSemester },
@@ -286,59 +233,26 @@ export function ChantierGantt({
             <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
               {l.scale}
             </span>
-            <div className="flex overflow-hidden rounded-md border border-border">
-              {scaleOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={scale === option.value}
-                  onClick={() => setScale(option.value)}
-                  className={`px-2.5 py-1 text-[11px] font-semibold transition ${
-                    scale === option.value
-                      ? "bg-black text-white"
-                      : "bg-white text-secondary hover:text-primary"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <TimelineScaleToggle value={scale} onChange={setScale} options={scaleOptions} />
           </div>
 
           <div className="overflow-x-auto">
             <div className="min-w-[560px]">
               {/* ── En-tête : années puis colonnes de la maille ──────────────────────────── */}
-              <div className="flex items-end gap-2 pb-1">
-                <div className={`${ROW_LABEL_WIDTH} shrink-0`} />
-                <div className="relative h-8 flex-1">
-                  {yearBands.map((band) => (
-                    <span
-                      key={band.year}
-                      className="absolute top-0 truncate border-l border-border pl-1 text-[10px] font-bold text-secondary"
-                      style={{ left: `${band.left}%`, width: `${band.width}%` }}
-                    >
-                      {band.year}
-                    </span>
-                  ))}
-                  {columns.map((col) => (
-                    <span
-                      key={col.key}
-                      className="absolute bottom-0 truncate text-center text-[9.5px] uppercase text-tertiary"
-                      style={{ left: `${col.left}%`, width: `${col.width}%` }}
-                    >
-                      {col.label}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <TimelineHeaderRow
+                columns={columns}
+                yearBands={yearBands}
+                labelWidthClassName={ROW_LABEL_WIDTH}
+              />
 
               {/* ── Une ligne par chantier ───────────────────────────────────────────────── */}
               {planned.map(({ chantier, bounds, items }) => {
                 const startPct = pctOf(bounds.start);
                 const widthPct = Math.max(1.5, pctOf(bounds.end) - startPct);
-                const isAlerted = alertedChantierIds?.has(chantier.id) ?? false;
+                const isAlerted = alertedChantierIds.has(chantier.id);
+                const chantierAlerts = alertsByChantier.get(chantier.id) ?? [];
                 const progress = chantierProgress(chantier.id, actions, stages);
-                const lanes = packLanes(items);
+                const lanes = packTimelineLanes(items);
                 const trackHeight = LANES_TOP + Math.max(1, lanes.length) * ACTION_LANE_HEIGHT;
                 const blockColor = isAlerted ? ALERT_COLOR : color;
 
@@ -380,119 +294,85 @@ export function ChantierGantt({
 
                     <div className="relative flex-1" style={{ height: trackHeight }}>
                       {/* Grille de colonnes */}
-                      {columns.map((col, i) => (
-                        <div
-                          key={col.key}
-                          className={`absolute inset-y-0 border-l ${
-                            i === 0 ? "border-border" : "border-border/60"
-                          }`}
-                          style={{ left: `${col.left}%` }}
-                        />
-                      ))}
+                      <TimelineGridColumns columns={columns} />
 
                       {/* Bloc macro du chantier (maille exécutive) — REMPLI, avec la part
                           d'avancement en teinte soutenue. */}
-                      <Tooltip
-                        text={`${chantier.name} · ${formatDay(bounds.start)} → ${formatDay(
+                      <TimelineBar
+                        left={startPct}
+                        width={widthPct}
+                        top={0}
+                        height={CHANTIER_BAR_HEIGHT}
+                        color={blockColor}
+                        variant="outline"
+                        progressPct={progress.pct}
+                        ringed={isAlerted}
+                        onClick={() => openChantier(chantier)}
+                        ariaLabel={chantier.name}
+                        tooltipText={`${chantier.name} · ${formatTimelineDay(bounds.start)} → ${formatTimelineDay(
                           bounds.end
-                        )} · ${l.progress} ${progress.pct}%${isAlerted ? ` · ${l.alerted}` : ""}`}
-                        className="absolute"
-                        style={{ left: `${startPct}%`, width: `${widthPct}%`, top: 0 }}
-                      >
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          aria-label={chantier.name}
-                          onClick={() => openChantier(chantier)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              openChantier(chantier);
-                            }
-                          }}
-                          className={`relative w-full cursor-pointer overflow-hidden rounded border transition hover:ring-2 hover:ring-bp-coral/40 ${
-                            isAlerted ? "ring-1 ring-rag-amber" : ""
-                          }`}
-                          style={{
-                            height: CHANTIER_BAR_HEIGHT,
-                            backgroundColor: withAlpha(blockColor, 0.16),
-                            borderColor: withAlpha(blockColor, 0.65),
-                          }}
-                        >
-                          <div
-                            aria-hidden
-                            className="absolute inset-y-0 left-0"
-                            style={{
-                              width: `${progress.pct}%`,
-                              backgroundColor: withAlpha(blockColor, 0.42),
-                            }}
-                          />
-                          <div className="relative flex h-full items-center gap-1 px-1.5">
-                            <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-primary">
-                              {chantier.name}
-                            </span>
-                            {isAlerted && (
-                              <TriangleAlert size={10} className="shrink-0 text-rag-amber" />
-                            )}
-                            <span className="shrink-0 text-[10px] font-bold text-primary">
-                              {progress.pct}%
-                            </span>
-                          </div>
-                        </div>
-                      </Tooltip>
+                        )} · ${l.progress} ${progress.pct}%${
+                          chantierAlerts.length > 0
+                            ? ` · ${l.alerted} : ${chantierAlerts.map((a) => a.message).join(" ; ")}`
+                            : ""
+                        }`}
+                        label={chantier.name}
+                        labelClassName="min-w-0 flex-1 truncate text-[11px] font-semibold text-primary"
+                        icon={
+                          isAlerted ? (
+                            <TriangleAlert size={11} className="shrink-0 text-rag-amber" />
+                          ) : undefined
+                        }
+                        trailing={
+                          <span className="shrink-0 text-[11px] font-bold text-primary">
+                            {progress.pct}%
+                          </span>
+                        }
+                      />
 
                       {/* Actions individuelles (maille fine), NOMMÉES — même pop-up au clic. */}
                       {lanes.map((lane, laneIndex) =>
                         lane.map((action) => {
                           const aStart = pctOf(action.start);
                           const aWidth = Math.max(0.8, pctOf(action.end) - aStart);
-                          // Sous ~14 % de la piste, un nom écrit dans la barre serait réduit à
-                          // « D… » : on le rabat alors juste à droite de la barre.
-                          const inlineLabel = aWidth >= 14;
                           const top = LANES_TOP + laneIndex * ACTION_LANE_HEIGHT;
+                          // Prérequis go/no-go (round 4, point 5) — purement informatif : le badge
+                          // cadenas et la raison en infobulle n'empêchent AUCUNE transition.
+                          const startInfo = canStartAction(action, effectiveAllActions, stages);
                           return (
-                            <Tooltip
+                            <TimelineBar
                               key={action.id}
-                              text={`${action.name} · ${formatDay(action.start)} → ${formatDay(
+                              left={aStart}
+                              width={aWidth}
+                              top={top}
+                              height={ACTION_BAR_HEIGHT}
+                              color={blockColor}
+                              variant="solid"
+                              roundedClassName="rounded-sm"
+                              // Sous ~14 % de la piste, un nom écrit dans la barre serait réduit à
+                              // « D… » : on le rabat alors juste à droite de la barre. Seuil en
+                              // POURCENTAGE de largeur, indépendant de la hauteur de la barre —
+                              // inchangé malgré l'agrandissement round 4 (voir doc-comment plus haut).
+                              inlineMinWidthPct={14}
+                              onClick={() => onActionClick?.(action, chantier)}
+                              ariaLabel={action.name}
+                              tooltipText={`${action.name} · ${formatTimelineDay(action.start)} → ${formatTimelineDay(
                                 action.end
                               )} · ${resolveMaturityStageLabel(action.status, stages)}${
                                 action.owner ? ` · ${action.owner}` : ""
+                              }${
+                                startInfo.blocked
+                                  ? ` · ${l.blockedBy} ${startInfo.reasons.join(", ")}`
+                                  : ""
                               }`}
-                              className="absolute"
-                              style={{ left: `${aStart}%`, width: `${aWidth}%`, top }}
-                            >
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                aria-label={action.name}
-                                onClick={() => onActionClick?.(action, chantier)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    onActionClick?.(action, chantier);
-                                  }
-                                }}
-                                className="flex h-[15px] w-full cursor-pointer items-center rounded-sm px-1 transition hover:brightness-110"
-                                style={{
-                                  backgroundColor: withAlpha(blockColor, 0.9),
-                                  color: readableTextColor(blockColor),
-                                }}
-                              >
-                                {inlineLabel && (
-                                  <span className="truncate text-[9.5px] font-medium leading-none">
-                                    {action.name}
-                                  </span>
-                                )}
-                              </div>
-                              {!inlineLabel && (
-                                <span
-                                  aria-hidden
-                                  className="pointer-events-none absolute left-full top-0 ml-1 whitespace-nowrap text-[9.5px] leading-[15px] text-secondary"
-                                >
-                                  {action.name}
-                                </span>
-                              )}
-                            </Tooltip>
+                              label={action.name}
+                              labelClassName="min-w-0 flex-1 truncate text-[9.5px] font-medium leading-none"
+                              icon={
+                                startInfo.blocked ? (
+                                  <Lock size={9} className="shrink-0" aria-hidden />
+                                ) : undefined
+                              }
+                            />
                           );
                         })
                       )}
