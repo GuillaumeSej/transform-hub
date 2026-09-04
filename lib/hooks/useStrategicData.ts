@@ -23,8 +23,10 @@ import {
   saveChantierStaffing,
   deleteChantierStaffing,
 } from "@/lib/firestore/chantierStaffing";
+import { subscribeUsers } from "@/lib/firestore/admin";
 import { computeIndicatorStatus } from "@/lib/axisLogic";
 import type {
+  AuthUser,
   Chantier,
   ChantierAction,
   ChantierStaffing,
@@ -61,7 +63,12 @@ export type StrategicData = {
   measurements: IndicatorMeasurement[];
   /** Lignes de staffing (ETP par fonction) des chantiers du programme actif. */
   staffing: ChantierStaffing[];
-  /** true tant que les six abonnements n'ont pas tous répondu au moins une fois. */
+  /** Utilisateurs de l'entreprise (`companyId`) — source unique pour `UserPicker`, RACI, sponsor/
+   *  pilote de chantier, owner/sponsor d'action (round 4). Abonnement INDÉPENDANT, voir plus bas :
+   *  volontairement PAS dans `pending`/`loading`, c'est une commodité additive et non une donnée
+   *  cœur du plan (le contenu du plan reste affichable sans elle). */
+  users: AuthUser[];
+  /** true tant que les six abonnements du plan n'ont pas tous répondu au moins une fois. */
   loading: boolean;
 
   // ── Mutations ──────────────────────────────────────────────────────────────────────────────
@@ -196,6 +203,21 @@ export function useStrategicData(
       }),
     ];
     return () => unsubs.forEach((unsub) => unsub());
+  }, [companyId]);
+
+  // Abonnement utilisateurs INDÉPENDANT du bloc ci-dessus : `subscribeUsers` n'est pas scopé
+  // entreprise côté serveur (voir lib/firestore/admin.ts), le filtrage par `companyId` se fait ici
+  // — même pattern que `components/admin/IndicatorsEditor.tsx`. Ne participe PAS au `pending`
+  // settle-set qui pilote `loading` : c'est une donnée additive (RACI, UserPicker), pas une donnée
+  // cœur du plan stratégique.
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  useEffect(() => {
+    if (!companyId) {
+      setUsers([]);
+      return;
+    }
+    const unsub = subscribeUsers((list) => setUsers(list.filter((u) => u.companyId === companyId)));
+    return unsub;
   }, [companyId]);
 
   // ── Projections scopées au programme actif ────────────────────────────────────────────────
@@ -419,6 +441,7 @@ export function useStrategicData(
     indicators,
     measurements,
     staffing,
+    users,
     loading,
     createAxis,
     updateAxis,

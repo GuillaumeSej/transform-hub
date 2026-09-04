@@ -130,6 +130,59 @@ export function resolveIndicatorStatus(
   return indicator.statusOverride ?? indicator.status;
 }
 
+/** Écart signé d'un indicateur par rapport à sa cible, dérivé de sa dernière mesure — pendant
+ *  du binaire `computeIndicatorStatus` mais avec une AMPLITUDE plutôt qu'un simple booléen, pour
+ *  l'affichage "82% vs cible 80%" (round 4, point 1 : rendre l'écart visuellement lisible). */
+export type IndicatorDelta = {
+  /** `latest.value - objectiveValue`, signé (positif = au-dessus de la cible). */
+  delta: number;
+  /** `delta / objectiveValue * 100`, signé ; 0 si `objectiveValue` vaut 0 (évite une division par
+   *  zéro plutôt que de produire `Infinity`/`NaN`). */
+  deltaPct: number;
+  /** Progression vers la cible, 0-100, TOUJOURS bornée. Cadrage sensible au sens d'amélioration :
+   *  pour "up" (plus haut vaut mieux), `valeur / objectif` ; pour "down" (plus bas vaut mieux), le
+   *  cadrage est INVERSÉ (`objectif / valeur`), sans quoi une valeur descendant sous la cible
+   *  afficherait une progression qui DIMINUE alors que l'indicateur s'améliore. */
+  progressPct: number;
+  /** `true` si l'écart va dans le bon sens — même convention de signe que `computeIndicatorStatus`
+   *  ("down" : `delta <= 0` est favorable ; sinon `delta >= 0`). */
+  favorable: boolean;
+};
+
+/** `undefined` avec les MÊMES garde-fous que `computeIndicatorStatus` : pas d'objectif chiffré, ou
+ *  pas de mesure exploitable (absente ou sans valeur numérique) — rien à afficher plutôt qu'un
+ *  écart inventé. */
+export function computeIndicatorDelta(
+  indicator: Pick<Indicator, "objectiveValue" | "direction">,
+  latest: IndicatorMeasurement | undefined
+): IndicatorDelta | undefined {
+  if (indicator.objectiveValue === undefined) return undefined;
+  if (!latest || latest.value === undefined) return undefined;
+
+  const value = latest.value;
+  const objective = indicator.objectiveValue;
+  const isDown = indicator.direction === "down";
+
+  const delta = value - objective;
+  const deltaPct = objective !== 0 ? (delta / objective) * 100 : 0;
+  const favorable = isDown ? delta <= 0 : delta >= 0;
+
+  const rawProgress = isDown
+    ? value !== 0
+      ? (objective / value) * 100
+      : objective === 0
+        ? 100
+        : 0
+    : objective !== 0
+      ? (value / objective) * 100
+      : value >= 0
+        ? 100
+        : 0;
+  const progressPct = Math.max(0, Math.min(100, rawProgress));
+
+  return { delta, deltaPct, progressPct, favorable };
+}
+
 /** Cumul des dernières valeurs mesurées des indicateurs QUANTITATIFS de la liste — l'agrégat
  *  affiché en tête de page KPI / fiche d'axe. Les indicateurs qualitatifs et ceux jamais mesurés
  *  sont ignorés (pas comptés comme 0). */
@@ -207,6 +260,25 @@ export function canManageChantier(
   const roles = chantier.responsibleRoles ?? [];
   if (roles.length === 0) return true;
   return roles.includes(user.role);
+}
+
+/**
+ * Indicateurs à risque d'UN chantier, chacun accompagné de son écart calculé (`computeIndicatorDelta`)
+ * — alimente le `Popover` du badge "N à risque" (round 4, point 2) : le badge affichait un nombre
+ * sans jamais dire QUELS indicateurs ni de COMBIEN ils dérapent.
+ */
+export function chantierAtRiskIndicators(
+  chantierId: string,
+  indicators: Indicator[],
+  measurements: IndicatorMeasurement[]
+): { indicator: Indicator; delta: IndicatorDelta | undefined }[] {
+  return indicators
+    .filter((indicator) => indicator.chantierId === chantierId)
+    .filter((indicator) => resolveIndicatorStatus(indicator) === "at_risk")
+    .map((indicator) => ({
+      indicator,
+      delta: computeIndicatorDelta(indicator, latestMeasurement(indicator.id, measurements)),
+    }));
 }
 
 // ─── Alertes de cascade de retard inter-chantiers ──────────────────────────────────────────────
@@ -410,4 +482,42 @@ export function chantierProgress(
     total: own.length,
     done,
   };
+}
+
+// ─── Prérequis d'action (go/no-go) ─────────────────────────────────────────────────────────────
+
+/**
+ * Une action peut-elle démarrer, au regard de ses prérequis (`ChantierAction.prerequisites`) ?
+ * v1 PUREMENT INFORMATIVE (voir plan round 4, point 5) : rien dans l'app n'intercepte aujourd'hui
+ * un changement de statut/étape, donc un prérequis non satisfait n'empêche RIEN — il s'affiche
+ * seulement (badge cadenas sur le Gantt, détail sur la fiche chantier).
+ *
+ * Un prérequis "action" est satisfait quand l'étape COURANTE de l'action cible est `isTerminal`
+ * dans le référentiel `stages` du programme (même notion que `chantierProgress`/
+ * `maturityStageProgressRatio`). Une cible introuvable (action supprimée depuis, ou id invalide)
+ * n'est jamais satisfaite mais ne lève JAMAIS d'exception — elle produit un message explicite.
+ * Un prérequis "external" est satisfait quand `done === true`.
+ */
+export function canStartAction(
+  action: Pick<ChantierAction, "prerequisites">,
+  allActions: ChantierAction[],
+  stages: MaturityStageConfig[]
+): { blocked: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+
+  for (const prerequisite of action.prerequisites ?? []) {
+    if (prerequisite.kind === "action") {
+      const target = allActions.find((a) => a.id === prerequisite.targetActionId);
+      if (!target) {
+        reasons.push(`Prérequis introuvable (action supprimée ou invalide)`);
+        continue;
+      }
+      const isTerminal = stages.find((s) => s.id === target.status)?.isTerminal ?? false;
+      if (!isTerminal) reasons.push(`En attente de "${target.name}"`);
+    } else {
+      if (!prerequisite.done) reasons.push(prerequisite.label || "Prérequis externe non satisfait");
+    }
+  }
+
+  return { blocked: reasons.length > 0, reasons };
 }
