@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   canFillIndicator,
+  canManageChantier,
   chantierBounds,
   chantierDependencyAlerts,
   computeIndicatorStatus,
@@ -364,5 +365,46 @@ describe("chantierDependencyAlerts", () => {
     expect(chantierDependencyAlerts(chantiers, actions)).toEqual([]);
     // Sans aucune action, aucune borne exploitable → aucune alerte plutôt que des dates inventées.
     expect(chantierDependencyAlerts(chantiers)).toEqual([]);
+  });
+});
+
+// ─── Habilitation à piloter un chantier ────────────────────────────────────────────────────────
+
+describe("canManageChantier", () => {
+  it("allows a user whose role is listed in responsibleRoles", () => {
+    const chantier = makeChantier("CH1", {
+      responsibleRoles: ["chantier_owner", "axis_sponsor"],
+    });
+    expect(canManageChantier(chantier, { ...baseUser, role: "chantier_owner" })).toBe(true);
+    expect(canManageChantier(chantier, { ...baseUser, role: "axis_sponsor" })).toBe(true);
+  });
+
+  it("blocks a user whose role is not listed", () => {
+    const chantier = makeChantier("CH1", { responsibleRoles: ["chantier_owner"] });
+    expect(canManageChantier(chantier, { ...baseUser, role: "chantier_contributor" })).toBe(false);
+    expect(canManageChantier(chantier, { ...baseUser, role: "ops" })).toBe(false);
+  });
+
+  it("does not restrict anyone while no responsible role has been configured", () => {
+    // Défaut PERMISSIF assumé (à l'inverse de canFillIndicator) : champ absent ou liste vide =
+    // aucune restriction, pour ne pas bloquer les chantiers créés avant ce champ.
+    expect(canManageChantier(makeChantier("CH1"), { ...baseUser, role: "ops" })).toBe(true);
+    expect(
+      canManageChantier(makeChantier("CH1", { responsibleRoles: [] }), {
+        ...baseUser,
+        role: "ops",
+      })
+    ).toBe(true);
+  });
+
+  it("always allows admin and admin_entreprise, even outside responsibleRoles", () => {
+    const chantier = makeChantier("CH1", { responsibleRoles: ["chantier_owner"] });
+    expect(canManageChantier(chantier, { ...baseUser, role: "admin" })).toBe(true);
+    expect(canManageChantier(chantier, { ...baseUser, role: "admin_entreprise" })).toBe(true);
+  });
+
+  it("blocks an anonymous user, even on an unrestricted chantier", () => {
+    expect(canManageChantier(makeChantier("CH1"), null)).toBe(false);
+    expect(canManageChantier(makeChantier("CH1"), undefined)).toBe(false);
   });
 });

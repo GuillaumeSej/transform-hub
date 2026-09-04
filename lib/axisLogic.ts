@@ -132,6 +132,33 @@ export function canFillIndicator(
   return (indicator.additionalAuthorizedUserIds ?? []).includes(user.username);
 }
 
+/**
+ * Un utilisateur peut-il PILOTER ce chantier (mettre à jour son avancement, ses actions, ses
+ * livrables) ? Pendant de `canFillIndicator` pour l'entité `Chantier`, basé sur
+ * `Chantier.responsibleRoles` (voir `types/index.ts`).
+ *
+ * Deux différences assumées avec `canFillIndicator` :
+ *  - pas de liste d'utilisateurs nommés (`additionalAuthorizedUserIds`) : le champ n'existe pas
+ *    sur `Chantier`, l'habilitation est purement par rôle pour l'instant ;
+ *  - `responsibleRoles` est OPTIONNEL et le défaut est PERMISSIF : absent ou vide = `true` (tant
+ *    qu'aucun responsable n'a été configuré, on ne bloque personne). `canFillIndicator` est au
+ *    contraire restrictif par défaut, car `Indicator.responsibleRoles` est obligatoire à la
+ *    saisie.
+ *
+ * NON CÂBLÉE dans l'UI à ce stade — introduite pour le lot « responsabilités du Plan Stratégique »
+ * (organigramme 3-5-15 : sponsor d'axe, responsable de chantier, etc.).
+ */
+export function canManageChantier(
+  chantier: Pick<Chantier, "responsibleRoles">,
+  user: Pick<AuthUser, "role"> | null | undefined
+): boolean {
+  if (!user) return false;
+  if (user.role === "admin" || user.role === "admin_entreprise") return true;
+  const roles = chantier.responsibleRoles ?? [];
+  if (roles.length === 0) return true;
+  return roles.includes(user.role);
+}
+
 // ─── Alertes de cascade de retard inter-chantiers ──────────────────────────────────────────────
 
 /** Alerte de dépendance entre chantiers. Pendant STRICTEMENT non financier de

@@ -143,6 +143,98 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
     ],
   },
+
+  // ─── Rôles du Plan Stratégique (organigramme 3-5-15 : axes → chantiers) ──────────────────────
+  // Ces 6 rôles n'ont PAS d'écran dédié pour l'instant : ils servent avant tout de valeurs
+  // sélectionnables pour « qui est responsable de quoi » (`Indicator.responsibleRoles`,
+  // `Chantier.responsibleRoles`). Ils reçoivent néanmoins tous la MÊME nav minimale — axes
+  // (`levers`, relabelé « Axes stratégiques » en mode stratégique) + KPI — plutôt qu'une nav vide,
+  // pour deux raisons :
+  //   1. techniquement, `nav: []` casse `AppShell` : `allowedRoutes` serait vide et le repli
+  //      `PAGE_ROUTES[navItems[0]?.id] ?? "/levers"` renverrait en boucle vers une route elle-même
+  //      interdite (voir components/shared/AppShell.tsx) ;
+  //   2. fonctionnellement, ces profils ont tous besoin de LIRE l'avancement des axes/chantiers et
+  //      les indicateurs — c'est le dénominateur commun de leurs responsabilités (rendre compte,
+  //      arbitrer, communiquer, consolider). Les écrans dédiés (vue « mon axe » pour le sponsor,
+  //      « mon chantier » pour le responsable de chantier) sont un lot ultérieur.
+  strategic_lead: {
+    label: "roles.strategicLead.label",
+    short: "roles.strategicLead.short",
+    nav: [
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+    ],
+  },
+  axis_sponsor: {
+    label: "roles.axisSponsor.label",
+    short: "roles.axisSponsor.short",
+    nav: [
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+    ],
+  },
+  chantier_owner: {
+    label: "roles.chantierOwner.label",
+    short: "roles.chantierOwner.short",
+    nav: [
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+    ],
+  },
+  chantier_contributor: {
+    label: "roles.chantierContributor.label",
+    short: "roles.chantierContributor.short",
+    nav: [
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+    ],
+  },
+  internal_comm: {
+    label: "roles.internalComm.label",
+    short: "roles.internalComm.short",
+    nav: [
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+    ],
+  },
+  budget_control: {
+    label: "roles.budgetControl.label",
+    short: "roles.budgetControl.short",
+    nav: [
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+    ],
+  },
 };
 
 export const PAGE_ROUTES: Record<string, string> = {
