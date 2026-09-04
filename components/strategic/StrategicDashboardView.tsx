@@ -9,7 +9,6 @@ import {
   Maximize2,
   Plus,
   RotateCcw,
-  Sigma,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -23,7 +22,6 @@ import {
   countOnTrackAtRisk,
   latestMeasurement,
   resolveIndicatorStatus,
-  sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
 import {
   STRATEGIC_DASHBOARD_WIDGET_REGISTRY,
@@ -40,12 +38,14 @@ import {
   type StrategicDashboardWidgetInstance,
 } from "@/lib/strategicDashboardWidgets";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
-import { KPICard } from "@/components/shared/KPICard";
 import { Button } from "@/components/shared/Button";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
-import { IndicatorStatusSummary } from "@/components/strategic/IndicatorStatusSummary";
+import {
+  BusinessKpiCards,
+  IndicatorStatusSummary,
+} from "@/components/strategic/IndicatorStatusSummary";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 
@@ -78,10 +78,6 @@ export function StrategicDashboardView() {
 
   // ─── Agrégats (toute la logique de calcul vient de lib/axisLogic.ts) ──────────────────────
   const counts = useMemo(() => countOnTrackAtRisk(indicators), [indicators]);
-  const cumulative = useMemo(
-    () => sumLatestQuantitativeValues(indicators, measurements),
-    [indicators, measurements]
-  );
   const atRiskIndicators = useMemo(
     () => indicators.filter((i) => resolveIndicatorStatus(i) === "at_risk"),
     [indicators]
@@ -136,8 +132,15 @@ export function StrategicDashboardView() {
     tracked: t("strategicDashboard.tracked"),
     onTrack: t("strategicDashboard.onTrack"),
     atRisk: t("strategicDashboard.atRisk"),
-    total: t("strategicDashboard.cumulative"),
     indicatorsSuffix: t("strategicDashboard.indicatorsSuffix"),
+  };
+
+  const businessKpiLabels = {
+    empty: t("businessKpis.empty"),
+    noValue: t("businessKpis.noValue"),
+    objective: t("kpi.objectiveValue"),
+    onTrack: t("indicatorStatus.onTrack"),
+    atRisk: t("indicatorStatus.atRisk"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────
@@ -295,18 +298,20 @@ export function StrategicDashboardView() {
           </Card>
         );
 
-      // ── Cumul des dernières valeurs quantitatives (carte héro) ────────────────────────────
-      case "indicator-total":
+      // ── KPI business : indicateurs de niveau axe (remplace l'ancien widget « cumul des
+      //    indicateurs », retiré — sommer des indicateurs hétérogènes n'a pas de sens sur un plan
+      //    stratégique, contrairement aux économies d'un Plan Performance) ─────────────────────
+      case "business-kpis":
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title={t("strategicDashboard.widget.indicatorTotal")} />
+            <CardHeader title={t("strategicDashboard.widget.businessKpis")} />
             <CardBody>
-              <KPICard
-                label={t("strategicDashboard.cumulative")}
-                value={String(cumulative)}
-                icon={Sigma}
-                sub={t("strategicDashboard.cumulativeHint")}
+              <BusinessKpiCards
+                indicators={indicators}
+                measurements={measurements}
+                labels={businessKpiLabels}
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
               />
             </CardBody>
           </Card>

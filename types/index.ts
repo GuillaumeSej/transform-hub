@@ -1,5 +1,39 @@
+/**
+ * Rôle applicatif d'un utilisateur — union FERMÉE, référencée partout (permissions de page via
+ * `lib/nav-config.ts`, création d'utilisateur, `Indicator.responsibleRoles`,
+ * `Chantier.responsibleRoles`).
+ *
+ * Les 8 premières valeurs sont les rôles historiques du Plan Performance. Les 6 suivantes portent
+ * l'organigramme du Plan Stratégique (méthodologie 3-5-15, axes → chantiers) défini par le PO :
+ *   - `strategic_lead`      : Pilote du plan stratégique (un seul par plan) — rend compte de
+ *                             l'avancement global au COMEX, anime les instances de pilotage.
+ *   - `axis_sponsor`        : Sponsor d'un axe — responsable de l'avancement et du budget de SON
+ *                             axe, arbitre les propositions de ses responsables de chantier.
+ *   - `chantier_owner`      : Responsable de chantier — garant de l'avancement et de la qualité de
+ *                             SON chantier, plan de travail, risques, coûts/bénéfices.
+ *   - `chantier_contributor`: Contributeur, exécute au sein d'un chantier.
+ *   - `internal_comm`       : Communication interne — cadre et pilote la communication sur
+ *                             l'avancement des chantiers.
+ *   - `budget_control`      : Contrôle de gestion — consolidation des indicateurs et contrôle
+ *                             budgétaire, en appui du pilote.
+ * Le COMEX n'y figure PAS : c'est un organe de gouvernance collectif, pas un profil individuel
+ * connectable à l'application.
+ */
 export type Role =
-  "admin" | "admin_entreprise" | "cto" | "sponsor" | "lever" | "finance" | "hr" | "ops";
+  | "admin"
+  | "admin_entreprise"
+  | "cto"
+  | "sponsor"
+  | "lever"
+  | "finance"
+  | "hr"
+  | "ops"
+  | "strategic_lead"
+  | "axis_sponsor"
+  | "chantier_owner"
+  | "chantier_contributor"
+  | "internal_comm"
+  | "budget_control";
 
 /** Compte de test (voir lib/auth.ts) — login réel par identifiant/mot de passe, mais toujours
  * des comptes de démo (mot de passe unique "test" pour les 8 comptes/rôles). */
@@ -365,6 +399,11 @@ export type Alert = {
   type: AlertType;
   ts: string;
   scope: string; // lever, sub-lever or workstream id
+  /** Libellé lisible du `scope`, quand l'identifiant brut n'est pas parlant pour un humain.
+   *  Absent côté Plan Performance (les ids de leviers `L###` se lisent tels quels) ; renseigné
+   *  pour les alertes synthétiques du Plan Stratégique, dont les scopes sont des ids générés
+   *  (`CH-…`, `IND-…`) — voir components/shared/AppShell.tsx. */
+  scopeLabel?: string;
   title: string;
   desc: string;
   actorRole: string;
@@ -603,9 +642,35 @@ export type Chantier = {
   /** Référence un `MaturityStageConfig.id` du programme (même référentiel que l'axe). */
   stage: string;
   dependencies: ChantierDependency[];
+  /** Rôles habilités à PILOTER ce chantier (mettre à jour son avancement, ses actions, ses
+   *  livrables) — pendant de `Indicator.responsibleRoles`, voir `canManageChantier` dans
+   *  `lib/axisLogic.ts`. Optionnel et non-bloquant : absent ou vide = aucune restriction, tout
+   *  utilisateur qui voit le chantier peut le piloter (comportement historique conservé pour les
+   *  chantiers créés avant l'introduction de ce champ). */
+  responsibleRoles?: Role[];
   confidentialityLevel?: string;
   createdAt: string;
   lastUpdate: string;
+};
+
+/** Sous-étape temporelle d'un livrable : un livrable peut être produit en plusieurs vagues
+ *  disjointes (ex. une première portion de S2 2026 à S2 2027, une seconde de S1 2028 à S2 2029),
+ *  chacune avec sa propre plage de dates — d'où une LISTE de phases plutôt qu'un couple
+ *  début/fin unique sur le livrable. */
+export type DeliverablePhase = {
+  id: string;
+  start: string; // ISO date
+  end: string; // ISO date
+  /** Précision libre sur cette phase (non saisie dans le formulaire v1, conservée si présente). */
+  note?: string;
+};
+
+/** Livrable attendu d'une action de chantier — texte libre (aucune convention « un par ligne »),
+ *  éventuellement phasé dans le temps. */
+export type Deliverable = {
+  id: string;
+  label: string;
+  phases: DeliverablePhase[];
 };
 
 export type ChantierAction = {
@@ -619,8 +684,8 @@ export type ChantierAction = {
   end: string; // ISO date
   /** Référence un `MaturityStageConfig.id`, comme le chantier — pas de `ActionStatus` dédié. */
   status: string;
-  /** Livrables attendus — texte libre par livrable (v1 simple, pas d'objets riches). */
-  deliverables?: string[];
+  /** Livrables attendus, chacun avec ses propres sous-étapes temporelles. */
+  deliverables?: Deliverable[];
 };
 
 export type IndicatorKind = "quantitative" | "qualitative";

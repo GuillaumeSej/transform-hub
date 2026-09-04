@@ -19,6 +19,15 @@ const ALL_ROLES: { value: Role; label: string }[] = [
   { value: "finance", label: "Finance" },
   { value: "hr", label: "HR" },
   { value: "ops", label: "Ops" },
+  // ─── Profils du Plan Stratégique (organigramme 3-5-15) ─────────────────────────────────────
+  // Libellés littéraux comme les rôles historiques ci-dessus (cet écran d'admin n'est pas
+  // traduit) ; les clés i18n `roles.*` correspondantes existent pour la sidebar/topbar.
+  { value: "strategic_lead", label: "Pilote du plan stratégique" },
+  { value: "axis_sponsor", label: "Sponsor d'axe" },
+  { value: "chantier_owner", label: "Responsable de chantier" },
+  { value: "chantier_contributor", label: "Contributeur chantier" },
+  { value: "internal_comm", label: "Communication interne" },
+  { value: "budget_control", label: "Contrôle de gestion" },
 ];
 
 const OPERATIONAL_ROLES = ALL_ROLES.filter(

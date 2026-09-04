@@ -42,6 +42,22 @@ type TabId =
   | "data"
   | "database";
 
+const TAB_IDS: TabId[] = [
+  "settings",
+  "users",
+  "financial-hierarchy",
+  "geographic-hierarchy",
+  "projects",
+  "lifecycle",
+  "data",
+  "database",
+];
+
+/** Un `?tab=` d'URL est une donnée non fiable : on ne l'accepte que s'il désigne un onglet réel. */
+function isTabId(value: string | null): value is TabId {
+  return value != null && (TAB_IDS as string[]).includes(value);
+}
+
 /** Comparaison simple (JSON stringify) — suffisant vu la taille du formulaire, et robuste au
  *  fait que confidentialityLevels et roleClearance sont des objets/tableaux "plats". */
 function companyFormEquals(a: CompanyFormState, b: CompanyFormState): boolean {
@@ -93,12 +109,24 @@ export default function CompanyDetailClient() {
   const { role } = useRole();
   const { showToast } = useToast();
   const companyId = searchParams.get("id") ?? "";
+  // Onglet d'arrivée pilotable par l'URL : le sélecteur de programme du Topbar amène le global
+  // admin ici directement sur l'onglet « Programmes » du programme qu'il vient de choisir (voir
+  // components/shared/ProgramSwitcher.tsx). Sans paramètre, comportement historique : « Paramètres ».
+  const urlTab = searchParams.get("tab");
+  const urlManageProgram = searchParams.get("manageProgram");
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState<TabId>("settings");
+  const [tab, setTab] = useState<TabId>(() => (isTabId(urlTab) ? urlTab : "settings"));
   const [form, setForm] = useState<CompanyFormState>(DEFAULT_COMPANY_FORM);
   const [saving, setSaving] = useState(false);
+
+  // Ré-appliqué à chaque changement de `?tab=` (et pas seulement au montage) : arriver ici depuis
+  // le Topbar alors qu'on y est déjà ne remonte pas le composant. La dépendance sur `urlTab` seul
+  // garantit qu'un clic manuel sur un autre onglet n'est jamais écrasé.
+  useEffect(() => {
+    if (isTabId(urlTab)) setTab(urlTab);
+  }, [urlTab]);
 
   useEffect(() => {
     const unsub = subscribeCompanies((list) => {
@@ -328,7 +356,9 @@ export default function CompanyDetailClient() {
           {tab === "geographic-hierarchy" && (
             <HierarchyEditor companies={companies} companyId={company.id} domain="geographic" />
           )}
-          {tab === "projects" && <ProgramsPanel companyId={company.id} />}
+          {tab === "projects" && (
+            <ProgramsPanel companyId={company.id} initialManagedProgramId={urlManageProgram} />
+          )}
           {tab === "lifecycle" && <LifecycleEditor companyId={company.id} />}
           {tab === "data" && <CompanyDataHistoryPanel company={company} />}
           {tab === "database" && <CompanyDatabasePanel company={company} />}

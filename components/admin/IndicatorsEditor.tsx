@@ -63,6 +63,45 @@ const RESPONSIBLE_ROLES: { value: Role; shortKey: string; short: string; labelKe
   },
   { value: "hr", shortKey: "roles.hr.short", short: "RH", labelKey: "roles.hr.label" },
   { value: "ops", shortKey: "roles.ops.short", short: "Ops", labelKey: "roles.ops.label" },
+  // Profils du Plan Stratégique (organigramme 3-5-15) : un indicateur peut désormais être confié
+  // au sponsor de l'axe ou au responsable du chantier concerné, pas seulement aux rôles
+  // transverses historiques.
+  {
+    value: "strategic_lead",
+    shortKey: "roles.strategicLead.short",
+    short: "Pilote",
+    labelKey: "roles.strategicLead.label",
+  },
+  {
+    value: "axis_sponsor",
+    shortKey: "roles.axisSponsor.short",
+    short: "Sponsor axe",
+    labelKey: "roles.axisSponsor.label",
+  },
+  {
+    value: "chantier_owner",
+    shortKey: "roles.chantierOwner.short",
+    short: "Resp. chantier",
+    labelKey: "roles.chantierOwner.label",
+  },
+  {
+    value: "chantier_contributor",
+    shortKey: "roles.chantierContributor.short",
+    short: "Contributeur",
+    labelKey: "roles.chantierContributor.label",
+  },
+  {
+    value: "internal_comm",
+    shortKey: "roles.internalComm.short",
+    short: "Com. interne",
+    labelKey: "roles.internalComm.label",
+  },
+  {
+    value: "budget_control",
+    shortKey: "roles.budgetControl.short",
+    short: "Contrôle gestion",
+    labelKey: "roles.budgetControl.label",
+  },
 ];
 
 /** Libellés de fréquence de reporting — définis ici faute de référentiel partagé côté `lib/`
@@ -509,9 +548,19 @@ export function IndicatorsEditor({
                   <Plus size={13} /> {t("adminIndicators.newChantier", "Nouveau chantier")}
                 </button>
               </div>
-              {!form.axisId && (
+              {!form.axisId ? (
                 <p className="mt-1 text-xs text-text-secondary">
                   {t("adminIndicators.chantierPickAxisFirst", "Sélectionnez d'abord un axe.")}
+                </p>
+              ) : (
+                // Incitation explicite du PO : beaucoup de chantiers portent leurs propres KPI —
+                // les rattacher au chantier (et non à l'axe) rend le suivi exploitable par le
+                // responsable de chantier lui-même.
+                <p className="mt-1 text-xs text-text-secondary">
+                  {t(
+                    "adminIndicators.chantierLevelHint",
+                    "Certains chantiers ont leurs propres KPI : n'hésitez pas à rattacher l'indicateur au chantier concerné plutôt qu'à l'axe, et à le confier à son responsable de chantier."
+                  )}
                 </p>
               )}
             </div>

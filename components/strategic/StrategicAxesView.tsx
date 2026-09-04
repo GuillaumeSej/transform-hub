@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LayoutGrid, Plus, Rows3 } from "lucide-react";
+import { LayoutGrid, LayoutList, Plus, Rows3, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody } from "@/components/shared/Card";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
@@ -10,28 +10,37 @@ import { Modal } from "@/components/shared/Modal";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisKanban } from "@/components/strategic/AxisKanban";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
-import { resolveIndicatorStatus } from "@/lib/axisLogic";
+import { chantierDependencyAlerts, resolveIndicatorStatus } from "@/lib/axisLogic";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMaturityStages, resolveMaturityStageLabel } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { StrategicAxis } from "@/types";
+import type { Chantier, StrategicAxis } from "@/types";
 
 /**
  * Page « Axes stratégiques » — portefeuille des axes du programme actif, servie sur la MÊME route
  * que la bibliothèque des leviers (`/levers`, voir le routeur `app/(app)/levers/page.tsx`) : c'est
  * l'équivalent stratégique de `LeversPagePerformance`, dont elle reprend la structure (barre de
- * filtres persistés dans l'URL + bascule cartes/kanban + modale de création).
+ * filtres persistés dans l'URL + bascule de vues + modale de création).
  *
  * Elle N'EST PAS un rendu paramétré de la page leviers : un axe n'a ni code, ni montant, ni
  * workstream, ni risque calculé — les colonnes du tableau levier n'auraient presque aucun
  * équivalent. On garde donc une grille de cartes (lecture rapide d'un portefeuille de ~5 axes,
  * volumétrie visée par la méthodologie 3-5-15) plutôt qu'un `EditableTable` à trois colonnes.
  *
+ * Trois vues, trois mailles de lecture volontairement distinctes :
+ *  - « cartes » et « kanban » (`AxisKanban`) portent sur les AXES eux-mêmes (portefeuille) ;
+ *  - « chantiers » descend d'un cran : une section par axe, listant SES CHANTIERS — la maille où
+ *    l'avancement réel d'un axe se lit (étape de chaque chantier, actions, indicateurs à risque,
+ *    alertes de cascade), sans avoir à ouvrir chaque fiche d'axe une par une.
+ *
  * Le clic sur un axe pousse `/levers/detail?id=<axisId>` — même motif d'URL que les leviers, ce
- * qui laisse `LeverDetailClient` aiguiller vers `AxisDetailClient` selon le type de programme.
+ * qui laisse `LeverDetailClient` aiguiller vers `AxisDetailClient` selon le type de programme. Le
+ * clic sur un chantier y ajoute `&chantier=<chantierId>`, que `AxisDetailClient` interprète pour
+ * ouvrir directement la pop-up de ce chantier (paramètre ignoré si inconnu : la fiche d'axe
+ * s'ouvre alors simplement sans pop-up).
  */
 export function StrategicAxesView() {
   const { user } = useRole();
@@ -44,7 +53,7 @@ export function StrategicAxesView() {
   const data = useStrategicData(user?.companyId ?? null, activeProgramId);
   const stages = useMaturityStages(activeProgramId);
   const [newAxisOpen, setNewAxisOpen] = useState(false);
-  const [view, setView] = useState<"cards" | "kanban">("cards");
+  const [view, setView] = useState<"cards" | "kanban" | "chantiers">("cards");
 
   // Compteurs par axe — chantiers, indicateurs, indicateurs à risque (statut EFFECTIF, surcharge
   // manuelle comprise, via resolveIndicatorStatus).
@@ -66,6 +75,45 @@ export function StrategicAxesView() {
 
   const countsOf = (axisId: string) =>
     countsByAxis.get(axisId) ?? { chantiers: 0, indicators: 0, atRisk: 0 };
+
+  // --- Vue « chantiers » : dérivés à la maille CHANTIER (et non plus axe) -------------------
+  // Chantiers regroupés par axe, dans l'ordre de `data.chantiers` (déjà trié par le hook).
+  const chantiersByAxis = useMemo(() => {
+    const map = new Map<string, Chantier[]>();
+    for (const chantier of data.chantiers) {
+      const list = map.get(chantier.axisId);
+      if (list) list.push(chantier);
+      else map.set(chantier.axisId, [chantier]);
+    }
+    return map;
+  }, [data.chantiers]);
+
+  // Actions + indicateurs à risque rattachés à CHAQUE chantier. Un indicateur sans `chantierId`
+  // est « macro » (rattaché directement à l'axe) : il ne compte pour aucun chantier.
+  const chantierCounts = useMemo(() => {
+    const map = new Map<string, { actions: number; atRisk: number }>();
+    const entry = (id: string) => {
+      const existing = map.get(id);
+      if (existing) return existing;
+      const created = { actions: 0, atRisk: 0 };
+      map.set(id, created);
+      return created;
+    };
+    for (const chantier of data.chantiers) entry(chantier.id);
+    for (const action of data.chantierActions) entry(action.chantierId).actions += 1;
+    for (const indicator of data.indicators) {
+      if (!indicator.chantierId) continue;
+      if (resolveIndicatorStatus(indicator) === "at_risk") entry(indicator.chantierId).atRisk += 1;
+    }
+    return map;
+  }, [data.chantiers, data.chantierActions, data.indicators]);
+
+  // Les dépendances sont évaluées sur TOUT le programme (un chantier peut dépendre du chantier
+  // d'un autre axe — cas explicitement prévu par le modèle), exactement comme `AxisDetailClient`.
+  const alertedChantierIds = useMemo(() => {
+    const alerts = chantierDependencyAlerts(data.chantiers, data.chantierActions);
+    return new Set(alerts.flatMap((a) => [a.sourceId, a.targetId]));
+  }, [data.chantiers, data.chantierActions]);
 
   // Filtres persistés dans l'URL sous le préfixe `f_`, exactement comme la page leviers — un lien
   // vers une vue filtrée reste partageable et survit à un rafraîchissement.
@@ -117,6 +165,10 @@ export function StrategicAxesView() {
   );
 
   const openAxis = (axisId: string) => router.push(`/levers/detail?id=${axisId}`);
+
+  /** Même destination que `openAxis`, plus le chantier à ouvrir en pop-up sur la fiche d'axe. */
+  const openChantier = (axisId: string, chantierId: string) =>
+    router.push(`/levers/detail?id=${axisId}&chantier=${chantierId}`);
 
   if (!programsLoading && !activeProgramId) {
     return (
@@ -189,6 +241,14 @@ export function StrategicAxesView() {
               >
                 <LayoutGrid size={13} /> {t("strategicAxes.kanban")}
               </button>
+              <button
+                onClick={() => setView("chantiers")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${
+                  view === "chantiers" ? "bg-black text-white" : "bg-white text-secondary"
+                }`}
+              >
+                <LayoutList size={13} /> {t("strategicAxes.chantiersView")}
+              </button>
             </div>
           </div>
         </CardBody>
@@ -217,6 +277,79 @@ export function StrategicAxesView() {
             noStage: t("strategicAxes.noStage"),
           }}
         />
+      ) : view === "chantiers" ? (
+        <div className="flex flex-col gap-3">
+          {filteredAxes.map((axis) => {
+            const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
+            return (
+              <div key={axis.id} className="rounded-lg border border-border bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2.5 border-b border-border pb-2.5">
+                  <span
+                    aria-hidden
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
+                  />
+                  <button
+                    onClick={() => openAxis(axis.id)}
+                    className="text-sm font-bold text-primary underline-offset-2 hover:underline"
+                  >
+                    {axis.name}
+                  </button>
+                  <AxisStageBadge stageId={axis.stage} stages={stages} className="shrink-0" />
+                  <span className="ml-auto text-[11px] text-tertiary">
+                    {axisChantiers.length} {t("strategicAxes.chantiersCount")}
+                  </span>
+                </div>
+
+                {axisChantiers.length === 0 ? (
+                  <p className="pt-3 text-[12px] text-tertiary">
+                    {t("strategicAxes.axisNoChantier")}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 pt-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {axisChantiers.map((chantier) => {
+                      const c = chantierCounts.get(chantier.id) ?? { actions: 0, atRisk: 0 };
+                      const isAlerted = alertedChantierIds.has(chantier.id);
+                      return (
+                        <button
+                          key={chantier.id}
+                          onClick={() => openChantier(axis.id, chantier.id)}
+                          className={`flex h-full flex-col rounded-md border bg-white p-3 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm ${
+                            isAlerted ? "border-rag-amber bg-rag-amber-light/40" : "border-border"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-primary">
+                              {chantier.name}
+                            </span>
+                            {isAlerted && (
+                              <TriangleAlert
+                                size={13}
+                                className="mt-0.5 shrink-0 text-rag-amber"
+                                aria-label={t("strategicAxes.chantierAlerted")}
+                              />
+                            )}
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+                            <AxisStageBadge stageId={chantier.stage} stages={stages} />
+                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
+                              {c.actions} {t("strategicAxes.actionsSuffix")}
+                            </span>
+                            {c.atRisk > 0 && (
+                              <span className="rounded-full bg-rag-amber-light px-2 py-0.5 font-semibold text-rag-amber">
+                                {c.atRisk} {t("strategicAxes.atRiskCount")}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filteredAxes.map((axis) => {

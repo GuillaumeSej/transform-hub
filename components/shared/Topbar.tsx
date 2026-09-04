@@ -223,7 +223,10 @@ export function Topbar({
                         {alert.source === "auto"
                           ? t("shared.topbar.sourceAuto", "Automatique")
                           : t("shared.topbar.sourceManual", "Manuelle")}{" "}
-                        · {alert.scope}
+                        {/* Les alertes du Plan Performance portent un id de levier lisible
+                            (`L###`) ; celles du Plan Stratégique référencent des ids générés
+                            (`CH-…`, `IND-…`) et fournissent donc un libellé humain. */}
+                        · {alert.scopeLabel ?? alert.scope}
                       </span>
                     </button>
                   ))
