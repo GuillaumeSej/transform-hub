@@ -79,6 +79,64 @@ const STAGES = [
   { id: "achieved", order: 4, label: "Réalisé", isTerminal: true },
 ];
 
+// ── Utilisateurs de démo (adminUsers) ───────────────────────────────────────────────────────
+// Corrige le vrai problème du PO ("impossible d'assigner quelqu'un dans les pickers RACI/
+// responsable/sponsor") : ces pickers lisent `adminUsers` filtré par `companyId`, et ce script ne
+// créait auparavant AUCUN document `adminUsers` — les anciens champs `owner` (ex. "Sophie Nguyen")
+// ne sont que des chaînes d'affichage, pas des comptes. Ces utilisateurs sont donc SÉLECTIONNABLES
+// dans les pickers mais ne peuvent PAS se connecter (aucun compte Firebase Auth associé) — c'est
+// voulu, seul le côté "options des pickers" est demandé ici.
+const DEMO_USERS = [
+  {
+    username: "camille.rousseau",
+    password: "demo-user-2026",
+    role: "chantier_owner",
+    firstName: "Camille",
+    lastName: "Rousseau",
+    name: "Camille Rousseau",
+  },
+  {
+    username: "antoine.mercier",
+    password: "demo-user-2026",
+    role: "chantier_contributor",
+    firstName: "Antoine",
+    lastName: "Mercier",
+    name: "Antoine Mercier",
+  },
+  {
+    username: "nicolas.petit",
+    password: "demo-user-2026",
+    role: "chantier_contributor",
+    firstName: "Nicolas",
+    lastName: "Petit",
+    name: "Nicolas Petit",
+  },
+  {
+    username: "isabelle.faure",
+    password: "demo-user-2026",
+    role: "axis_sponsor",
+    firstName: "Isabelle",
+    lastName: "Faure",
+    name: "Isabelle Faure",
+  },
+  {
+    username: "thomas.girard",
+    password: "demo-user-2026",
+    role: "strategic_lead",
+    firstName: "Thomas",
+    lastName: "Girard",
+    name: "Thomas Girard",
+  },
+  {
+    username: "lucie.bernard",
+    password: "demo-user-2026",
+    role: "budget_control",
+    firstName: "Lucie",
+    lastName: "Bernard",
+    name: "Lucie Bernard",
+  },
+];
+
 // ── Contenu du plan ─────────────────────────────────────────────────────────────────────────
 const AXES = [
   {
@@ -125,12 +183,113 @@ const AXES = [
 
 const CHANTIERS = [
   { id: "CH-lean", axisId: "AX-excop", name: "Lean Manufacturing Sites EU", stage: "planned" },
-  { id: "CH-supply", axisId: "AX-excop", name: "Optimisation Supply Chain", stage: "validated" },
+  {
+    id: "CH-supply",
+    axisId: "AX-excop",
+    name: "Optimisation Supply Chain",
+    stage: "validated",
+    raci: [
+      { userId: "thomas.girard", letter: "A" },
+      { userId: "lucie.bernard", letter: "C" },
+    ],
+  },
   { id: "CH-qualite", axisId: "AX-excop", name: "Amélioration Qualité Produits", stage: "defined" },
 
-  { id: "CH-data", axisId: "AX-digital", name: "Plateforme Data Unifiée", stage: "planned" },
+  {
+    id: "CH-data",
+    axisId: "AX-digital",
+    name: "Plateforme Data Unifiée",
+    stage: "planned",
+    sponsorName: "isabelle.faure",
+    pilote: "camille.rousseau",
+    effort: { financialImpact: 3, humanImpact: 2, duration: 3, changeManagement: 2 },
+  },
   { id: "CH-rpa", axisId: "AX-digital", name: "Automatisation RPA Finance", stage: "achieved" },
-  { id: "CH-cyber", axisId: "AX-digital", name: "Cybersécurité & Cloud", stage: "validated" },
+  {
+    id: "CH-cyber",
+    axisId: "AX-digital",
+    name: "Cybersécurité & Cloud",
+    stage: "validated",
+    sponsorName: "isabelle.faure",
+    pilote: "camille.rousseau",
+    effort: { financialImpact: 3, humanImpact: 3, duration: 3, changeManagement: 4 },
+    raci: [
+      { userId: "isabelle.faure", letter: "A" },
+      { userId: "camille.rousseau", letter: "R" },
+      { userId: "antoine.mercier", letter: "R" },
+      { userId: "nicolas.petit", letter: "C" },
+      { userId: "lucie.bernard", letter: "C" },
+      { userId: "thomas.girard", letter: "I" },
+    ],
+    successCriteria:
+      "On sera satisfait fin 2027 si l'ensemble des applications critiques tourne sur l'infrastructure cloud sécurisée, sans incident de sécurité majeur, et si les équipes opérationnelles sont autonomes sur les nouveaux outils de sécurité.",
+    successKpis: [
+      { id: "KPI-cyber-1", label: "0 incident de sécurité majeur en 2026", achieved: false },
+      {
+        id: "KPI-cyber-2",
+        label: "100% des applications critiques migrées vers le cloud sécurisé d'ici Q4 2026",
+        achieved: false,
+      },
+      { id: "KPI-cyber-3", label: "Certification ISO 27001 obtenue", achieved: false },
+      {
+        id: "KPI-cyber-4",
+        label: "90% des collaborateurs formés aux nouvelles politiques de sécurité",
+        achieved: true,
+      },
+    ],
+    milestones: {
+      currentMilestone: "E2",
+      passedMilestones: ["E0", "E1"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          {
+            itemId: "E0-B2",
+            flag: "orange",
+            resolved: true,
+            actionPlan: {
+              description:
+                "Périmètre initial limité au SI de gestion ; élargi aux environnements industriels (OT) après cadrage complémentaire avec la DSI.",
+              owner: "camille.rousseau",
+              dueDate: "2026-03-10",
+            },
+          },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          {
+            itemId: "E1-B3",
+            flag: "orange",
+            resolved: true,
+            actionPlan: {
+              description:
+                "Revue multi-angles initialement incomplète sur le volet conformité RGPD du futur hébergement cloud ; complétée avec le DPO avant validation du jalon.",
+              owner: "lucie.bernard",
+              dueDate: "2026-05-15",
+            },
+          },
+          { itemId: "E1-C2", flag: "green" },
+        ],
+        E2: [
+          { itemId: "E2-B1", flag: "green" },
+          {
+            itemId: "E2-B2",
+            flag: "orange",
+            resolved: false,
+            actionPlan: {
+              description:
+                "Ressources internes confirmées ; poste d'architecte sécurité cloud encore en recrutement, recours à un prestataire externe en cours d'arbitrage.",
+              owner: "camille.rousseau",
+              dueDate: "2026-11-30",
+            },
+          },
+        ],
+      },
+    },
+  },
 
   {
     id: "CH-omnicanal",
@@ -694,6 +853,25 @@ async function main() {
     type: "strategic",
   });
 
+  console.log(`Utilisateurs de démo (${DEMO_USERS.length})...`);
+  for (const user of DEMO_USERS) {
+    // Idem au nettoyage des autres collections (delete-then-recreate), mais ciblé PAR USERNAME et
+    // non par requête companyId : `adminUsers` contient aussi des comptes créés manuellement
+    // (ex. "test.cto") qui ne doivent jamais être touchés par ce script.
+    await deleteDoc(doc(db, "adminUsers", user.username));
+  }
+  for (const user of DEMO_USERS) {
+    await setDoc(doc(db, "adminUsers", user.username), {
+      username: user.username,
+      password: user.password,
+      role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      name: user.name,
+      companyId: COMPANY_ID,
+    });
+  }
+
   console.log("Étapes de maturité par défaut...");
   for (const stage of STAGES) {
     await setDoc(doc(db, "maturityStageConfigs", `${PROGRAM_ID}__${stage.id}`), {
@@ -716,7 +894,7 @@ async function main() {
 
   console.log(`Chantiers (${CHANTIERS.length})...`);
   for (const chantier of CHANTIERS) {
-    await setDoc(doc(db, "chantiers", chantier.id), {
+    const payload = {
       id: chantier.id,
       companyId: COMPANY_ID,
       programId: PROGRAM_ID,
@@ -726,7 +904,15 @@ async function main() {
       dependencies: chantier.dependencies ?? [],
       createdAt: TODAY,
       lastUpdate: TODAY,
-    });
+    };
+    if (chantier.sponsorName) payload.sponsorName = chantier.sponsorName;
+    if (chantier.pilote) payload.pilote = chantier.pilote;
+    if (chantier.successCriteria) payload.successCriteria = chantier.successCriteria;
+    if (chantier.successKpis) payload.successKpis = chantier.successKpis;
+    if (chantier.raci) payload.raci = chantier.raci;
+    if (chantier.effort) payload.effort = chantier.effort;
+    if (chantier.milestones) payload.milestones = chantier.milestones;
+    await setDoc(doc(db, "chantiers", chantier.id), payload);
   }
 
   console.log(`Actions (${ACTIONS.length})...`);
@@ -795,10 +981,13 @@ async function main() {
     '\nTerminé. Programme stratégique "Excellence Opérationnelle 2026-2028" créé pour Acme Corp.'
   );
   console.log(
-    `  5 axes · ${CHANTIERS.length} chantiers · ${ACTIONS.length} actions · ${INDICATORS.length} indicateurs · ${measurementCount} mesures`
+    `  5 axes · ${CHANTIERS.length} chantiers · ${ACTIONS.length} actions · ${INDICATORS.length} indicateurs · ${measurementCount} mesures · ${DEMO_USERS.length} utilisateurs de démo`
   );
   console.log(
     "  1 dépendance en retard (Plateforme Data Unifiée → Service Client IA, FS) pour illustrer l'alerte de cascade."
+  );
+  console.log(
+    "  CH-cyber : exemple complet (RACI, effort, jalons E0→E2 avec check-lists, critères/KPI de succès)."
   );
   process.exit(0);
 }
