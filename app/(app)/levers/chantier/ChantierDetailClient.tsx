@@ -8,8 +8,11 @@ import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { ChantierStaffingEditor } from "@/components/strategic/ChantierStaffingEditor";
 import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
+import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
+import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
 import { RaciChips } from "@/components/strategic/RaciChips";
 import { RaciEditor } from "@/components/strategic/RaciEditor";
+import { SuccessKpiList } from "@/components/strategic/SuccessKpiList";
 import {
   formatTimelineDay,
   packTimelineLanes,
@@ -24,7 +27,12 @@ import {
   type TimelineScale,
 } from "@/components/strategic/TimelineBars";
 import { UserPicker } from "@/components/strategic/UserPicker";
-import { canStartAction, chantierBounds, chantierProgress } from "@/lib/axisLogic";
+import {
+  canStartAction,
+  chantierBounds,
+  milestoneProgressPct,
+  resolveMilestoneAutoFlags,
+} from "@/lib/axisLogic";
 import { addDays } from "@/lib/dateUtils";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
@@ -32,12 +40,14 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import type {
   ActionPrerequisite,
   ActionPrerequisiteKind,
   AuthUser,
   Chantier,
   ChantierAction,
+  ChantierMilestoneState,
   Deliverable,
   DeliverablePhase,
   MaturityStageConfig,
@@ -652,10 +662,7 @@ export function ChantierDetailClient() {
     () => (chantier ? chantierBounds(chantier.id, chantierActions) : undefined),
     [chantier, chantierActions]
   );
-  const progress = useMemo(
-    () => (chantier ? chantierProgress(chantier.id, chantierActions, stages) : undefined),
-    [chantier, chantierActions, stages]
-  );
+  const progressPct = useMemo(() => (chantier ? milestoneProgressPct(chantier) : 0), [chantier]);
 
   // Bloc "critères de succès" — texte libre, sauvegardé au blur (pas de bouton dédié : cohérent
   // avec le reste de la fiche, où chaque bloc round 4 s'auto-sauvegarde à la modification). Resync
@@ -756,6 +763,15 @@ export function ChantierDetailClient() {
         "error"
       );
     }
+  };
+
+  /** Défaut défensif pour un chantier créé avant l'introduction des jalons E0→E4 (round 5) — ou
+   *  jamais encore touché par cette carte : "encore à E0, rien de répondu". N'est écrit en base
+   *  qu'à la première interaction réelle (via `updateChantierField`), jamais au simple rendu. */
+  const milestones: ChantierMilestoneState = chantier.milestones ?? {
+    currentMilestone: "E0",
+    passedMilestones: [],
+    checklists: {},
   };
 
   const actionFormLabels: ChantierActionFormLabels = {
@@ -873,16 +889,71 @@ export function ChantierDetailClient() {
                   <div
                     className="h-full rounded-full"
                     style={{
-                      width: `${progress?.pct ?? 0}%`,
+                      width: `${progressPct}%`,
                       backgroundColor: axis?.color ?? "var(--bp-warm-taupe)",
                     }}
                   />
                 </div>
-                <span className="shrink-0 text-[13px] font-bold text-primary">
-                  {progress?.pct ?? 0}%
-                </span>
+                <span className="shrink-0 text-[13px] font-bold text-primary">{progressPct}%</span>
               </div>
             </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* ── Jalons E0→E4 (round 5, méthode PMO) ────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader title={t("strategicChantierDetail.milestones.title")} />
+        <CardBody>
+          <MilestoneStepper
+            currentMilestone={milestones.currentMilestone}
+            passedMilestones={milestones.passedMilestones}
+          />
+          <div className="mt-4">
+            <MilestoneChecklistPanel
+              milestoneId={milestones.currentMilestone}
+              items={milestones.checklists[milestones.currentMilestone] ?? []}
+              autoFlags={resolveMilestoneAutoFlags(
+                milestones.currentMilestone,
+                chantier,
+                data.chantiers,
+                data.chantierActions
+              )}
+              users={data.users}
+              onChange={(nextItems) => {
+                updateChantierField({
+                  milestones: {
+                    currentMilestone: milestones.currentMilestone,
+                    passedMilestones: milestones.passedMilestones,
+                    checklists: {
+                      ...milestones.checklists,
+                      [milestones.currentMilestone]: nextItems,
+                    },
+                  },
+                });
+              }}
+              onValidateMilestone={() => {
+                // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà le dernier),
+                // on le laisse tel quel — MilestoneStepper affiche alors E4 à la fois "franchi"
+                // (dans passedMilestones) et "courant" (currentMilestone), priorité donnée au style
+                // "franchi" (vert) pour éviter qu'un jalon validé ne s'affiche comme encore actif.
+                const currentIndex = MILESTONE_ORDER.indexOf(milestones.currentMilestone);
+                const nextMilestone =
+                  MILESTONE_ORDER[currentIndex + 1] ?? milestones.currentMilestone;
+                const passedMilestones = milestones.passedMilestones.includes(
+                  milestones.currentMilestone
+                )
+                  ? milestones.passedMilestones
+                  : [...milestones.passedMilestones, milestones.currentMilestone];
+                updateChantierField({
+                  milestones: {
+                    currentMilestone: nextMilestone,
+                    passedMilestones,
+                    checklists: milestones.checklists,
+                  },
+                });
+              }}
+            />
           </div>
         </CardBody>
       </Card>
@@ -902,6 +973,10 @@ export function ChantierDetailClient() {
             rows={3}
             placeholder={t("strategicChantierDetail.successCriteria.placeholder")}
             className={INPUT_CLASS}
+          />
+          <SuccessKpiList
+            value={chantier.successKpis ?? []}
+            onChange={(next) => updateChantierField({ successKpis: next })}
           />
         </CardBody>
       </Card>
