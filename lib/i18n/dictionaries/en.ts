@@ -1323,6 +1323,60 @@ const en: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint": "Fill in the name and dates to save.",
   "strategicChantierDetail.successCriteria.placeholder": "We'll be happy in [year] if...",
 
+  // ─── Strategic Plan — E0-E4 milestones (round 5) ────────────────────────────
+  "strategicChantierDetail.milestones.title": "E0-E4 milestone method",
+  "strategicChantierDetail.milestones.stepper.title": "Chantier milestones",
+  "strategicChantierDetail.milestones.stepper.lockedTooltip": "Unlocks after the current milestone",
+  "strategicChantierDetail.milestones.stepper.passedLabel": "Milestone passed",
+  "strategicChantierDetail.milestones.stepper.currentLabel": "Current milestone",
+
+  "strategicChantierDetail.milestones.flag.green": "Green",
+  "strategicChantierDetail.milestones.flag.orange": "Orange",
+  "strategicChantierDetail.milestones.flag.red": "Red",
+
+  "strategicChantierDetail.milestones.actionPlan.description": "Action plan description",
+  "strategicChantierDetail.milestones.actionPlan.owner": "Owner",
+  "strategicChantierDetail.milestones.actionPlan.dueDate": "Due date",
+  "strategicChantierDetail.milestones.actionPlan.validate": "Validate milestone",
+  "strategicChantierDetail.milestones.actionPlan.missingHint":
+    "Resolve red items and answer every item to validate the milestone.",
+  "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Computed automatically.",
+  "strategicChantierDetail.milestones.actionPlan.markResolved": "Mark as resolved",
+
+  "strategicChantierDetail.milestones.item.E0_A1": "Dependencies / prerequisites satisfied",
+  "strategicChantierDetail.milestones.item.E0_A2": "Clients / sponsor identified",
+  "strategicChantierDetail.milestones.item.E0_B1": "Stakes formalized",
+  "strategicChantierDetail.milestones.item.E0_B2": "Objectives and scope formalized",
+  "strategicChantierDetail.milestones.item.E0_C1": "Organization and budget approved",
+
+  "strategicChantierDetail.milestones.item.E1_A1": "Previous milestone's oranges resolved",
+  "strategicChantierDetail.milestones.item.E1_B1": "Several options compared",
+  "strategicChantierDetail.milestones.item.E1_B2": "Objective chosen and risks accepted",
+  "strategicChantierDetail.milestones.item.E1_B3":
+    "Multi-angle review (technical, change, timeline, resources, economic...) done",
+  "strategicChantierDetail.milestones.item.E1_C_effort": "Chantier effort grid filled in",
+  "strategicChantierDetail.milestones.item.E1_C2": "Study plan approved",
+
+  "strategicChantierDetail.milestones.item.E2_A1": "Previous milestone's oranges resolved",
+  "strategicChantierDetail.milestones.item.E2_B1": "Solution validated (needs, technical, change)",
+  "strategicChantierDetail.milestones.item.E2_B2": "All deployment resources assigned",
+  "strategicChantierDetail.milestones.item.E2_B3": "Handover plan defined",
+
+  "strategicChantierDetail.milestones.item.E3_A1": "Previous milestone's oranges resolved",
+  "strategicChantierDetail.milestones.item.E3_B1": "Results match objectives",
+  "strategicChantierDetail.milestones.item.E3_B2": "Operational handover completed",
+  "strategicChantierDetail.milestones.item.E3_B3": "Stakes closure date (E4) set",
+
+  "strategicChantierDetail.milestones.item.E4_A1": "Previous milestone's oranges resolved",
+  "strategicChantierDetail.milestones.item.E4_B1": "E3 action plan carried out",
+  "strategicChantierDetail.milestones.item.E4_B2":
+    "Stakes achieved (or root-cause analysis presented)",
+
+  "strategicChantierDetail.successKpis.title": "Success KPIs",
+  "strategicChantierDetail.successKpis.addLabel": "Add a KPI",
+  "strategicChantierDetail.successKpis.placeholder": "E.g. Launch 3 to 6 regulated funds",
+  "strategicChantierDetail.successKpis.empty": "No success KPI yet.",
+
   // ─── Strategic Plan — Excel import (round 4) ────────────────────────────────
   "strategicImport.title": "Import a strategic plan",
   "strategicImport.uploadButton": "Import a file",
