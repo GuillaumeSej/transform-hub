@@ -662,6 +662,52 @@ export type ChantierEffort = {
   changeManagement?: EffortScore;
 };
 
+/** Un des 5 jalons fixes et nommés de la méthode PMO E0→E4 (round 5, demande PO explicite) —
+ *  SYSTÈME PARALLÈLE à `MaturityStageConfig`/`Chantier.stage` (qui reste inchangé et continue de
+ *  servir aux axes/actions) : 5 jalons fixes, pas configurables par programme, avec une
+ *  sous-structure de check-list riche qui ne rentre pas dans le modèle "stage" simple. Ordre de
+ *  passage dans `MILESTONE_ORDER` (voir `lib/milestoneChecklist.ts`). */
+export type MilestoneId = "E0" | "E1" | "E2" | "E3" | "E4";
+
+/** Feu d'un item de check-list de jalon — même sémantique à 3 niveaux que la note PMO du PO,
+ *  réutilisée telle quelle pour tous les jalons (y compris E3/E4 dont le libellé diffère mais pas
+ *  le contrôle, simplification actée avec le PO). */
+export type ChecklistFlag = "green" | "orange" | "red";
+
+/** Réponse à UN item de check-list d'un jalon donné (le contenu de l'item — libellé, section,
+ *  caractère automatique — est en dur dans `lib/milestoneChecklist.ts`, seule la réponse est
+ *  persistée ici). Un item orange est non-bloquant pour le jalon COURANT mais doit être `resolved`
+ *  avant que le jalon SUIVANT ne puisse lui-même passer (voir l'item automatique
+ *  `auto: "previousOranges"`). */
+export type MilestoneChecklistItem = {
+  /** Référence un `ChecklistItemDef.itemId` de `lib/milestoneChecklist.ts` (ex. "E0-A1"). */
+  itemId: string;
+  /** Absent = pas encore répondu (un item manuel sans `flag` bloque `canPassMilestone`, au même
+   *  titre qu'un item rouge). */
+  flag?: ChecklistFlag;
+  /** Pertinent seulement quand `flag === "orange"` — plan d'action daté et attribué (piège
+   *  `saveChantier` : omettre cette clé plutôt que d'y mettre `undefined` quand elle est vide). */
+  actionPlan?: { description: string; owner?: string; dueDate?: string };
+  /** Un item orange peut être soldé plus tard sans changer de feu — c'est ce booléen (et non le
+   *  feu lui-même) qui alimente le verrou automatique du jalon suivant. */
+  resolved?: boolean;
+};
+
+/** État de suivi des jalons E0→E4 d'un chantier (round 5) — additionnel à `Chantier.stage`, pas un
+ *  remplacement : voir le commentaire de `MilestoneId`. */
+export type ChantierMilestoneState = {
+  /** Jalon en cours de traitement, PAS ENCORE validé — c'est celui dont la check-list est ouverte
+   *  sur la fiche chantier. */
+  currentMilestone: MilestoneId;
+  /** Jalons déjà validés, dans l'ordre de passage — la progression affichée du chantier est
+   *  `passedMilestones.length * 20` (voir `milestoneProgressPct`), à la place de l'ancien
+   *  `chantierProgress()` pondéré par durée d'action (qui reste dans le code mais n'est plus
+   *  branché sur ces 3 affichages). */
+  passedMilestones: MilestoneId[];
+  /** Réponses par jalon — `Partial` car un jalon pas encore atteint n'a pas de check-list saisie. */
+  checklists: Partial<Record<MilestoneId, MilestoneChecklistItem[]>>;
+};
+
 /** Un chantier = un regroupement d'actions concrètes qui font avancer un axe. Niveau
  *  intermédiaire absent du modèle Performance : c'est lui qui structure le Gantt (un bloc de
  *  Gantt = un chantier, pas une action isolée). */
@@ -695,6 +741,13 @@ export type Chantier = {
   /** Grille de notation d'effort — voir `ChantierEffort`, affichée uniquement sur la fiche
    *  chantier dédiée. */
   effort?: ChantierEffort;
+  /** Suivi des jalons E0→E4 (round 5) — voir `ChantierMilestoneState`. Absent sur un chantier créé
+   *  avant l'introduction de la méthode : traité comme "encore à E0, rien de répondu" par les
+   *  lecteurs plutôt que de migrer les documents existants. */
+  milestones?: ChantierMilestoneState;
+  /** Critères de succès mesurables, en complément de `successCriteria` (texte libre, INCHANGÉ) —
+   *  demande PO round 5 : une liste de KPI cochables plutôt qu'un unique paragraphe. */
+  successKpis?: { id: string; label: string; achieved?: boolean }[];
   createdAt: string;
   lastUpdate: string;
 };

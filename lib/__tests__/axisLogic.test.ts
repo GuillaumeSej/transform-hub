@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   canFillIndicator,
   canManageChantier,
+  canPassMilestone,
   canStartAction,
   chantierAtRiskIndicators,
   chantierBounds,
@@ -10,7 +11,9 @@ import {
   computeIndicatorStatus,
   countOnTrackAtRisk,
   latestMeasurement,
+  milestoneProgressPct,
   resolveIndicatorStatus,
+  resolveMilestoneAutoFlags,
   resolveProgramType,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
@@ -21,6 +24,7 @@ import type {
   Indicator,
   IndicatorMeasurement,
   MaturityStageConfig,
+  MilestoneChecklistItem,
 } from "@/types";
 
 const baseIndicator: Indicator = {
@@ -597,5 +601,155 @@ describe("canStartAction", () => {
       stages
     );
     expect(done).toEqual({ blocked: false, reasons: [] });
+  });
+});
+
+// ─── Jalons E0→E4 (round 5) ─────────────────────────────────────────────────────────────────────
+
+describe("resolveMilestoneAutoFlags", () => {
+  it("flags 'previousOranges' green when the previous milestone has no unresolved orange", () => {
+    // Aucun item orange du tout sur E0 → vacuously vert pour l'item auto de E1.
+    const chantier = makeChantier("CH1", {
+      milestones: {
+        currentMilestone: "E1",
+        passedMilestones: ["E0"],
+        checklists: { E0: [{ itemId: "E0-B1", flag: "green" }] },
+      },
+    });
+    const flags = resolveMilestoneAutoFlags("E1", chantier, [chantier], []);
+    expect(flags["E1-A1"]).toBe("green");
+  });
+
+  it("flags 'previousOranges' red when the previous milestone has an unresolved orange", () => {
+    const chantier = makeChantier("CH1", {
+      milestones: {
+        currentMilestone: "E1",
+        passedMilestones: ["E0"],
+        checklists: {
+          E0: [{ itemId: "E0-B1", flag: "orange", resolved: false }],
+        },
+      },
+    });
+    expect(resolveMilestoneAutoFlags("E1", chantier, [chantier], [])["E1-A1"]).toBe("red");
+  });
+
+  it("flags 'previousOranges' green once the orange item is marked resolved", () => {
+    const chantier = makeChantier("CH1", {
+      milestones: {
+        currentMilestone: "E1",
+        passedMilestones: ["E0"],
+        checklists: {
+          E0: [{ itemId: "E0-B1", flag: "orange", resolved: true }],
+        },
+      },
+    });
+    expect(resolveMilestoneAutoFlags("E1", chantier, [chantier], [])["E1-A1"]).toBe("green");
+  });
+
+  it("flags 'dependencyAlert' green when this chantier is not the blocked side of any alert", () => {
+    const chantier = makeChantier("CH1");
+    expect(resolveMilestoneAutoFlags("E0", chantier, [chantier], [])["E0-A1"]).toBe("green");
+  });
+
+  it("flags 'dependencyAlert' red when this chantier is the blocked side of a violated dependency", () => {
+    const chantiers = [
+      makeChantier("CH1", { name: "Refonte SI" }),
+      makeChantier("CH2", {
+        name: "Déploiement terrain",
+        dependencies: [{ targetId: "CH1", type: "FS" }],
+      }),
+    ];
+    const actions = [
+      makeAction("CH1", "2026-01-01", "2026-03-31"),
+      makeAction("CH2", "2026-03-01", "2026-06-30"),
+    ];
+    // CH2 est le côté bloqué (sourceId) : son item auto E0-A1 doit être rouge.
+    const ch2 = chantiers[1];
+    expect(resolveMilestoneAutoFlags("E0", ch2, chantiers, actions)["E0-A1"]).toBe("red");
+    // CH1 n'est pas bloqué (c'est lui le bloqueur) : son propre item auto reste vert.
+    const ch1 = chantiers[0];
+    expect(resolveMilestoneAutoFlags("E0", ch1, chantiers, actions)["E0-A1"]).toBe("green");
+  });
+
+  it("flags 'effortComplete' green only when all 4 effort dimensions are set", () => {
+    const complete = makeChantier("CH1", {
+      effort: { financialImpact: 1, humanImpact: 2, duration: 3, changeManagement: 4 },
+    });
+    expect(resolveMilestoneAutoFlags("E1", complete, [complete], [])["E1-C-effort"]).toBe("green");
+
+    const partial = makeChantier("CH1", {
+      effort: { financialImpact: 1, humanImpact: 2 },
+    });
+    expect(resolveMilestoneAutoFlags("E1", partial, [partial], [])["E1-C-effort"]).toBe("red");
+
+    const none = makeChantier("CH1");
+    expect(resolveMilestoneAutoFlags("E1", none, [none], [])["E1-C-effort"]).toBe("red");
+  });
+});
+
+describe("canPassMilestone", () => {
+  it("allows passing when every item is green", () => {
+    const items: MilestoneChecklistItem[] = [
+      { itemId: "E0-A1", flag: "green" },
+      { itemId: "E0-A2", flag: "green" },
+    ];
+    expect(canPassMilestone("E0", items)).toEqual({ canPass: true, reasons: [] });
+  });
+
+  it("allows passing with a non-blocking orange item", () => {
+    const items: MilestoneChecklistItem[] = [
+      { itemId: "E0-A1", flag: "green" },
+      { itemId: "E0-A2", flag: "orange", actionPlan: { description: "Plan" } },
+    ];
+    expect(canPassMilestone("E0", items).canPass).toBe(true);
+  });
+
+  it("blocks when any item is red, with a reason", () => {
+    const items: MilestoneChecklistItem[] = [
+      { itemId: "E0-A1", flag: "green" },
+      { itemId: "E0-A2", flag: "red" },
+    ];
+    const result = canPassMilestone("E0", items);
+    expect(result.canPass).toBe(false);
+    expect(result.reasons).toHaveLength(1);
+    expect(result.reasons[0]).toContain("E0-A2");
+  });
+
+  it("blocks when a manual item has not been answered at all", () => {
+    const items: MilestoneChecklistItem[] = [{ itemId: "E0-A1" }];
+    const result = canPassMilestone("E0", items);
+    expect(result.canPass).toBe(false);
+    expect(result.reasons).toHaveLength(1);
+  });
+});
+
+describe("milestoneProgressPct", () => {
+  it("returns 0 when no milestone has been passed (or milestones is absent)", () => {
+    expect(milestoneProgressPct({ milestones: undefined })).toBe(0);
+    expect(
+      milestoneProgressPct({
+        milestones: { currentMilestone: "E0", passedMilestones: [], checklists: {} },
+      })
+    ).toBe(0);
+  });
+
+  it("returns 20 per passed milestone", () => {
+    expect(
+      milestoneProgressPct({
+        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} },
+      })
+    ).toBe(20);
+  });
+
+  it("returns 100 once all 5 milestones are passed", () => {
+    expect(
+      milestoneProgressPct({
+        milestones: {
+          currentMilestone: "E4",
+          passedMilestones: ["E0", "E1", "E2", "E3", "E4"],
+          checklists: {},
+        },
+      })
+    ).toBe(100);
   });
 });

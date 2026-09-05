@@ -1,13 +1,17 @@
 import { daysBetween } from "@/lib/dateUtils";
+import { MILESTONE_ORDER, MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
 import type {
   AuthUser,
   Chantier,
   ChantierAction,
   ChantierDependencyType,
+  ChecklistFlag,
   Indicator,
   IndicatorMeasurement,
   IndicatorRiskStatus,
   MaturityStageConfig,
+  MilestoneChecklistItem,
+  MilestoneId,
   Program,
   ProgramType,
 } from "@/types";
@@ -520,4 +524,106 @@ export function canStartAction(
   }
 
   return { blocked: reasons.length > 0, reasons };
+}
+
+// ─── Jalons E0→E4 (round 5) ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Calcule le feu des items AUTOMATIQUES d'un jalon donné (`ChecklistItemDef.auto`, contenu défini
+ * dans `lib/milestoneChecklist.ts`) — les items manuels de ce même jalon n'apparaissent PAS dans le
+ * résultat, c'est à l'appelant (l'UI) de fusionner cette map avec les feux manuels déjà enregistrés
+ * sur le chantier (`chantier.milestones.checklists[milestoneId]`).
+ *
+ * Les trois tags `auto` correspondent chacun à une règle de la note PMO du PO, rendue automatique
+ * plutôt que posée comme une question (voir le commentaire de `ChecklistItemDef` pour le détail de
+ * chaque règle) :
+ *  - `previousOranges` : vert si tous les items orange du jalon PRÉCÉDENT sont soldés
+ *    (`resolved === true`), vert aussi s'il n'y en avait aucun (vacuously) — rouge sinon. N'apparaît
+ *    jamais sur E0 (pas de jalon précédent dans `MILESTONE_ORDER`).
+ *  - `dependencyAlert` : rouge si ce chantier est le côté BLOQUÉ (`sourceId`) d'au moins une alerte
+ *    de `chantierDependencyAlerts` — vert sinon (y compris si l'alerte existe mais bloque un AUTRE
+ *    chantier).
+ *  - `effortComplete` : vert si les 4 dimensions de `chantier.effort` sont toutes renseignées
+ *    (`!== undefined`), rouge sinon.
+ */
+export function resolveMilestoneAutoFlags(
+  milestoneId: MilestoneId,
+  chantier: Chantier,
+  allChantiers: Chantier[],
+  allActions: ChantierAction[]
+): Record<string, ChecklistFlag> {
+  const flags: Record<string, ChecklistFlag> = {};
+
+  for (const item of MILESTONE_CHECKLISTS[milestoneId]) {
+    if (!item.auto) continue;
+
+    switch (item.auto) {
+      case "previousOranges": {
+        const index = MILESTONE_ORDER.indexOf(milestoneId);
+        const previousMilestone = index > 0 ? MILESTONE_ORDER[index - 1] : undefined;
+        const previousItems = previousMilestone
+          ? (chantier.milestones?.checklists?.[previousMilestone] ?? [])
+          : [];
+        const hasUnresolvedOrange = previousItems.some((i) => i.flag === "orange" && !i.resolved);
+        flags[item.itemId] = hasUnresolvedOrange ? "red" : "green";
+        break;
+      }
+      case "dependencyAlert": {
+        const alerts = chantierDependencyAlerts(allChantiers, allActions);
+        const isAffected = alerts.some((a) => a.sourceId === chantier.id);
+        flags[item.itemId] = isAffected ? "red" : "green";
+        break;
+      }
+      case "effortComplete": {
+        const effort = chantier.effort;
+        const isComplete =
+          effort?.financialImpact !== undefined &&
+          effort?.humanImpact !== undefined &&
+          effort?.duration !== undefined &&
+          effort?.changeManagement !== undefined;
+        flags[item.itemId] = isComplete ? "green" : "red";
+        break;
+      }
+    }
+  }
+
+  return flags;
+}
+
+/**
+ * Un jalon peut-il être VALIDÉ, au regard des items de sa check-list (manuels + automatiques,
+ * déjà fusionnés par l'appelant — cette fonction ne sait pas distinguer les deux) ?
+ *
+ * **Contrairement à `canStartAction` (round 4, purement informatif — rien n'empêche réellement une
+ * action bloquée de démarrer), ce verrou est réel** : correspond à la règle explicite de la note
+ * PMO du PO ("un rouge = pas de passage"). `canPass` est faux si un item quelconque est `red`, ou
+ * si un item n'a encore aucun feu (pas répondu) — un item orange, en revanche, n'empêche PAS de
+ * passer (c'est tout le sens du feu orange : non-bloquant, avec un plan d'action). Ne lève jamais
+ * d'exception ; une check-list vide renvoie `canPass: true`.
+ */
+export function canPassMilestone(
+  milestoneId: MilestoneId,
+  items: MilestoneChecklistItem[]
+): { canPass: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+
+  for (const item of items) {
+    if (!item.flag) {
+      reasons.push(`Item non répondu (${milestoneId}, ${item.itemId})`);
+    } else if (item.flag === "red") {
+      reasons.push(`Item bloquant en rouge (${milestoneId}, ${item.itemId})`);
+    }
+  }
+
+  return { canPass: reasons.length === 0, reasons };
+}
+
+/**
+ * Avancement d'un chantier en pourcentage, dérivé du nombre de jalons E0→E4 FRANCHIS (round 5) —
+ * remplace `chantierProgress()` sur les 3 affichages de progression (fiche chantier, Gantt, carte
+ * d'axe). 5 jalons possibles × 20% chacun, donc toujours un multiple de 20 entre 0 et 100.
+ * `chantierProgress()` reste dans le code (peut resservir) mais n'est plus branché ici.
+ */
+export function milestoneProgressPct(chantier: Pick<Chantier, "milestones">): number {
+  return (chantier.milestones?.passedMilestones.length ?? 0) * 20;
 }
