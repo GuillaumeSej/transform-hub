@@ -1315,6 +1315,65 @@ const de: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint": "Name und Daten ausfüllen, um zu speichern.",
   "strategicChantierDetail.successCriteria.placeholder": "Wir sind im [Jahr] zufrieden, wenn...",
 
+  // ─── Strategieplan — Meilensteine E0-E4 (Runde 5) ───────────────────────────
+  "strategicChantierDetail.milestones.title": "E0-E4-Meilensteinmethode",
+  "strategicChantierDetail.milestones.stepper.title": "Chantier-Meilensteine",
+  "strategicChantierDetail.milestones.stepper.lockedTooltip":
+    "Wird nach dem aktuellen Meilenstein freigeschaltet",
+  "strategicChantierDetail.milestones.stepper.passedLabel": "Meilenstein erreicht",
+  "strategicChantierDetail.milestones.stepper.currentLabel": "Aktueller Meilenstein",
+
+  "strategicChantierDetail.milestones.flag.green": "Grün",
+  "strategicChantierDetail.milestones.flag.orange": "Orange",
+  "strategicChantierDetail.milestones.flag.red": "Rot",
+
+  "strategicChantierDetail.milestones.actionPlan.description": "Beschreibung des Aktionsplans",
+  "strategicChantierDetail.milestones.actionPlan.owner": "Verantwortlicher",
+  "strategicChantierDetail.milestones.actionPlan.dueDate": "Fälligkeitsdatum",
+  "strategicChantierDetail.milestones.actionPlan.validate": "Meilenstein validieren",
+  "strategicChantierDetail.milestones.actionPlan.missingHint":
+    "Lösen Sie rote Punkte und beantworten Sie alle Punkte, um den Meilenstein zu validieren.",
+  "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Automatisch berechnet.",
+  "strategicChantierDetail.milestones.actionPlan.markResolved": "Als erledigt markieren",
+
+  "strategicChantierDetail.milestones.item.E0_A1": "Abhängigkeiten / Voraussetzungen erfüllt",
+  "strategicChantierDetail.milestones.item.E0_A2": "Kunden / Auftraggeber identifiziert",
+  "strategicChantierDetail.milestones.item.E0_B1": "Herausforderungen formalisiert",
+  "strategicChantierDetail.milestones.item.E0_B2": "Ziele und Umfang formalisiert",
+  "strategicChantierDetail.milestones.item.E0_C1": "Organisation und Budget genehmigt",
+
+  "strategicChantierDetail.milestones.item.E1_A1":
+    "Offene Punkte des vorherigen Meilensteins gelöst",
+  "strategicChantierDetail.milestones.item.E1_B1": "Mehrere Optionen verglichen",
+  "strategicChantierDetail.milestones.item.E1_B2": "Ziel gewählt und Risiken akzeptiert",
+  "strategicChantierDetail.milestones.item.E1_B3":
+    "Multi-Perspektiven-Review (technisch, Change, Termine, Ressourcen, wirtschaftlich...) durchgeführt",
+  "strategicChantierDetail.milestones.item.E1_C_effort": "Aufwandsraster des Chantiers ausgefüllt",
+  "strategicChantierDetail.milestones.item.E1_C2": "Studienplan genehmigt",
+
+  "strategicChantierDetail.milestones.item.E2_A1":
+    "Offene Punkte des vorherigen Meilensteins gelöst",
+  "strategicChantierDetail.milestones.item.E2_B1": "Lösung validiert (Bedarf, Technik, Change)",
+  "strategicChantierDetail.milestones.item.E2_B2": "Alle Umsetzungsressourcen zugewiesen",
+  "strategicChantierDetail.milestones.item.E2_B3": "Übergabeplan definiert",
+
+  "strategicChantierDetail.milestones.item.E3_A1":
+    "Offene Punkte des vorherigen Meilensteins gelöst",
+  "strategicChantierDetail.milestones.item.E3_B1": "Ergebnisse entsprechen den Zielen",
+  "strategicChantierDetail.milestones.item.E3_B2": "Operative Übergabe abgeschlossen",
+  "strategicChantierDetail.milestones.item.E3_B3": "Abschlussdatum der Themen (E4) festgelegt",
+
+  "strategicChantierDetail.milestones.item.E4_A1":
+    "Offene Punkte des vorherigen Meilensteins gelöst",
+  "strategicChantierDetail.milestones.item.E4_B1": "Aktionsplan E3 umgesetzt",
+  "strategicChantierDetail.milestones.item.E4_B2":
+    "Themen erreicht (oder Ursachenanalyse vorgelegt)",
+
+  "strategicChantierDetail.successKpis.title": "Erfolgs-KPIs",
+  "strategicChantierDetail.successKpis.addLabel": "KPI hinzufügen",
+  "strategicChantierDetail.successKpis.placeholder": "z. B. 3 bis 6 regulierte Fonds auflegen",
+  "strategicChantierDetail.successKpis.empty": "Noch kein Erfolgs-KPI.",
+
   // ─── Strategieplan — Excel-Import (Runde 4) ─────────────────────────────────
   "strategicImport.title": "Strategieplan importieren",
   "strategicImport.uploadButton": "Datei importieren",

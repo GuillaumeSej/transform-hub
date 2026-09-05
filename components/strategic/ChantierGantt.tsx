@@ -20,7 +20,7 @@ import {
 import {
   canStartAction,
   chantierBounds,
-  chantierProgress,
+  milestoneProgressPct,
   type ChantierDependencyAlert,
 } from "@/lib/axisLogic";
 import { resolveMaturityStageLabel } from "@/lib/hooks/useMaturityStages";
@@ -42,7 +42,7 @@ import type { Chantier, ChantierAction, MaturityStageConfig } from "@/types";
  *
  * Trois partis pris de lisibilité, demandés par le PO qui suit les CHANTIERS au quotidien :
  *  1. les blocs sont REMPLIS de la couleur de l'axe (et non de simples contours), avec un
- *     remplissage plus soutenu proportionnel à l'avancement (`axisLogic.chantierProgress`) ;
+ *     remplissage plus soutenu proportionnel à l'avancement (`axisLogic.milestoneProgressPct`) ;
  *  2. le nom de chaque action est écrit DANS sa barre (rabattu à droite de la barre quand elle est
  *     trop étroite, et toujours repris dans l'infobulle) ;
  *  3. l'échelle temporelle est réglable Mois / Trimestre / Semestre — sur un plan de 2-3 ans,
@@ -125,8 +125,8 @@ export function ChantierGantt({
    *  les actions de cet axe sous la main). */
   allActions?: ChantierAction[];
   /** Référentiel d'étapes du programme, pour afficher le libellé d'étape sous le nom du chantier
-   *  et calculer l'avancement (`chantierProgress`), ainsi que la satisfaction des prérequis
-   *  (`canStartAction`). */
+   *  et la satisfaction des prérequis (`canStartAction`). L'avancement affiché ne s'appuie plus sur
+   *  ce référentiel : il vient des jalons E0-E4 du chantier (`axisLogic.milestoneProgressPct`). */
   stages: MaturityStageConfig[];
   /** Couleur de l'axe (`StrategicAxis.color`) — teinte de tous les blocs de ce Gantt. */
   axisColor?: string;
@@ -251,7 +251,7 @@ export function ChantierGantt({
                 const widthPct = Math.max(1.5, pctOf(bounds.end) - startPct);
                 const isAlerted = alertedChantierIds.has(chantier.id);
                 const chantierAlerts = alertsByChantier.get(chantier.id) ?? [];
-                const progress = chantierProgress(chantier.id, actions, stages);
+                const progressPct = milestoneProgressPct(chantier);
                 const lanes = packTimelineLanes(items);
                 const trackHeight = LANES_TOP + Math.max(1, lanes.length) * ACTION_LANE_HEIGHT;
                 const blockColor = isAlerted ? ALERT_COLOR : color;
@@ -281,13 +281,13 @@ export function ChantierGantt({
                           <div
                             className="h-full rounded-full"
                             style={{
-                              width: `${progress.pct}%`,
+                              width: `${progressPct}%`,
                               backgroundColor: blockColor,
                             }}
                           />
                         </div>
                         <span className="shrink-0 text-[9.5px] font-bold text-secondary">
-                          {progress.pct}%
+                          {progressPct}%
                         </span>
                       </div>
                     </div>
@@ -305,13 +305,13 @@ export function ChantierGantt({
                         height={CHANTIER_BAR_HEIGHT}
                         color={blockColor}
                         variant="outline"
-                        progressPct={progress.pct}
+                        progressPct={progressPct}
                         ringed={isAlerted}
                         onClick={() => openChantier(chantier)}
                         ariaLabel={chantier.name}
                         tooltipText={`${chantier.name} · ${formatTimelineDay(bounds.start)} → ${formatTimelineDay(
                           bounds.end
-                        )} · ${l.progress} ${progress.pct}%${
+                        )} · ${l.progress} ${progressPct}%${
                           chantierAlerts.length > 0
                             ? ` · ${l.alerted} : ${chantierAlerts.map((a) => a.message).join(" ; ")}`
                             : ""
@@ -325,7 +325,7 @@ export function ChantierGantt({
                         }
                         trailing={
                           <span className="shrink-0 text-[11px] font-bold text-primary">
-                            {progress.pct}%
+                            {progressPct}%
                           </span>
                         }
                       />

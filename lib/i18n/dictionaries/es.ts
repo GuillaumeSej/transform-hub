@@ -1313,6 +1313,62 @@ const es: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint": "Complete el nombre y las fechas para guardar.",
   "strategicChantierDetail.successCriteria.placeholder": "Estaremos satisfechos en [año] si...",
 
+  // ─── Plan Estratégico — hitos E0-E4 (ronda 5) ────────────────────────────────
+  "strategicChantierDetail.milestones.title": "Método de hitos E0-E4",
+  "strategicChantierDetail.milestones.stepper.title": "Hitos del chantier",
+  "strategicChantierDetail.milestones.stepper.lockedTooltip": "Se desbloquea tras el hito actual",
+  "strategicChantierDetail.milestones.stepper.passedLabel": "Hito superado",
+  "strategicChantierDetail.milestones.stepper.currentLabel": "Hito actual",
+
+  "strategicChantierDetail.milestones.flag.green": "Verde",
+  "strategicChantierDetail.milestones.flag.orange": "Naranja",
+  "strategicChantierDetail.milestones.flag.red": "Rojo",
+
+  "strategicChantierDetail.milestones.actionPlan.description": "Descripción del plan de acción",
+  "strategicChantierDetail.milestones.actionPlan.owner": "Responsable",
+  "strategicChantierDetail.milestones.actionPlan.dueDate": "Fecha límite",
+  "strategicChantierDetail.milestones.actionPlan.validate": "Validar el hito",
+  "strategicChantierDetail.milestones.actionPlan.missingHint":
+    "Resuelva los elementos en rojo y responda a todos los elementos para validar el hito.",
+  "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Calculado automáticamente.",
+  "strategicChantierDetail.milestones.actionPlan.markResolved": "Marcar como resuelto",
+
+  "strategicChantierDetail.milestones.item.E0_A1": "Dependencias / requisitos previos satisfechos",
+  "strategicChantierDetail.milestones.item.E0_A2": "Clientes / comanditario identificados",
+  "strategicChantierDetail.milestones.item.E0_B1": "Retos formalizados",
+  "strategicChantierDetail.milestones.item.E0_B2": "Objetivos y alcance formalizados",
+  "strategicChantierDetail.milestones.item.E0_C1": "Organización y presupuesto validados",
+
+  "strategicChantierDetail.milestones.item.E1_A1": "Elementos naranjas del hito anterior resueltos",
+  "strategicChantierDetail.milestones.item.E1_B1": "Varias opciones comparadas",
+  "strategicChantierDetail.milestones.item.E1_B2": "Objetivo elegido y riesgos aceptados",
+  "strategicChantierDetail.milestones.item.E1_B3":
+    "Revisión multiángulo (técnica, cambio, plazos, recursos, económica...) realizada",
+  "strategicChantierDetail.milestones.item.E1_C_effort":
+    "Cuadro de esfuerzo del chantier completado",
+  "strategicChantierDetail.milestones.item.E1_C2": "Plan de estudio validado",
+
+  "strategicChantierDetail.milestones.item.E2_A1": "Elementos naranjas del hito anterior resueltos",
+  "strategicChantierDetail.milestones.item.E2_B1":
+    "Solución validada (necesidades, técnica, cambio)",
+  "strategicChantierDetail.milestones.item.E2_B2": "Todos los recursos de despliegue asignados",
+  "strategicChantierDetail.milestones.item.E2_B3": "Plan de transferencia definido",
+
+  "strategicChantierDetail.milestones.item.E3_A1": "Elementos naranjas del hito anterior resueltos",
+  "strategicChantierDetail.milestones.item.E3_B1": "Resultados conformes a los objetivos",
+  "strategicChantierDetail.milestones.item.E3_B2": "Transferencia operativa realizada",
+  "strategicChantierDetail.milestones.item.E3_B3": "Fecha de cierre de los retos (E4) fijada",
+
+  "strategicChantierDetail.milestones.item.E4_A1": "Elementos naranjas del hito anterior resueltos",
+  "strategicChantierDetail.milestones.item.E4_B1": "Plan de acción E3 realizado",
+  "strategicChantierDetail.milestones.item.E4_B2":
+    "Retos alcanzados (o análisis de causas presentado)",
+
+  "strategicChantierDetail.successKpis.title": "KPI de éxito",
+  "strategicChantierDetail.successKpis.addLabel": "Añadir un KPI",
+  "strategicChantierDetail.successKpis.placeholder": "Ej. Crear de 3 a 6 fondos regulados",
+  "strategicChantierDetail.successKpis.empty": "Aún no hay KPI de éxito.",
+
   // ─── Plan Estratégico — importación Excel (ronda 4) ─────────────────────────
   "strategicImport.title": "Importar un plan estratégico",
   "strategicImport.uploadButton": "Importar un archivo",

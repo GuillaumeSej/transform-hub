@@ -16,9 +16,9 @@ import { StrategicImportButton } from "@/components/strategic/StrategicImportBut
 import {
   chantierAtRiskIndicators,
   chantierDependencyAlerts,
-  chantierProgress,
   computeIndicatorDelta,
   latestMeasurement,
+  milestoneProgressPct,
   resolveIndicatorStatus,
   type IndicatorDelta,
 } from "@/lib/axisLogic";
@@ -561,7 +561,7 @@ export function StrategicAxesView() {
                       const chantierActions = actionsByChantier.get(chantier.id) ?? [];
                       const shownActions = chantierActions.slice(0, CARD_ACTIONS_SHOWN);
                       const hiddenActions = chantierActions.length - shownActions.length;
-                      const progress = chantierProgress(chantier.id, data.chantierActions, stages);
+                      const progressPct = milestoneProgressPct(chantier);
                       // Popover-cliquable (round 4, point 2) : le badge "N à risque" est un vrai
                       // <button>, donc la carte NE PEUT PLUS être elle-même un <button> (imbrication
                       // invalide) — `role="button"` + gestion clavier reproduit le même comportement.
@@ -626,19 +626,19 @@ export function StrategicAxesView() {
                             )}
                           </div>
 
-                          {/* Avancement pondéré par la durée des actions (voir chantierProgress). */}
+                          {/* Avancement dérivé des jalons E0→E4 franchis (voir milestoneProgressPct). */}
                           <div className="mt-2 flex items-center gap-1.5">
                             <div className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-100">
                               <div
                                 className="h-full rounded-full"
                                 style={{
-                                  width: `${progress.pct}%`,
+                                  width: `${progressPct}%`,
                                   backgroundColor: axis.color ?? "var(--bp-warm-taupe)",
                                 }}
                               />
                             </div>
                             <span className="shrink-0 text-[10px] font-bold text-secondary">
-                              {progress.pct}%
+                              {progressPct}%
                             </span>
                           </div>
 

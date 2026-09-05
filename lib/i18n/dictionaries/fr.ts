@@ -19,7 +19,8 @@
  *                         `MaturityStageConfig` (dont les libellés sont saisis par l'admin et ne
  *                         passent donc jamais par ce dictionnaire)
  *  - strategicAxes.*      Page « Axes stratégiques » + fiche détail d'un axe
- *  - strategicChantierDetail.* Fiche chantier dédiée (round 4 : succès, effort, RACI, prérequis)
+ *  - strategicChantierDetail.* Fiche chantier dédiée (round 4 : succès, effort, RACI, prérequis ;
+ *                              round 5 : jalons E0-E4, KPI de succès)
  *  - strategicImport.*    Import Excel d'un plan stratégique complet (round 4)
  *  - kpi.*                Page KPI (saisie de mesures, édition d'objectif)
  *  - strategicDashboard.* Dashboard stratégique + son registre de widgets
@@ -1357,6 +1358,61 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint":
     "Renseignez le nom et les dates pour enregistrer.",
   "strategicChantierDetail.successCriteria.placeholder": "On sera content en [année] si...",
+
+  // ─── Plan Stratégique — jalons E0→E4 (round 5) ─────────────────────────────────────────
+  "strategicChantierDetail.milestones.title": "Méthode de jalons E0→E4",
+  "strategicChantierDetail.milestones.stepper.title": "Jalons du chantier",
+  "strategicChantierDetail.milestones.stepper.lockedTooltip": "Se débloque après le jalon courant",
+  "strategicChantierDetail.milestones.stepper.passedLabel": "Jalon franchi",
+  "strategicChantierDetail.milestones.stepper.currentLabel": "Jalon courant",
+
+  "strategicChantierDetail.milestones.flag.green": "Vert",
+  "strategicChantierDetail.milestones.flag.orange": "Orange",
+  "strategicChantierDetail.milestones.flag.red": "Rouge",
+
+  "strategicChantierDetail.milestones.actionPlan.description": "Description du plan d'action",
+  "strategicChantierDetail.milestones.actionPlan.owner": "Responsable",
+  "strategicChantierDetail.milestones.actionPlan.dueDate": "Échéance",
+  "strategicChantierDetail.milestones.actionPlan.validate": "Valider le jalon",
+  "strategicChantierDetail.milestones.actionPlan.missingHint":
+    "Résolvez les items rouges et répondez à tous les items pour valider le jalon.",
+  "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Calculé automatiquement.",
+  "strategicChantierDetail.milestones.actionPlan.markResolved": "Marquer comme soldé",
+
+  "strategicChantierDetail.milestones.item.E0_A1": "Dépendances / prérequis satisfaits",
+  "strategicChantierDetail.milestones.item.E0_A2": "Clients / commanditaire identifiés",
+  "strategicChantierDetail.milestones.item.E0_B1": "Enjeux formalisés",
+  "strategicChantierDetail.milestones.item.E0_B2": "Objectifs et périmètre formalisés",
+  "strategicChantierDetail.milestones.item.E0_C1": "Organisation et budget validés",
+
+  "strategicChantierDetail.milestones.item.E1_A1": "Oranges du jalon précédent soldés",
+  "strategicChantierDetail.milestones.item.E1_B1": "Plusieurs options comparées",
+  "strategicChantierDetail.milestones.item.E1_B2": "Objectif choisi et risques acceptés",
+  "strategicChantierDetail.milestones.item.E1_B3":
+    "Revue multi-angles (technique, changement, délais, ressources, économique...) faite",
+  "strategicChantierDetail.milestones.item.E1_C_effort": "Grille d'effort du chantier renseignée",
+  "strategicChantierDetail.milestones.item.E1_C2": "Plan d'étude validé",
+
+  "strategicChantierDetail.milestones.item.E2_A1": "Oranges du jalon précédent soldés",
+  "strategicChantierDetail.milestones.item.E2_B1":
+    "Solution validée (besoins, technique, changement)",
+  "strategicChantierDetail.milestones.item.E2_B2": "Ressources de déploiement toutes attribuées",
+  "strategicChantierDetail.milestones.item.E2_B3": "Plan de transfert défini",
+
+  "strategicChantierDetail.milestones.item.E3_A1": "Oranges du jalon précédent soldés",
+  "strategicChantierDetail.milestones.item.E3_B1": "Résultats conformes aux objectifs",
+  "strategicChantierDetail.milestones.item.E3_B2": "Transfert opérationnel réalisé",
+  "strategicChantierDetail.milestones.item.E3_B3": "Date de bouclage des enjeux (E4) fixée",
+
+  "strategicChantierDetail.milestones.item.E4_A1": "Oranges du jalon précédent soldés",
+  "strategicChantierDetail.milestones.item.E4_B1": "Plan d'action E3 réalisé",
+  "strategicChantierDetail.milestones.item.E4_B2":
+    "Enjeux atteints (ou analyse des causes présentée)",
+
+  "strategicChantierDetail.successKpis.title": "Indicateurs de succès",
+  "strategicChantierDetail.successKpis.addLabel": "Ajouter un indicateur",
+  "strategicChantierDetail.successKpis.placeholder": "Ex. Créer 3 à 6 fonds régulés",
+  "strategicChantierDetail.successKpis.empty": "Aucun indicateur de succès pour l'instant.",
 
   // ─── Plan Stratégique — import Excel (round 4, mirror de shared.leverImportButton.*) ──────
   "strategicImport.title": "Importer un plan stratégique",
