@@ -52,19 +52,20 @@ export function generateAlerts(
   const active = data.levers.filter((l) => l.status !== "cancelled");
   const financialAlertsEnabled = programType !== "strategic";
 
-  // ── 1. Leviers en retard (dès qu'il y a un écart) ──────────────────────────
+  // ── 1. Leviers en retard — dérivé UNIQUEMENT du retard de leurs actions ────
+  // (voir engine.underperformers / engine.isActionLate : c'est le seul mécanisme de détection).
   const underperf = underperformers(data);
   for (const u of underperf) {
-    const gap = u.gap;
-    if (gap <= 0) continue;
-    const impact = -(u.netSavings * gap) / 100;
+    const totalActions = u.actions?.length ?? 0;
+    const lateRatio = totalActions > 0 ? u.lateActionsCount / totalActions : 0;
+    const impact = -(u.netSavings * lateRatio);
     auto.push({
       id: `AUTO-DELAY-${u.id}`,
-      type: gap > 20 ? "red" : "amber",
+      type: lateRatio > 0.5 ? "red" : "amber",
       ts: u.lastUpdate || "",
       scope: u.id,
-      title: `Levier "${u.name}" en retard de ${gap} pts`,
-      desc: `Progression attendue ${u.expectedProgress}% vs réelle ${u.progress}%. Impact estimé : ${fmtImpact(impact)} sur le run-rate.`,
+      title: `Levier "${u.name}" en retard : ${u.lateActionsCount} action(s) sur ${totalActions}`,
+      desc: `${u.lateActionsCount} action(s) du plan d'action sont en retard (date de fin dépassée ou statut "En retard"). Impact estimé : ${fmtImpact(impact)} sur le run-rate.`,
       actorRole: "lever",
       impactEur: Math.round(impact * 1000000),
       owner: u.owner,

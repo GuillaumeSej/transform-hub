@@ -377,22 +377,31 @@ export function computeLeverRisk(
   return hit?.level ?? "low";
 }
 
-/** `now` est calculé à chaque appel (Date.now() par défaut) plutôt que figé au chargement du
- *  module, pour que l'écart affiché reste réellement temps réel sur une session longue. */
+/**
+ * Un levier est "en retard" SI ET SEULEMENT SI au moins une de ses actions est en retard
+ * (voir `isActionLate`) — c'est le SEUL mécanisme de détection de retard d'un levier
+ * (remplace l'ancienne heuristique date/progression `expectedProgress - progress > 10`,
+ * complètement déconnectée du plan d'action réel).
+ *
+ * Cas limite : un levier SANS AUCUNE action déclarée ne peut jamais être flaggé en retard par
+ * cette fonction (il n'y a rien à évaluer) — c'est un changement de comportement assumé par
+ * rapport à l'ancienne heuristique, qui pouvait détecter un retard purement sur start/end/progress
+ * même à 0 action. Un levier sans plan d'action doit d'abord se voir doter d'actions pour être
+ * suivi par ce mécanisme.
+ *
+ * `now` est calculé à chaque appel (`Date.now()` par défaut) plutôt que figé au chargement du
+ * module, pour que l'écart affiché reste réellement temps réel sur une session longue.
+ */
 export function underperformers(data: BeTrackData, wsId?: string, now: number = Date.now()) {
+  const today = new Date(now);
   return data.levers
     .filter((l) => (!wsId || l.ws === wsId) && l.status === "in_progress")
     .map((l) => {
-      const start = new Date(l.start).getTime();
-      const end = new Date(l.end).getTime();
-      const expectedProgress = Math.min(
-        100,
-        Math.max(0, Math.round(((now - start) / (end - start)) * 100))
-      );
-      return { ...l, expectedProgress, gap: expectedProgress - l.progress };
+      const lateActions = (l.actions ?? []).filter((a) => isActionLate(a, today));
+      return { ...l, lateActionsCount: lateActions.length, lateActions };
     })
-    .filter((x) => x.gap > 10)
-    .sort((a, b) => b.gap - a.gap);
+    .filter((x) => x.lateActionsCount > 0)
+    .sort((a, b) => b.lateActionsCount - a.lateActionsCount);
 }
 
 export function fmtCurr(v: number | null | undefined, dec = 1): string {
@@ -418,6 +427,24 @@ const ACTION_STATUS_WEIGHT: Record<ActionStatus, number> = {
   todo: 0,
   delayed: 0,
 };
+
+/**
+ * Une action est "en retard" si :
+ *  - son statut a été manuellement mis à "delayed" par un utilisateur (retard explicite, qui
+ *    peut couvrir une raison non capturée par la date seule — toujours vrai, quelle que soit la
+ *    date), OU
+ *  - elle n'est pas terminée ("done") ET sa date de fin (`end`) est déjà passée par rapport à
+ *    `today`.
+ *
+ * C'est la SEULE source de vérité pour le retard d'une action dans l'application (Kanban, retard
+ * d'un levier via `underperformers`, badges). `today` est un paramètre optionnel (défaut
+ * `new Date()`) pour rester testable sans mocker l'horloge globale.
+ */
+export function isActionLate(action: LeverAction, today: Date = new Date()): boolean {
+  if (action.status === "delayed") return true;
+  if (action.status === "done") return false;
+  return new Date(action.end).getTime() < today.getTime();
+}
 
 /** Progression d'un plan d'action : moyenne pondérée par statut des actions (done=100, in_progress=50). */
 export function actionProgress(actions: LeverAction[]): number {

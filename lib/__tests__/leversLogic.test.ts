@@ -8,6 +8,7 @@ import {
   resolveConfidentialityClearance,
   isLeverVisibleForClearance,
   canUserViewLever,
+  isLeverOwnedBy,
 } from "@/lib/leversLogic";
 import type { Lever, LeverStatus } from "@/types";
 
@@ -15,6 +16,7 @@ describe("canUserViewLever", () => {
   const user = {
     profiles: [{ role: "lever" as const }],
     name: "Test Lever Owner",
+    username: "test.lever.owner",
     companyId: "c1",
   };
 
@@ -26,6 +28,32 @@ describe("canUserViewLever", () => {
     expect(
       canUserViewLever(user, { ...baseLever, owner: "Another Owner", companyId: "c1" }, {})
     ).toBe(false);
+  });
+});
+
+describe("isLeverOwnedBy", () => {
+  const user = { name: "Test Lever Owner", username: "test.lever.owner" };
+
+  it("takes the id-based match (ownerUsername) when set, even if the name differs", () => {
+    expect(
+      isLeverOwnedBy({ owner: "Some Stale Name", ownerUsername: "test.lever.owner" }, user)
+    ).toBe(true);
+  });
+
+  it("denies access on an ownerUsername mismatch, regardless of the owner name", () => {
+    expect(isLeverOwnedBy({ owner: "Test Lever Owner", ownerUsername: "someone.else" }, user)).toBe(
+      false
+    );
+  });
+
+  it("falls back to the free-text name comparison when ownerUsername is not set", () => {
+    expect(isLeverOwnedBy({ owner: "Test Lever Owner", ownerUsername: undefined }, user)).toBe(
+      true
+    );
+  });
+
+  it("denies access on a name mismatch when ownerUsername is not set", () => {
+    expect(isLeverOwnedBy({ owner: "Another Owner", ownerUsername: undefined }, user)).toBe(false);
   });
 });
 

@@ -60,6 +60,12 @@ export function ActionGantt({
   const range = maxTime - minTime || 1;
   const pctOf = (iso: string) => ((new Date(iso).getTime() - minTime) / range) * 100;
 
+  // Marqueur "aujourd'hui" — même formule que `pctOf` ci-dessus pour rester exactement aligné sur
+  // les barres. `null` si le jour courant tombe hors de la plage affichée : pas de marqueur plutôt
+  // que de le dessiner hors-cadre ou d'élargir la plage pour l'y faire entrer.
+  const now = Date.now();
+  const todayPct = now >= minTime && now <= maxTime ? ((now - minTime) / range) * 100 : null;
+
   // Générer les labels de mois pour l'axe
   const startDate = new Date(minTime);
   const endDate = new Date(maxTime);
@@ -87,6 +93,27 @@ export function ActionGantt({
             style={{ left: `${m.pct}%`, height: totalHeight - axisHeight }}
           />
         ))}
+
+        {/* Marqueur "aujourd'hui" — gris neutre en tirets (pas `bp-coral`, ni le vert/rouge gain-coût
+            déjà utilisés pour la couleur des barres), masqué si hors plage affichée. Étiquette
+            placée juste au-dessus de l'axe des mois pour ne pas chevaucher le libellé de la
+            première action. */}
+        {todayPct != null && (
+          <>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute top-0 z-[1] border-l border-dashed border-neutral-500/70"
+              style={{ left: `${todayPct}%`, height: totalHeight - axisHeight }}
+            />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-sm bg-neutral-700 px-1 py-0.5 text-[9px] font-semibold leading-none text-white"
+              style={{ left: `${todayPct}%`, top: totalHeight - axisHeight }}
+            >
+              {t("shared.actionGantt.today", "Aujourd'hui")}
+            </span>
+          </>
+        )}
 
         {/* Barres des actions */}
         {actions.map((action, idx) => {

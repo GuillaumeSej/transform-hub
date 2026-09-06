@@ -8,6 +8,8 @@ import {
   sankeyChronology,
   actionProgress,
   recomputeLeverProgress,
+  isActionLate,
+  underperformers,
   pnlImpact,
   pnlImpactDetailed,
   byGeo,
@@ -282,6 +284,126 @@ describe("engine — actionProgress", () => {
       { id: "a2", name: "A2", start: "", end: "", cost: 0, status: "todo" as const },
     ];
     expect(actionProgress(actions)).toBe(50);
+  });
+});
+
+describe("engine — isActionLate", () => {
+  const today = new Date("2026-06-15");
+
+  it("done action with a past end date is NOT late", () => {
+    const action = {
+      id: "a1",
+      name: "A1",
+      start: "2026-01-01",
+      end: "2026-02-01",
+      cost: 0,
+      status: "done" as const,
+    };
+    expect(isActionLate(action, today)).toBe(false);
+  });
+
+  it("todo action with a past end date IS late", () => {
+    const action = {
+      id: "a1",
+      name: "A1",
+      start: "2026-01-01",
+      end: "2026-02-01",
+      cost: 0,
+      status: "todo" as const,
+    };
+    expect(isActionLate(action, today)).toBe(true);
+  });
+
+  it("in_progress action not yet due is NOT late", () => {
+    const action = {
+      id: "a1",
+      name: "A1",
+      start: "2026-01-01",
+      end: "2026-12-31",
+      cost: 0,
+      status: "in_progress" as const,
+    };
+    expect(isActionLate(action, today)).toBe(false);
+  });
+
+  it("explicit 'delayed' status is late regardless of date (even a future end date)", () => {
+    const action = {
+      id: "a1",
+      name: "A1",
+      start: "2026-01-01",
+      end: "2027-01-01", // in the future
+      cost: 0,
+      status: "delayed" as const,
+    };
+    expect(isActionLate(action, today)).toBe(true);
+  });
+
+  it("defaults `today` to now when not provided", () => {
+    const pastAction = {
+      id: "a1",
+      name: "A1",
+      start: "2000-01-01",
+      end: "2000-02-01",
+      cost: 0,
+      status: "todo" as const,
+    };
+    expect(isActionLate(pastAction)).toBe(true);
+  });
+});
+
+describe("engine — underperformers (retard levier dérivé UNIQUEMENT du retard des actions)", () => {
+  const today = new Date("2026-06-15").getTime();
+
+  it("flags a lever with at least one late action", () => {
+    const lever: Lever = {
+      ...baseLever,
+      status: "in_progress",
+      actions: [
+        { id: "a1", name: "A1", start: "2026-01-01", end: "2026-02-01", cost: 0, status: "todo" },
+        { id: "a2", name: "A2", start: "2026-01-01", end: "2026-12-31", cost: 0, status: "done" },
+      ],
+    };
+    const data = makeData({ levers: [lever] });
+    const result = underperformers(data, undefined, today);
+    expect(result.map((l) => l.id)).toContain("L001");
+    expect(result[0].lateActionsCount).toBe(1);
+  });
+
+  it("does NOT flag a lever with zero late actions, even if progress looks behind the old schedule heuristic", () => {
+    const lever: Lever = {
+      ...baseLever,
+      status: "in_progress",
+      progress: 5, // would have triggered the old expectedProgress-based heuristic
+      start: "2026-01-01",
+      end: "2026-12-31",
+      actions: [
+        {
+          id: "a1",
+          name: "A1",
+          start: "2026-01-01",
+          end: "2026-12-31", // not yet due
+          cost: 0,
+          status: "in_progress",
+        },
+      ],
+    };
+    const data = makeData({ levers: [lever] });
+    const result = underperformers(data, undefined, today);
+    expect(result.map((l) => l.id)).not.toContain("L001");
+  });
+
+  it("does NOT flag a lever with zero actions declared", () => {
+    const lever: Lever = {
+      ...baseLever,
+      status: "in_progress",
+      progress: 5,
+      start: "2026-01-01",
+      end: "2026-12-31",
+      actions: [],
+    };
+    const data = makeData({ levers: [lever] });
+    const result = underperformers(data, undefined, today);
+    expect(result.map((l) => l.id)).not.toContain("L001");
   });
 });
 

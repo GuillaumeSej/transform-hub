@@ -180,6 +180,17 @@ export function timelinePctOf(minTime: number, maxTime: number): (iso: string) =
   return (iso: string) => ((parseISO(iso) - minTime) / range) * 100;
 }
 
+/** Position en % du jour courant (« aujourd'hui ») dans `[minTime, maxTime]`, MÊME formule que
+ *  `timelinePctOf` — garantit l'alignement exact avec les barres. `null` si la date du jour tombe
+ *  hors de la plage affichée : l'appelant ne doit alors PAS afficher de marqueur (ni recadrer la
+ *  plage pour le faire rentrer, ni le dessiner hors-écran). */
+export function timelineTodayPct(minTime: number, maxTime: number): number | null {
+  const now = Date.now();
+  if (now < minTime || now > maxTime) return null;
+  const range = Math.max(1, maxTime - minTime);
+  return ((now - minTime) / range) * 100;
+}
+
 // ─── Composants de rendu ────────────────────────────────────────────────────────────────────────
 
 /** Bascule d'échelle temporelle — même look que le contrôle segmenté de `EffortScoringGrid.tsx`
@@ -222,10 +233,17 @@ export function TimelineHeaderRow({
   columns,
   yearBands,
   labelWidthClassName,
+  todayPct,
+  todayLabel,
 }: {
   columns: TimelineColumn[];
   yearBands: TimelineYearBand[];
   labelWidthClassName: string;
+  /** Position en % du marqueur "aujourd'hui" (`timelineTodayPct`), `null`/`undefined` si hors
+   *  plage — l'étiquette n'est alors pas affichée (la ligne elle-même est dessinée par
+   *  `TimelineTodayMarker` dans chaque ligne, pas ici). */
+  todayPct?: number | null;
+  todayLabel?: string;
 }) {
   return (
     <div className="flex items-end gap-2 pb-1">
@@ -249,8 +267,34 @@ export function TimelineHeaderRow({
             {col.label}
           </span>
         ))}
+        {todayPct != null && todayLabel && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -top-4 -translate-x-1/2 whitespace-nowrap rounded-sm bg-neutral-700 px-1 py-0.5 text-[9px] font-semibold leading-none text-white"
+            style={{ left: `${todayPct}%` }}
+          >
+            {todayLabel}
+          </span>
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Ligne verticale fine marquant "aujourd'hui" sur la piste temporelle — à placer comme
+ * `TimelineGridColumns` (premier enfant d'un conteneur `relative` dont l'appelant fixe la
+ * hauteur). Gris neutre en tirets, volontairement PAS `bp-coral` (l'accent de marque, déjà utilisé
+ * pour les états de survol/sélection ailleurs dans ce composant) ni une couleur de statut/risque
+ * existante — un repère de lecture, pas une donnée d'état.
+ */
+export function TimelineTodayMarker({ leftPct }: { leftPct: number }) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-y-0 z-[1] border-l border-dashed border-neutral-500/70"
+      style={{ left: `${leftPct}%` }}
+    />
   );
 }
 

@@ -13,6 +13,13 @@ import {
 import type { BeTrackData, Workstream } from "@/types";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
+import {
+  LeverOwnerReconciliationDialog,
+  buildReconciliationQueue,
+  type OwnerReconciliationDecision,
+  type PendingReconciliationItem,
+} from "@/components/shared/LeverOwnerReconciliationDialog";
+import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -61,6 +68,13 @@ export function LeverImportButton({
   const [preview, setPreview] = useState<LeverImportPreview | null>(null);
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
+  // Réconciliation propriétaire (round "ownership réel", voir lib/leverOwnerReconciliation.ts) :
+  // file d'attente affichée par LeverOwnerReconciliationDialog, construite au clic sur "Confirmer
+  // l'import" (voir confirmImport) — non-null pendant que ce second dialogue est ouvert.
+  const [reconciliationQueue, setReconciliationQueue] = useState<
+    PendingReconciliationItem[] | null
+  >(null);
+  const companyUsers = useCompanyUsers(companyId);
 
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
@@ -162,14 +176,17 @@ export function LeverImportButton({
     setPreview(result);
   };
 
-  const confirmImport = () => {
-    if (!preview || preview.toUpsert.length === 0) return;
+  /** Écriture effective (workstreams auto-créés puis leviers) — appelée soit directement depuis
+   *  `confirmImport` (aucun levier à réconcilier), soit après résolution du dialogue de
+   *  réconciliation propriétaire (voir `resolveReconciliation` plus bas). */
+  const writeImport = (rowsToUpsert: LeverImportPreview["toUpsert"]) => {
+    if (!preview) return;
     setImporting(true);
     try {
       if (preview.toCreateWorkstreams.length > 0) {
         onCreateWorkstreams(preview.toCreateWorkstreams);
       }
-      const { createdCount, updatedCount } = onImport(preview.toUpsert);
+      const { createdCount, updatedCount } = onImport(rowsToUpsert);
       const wsNote =
         preview.toCreateWorkstreams.length > 0
           ? ` · ${t("shared.leverImportButton.workstreamsCreatedNote", "{n} workstream(s) créé(s)").replace("{n}", String(preview.toCreateWorkstreams.length))}`
@@ -191,9 +208,35 @@ export function LeverImportButton({
         "success"
       );
       setPreview(null);
+      setReconciliationQueue(null);
     } finally {
       setImporting(false);
     }
+  };
+
+  /** Déclenché par "Confirmer l'import" : insère l'étape de réconciliation propriétaire (round
+   *  "ownership réel", voir `lib/leverOwnerReconciliation.ts`) AVANT l'écriture — un levier de
+   *  l'aperçu dont l'"Owner" texte libre est non vide doit être rapproché d'un compte réel. Aucun
+   *  levier à réconcilier (colonne "Owner" vide partout, ou aucun candidat trouvé n'étant pas géré
+   *  ici — voir le dialogue) : écriture immédiate, comportement inchangé. */
+  const confirmImport = () => {
+    if (!preview || preview.toUpsert.length === 0) return;
+    const queue = buildReconciliationQueue(preview.toUpsert, companyUsers);
+    if (queue.length === 0) {
+      writeImport(preview.toUpsert);
+      return;
+    }
+    setReconciliationQueue(queue);
+  };
+
+  const resolveReconciliation = (decisions: Map<string, OwnerReconciliationDecision>) => {
+    if (!preview) return;
+    const resolvedRows = preview.toUpsert.map((row) => {
+      const decision = decisions.get(row.code);
+      if (!decision) return row;
+      return { ...row, owner: decision.owner, ownerUsername: decision.ownerUsername };
+    });
+    writeImport(resolvedRows);
   };
 
   return (
@@ -284,6 +327,14 @@ export function LeverImportButton({
           )}
         </div>
       </Modal>
+
+      <LeverOwnerReconciliationDialog
+        open={reconciliationQueue !== null}
+        queue={reconciliationQueue ?? []}
+        companyUsers={companyUsers}
+        onCancel={() => setReconciliationQueue(null)}
+        onConfirm={resolveReconciliation}
+      />
     </>
   );
 }

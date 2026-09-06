@@ -236,6 +236,8 @@ const fr: Record<string, string> = {
   "dashboard.widgets.actualProgress": "Réel",
   "dashboard.widgets.gapPts": "pts de retard",
   "dashboard.widgets.atRiskAmount": "à risque",
+  "dashboard.widgets.lateActions": "action(s) en retard",
+  "dashboard.widgets.ofTotalActions": "sur",
   "dashboard.widgets.initiativeHealth": "Santé des initiatives",
   "dashboard.widgets.initiativeHealthEmpty": "Aucune initiative à afficher",
   "dashboard.widgets.healthOnTrack": "On track",
@@ -330,6 +332,7 @@ const fr: Record<string, string> = {
   "leverForm.confidentiality": "Niveau de confidentialité",
   "leverForm.confidentialityNone": "Aucun (visible par tous les profils)",
   "leverForm.owner": "Responsable",
+  "leverForm.ownerNone": "Aucun",
   "leverForm.sponsor": "Sponsor",
   "leverForm.initials": "Initiales",
   "leverForm.geography": "Région",
@@ -800,6 +803,8 @@ const fr: Record<string, string> = {
 
   // ─── shared (composants partagés : Kanban, EditableTable, HrOwnerActionTable) ──────────────
   "shared.actionKanban.noItems": "Aucune action",
+  "shared.actionKanban.blockingDependency": "Dépendance bloquante sur ce levier",
+  "shared.actionKanban.overdue": "Date de fin dépassée",
   "shared.kanban.noItems": "Aucun",
   "shared.hrOwnerActionTable.dueSoon": "À venir < 90 j",
   "shared.hrOwnerActionTable.later": "À venir > 90 j",
@@ -913,6 +918,19 @@ const fr: Record<string, string> = {
   "shared.leverImportButton.willBeCreatedPlural": "seront créés",
   "shared.leverImportButton.willBeCreatedSingular": "sera créé",
   "shared.leverImportButton.workstreamsNoteOutro": "automatiquement : {names}.",
+  "shared.leverOwnerReconciliation.title": "Confirmation des propriétaires de levier",
+  "shared.leverOwnerReconciliation.intro":
+    "Les leviers doivent être rattachés à un compte utilisateur réel. Confirmez ou choisissez le compte pour chacun des leviers ci-dessous.",
+  "shared.leverOwnerReconciliation.confirmButton": "Valider et importer",
+  "shared.leverOwnerReconciliation.uniqueQuestion":
+    'Le propriétaire "{owner}" est-il bien {name} ({username}) ?',
+  "shared.leverOwnerReconciliation.homonymsQuestion":
+    'Plusieurs comptes correspondent à "{owner}" — lequel est le bon ?',
+  "shared.leverOwnerReconciliation.noneOfThem": "Aucun de ceux-là",
+  "shared.leverOwnerReconciliation.noneQuestion":
+    'Aucun compte utilisateur ne correspond à "{owner}" pour cette entreprise.',
+  "shared.leverOwnerReconciliation.pickUser": "Choisir un compte…",
+  "shared.leverOwnerReconciliation.leaveEmpty": "Laisser vide",
   "shared.leverImportButton.lineLabel": "Ligne",
 
   // ─── adminHierarchy (Admin > Entreprises > Arborescence financière/géo) ────
@@ -1014,6 +1032,7 @@ const fr: Record<string, string> = {
   "shared.actionGantt.legendCapex": "Milestone CAPEX",
   "shared.actionGantt.legendGainOneShot": "Gain encaissé (one-shot)",
   "shared.actionGantt.legendGainSmoothed": "Gain lissé",
+  "shared.actionGantt.today": "Aujourd'hui",
   "shared.forcedDepartureStatusChart.noData": "Aucun départ forcé à afficher.",
   "shared.forcedDepartureStatusChart.movementsTooltip": "{n} mouvement(s)",
   "shared.forcedDepartureStatusChart.schemeTooltipLabel": "Dispositif : {scheme}",
@@ -1213,6 +1232,7 @@ const fr: Record<string, string> = {
   "strategicAxes.ganttScaleQuarter": "Trimestre",
   "strategicAxes.ganttScaleSemester": "Semestre",
   "strategicAxes.progress": "Avancement",
+  "strategicAxes.ganttToday": "Aujourd'hui",
   "strategicAxes.actionsCompleted": "actions terminées",
   "strategicAxes.moreActionsSuffix": "autres",
   "strategicAxes.cardNoActions": "Aucune action",

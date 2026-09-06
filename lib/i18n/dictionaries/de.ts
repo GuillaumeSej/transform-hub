@@ -760,6 +760,8 @@ const de: Record<string, string> = {
 
   // ─── shared (Kanban, EditableTable, HrOwnerActionTable) ────────────────────
   "shared.actionKanban.noItems": "Keine Maßnahmen",
+  "shared.actionKanban.blockingDependency": "Blockierende Abhängigkeit auf diesem Hebel",
+  "shared.actionKanban.overdue": "Enddatum überschritten",
   "shared.kanban.noItems": "Keine",
   "shared.hrOwnerActionTable.dueSoon": "Anstehend < 90 Tage",
   "shared.hrOwnerActionTable.later": "Anstehend > 90 Tage",
@@ -882,6 +884,7 @@ const de: Record<string, string> = {
   "shared.actionGantt.legendCapex": "CAPEX-Meilenstein",
   "shared.actionGantt.legendGainOneShot": "Gewinn vereinnahmt (einmalig)",
   "shared.actionGantt.legendGainSmoothed": "Linear verteilter Gewinn",
+  "shared.actionGantt.today": "Heute",
   "shared.forcedDepartureStatusChart.noData": "Keine Zwangsaustritte anzuzeigen.",
   "shared.forcedDepartureStatusChart.movementsTooltip": "{n} Bewegung(en)",
   "shared.forcedDepartureStatusChart.schemeTooltipLabel": "Maßnahme: {scheme}",
@@ -1174,6 +1177,7 @@ const de: Record<string, string> = {
   "strategicAxes.ganttScaleQuarter": "Quartal",
   "strategicAxes.ganttScaleSemester": "Halbjahr",
   "strategicAxes.progress": "Fortschritt",
+  "strategicAxes.ganttToday": "Heute",
   "strategicAxes.actionsCompleted": "Maßnahmen abgeschlossen",
   "strategicAxes.moreActionsSuffix": "weitere",
   "strategicAxes.cardNoActions": "Keine Maßnahme",

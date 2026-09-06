@@ -440,8 +440,8 @@ export function DashboardPagePerformance() {
   const sortedUnderperformers = useMemo(() => {
     const sorted = [...underperformingLevers];
     sorted.sort((a, b) => {
-      const va = underSort === "gap" ? a.gap : a.netSavings;
-      const vb = underSort === "gap" ? b.gap : b.netSavings;
+      const va = underSort === "gap" ? a.lateActionsCount : a.netSavings;
+      const vb = underSort === "gap" ? b.lateActionsCount : b.netSavings;
       return underSortDir === "desc" ? vb - va : va - vb;
     });
     return sorted;
@@ -1745,16 +1745,13 @@ export function DashboardPagePerformance() {
                               {l.name}
                             </div>
                             <span className="flex-shrink-0 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10.5px] font-bold text-bp-coral">
-                              −{l.gap} {t("dashboard.widgets.gapPts")}
+                              {l.lateActionsCount} {t("dashboard.widgets.lateActions")}
                             </span>
                           </div>
                           <div className="mt-1 flex items-center gap-3 text-[11px] text-secondary">
                             <span>
-                              {t("dashboard.widgets.expectedProgress")} {l.expectedProgress}%
-                            </span>
-                            <span>→</span>
-                            <span>
-                              {t("dashboard.widgets.actualProgress")} {l.progress}%
+                              {l.lateActionsCount} {t("dashboard.widgets.ofTotalActions")}{" "}
+                              {l.actions?.length ?? 0}
                             </span>
                             <span className="ml-auto font-semibold text-bp-coral">
                               {engine.fmtCurr(l.netSavings)} {t("dashboard.widgets.atRiskAmount")}

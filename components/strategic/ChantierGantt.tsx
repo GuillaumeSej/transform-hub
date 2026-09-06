@@ -8,11 +8,13 @@ import {
   timelineColumns,
   timelinePctOf,
   timelineRange,
+  timelineTodayPct,
   timelineYearBands,
   TimelineBar,
   TimelineGridColumns,
   TimelineHeaderRow,
   TimelineScaleToggle,
+  TimelineTodayMarker,
   hexToRgb,
   withAlpha,
   type TimelineScale,
@@ -73,6 +75,8 @@ export type ChantierGanttLabels = {
   scaleSemester?: string;
   progress?: string;
   alerted?: string;
+  /** Étiquette du marqueur de date du jour sur la piste temporelle. */
+  today?: string;
   /** Préfixe affiché devant la liste des raisons de blocage dans l'infobulle d'une action bloquée
    *  (round 4, point 5 — prérequis go/no-go). */
   blockedBy?: string;
@@ -151,6 +155,7 @@ export function ChantierGantt({
     scaleSemester: labels?.scaleSemester ?? "Semestre",
     progress: labels?.progress ?? "Avancement",
     alerted: labels?.alerted ?? "Dépendance en alerte",
+    today: labels?.today ?? "Aujourd'hui",
     blockedBy: labels?.blockedBy ?? "Bloqué par :",
   };
 
@@ -212,6 +217,11 @@ export function ChantierGantt({
 
   const yearBands = useMemo(() => timelineYearBands(columns), [columns]);
 
+  const todayPct = useMemo(
+    () => (planned.length === 0 ? null : timelineTodayPct(minTime, maxTime)),
+    [minTime, maxTime, planned.length]
+  );
+
   if (rows.length === 0) {
     return <p className="py-6 text-center text-sm text-tertiary">{l.empty}</p>;
   }
@@ -243,6 +253,8 @@ export function ChantierGantt({
                 columns={columns}
                 yearBands={yearBands}
                 labelWidthClassName={ROW_LABEL_WIDTH}
+                todayPct={todayPct}
+                todayLabel={l.today}
               />
 
               {/* ── Une ligne par chantier ───────────────────────────────────────────────── */}
@@ -295,6 +307,10 @@ export function ChantierGantt({
                     <div className="relative flex-1" style={{ height: trackHeight }}>
                       {/* Grille de colonnes */}
                       <TimelineGridColumns columns={columns} />
+
+                      {/* Marqueur "aujourd'hui" — même échelle que les barres (`pctOf`), masqué
+                          si le jour courant tombe hors de la plage affichée. */}
+                      {todayPct != null && <TimelineTodayMarker leftPct={todayPct} />}
 
                       {/* Bloc macro du chantier (maille exécutive) — REMPLI, avec la part
                           d'avancement en teinte soutenue. */}

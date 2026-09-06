@@ -203,9 +203,74 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     expect(preview.createCount).toBe(0);
     expect(preview.updateCount).toBe(1);
     expect(preview.toUpsert[0].name).toBe("Nouveau nom");
-    // Le fichier ne redéclare aucune action pour ce levier -> le plan existant (vide) est conservé.
+    // Le fichier ne redéclare aucune action pour ce levier -> le plan (déjà vide) reste vide.
     expect(preview.toUpsert[0].actions).toEqual([]);
     // Le risque stocké n'est pas réinitialisé par l'import (recalculé de toute façon à l'affichage).
+    expect(preview.toUpsert[0].risk).toBe("medium");
+  });
+
+  it("wipes a lever's pre-existing actions when the file declares none for its Code", () => {
+    const existing: Lever = {
+      id: "L001",
+      programId: "p1",
+      code: "PROC-001",
+      type: "Sourcing & Achats",
+      name: "Ancien nom",
+      ws: "WS-PROC",
+      owner: "Marc Dubois",
+      ownerInit: "MD",
+      sponsor: "Isabelle Roy",
+      sponsorInit: "IR",
+      geography: "Europe",
+      country: "France",
+      entity: "Acme France SAS",
+      function: "Procurement",
+      costCenter: "CC-PROC-001",
+      pnlMap: "GA",
+      start: "2026-01-01",
+      end: "2026-06-30",
+      status: "idea",
+      progress: 0,
+      risk: "medium",
+      grossSavings: 1,
+      netSavings: 1,
+      opexOneOff: 0,
+      opexRec: 0,
+      capex: 0,
+      fteImpact: 0,
+      popImpacted: 0,
+      companyId: "c1",
+      dependencies: [],
+      description: "",
+      createdAt: "2025-01-01",
+      lastUpdate: "2025-01-01",
+      actions: [
+        {
+          id: "A001",
+          name: "Ancienne action",
+          start: "2026-01-01",
+          end: "2026-02-01",
+          cost: 0,
+          status: "todo",
+          impacts: [],
+        },
+      ],
+    };
+
+    const sheets: LeverImportRawSheets = {
+      leviers: [baseLeverRow({ "Nom du levier": "Nouveau nom" })],
+      actions: [],
+      impacts: [],
+    };
+
+    const preview = validateLeverImportRows(sheets, ctx([existing]), "c1", singleProgram);
+
+    expect(preview.errors).toEqual([]);
+    expect(preview.updateCount).toBe(1);
+    // Le fichier importé fait foi : aucune ligne Action pour ce Code -> le plan d'action existant
+    // (qui contenait "Ancienne action") est intégralement vidé, pas conservé.
+    expect(preview.toUpsert[0].actions).toEqual([]);
+    // Les autres champs préservés (ex. risk) ne sont pas affectés par ce changement.
     expect(preview.toUpsert[0].risk).toBe("medium");
   });
 

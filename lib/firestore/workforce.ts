@@ -1,4 +1,4 @@
-import { doc, getDoc, onSnapshot, setDoc, writeBatch, type Unsubscribe } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, writeBatch, type Unsubscribe } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { onListenerError } from "@/lib/firestore/listenerError";
 import type { Department, Employee, WorkforceDimensionBaseline, WorkforceMovement } from "@/types";
@@ -15,23 +15,6 @@ import type { Department, Employee, WorkforceDimensionBaseline, WorkforceMovemen
  * 1 Mo et divise les lectures par 200 par rapport à une collection.
  */
 
-// Incrémenter force un reseed complet du périmètre workforce (schéma modifié).
-// v2 (Août 2026) : migration typologie 4-types → 5-types Gooduelle. Les données seedées
-// avant ce bump portent encore Suppression / Redéploiement / Reconversion, qui ne matchent
-// plus lib/hrEngine.ts::fteEffect (retour undefined → NaN partout dans le dashboard RH).
-// Le bump force ensureWorkforceSeeded à réécrire les 3 documents workforce depuis mockData.ts.
-// v3 (Août 2026) : alignement WorkforceMovement.programId sur la collection Firestore
-// multi-programmes (`programs`) — ancien "PRG-2026" (id de `ProgramConfig`) remplacé par "p1"
-// (id de `TEST_PROGRAM`). Redistribution des dates mouvements sur 2026-2028 pour peupler le
-// sélecteur FY et éviter des sous-catégories vides. Voir data/mockData.ts::nextYearMonth.
-// v4 (Août 2026) : ajout du dispositif social (PSE/RC/RCC/PDV/Autre) et alignement des
-// workstream IDs des mouvements sur le référentiel réel des initiatives (WS-PROC, WS-OPS…).
-// v5 (Août 2026) : ajout des baselines ETP pays/workstream dans WorkforceMeta pour alimenter
-// les vues actuel/cible/atterrissage sans extrapoler depuis l'échantillon d'employés détaillés.
-// v6 (Août 2026) : statut mouvement migré vers Réalisé/Planifié/À faire/Abandonné. Les anciens
-// "En cours" sont reseedés en "À faire" et quelques abandons sont conservés hors prévisions.
-const SCHEMA_VERSION = "6";
-
 /** Documents `leverMeta/{companyId}__{workforceEmployees|workforceMovements|workforceSummary}` —
  * partitionnés par entreprise (voir firestore.rules, section `match /leverMeta/{docId}`, et
  * scripts/migrate-lever-meta-tenant-split.js pour la migration depuis les anciens documents
@@ -41,7 +24,6 @@ const employeesDoc = (companyId: string) =>
 const movementsDoc = (companyId: string) =>
   doc(db, "leverMeta", `${companyId}__workforceMovements`);
 const summaryDoc = (companyId: string) => doc(db, "leverMeta", `${companyId}__workforceSummary`);
-const metaDoc = () => doc(db, "meta", "workforce");
 
 export type WorkforceMeta = {
   totalFTE: number;
@@ -155,9 +137,13 @@ export type WorkforceSeed = {
   meta: WorkforceMeta;
 };
 
-/** Réécrit tout le périmètre workforce — premier démarrage ou "réinitialiser la démo". Sans
- *  `companyId` (admin global), aucun document partitionné valide n'existe : le reseed est ignoré
- *  (rien n'est écrit) plutôt que d'écrire sous un id de document invalide. */
+/** Réécrit tout le périmètre workforce pour une entreprise donnée — utilitaire explicite (ex.
+ *  "réinitialiser la démo" côté admin), JAMAIS appelé automatiquement au chargement d'une page :
+ *  voir lib/hooks/useStorage.ts, qui n'appelle plus aucune variante "ensure*Seeded" implicite
+ *  depuis la suppression de ce mécanisme (une entreprise démarre avec un périmètre workforce
+ *  vide, peuplé uniquement par de la vraie saisie/import). Sans `companyId` (admin global),
+ *  aucun document partitionné valide n'existe : le reseed est ignoré (rien n'est écrit) plutôt
+ *  que d'écrire sous un id de document invalide. */
 export async function forceReseedWorkforce(
   seed: WorkforceSeed,
   companyId?: string | null
@@ -170,16 +156,5 @@ export async function forceReseedWorkforce(
   batch.set(employeesDoc(companyId), { list: stripUndefined(seed.employees) });
   batch.set(movementsDoc(companyId), { list: stripUndefined(seed.movements) });
   batch.set(summaryDoc(companyId), stripUndefined(seed.meta));
-  batch.set(metaDoc(), { schemaVersion: SCHEMA_VERSION });
   await batch.commit();
-}
-
-/** Amorce Firestore avec le seed mockData si jamais initialisé pour ce schéma — idempotent. */
-export async function ensureWorkforceSeeded(
-  seed: WorkforceSeed,
-  companyId?: string | null
-): Promise<void> {
-  const meta = await getDoc(metaDoc());
-  if (meta.exists() && meta.data().schemaVersion === SCHEMA_VERSION) return;
-  await forceReseedWorkforce(seed, companyId);
 }

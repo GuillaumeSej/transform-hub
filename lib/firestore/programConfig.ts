@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, onSnapshot, type Unsubscribe } from "firebase/firestore";
+import { doc, setDoc, onSnapshot, type Unsubscribe } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { onListenerError } from "@/lib/firestore/listenerError";
 import type { ProgramConfig, Workstream } from "@/types";
@@ -14,18 +14,16 @@ import type { ProgramConfig, Workstream } from "@/types";
  * racine dédiée serait refusée tant que les règles ne sont pas redéployées (accès Firebase CLI
  * pas toujours disponible, même contrainte que lib/firestore/workforce.ts).
  *
- * Ces données sont des référentiels quasi statiques (aucune mutation dans l'UI aujourd'hui,
- * seulement le seed et le reset démo) — le subscribe sert surtout à ce qu'un reset de démo
- * sur un poste se propage aux autres.
+ * AUCUN seed implicite de données démo ici : une entreprise sans ProgramConfig n'en a simplement
+ * pas encore ; `subscribeProgramConfig` renvoie `null` et l'appelant (voir
+ * lib/hooks/useStorage.ts) doit retomber sur des valeurs vides/neutres plutôt que sur
+ * `data/mockData.ts`. `forceReseedProgram` reste un utilitaire explicite (reset démo côté admin),
+ * jamais invoqué automatiquement au chargement d'une page.
  */
-
-// Incrémenter force un reseed du périmètre programme (schéma modifié).
-const SCHEMA_VERSION = "1";
 
 export type ProgramConfigDoc = {
   program: ProgramConfig;
   workstreams: Workstream[];
-  schemaVersion: string;
 };
 
 /** Un document par tenant — `global` pour l'admin plateforme (companyId null). */
@@ -33,7 +31,7 @@ const tenantKey = (companyId?: string | null) => companyId ?? "global";
 const programDoc = (companyId?: string | null) =>
   doc(db, "meta", `program__${tenantKey(companyId)}`);
 
-export type ProgramSeed = Omit<ProgramConfigDoc, "schemaVersion">;
+export type ProgramSeed = ProgramConfigDoc;
 
 export function subscribeProgramConfig(
   cb: (config: ProgramSeed | null) => void,
@@ -57,23 +55,17 @@ export async function saveProgramConfig(
   seed: ProgramSeed,
   companyId?: string | null
 ): Promise<void> {
-  await setDoc(programDoc(companyId), { ...seed, schemaVersion: SCHEMA_VERSION });
+  await setDoc(programDoc(companyId), seed);
 }
 
-/** Réécrit la config programme du tenant depuis le seed — utilisé par le reset démo. */
+/** Réécrit la config programme du tenant depuis le seed fourni — utilitaire explicite (reset
+ *  démo côté admin), JAMAIS appelé automatiquement au chargement d'une page (voir
+ *  lib/hooks/useStorage.ts, qui n'appelle plus `ensureProgramSeeded` : ce mécanisme d'auto-seed
+ *  implicite a été supprimé, il écrivait la config mock d'Acme dans le ProgramConfig de N'IMPORTE
+ *  QUELLE entreprise dès le premier chargement de page après un bump de schéma). */
 export async function forceReseedProgram(
   seed: ProgramSeed,
   companyId?: string | null
 ): Promise<void> {
   await saveProgramConfig(seed, companyId);
-}
-
-/** Amorce la config programme si absente ou d'un schéma antérieur — idempotent. */
-export async function ensureProgramSeeded(
-  seed: ProgramSeed,
-  companyId?: string | null
-): Promise<void> {
-  const snap = await getDoc(programDoc(companyId));
-  if (snap.exists() && snap.data().schemaVersion === SCHEMA_VERSION) return;
-  await forceReseedProgram(seed, companyId);
 }

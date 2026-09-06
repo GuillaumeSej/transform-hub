@@ -12,7 +12,11 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
-import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
+import {
+  isLeverOwnedBy,
+  isLeverVisibleForClearance,
+  resolveConfidentialityClearance,
+} from "@/lib/leversLogic";
 import { isAnyAdmin } from "@/lib/roleProfiles";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { Card, CardBody } from "@/components/shared/Card";
@@ -127,13 +131,14 @@ export function LeversPagePerformance() {
     [geographyHierarchyLevels]
   );
 
-  // Le Lever Owner ne voit que ses propres leviers (owner === son nom de compte de test). Les
-  // autres rôles (CTO, Sponsor, ...) voient toute la bibliothèque. Les leviers confidentiels sont
-  // en plus masqués aux profils non habilités (voir Company.roleClearance) — admin/admin_entreprise
-  // voient toujours tout.
+  // Le Lever Owner ne voit que ses propres leviers — via `isLeverOwnedBy` (lib/leversLogic.ts) :
+  // lien id-based `ownerUsername` si le levier a été réconcilié, repli sur la comparaison de noms
+  // sinon (levier legacy). Les autres rôles (CTO, Sponsor, ...) voient toute la bibliothèque. Les
+  // leviers confidentiels sont en plus masqués aux profils non habilités (voir
+  // Company.roleClearance) — admin/admin_entreprise voient toujours tout.
   const scopedLevers = useMemo(() => {
     const ownerScoped =
-      role === "lever" && user ? data.levers.filter((l) => l.owner === user.name) : data.levers;
+      role === "lever" && user ? data.levers.filter((l) => isLeverOwnedBy(l, user)) : data.levers;
     return ownerScoped.filter(
       (l) => isAnyAdmin(user) || isLeverVisibleForClearance(l.confidentialityLevel, clearance)
     );

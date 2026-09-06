@@ -916,19 +916,24 @@ export function LeverDetailClientPerformance() {
               </span>
               <span className="text-secondary">
                 {t("leverDetail.todo", "À faire")} :{" "}
-                {actions.filter((a) => a.status === "todo").length}
+                {actions.filter((a) => a.status === "todo" && !engine.isActionLate(a)).length}
               </span>
               <span className="text-info-blue">
                 {t("leverDetail.inProgress", "En cours")} :{" "}
-                {actions.filter((a) => a.status === "in_progress").length}
+                {
+                  actions.filter((a) => a.status === "in_progress" && !engine.isActionLate(a))
+                    .length
+                }
               </span>
               <span className="text-rag-green-dark">
                 {t("leverDetail.completed", "Fait")} :{" "}
                 {actions.filter((a) => a.status === "done").length}
               </span>
               <span className="text-rag-red">
+                {/* Retard calculé (engine.isActionLate) : statut "delayed" manuel OU date de fin
+                    dépassée sans être "done" — pas seulement le flag manuel, voir lib/engine.ts. */}
                 {t("leverDetail.late", "En retard")} :{" "}
-                {actions.filter((a) => a.status === "delayed").length}
+                {actions.filter((a) => engine.isActionLate(a)).length}
               </span>
               <span className="ml-auto font-bold text-primary">
                 {t("leverDetail.percentOfPlan", "{pct}% du plan").replace(
@@ -945,6 +950,7 @@ export function LeverDetailClientPerformance() {
                 onStatusChange={(actionId, status: ActionStatus) =>
                   data.updateAction(actionScope, actionId, { status })
                 }
+                hasBlockingDependency={allDependencyAlerts.some((d) => d.sourceId === lever.id)}
               />
             ) : (
               <ActionGantt

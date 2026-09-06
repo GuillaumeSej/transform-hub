@@ -395,6 +395,7 @@ export function AxisDetailClient() {
               progress: t("strategicAxes.progress"),
               alerted: t("strategicAxes.chantierAlerted"),
               blockedBy: t("strategicChantierDetail.prerequisites.blockedBy"),
+              today: t("strategicAxes.ganttToday"),
             }}
           />
         </CardBody>

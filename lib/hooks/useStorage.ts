@@ -35,9 +35,48 @@ import type {
 
 const DEMO_USER = "Utilisateur démo";
 
-/** Applique le verrouillage plan initial/réactualisation (voir leversLogic.applyPlanLock) au
- * seed mockData : sans ça, les leviers de démo déjà en L3+/L4+ n'auraient pas de plan figé tant
- * qu'on ne les modifie pas manuellement. */
+/** Périmètre workforce vide — état initial/fallback pour une entreprise qui n'a pas (encore) de
+ *  document workforce dans Firestore. Remplace l'ancien `workforceSeed()` qui retombait sur
+ *  `mockData.workforce` : une entreprise fraîchement créée doit démarrer sans aucune donnée RH
+ *  démo, pas avec les employés/mouvements d'Acme. */
+function emptyWorkforceMeta(): workforceDb.WorkforceMeta {
+  return {
+    totalFTE: 0,
+    massSalary: 0,
+    budgetSalary: 0,
+    departments: [],
+    countryBaselines: [],
+    workstreamBaselines: [],
+  };
+}
+
+/** Config programme neutre — état initial/fallback tant que le document Firestore de
+ *  l'entreprise (`meta/program__{companyId}`) n'a pas encore répondu ou n'existe pas. Remplace
+ *  l'ancien `programSeed()` qui retombait sur `mockData.program`/`mockData.workstreams` : voir
+ *  lib/firestore/programConfig.ts pour le retrait de l'auto-seed implicite correspondant. */
+function emptyProgramConfig(): programDb.ProgramSeed {
+  return {
+    program: {
+      id: "",
+      name: "",
+      sponsor: "",
+      target: 0,
+      currency: "EUR",
+      fyStart: "",
+      fyEnd: "",
+      baselineEBIT: 0,
+      revenue: 0,
+    },
+    workstreams: [],
+  };
+}
+
+/** Utilisée UNIQUEMENT par `resetToMockData` (reset démo explicite, jamais un effet de bord d'un
+ *  chargement de page) — voir lib/firestore/levers.ts::forceReseedLevers pour le pourquoi de la
+ *  suppression de l'ancien mécanisme d'auto-seed implicite (`ensureLeversSeeded`). Applique le
+ *  verrouillage plan initial/réactualisation (voir leversLogic.applyPlanLock) au seed mockData :
+ *  sans ça, les leviers de démo déjà en L3+/L4+ n'auraient pas de plan figé tant qu'on ne les
+ *  modifie pas manuellement. */
 function lockedSeed() {
   const migratedLevers = migrateMockLeversToActions(mockData.levers, legacySubLevers);
   return {
@@ -49,6 +88,8 @@ function lockedSeed() {
   };
 }
 
+/** Utilisée UNIQUEMENT par `resetToMockData` (reset démo explicite) — voir lockedSeed() ci-dessus
+ *  pour le même avertissement. */
 function workforceSeed(): workforceDb.WorkforceSeed {
   return {
     employees: mockData.workforce.employees,
@@ -64,6 +105,8 @@ function workforceSeed(): workforceDb.WorkforceSeed {
   };
 }
 
+/** Utilisée UNIQUEMENT par `resetToMockData` (reset démo explicite) — voir lockedSeed() ci-dessus
+ *  pour le même avertissement. */
 function programSeed(): programDb.ProgramSeed {
   return { program: mockData.program, workstreams: mockData.workstreams };
 }
@@ -83,12 +126,18 @@ function programSeed(): programDb.ProgramSeed {
  * voir lib/firestore/programConfig.ts.
  */
 export function useBeTrackData(companyId?: string | null) {
-  // Fallback immédiat : l'application reste utilisable avec le nouveau modèle même si Firestore
-  // est indisponible ou si le compte courant n'a pas les droits de reseed.
-  const [levers, setLevers] = useState<Lever[]>(() => lockedSeed().levers);
-  const [programConfig, setProgramConfig] = useState<programDb.ProgramSeed>(() => programSeed());
-  const [comments, setComments] = useState<Record<string, Comment[]>>(() => mockData.comments);
-  const [audit, setAudit] = useState<AuditEntry[]>(() => mockData.audit);
+  // État initial VIDE — aucune donnée mock/démo n'est injectée ici : une entreprise démarre sans
+  // leviers/programme/commentaires/audit tant que sa souscription Firestore n'a pas répondu (ou
+  // tant qu'elle n'a rien créé elle-même). Voir lib/firestore/levers.ts, programConfig.ts,
+  // workforce.ts et alerts.ts pour le retrait des anciens mécanismes d'auto-seed implicite
+  // (`ensure*Seeded`) qui écrivaient `data/mockData.ts` dans les documents Firestore de N'IMPORTE
+  // QUELLE entreprise comme simple effet de bord d'un chargement de page.
+  const [levers, setLevers] = useState<Lever[]>([]);
+  const [programConfig, setProgramConfig] = useState<programDb.ProgramSeed>(() =>
+    emptyProgramConfig()
+  );
+  const [comments, setComments] = useState<Record<string, Comment[]>>({});
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [movements, setMovements] = useState<WorkforceMovement[]>([]);
   const [workforceMeta, setWorkforceMeta] = useState<workforceDb.WorkforceMeta | null>(null);
@@ -119,19 +168,16 @@ export function useBeTrackData(companyId?: string | null) {
 
     void (async () => {
       try {
-        // Le seed doit être terminé avant les subscriptions : lors d'un changement de schéma,
-        // cela évite d'afficher brièvement les anciennes données/sous-leviers.
-        await Promise.all([
-          leversDb.ensureLeversSeeded(lockedSeed(), companyId),
-          workforceDb.ensureWorkforceSeeded(workforceSeed(), companyId),
-          ensureAdminSeeded(),
-          alertsDb.ensureAlertsSeeded(),
-          programDb.ensureProgramSeeded(programSeed(), companyId),
-        ]);
+        // Plus aucun seed implicite de données démo ici (voir le commentaire sur l'état initial
+        // ci-dessus) — seule `ensureAdminSeeded` reste automatique : elle ne crée des entreprises
+        // de test que si la collection `companies` est ENTIÈREMENT vide (voir
+        // lib/firestore/admin.ts), ce qui ne peut arriver que sur un projet Firebase flambant
+        // neuf, jamais comme effet de bord sur une entreprise réelle déjà existante.
+        await ensureAdminSeeded();
         if (companyId) await leversDb.migrateCompanyIds(companyId);
       } catch (err) {
-        // Le fallback seedé plus haut reste actif. Les subscriptions sont tout de même tentées :
-        // si la lecture est autorisée mais pas le reseed, elles remplacent le fallback.
+        // Les subscriptions sont tout de même tentées : si la lecture est autorisée mais pas
+        // l'admin-seed, elles peuplent l'état dès que Firestore répond.
         console.warn(
           "[betrack] Firestore indisponible, utilisation du jeu de données local :",
           err
@@ -198,15 +244,12 @@ export function useBeTrackData(companyId?: string | null) {
         workstreams: programConfig.workstreams,
         levers: migratedLevers,
         // Reconstruit au format Workforce historique pour ne pas casser les consommateurs
-        // existants — mais la donnée vit désormais dans Firestore (temps réel partagé).
+        // existants — mais la donnée vit désormais dans Firestore (temps réel partagé). Tant que
+        // `workforceMeta` n'a pas encore été chargé (ou qu'aucun document workforce n'existe pour
+        // cette entreprise), on retombe sur un périmètre VIDE — jamais sur `mockData.workforce` :
+        // voir emptyWorkforceMeta() plus haut.
         workforce: {
-          totalFTE: workforceMeta?.totalFTE ?? mockData.workforce.totalFTE,
-          massSalary: workforceMeta?.massSalary ?? mockData.workforce.massSalary,
-          budgetSalary: workforceMeta?.budgetSalary ?? mockData.workforce.budgetSalary,
-          departments: workforceMeta?.departments ?? mockData.workforce.departments,
-          countryBaselines: workforceMeta?.countryBaselines ?? mockData.workforce.countryBaselines,
-          workstreamBaselines:
-            workforceMeta?.workstreamBaselines ?? mockData.workforce.workstreamBaselines,
+          ...(workforceMeta ?? emptyWorkforceMeta()),
           employees,
           movements,
         },
@@ -518,7 +561,7 @@ export function useBeTrackData(companyId?: string | null) {
 
   const updateDepartment = useCallback(
     (name: string, patch: Partial<Department>) => {
-      const currentMeta = workforceMetaRef.current ?? workforceSeed().meta;
+      const currentMeta = workforceMetaRef.current ?? emptyWorkforceMeta();
       const departments = currentMeta.departments.map((d) =>
         d.name === name ? { ...d, ...patch } : d
       );

@@ -49,6 +49,32 @@ export function isLeverVisibleForClearance(
   return clearance.includes(confidentialityLevel);
 }
 
+/**
+ * Un utilisateur est-il le propriétaire de ce levier ? Point d'entrée UNIQUE pour cette question,
+ * réutilisé par `canUserViewLever` ci-dessous, `lib/notifications.ts::canUserAccessLever` et le
+ * filtre "mes leviers" de `app/(app)/levers/LeversPagePerformance.tsx` — round "ownership réel" :
+ * avant ce round, ces trois call sites réimplémentaient chacun leur propre comparaison de chaînes
+ * (`===` strict à deux endroits, `.trim().toLowerCase()` au troisième), ce qui pouvait silencieusement
+ * masquer un levier à son propriétaire réel en cas de simple différence de casse/espace.
+ *
+ * Priorité au lien robuste : si `lever.ownerUsername` est défini (levier réconcilié, voir doc-comment
+ * `Lever.ownerUsername` dans `types/index.ts`), comparaison EXACTE avec `user.username` — deux
+ * identifiants système, pas du texte libre, donc pas de normalisation nécessaire. Sinon (levier
+ * legacy jamais réconcilié), repli sur l'ancienne comparaison fragile `lever.owner === user.name`
+ * (comportement historique inchangé, pour ne pas casser la visibilité des leviers existants).
+ */
+function normalizeOwnerName(value: string | undefined | null): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+export function isLeverOwnedBy(
+  lever: Pick<Lever, "owner" | "ownerUsername">,
+  user: Pick<AuthUser, "name" | "username">
+): boolean {
+  if (lever.ownerUsername) return lever.ownerUsername === user.username;
+  return normalizeOwnerName(lever.owner) === normalizeOwnerName(user.name);
+}
+
 export function canUserViewLever(
   user:
     | Pick<
@@ -57,19 +83,20 @@ export function canUserViewLever(
         | "isGlobalAdmin"
         | "isCompanyAdmin"
         | "name"
+        | "username"
         | "companyId"
         | "confidentialityClearance"
       >
     | null
     | undefined,
-  lever: Pick<Lever, "owner" | "companyId" | "confidentialityLevel">,
+  lever: Pick<Lever, "owner" | "ownerUsername" | "companyId" | "confidentialityLevel">,
   roleClearance: Partial<Record<Role, string[]>> | undefined
 ): boolean {
   if (!user) return false;
   if (user.isGlobalAdmin) return true;
   if (lever.companyId != null && user.companyId !== lever.companyId) return false;
   if (user.isCompanyAdmin) return true;
-  if (hasRole(user, "lever") && lever.owner !== user.name) return false;
+  if (hasRole(user, "lever") && !isLeverOwnedBy(lever, user)) return false;
   return isLeverVisibleForClearance(
     lever.confidentialityLevel,
     resolveConfidentialityClearance(user, roleClearance)

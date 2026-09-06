@@ -1,6 +1,26 @@
 import { describe, it, expect } from "vitest";
 import { generateAlerts } from "@/lib/alertEngine";
-import type { BeTrackData, Lever, LeverStatus } from "@/types";
+import type { BeTrackData, Lever, LeverAction, LeverStatus } from "@/types";
+
+/** Action en retard : statut non-"done" avec une date de fin passée (voir engine.isActionLate) —
+ *  seul mécanisme de retard action → levier depuis le passage au retard piloté par les actions. */
+const lateAction = (id = "a1"): LeverAction => ({
+  id,
+  name: `Action ${id}`,
+  start: "2026-01-01",
+  end: "2026-01-15", // largement passé par rapport à "aujourd'hui" en test
+  cost: 0,
+  status: "todo",
+});
+
+const onTimeAction = (id = "a1"): LeverAction => ({
+  id,
+  name: `Action ${id}`,
+  start: "2026-01-01",
+  end: "2099-01-01", // très loin dans le futur, jamais en retard
+  cost: 0,
+  status: "todo",
+});
 
 const baseLever: Lever = {
   id: "L001",
@@ -85,10 +105,11 @@ describe("alertEngine — generateAlerts", () => {
     expect(generateAlerts(makeData())).toHaveLength(0);
   });
 
-  it("generates delay alert when lever has any schedule gap > 0", () => {
-    // Lever started Jan 1, ends Dec 31 — mid-year expected ~50%, set progress to 20%
+  it("generates delay alert when a lever has at least one late action", () => {
+    // Le retard du levier est désormais UNIQUEMENT dérivé du retard de ses actions
+    // (voir engine.underperformers / engine.isActionLate) — plus aucun lien avec `progress`.
     const data = makeData({
-      levers: [{ ...baseLever, progress: 20 }],
+      levers: [{ ...baseLever, actions: [lateAction(), onTimeAction("a2")] }],
     });
     const alerts = generateAlerts(data);
     const delayAlerts = alerts.filter((a) => a.id.startsWith("AUTO-DELAY-"));
@@ -100,15 +121,45 @@ describe("alertEngine — generateAlerts", () => {
     expect(delayAlerts[0].impactEur!).toBeLessThan(0); // negative = loss
   });
 
-  it("generates red alert for large delay (gap > 20), amber for smaller", () => {
-    // Very behind lever: progress 5% when ~50% expected → gap ~45 → red
+  it("does NOT generate a delay alert when a lever has zero late actions", () => {
     const data = makeData({
-      levers: [{ ...baseLever, progress: 5 }],
+      levers: [{ ...baseLever, actions: [onTimeAction("a1"), onTimeAction("a2")] }],
     });
-    const redAlerts = generateAlerts(data).filter(
+    const delayAlerts = generateAlerts(data).filter((a) => a.id.startsWith("AUTO-DELAY-"));
+    expect(delayAlerts).toHaveLength(0);
+  });
+
+  it("does NOT generate a delay alert when a lever has zero actions declared", () => {
+    const data = makeData({
+      levers: [{ ...baseLever, actions: [] }],
+    });
+    const delayAlerts = generateAlerts(data).filter((a) => a.id.startsWith("AUTO-DELAY-"));
+    expect(delayAlerts).toHaveLength(0);
+  });
+
+  it("generates red alert when more than half of actions are late, amber otherwise", () => {
+    // 2 actions sur 2 en retard → ratio 1 → red
+    const dataAllLate = makeData({
+      levers: [{ ...baseLever, actions: [lateAction("a1"), lateAction("a2")] }],
+    });
+    const redAlerts = generateAlerts(dataAllLate).filter(
       (a) => a.id.startsWith("AUTO-DELAY-") && a.type === "red"
     );
     expect(redAlerts.length).toBe(1);
+
+    // 1 action sur 4 en retard → ratio 0.25 → amber
+    const dataMostlyOnTime = makeData({
+      levers: [
+        {
+          ...baseLever,
+          actions: [lateAction("a1"), onTimeAction("a2"), onTimeAction("a3"), onTimeAction("a4")],
+        },
+      ],
+    });
+    const amberAlerts = generateAlerts(dataMostlyOnTime).filter(
+      (a) => a.id.startsWith("AUTO-DELAY-") && a.type === "amber"
+    );
+    expect(amberAlerts.length).toBe(1);
   });
 
   it("generates cost overrun alert when reforecast costs exceed plan (any amount)", () => {
@@ -182,7 +233,7 @@ describe("alertEngine — generateAlerts", () => {
 
   it("keeps auto alerts by default when a manual alert uses the same scope", () => {
     const data = makeData({
-      levers: [{ ...baseLever, progress: 10 }], // will generate AUTO-DELAY-L001
+      levers: [{ ...baseLever, actions: [lateAction()] }], // will generate AUTO-DELAY-L001
       alerts: [
         {
           id: "MANUAL-1",
@@ -203,7 +254,7 @@ describe("alertEngine — generateAlerts", () => {
 
   it("suppresses auto alerts only when the manual alert explicitly requests it", () => {
     const data = makeData({
-      levers: [{ ...baseLever, progress: 10 }],
+      levers: [{ ...baseLever, actions: [lateAction()] }],
       alerts: [
         {
           id: "MANUAL-1",
@@ -224,7 +275,7 @@ describe("alertEngine — generateAlerts", () => {
 
   it("does not suppress an automatic alert belonging to another company", () => {
     const data = makeData({
-      levers: [{ ...baseLever, progress: 10, companyId: "c2" }],
+      levers: [{ ...baseLever, actions: [lateAction()], companyId: "c2" }],
       alerts: [
         {
           id: "MANUAL-1",
@@ -244,7 +295,7 @@ describe("alertEngine — generateAlerts", () => {
 
   it("applies persisted resolved state to automatic alerts", () => {
     const data = makeData({
-      levers: [{ ...baseLever, progress: 10 }],
+      levers: [{ ...baseLever, actions: [lateAction()] }],
       alertStates: {
         "global__AUTO-DELAY-L001": {
           alertId: "AUTO-DELAY-L001",

@@ -52,12 +52,12 @@ function slugifyWorkstreamName(name: string): string {
  *    déjà en base mais absente du fichier importé : voir note sur le remplacement des actions
  *    ci-dessous).
  *
- * Remplacement des actions d'un levier mis à jour : si le fichier contient au moins une ligne
- * Action pour un `Code Levier` donné, ces actions REMPLACENT intégralement le plan d'action
- * existant de ce levier (les impacts also inclus) — cohérent avec un import qui redéclare l'état
- * complet souhaité. Si le fichier ne contient AUCUNE ligne Action pour ce levier, son plan
- * d'action existant est conservé tel quel (l'import ne touche alors que les champs "en-tête" du
- * levier). Un levier nouvellement créé sans ligne Action associée démarre avec un plan vide.
+ * Remplacement des actions d'un levier mis à jour : le fichier fait TOUJOURS foi sur le plan
+ * d'action d'un levier mis à jour — ses lignes Action pour un `Code Levier` donné (impacts inclus)
+ * REMPLACENT intégralement le plan d'action existant de ce levier. Si le fichier ne contient AUCUNE
+ * ligne Action pour ce levier, son plan d'action existant est VIDÉ (pas conservé) : il ne doit pas
+ * subsister d'anciennes actions absentes du fichier importé. Un levier nouvellement créé sans ligne
+ * Action associée démarre avec un plan vide.
  *
  * Validation toujours faite sur les 3 feuilles ENSEMBLE avant la moindre écriture (voir
  * `validateLeverImportRows`, sur le modèle de `validateHierarchyImportRows`) : l'aperçu retourné
@@ -767,7 +767,7 @@ export function validateLeverImportRows(
     const lowerCode = p.code.toLowerCase();
     const declaredActions = (actionsByLeverCode.get(lowerCode) ?? []).map((a) => a.action);
     const existing = existingByCode.get(lowerCode);
-    const actions = declaredActions.length > 0 ? declaredActions : (existing?.actions ?? []);
+    const actions = declaredActions; // toujours ce que le fichier déclare, y compris vide — l'import Excel fait foi
     toUpsert.push({ ...p.values, risk: existing?.risk ?? "low", actions });
     if (existing) updateCount++;
     else createCount++;

@@ -761,6 +761,8 @@ const es: Record<string, string> = {
 
   // ─── shared (Kanban, EditableTable, HrOwnerActionTable) ────────────────────
   "shared.actionKanban.noItems": "Sin acciones",
+  "shared.actionKanban.blockingDependency": "Dependencia bloqueante en esta palanca",
+  "shared.actionKanban.overdue": "Fecha de fin superada",
   "shared.kanban.noItems": "Ninguno",
   "shared.hrOwnerActionTable.dueSoon": "Próximos < 90 días",
   "shared.hrOwnerActionTable.later": "Próximos > 90 días",
@@ -884,6 +886,7 @@ const es: Record<string, string> = {
   "shared.actionGantt.legendCapex": "Hito CAPEX",
   "shared.actionGantt.legendGainOneShot": "Ganancia cobrada (puntual)",
   "shared.actionGantt.legendGainSmoothed": "Ganancia distribuida",
+  "shared.actionGantt.today": "Hoy",
   "shared.forcedDepartureStatusChart.noData": "No hay salidas forzadas que mostrar.",
   "shared.forcedDepartureStatusChart.movementsTooltip": "{n} movimiento(s)",
   "shared.forcedDepartureStatusChart.schemeTooltipLabel": "Dispositivo: {scheme}",
@@ -1174,6 +1177,7 @@ const es: Record<string, string> = {
   "strategicAxes.ganttScaleQuarter": "Trimestre",
   "strategicAxes.ganttScaleSemester": "Semestre",
   "strategicAxes.progress": "Avance",
+  "strategicAxes.ganttToday": "Hoy",
   "strategicAxes.actionsCompleted": "acciones finalizadas",
   "strategicAxes.moreActionsSuffix": "más",
   "strategicAxes.cardNoActions": "Sin acciones",

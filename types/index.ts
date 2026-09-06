@@ -169,8 +169,28 @@ export type Lever = {
   type: string; // catégorie du levier (ex: Sourcing, Digitalisation, Réorganisation...)
   name: string;
   ws: string; // Workstream id
+  /** Libellé d'affichage du propriétaire (nom complet). Round "ownership réel" : pour un levier
+   *  RÉCONCILIÉ (voir `ownerUsername` ci-dessous et `lib/leverOwnerReconciliation.ts`), ce champ est
+   *  un CACHE dénormalisé — recopié depuis `AuthUser.name` une seule fois au moment de la
+   *  réconciliation (via `LeverOwnerReconciliationDialog`/`LeverForm`), jamais recalculé en direct à
+   *  chaque rendu. Si la réconciliation aboutit à "aucun compte" (rejet explicite ou aucun candidat
+   *  choisi), ce champ est vidé ("") plutôt que de conserver le texte libre d'origine — voir
+   *  `ownerUsername`. Pour un levier LEGACY jamais passé par la réconciliation, ce champ reste le
+   *  texte libre historique tel quel (compat ascendante, voir doc de `ownerUsername`). */
   owner: string;
   ownerInit: string;
+  /** Lien AUTHORITATIF vers un compte `AuthUser` réel (valeur = `AuthUser.username`), établi via la
+   *  réconciliation propriétaire (`lib/leverOwnerReconciliation.ts::matchLeverOwner`, déclenchée
+   *  après import Excel ou depuis `LeverForm` en création/édition manuelle). Un levier est toujours
+   *  scopé à une seule `companyId` : `username` seul suffit à désigner le compte sans ambiguïté (pas
+   *  besoin du `accountSlug` complet). Absent/`undefined` = levier LEGACY jamais réconcilié (créé
+   *  avant ce round, ou réconciliation explicitement résolue à "aucun compte") — dans ce cas, `owner`
+   *  reste (ou redevient) du texte libre, et les contrôles d'accès par propriétaire retombent sur la
+   *  comparaison de noms fragile historique (voir `lib/leversLogic.ts::isLeverOwnedBy`). Quand ce
+   *  champ EST défini, c'est lui qui fait foi pour l'accès (comparaison stricte de deux identifiants
+   *  système, `ownerUsername === user.username`, sans normalisation nécessaire) — `owner` n'est plus
+   *  alors qu'un libellé d'affichage synchronisé une fois pour toutes à la réconciliation. */
+  ownerUsername?: string;
   sponsor: string;
   sponsorInit: string;
   geography: string;

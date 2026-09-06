@@ -213,6 +213,8 @@ const en: Record<string, string> = {
   "dashboard.widgets.actualProgress": "Actual",
   "dashboard.widgets.gapPts": "pts behind",
   "dashboard.widgets.atRiskAmount": "at risk",
+  "dashboard.widgets.lateActions": "late action(s)",
+  "dashboard.widgets.ofTotalActions": "of",
   "dashboard.widgets.initiativeHealth": "Initiative health",
   "dashboard.widgets.initiativeHealthEmpty": "No initiative to display",
   "dashboard.widgets.healthOnTrack": "On track",
@@ -775,6 +777,8 @@ const en: Record<string, string> = {
 
   // ─── shared (Kanban, EditableTable, HrOwnerActionTable) ────────────────────
   "shared.actionKanban.noItems": "No actions",
+  "shared.actionKanban.blockingDependency": "Blocking dependency on this lever",
+  "shared.actionKanban.overdue": "End date has passed",
   "shared.kanban.noItems": "None",
   "shared.hrOwnerActionTable.dueSoon": "Upcoming < 90 days",
   "shared.hrOwnerActionTable.later": "Upcoming > 90 days",
@@ -987,6 +991,7 @@ const en: Record<string, string> = {
   "shared.actionGantt.legendCapex": "CAPEX milestone",
   "shared.actionGantt.legendGainOneShot": "Gain collected (one-shot)",
   "shared.actionGantt.legendGainSmoothed": "Smoothed gain",
+  "shared.actionGantt.today": "Today",
   "shared.forcedDepartureStatusChart.noData": "No forced departures to display.",
   "shared.forcedDepartureStatusChart.movementsTooltip": "{n} movement(s)",
   "shared.forcedDepartureStatusChart.schemeTooltipLabel": "Scheme: {scheme}",
@@ -1185,6 +1190,7 @@ const en: Record<string, string> = {
   "strategicAxes.ganttScaleQuarter": "Quarter",
   "strategicAxes.ganttScaleSemester": "Half-year",
   "strategicAxes.progress": "Progress",
+  "strategicAxes.ganttToday": "Today",
   "strategicAxes.actionsCompleted": "actions completed",
   "strategicAxes.moreActionsSuffix": "more",
   "strategicAxes.cardNoActions": "No action",

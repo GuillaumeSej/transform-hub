@@ -1,22 +1,18 @@
 import {
   collection,
   doc,
-  getDocs,
   onSnapshot,
   query,
   setDoc,
   where,
-  writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { onListenerError } from "@/lib/firestore/listenerError";
-import { mockData } from "@/data/mockData";
 import type { Alert, AlertState } from "@/types";
 
 const alertsCol = () => collection(db, "alerts");
 const alertStatesCol = () => collection(db, "alertStates");
-const metaDoc = () => doc(db, "meta", "alertsSeed");
 
 function belongsToCompany(value: { companyId?: string | null }, companyId?: string | null) {
   return companyId == null || value.companyId === companyId;
@@ -63,25 +59,6 @@ export function subscribeAlertStates(
     },
     onListenerError("alertStates")
   );
-}
-
-export async function ensureAlertsSeeded(): Promise<void> {
-  const existing = await getDocs(alertsCol());
-  if (!existing.empty) return;
-
-  const batch = writeBatch(db);
-  const createdAt = new Date().toISOString();
-  for (const alert of mockData.alerts) {
-    const seeded: Alert = {
-      ...alert,
-      companyId: alert.companyId ?? "c1",
-      createdAt: alert.createdAt ?? createdAt,
-      suppressAutomaticAlerts: alert.suppressAutomaticAlerts ?? false,
-    };
-    batch.set(doc(alertsCol(), seeded.id), seeded);
-  }
-  batch.set(metaDoc(), { seededAt: createdAt, version: 1 });
-  await batch.commit();
 }
 
 export async function saveManualAlert(alert: Alert): Promise<void> {

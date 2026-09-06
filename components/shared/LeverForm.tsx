@@ -20,6 +20,21 @@ import type {
 } from "@/types";
 import { hierarchyPathValue, resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { resolveProgramType } from "@/lib/axisLogic";
+import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
+import { matchLeverOwner } from "@/lib/leverOwnerReconciliation";
+
+/** Mêmes règles que `components/shared/Topbar.tsx`/`components/strategic/RaciChips.tsx` (2
+ *  initiales max, majuscules) — pas de helper partagé exporté par ces composants d'affichage, on
+ *  réplique ici pour dériver `ownerInit` depuis le nom du compte sélectionné. */
+function initialsFromName(name: string): string {
+  return name
+    .split(" ")
+    .map((x) => x[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
 
 export type LeverFormValues = Omit<Lever, "id" | "createdAt" | "lastUpdate" | "dependencies">;
 
@@ -112,6 +127,37 @@ export function LeverForm({
     ...emptyValues(data),
     ...initialValues,
   });
+
+  // Comptes réels de l'entreprise, pour le sélecteur "Propriétaire" ci-dessous (round "ownership
+  // réel" — voir doc-comment `Lever.ownerUsername`, types/index.ts). Un levier ne peut plus être
+  // rattaché à du texte libre depuis ce formulaire, seulement à un compte de cette liste (ou
+  // "Aucun").
+  const companyUsers = useCompanyUsers(companyId);
+
+  // Édition d'un levier LEGACY (jamais réconcilié, `ownerUsername` absent) dont l'`owner` texte
+  // libre correspond à EXACTEMENT un compte réel : pré-sélectionne ce compte plutôt que "Aucun" —
+  // simple confort UX (voir doc-comment "point 6" de `Lever.ownerUsername`), jamais imposé
+  // silencieusement (l'utilisateur peut toujours changer/désélectionner avant d'enregistrer).
+  useEffect(() => {
+    if (values.ownerUsername || !values.owner || companyUsers.length === 0) return;
+    const match = matchLeverOwner(
+      values.owner,
+      companyUsers.map((u) => ({ username: u.username, name: u.name }))
+    );
+    if (match.kind === "unique") {
+      setValues((current) =>
+        current.ownerUsername
+          ? current
+          : {
+              ...current,
+              ownerUsername: match.candidate.username,
+              owner: match.candidate.name,
+              ownerInit: initialsFromName(match.candidate.name),
+            }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyUsers]);
 
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
   const [leafNodes, setLeafNodes] = useState<HierarchyNode[]>([]);
@@ -350,20 +396,51 @@ export function LeverForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <div className="col-span-1 sm:col-span-2">
           <Field label={t("leverForm.owner")}>
-            <input
+            {/* Round "ownership réel" (voir doc-comment `Lever.ownerUsername`, types/index.ts) :
+             *  plus de texte libre — un levier ne peut être rattaché qu'à un compte réel de
+             *  l'entreprise (ou explicitement à "Aucun"). Sélectionner un compte renseigne
+             *  d'un coup `ownerUsername` (lien fiable) et `owner`/`ownerInit` (libellé d'affichage
+             *  dénormalisé, voir `initialsFromName`). */}
+            <select
               className={inputClass}
-              value={values.owner}
-              onChange={(e) => set("owner", e.target.value)}
-            />
+              value={values.ownerUsername ?? ""}
+              onChange={(e) => {
+                const username = e.target.value;
+                if (!username) {
+                  setValues((current) => ({
+                    ...current,
+                    ownerUsername: undefined,
+                    owner: "",
+                    ownerInit: "",
+                  }));
+                  return;
+                }
+                const selected = companyUsers.find((u) => u.username === username);
+                if (!selected) return;
+                setValues((current) => ({
+                  ...current,
+                  ownerUsername: selected.username,
+                  owner: selected.name,
+                  ownerInit: initialsFromName(selected.name),
+                }));
+              }}
+            >
+              <option value="">{t("leverForm.ownerNone", "Aucun")}</option>
+              {companyUsers
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((u) => (
+                  <option key={u.username} value={u.username}>
+                    {u.name}
+                  </option>
+                ))}
+            </select>
           </Field>
         </div>
         <Field label={t("leverForm.initials")}>
-          <input
-            className={inputClass}
-            maxLength={3}
-            value={values.ownerInit}
-            onChange={(e) => set("ownerInit", e.target.value.toUpperCase())}
-          />
+          <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+            {values.ownerInit || "—"}
+          </div>
         </Field>
         <div />
         <div className="col-span-1 sm:col-span-2">

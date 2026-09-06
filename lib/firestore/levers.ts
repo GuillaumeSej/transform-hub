@@ -1,7 +1,6 @@
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -25,21 +24,10 @@ import type { AuditEntry, Comment, Lever, LeverDependency } from "@/types";
  * voit tout.
  */
 
-// Incrémenter force un reseed complet de la BDD (schéma de données modifié).
-// v7 : suppression du modèle sous-levier (fusionné dans Lever.actions via
-// lib/mockActionMigration.ts) — changement de forme assumé consciemment, reseed complet.
-// v8 : enrichissement des impacts migrés (capexDeploymentDate, gainDate, savingType,
-// recognition — voir lib/mockActionMigration.ts) — le seed existant ne les porte pas, reseed complet.
-// v9 : ajout de Lever.hierarchyLeafId (rattachement des 18 leviers de démo à l'arborescence
-// financière DEMO_HIERARCHY_NODES — voir data/mockData.ts) — le seed existant ne le porte pas,
-// reseed complet.
-const SCHEMA_VERSION = "9";
-
 const leversCol = () => collection(db, "levers");
 /** Ancienne collection sous-leviers, plus alimentée — supprimée à chaque reseed pour ne laisser
  * traîner aucune donnée orpheline d'un ancien schéma. */
 const subLeversCol = () => collection(db, "subLevers");
-const metaDoc = () => doc(db, "meta", "levers");
 
 /** Documents `leverMeta/{companyId}__{comments|auditLog}` — partitionnés par entreprise (voir
  * firestore.rules, section `match /leverMeta/{docId}`, et scripts/migrate-lever-meta-tenant-split.js
@@ -223,13 +211,18 @@ type LeversSeed = {
   audit: AuditEntry[];
 };
 
-/** Purge les leviers (et les sous-leviers résiduels d'un ancien schéma) existants et réécrit le
- * seed fourni — utilisé au premier démarrage (schéma jamais initialisé) et par le bouton
- * "réinitialiser la démo". `companyId` détermine sous quel document partitionné
- * (`leverMeta/{companyId}__comments`/`__auditLog`) le seed de commentaires/audit est écrit — sans
- * companyId (admin global), ces deux documents ne sont pas écrits (pas de partition valide), seuls
- * les leviers et le marqueur de schéma le sont, comme c'était déjà globalement le cas avant cette
- * migration pour la collection `levers` (non concernée par le cloisonnement `leverMeta`). */
+/** Purge TOUS les leviers (et sous-leviers résiduels d'un ancien schéma) de TOUTES les
+ * entreprises et réécrit le seed fourni. Utilitaire explicite (dev/ops — reset complet d'un
+ * environnement, jamais un reset "démo" ciblé : voir `lib/companyResetLogic.ts` +
+ * `lib/firestore/companyReset.ts` pour le reset scopé à UNE entreprise) — plus AUCUN call site
+ * automatique ne doit l'invoquer (voir lib/hooks/useStorage.ts : l'ancien
+ * `ensureLeversSeeded`, qui déclenchait cette purge globale comme simple effet de bord d'un
+ * chargement de page dès que `SCHEMA_VERSION` changeait, a été supprimé — c'était le bug le
+ * plus sévère de cette famille : n'importe quelle entreprise chargeant une page la première
+ * après un bump de schéma faisait effacer les leviers de TOUTES les entreprises). `companyId`
+ * détermine sous quel document partitionné (`leverMeta/{companyId}__comments`/`__auditLog`) le
+ * seed de commentaires/audit est écrit — sans companyId (admin global), ces deux documents ne
+ * sont pas écrits (pas de partition valide), seuls les leviers le sont. */
 export async function forceReseedLevers(
   seed: LeversSeed,
   companyId?: string | null
@@ -255,19 +248,7 @@ export async function forceReseedLevers(
       "[betrack] forceReseedLevers : comments/auditLog non réécrits (pas de companyId)."
     );
   }
-  batch.set(metaDoc(), { schemaVersion: SCHEMA_VERSION });
   await batch.commit();
-}
-
-/** Amorce Firestore avec le seed mockData si la BDD n'a jamais été initialisée pour ce schéma
- * (démarrage à vide ou schéma changé) — idempotent, ne touche à rien si déjà initialisé. */
-export async function ensureLeversSeeded(
-  seed: LeversSeed,
-  companyId?: string | null
-): Promise<void> {
-  const meta = await getDoc(metaDoc());
-  if (meta.exists() && meta.data().schemaVersion === SCHEMA_VERSION) return;
-  await forceReseedLevers(seed, companyId);
 }
 
 const MIGRATION_COMPANY_ID_KEY = "betrack_company_migration_v1";

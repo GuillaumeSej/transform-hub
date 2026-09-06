@@ -1,4 +1,8 @@
-import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
+import {
+  isLeverOwnedBy,
+  isLeverVisibleForClearance,
+  resolveConfidentialityClearance,
+} from "@/lib/leversLogic";
 import { hasRole } from "@/lib/roleProfiles";
 import type { Alert, AuthUser, BeTrackData, Company, Lever } from "@/types";
 
@@ -23,7 +27,10 @@ export function canUserAccessLever(user: AuthUser, lever: Lever, company?: Compa
 
   const clearance = resolveConfidentialityClearance(user, company?.roleClearance);
   if (!isLeverVisibleForClearance(lever.confidentialityLevel, clearance)) return false;
-  if (hasRole(user, "lever")) return normalize(lever.owner) === normalize(user.name);
+  // Comparaison via `isLeverOwnedBy` (voir lib/leversLogic.ts, seule implémentation partagée par
+  // les 3 call sites de cette question) : lien id-based `ownerUsername` en priorité si le levier a
+  // été réconcilié, repli sur la comparaison de noms normalisée sinon.
+  if (hasRole(user, "lever")) return isLeverOwnedBy(lever, user);
   return true;
 }
 
