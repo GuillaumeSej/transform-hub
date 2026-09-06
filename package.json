@@ -15,7 +15,8 @@
     "test:e2e:headed": "playwright test --headed",
     "format": "prettier --write .",
     "prepare": "husky",
-    "create-admin": "node scripts/create-admin.js"
+    "create-admin": "node scripts/create-admin.js",
+    "migrate-lever-meta-tenant-split": "node scripts/migrate-lever-meta-tenant-split.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.18",

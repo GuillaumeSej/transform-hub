@@ -10,14 +10,15 @@ import type { AuditEntry, Comment, Lever } from "@/types";
  * - levers : ceux dont `companyId === companyId` (les leviers sans companyId sont des données
  *   historiques/partagées, volontairement épargnés — un reset scopé ne doit jamais purger des
  *   données qui pourraient appartenir à une autre entreprise ou n'être taguées à personne).
- * - comments / audit : stockés dans DEUX documents globaux uniques (pas de collection par
- *   entreprise, voir lib/firestore/levers.ts). On ne peut les scoper qu'via les ids de lever qu'on
- *   vient de déterminer comme appartenant à l'entreprise (même technique que
- *   `filterAuditByCompany`) : on retire les entrées de commentaires dont la clé est un de ces ids,
- *   et les entrées d'audit dont l'entité matche un id de lever de l'entreprise. Les entrées non
- *   liées à un lever connu (mouvements RH, employés — pas encore multi-tenant) sont TOUJOURS
- *   conservées : elles ne peuvent pas être attribuées de façon fiable à une entreprise, donc les
- *   supprimer risquerait de perdre des données d'une autre entreprise.
+ * - comments / audit : depuis la migration `leverMeta/{companyId}__{comments|auditLog}` (voir
+ *   lib/firestore/levers.ts, lib/firestore/companyReset.ts, scripts/migrate-lever-meta-tenant-
+ *   split.js), le document lu/écrit ici est DÉJÀ celui de l'entreprise ciblée — plus de risque
+ *   structurel de toucher une autre entreprise. Cette fonction continue néanmoins de filtrer par
+ *   id de lever (même technique qu'avant, et que `filterAuditByCompany`) en défense en
+ *   profondeur : on ne retire que les entrées dont la clé/l'entité correspond à un id de lever de
+ *   l'entreprise ciblée. Les entrées non liées à un lever connu (mouvements RH, employés — pas
+ *   encore rattachés à un id de lever) sont TOUJOURS conservées : on ne les supprime jamais sur la
+ *   seule foi d'un id inconnu.
  */
 export type CompanyResetPlan = {
   leverIds: string[];

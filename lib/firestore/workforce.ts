@@ -32,9 +32,15 @@ import type { Department, Employee, WorkforceDimensionBaseline, WorkforceMovemen
 // "En cours" sont reseedés en "À faire" et quelques abandons sont conservés hors prévisions.
 const SCHEMA_VERSION = "6";
 
-const employeesDoc = () => doc(db, "leverMeta", "workforceEmployees");
-const movementsDoc = () => doc(db, "leverMeta", "workforceMovements");
-const summaryDoc = () => doc(db, "leverMeta", "workforceSummary");
+/** Documents `leverMeta/{companyId}__{workforceEmployees|workforceMovements|workforceSummary}` —
+ * partitionnés par entreprise (voir firestore.rules, section `match /leverMeta/{docId}`, et
+ * scripts/migrate-lever-meta-tenant-split.js pour la migration depuis les anciens documents
+ * mutualisés qui mélangeaient les effectifs/mouvements de TOUTES les entreprises). */
+const employeesDoc = (companyId: string) =>
+  doc(db, "leverMeta", `${companyId}__workforceEmployees`);
+const movementsDoc = (companyId: string) =>
+  doc(db, "leverMeta", `${companyId}__workforceMovements`);
+const summaryDoc = (companyId: string) => doc(db, "leverMeta", `${companyId}__workforceSummary`);
 const metaDoc = () => doc(db, "meta", "workforce");
 
 export type WorkforceMeta = {
@@ -52,9 +58,21 @@ function stripUndefined<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-export function subscribeEmployees(cb: (employees: Employee[]) => void): Unsubscribe {
+/** `companyId` null/undefined = admin global : plus d'équivalent "toutes entreprises confondues"
+ *  pour un document désormais partitionné par entreprise (voir firestore.rules) — l'appelant
+ *  reçoit une liste vide plutôt qu'une erreur ou une fuite de données entre entreprises. Un admin
+ *  global qui veut un total multi-entreprises doit itérer sur la liste des entreprises et agréger
+ *  côté client (voir app/(app)/admin/data/page.tsx). */
+export function subscribeEmployees(
+  cb: (employees: Employee[]) => void,
+  companyId?: string | null
+): Unsubscribe {
+  if (!companyId) {
+    cb([]);
+    return () => {};
+  }
   return onSnapshot(
-    employeesDoc(),
+    employeesDoc(companyId),
     (snap) => {
       cb((snap.data()?.list as Employee[]) ?? []);
     },
@@ -62,9 +80,16 @@ export function subscribeEmployees(cb: (employees: Employee[]) => void): Unsubsc
   );
 }
 
-export function subscribeMovements(cb: (movements: WorkforceMovement[]) => void): Unsubscribe {
+export function subscribeMovements(
+  cb: (movements: WorkforceMovement[]) => void,
+  companyId?: string | null
+): Unsubscribe {
+  if (!companyId) {
+    cb([]);
+    return () => {};
+  }
   return onSnapshot(
-    movementsDoc(),
+    movementsDoc(companyId),
     (snap) => {
       cb((snap.data()?.list as WorkforceMovement[]) ?? []);
     },
@@ -72,9 +97,16 @@ export function subscribeMovements(cb: (movements: WorkforceMovement[]) => void)
   );
 }
 
-export function subscribeWorkforceMeta(cb: (meta: WorkforceMeta | null) => void): Unsubscribe {
+export function subscribeWorkforceMeta(
+  cb: (meta: WorkforceMeta | null) => void,
+  companyId?: string | null
+): Unsubscribe {
+  if (!companyId) {
+    cb(null);
+    return () => {};
+  }
   return onSnapshot(
-    summaryDoc(),
+    summaryDoc(companyId),
     (snap) => {
       cb(snap.exists() ? (snap.data() as WorkforceMeta) : null);
     },
@@ -84,16 +116,37 @@ export function subscribeWorkforceMeta(cb: (meta: WorkforceMeta | null) => void)
 
 /** Persiste la liste complète des employés (mise à jour optimiste côté hook : la liste à jour
  * est déjà en mémoire, l'écriture du doc entier est la plus simple et la plus sûre ici). */
-export async function saveEmployees(employees: Employee[]): Promise<void> {
-  await setDoc(employeesDoc(), { list: stripUndefined(employees) });
+export async function saveEmployees(
+  companyId: string | null | undefined,
+  employees: Employee[]
+): Promise<void> {
+  if (!companyId) {
+    console.warn("[betrack] saveEmployees ignoré : pas de companyId (admin global).");
+    return;
+  }
+  await setDoc(employeesDoc(companyId), { list: stripUndefined(employees) });
 }
 
-export async function saveMovements(movements: WorkforceMovement[]): Promise<void> {
-  await setDoc(movementsDoc(), { list: stripUndefined(movements) });
+export async function saveMovements(
+  companyId: string | null | undefined,
+  movements: WorkforceMovement[]
+): Promise<void> {
+  if (!companyId) {
+    console.warn("[betrack] saveMovements ignoré : pas de companyId (admin global).");
+    return;
+  }
+  await setDoc(movementsDoc(companyId), { list: stripUndefined(movements) });
 }
 
-export async function saveWorkforceMeta(meta: WorkforceMeta): Promise<void> {
-  await setDoc(summaryDoc(), stripUndefined(meta));
+export async function saveWorkforceMeta(
+  companyId: string | null | undefined,
+  meta: WorkforceMeta
+): Promise<void> {
+  if (!companyId) {
+    console.warn("[betrack] saveWorkforceMeta ignoré : pas de companyId (admin global).");
+    return;
+  }
+  await setDoc(summaryDoc(companyId), stripUndefined(meta));
 }
 
 export type WorkforceSeed = {
@@ -102,19 +155,31 @@ export type WorkforceSeed = {
   meta: WorkforceMeta;
 };
 
-/** Réécrit tout le périmètre workforce — premier démarrage ou "réinitialiser la démo". */
-export async function forceReseedWorkforce(seed: WorkforceSeed): Promise<void> {
+/** Réécrit tout le périmètre workforce — premier démarrage ou "réinitialiser la démo". Sans
+ *  `companyId` (admin global), aucun document partitionné valide n'existe : le reseed est ignoré
+ *  (rien n'est écrit) plutôt que d'écrire sous un id de document invalide. */
+export async function forceReseedWorkforce(
+  seed: WorkforceSeed,
+  companyId?: string | null
+): Promise<void> {
+  if (!companyId) {
+    console.warn("[betrack] forceReseedWorkforce ignoré : pas de companyId (admin global).");
+    return;
+  }
   const batch = writeBatch(db);
-  batch.set(employeesDoc(), { list: stripUndefined(seed.employees) });
-  batch.set(movementsDoc(), { list: stripUndefined(seed.movements) });
-  batch.set(summaryDoc(), stripUndefined(seed.meta));
+  batch.set(employeesDoc(companyId), { list: stripUndefined(seed.employees) });
+  batch.set(movementsDoc(companyId), { list: stripUndefined(seed.movements) });
+  batch.set(summaryDoc(companyId), stripUndefined(seed.meta));
   batch.set(metaDoc(), { schemaVersion: SCHEMA_VERSION });
   await batch.commit();
 }
 
 /** Amorce Firestore avec le seed mockData si jamais initialisé pour ce schéma — idempotent. */
-export async function ensureWorkforceSeeded(seed: WorkforceSeed): Promise<void> {
+export async function ensureWorkforceSeeded(
+  seed: WorkforceSeed,
+  companyId?: string | null
+): Promise<void> {
   const meta = await getDoc(metaDoc());
   if (meta.exists() && meta.data().schemaVersion === SCHEMA_VERSION) return;
-  await forceReseedWorkforce(seed);
+  await forceReseedWorkforce(seed, companyId);
 }

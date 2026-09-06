@@ -77,7 +77,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
 
   useEffect(() => {
     const unsub1 = subscribeLevers(setLevers, companyId);
-    const unsub2 = subscribeAuditLog(setAudit);
+    const unsub2 = subscribeAuditLog(setAudit, companyId);
     return () => {
       unsub1();
       unsub2();
@@ -85,15 +85,17 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
   }, [companyId]);
 
   useEffect(() => {
-    // L'effectif RH n'est pas encore multi-tenant (voir lib/firestore/workforce.ts) : on affiche
-    // le total global tel quel, comme le fait déjà admin/data/page.tsx.
-    const unsub1 = subscribeEmployees((list) => setEmployeesCount(list.length));
-    const unsub2 = subscribeMovements((list) => setMovementsCount(list.length));
+    // Effectif RH désormais partitionné par entreprise (leverMeta/{companyId}__workforce*, voir
+    // lib/firestore/workforce.ts) : ce panneau étant toujours scopé à UNE entreprise (`company`
+    // vient d'une fiche entreprise précise), les compteurs ci-dessous sont déjà les vrais chiffres
+    // de cette entreprise, plus un total global partagé par erreur avec les autres.
+    const unsub1 = subscribeEmployees((list) => setEmployeesCount(list.length), companyId);
+    const unsub2 = subscribeMovements((list) => setMovementsCount(list.length), companyId);
     return () => {
       unsub1();
       unsub2();
     };
-  }, []);
+  }, [companyId]);
 
   const cUsers = users.filter((u) => u.companyId === companyId);
   const cPrograms = programs.filter((p) => p.companyId === companyId);
@@ -172,7 +174,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
             <div className="flex items-center gap-1.5 text-text-secondary">
               <FileSpreadsheet size={14} />
               <span className="text-xs font-semibold">
-                {t("adminCompanyHistory.employeesGlobal", "Employés (global)")}
+                {t("adminCompanyHistory.employeesGlobal", "Employés")}
               </span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{employeesCount}</div>
@@ -181,7 +183,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
             <div className="flex items-center gap-1.5 text-text-secondary">
               <Activity size={14} />
               <span className="text-xs font-semibold">
-                {t("adminCompanyHistory.movementsGlobal", "Mouvements (global)")}
+                {t("adminCompanyHistory.movementsGlobal", "Mouvements")}
               </span>
             </div>
             <div className="text-2xl font-bold text-text-primary">{movementsCount}</div>

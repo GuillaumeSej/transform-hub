@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
 import { signInUser } from "@/lib/auth";
+import { subscribeCompanyDirectory } from "@/lib/firestore/admin";
 import { PAGE_ROUTES, roles } from "@/lib/nav-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
@@ -14,6 +15,16 @@ import { assetPath } from "@/lib/utils";
  * Écran de connexion — identifiant + mot de passe contre Firebase Auth (voir lib/auth.ts).
  * Aucun compte n'est pré-seedé : le premier compte admin se crée via `npm run create-admin`
  * (scripts/create-admin.js), les suivants via le panneau Admin > Utilisateurs une fois connecté.
+ *
+ * Sélecteur d'entreprise (round 5) : depuis que `usernameToSyntheticEmail`/`accountSlug` (voir
+ * lib/auth.ts) encodent l'entreprise dans l'identifiant technique Firebase Auth, un même
+ * identifiant humain (ex. "alice") peut désormais correspondre à PLUSIEURS comptes Firebase Auth
+ * distincts (mots de passe séparés) — un par entreprise, plus éventuellement un compte admin
+ * global. La connexion n'est donc plus (identifiant, mot de passe) mais bien (identifiant,
+ * entreprise, mot de passe) : ce sélecteur, alimenté par `companyDirectory` (collection PUBLIQUE
+ * id+nom, lisible avant authentification — voir firestore.rules), laisse l'utilisateur préciser
+ * quelle entreprise avant de tenter la connexion. "Administrateur global" (valeur "") correspond à
+ * `companyId: null`, le mode utilisé par le tout premier compte créé via `scripts/create-admin.js`.
  */
 export default function LoginPage() {
   const { login } = useRole();
@@ -21,13 +32,17 @@ export default function LoginPage() {
   const { t, locale, setLocale } = useTranslation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [companyId, setCompanyId] = useState("");
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => subscribeCompanyDirectory(setCompanies), []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
-      const user = await signInUser(username, password);
+      const user = await signInUser(username, password, companyId || null);
       login(user);
       router.replace(PAGE_ROUTES[roles[user.role].nav[0]?.id] ?? "/levers");
     } catch (err) {
@@ -106,6 +121,25 @@ export default function LoginPage() {
               placeholder={t("login.usernamePlaceholder")}
               className="w-full rounded-sm border border-white/20 bg-white/5 px-3 py-2 text-sm text-white outline-none transition focus:border-white"
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
+              {t("login.company")}
+            </label>
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className="w-full rounded-sm border border-white/20 bg-white/5 px-3 py-2 text-sm text-white outline-none transition focus:border-white"
+            >
+              <option value="" className="bg-black">
+                {t("login.companyGlobalAdmin")}
+              </option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id} className="bg-black">
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">

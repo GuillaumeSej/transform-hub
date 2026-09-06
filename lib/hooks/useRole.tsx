@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getAuthInstance } from "@/lib/firebase";
-import { resolveAuthUserProfile } from "@/lib/auth";
+import { accountSlugFromEmail, resolveAuthUserProfile } from "@/lib/auth";
 import type { AuthUser, Role } from "@/types";
 
 type RoleContextValue = {
@@ -36,11 +36,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         return;
       }
-      // Le username applicatif n'est pas stocké tel quel sur le compte Firebase : on le retrouve
-      // depuis l'e-mail synthétique `${username}@betrack.local` (voir usernameToSyntheticEmail).
-      const username = firebaseUser.email.split("@")[0];
+      // L'accountSlug (= id du document adminUsers) n'est pas stocké tel quel sur le compte
+      // Firebase : on le retrouve depuis la partie locale de l'e-mail synthétique (voir
+      // accountSlugFromEmail/usernameToSyntheticEmail, lib/auth.ts).
+      const slug = accountSlugFromEmail(firebaseUser.email);
       try {
-        const profile = await resolveAuthUserProfile(username);
+        const profile = await resolveAuthUserProfile(slug);
         setUser(profile);
       } catch {
         // Compte Firebase Auth valide mais sans profil Firestore correspondant (ou Firestore

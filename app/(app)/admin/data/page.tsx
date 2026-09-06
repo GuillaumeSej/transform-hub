@@ -32,9 +32,74 @@ type CompanyStats = {
   programs: number;
   levers: number;
   employees: number;
+  movements: number;
   hasLevers: boolean;
   hasEmployees: boolean;
 };
+
+/**
+ * Effectifs/mouvements RH par entreprise (`leverMeta/{companyId}__workforce*`, voir
+ * lib/firestore/workforce.ts) : un admin_entreprise (`companyId` non-null) n'a jamais besoin que
+ * du document de SA propre entreprise — `useEffect` classique, un seul abonnement. Un admin
+ * global (`companyId` null) doit en revanche ouvrir un abonnement PAR entreprise (chacune a son
+ * propre document désormais isolé) et agréger côté client : ce hook fait exactement ça, et se
+ * re-souscrit proprement à chaque changement de la liste des entreprises.
+ */
+function useWorkforceByCompany(companies: Company[], companyId: string | null) {
+  const [byCompany, setByCompany] = useState<
+    Record<string, { employees: Employee[]; movements: WorkforceMovement[] }>
+  >({});
+
+  useEffect(() => {
+    if (companyId) {
+      // admin_entreprise : un seul document, celui de sa propre entreprise.
+      const unsubE = subscribeEmployees(
+        (list) =>
+          setByCompany((prev) => ({
+            ...prev,
+            [companyId]: { employees: list, movements: prev[companyId]?.movements ?? [] },
+          })),
+        companyId
+      );
+      const unsubM = subscribeMovements(
+        (list) =>
+          setByCompany((prev) => ({
+            ...prev,
+            [companyId]: { employees: prev[companyId]?.employees ?? [], movements: list },
+          })),
+        companyId
+      );
+      return () => {
+        unsubE();
+        unsubM();
+      };
+    }
+
+    // admin global : un abonnement par entreprise connue, agrégé côté client (voir docstring).
+    const unsubs = companies.flatMap((c) => [
+      subscribeEmployees(
+        (list) =>
+          setByCompany((prev) => ({
+            ...prev,
+            [c.id]: { employees: list, movements: prev[c.id]?.movements ?? [] },
+          })),
+        c.id
+      ),
+      subscribeMovements(
+        (list) =>
+          setByCompany((prev) => ({
+            ...prev,
+            [c.id]: { employees: prev[c.id]?.employees ?? [], movements: list },
+          })),
+        c.id
+      ),
+    ]);
+    return () => unsubs.forEach((u) => u());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, companies.map((c) => c.id).join(",")]);
+
+  return byCompany;
+}
 
 export default function AdminDataPage() {
   const { t } = useTranslation();
@@ -44,8 +109,6 @@ export default function AdminDataPage() {
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [levers, setLevers] = useState<Lever[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [movements, setMovements] = useState<WorkforceMovement[]>([]);
 
   useEffect(() => {
     const unsub1 = subscribeCompanies(setCompanies, companyId);
@@ -65,23 +128,22 @@ export default function AdminDataPage() {
     };
   }, [companyId]);
 
-  useEffect(() => {
-    const unsub1 = subscribeEmployees(setEmployees);
-    const unsub2 = subscribeMovements(setMovements);
-    return () => {
-      unsub1();
-      unsub2();
-    };
-  }, []);
-
   const visibleCompanies = companyId ? companies.filter((c) => c.id === companyId) : companies;
   const visibleUsers = companyId ? users.filter((u) => u.companyId === companyId) : users;
   const visiblePrograms = companyId ? programs.filter((p) => p.companyId === companyId) : programs;
+
+  const workforceByCompany = useWorkforceByCompany(visibleCompanies, companyId);
+  // Résumé global = somme des VRAIS effectifs/mouvements de chaque entreprise visible (jamais le
+  // même document réutilisé pour toutes — voir useWorkforceByCompany).
+  const employees = visibleCompanies.flatMap((c) => workforceByCompany[c.id]?.employees ?? []);
+  const movements = visibleCompanies.flatMap((c) => workforceByCompany[c.id]?.movements ?? []);
 
   const companyStats: CompanyStats[] = visibleCompanies.map((c) => {
     const cUsers = visibleUsers.filter((u) => u.companyId === c.id);
     const cPrograms = visiblePrograms.filter((p) => p.companyId === c.id);
     const cLevers = levers.filter((l) => l.companyId === c.id);
+    const cEmployees = workforceByCompany[c.id]?.employees ?? [];
+    const cMovements = workforceByCompany[c.id]?.movements ?? [];
 
     const userRoles: Record<string, number> = {};
     cUsers.forEach((u) => {
@@ -94,9 +156,10 @@ export default function AdminDataPage() {
       userRoles,
       programs: cPrograms.length,
       levers: cLevers.length,
-      employees: employees.length,
+      employees: cEmployees.length,
+      movements: cMovements.length,
       hasLevers: cLevers.length > 0,
-      hasEmployees: employees.length > 0,
+      hasEmployees: cEmployees.length > 0,
     };
   });
 
@@ -265,7 +328,7 @@ export default function AdminDataPage() {
                     {t("adminData.movements", "Mouvements")}
                   </span>
                 </div>
-                <div className="text-lg font-bold text-text-primary">{movements.length}</div>
+                <div className="text-lg font-bold text-text-primary">{cs.movements}</div>
               </div>
             </div>
           </div>

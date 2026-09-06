@@ -238,7 +238,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       // l'instance principale : createUserWithEmailAndPassword connecte automatiquement le
       // navigateur en tant que ce nouvel utilisateur, ce qui déconnecterait l'admin de sa propre
       // session s'il l'appelait sur l'instance principale.
-      await createAuthAccount(normalizedUsername, form.password);
+      await createAuthAccount(normalizedUsername, form.password, newUser.companyId ?? null);
       await saveUser(newUser);
       setShowForm(false);
     } catch (err) {
@@ -251,19 +251,29 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   };
 
   /**
-   * Crée le compte Firebase Auth d'un utilisateur d'entreprise (e-mail synthétique dérivé du
-   * username saisi). 'auth/email-already-in-use' est explicitement toléré et n'interrompt pas le
-   * formulaire : soit l'admin modifie un profil existant (compte Firebase déjà là), soit le
-   * compte a été créé lors d'une tentative précédente sans que le profil Firestore ait suivi —
-   * dans les deux cas on procède quand même à l'écriture/mise à jour du profil Firestore.
+   * Crée le compte Firebase Auth d'un utilisateur (e-mail synthétique dérivé du username saisi
+   * ET de son entreprise — voir usernameToSyntheticEmail dans lib/auth.ts). `companyId` DOIT être
+   * celui du nouvel utilisateur (`newUser.companyId`, déjà calculé par save() : null pour un
+   * admin, l'entreprise ciblée sinon) — PAS un simple usernameToSyntheticEmail(username) à un seul
+   * argument, qui construirait l'e-mail du compte ADMIN GLOBAL de ce username (round 5 : un même
+   * username peut désormais avoir un compte Firebase Auth distinct par entreprise, il ne faut donc
+   * jamais créer/toucher le mauvais des deux).
+   * 'auth/email-already-in-use' est explicitement toléré et n'interrompt pas le formulaire : soit
+   * l'admin modifie un profil existant (compte Firebase déjà là), soit le compte a été créé lors
+   * d'une tentative précédente sans que le profil Firestore ait suivi — dans les deux cas on
+   * procède quand même à l'écriture/mise à jour du profil Firestore.
    */
-  async function createAuthAccount(username: string, password: string): Promise<void> {
+  async function createAuthAccount(
+    username: string,
+    password: string,
+    companyId: string | null
+  ): Promise<void> {
     await withSecondaryAuth(async (secondaryAuth) => {
       const { createUserWithEmailAndPassword } = await import("firebase/auth");
       try {
         await createUserWithEmailAndPassword(
           secondaryAuth,
-          usernameToSyntheticEmail(username),
+          usernameToSyntheticEmail(username, companyId),
           password
         );
       } catch (err) {
@@ -290,8 +300,8 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   const showClearanceControl = eligibleRole && companyHasLevels;
   const showClearanceHint = eligibleRole && !companyHasLevels;
 
-  const remove = async (username: string) => {
-    await deleteUser(username);
+  const remove = async (username: string, companyId: string | null) => {
+    await deleteUser(username, companyId);
   };
 
   return (
@@ -566,7 +576,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 (u) => fixedCompanyId || companyFilter === "all" || u.companyId === companyFilter
               )
               .map((u, idx) => (
-                <tr key={u.username} className="border-b border-border hover:bg-bg-elevated/50">
+                <tr
+                  key={`${u.username}.${u.companyId ?? ""}`}
+                  className="border-b border-border hover:bg-bg-elevated/50"
+                >
                   <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary sm:table-cell">
                     {u.username}
                   </td>
@@ -590,7 +603,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                       <Pencil size={14} />
                     </button>
                     <button
-                      onClick={() => remove(u.username)}
+                      onClick={() => remove(u.username, u.companyId ?? null)}
                       className="text-text-secondary hover:text-red-500"
                     >
                       <Trash2 size={14} />
