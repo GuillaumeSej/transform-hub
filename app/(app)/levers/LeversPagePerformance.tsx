@@ -7,16 +7,13 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
+import { usePerformanceProgramSelector } from "@/lib/hooks/usePerformanceProgramSelector";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
-import {
-  subscribeCompanies,
-  subscribeHierarchyNodes,
-  subscribePrograms,
-} from "@/lib/firestore/admin";
+import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { ExportButton } from "@/components/shared/ExportButton";
@@ -31,7 +28,7 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
-import type { HierarchyLevelDef, HierarchyNode, Lever, Program, RiskLevel } from "@/types";
+import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
 
 type LeverRow = Lever & {
   realized: number;
@@ -45,11 +42,18 @@ type LeverRow = Lever & {
 export function LeversPagePerformance() {
   const { role, user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
-  // Vue agrégeant les leviers de TOUS les programmes de l'entreprise (pas de scope programme
-  // unique ici) : le cycle de vie étant désormais configuré par programme, on ne peut pas résoudre
-  // un référentiel personnalisé unique — repli sur les libellés par défaut (voir
-  // lib/hooks/useLifecycleLabels.ts).
-  const lifecycle = useLifecycleLabels(undefined);
+  // Vue scopée à UN programme Performance sélectionnable (voir le sélecteur plus bas) : le cycle
+  // de vie étant désormais configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un
+  // scope unique pour résoudre le bon référentiel — d'où `usePerformanceProgramSelector`, qui
+  // porte à la fois la liste des programmes Performance et la sélection courante.
+  const {
+    programs,
+    performancePrograms,
+    selectedProgramId,
+    setSelectedProgramId,
+    loaded: programsLoaded,
+  } = usePerformanceProgramSelector(user?.companyId);
+  const lifecycle = useLifecycleLabels(selectedProgramId);
   const { t } = useTranslation();
   const router = useRouter();
   const { showToast } = useToast();
@@ -88,17 +92,8 @@ export function LeversPagePerformance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.companyId, user?.role, user?.confidentialityClearance]);
 
-  // Programmes de l'entreprise — pour résoudre la colonne optionnelle "Programme" de l'import
-  // Excel des leviers (voir lib/leverExcelImport.ts) ; même pattern que le dashboard exécutif.
-  const [programs, setPrograms] = useState<Program[]>([]);
-  useEffect(() => {
-    const unsub = subscribePrograms(
-      (all) =>
-        setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all),
-      user?.companyId ?? null
-    );
-    return unsub;
-  }, [user?.companyId]);
+  // `programs` (tous types confondus, pour la colonne optionnelle "Programme" de l'import Excel —
+  // voir lib/leverExcelImport.ts) vient déjà de `usePerformanceProgramSelector` ci-dessus.
 
   // Alertes auto (dépendances, jalons, etc.) + manuelles — même source que useNotifications —
   // servent à recalculer le risque de chaque levier à la volée (voir engine.computeLeverRisk).
@@ -145,6 +140,14 @@ export function LeversPagePerformance() {
         isLeverVisibleForClearance(l.confidentialityLevel, clearance)
     );
   }, [data.levers, role, user, clearance]);
+
+  // Scope au programme Performance sélectionné (voir usePerformanceProgramSelector plus haut) —
+  // appliqué AVANT les filtres de la barre (leurs options ne doivent refléter que les leviers du
+  // programme courant), même principe que le dashboard exécutif (programScopedLevers).
+  const programScopedLevers = useMemo(
+    () => (selectedProgramId ? scopedLevers.filter((l) => l.programId === selectedProgramId) : []),
+    [scopedLevers, selectedProgramId]
+  );
 
   // Leviers avec au moins une contrainte de dépendance violée (colonne ⚠ + filtre)
   const alertedLeverIds = useMemo(() => {
@@ -345,13 +348,13 @@ export function LeversPagePerformance() {
   };
 
   const filteredLevers = useMemo(() => {
-    return scopedLevers.filter((lever) =>
+    return programScopedLevers.filter((lever) =>
       Object.entries(activeFilters).every(([key, values]) => {
         const def = filterDefs.find((d) => d.key === key);
         return !def || values.length === 0 || values.includes(def.getValue(lever));
       })
     );
-  }, [scopedLevers, activeFilters, filterDefs]);
+  }, [programScopedLevers, activeFilters, filterDefs]);
 
   const hasHierarchy = sortedHierarchyLevels.length > 0;
 
@@ -593,6 +596,28 @@ export function LeversPagePerformance() {
     },
   ];
 
+  // Entreprise sans aucun Plan Performance : pas de programme sur lequel scoper la table, donc
+  // rien à afficher (même repli que le dashboard exécutif, voir DashboardPagePerformance).
+  if (programsLoaded && performancePrograms.length === 0) {
+    return (
+      <div className="animate-fade-up">
+        <div className="mb-5">
+          <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
+            {role === "lever" ? t("levers.title.mine") : t("levers.title.library")}
+          </h1>
+        </div>
+        <div className="rounded-lg border border-border bg-white p-10 text-center">
+          <p className="mx-auto max-w-md text-sm text-secondary">
+            {t(
+              "levers.noProgram",
+              "Aucun Plan Performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers."
+            )}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-up">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
@@ -600,10 +625,27 @@ export function LeversPagePerformance() {
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
             {role === "lever" ? t("levers.title.mine") : t("levers.title.library")}
           </h1>
-          <div className="mt-2.5 text-[13px] text-secondary">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
             {filteredLevers.length} {t("levers.count")} · {t("levers.netSavingsShown")} :{" "}
             <strong>{engine.fmtCurr(totalNet)}</strong> · {t("levers.realized")} :{" "}
             <strong>{engine.fmtCurr(totalReal)}</strong>
+            {performancePrograms.length > 1 ? (
+              <select
+                value={selectedProgramId ?? ""}
+                onChange={(e) => setSelectedProgramId(e.target.value)}
+                className="ml-1 rounded-sm border border-border bg-white px-2 py-0.5 text-[12px] font-semibold text-primary focus:border-bp-coral focus:outline-none"
+              >
+                {performancePrograms.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              performancePrograms[0] && (
+                <strong className="text-primary">{performancePrograms[0].name}</strong>
+              )
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -649,7 +691,7 @@ export function LeversPagePerformance() {
         <CardBody flush>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
             <FilterBar
-              items={scopedLevers}
+              items={programScopedLevers}
               defs={filterDefs}
               active={activeFilters}
               onChange={setFilters}

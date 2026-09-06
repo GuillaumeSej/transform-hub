@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
+import { usePerformanceProgramSelector } from "@/lib/hooks/usePerformanceProgramSelector";
 import * as engine from "@/lib/engine";
 import { Card, CardBody } from "@/components/shared/Card";
 import { StageBadge } from "@/components/shared/StageBadge";
@@ -27,11 +28,17 @@ export default function WorkstreamsPage() {
   const { t } = useTranslation();
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
-  // Vue agrégeant les leviers de TOUS les programmes de l'entreprise (pas de scope programme
-  // unique ici) : le cycle de vie étant désormais configuré par programme, on ne peut pas résoudre
-  // un référentiel personnalisé unique — repli sur les libellés par défaut (voir
-  // lib/hooks/useLifecycleLabels.ts).
-  const lifecycle = useLifecycleLabels(undefined);
+  // Vue scopée à UN programme Performance sélectionnable (voir le sélecteur plus bas) : le cycle
+  // de vie étant désormais configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un
+  // scope unique pour résoudre le bon référentiel — d'où `usePerformanceProgramSelector`, qui
+  // porte à la fois la liste des programmes Performance et la sélection courante.
+  const {
+    performancePrograms,
+    selectedProgramId,
+    setSelectedProgramId,
+    loaded: programsLoaded,
+  } = usePerformanceProgramSelector(user?.companyId);
+  const lifecycle = useLifecycleLabels(selectedProgramId);
   const router = useRouter();
   const [company, setCompany] = useState<Company | undefined>();
   useEffect(
@@ -42,8 +49,12 @@ export default function WorkstreamsPage() {
       ),
     [user?.companyId]
   );
-  const visibleLevers = data.levers.filter((lever) =>
-    canUserViewLever(user, lever, company?.roleClearance)
+  // Scope au programme Performance sélectionné (voir usePerformanceProgramSelector plus haut) —
+  // même principe que le dashboard exécutif et LeversPagePerformance : cette page affiche UN
+  // programme à la fois, pas l'ensemble de l'entreprise.
+  const visibleLevers = data.levers.filter(
+    (lever) =>
+      lever.programId === selectedProgramId && canUserViewLever(user, lever, company?.roleClearance)
   );
   const summary = engine.programSummary({ ...data, levers: visibleLevers });
 
@@ -97,16 +108,55 @@ export default function WorkstreamsPage() {
     },
   ];
 
+  // Entreprise sans aucun Plan Performance : pas de programme sur lequel scoper la table, donc
+  // rien à afficher (même repli que le dashboard exécutif, voir DashboardPagePerformance).
+  if (programsLoaded && performancePrograms.length === 0) {
+    return (
+      <div className="animate-fade-up">
+        <div className="mb-5">
+          <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
+            {t("nav.workstreamDashboard", "Workstream Dashboard")}
+          </h1>
+        </div>
+        <div className="rounded-lg border border-border bg-white p-10 text-center">
+          <p className="mx-auto max-w-md text-sm text-secondary">
+            {t(
+              "workstreams.noProgram",
+              "Aucun Plan Performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers."
+            )}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-up">
       <div className="mb-5">
         <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
           {t("nav.workstreamDashboard", "Workstream Dashboard")}
         </h1>
-        <div className="mt-2.5 text-[13px] text-secondary">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
           {t(
             "workstreams.subtitle",
             "Vue de tous les leviers du programme, tous workstreams confondus."
+          )}
+          {performancePrograms.length > 1 ? (
+            <select
+              value={selectedProgramId ?? ""}
+              onChange={(e) => setSelectedProgramId(e.target.value)}
+              className="ml-1 rounded-sm border border-border bg-white px-2 py-0.5 text-[12px] font-semibold text-primary focus:border-bp-coral focus:outline-none"
+            >
+              {performancePrograms.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            performancePrograms[0] && (
+              <strong className="text-primary">{performancePrograms[0].name}</strong>
+            )
           )}
         </div>
       </div>
