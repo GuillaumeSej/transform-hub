@@ -14,12 +14,16 @@ import type { Chantier, MaturityStageConfig, StrategicAxis } from "@/types";
  * où l'on voit les chantiers voisins et leurs dates (voir plan, section hiérarchie).
  */
 
-export type ChantierFormValues = Pick<Chantier, "name" | "description" | "axisId" | "stage">;
+export type ChantierFormValues = Pick<
+  Chantier,
+  "name" | "description" | "axisId" | "stage" | "confidentialityLevel"
+>;
 
 export function ChantierForm({
   initial,
   axes,
   stages,
+  confidentialityLevels,
   onSubmit,
   onCancel,
   submitLabel,
@@ -30,6 +34,10 @@ export function ChantierForm({
   axes: StrategicAxis[];
   /** Étapes de maturité du programme (même référentiel que l'axe). */
   stages: MaturityStageConfig[];
+  /** Échelle de confidentialité de l'entreprise (`Company.confidentialityLevels`) — même
+   *  sélecteur que `AxisForm`/`components/shared/LeverForm.tsx:291-300`. Absente/vide = aucun
+   *  sélecteur affiché (non régressif). */
+  confidentialityLevels?: string[];
   onSubmit: (values: ChantierFormValues) => void | Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
@@ -40,6 +48,9 @@ export function ChantierForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [axisId, setAxisId] = useState(initial?.axisId ?? axes[0]?.id ?? "");
   const [stage, setStage] = useState(initial?.stage ?? stages[0]?.id ?? "");
+  const [confidentialityLevel, setConfidentialityLevel] = useState(
+    initial?.confidentialityLevel ?? ""
+  );
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = name.trim().length > 0 && axisId.length > 0 && stage.length > 0 && !submitting;
@@ -53,6 +64,7 @@ export function ChantierForm({
         // Clé OMISE (jamais `undefined`) quand le champ est vide : `setDoc` rejette toute valeur
         // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
         ...(description.trim() ? { description: description.trim() } : {}),
+        ...(confidentialityLevel ? { confidentialityLevel } : {}),
         axisId,
         stage,
       });
@@ -115,6 +127,29 @@ export function ChantierForm({
             ))}
           </select>
         </div>
+        {confidentialityLevels && confidentialityLevels.length > 0 && (
+          <div>
+            <label
+              className="text-xs font-medium text-text-secondary"
+              htmlFor="chantier-confidentiality"
+            >
+              Niveau de confidentialité
+            </label>
+            <select
+              id="chantier-confidentiality"
+              value={confidentialityLevel}
+              onChange={(e) => setConfidentialityLevel(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Aucun (visible par tous)</option>
+              {confidentialityLevels.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {!compact && (

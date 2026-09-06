@@ -148,7 +148,7 @@ export function DashboardPagePerformance() {
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       setCompany(companies.find((c) => c.id === user?.companyId) ?? null);
-    });
+    }, user?.companyId ?? null);
     return unsub;
   }, [user?.companyId]);
 
@@ -175,8 +175,10 @@ export function DashboardPagePerformance() {
   // workstream") et pour le sélecteur de programme du dashboard (voir plus bas).
   const [programs, setPrograms] = useState<Program[]>([]);
   useEffect(() => {
-    const unsub = subscribePrograms((all) =>
-      setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all)
+    const unsub = subscribePrograms(
+      (all) =>
+        setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all),
+      user?.companyId ?? null
     );
     return unsub;
   }, [user?.companyId]);
@@ -683,11 +685,22 @@ export function DashboardPagePerformance() {
   const functionBars = dimensionBars((l) => l.function);
 
   const programMap = engine.byProgram(visibleData, programs);
+  // Program.target a été retiré (cible saisie à la main, jamais alignée avec la cible bottom-up —
+  // voir le commentaire plus bas sur l'ambition programme) : la cible affichée ici est recalculée
+  // par programme sur le même principe que engine.programSummary — somme des netSavings des
+  // leviers actifs rattachés au programme.
+  const programTargetById = new Map<string, number>();
+  visibleData.levers
+    .filter((l) => l.status !== "cancelled")
+    .forEach((l) => {
+      if (!l.programId) return;
+      programTargetById.set(l.programId, (programTargetById.get(l.programId) ?? 0) + l.netSavings);
+    });
   const programBars = [
     ...programs.map((p) => ({
       label: p.name,
       realized: programMap[p.name] ?? 0,
-      target: p.target,
+      target: Math.round((programTargetById.get(p.id) ?? 0) * 10) / 10,
     })),
     ...(programMap["Non assigné"]
       ? [

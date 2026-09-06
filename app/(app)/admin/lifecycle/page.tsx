@@ -28,7 +28,7 @@ export default function AdminLifecyclePage() {
           setSelectedCompany(list[0].id);
         }
       }
-    });
+    }, user?.companyId ?? null);
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEntAdmin, user?.companyId]);

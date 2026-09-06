@@ -14,7 +14,7 @@ import type { MaturityStageConfig, StrategicAxis } from "@/types";
 
 export type AxisFormValues = Pick<
   StrategicAxis,
-  "name" | "description" | "owner" | "color" | "stage"
+  "name" | "description" | "owner" | "color" | "stage" | "confidentialityLevel"
 >;
 
 const COLOR_CHOICES = ["#320300", "#FF3C47", "#806659", "#B8A99A", "#4A7C59", "#2F5D8C"];
@@ -22,6 +22,7 @@ const COLOR_CHOICES = ["#320300", "#FF3C47", "#806659", "#B8A99A", "#4A7C59", "#
 export function AxisForm({
   initial,
   stages,
+  confidentialityLevels,
   onSubmit,
   onCancel,
   submitLabel,
@@ -31,6 +32,11 @@ export function AxisForm({
   /** Étapes de maturité du programme (voir `useMaturityStages`) — la première est proposée par
    *  défaut pour un axe neuf. */
   stages: MaturityStageConfig[];
+  /** Échelle de confidentialité de l'entreprise (`Company.confidentialityLevels`) — voir
+   *  `components/shared/LeverForm.tsx:291-300` pour le même sélecteur côté Plan Performance.
+   *  Absente/vide = aucun sélecteur affiché (comportement non régressif : un axe sans niveau
+   *  configuré reste visible par tous, exactement comme un levier sans niveau). */
+  confidentialityLevels?: string[];
   onSubmit: (values: AxisFormValues) => void | Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
@@ -42,6 +48,9 @@ export function AxisForm({
   const [owner, setOwner] = useState(initial?.owner ?? "");
   const [color, setColor] = useState(initial?.color ?? COLOR_CHOICES[0]);
   const [stage, setStage] = useState(initial?.stage ?? stages[0]?.id ?? "");
+  const [confidentialityLevel, setConfidentialityLevel] = useState(
+    initial?.confidentialityLevel ?? ""
+  );
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = name.trim().length > 0 && stage.length > 0 && !submitting;
@@ -56,6 +65,7 @@ export function AxisForm({
         // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
         ...(description.trim() ? { description: description.trim() } : {}),
         ...(owner.trim() ? { owner: owner.trim() } : {}),
+        ...(confidentialityLevel ? { confidentialityLevel } : {}),
         color,
         stage,
       });
@@ -112,6 +122,29 @@ export function AxisForm({
             ))}
           </select>
         </div>
+        {confidentialityLevels && confidentialityLevels.length > 0 && (
+          <div>
+            <label
+              className="text-xs font-medium text-text-secondary"
+              htmlFor="axis-confidentiality"
+            >
+              Niveau de confidentialité
+            </label>
+            <select
+              id="axis-confidentiality"
+              value={confidentialityLevel}
+              onChange={(e) => setConfidentialityLevel(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Aucun (visible par tous)</option>
+              {confidentialityLevels.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <span className="text-xs font-medium text-text-secondary">Couleur</span>
           <div className="mt-1 flex flex-wrap gap-2">

@@ -11,14 +11,20 @@ import {
   Trash2,
   Workflow,
 } from "lucide-react";
-import type { Program, ProgramType } from "@/types";
-import { subscribePrograms, saveProgram, deleteProgram } from "@/lib/firestore/admin";
+import type { AuthUser, Program, ProgramType } from "@/types";
+import {
+  subscribePrograms,
+  saveProgram,
+  deleteProgram,
+  subscribeUsers,
+} from "@/lib/firestore/admin";
 import { ensureDefaultMaturityStages } from "@/lib/firestore/maturityStageConfigs";
 import { resolveProgramType } from "@/lib/axisLogic";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MaturityStagesEditor } from "@/components/admin/MaturityStagesEditor";
 import { IndicatorsEditor } from "@/components/admin/IndicatorsEditor";
+import { UserPicker } from "@/components/strategic/UserPicker";
 
 /** Libellés des deux types de programme. Le type est choisi À LA CRÉATION et figé ensuite : il
  *  détermine la nature même des entités du programme (leviers financiers vs axes/chantiers/
@@ -78,10 +84,20 @@ export function ProgramsPanel({
 }) {
   const { t } = useTranslation();
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [companyUsers, setCompanyUsers] = useState<AuthUser[]>([]);
 
   useEffect(() => {
-    const unsub = subscribePrograms((all) =>
-      setPrograms(all.filter((p) => p.companyId === companyId))
+    const unsub = subscribePrograms(
+      (all) => setPrograms(all.filter((p) => p.companyId === companyId)),
+      companyId
+    );
+    return unsub;
+  }, [companyId]);
+
+  useEffect(() => {
+    const unsub = subscribeUsers(
+      (all) => setCompanyUsers(all.filter((u) => u.companyId === companyId)),
+      companyId
     );
     return unsub;
   }, [companyId]);
@@ -89,10 +105,10 @@ export function ProgramsPanel({
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<{
     name: string;
-    sponsor: string;
-    target: string;
+    sponsor: string | undefined;
     type: ProgramType;
-  }>({ name: "", sponsor: "", target: "", type: "performance" });
+    actionPlanEnabled: boolean;
+  }>({ name: "", sponsor: undefined, type: "performance", actionPlanEnabled: true });
   const [showForm, setShowForm] = useState(false);
   /** Programme stratégique dont on affiche la fiche de configuration (null = liste). */
   const [managedProgramId, setManagedProgramId] = useState<string | null>(
@@ -113,14 +129,12 @@ export function ProgramsPanel({
   // Un programme est "en cours d'édition" (dirty) si le formulaire est ouvert avec au moins un
   // champ rempli — évite de bloquer inutilement la navigation quand l'utilisateur a juste
   // cliqué sur "Nouveau programme" sans rien saisir.
-  const programFormDirty =
-    showForm &&
-    (form.name.trim() !== "" || form.sponsor.trim() !== "" || form.target.trim() !== "");
+  const programFormDirty = showForm && (form.name.trim() !== "" || !!form.sponsor);
   useRegisterUnsavedChanges(`admin:programs:${companyId}`, programFormDirty);
 
   const startCreate = () => {
     setEditId(null);
-    setForm({ name: "", sponsor: "", target: "", type: "performance" });
+    setForm({ name: "", sponsor: undefined, type: "performance", actionPlanEnabled: true });
     setShowForm(true);
   };
 
@@ -130,15 +144,14 @@ export function ProgramsPanel({
     setForm({
       name: p.name,
       sponsor: p.sponsor,
-      target: String(p.target),
       type: resolveProgramType(p),
+      actionPlanEnabled: p.actionPlanEnabled ?? true,
     });
     setShowForm(true);
   };
 
   const save = async () => {
     if (!form.name.trim()) return;
-    const target = parseFloat(form.target) || 0;
     if (editId) {
       const existing = programs.find((p) => p.id === editId);
       if (existing) {
@@ -148,7 +161,9 @@ export function ProgramsPanel({
           ...existing,
           name: form.name,
           sponsor: form.sponsor,
-          target,
+          ...(resolveProgramType(existing) === "performance"
+            ? { actionPlanEnabled: form.actionPlanEnabled }
+            : {}),
         });
       }
     } else {
@@ -158,7 +173,6 @@ export function ProgramsPanel({
         companyId,
         name: form.name,
         sponsor: form.sponsor,
-        target,
         currency: "€M",
         fyStart: "2026-01",
         fyEnd: "2026-12",
@@ -166,6 +180,7 @@ export function ProgramsPanel({
         revenue: 0,
         createdAt: new Date().toISOString().slice(0, 10),
         type: form.type,
+        ...(form.type === "performance" ? { actionPlanEnabled: form.actionPlanEnabled } : {}),
       });
       // Un plan stratégique démarre avec un jeu d'étapes de maturité par défaut, que l'admin
       // pourra ensuite étendre à N étapes (voir MaturityStagesEditor). Idempotent.
@@ -280,30 +295,36 @@ export function ProgramsPanel({
                 placeholder={t("adminProgramsPanel.namePlaceholder", "Nom")}
               />
             </div>
-            <div>
-              <label className="text-xs font-medium text-text-secondary">
-                {t("adminProgramsPanel.sponsor", "Sponsor")}
-              </label>
-              <input
-                value={form.sponsor}
-                onChange={(e) => setForm((f) => ({ ...f, sponsor: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder={t("adminProgramsPanel.sponsor", "Sponsor")}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-text-secondary">
-                {t("adminProgramsPanel.targetLabel", "Cible (€M)")}
-              </label>
-              <input
-                type="number"
-                value={form.target}
-                onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder="50"
-              />
-            </div>
+            <UserPicker
+              users={companyUsers}
+              value={form.sponsor}
+              onChange={(sponsor) => setForm((f) => ({ ...f, sponsor }))}
+              label={t("adminProgramsPanel.sponsor", "Sponsor")}
+              id="program-sponsor"
+            />
           </div>
+
+          {form.type === "performance" && (
+            <label className="flex cursor-pointer gap-2 rounded-lg border border-border p-3 text-sm hover:bg-bg-surface">
+              <input
+                type="checkbox"
+                checked={form.actionPlanEnabled}
+                onChange={(e) => setForm((f) => ({ ...f, actionPlanEnabled: e.target.checked }))}
+                className="mt-0.5 accent-bp-coral"
+              />
+              <span>
+                <span className="block font-medium text-text-primary">
+                  {t("adminProgramsPanel.actionPlanModuleLabel", "Module Plan d'action")}
+                </span>
+                <span className="block text-xs text-text-secondary">
+                  {t(
+                    "adminProgramsPanel.actionPlanModuleHint",
+                    "Active l'onglet Plan d'action (Kanban/Gantt) sur les leviers de ce programme. Module additionnel activable selon les options souscrites par le client — décoché, les leviers de ce programme n'affichent pas cet onglet."
+                  )}
+                </span>
+              </span>
+            </label>
+          )}
 
           {/* Type de programme — sélectionnable UNIQUEMENT à la création, figé ensuite : il
               détermine la nature des entités du programme (leviers vs axes/chantiers). */}
@@ -384,9 +405,6 @@ export function ProgramsPanel({
                 {t("adminProgramsPanel.sponsor", "Sponsor")}
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
-                {t("adminProgramsPanel.colTarget", "Cible")}
-              </th>
-              <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
                 {t("adminProgramsPanel.colActions", "Actions")}
               </th>
             </tr>
@@ -406,9 +424,6 @@ export function ProgramsPanel({
                   )}
                 </td>
                 <td className="px-4 py-2.5 text-text-secondary">{p.sponsor}</td>
-                <td className="px-4 py-2.5 text-right font-medium text-text-primary">
-                  €{p.target}M
-                </td>
                 <td className="whitespace-nowrap px-4 py-2.5 text-right">
                   {resolveProgramType(p) === "strategic" && (
                     <button
@@ -435,7 +450,7 @@ export function ProgramsPanel({
             ))}
             {programs.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-text-secondary">
+                <td colSpan={4} className="px-4 py-6 text-center text-sm text-text-secondary">
                   {t("adminProgramsPanel.empty", "Aucun programme pour cette entreprise.")}
                 </td>
               </tr>
@@ -459,9 +474,6 @@ export function ProgramsPanel({
                   )}
                 </div>
                 <div className="text-xs text-text-secondary">{p.sponsor}</div>
-              </div>
-              <div className="text-right">
-                <div className="font-medium text-text-primary">€{p.target}M</div>
               </div>
             </div>
             <div className="mt-2 flex items-center justify-end gap-3">

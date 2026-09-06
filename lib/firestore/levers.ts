@@ -4,7 +4,9 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
+  query,
   setDoc,
+  where,
   writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -78,13 +80,23 @@ export function byCompany<T extends { companyId?: string | null }>(
   return items.filter((item) => item.companyId === companyId);
 }
 
-/** Subscribe to levers, optionally filtered by companyId. */
+/** Subscribe to levers, optionally filtered by companyId. `companyId` null/undefined = admin
+ *  global, requête non filtrée (voir `byCompany`). Sinon, filtre CÔTÉ SERVEUR via `where` — pas
+ *  seulement en mémoire côté client : nécessaire pour que `firestore.rules` puisse restreindre la
+ *  lecture aux leviers de l'entreprise de l'appelant (Firestore refuse un `list`/`onSnapshot` non
+ *  filtré dès que la règle dépend de `resource.data.companyId`, voir firestore.rules). Le filtre
+ *  client `byCompany` ci-dessus est conservé en aval par défense en profondeur (et pour les
+ *  leviers orphelins sans companyId, qu'un filtre `where` égalité ne peut pas exclure autrement
+ *  qu'en les excluant déjà du résultat serveur). */
 export function subscribeLevers(
   cb: (levers: Lever[]) => void,
   companyId?: string | null
 ): Unsubscribe {
+  const scopedQuery = companyId
+    ? query(leversCol(), where("companyId", "==", companyId))
+    : leversCol();
   return onSnapshot(
-    leversCol(),
+    scopedQuery,
     (snap) => {
       const all = snap.docs.map((d) => {
         const lever = d.data() as Lever;

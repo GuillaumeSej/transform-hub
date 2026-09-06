@@ -81,12 +81,6 @@ export type LeverDependency = {
  *  type "cost" (déjà classés par `nature`, voir ActionImpact). */
 export type SavingType = "cost_reduction" | "revenue_increase" | "working_capital";
 
-/** Règle de reconnaissance dans le temps d'un coût/gain : "smoothing" = reconnu linéairement
- *  entre le début de l'action et la date milestone (CAPEX ou gain) ; "one_shot" = reconnu à 100%
- *  à la date milestone. Réglable par défaut au niveau entreprise (Company.defaultRecognition),
- *  surchargeable par ligne d'impact (ActionImpact.recognition). */
-export type RecognitionMode = "smoothing" | "one_shot";
-
 export type ProgramConfig = {
   id: string;
   name: string;
@@ -221,9 +215,6 @@ export type ActionImpact = {
   /** Pour type="saving" — date/milestone d'encaissement réel du gain (peut être postérieure à la
    *  fin de l'action). */
   gainDate?: string; // ISO date
-  /** Surcharge manuelle du mode de reconnaissance ; non défini = hérite de
-   *  Company.defaultRecognition (ou "smoothing" si l'entreprise n'a rien configuré). */
-  recognition?: RecognitionMode;
   /** Commentaires libres sur cette ligne d'impact (ex. méthode de calcul, hypothèses). */
   comments?: Comment[];
 };
@@ -480,14 +471,6 @@ export type Company = {
   /** Configuration temporelle du programme pour cette entreprise */
   fyStart: string; // ISO date "YYYY-01-01"
   fyEnd: string; // ISO date "YYYY-12-31"
-  /** Budget CAPEX total alloué au programme (optionnel — souvent déjà cadré ailleurs en amont
-   *  de la mission). Si renseigné, le KPI "CAPEX engagé" du dashboard exécutif l'affiche en
-   *  regard ("X€M engagés / Y€M budgétés"). */
-  capexBudget?: number; // €M
-  /** Si false, le module "Plan d'action" (onglet Kanban/Gantt) est désactivé pour cette
-   *  entreprise — les utilisateurs voient un message "Module non activé" à la place.
-   *  undefined = activé (comportement historique, avant l'introduction du toggle). */
-  actionPlanEnabled?: boolean;
   /** Échelle de confidentialité propre à l'entreprise, ordonnée du niveau le moins au plus
    *  restreint (ex. ["Public", "Restreint", "Confidentiel", "Secret"]). Un levier sans
    *  confidentialityLevel n'est restreint pour personne. */
@@ -507,16 +490,14 @@ export type Company = {
   hierarchyLevels?: HierarchyLevelDef[];
   /** Arborescence géographique indépendante et de profondeur libre. */
   geographyHierarchyLevels?: HierarchyLevelDef[];
-  /** Taux de charges sociales patronales appliqué au salaire brut pour obtenir le "salaire
-   *  chargé" utilisé dans le calcul EUR mécanisme-dépendant des mouvements RH (voir
+  /** Paramètre RH — taux de charges sociales patronales appliqué au salaire brut pour obtenir le
+   *  "salaire chargé" utilisé dans le calcul EUR mécanisme-dépendant des mouvements RH (voir
    *  lib/hrFinancials.ts). Varie fortement selon pays/statut/convention collective — ASSUMPTION :
    *  non défini = valeur par défaut ~45% (ordre de grandeur France, cadre), à ajuster projet par
-   *  projet selon la politique RH réelle du client. */
+   *  projet selon la politique RH réelle du client. Présenté dans un encadré "Paramètres RH"
+   *  dédié en admin entreprise (CompanyFieldsEditor) pour éviter la confusion avec les champs
+   *  financiers de la mission. */
   socialChargesRate?: number;
-  /** Mode de reconnaissance par défaut appliqué aux nouvelles lignes d'impact de cette entreprise,
-   *  quand la ligne ne surcharge pas explicitement ActionImpact.recognition. Non défini =
-   *  "smoothing". */
-  defaultRecognition?: RecognitionMode;
   /** Seuils de segmentation du risque d'un levier en fonction du cumul des montants (€, valeur
    *  absolue de Alert.impactEur) des alertes ouvertes qui lui sont liées (voir
    *  engine.computeLeverRisk). Non défini = seuils par défaut (voir DEFAULT_RISK_THRESHOLDS dans
@@ -568,8 +549,10 @@ export type Program = {
   id: string;
   companyId: string;
   name: string;
-  sponsor: string;
-  target: number;
+  /** `AuthUser.username` du sponsor (sélectionné via `UserPicker`, restreint aux utilisateurs de
+   *  `companyId`) — jamais un texte libre. Optionnel : un programme peut ne pas avoir de sponsor
+   *  désigné. */
+  sponsor?: string;
   currency: string;
   fyStart: string;
   fyEnd: string;
@@ -581,6 +564,13 @@ export type Program = {
    *  l'introduction du Plan Stratégique) — toujours lire via `resolveProgramType()`
    *  (lib/axisLogic.ts) plutôt que de tester `type === "performance"` directement. */
   type?: ProgramType;
+  /** Module additionnel "Plan d'action" (onglet Kanban/Gantt sur chaque levier), activable par
+   *  programme selon les options souscrites par le client. Ne concerne QUE les programmes de
+   *  type "performance" (les axes/chantiers stratégiques n'ont pas cet onglet) — ignoré/absent
+   *  pour un programme "strategic". `undefined` = activé (comportement historique, avant
+   *  l'introduction du toggle, alors porté par `Company.actionPlanEnabled`, retiré depuis :
+   *  l'activation se décide par programme, pas globalement pour toute l'entreprise). */
+  actionPlanEnabled?: boolean;
 };
 
 // ─── Plan Stratégique (méthodologie 3-5-15 : Vision → Axes → Chantiers → Actions) ─────────────

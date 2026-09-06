@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import type { Role, RiskLevel, RecognitionMode } from "@/types";
+import type { Role, RiskLevel } from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 function riskLevels(
@@ -40,11 +40,10 @@ export type CompanyFormState = {
   industry: string;
   fyStart: string;
   fyEnd: string;
-  capexBudget: string;
-  actionPlanEnabled: boolean;
   /** Taux de charges sociales patronales, saisi en % (ex. "45") — converti en fraction (0.45)
    *  côté sauvegarde. Vide = pas de surcharge, la valeur par défaut de lib/hrFinancials.ts
-   *  s'applique (voir Company.socialChargesRate). */
+   *  s'applique (voir Company.socialChargesRate). Ne sert QUE pour les calculs du module RH
+   *  (mouvements de personnel) — sans impact sur les plans de performance ou stratégiques. */
   socialChargesRate: string;
   confidentialityLevels: string[];
   /** Directions/services métier de l'entreprise (round 4, filtres Plan Stratégique) — même
@@ -52,9 +51,6 @@ export type CompanyFormState = {
    *  `AuthUser.direction`. Additif/optionnel, sans impact sur le Plan Performance. */
   directions: string[];
   roleClearance: Partial<Record<Role, string[]>>;
-  /** Mode de reconnaissance par défaut des nouvelles lignes d'impact (voir
-   *  Company.defaultRecognition). Non défini = "smoothing". */
-  defaultRecognition?: RecognitionMode;
   /** Seuils de risque par niveau, saisis en €K (voir Company.riskThresholds — stocké en € brut,
    *  conversion à la charge de qui branche la sauvegarde). Non défini = valeurs par défaut
    *  affichées (DEFAULT_RISK_THRESHOLDS_KEUR). */
@@ -66,19 +62,16 @@ export const DEFAULT_COMPANY_FORM: CompanyFormState = {
   industry: "",
   fyStart: "2026-01-01",
   fyEnd: "2026-12-31",
-  capexBudget: "",
-  actionPlanEnabled: true,
   socialChargesRate: "",
   confidentialityLevels: [],
   directions: [],
   roleClearance: {},
-  defaultRecognition: "smoothing",
   riskThresholds: undefined,
 };
 
 /**
- * Formulaire d'édition des paramètres d'une entreprise (identité, exercice fiscal, CAPEX, module
- * Plan d'action, échelle de confidentialité + matrice d'habilitation par profil). Extrait de
+ * Formulaire d'édition des paramètres d'une entreprise (identité, exercice fiscal, paramètre RH,
+ * échelle de confidentialité + matrice d'habilitation par profil). Extrait de
  * `admin/companies/page.tsx` pour être réutilisé tel quel par le hub `/admin/companies/detail`
  * (onglet Paramètres) — seule source de vérité pour ces champs, ne pas dupliquer.
  */
@@ -198,31 +191,17 @@ export function CompanyFieldsEditor({
         <div className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
           {t("adminCompanyFields.advancedSettings", "Paramètres avancés")}
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="text-xs font-medium text-text-secondary">
-              {t("adminCompanyFields.capexBudgetLabel", "Budget CAPEX total (€M) — optionnel")}
-            </label>
-            <input
-              type="number"
-              value={value.capexBudget}
-              onChange={(e) => onChange({ capexBudget: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              placeholder={t("finance.notProvided", "Non renseigné")}
-            />
+        <div className="rounded-lg border border-bp-coral/30 bg-bp-coral/5 p-3">
+          <div className="text-xs font-semibold text-bp-coral">
+            {t("adminCompanyFields.hrParameterBoxTitle", "Paramètre RH")}
           </div>
-          <div className="flex items-end pb-2">
-            <label className="flex items-center gap-2 text-sm text-text-primary">
-              <input
-                type="checkbox"
-                checked={value.actionPlanEnabled}
-                onChange={(e) => onChange({ actionPlanEnabled: e.target.checked })}
-                className="h-4 w-4 rounded border-border accent-bp-coral"
-              />
-              {t("adminCompanyFields.actionPlanToggle", 'Module "Plan d\'action" activé')}
-            </label>
-          </div>
-          <div>
+          <p className="mt-1 text-[11px] text-text-secondary">
+            {t(
+              "adminCompanyFields.hrParameterBoxHint",
+              "Ce taux ne sert que pour les calculs du module RH (mouvements de personnel — recrutement, départ, transfert — salaire chargé). Il n'affecte ni les plans de performance ni les plans stratégiques. Non renseigné = repli automatique sur 45% par défaut."
+            )}
+          </p>
+          <div className="mt-2 max-w-xs">
             <label className="text-xs font-medium text-text-secondary">
               {t(
                 "adminCompanyFields.socialChargesLabel",
@@ -239,39 +218,6 @@ export function CompanyFieldsEditor({
               className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
               placeholder={t("adminCompanyFields.socialChargesPlaceholder", "Défaut : 45%")}
             />
-            <p className="mt-1 text-[11px] text-text-secondary">
-              {t(
-                "adminCompanyFields.socialChargesHint",
-                'Utilisé pour le "salaire chargé" (brut + charges) dans le calcul EUR des mouvements RH (Vision mouvement). Non renseigné = 45% par défaut (ordre de grandeur France, cadre) — à ajuster selon la politique RH réelle du client.'
-              )}
-            </p>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-text-secondary">
-              {t("adminCompanyFields.defaultRecognitionLabel", "Mode de reconnaissance par défaut")}
-            </label>
-            <select
-              value={value.defaultRecognition ?? "smoothing"}
-              onChange={(e) =>
-                onChange({
-                  defaultRecognition: e.target.value as CompanyFormState["defaultRecognition"],
-                })
-              }
-              className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-            >
-              <option value="smoothing">
-                {t("adminCompanyFields.recognitionSmoothed", "Lissé")}
-              </option>
-              <option value="one_shot">
-                {t("adminCompanyFields.recognitionOneShot", "One-shot")}
-              </option>
-            </select>
-            <p className="mt-1 text-[11px] text-text-secondary">
-              {t(
-                "adminCompanyFields.defaultRecognitionHint",
-                "Appliqué par défaut aux nouvelles lignes d'impact, surchargeable pour chaque ligne d'impact individuellement."
-              )}
-            </p>
           </div>
         </div>
 

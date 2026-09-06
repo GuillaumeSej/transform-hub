@@ -1,55 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { LineChart } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
-import { subscribeCompanies, saveCompany } from "@/lib/firestore/admin";
-import type { Company } from "@/types";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
-import { Button } from "@/components/shared/Button";
-import { useToast } from "@/lib/hooks/useToast";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
-import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import * as engine from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
- * Module Finance — encore un STRETCH (baseline P&L éditable, reforecast, waterfall à venir), mais
- * porte déjà le budget CAPEX de référence du programme : c'est le champ que le dashboard exécutif
- * compare au CAPEX engagé ("X€M engagés / Y€M budgétés"). Tant que ce module n'est pas complet,
- * c'est aussi modifiable depuis Admin > Entreprises.
+ * Module Finance — encore un STRETCH (baseline P&L éditable, reforecast, waterfall à venir).
+ * Le budget CAPEX de référence a été retiré (voir historique) ; ce module n'affiche pour
+ * l'instant que le compte de résultat configuré, consolidé depuis l'arborescence financière.
  */
 export default function FinancePage() {
   const { t } = useTranslation();
   const { user } = useRole();
-  const { showToast } = useToast();
   const data = useBeTrackData(user?.companyId ?? null);
-  const [company, setCompany] = useState<Company | null>(null);
-  const [capexBudget, setCapexBudget] = useState("");
-
-  useEffect(() => {
-    const unsub = subscribeCompanies((companies) => {
-      const c = companies.find((c) => c.id === user?.companyId) ?? null;
-      setCompany(c);
-      setCapexBudget(c?.capexBudget != null ? String(c.capexBudget) : "");
-    });
-    return unsub;
-  }, [user?.companyId]);
-
-  // Le budget CAPEX est "sale" quand la valeur saisie diffère de celle stockée sur `company`.
-  const savedCapex = company?.capexBudget != null ? String(company.capexBudget) : "";
-  useRegisterUnsavedChanges("finance:capex-budget", capexBudget.trim() !== savedCapex.trim());
-
-  const save = async () => {
-    if (!company) return;
-    const next = { ...company };
-    delete next.capexBudget;
-    await saveCompany({
-      ...next,
-      ...(capexBudget.trim() !== "" ? { capexBudget: Number(capexBudget) } : {}),
-    });
-    showToast(t("finance.capexSaved", "Budget CAPEX enregistré"), "", "success");
-  };
   const pnlRows = useMemo(() => engine.pnlImpactDetailed(data), [data]);
 
   return (
@@ -60,35 +27,6 @@ export default function FinancePage() {
           {t("nav.financeModule", "Finance Module")}
         </h1>
       </div>
-
-      <Card>
-        <CardHeader title={t("finance.capexBudgetTitle", "Budget CAPEX de référence")} />
-        <CardBody>
-          <p className="mb-3 text-sm text-text-secondary">
-            {t(
-              "finance.capexBudgetHint",
-              "Le dashboard exécutif affiche le CAPEX engagé rapporté à ce budget total, si déjà cadré en amont de la mission (souvent le cas). Non renseigné = le dashboard affiche uniquement le montant engagé."
-            )}
-          </p>
-          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
-            <div className="w-full sm:w-auto">
-              <label className="text-xs font-medium text-text-secondary">
-                {t("finance.capexBudgetLabel", "Budget CAPEX total (€M)")}
-              </label>
-              <input
-                type="number"
-                value={capexBudget}
-                onChange={(e) => setCapexBudget(e.target.value)}
-                placeholder={t("finance.notProvided", "Non renseigné")}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral sm:w-48"
-              />
-            </div>
-            <Button variant="primary" onClick={save} disabled={!company}>
-              {t("common.save", "Enregistrer")}
-            </Button>
-          </div>
-        </CardBody>
-      </Card>
 
       <Card>
         <CardHeader title={t("finance.pnlConfiguredTitle", "Compte de résultat configuré")} />

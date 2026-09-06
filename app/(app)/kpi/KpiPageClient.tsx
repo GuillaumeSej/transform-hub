@@ -454,7 +454,7 @@ export function KpiPageClient() {
     loading: dataLoading,
     addMeasurement,
     updateIndicator,
-  } = useStrategicData(user?.companyId ?? null, activeProgramId);
+  } = useStrategicData(user?.companyId ?? null, activeProgramId, user);
 
   /** Regroupement d'affichage : par axe, puis par chantier. Les indicateurs "macro" (sans
    *  `chantierId`) ouvrent la section de leur axe ; un indicateur pointant un chantier disparu est

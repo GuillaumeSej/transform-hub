@@ -7,6 +7,7 @@ import { Building2, Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
 import type { Company } from "@/types";
 import { subscribeCompanies, saveCompany, deleteCompany } from "@/lib/firestore/admin";
 import { useToast } from "@/lib/hooks/useToast";
+import { useRole } from "@/lib/hooks/useRole";
 import {
   CompanyFieldsEditor,
   DEFAULT_COMPANY_FORM,
@@ -20,12 +21,13 @@ export default function AdminCompaniesPage() {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const router = useRouter();
+  const { user } = useRole();
   const [companies, setCompanies] = useState<Company[]>([]);
 
   useEffect(() => {
-    const unsub = subscribeCompanies(setCompanies);
+    const unsub = subscribeCompanies(setCompanies, user?.companyId ?? null);
     return unsub;
-  }, []);
+  }, [user?.companyId]);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(DEFAULT_FORM);
   const [showForm, setShowForm] = useState(false);
@@ -43,14 +45,11 @@ export default function AdminCompaniesPage() {
       industry: c.industry,
       fyStart: c.fyStart,
       fyEnd: c.fyEnd,
-      capexBudget: c.capexBudget != null ? String(c.capexBudget) : "",
-      actionPlanEnabled: c.actionPlanEnabled ?? true,
       socialChargesRate:
         c.socialChargesRate != null ? String(Math.round(c.socialChargesRate * 100)) : "",
       confidentialityLevels: c.confidentialityLevels ?? [],
       directions: c.directions ?? [],
       roleClearance: c.roleClearance ?? {},
-      defaultRecognition: c.defaultRecognition ?? "smoothing",
       riskThresholds: c.riskThresholds?.map((t) => ({
         level: t.level,
         minAmount: String(t.minAmount / 1000),
@@ -61,27 +60,20 @@ export default function AdminCompaniesPage() {
 
   const save = async () => {
     if (!form.name.trim()) return;
-    // Ne jamais assigner `capexBudget`/`socialChargesRate` à `undefined` explicitement — Firestore
-    // `setDoc` rejette toute clé valant `undefined` (même bug corrigé sur
-    // AuthUser.confidentialityClearance dans UsersPanel.tsx et sur capexBudget dans
-    // CompanyDetailClient.tsx) : on omet la clé plutôt que de la mettre à `undefined` quand le
-    // champ est vidé.
-    const trimmedCapex = form.capexBudget.trim();
+    // Ne jamais assigner `socialChargesRate` à `undefined` explicitement — Firestore `setDoc`
+    // rejette toute clé valant `undefined` (même bug corrigé sur
+    // AuthUser.confidentialityClearance dans UsersPanel.tsx) : on omet la clé plutôt que de la
+    // mettre à `undefined` quand le champ est vidé.
     const trimmedCharges = form.socialChargesRate.trim();
     const common = {
       name: form.name,
       industry: form.industry,
       fyStart: form.fyStart,
       fyEnd: form.fyEnd,
-      ...(trimmedCapex !== "" ? { capexBudget: Number(trimmedCapex) } : {}),
-      actionPlanEnabled: form.actionPlanEnabled,
       ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
       confidentialityLevels: form.confidentialityLevels,
       directions: form.directions,
       roleClearance: form.roleClearance,
-      ...(form.defaultRecognition !== undefined
-        ? { defaultRecognition: form.defaultRecognition }
-        : {}),
       // riskThresholds saisi en €K côté formulaire (CompanyFormState) → converti en € brut pour
       // Company.riskThresholds (voir commentaire de CompanyFormState.riskThresholds).
       ...(form.riskThresholds !== undefined
@@ -98,7 +90,6 @@ export default function AdminCompaniesPage() {
         const existing = companies.find((c) => c.id === editId);
         if (existing) {
           const rest = { ...existing };
-          delete rest.capexBudget;
           delete rest.socialChargesRate;
           await saveCompany({ ...rest, ...common });
         }

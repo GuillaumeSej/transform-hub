@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
   getDocs,
   onSnapshot,
   query,
@@ -28,9 +29,25 @@ import { DEMO_HIERARCHY_NODES } from "@/data/mockData";
 
 const companiesCol = () => collection(db, "companies");
 
-export function subscribeCompanies(cb: (companies: Company[]) => void): Unsubscribe {
+/**
+ * `companyId` null/undefined = admin global (voit toutes les entreprises, comme `byCompany` dans
+ * lib/firestore/levers.ts) ; sinon SCOPÉ CÔTÉ SERVEUR à cette seule entreprise via un filtre sur
+ * l'id du document (`Company.id` EST le tenant id, il n'y a pas de champ `companyId` séparé sur ce
+ * type). Nécessaire pour que `firestore.rules` puisse restreindre la lecture de la collection
+ * `companies` à l'entreprise de l'appelant : Firestore refuse une requête `list`/`onSnapshot` sans
+ * filtre correspondant à la condition de la règle (voir commentaire en tête de `firestore.rules`).
+ * Tous les appelants scopés à une entreprise DOIVENT passer `user?.companyId ?? null` ici — un
+ * oubli redevient un `permission-denied` silencieux une fois les règles strictes déployées.
+ */
+export function subscribeCompanies(
+  cb: (companies: Company[]) => void,
+  companyId?: string | null
+): Unsubscribe {
+  const scopedQuery = companyId
+    ? query(companiesCol(), where(documentId(), "==", companyId))
+    : companiesCol();
   return onSnapshot(
-    companiesCol(),
+    scopedQuery,
     (snap) => {
       cb(snap.docs.map((d) => d.data() as Company));
     },
@@ -59,9 +76,18 @@ export async function deleteCompany(id: string): Promise<void> {
 
 const programsCol = () => collection(db, "programs");
 
-export function subscribePrograms(cb: (programs: Program[]) => void): Unsubscribe {
+/** `companyId` null/undefined = admin global (voit tous les programmes de toutes les
+ *  entreprises) ; sinon SCOPÉ CÔTÉ SERVEUR via `where("companyId", ...)`. Même contrat que
+ *  `subscribeCompanies` ci-dessus — tout appelant scopé DOIT passer `user?.companyId ?? null`. */
+export function subscribePrograms(
+  cb: (programs: Program[]) => void,
+  companyId?: string | null
+): Unsubscribe {
+  const scopedQuery = companyId
+    ? query(programsCol(), where("companyId", "==", companyId))
+    : programsCol();
   return onSnapshot(
-    programsCol(),
+    scopedQuery,
     (snap) => {
       cb(snap.docs.map((d) => d.data() as Program));
     },
@@ -169,9 +195,20 @@ export async function saveHierarchyNodesBatch(nodes: HierarchyNode[]): Promise<v
 
 const usersCol = () => collection(db, "adminUsers");
 
-export function subscribeUsers(cb: (users: AuthUser[]) => void): Unsubscribe {
+/** `companyId` null/undefined = admin global (voit tous les utilisateurs de toutes les
+ *  entreprises) ; sinon SCOPÉ CÔTÉ SERVEUR via `where("companyId", ...)`. Même contrat que
+ *  `subscribeCompanies`/`subscribePrograms` — tout appelant scopé DOIT passer
+ *  `user?.companyId ?? null`. Particulièrement sensible : `adminUsers` porte aussi
+ *  `AuthUser.password` (voir types/index.ts) — c'est la collection la plus critique à isoler. */
+export function subscribeUsers(
+  cb: (users: AuthUser[]) => void,
+  companyId?: string | null
+): Unsubscribe {
+  const scopedQuery = companyId
+    ? query(usersCol(), where("companyId", "==", companyId))
+    : usersCol();
   return onSnapshot(
-    usersCol(),
+    scopedQuery,
     (snap) => {
       cb(snap.docs.map((d) => d.data() as AuthUser));
     },
@@ -197,9 +234,6 @@ export const TEST_COMPANY: Company = {
   createdAt: "2026-01-15",
   fyStart: "2026-01-01",
   fyEnd: "2026-12-31",
-  // CAPEX total engagé par les 18 leviers de démo (data/mockData.ts) ≈ 10.7€M — budget fixé
-  // ~26% au-dessus pour un ratio "engagé / budgété" réaliste sur le dashboard exécutif.
-  capexBudget: 13.5,
   // Arborescence financière P&L -> centre de coût (voir data/mockData.ts DEMO_HIERARCHY_NODES,
   // domain: "financial"). Les leviers pointent vers leur centre de coût via hierarchyLeafId.
   hierarchyLevels: [
@@ -238,8 +272,6 @@ export const TEST_PROGRAM: Program = {
   id: "p1",
   companyId: "c1",
   name: "Transformation Excellence 2026",
-  sponsor: "CEO Office",
-  target: 50.0,
   currency: "EUR",
   fyStart: "2026-01-01",
   fyEnd: "2026-12-31",
@@ -252,8 +284,6 @@ export const TEST_PROGRAM_2: Program = {
   id: "p2",
   companyId: "c2",
   name: "Digital Shift GlobalTech",
-  sponsor: "Sophie Chen",
-  target: 22.0,
   currency: "€M",
   fyStart: "2026-01-01",
   fyEnd: "2026-12-31",
@@ -266,8 +296,6 @@ export const TEST_PROGRAM_3: Program = {
   id: "p3",
   companyId: "c3",
   name: "Fusion EuroFinance 2026",
-  sponsor: "Lucas Bernard",
-  target: 10.0,
   currency: "€M",
   fyStart: "2026-01-01",
   fyEnd: "2026-12-31",

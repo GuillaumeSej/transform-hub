@@ -79,7 +79,7 @@ export function LeversPagePerformance() {
       setGeographyHierarchyLevels(company?.geographyHierarchyLevels ?? []);
       setClearance(resolveConfidentialityClearance(user, company?.roleClearance));
       setRiskThresholds(company?.riskThresholds);
-    });
+    }, user?.companyId ?? null);
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.companyId, user?.role, user?.confidentialityClearance]);
@@ -88,8 +88,10 @@ export function LeversPagePerformance() {
   // Excel des leviers (voir lib/leverExcelImport.ts) ; même pattern que le dashboard exécutif.
   const [programs, setPrograms] = useState<Program[]>([]);
   useEffect(() => {
-    const unsub = subscribePrograms((all) =>
-      setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all)
+    const unsub = subscribePrograms(
+      (all) =>
+        setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all),
+      user?.companyId ?? null
     );
     return unsub;
   }, [user?.companyId]);

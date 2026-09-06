@@ -34,6 +34,8 @@ import {
   resolveMilestoneAutoFlags,
 } from "@/lib/axisLogic";
 import { addDays } from "@/lib/dateUtils";
+import { subscribeCompanies } from "@/lib/firestore/admin";
+import { saveChantier } from "@/lib/firestore/chantiers";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
@@ -639,8 +641,19 @@ export function ChantierDetailClient() {
    *  défilement plus bas. */
   const focusActionId = searchParams.get("action") ?? "";
 
-  const data = useStrategicData(user?.companyId ?? null, activeProgramId);
-  const stages = useMaturityStages(activeProgramId);
+  const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
+  const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
+
+  // Échelle de confidentialité de l'entreprise — pour le sélecteur inline de l'en-tête (voir plus
+  // bas), même pattern que `components/shared/LeverForm.tsx:291-300` côté Plan Performance.
+  const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      const company = companies.find((c) => c.id === user?.companyId);
+      setConfidentialityLevels(company?.confidentialityLevels ?? []);
+    }, user?.companyId ?? null);
+    return unsub;
+  }, [user?.companyId]);
 
   const chantier = useMemo(() => data.chantiers.find((c) => c.id === id), [data.chantiers, id]);
   const axis = useMemo(
@@ -755,6 +768,26 @@ export function ChantierDetailClient() {
   const updateChantierField = async (patch: Partial<Chantier>) => {
     try {
       await data.updateChantier(chantier.id, patch);
+    } catch (error) {
+      console.error("[betrack] échec d'enregistrement du chantier :", error);
+      showToast(
+        t("strategicAxes.chantierSaveErrorTitle"),
+        t("strategicAxes.chantierSaveError"),
+        "error"
+      );
+    }
+  };
+
+  /** Retire `confidentialityLevel` du chantier ("Aucun" choisi dans le sélecteur ci-dessous) — cas
+   *  particulier qui ne peut PAS passer par `updateChantierField` : celle-ci fusionne un patch sur
+   *  le document existant (`{...existing, ...patch}`), et une clé valant explicitement `undefined`
+   *  ferait échouer `setDoc` (Firestore rejette toute valeur `undefined`). On écrit donc ici le
+   *  document complet, la clé simplement ABSENTE de l'objet. */
+  const clearChantierConfidentiality = async () => {
+    try {
+      const rest = { ...chantier };
+      delete rest.confidentialityLevel;
+      await saveChantier({ ...rest, lastUpdate: new Date().toISOString().slice(0, 10) });
     } catch (error) {
       console.error("[betrack] échec d'enregistrement du chantier :", error);
       showToast(
@@ -897,6 +930,38 @@ export function ChantierDetailClient() {
                 <span className="shrink-0 text-[13px] font-bold text-primary">{progressPct}%</span>
               </div>
             </div>
+            {confidentialityLevels.length > 0 && (
+              <div>
+                <label
+                  className="text-xs font-medium text-text-secondary"
+                  htmlFor="chantier-confidentiality"
+                >
+                  {t("strategicChantierDetail.confidentialityLevel", "Niveau de confidentialité")}
+                </label>
+                <select
+                  id="chantier-confidentiality"
+                  className={INPUT_CLASS}
+                  value={chantier.confidentialityLevel ?? ""}
+                  onChange={(e) =>
+                    e.target.value
+                      ? updateChantierField({ confidentialityLevel: e.target.value })
+                      : clearChantierConfidentiality()
+                  }
+                >
+                  <option value="">
+                    {t(
+                      "strategicChantierDetail.confidentialityLevelNone",
+                      "Aucun (visible par tous)"
+                    )}
+                  </option>
+                  {confidentialityLevels.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>

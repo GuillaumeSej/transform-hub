@@ -11,13 +11,13 @@ export function useNotifications(data: BeTrackData, user: AuthUser | null | unde
   const [companies, setCompanies] = useState<Company[]>([]);
 
   useEffect(() => {
-    const unsubscribeUsers = subscribeUsers(setUsers);
-    const unsubscribeCompanies = subscribeCompanies(setCompanies);
+    const unsubscribeUsers = subscribeUsers(setUsers, user?.companyId ?? null);
+    const unsubscribeCompanies = subscribeCompanies(setCompanies, user?.companyId ?? null);
     return () => {
       unsubscribeUsers();
       unsubscribeCompanies();
     };
-  }, []);
+  }, [user?.companyId]);
 
   const alerts = useMemo(
     () => targetAlerts(generateAlerts(data), user, users, data, companies),

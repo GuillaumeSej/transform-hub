@@ -18,7 +18,10 @@ import type { MaturityStageConfig } from "@/types";
  * composants stratégiques partagés reçoivent la liste d'étapes en prop (voir
  * `components/strategic/AxisStageBadge.tsx`), une seule forme circule donc partout.
  */
-export function useMaturityStages(programId: string | null | undefined): MaturityStageConfig[] {
+export function useMaturityStages(
+  programId: string | null | undefined,
+  companyId?: string | null
+): MaturityStageConfig[] {
   const [stages, setStages] = useState<MaturityStageConfig[]>([]);
 
   useEffect(() => {
@@ -26,9 +29,9 @@ export function useMaturityStages(programId: string | null | undefined): Maturit
       setStages([]);
       return;
     }
-    const unsub = subscribeMaturityStages(programId, setStages);
+    const unsub = subscribeMaturityStages(programId, setStages, companyId);
     return unsub;
-  }, [programId]);
+  }, [programId, companyId]);
 
   return stages;
 }

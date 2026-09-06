@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutGrid, LayoutList, Plus, Rows3, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/shared/Button";
@@ -22,6 +22,7 @@ import {
   resolveIndicatorStatus,
   type IndicatorDelta,
 } from "@/lib/axisLogic";
+import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantierAction } from "@/lib/firestore/chantierActions";
 import { saveChantier } from "@/lib/firestore/chantiers";
 import { saveIndicator } from "@/lib/firestore/indicators";
@@ -117,9 +118,20 @@ export function StrategicAxesView() {
   const searchParams = useSearchParams();
   const { showToast } = useToast();
 
-  const data = useStrategicData(user?.companyId ?? null, activeProgramId);
-  const stages = useMaturityStages(activeProgramId);
+  const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
+  const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
   const [newAxisOpen, setNewAxisOpen] = useState(false);
+
+  // Échelle de confidentialité de l'entreprise — pour le sélecteur du formulaire de création d'axe
+  // (même pattern que `components/shared/LeverForm.tsx`, voir `AxisForm`).
+  const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      const company = companies.find((c) => c.id === user?.companyId);
+      setConfidentialityLevels(company?.confidentialityLevels ?? []);
+    }, user?.companyId ?? null);
+    return unsub;
+  }, [user?.companyId]);
   const [view, setView] = useState<"cards" | "kanban" | "chantiers">("cards");
 
   // Compteurs par axe — chantiers, indicateurs, indicateurs à risque (statut EFFECTIF, surcharge
@@ -430,6 +442,7 @@ export function StrategicAxesView() {
       >
         <AxisForm
           stages={stages}
+          confidentialityLevels={confidentialityLevels}
           submitLabel={t("strategicAxes.createAxis")}
           onCancel={() => setNewAxisOpen(false)}
           onSubmit={async (values: AxisFormValues) => {

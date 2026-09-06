@@ -266,7 +266,6 @@ describe("dashboardPivot — edge cases", () => {
           companyId: "C1",
           name: "Programme Un",
           sponsor: "S",
-          target: 1,
           currency: "€M",
           fyStart: "2026-01-01",
           fyEnd: "2026-12-31",

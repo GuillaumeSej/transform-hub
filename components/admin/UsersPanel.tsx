@@ -129,14 +129,14 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   const [companies, setCompanies] = useState<Company[]>([]);
 
   useEffect(() => {
-    const unsub = subscribeCompanies(setCompanies);
+    const unsub = subscribeCompanies(setCompanies, fixedCompanyId ?? null);
     return unsub;
-  }, []);
+  }, [fixedCompanyId]);
 
   useEffect(() => {
     const unsub = subscribeUsers((list) => {
       setUsers(fixedCompanyId ? list.filter((u) => u.companyId === fixedCompanyId) : list);
-    });
+    }, fixedCompanyId ?? null);
     return unsub;
   }, [fixedCompanyId]);
 

@@ -148,7 +148,7 @@ export function useBeTrackData(companyId?: string | null) {
         workforceDb.subscribeWorkforceMeta((m) => !cancelled && setWorkforceMeta(m)),
         alertsDb.subscribeAlerts((a) => !cancelled && setAlerts(a), companyId),
         alertsDb.subscribeAlertStates((s) => !cancelled && setAlertStates(s), companyId),
-        subscribeCompanies((items) => !cancelled && setCompanies(items)),
+        subscribeCompanies((items) => !cancelled && setCompanies(items), companyId),
         programDb.subscribeProgramConfig(
           (config) => !cancelled && config && setProgramConfig(config),
           companyId
