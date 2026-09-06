@@ -1,75 +1,279 @@
 rules_version = '2';
 
-// Périmètre "leviers" de BeTrack (voir lib/firestore/levers.ts). L'app n'a pas encore
-// d'authentification réelle (le choix de rôle est juste local au navigateur, voir
-// lib/hooks/useRole.tsx) : ces règles ouvrent donc la lecture/écriture à quiconque connaît le
-// projectId, ce qui est acceptable pour une démo interne mais PAS pour de la donnée sensible en
-// prod. Avant un déploiement public, ajouter Firebase Auth et restreindre via `request.auth`.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Isolation multi-tenant ("chinese wall") — chaque entreprise (Company.id) ne doit voir/écrire
+// QUE ses propres données, quel que soit le compte utilisé pour se connecter (y compris un
+// identifiant/username identique réutilisé pour 2 entreprises différentes — le modèle actuel est
+// "1 compte adminUsers = 1 companyId", donc ce cas n'existe pas encore côté identité, mais
+// l'isolation posée ici au niveau des DONNÉES est la même quel que soit le modèle d'identité
+// retenu plus tard).
+//
+// AVANT ce fichier, TOUTES les collections étaient `allow read, write: if true` : n'importe qui
+// connaissant le projectId Firebase (authentifié ou non) pouvait lire/écrire l'intégralité des
+// données de TOUTES les entreprises. Ce fichier ferme ce trou pour les collections qui portent
+// un `companyId` par document (l'immense majorité — voir types/index.ts) en vérifiant, à chaque
+// lecture/écriture, que l'entreprise du document correspond à l'entreprise du compte connecté.
+//
+// Comment l'identité est résolue : l'app utilise un VRAI Firebase Auth (email/mot de passe), mais
+// avec un e-mail SYNTHÉTIQUE `${username}@betrack.local` (voir lib/auth.ts:usernameToSyntheticEmail)
+// — jamais de vrai e-mail. Le profil applicatif (role + companyId) vit dans le document Firestore
+// `adminUsers/{username}` (doc id = username normalisé, voir lib/firestore/admin.ts:saveUser). On
+// retrouve le username depuis `request.auth.token.email` en coupant avant le "@" — exactement ce
+// que fait déjà `lib/hooks/useRole.tsx` côté client — puis on va lire ce document pour connaître
+// le rôle et l'entreprise de l'appelant.
+//
+// IMPORTANT — contrainte Firestore sur les requêtes `list`/`onSnapshot` (pas seulement `get`) :
+// une requête qui liste une collection est refusée EN BLOC si Firestore ne peut pas prouver, à
+// partir des seuls filtres `where(...)` de la requête, que TOUS les documents retournables
+// respecteraient la règle — il n'y a pas de filtrage silencieux document par document. Concrètement
+// : une requête `onSnapshot(collection(db,"levers"))` SANS `where("companyId","==",...)` sera
+// rejetée (`permission-denied`) pour un utilisateur non-admin dès que la règle ci-dessous dépend
+// de `resource.data.companyId`. La couche `lib/firestore/*.ts` a été mise à jour en parallèle de
+// ce fichier pour que CHAQUE abonnement scopé à une entreprise envoie bien ce filtre — voir les
+// commentaires "filtre CÔTÉ SERVEUR" dans lib/firestore/levers.ts, admin.ts, alerts.ts. Si une
+// régression apparaît après déploiement de ces règles ("permission-denied" imprévu), le premier
+// réflexe est de vérifier que l'appel `subscribeXxx(...)` en cause passe bien `companyId`.
+//
+// LIMITE CONNUE, PAS RÉSOLUE ICI : certains documents (`leverMeta/*`, une partie de `meta/*`)
+// mutualisent en un SEUL document Firestore les données de TOUTES les entreprises (commentaires
+// de leviers, journal d'audit, base RH — voir lib/firestore/workforce.ts, levers.ts,
+// companyReset.ts). Une règle de sécurité ne peut isoler que des DOCUMENTS entiers, pas des
+// portions à l'intérieur d'un document — ces collections restent donc lisibles/inscriptibles par
+// tout utilisateur authentifié de N'IMPORTE QUELLE entreprise (voir le bloc dédié plus bas). Le
+// vrai correctif est une restructuration de ces documents en sous-collections/documents par
+// entreprise (ex. `leverMeta/{companyId}/comments`) — chantier distinct, plus risqué (migration de
+// données live), volontairement pas fait dans cette passe. Voir aussi le chantier de migration
+// Azure : cette même limite existe indépendamment du fournisseur (Firestore ou Cosmos DB/Azure
+// SQL), c'est une question de MODÈLE DE DONNÉES, pas de plateforme.
+//
+// Ce fichier ne modélise PAS encore les permissions fines par rôle À L'INTÉRIEUR d'une entreprise
+// (ex. un chantier_owner ne devrait modifier que SON chantier) — la granularité ici est "toute
+// personne authentifiée de l'entreprise peut lire/écrire les données de son entreprise", identique
+// à la granularité déjà appliquée côté UI aujourd'hui. Le gain de ce fichier porte sur l'ISOLATION
+// ENTRE ENTREPRISES (le "chinese wall" demandé), pas sur le RBAC interne — raffinement possible
+// dans un second temps, sans lien avec la migration Azure.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /levers/{leverId} {
-      allow read, write: if true;
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email != null;
     }
-    match /subLevers/{subLeverId} {
-      allow read, write: if true;
+
+    // Username applicatif dérivé de l'e-mail synthétique Firebase Auth (voir lib/auth.ts).
+    function currentUsername() {
+      return request.auth.token.email.split('@')[0];
     }
+
+    // Profil applicatif (role + companyId + password legacy...) — un seul `get()` par requête,
+    // réutilisé par toutes les fonctions ci-dessous. `adminUsers/{username}` doit exister pour
+    // tout compte Firebase Auth valide (voir lib/auth.ts:resolveAuthUserProfile, qui échoue
+    // explicitement sinon) : un compte Auth sans profil Firestore correspondant n'a aucun accès
+    // (ce `get()` échoue, donc tout appelant de `currentProfile()` sans profil recevra `false`
+    // par courtcircuit `isSignedIn() &&` en amont dans les fonctions qui l'utilisent — jamais un
+    // accès total par défaut).
+    function currentProfile() {
+      return get(/databases/$(database)/documents/adminUsers/$(currentUsername())).data;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && currentProfile().role == 'admin';
+    }
+
+    function myCompanyId() {
+      return currentProfile().companyId;
+    }
+
+    // Rôle admin d'ENTREPRISE (pas admin global) dont le companyId correspond.
+    function isCompanyAdmin(companyId) {
+      return isSignedIn() && currentProfile().role == 'admin_entreprise' && myCompanyId() == companyId;
+    }
+
+    // N'IMPORTE QUEL rôle de l'entreprise donnée (pas seulement les admins) — c'est la fonction la
+    // plus utilisée ci-dessous : elle porte l'isolation entre entreprises, pas les permissions
+    // internes par rôle (voir note en tête de fichier).
+    function belongsToCompany(companyId) {
+      return isSignedIn() && myCompanyId() == companyId;
+    }
+
+    // Lecture : admin global OU membre de l'entreprise. Écriture métier courante : idem (voir
+    // note "pas de RBAC fin" en tête de fichier) — réutilisée telle quelle par la plupart des
+    // collections métier ci-dessous.
+    function canReadCompanyScoped(companyId) {
+      return isSuperAdmin() || belongsToCompany(companyId);
+    }
+    function canWriteCompanyScoped(companyId) {
+      return isSuperAdmin() || belongsToCompany(companyId);
+    }
+
+    // ─── companies/{companyId} — Company.id EST le tenant id (pas de champ companyId séparé) ────
+    match /companies/{companyId} {
+      allow read: if canReadCompanyScoped(companyId);
+      // Création/suppression d'entreprise : admin global uniquement (voir nav-config.ts,
+      // /admin/companies réservé au rôle "admin"). Édition des paramètres (fyStart, hiérarchie,
+      // échelle de confidentialité...) : admin global OU admin de CETTE entreprise (le hub
+      // /admin/companies/detail est accessible à admin_entreprise pour sa propre entreprise).
+      allow create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin() || isCompanyAdmin(companyId);
+    }
+
+    // ─── adminUsers/{username} — porte AuthUser.password en clair (voir types/index.ts) : LA
+    // collection la plus sensible du modèle actuel. doc id = username normalisé (voir
+    // lib/firestore/admin.ts:saveUser). `resolveAuthUserProfile` (lib/auth.ts) interroge par le
+    // CHAMP `username` (pas seulement par id) — la règle de lecture couvre donc les deux. ────────
+    match /adminUsers/{username} {
+      allow read: if isSuperAdmin()
+        || resource.data.username == currentUsername()
+        || belongsToCompany(resource.data.companyId);
+      allow create: if isSuperAdmin() || isCompanyAdmin(request.resource.data.companyId);
+      allow update: if isSuperAdmin()
+        || (isCompanyAdmin(resource.data.companyId)
+            && request.resource.data.companyId == resource.data.companyId);
+      allow delete: if isSuperAdmin() || isCompanyAdmin(resource.data.companyId);
+    }
+
+    // ─── programs/{id} ─────────────────────────────────────────────────────────────────────────
+    match /programs/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+
+    // ─── lifecycleConfigs/{companyId} — un seul document par entreprise, doc id = companyId. ─────
+    // Lecture ouverte à toute l'entreprise (les libellés d'étapes L1-L5 sont lus partout via
+    // useLifecycleLabels) ; édition réservée aux admins (LifecycleEditor n'est monté que dans le
+    // hub admin).
+    match /lifecycleConfigs/{companyId} {
+      allow read: if canReadCompanyScoped(companyId);
+      allow write: if isSuperAdmin() || isCompanyAdmin(companyId);
+    }
+
+    // ─── levers/{id} — companyId optionnel (legacy : les leviers orphelins, sans companyId,
+    // deviennent invisibles pour toute entreprise non-admin — comportement déjà voulu côté client,
+    // voir lib/firestore/levers.ts:byCompany). ─────────────────────────────────────────────────
+    match /levers/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+
+    // Collection legacy, plus jamais alimentée (fusionnée dans Lever.actions — voir
+    // lib/firestore/levers.ts) : vidée à chaque reseed, pas de modèle de tenant à maintenir ici.
+    // Authentification requise uniquement (plus de `if true`).
+    match /subLevers/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ─── hierarchyNodes/{id} — companyId requis, déjà interrogé côté serveur avec
+    // where("companyId","==",...) (voir lib/firestore/admin.ts:subscribeHierarchyNodes). ─────────
+    match /hierarchyNodes/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+
+    // ─── alerts/{id} & alertStates/{id} — companyId optionnel, désormais interrogées côté serveur
+    // avec where("companyId","==",...) quand l'appelant est scopé (voir lib/firestore/alerts.ts).
+    match /alerts/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+    match /alertStates/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+
+    // ─── Plan Stratégique — strategicAxes/chantiers/chantierActions/indicators/
+    // indicatorMeasurements/chantierStaffing : companyId requis sur chaque document, DÉJÀ
+    // interrogées côté serveur avec where("companyId","==",...) (voir lib/firestore/{strategicAxes,
+    // chantiers,chantierActions,indicators,indicatorMeasurements,chantierStaffing}.ts) — aucun
+    // changement client nécessaire pour ce bloc. ───────────────────────────────────────────────
+    match /strategicAxes/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+    match /chantiers/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+    match /chantierActions/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+    match /indicators/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+    match /indicatorMeasurements/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+    match /chantierStaffing/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+
+    // ─── maturityStageConfigs/{id} — companyId présent sur le document. La requête client
+    // (lib/firestore/maturityStageConfigs.ts:subscribeMaturityStages) filtre désormais par
+    // programId ET companyId (un `==` supplémentaire n'exige pas d'index composite Firestore) —
+    // même pattern que le reste du Plan Stratégique ci-dessus, pas de `get()` de jointure requis.
+    match /maturityStageConfigs/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+    }
+
+    // ─── Documents "mega-doc" partagés entre TOUTES les entreprises (voir note en tête de
+    // fichier) : leverMeta/{comments,auditLog,workforceEmployees,workforceMovements,
+    // workforceSummary} et meta/{levers,alertsSeed,workforce,program__*} — pas de tenant isolable
+    // au niveau Firestore sans restructuration. On ferme au moins l'accès anonyme/public (avant :
+    // `if true`) en exigeant une session authentifiée valide avec un profil adminUsers résolu. ───
     match /leverMeta/{docId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
     match /meta/{docId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
-    match /companies/{docId} {
-      allow read, write: if true;
-    }
+
+    // Route legacy retirée de la nav (voir lib/nav-config.ts) — plus alimentée, gardée en lecture/
+    // écriture authentifiée seulement pour ne pas casser un import/export existant.
     match /projects/{docId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
-    match /programs/{docId} {
-      allow read, write: if true;
-    }
-    match /lifecycleConfigs/{docId} {
-      allow read, write: if true;
-    }
-    match /adminUsers/{docId} {
-      allow read, write: if true;
-    }
-    match /hierarchyNodes/{docId} {
-      allow read, write: if true;
-    }
-    // Temporairement aligné avec le reste de la démo. Une restriction par destinataire nécessite
-    // Firebase Auth : les profils actuellement stockés en localStorage ne créent pas request.auth.
-    match /alerts/{docId} {
-      allow read, write: if true;
-    }
-    match /alertStates/{docId} {
-      allow read, write: if true;
-    }
-    // Plan Stratégique (voir lib/firestore/{strategicAxes,chantiers,chantierActions,
-    // maturityStageConfigs,indicators,indicatorMeasurements}.ts). Même ouverture que le reste de
-    // la démo — sans ces entrées, le `match /{document=**}` ci-dessous les refuserait toutes.
-    match /strategicAxes/{docId} {
-      allow read, write: if true;
-    }
-    match /chantiers/{docId} {
-      allow read, write: if true;
-    }
-    match /chantierActions/{docId} {
-      allow read, write: if true;
-    }
-    match /maturityStageConfigs/{docId} {
-      allow read, write: if true;
-    }
-    match /indicators/{docId} {
-      allow read, write: if true;
-    }
-    match /indicatorMeasurements/{docId} {
-      allow read, write: if true;
-    }
-    // Staffing des chantiers en ETP par grande fonction (voir lib/firestore/chantierStaffing.ts).
-    match /chantierStaffing/{docId} {
-      allow read, write: if true;
-    }
+
     match /{document=**} {
       allow read, write: if false;
     }

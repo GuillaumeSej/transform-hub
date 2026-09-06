@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Pencil, Plus, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Modal } from "@/components/shared/Modal";
+import { subscribeCompanies } from "@/lib/firestore/admin";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { ChantierForm, type ChantierFormValues } from "@/components/strategic/ChantierForm";
@@ -61,8 +62,19 @@ export function AxisDetailClient() {
   const { showToast } = useToast();
   const id = searchParams.get("id") ?? "";
 
-  const data = useStrategicData(user?.companyId ?? null, activeProgramId);
-  const stages = useMaturityStages(activeProgramId);
+  const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
+  const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
+
+  // Échelle de confidentialité de l'entreprise — pour le sélecteur des modales d'édition d'axe et
+  // de création de chantier ci-dessous (même pattern que `StrategicAxesView.tsx`).
+  const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      const company = companies.find((c) => c.id === user?.companyId);
+      setConfidentialityLevels(company?.confidentialityLevels ?? []);
+    }, user?.companyId ?? null);
+    return unsub;
+  }, [user?.companyId]);
 
   const [editAxisOpen, setEditAxisOpen] = useState(false);
   const [newChantierOpen, setNewChantierOpen] = useState(false);
@@ -237,6 +249,7 @@ export function AxisDetailClient() {
         <AxisForm
           initial={axis}
           stages={stages}
+          confidentialityLevels={confidentialityLevels}
           submitLabel={t("common.save")}
           onCancel={() => setEditAxisOpen(false)}
           onSubmit={async (values: AxisFormValues) => {
@@ -397,6 +410,7 @@ export function AxisDetailClient() {
           initial={{ axisId: axis.id }}
           axes={data.axes}
           stages={stages}
+          confidentialityLevels={confidentialityLevels}
           submitLabel={t("strategicAxes.createChantier")}
           onCancel={() => setNewChantierOpen(false)}
           onSubmit={async (values: ChantierFormValues) => {

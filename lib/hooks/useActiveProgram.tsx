@@ -91,7 +91,7 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
       // entreprise — même règle que partout ailleurs (voir useBeTrackData).
       setPrograms(companyId ? all.filter((p) => p.companyId === companyId) : all);
       setFirestoreLoading(false);
-    });
+    }, companyId);
     return unsub;
   }, [companyId]);
 

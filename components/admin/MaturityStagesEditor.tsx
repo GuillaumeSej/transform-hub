@@ -61,12 +61,16 @@ export function MaturityStagesEditor({
 
   useEffect(() => {
     if (!programId) return;
-    const unsub = subscribeMaturityStages(programId, (fetched) => {
-      setStages(fetched);
-      setSavedStages(structuredClone(fetched));
-    });
+    const unsub = subscribeMaturityStages(
+      programId,
+      (fetched) => {
+        setStages(fetched);
+        setSavedStages(structuredClone(fetched));
+      },
+      companyId
+    );
     return unsub;
-  }, [programId]);
+  }, [programId, companyId]);
 
   const stagesDirty = JSON.stringify(stages) !== JSON.stringify(savedStages);
   useRegisterUnsavedChanges(`admin:maturityStages:${programId}`, stagesDirty);

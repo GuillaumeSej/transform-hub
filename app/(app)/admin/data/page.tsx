@@ -48,15 +48,15 @@ export default function AdminDataPage() {
   const [movements, setMovements] = useState<WorkforceMovement[]>([]);
 
   useEffect(() => {
-    const unsub1 = subscribeCompanies(setCompanies);
-    const unsub2 = subscribeUsers(setUsers);
-    const unsub3 = subscribePrograms(setPrograms);
+    const unsub1 = subscribeCompanies(setCompanies, companyId);
+    const unsub2 = subscribeUsers(setUsers, companyId);
+    const unsub3 = subscribePrograms(setPrograms, companyId);
     return () => {
       unsub1();
       unsub2();
       unsub3();
     };
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     const unsub1 = subscribeLevers(setLevers, companyId);

@@ -442,10 +442,6 @@ const en: Record<string, string> = {
   "leverDetail.impactTable.amount": "Amount €M",
 
   // ─── finance (Finance Module) ───────────────────────────────────────────────
-  "finance.capexBudgetTitle": "Reference CAPEX budget",
-  "finance.capexBudgetHint":
-    "The executive dashboard shows engaged CAPEX against this total budget, if already scoped upfront (often the case). Not provided = the dashboard shows only the engaged amount.",
-  "finance.capexBudgetLabel": "Total CAPEX budget (€M)",
   "finance.notProvided": "Not provided",
   "finance.capexSaved": "CAPEX budget saved",
   "finance.pnlConfiguredTitle": "Configured P&L",
@@ -606,12 +602,13 @@ const en: Record<string, string> = {
   "adminProgramsPanel.nameLabel": "Program name",
   "adminProgramsPanel.namePlaceholder": "Name",
   "adminProgramsPanel.sponsor": "Sponsor",
-  "adminProgramsPanel.targetLabel": "Target (€M)",
   "adminProgramsPanel.count": "{n} program(s)",
   "adminProgramsPanel.colProgram": "Program",
-  "adminProgramsPanel.colTarget": "Target",
   "adminProgramsPanel.colActions": "Actions",
   "adminProgramsPanel.empty": "No program for this company.",
+  "adminProgramsPanel.actionPlanModuleLabel": "Action Plan module",
+  "adminProgramsPanel.actionPlanModuleHint":
+    "Enables the Action Plan tab (Kanban/Gantt) on this program's levers. Add-on module enabled per the client's subscribed options — unchecked, this program's levers won't show that tab.",
 
   // ─── shared ───────────────────────────────────────────────────────────────
   "shared.appShell.mobileNavLabel": "Main navigation",
@@ -802,17 +799,13 @@ const en: Record<string, string> = {
   "adminCompanyFields.fyStart": "Fiscal year start",
   "adminCompanyFields.fyEnd": "Fiscal year end",
   "adminCompanyFields.advancedSettings": "Advanced settings",
-  "adminCompanyFields.capexBudgetLabel": "Total CAPEX budget (€M) — optional",
-  "adminCompanyFields.actionPlanToggle": '"Action Plan" module enabled',
+  "adminCompanyFields.hrParameterBoxTitle": "HR parameter",
+  "adminCompanyFields.hrParameterBoxHint":
+    "This rate is used only for HR module calculations (staff movements — hiring, departure, transfer — fully-loaded salary). It has no impact on performance plans or strategic plans. Not set = automatically falls back to 45% by default.",
   "adminCompanyFields.socialChargesLabel": "Employer social charges rate (%) — optional",
   "adminCompanyFields.socialChargesPlaceholder": "Default: 45%",
   "adminCompanyFields.socialChargesHint":
     'Used for the "fully-loaded salary" (gross + charges) in the EUR calculation of HR movements (Movement View). Not set = 45% by default (France-scale order of magnitude) — adjust to the client\'s actual HR policy.',
-  "adminCompanyFields.defaultRecognitionLabel": "Default recognition mode",
-  "adminCompanyFields.recognitionSmoothed": "Smoothed",
-  "adminCompanyFields.recognitionOneShot": "One-off",
-  "adminCompanyFields.defaultRecognitionHint":
-    "Applied by default to new impact lines, overridable for each impact line individually.",
   "adminCompanyFields.riskThresholdsLabel":
     "Risk thresholds (€K) — cumulative amount of open alerts above which an initiative moves to this risk level",
   "adminCompanyFields.colLevel": "Level",
@@ -1044,7 +1037,6 @@ const en: Record<string, string> = {
   "shared.actionForm.savingType": "Saving type",
   "shared.actionForm.capexDate": "CAPEX date",
   "shared.actionForm.gainDate": "Gain date",
-  "shared.actionForm.recognition": "Recognition",
   "shared.actionForm.costLine": "Cost line",
   "shared.actionForm.actionsColumnAria": "Actions",
   "shared.actionForm.descriptionPlaceholder": "Description...",
@@ -1263,6 +1255,8 @@ const en: Record<string, string> = {
   "strategicChantierDetail.successCriteria": "Success criteria",
   "strategicChantierDetail.sponsor": "Sponsor",
   "strategicChantierDetail.pilote": "Lead",
+  "strategicChantierDetail.confidentialityLevel": "Confidentiality level",
+  "strategicChantierDetail.confidentialityLevelNone": "None (visible to everyone)",
 
   "strategicChantierDetail.effort.title": "Effort scoring grid",
   "strategicChantierDetail.effort.financialImpact": "Financial impact",
@@ -1598,6 +1592,8 @@ const en: Record<string, string> = {
   "adminIndicators.directionDown": "Lower is better",
   "adminIndicators.unit": "Unit (optional)",
   "adminIndicators.unitPlaceholder": "%, k€, days…",
+  "adminIndicators.confidentialityLevel": "Confidentiality level",
+  "adminIndicators.confidentialityLevelNone": "None (visible to everyone)",
   "adminIndicators.responsibleRoles": "Roles allowed to report",
   "adminIndicators.responsibleRolesHint":
     "At least one role is required. Administrators are always allowed, whatever is selected here.",

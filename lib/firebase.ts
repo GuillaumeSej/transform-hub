@@ -1,6 +1,6 @@
 import { deleteApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth, type Auth } from "firebase/auth";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,6 +17,19 @@ const firebaseConfig = {
 const app = getApps()[0] ?? initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
+
+// Bascule vers l'émulateur Firebase local (Firestore + Auth) au lieu du projet réel — UNIQUEMENT
+// quand NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true est explicitement positionné (ex. pour valider
+// `firestore.rules` avant déploiement via `firebase emulators:start`, voir CONTRIBUTING.md). Ne
+// JAMAIS activé par défaut : aucune variable de prod/CI ne positionne ce flag, donc ce bloc est
+// inerte en dehors d'une session de test locale explicite. `_emulatorConnected` évite un double
+// `connectFirestoreEmulator`/`connectAuthEmulator` au rechargement HMR (Firestore lève sinon).
+let _emulatorConnected = false;
+if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === "true" && !_emulatorConnected) {
+  _emulatorConnected = true;
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectAuthEmulator(getAuth(app), "http://127.0.0.1:9099", { disableWarnings: true });
+}
 
 // getAuth() (contrairement à getFirestore()) valide le format de l'apiKey de façon SYNCHRONE dès
 // l'appel — sans config Firebase valide (ex. en CI, où aucune variable NEXT_PUBLIC_FIREBASE_* n'a
@@ -45,8 +58,15 @@ export function getAuthInstance(): Auth {
  */
 export async function withSecondaryAuth<T>(fn: (secondaryAuth: Auth) => Promise<T>): Promise<T> {
   const secondaryApp: FirebaseApp = initializeApp(firebaseConfig, `auth-secondary-${Date.now()}`);
+  const secondaryAuth = getAuth(secondaryApp);
+  // Même bascule émulateur que sur l'instance principale ci-dessus — sans ça, une création
+  // d'utilisateur via ce chemin (UsersPanel.tsx, scripts/create-admin.js) toucherait le VRAI
+  // projet Firebase même pendant une session de test sur l'émulateur.
+  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === "true") {
+    connectAuthEmulator(secondaryAuth, "http://127.0.0.1:9099", { disableWarnings: true });
+  }
   try {
-    return await fn(getAuth(secondaryApp));
+    return await fn(secondaryAuth);
   } finally {
     await deleteApp(secondaryApp);
   }

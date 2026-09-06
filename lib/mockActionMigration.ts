@@ -5,7 +5,6 @@ import type {
   LeverAction,
   LeverDependency,
   LeverStatus,
-  RecognitionMode,
   SavingType,
 } from "@/types";
 import { hasActionImpacts } from "@/lib/leverConsolidate";
@@ -53,18 +52,6 @@ function midpoint(start: string, end: string, ratio: number): string {
   const a = new Date(start).getTime();
   const b = new Date(end).getTime();
   return new Date(a + (b - a) * ratio).toISOString().slice(0, 10);
-}
-
-/** Répartit déterministiquement les impacts "saving" migrés entre les deux modes de
- *  reconnaissance (voire aucun, pour illustrer l'héritage de Company.defaultRecognition) — sur la
- *  base d'un hash stable de la clé fournie, pour obtenir un mélange varié mais reproductible d'un
- *  seed à l'autre plutôt qu'une règle unique appliquée à tout le jeu de démo. */
-function pickRecognition(key: string): RecognitionMode | undefined {
-  const hash = Array.from(key).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-  const bucket = hash % 3;
-  if (bucket === 0) return "one_shot";
-  if (bucket === 1) return "smoothing";
-  return undefined;
 }
 
 /** Repère les leviers/sous-leviers dont le libellé évoque un enjeu BFR (stocks, rotation,
@@ -154,7 +141,6 @@ function financialImpacts(
       savingType: inferSavingType(values.pnlMap, options.contextText ?? ""),
       // Le gain est constaté à la clôture de l'action porteuse (date de livraison si déjà connue).
       gainDate: options.deliveredDate ?? actionEnd,
-      recognition: pickRecognition(prefix),
     });
   }
   return impacts;
@@ -264,7 +250,6 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
         savingType: inferSavingType(sub.pnlMap || parent.pnlMap, sub.name),
         // Le gain est constaté à la clôture de cette (dernière) action porteuse.
         gainDate: resolvedDeliveredDate ?? action.end,
-        recognition: pickRecognition(`IMP-${sub.id}-${index + 1}-SAVING`),
       });
     }
 
@@ -482,7 +467,6 @@ function alignActionsToLeverFinancials(actions: LeverAction[], lever: Lever): Le
       entity: lever.entity,
       savingType: inferSavingType(lever.pnlMap, lever.description),
       gainDate: lever.deliveredDate ?? next.at(-1)!.end,
-      recognition: pickRecognition(`IMP-${lever.id}-SAVING-ADJ`),
     })
   );
 

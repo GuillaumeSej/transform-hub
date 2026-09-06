@@ -3,7 +3,9 @@ import {
   doc,
   getDocs,
   onSnapshot,
+  query,
   setDoc,
+  where,
   writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -20,12 +22,18 @@ function belongsToCompany(value: { companyId?: string | null }, companyId?: stri
   return companyId == null || value.companyId === companyId;
 }
 
+// `companyId` null/undefined = admin global, requête non filtrée. Sinon, filtre CÔTÉ SERVEUR via
+// `where` (même contrat que `subscribeLevers` — voir son commentaire pour le détail sur pourquoi
+// un filtre client seul ne suffit plus une fois `firestore.rules` durci).
 export function subscribeAlerts(
   cb: (alerts: Alert[]) => void,
   companyId?: string | null
 ): Unsubscribe {
+  const scopedQuery = companyId
+    ? query(alertsCol(), where("companyId", "==", companyId))
+    : alertsCol();
   return onSnapshot(
-    alertsCol(),
+    scopedQuery,
     (snap) => {
       const alerts = snap.docs.map((entry) => entry.data() as Alert);
       cb(alerts.filter((alert) => belongsToCompany(alert, companyId)));
@@ -38,8 +46,11 @@ export function subscribeAlertStates(
   cb: (states: Record<string, AlertState>) => void,
   companyId?: string | null
 ): Unsubscribe {
+  const scopedQuery = companyId
+    ? query(alertStatesCol(), where("companyId", "==", companyId))
+    : alertStatesCol();
   return onSnapshot(
-    alertStatesCol(),
+    scopedQuery,
     (snap) => {
       const states = snap.docs
         .map((entry) => entry.data() as AlertState)

@@ -7,13 +7,31 @@
  * puisque la création d'utilisateurs via le panneau Admin > Utilisateurs exige déjà d'être
  * connecté en admin.
  *
- * Usage :
+ * Utilise le SDK ADMIN (firebase-admin), pas le SDK client (firebase/*) : depuis le durcissement
+ * de firestore.rules (isolation par entreprise), créer le document 'adminUsers/{username}' via le
+ * SDK client est un problème d'œuf-et-de-poule — la règle de création exige déjà d'être admin,
+ * ce qu'aucun compte n'est encore avant ce tout premier bootstrap. Le SDK Admin, authentifié par
+ * des identifiants de service (ou automatiquement sans identifiants contre l'émulateur), ignore
+ * les règles de sécurité par conception — c'est le mécanisme standard pour ce genre d'opération
+ * "hors flux utilisateur normal", pas une façon de contourner les règles pour le reste de l'app.
+ *
+ * Usage (contre le VRAI projet Firebase — nécessite des identifiants de service, voir plus bas) :
  *   npm run create-admin
  *   npm run create-admin -- --username admin --password "un-mot-de-passe-solide" --first Admin --last BeTrack
  *
- * Lit la config Firebase depuis .env.local (ou .env.production en fallback), comme lib/firebase.ts.
- * Idempotent : si le compte existe déjà côté Firebase Auth, le script met simplement à jour le
- * document Firestore correspondant plutôt que d'échouer.
+ * Usage contre l'ÉMULATEUR Firebase local (aucun identifiant requis, le SDK Admin les ignore quand
+ * ces variables sont positionnées — voir `firebase emulators:start`) :
+ *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+ *     npm run create-admin -- --username admin --password test123456
+ *
+ * Identifiants requis contre le VRAI projet : soit `GOOGLE_APPLICATION_CREDENTIALS` pointant vers
+ * une clé de compte de service JSON (Console Firebase > Paramètres du projet > Comptes de
+ * service > Générer une nouvelle clé privée), soit `gcloud auth application-default login`
+ * exécuté au préalable avec un compte ayant le rôle IAM Firebase Admin sur le projet.
+ *
+ * Lit la config Firebase (projectId) depuis .env.local (ou .env.production en fallback), comme
+ * lib/firebase.ts. Idempotent : si le compte existe déjà côté Firebase Auth, le script met
+ * simplement à jour le document Firestore correspondant plutôt que d'échouer.
  */
 const fs = require("fs");
 const path = require("path");
@@ -86,38 +104,46 @@ async function main() {
     console.error("Firebase Auth exige un mot de passe d'au moins 6 caractères.");
     process.exit(1);
   }
-  if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     console.error(
-      "Config Firebase introuvable (NEXT_PUBLIC_FIREBASE_API_KEY manquant) — vérifier .env.local."
+      "Config Firebase introuvable (NEXT_PUBLIC_FIREBASE_PROJECT_ID manquant) — vérifier .env.local."
     );
     process.exit(1);
   }
 
-  const { initializeApp } = require("firebase/app");
-  const { getAuth, createUserWithEmailAndPassword } = require("firebase/auth");
-  const { getFirestore, doc, setDoc } = require("firebase/firestore");
+  const { initializeApp, applicationDefault } = require("firebase-admin/app");
+  const { getAuth } = require("firebase-admin/auth");
+  const { getFirestore } = require("firebase-admin/firestore");
 
-  const firebaseConfig = {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  // Contre l'émulateur : FIRESTORE_EMULATOR_HOST/FIREBASE_AUTH_EMULATOR_HOST suffisent, le SDK
+  // Admin les détecte tout seul et n'exige alors AUCUN identifiant de service. Contre le vrai
+  // projet : applicationDefault() lit GOOGLE_APPLICATION_CREDENTIALS ou les identifiants posés par
+  // `gcloud auth application-default login` — voir le commentaire d'en-tête pour la marche à suivre.
+  const usingEmulator = Boolean(
+    process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST
+  );
+  const app = initializeApp({
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  };
-
-  const app = initializeApp(firebaseConfig);
+    ...(usingEmulator ? {} : { credential: applicationDefault() }),
+  });
   const auth = getAuth(app);
   const db = getFirestore(app);
 
   const normalizedUsername = username.trim().toLowerCase();
   const syntheticEmail = `${normalizedUsername}@betrack.local`;
 
+  let uid;
   try {
-    await createUserWithEmailAndPassword(auth, syntheticEmail, password);
+    const created = await auth.createUser({ email: syntheticEmail, password });
+    uid = created.uid;
     console.log(`Compte Firebase Auth créé pour "${normalizedUsername}".`);
   } catch (err) {
-    if (err && err.code === "auth/email-already-in-use") {
+    if (err && err.code === "auth/email-already-exists") {
+      const existing = await auth.getUserByEmail(syntheticEmail);
+      uid = existing.uid;
+      // Le mot de passe saisi n'écrase PAS celui d'un compte existant (comportement identique à
+      // l'ancienne version basée sur le SDK client, qui tolérait déjà silencieusement ce cas) —
+      // seul le document Firestore ci-dessous est (re)créé/mis à jour.
       console.log(`Compte Firebase Auth déjà existant pour "${normalizedUsername}" — inchangé.`);
     } else {
       console.error("Échec de la création du compte Firebase Auth :", err);
@@ -125,7 +151,7 @@ async function main() {
     }
   }
 
-  await setDoc(doc(db, "adminUsers", normalizedUsername), {
+  await db.doc(`adminUsers/${normalizedUsername}`).set({
     username: normalizedUsername,
     role: "admin",
     firstName: firstName || "Admin",
@@ -133,7 +159,9 @@ async function main() {
     name: `${firstName || "Admin"} ${lastName || "BeTrack"}`,
     companyId: null,
   });
-  console.log(`Document Firestore 'adminUsers/${normalizedUsername}' créé/mis à jour.`);
+  console.log(
+    `Document Firestore 'adminUsers/${normalizedUsername}' créé/mis à jour (uid ${uid}).`
+  );
   console.log("Terminé — connexion possible avec cet identifiant sur l'écran de login.");
   process.exit(0);
 }

@@ -113,8 +113,8 @@ export function StrategicDashboardView() {
   const { user } = useRole();
   const { activeProgram, activeProgramId, programs, loading: programsLoading } = useActiveProgram();
   const { t } = useTranslation();
-  const strategic = useStrategicData(user?.companyId ?? null, activeProgramId);
-  const stages = useMaturityStages(activeProgramId);
+  const strategic = useStrategicData(user?.companyId ?? null, activeProgramId, user);
+  const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
   const { axes, chantiers, chantierActions, indicators, measurements } = strategic;
 

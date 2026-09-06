@@ -10,7 +10,7 @@ import type {
   IndicatorKind,
   Role,
 } from "@/types";
-import { subscribeUsers } from "@/lib/firestore/admin";
+import { subscribeUsers, subscribeCompanies } from "@/lib/firestore/admin";
 import { saveIndicator } from "@/lib/firestore/indicators";
 import { computeIndicatorStatus } from "@/lib/axisLogic";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
@@ -128,6 +128,9 @@ export type IndicatorFormState = {
   responsibleRoles: Role[];
   /** `AuthUser.username` (pas d'uid Firebase) — voir `canFillIndicator`. */
   additionalAuthorizedUserIds: string[];
+  /** "" = aucun niveau (visible par tous) — voir `Company.confidentialityLevels` et
+   *  `lib/leversLogic.ts` (même mécanisme que le Plan Performance). */
+  confidentialityLevel: string;
 };
 
 const EMPTY_FORM: IndicatorFormState = {
@@ -142,6 +145,7 @@ const EMPTY_FORM: IndicatorFormState = {
   unit: "",
   responsibleRoles: [],
   additionalAuthorizedUserIds: [],
+  confidentialityLevel: "",
 };
 
 /** Champs obligatoires manquants, sous forme de clés de champ. Fonction pure (testable sans React)
@@ -164,7 +168,12 @@ export function missingIndicatorFields(form: IndicatorFormState): string[] {
 type IndicatorOptionalFields = Partial<
   Pick<
     Indicator,
-    "chantierId" | "objectiveValue" | "direction" | "unit" | "additionalAuthorizedUserIds"
+    | "chantierId"
+    | "objectiveValue"
+    | "direction"
+    | "unit"
+    | "additionalAuthorizedUserIds"
+    | "confidentialityLevel"
   >
 >;
 
@@ -187,6 +196,7 @@ export function optionalIndicatorFields(form: IndicatorFormState): IndicatorOpti
   if (form.additionalAuthorizedUserIds.length > 0) {
     out.additionalAuthorizedUserIds = [...form.additionalAuthorizedUserIds];
   }
+  if (form.confidentialityLevel) out.confidentialityLevel = form.confidentialityLevel;
   return out;
 }
 
@@ -210,11 +220,26 @@ export function IndicatorsEditor({
     createIndicator,
     removeIndicator,
   } = useStrategicData(companyId, programId);
-  const stages = useMaturityStages(programId);
+  const stages = useMaturityStages(programId, companyId);
 
   const [users, setUsers] = useState<AuthUser[]>([]);
   useEffect(() => {
-    const unsub = subscribeUsers((list) => setUsers(list.filter((u) => u.companyId === companyId)));
+    const unsub = subscribeUsers(
+      (list) => setUsers(list.filter((u) => u.companyId === companyId)),
+      companyId
+    );
+    return unsub;
+  }, [companyId]);
+
+  // Échelle de confidentialité de l'entreprise — même sélecteur que `components/shared/
+  // LeverForm.tsx:291-300` côté Plan Performance, réutilisé ici pour l'indicateur ET pour les
+  // formulaires inline de création rapide d'axe/chantier (voir modales plus bas).
+  const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      const company = companies.find((c) => c.id === companyId);
+      setConfidentialityLevels(company?.confidentialityLevels ?? []);
+    }, companyId);
     return unsub;
   }, [companyId]);
 
@@ -278,6 +303,7 @@ export function IndicatorsEditor({
       unit: indicator.unit ?? "",
       responsibleRoles: [...indicator.responsibleRoles],
       additionalAuthorizedUserIds: [...(indicator.additionalAuthorizedUserIds ?? [])],
+      confidentialityLevel: indicator.confidentialityLevel ?? "",
     });
     setShowForm(true);
   };
@@ -328,6 +354,7 @@ export function IndicatorsEditor({
           delete base.direction;
           delete base.unit;
           delete base.additionalAuthorizedUserIds;
+          delete base.confidentialityLevel;
           const next: Indicator = {
             ...base,
             name: form.name.trim(),
@@ -610,6 +637,32 @@ export function IndicatorsEditor({
                 placeholder={t("adminIndicators.unitPlaceholder", "%, k€, jours…")}
               />
             </div>
+
+            {confidentialityLevels.length > 0 && (
+              <div>
+                <label
+                  className="text-xs font-medium text-text-secondary"
+                  htmlFor="indicator-confidentiality"
+                >
+                  {t("adminIndicators.confidentialityLevel", "Niveau de confidentialité")}
+                </label>
+                <select
+                  id="indicator-confidentiality"
+                  value={form.confidentialityLevel}
+                  onChange={(e) => setForm((f) => ({ ...f, confidentialityLevel: e.target.value }))}
+                  className={inputClass}
+                >
+                  <option value="">
+                    {t("adminIndicators.confidentialityLevelNone", "Aucun (visible par tous)")}
+                  </option>
+                  {confidentialityLevels.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="sm:col-span-2">
               <label
@@ -933,6 +986,7 @@ export function IndicatorsEditor({
         <AxisForm
           compact
           stages={stages}
+          confidentialityLevels={confidentialityLevels}
           submitLabel={t("common.add", "Ajouter")}
           onCancel={() => setAxisModalOpen(false)}
           onSubmit={async (values) => {
@@ -961,6 +1015,7 @@ export function IndicatorsEditor({
           compact
           axes={axes}
           stages={stages}
+          confidentialityLevels={confidentialityLevels}
           initial={{ axisId: form.axisId }}
           submitLabel={t("common.add", "Ajouter")}
           onCancel={() => setChantierModalOpen(false)}

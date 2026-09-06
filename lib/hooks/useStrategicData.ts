@@ -23,13 +23,15 @@ import {
   saveChantierStaffing,
   deleteChantierStaffing,
 } from "@/lib/firestore/chantierStaffing";
-import { subscribeUsers } from "@/lib/firestore/admin";
+import { subscribeUsers, subscribeCompanies } from "@/lib/firestore/admin";
 import { computeIndicatorStatus } from "@/lib/axisLogic";
+import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import type {
   AuthUser,
   Chantier,
   ChantierAction,
   ChantierStaffing,
+  Company,
   Indicator,
   IndicatorMeasurement,
   StrategicAxis,
@@ -139,7 +141,17 @@ function newId(prefix: string): string {
 
 export function useStrategicData(
   companyId: string | null | undefined,
-  programId: string | null | undefined
+  programId: string | null | undefined,
+  /**
+   * Utilisateur courant — OMIS (paramètre non passé, `undefined`) par les appelants non encore
+   * migrés au masquage de confidentialité (comportement inchangé : aucun filtre appliqué, comme
+   * avant l'introduction de ce paramètre). Passé explicitement (objet, ou `null` si déconnecté),
+   * il ACTIVE le filtrage : axes/chantiers/indicateurs confidentiels sont masqués aux profils non
+   * habilités, exactement comme `isLeverVisibleForClearance`/`resolveConfidentialityClearance`
+   * (lib/leversLogic.ts) le font pour les leviers du Plan de Performance — admin/admin_entreprise
+   * voient toujours tout.
+   */
+  user?: Pick<AuthUser, "role" | "confidentialityClearance"> | null
 ): StrategicData {
   const [allAxes, setAllAxes] = useState<StrategicAxis[]>([]);
   const [allChantiers, setAllChantiers] = useState<Chantier[]>([]);
@@ -216,23 +228,54 @@ export function useStrategicData(
       setUsers([]);
       return;
     }
-    const unsub = subscribeUsers((list) => setUsers(list.filter((u) => u.companyId === companyId)));
+    const unsub = subscribeUsers(
+      (list) => setUsers(list.filter((u) => u.companyId === companyId)),
+      companyId
+    );
     return unsub;
   }, [companyId]);
 
+  // ── Habilitation de confidentialité (masquage global, même mécanisme que le Plan Performance)
+  // N'est souscrite que si l'appelant a explicitement passé `user` (voir doc du paramètre
+  // ci-dessus) — les appelants non migrés ne payent aucun abonnement supplémentaire.
+  const filterActive = user !== undefined;
+  const [company, setCompany] = useState<Company | null>(null);
+  useEffect(() => {
+    if (!filterActive || !companyId) {
+      setCompany(null);
+      return;
+    }
+    const unsub = subscribeCompanies((companies) => {
+      setCompany(companies.find((c) => c.id === companyId) ?? null);
+    }, companyId);
+    return unsub;
+  }, [filterActive, companyId]);
+  const isAdmin = user?.role === "admin" || user?.role === "admin_entreprise";
+  const clearance = useMemo(
+    () => resolveConfidentialityClearance(user, company?.roleClearance),
+    [user, company?.roleClearance]
+  );
+
   // ── Projections scopées au programme actif ────────────────────────────────────────────────
-  const axes = useMemo(
-    () => allAxes.filter((a) => a.programId === programId),
-    [allAxes, programId]
-  );
-  const chantiers = useMemo(
-    () => allChantiers.filter((c) => c.programId === programId),
-    [allChantiers, programId]
-  );
-  const indicators = useMemo(
-    () => allIndicators.filter((i) => i.programId === programId),
-    [allIndicators, programId]
-  );
+  // Le masquage de confidentialité (quand `filterActive`) s'applique ICI, une seule fois pour
+  // tous les écrans consommateurs (StrategicAxesView, ChantierDetailClient, KpiPageClient,
+  // StrategicDashboardView, …) — les actions/mesures qui en dérivent plus bas héritent donc
+  // automatiquement du masquage sans logique dupliquée par écran.
+  const axes = useMemo(() => {
+    const scoped = allAxes.filter((a) => a.programId === programId);
+    if (!filterActive || isAdmin) return scoped;
+    return scoped.filter((a) => isLeverVisibleForClearance(a.confidentialityLevel, clearance));
+  }, [allAxes, programId, filterActive, isAdmin, clearance]);
+  const chantiers = useMemo(() => {
+    const scoped = allChantiers.filter((c) => c.programId === programId);
+    if (!filterActive || isAdmin) return scoped;
+    return scoped.filter((c) => isLeverVisibleForClearance(c.confidentialityLevel, clearance));
+  }, [allChantiers, programId, filterActive, isAdmin, clearance]);
+  const indicators = useMemo(() => {
+    const scoped = allIndicators.filter((i) => i.programId === programId);
+    if (!filterActive || isAdmin) return scoped;
+    return scoped.filter((i) => isLeverVisibleForClearance(i.confidentialityLevel, clearance));
+  }, [allIndicators, programId, filterActive, isAdmin, clearance]);
   // Actions et mesures ne portent pas de `programId` (elles le tiennent de leur parent) : on les
   // rattache via l'ensemble des chantiers/indicateurs du programme.
   const chantierActions = useMemo(() => {

@@ -166,7 +166,7 @@ export function LeverForm({
           "geographic"
         );
       }
-    });
+    }, companyId);
     return () => {
       cancelled = true;
       unsubNodes?.();
@@ -205,8 +205,9 @@ export function LeverForm({
       setProjects([]);
       return;
     }
-    const unsub = subscribePrograms((all) =>
-      setProjects(all.filter((p) => p.companyId === companyId))
+    const unsub = subscribePrograms(
+      (all) => setProjects(all.filter((p) => p.companyId === companyId)),
+      companyId
     );
     return unsub;
   }, [companyId]);

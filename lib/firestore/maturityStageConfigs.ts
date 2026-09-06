@@ -38,11 +38,23 @@ export const DEFAULT_MATURITY_STAGES: Omit<MaturityStageConfig, "programId" | "c
   { id: "achieved", order: 4, label: "Réalisé", isTerminal: true },
 ];
 
+/** `companyId` optionnel pour compat ascendante, mais à passer systématiquement dès que
+ *  l'appelant le connaît : filtre CÔTÉ SERVEUR en plus de `programId`, requis pour que
+ *  `firestore.rules` puisse restreindre la lecture à l'entreprise de l'appelant (même contrat que
+ *  `subscribeLevers`/`subscribeCompanies` — voir leurs commentaires). Un `==` supplémentaire sur
+ *  un champ différent ne nécessite pas d'index composite Firestore. */
 export function subscribeMaturityStages(
   programId: string,
-  cb: (stages: MaturityStageConfig[]) => void
+  cb: (stages: MaturityStageConfig[]) => void,
+  companyId?: string | null
 ): Unsubscribe {
-  const scopedQuery = query(maturityStagesCol(), where("programId", "==", programId));
+  const scopedQuery = companyId
+    ? query(
+        maturityStagesCol(),
+        where("programId", "==", programId),
+        where("companyId", "==", companyId)
+      )
+    : query(maturityStagesCol(), where("programId", "==", programId));
   return onSnapshot(
     scopedQuery,
     { includeMetadataChanges: true },

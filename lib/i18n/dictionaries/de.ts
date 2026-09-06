@@ -426,10 +426,6 @@ const de: Record<string, string> = {
   "leverDetail.impactTable.amount": "Betrag Mio. €",
 
   // ─── finance (Finanzmodul) ──────────────────────────────────────────────────
-  "finance.capexBudgetTitle": "Referenz-CAPEX-Budget",
-  "finance.capexBudgetHint":
-    "Das Executive Dashboard zeigt das gebundene CAPEX im Verhältnis zu diesem Gesamtbudget, sofern bereits im Vorfeld festgelegt (häufig der Fall). Nicht angegeben = das Dashboard zeigt nur den gebundenen Betrag.",
-  "finance.capexBudgetLabel": "Gesamtes CAPEX-Budget (Mio. €)",
   "finance.notProvided": "Nicht angegeben",
   "finance.capexSaved": "CAPEX-Budget gespeichert",
   "finance.pnlConfiguredTitle": "Konfigurierte GuV",
@@ -592,12 +588,13 @@ const de: Record<string, string> = {
   "adminProgramsPanel.nameLabel": "Programmname",
   "adminProgramsPanel.namePlaceholder": "Name",
   "adminProgramsPanel.sponsor": "Sponsor",
-  "adminProgramsPanel.targetLabel": "Zielwert (€M)",
   "adminProgramsPanel.count": "{n} Programm(e)",
   "adminProgramsPanel.colProgram": "Programm",
-  "adminProgramsPanel.colTarget": "Zielwert",
   "adminProgramsPanel.colActions": "Aktionen",
   "adminProgramsPanel.empty": "Kein Programm für dieses Unternehmen.",
+  "adminProgramsPanel.actionPlanModuleLabel": "Modul Aktionsplan",
+  "adminProgramsPanel.actionPlanModuleHint":
+    "Aktiviert den Tab Aktionsplan (Kanban/Gantt) für die Hebel dieses Programms. Zusatzmodul, das je nach den vom Kunden gebuchten Optionen aktivierbar ist — deaktiviert, zeigen die Hebel dieses Programms diesen Tab nicht an.",
 
   // ─── shared ───────────────────────────────────────────────────────────────
   "shared.appShell.mobileNavLabel": "Hauptnavigation",
@@ -787,17 +784,13 @@ const de: Record<string, string> = {
   "adminCompanyFields.fyStart": "Beginn Geschäftsjahr",
   "adminCompanyFields.fyEnd": "Ende Geschäftsjahr",
   "adminCompanyFields.advancedSettings": "Erweiterte Einstellungen",
-  "adminCompanyFields.capexBudgetLabel": "Gesamtes CAPEX-Budget (€M) — optional",
-  "adminCompanyFields.actionPlanToggle": 'Modul „Aktionsplan" aktiviert',
+  "adminCompanyFields.hrParameterBoxTitle": "HR-Parameter",
+  "adminCompanyFields.hrParameterBoxHint":
+    "Dieser Satz wird ausschließlich für Berechnungen im HR-Modul verwendet (Personalbewegungen — Einstellung, Austritt, Versetzung — Vollkosten-Gehalt). Er wirkt sich weder auf Performance-Pläne noch auf strategische Pläne aus. Nicht angegeben = automatischer Rückgriff auf den Standardwert von 45%.",
   "adminCompanyFields.socialChargesLabel": "Arbeitgeber-Sozialabgabensatz (%) — optional",
   "adminCompanyFields.socialChargesPlaceholder": "Standard: 45%",
   "adminCompanyFields.socialChargesHint":
     'Wird für das „Vollkosten-Gehalt" (brutto + Abgaben) bei der EUR-Berechnung von HR-Bewegungen verwendet (Bewegungsansicht). Nicht angegeben = 45% Standardwert (Größenordnung Frankreich, Richtwert) — an die tatsächliche HR-Politik des Kunden anzupassen.',
-  "adminCompanyFields.defaultRecognitionLabel": "Standard-Erfassungsmodus",
-  "adminCompanyFields.recognitionSmoothed": "Geglättet",
-  "adminCompanyFields.recognitionOneShot": "Einmalig",
-  "adminCompanyFields.defaultRecognitionHint":
-    "Wird standardmäßig auf neue Wirkungszeilen angewendet, für jede Wirkungszeile individuell überschreibbar.",
   "adminCompanyFields.riskThresholdsLabel":
     "Risikoschwellen (€K) — kumulierter Betrag offener Warnungen, ab dem ein Hebel auf diese Risikostufe wechselt",
   "adminCompanyFields.colLevel": "Stufe",
@@ -1037,7 +1030,6 @@ const de: Record<string, string> = {
   "shared.actionForm.savingType": "Art der Einsparung",
   "shared.actionForm.capexDate": "CAPEX-Datum",
   "shared.actionForm.gainDate": "Datum der Einsparung",
-  "shared.actionForm.recognition": "Erfassung",
   "shared.actionForm.costLine": "Kostenart",
   "shared.actionForm.actionsColumnAria": "Aktionen",
   "shared.actionForm.descriptionPlaceholder": "Beschreibung...",
@@ -1253,6 +1245,8 @@ const de: Record<string, string> = {
   "strategicChantierDetail.successCriteria": "Erfolgskriterien",
   "strategicChantierDetail.sponsor": "Sponsor",
   "strategicChantierDetail.pilote": "Leitung",
+  "strategicChantierDetail.confidentialityLevel": "Vertraulichkeitsstufe",
+  "strategicChantierDetail.confidentialityLevelNone": "Keine (für alle sichtbar)",
 
   "strategicChantierDetail.effort.title": "Aufwandsbewertungsraster",
   "strategicChantierDetail.effort.financialImpact": "Finanzielle Auswirkung",
@@ -1600,6 +1594,8 @@ const de: Record<string, string> = {
   "adminIndicators.directionDown": "Niedriger ist besser",
   "adminIndicators.unit": "Einheit (optional)",
   "adminIndicators.unitPlaceholder": "%, T€, Tage…",
+  "adminIndicators.confidentialityLevel": "Vertraulichkeitsstufe",
+  "adminIndicators.confidentialityLevelNone": "Keine (für alle sichtbar)",
   "adminIndicators.responsibleRoles": "Zur Erfassung berechtigte Rollen",
   "adminIndicators.responsibleRolesHint":
     "Mindestens eine Rolle ist erforderlich. Administratoren sind unabhängig von dieser Auswahl immer berechtigt.",

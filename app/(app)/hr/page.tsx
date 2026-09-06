@@ -148,8 +148,10 @@ export default function HrDashboardPage() {
   // mouvement scopé.
   const [programs, setPrograms] = useState<Program[]>([]);
   useEffect(() => {
-    const unsub = subscribePrograms((all) =>
-      setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all)
+    const unsub = subscribePrograms(
+      (all) =>
+        setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all),
+      user?.companyId ?? null
     );
     return unsub;
   }, [user?.companyId]);

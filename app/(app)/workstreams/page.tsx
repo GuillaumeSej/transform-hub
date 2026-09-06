@@ -32,7 +32,10 @@ export default function WorkstreamsPage() {
   const [company, setCompany] = useState<Company | undefined>();
   useEffect(
     () =>
-      subscribeCompanies((items) => setCompany(items.find((item) => item.id === user?.companyId))),
+      subscribeCompanies(
+        (items) => setCompany(items.find((item) => item.id === user?.companyId)),
+        user?.companyId ?? null
+      ),
     [user?.companyId]
   );
   const visibleLevers = data.levers.filter((lever) =>

@@ -67,13 +67,13 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    const unsub1 = subscribeUsers(setUsers);
-    const unsub2 = subscribePrograms(setPrograms);
+    const unsub1 = subscribeUsers(setUsers, companyId);
+    const unsub2 = subscribePrograms(setPrograms, companyId);
     return () => {
       unsub1();
       unsub2();
     };
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     const unsub1 = subscribeLevers(setLevers, companyId);

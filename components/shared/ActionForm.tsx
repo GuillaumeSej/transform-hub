@@ -2,14 +2,7 @@
 
 import { useState } from "react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type {
-  ActionImpact,
-  ActionStatus,
-  BeTrackData,
-  LeverAction,
-  RecognitionMode,
-  SavingType,
-} from "@/types";
+import type { ActionImpact, ActionStatus, BeTrackData, LeverAction, SavingType } from "@/types";
 
 const inputClass =
   "w-full rounded-sm border border-border bg-white px-2 py-1.5 text-[12px] focus:border-bp-coral focus:outline-none";
@@ -62,7 +55,6 @@ export type ActionFormValues = Omit<LeverAction, "id">;
  *  la date d'engagement. Un commentaire libre peut expliquer la méthode de calcul. */
 export function ActionForm({
   data,
-  companyDefaultRecognition = "smoothing",
   initialValues,
   submitLabel,
   onSubmit,
@@ -70,9 +62,6 @@ export function ActionForm({
   onDelete,
 }: {
   data: BeTrackData;
-  /** Mode de reconnaissance par défaut de l'entreprise (Company.defaultRecognition), affiché en
-   * clair sur l'option "Défaut entreprise" du sélecteur par ligne d'impact. */
-  companyDefaultRecognition?: RecognitionMode;
   initialValues?: Partial<LeverAction>;
   submitLabel?: string;
   onSubmit: (values: ActionFormValues) => void;
@@ -242,9 +231,6 @@ export function ActionForm({
                   </th>
                   <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
                     {t("shared.actionForm.gainDate", "Date gain")}
-                  </th>
-                  <th className="w-[130px] min-w-[130px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("shared.actionForm.recognition", "Reconnaissance")}
                   </th>
                   <th className="w-[150px] min-w-[150px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
                     {t("shared.actionForm.costLine", "Poste de coût")}
@@ -418,38 +404,6 @@ export function ActionForm({
                             "Date d'encaissement réel du gain"
                           )}
                         />
-                      ) : (
-                        <span className="text-tertiary">—</span>
-                      )}
-                    </td>
-
-                    <td className="w-[130px] min-w-[130px] px-2 py-1.5 align-top">
-                      {imp.type === "saving" || imp.nature === "capex" ? (
-                        <select
-                          className={selectClass}
-                          value={imp.recognition ?? ""}
-                          onChange={(e) =>
-                            updateImpact(idx, {
-                              recognition: (e.target.value || undefined) as
-                                RecognitionMode | undefined,
-                            })
-                          }
-                        >
-                          <option value="">
-                            {t("shared.actionForm.recognitionDefault", "Défaut ({value})").replace(
-                              "{value}",
-                              companyDefaultRecognition === "one_shot"
-                                ? t("shared.actionForm.oneShotLower", "one-shot")
-                                : t("shared.actionForm.smoothedLower", "lissé")
-                            )}
-                          </option>
-                          <option value="smoothing">
-                            {t("shared.actionForm.smoothed", "Lissé")}
-                          </option>
-                          <option value="one_shot">
-                            {t("shared.actionForm.oneShot", "One-shot")}
-                          </option>
-                        </select>
                       ) : (
                         <span className="text-tertiary">—</span>
                       )}

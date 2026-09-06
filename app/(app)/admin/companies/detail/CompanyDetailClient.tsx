@@ -132,9 +132,9 @@ export default function CompanyDetailClient() {
     const unsub = subscribeCompanies((list) => {
       setCompanies(list);
       setLoaded(true);
-    });
+    }, companyId);
     return unsub;
-  }, []);
+  }, [companyId]);
 
   const company = useMemo(() => companies.find((c) => c.id === companyId), [companies, companyId]);
 
@@ -148,8 +148,6 @@ export default function CompanyDetailClient() {
       industry: company.industry,
       fyStart: company.fyStart,
       fyEnd: company.fyEnd,
-      capexBudget: company.capexBudget != null ? String(company.capexBudget) : "",
-      actionPlanEnabled: company.actionPlanEnabled ?? true,
       socialChargesRate:
         company.socialChargesRate != null
           ? String(Math.round(company.socialChargesRate * 100))
@@ -157,7 +155,6 @@ export default function CompanyDetailClient() {
       confidentialityLevels: company.confidentialityLevels ?? [],
       directions: company.directions ?? [],
       roleClearance: company.roleClearance ?? {},
-      defaultRecognition: company.defaultRecognition ?? "smoothing",
       riskThresholds: company.riskThresholds?.map((t) => ({
         level: t.level,
         minAmount: String(t.minAmount / 1000),
@@ -176,8 +173,6 @@ export default function CompanyDetailClient() {
       industry: company.industry,
       fyStart: company.fyStart,
       fyEnd: company.fyEnd,
-      capexBudget: company.capexBudget != null ? String(company.capexBudget) : "",
-      actionPlanEnabled: company.actionPlanEnabled ?? true,
       socialChargesRate:
         company.socialChargesRate != null
           ? String(Math.round(company.socialChargesRate * 100))
@@ -185,7 +180,6 @@ export default function CompanyDetailClient() {
       confidentialityLevels: company.confidentialityLevels ?? [],
       directions: company.directions ?? [],
       roleClearance: company.roleClearance ?? {},
-      defaultRecognition: company.defaultRecognition ?? "smoothing",
       riskThresholds: company.riskThresholds?.map((t) => ({
         level: t.level,
         minAmount: String(t.minAmount / 1000),
@@ -205,16 +199,14 @@ export default function CompanyDetailClient() {
     if (!company || !form.name.trim()) return;
     setSaving(true);
     try {
-      // Ne jamais assigner `capexBudget`/`socialChargesRate` à `undefined` explicitement —
-      // Firestore `setDoc` rejette toute clé valant `undefined` (voir le bug identique corrigé
-      // sur AuthUser.confidentialityClearance dans UsersPanel.tsx) : on omet la clé plutôt que de
-      // la mettre à `undefined` quand le champ est vidé, ce qui l'efface bien du document. Même
+      // Ne jamais assigner `socialChargesRate` à `undefined` explicitement — Firestore `setDoc`
+      // rejette toute clé valant `undefined` (voir le bug identique corrigé sur
+      // AuthUser.confidentialityClearance dans UsersPanel.tsx) : on omet la clé plutôt que de la
+      // mettre à `undefined` quand le champ est vidé, ce qui l'efface bien du document. Même
       // précaution pour `riskThresholds` : on ne l'inclut que s'il a été chargé/renseigné dans le
       // formulaire (voir baselineForm/useEffect ci-dessus, qui l'hydratent depuis `company`).
-      const trimmedCapex = form.capexBudget.trim();
       const trimmedCharges = form.socialChargesRate.trim();
       const rest = { ...company };
-      delete rest.capexBudget;
       delete rest.socialChargesRate;
       await saveCompany({
         ...rest,
@@ -222,13 +214,10 @@ export default function CompanyDetailClient() {
         industry: form.industry,
         fyStart: form.fyStart,
         fyEnd: form.fyEnd,
-        ...(trimmedCapex !== "" ? { capexBudget: Number(trimmedCapex) } : {}),
-        actionPlanEnabled: form.actionPlanEnabled,
         ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
         confidentialityLevels: form.confidentialityLevels,
         directions: form.directions,
         roleClearance: form.roleClearance,
-        defaultRecognition: form.defaultRecognition ?? "smoothing",
         ...(form.riskThresholds
           ? {
               riskThresholds: form.riskThresholds.map((t) => ({

@@ -104,15 +104,15 @@ export function Topbar({
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const { logout, user } = useRole();
 
   useEffect(() => {
-    const unsub = subscribeCompanies(setCompanies);
+    const unsub = subscribeCompanies(setCompanies, user?.companyId ?? null);
     return unsub;
-  }, []);
+  }, [user?.companyId]);
 
   const pathname = usePathname();
   const router = useRouter();
-  const { logout, user } = useRole();
   const { t } = useTranslation();
   const { confirmDiscard } = useUnsavedChanges();
   const { programType } = useActiveProgram();

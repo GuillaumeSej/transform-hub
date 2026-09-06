@@ -465,10 +465,6 @@ const fr: Record<string, string> = {
   "leverDetail.impactTable.amount": "Montant €M",
 
   // ─── finance (Module Finance) ──────────────────────────────────────────────
-  "finance.capexBudgetTitle": "Budget CAPEX de référence",
-  "finance.capexBudgetHint":
-    "Le dashboard exécutif affiche le CAPEX engagé rapporté à ce budget total, si déjà cadré en amont de la mission (souvent le cas). Non renseigné = le dashboard affiche uniquement le montant engagé.",
-  "finance.capexBudgetLabel": "Budget CAPEX total (€M)",
   "finance.notProvided": "Non renseigné",
   "finance.capexSaved": "Budget CAPEX enregistré",
   "finance.pnlConfiguredTitle": "Compte de résultat configuré",
@@ -631,12 +627,13 @@ const fr: Record<string, string> = {
   "adminProgramsPanel.nameLabel": "Nom du programme",
   "adminProgramsPanel.namePlaceholder": "Nom",
   "adminProgramsPanel.sponsor": "Sponsor",
-  "adminProgramsPanel.targetLabel": "Cible (€M)",
   "adminProgramsPanel.count": "{n} programme(s)",
   "adminProgramsPanel.colProgram": "Programme",
-  "adminProgramsPanel.colTarget": "Cible",
   "adminProgramsPanel.colActions": "Actions",
   "adminProgramsPanel.empty": "Aucun programme pour cette entreprise.",
+  "adminProgramsPanel.actionPlanModuleLabel": "Module Plan d'action",
+  "adminProgramsPanel.actionPlanModuleHint":
+    "Active l'onglet Plan d'action (Kanban/Gantt) sur les leviers de ce programme. Module additionnel activable selon les options souscrites par le client — décoché, les leviers de ce programme n'affichent pas cet onglet.",
 
   // ─── shared (composants partagés) ──────────────────────────────────────────
   "shared.appShell.mobileNavLabel": "Navigation principale",
@@ -827,17 +824,13 @@ const fr: Record<string, string> = {
   "adminCompanyFields.fyStart": "Début exercice",
   "adminCompanyFields.fyEnd": "Fin exercice",
   "adminCompanyFields.advancedSettings": "Paramètres avancés",
-  "adminCompanyFields.capexBudgetLabel": "Budget CAPEX total (€M) — optionnel",
-  "adminCompanyFields.actionPlanToggle": 'Module "Plan d\'action" activé',
+  "adminCompanyFields.hrParameterBoxTitle": "Paramètre RH",
+  "adminCompanyFields.hrParameterBoxHint":
+    "Ce taux ne sert que pour les calculs du module RH (mouvements de personnel — recrutement, départ, transfert — salaire chargé). Il n'affecte ni les plans de performance ni les plans stratégiques. Non renseigné = repli automatique sur 45% par défaut.",
   "adminCompanyFields.socialChargesLabel": "Taux de charges sociales patronales (%) — optionnel",
   "adminCompanyFields.socialChargesPlaceholder": "Défaut : 45%",
   "adminCompanyFields.socialChargesHint":
     'Utilisé pour le "salaire chargé" (brut + charges) dans le calcul EUR des mouvements RH (Vision mouvement). Non renseigné = 45% par défaut (ordre de grandeur France, cadre) — à ajuster selon la politique RH réelle du client.',
-  "adminCompanyFields.defaultRecognitionLabel": "Mode de reconnaissance par défaut",
-  "adminCompanyFields.recognitionSmoothed": "Lissé",
-  "adminCompanyFields.recognitionOneShot": "One-shot",
-  "adminCompanyFields.defaultRecognitionHint":
-    "Appliqué par défaut aux nouvelles lignes d'impact, surchargeable pour chaque ligne d'impact individuellement.",
   "adminCompanyFields.riskThresholdsLabel":
     "Seuils de risque (€K) — cumul des montants d'alertes ouvertes à partir duquel un levier passe à ce niveau de risque",
   "adminCompanyFields.colLevel": "Niveau",
@@ -1071,7 +1064,6 @@ const fr: Record<string, string> = {
   "shared.actionForm.savingType": "Type de gain",
   "shared.actionForm.capexDate": "Date CAPEX",
   "shared.actionForm.gainDate": "Date gain",
-  "shared.actionForm.recognition": "Reconnaissance",
   "shared.actionForm.costLine": "Poste de coût",
   "shared.actionForm.actionsColumnAria": "Actions",
   "shared.actionForm.descriptionPlaceholder": "Description...",
@@ -1298,6 +1290,8 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.successCriteria": "Critères de succès",
   "strategicChantierDetail.sponsor": "Sponsor",
   "strategicChantierDetail.pilote": "Pilote",
+  "strategicChantierDetail.confidentialityLevel": "Niveau de confidentialité",
+  "strategicChantierDetail.confidentialityLevelNone": "Aucun (visible par tous)",
 
   "strategicChantierDetail.effort.title": "Grille de notation d'effort",
   "strategicChantierDetail.effort.financialImpact": "Impact financier",
@@ -1644,6 +1638,8 @@ const fr: Record<string, string> = {
   "adminIndicators.directionDown": "Plus bas vaut mieux",
   "adminIndicators.unit": "Unité (optionnel)",
   "adminIndicators.unitPlaceholder": "%, k€, jours…",
+  "adminIndicators.confidentialityLevel": "Niveau de confidentialité",
+  "adminIndicators.confidentialityLevelNone": "Aucun (visible par tous)",
   "adminIndicators.responsibleRoles": "Rôles autorisés à renseigner",
   "adminIndicators.responsibleRolesHint":
     "Au moins un rôle est requis. Les administrateurs sont toujours autorisés, quel que soit ce choix.",

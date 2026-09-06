@@ -14,7 +14,6 @@ import type {
   LeverDependency,
   LeverStatus,
   LifecycleStage,
-  RecognitionMode,
   SavingType,
   Workstream,
 } from "@/types";
@@ -127,7 +126,6 @@ export const IMPACT_IMPORT_HEADERS = [
   "Type de gain",
   "Date CAPEX",
   "Date gain",
-  "Reconnaissance",
   "Poste de coût",
   "Centre de coût",
   "Entité P&L",
@@ -158,11 +156,6 @@ const SAVING_TYPE_LABEL: Record<SavingType, string> = {
   cost_reduction: "Réduction de coût",
   revenue_increase: "Augmentation du CA",
   working_capital: "Impact BFR",
-};
-
-const RECOGNITION_LABEL: Record<RecognitionMode, string> = {
-  smoothing: "Lissé",
-  one_shot: "One-shot",
 };
 
 const DEPENDENCY_TYPES: DependencyType[] = ["FS", "SS", "FF", "SF"];
@@ -214,7 +207,6 @@ const ACTION_STATUS_BY_LABEL = reverseLabelMap(ACTION_STATUS_LABEL);
 const IMPACT_TYPE_BY_LABEL = reverseLabelMap(IMPACT_TYPE_LABEL);
 const IMPACT_NATURE_BY_LABEL = reverseLabelMap(IMPACT_NATURE_LABEL);
 const SAVING_TYPE_BY_LABEL = reverseLabelMap(SAVING_TYPE_LABEL);
-const RECOGNITION_BY_LABEL = reverseLabelMap(RECOGNITION_LABEL);
 
 // ---------- Parsing utilitaire (mêmes conventions que lib/hrExcel.ts) ----------
 
@@ -708,20 +700,6 @@ export function validateLeverImportRows(
       }
     }
 
-    const recognitionRaw = str(row["Reconnaissance"]);
-    let recognition: RecognitionMode | undefined;
-    if (recognitionRaw) {
-      recognition = RECOGNITION_BY_LABEL.get(recognitionRaw.toLowerCase());
-      if (!recognition) {
-        errors.push({
-          sheet: "Impacts",
-          rowNumber,
-          reason: `Reconnaissance "${recognitionRaw}" inconnue (attendu : ${Object.values(RECOGNITION_LABEL).join(", ")})`,
-        });
-        return;
-      }
-    }
-
     const pnlRaw = str(row["Poste de coût"]);
     let pnlMap: string | undefined;
     if (pnlRaw) {
@@ -753,7 +731,6 @@ export function validateLeverImportRows(
       savingType,
       capexDeploymentDate,
       gainDate,
-      recognition,
       comments: comment ? [{ user: "Import Excel", ts: nowDate(), text: comment }] : undefined,
     };
 

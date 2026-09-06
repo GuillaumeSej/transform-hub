@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { subscribeCompanies } from "@/lib/firestore/admin";
+import { subscribeCompanies, subscribePrograms } from "@/lib/firestore/admin";
 import { canUserViewLever } from "@/lib/leversLogic";
 import {
   ArrowLeft,
@@ -42,7 +42,7 @@ import { ActionGantt } from "@/components/shared/charts/ActionGantt";
 import { JCurveChart } from "@/components/shared/charts/JCurveChart";
 import { consolidateLeverFromActions, leverJCurve, leverPayback } from "@/lib/leverConsolidate";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import type { ActionStatus, Company, LeverAction, RecognitionMode } from "@/types";
+import type { ActionStatus, Company, LeverAction, Program } from "@/types";
 
 const TABS = ["overview", "plan", "impact", "collab"] as const;
 type Tab = (typeof TABS)[number];
@@ -61,21 +61,22 @@ export function LeverDetailClientPerformance() {
   const { t } = useTranslation();
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
-  const [actionPlanEnabled, setActionPlanEnabled] = useState(true);
   const [roleClearance, setRoleClearance] = useState<Company["roleClearance"]>();
-  const [defaultRecognition, setDefaultRecognition] = useState<RecognitionMode>("smoothing");
   const [riskThresholds, setRiskThresholds] = useState<Company["riskThresholds"]>();
+  const [programs, setPrograms] = useState<Program[]>([]);
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
       setRoleClearance(company?.roleClearance);
-      setActionPlanEnabled(company?.actionPlanEnabled ?? true);
-      setDefaultRecognition(company?.defaultRecognition ?? "smoothing");
       setRiskThresholds(company?.riskThresholds);
-    });
+    }, user?.companyId ?? null);
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.companyId, user?.role, user?.confidentialityClearance]);
+  useEffect(() => {
+    const unsub = subscribePrograms(setPrograms, user?.companyId ?? null);
+    return unsub;
+  }, [user?.companyId]);
   const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -94,6 +95,8 @@ export function LeverDetailClientPerformance() {
   const [depsModalOpen, setDepsModalOpen] = useState(false);
 
   const lever = data.getLeverById(id);
+  const actionPlanEnabled =
+    programs.find((p) => p.id === lever?.programId)?.actionPlanEnabled ?? true;
   useEffect(() => {
     if (requestedTab) setTab(requestedTab);
   }, [requestedTab, searchParams]);
@@ -333,7 +336,6 @@ export function LeverDetailClientPerformance() {
         {actionModal && (
           <ActionForm
             data={data}
-            companyDefaultRecognition={defaultRecognition}
             initialValues={actionModal.action}
             submitLabel={
               actionModal.mode === "edit"
@@ -677,7 +679,6 @@ export function LeverDetailClientPerformance() {
                     <ActionGantt
                       actions={lever.actions ?? []}
                       onActionClick={(action) => setActionModal({ mode: "edit", action })}
-                      defaultRecognition={defaultRecognition}
                     />
                   </>
                 )}
@@ -947,7 +948,6 @@ export function LeverDetailClientPerformance() {
               <ActionGantt
                 actions={actions}
                 onActionClick={(action) => setActionModal({ mode: "edit", action })}
-                defaultRecognition={defaultRecognition}
               />
             )}
 

@@ -91,7 +91,7 @@ export function MovementForm({
     }
     return subscribeCompanies((companies) => {
       setCompany(companies.find((c) => c.id === companyId) ?? null);
-    });
+    }, companyId);
   }, [companyId]);
   const chargesRate = getSocialChargesRate(company);
 
