@@ -45,3 +45,4 @@ demo/utilisateurs.xlsx
 
 # agent worktrees (nested under the repo root by the harness)
 /.claude/worktrees/
+service-account-tmp.json
