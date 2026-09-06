@@ -52,9 +52,18 @@ export default function WorkstreamsPage() {
   // Scope au programme Performance sélectionné (voir usePerformanceProgramSelector plus haut) —
   // même principe que le dashboard exécutif et LeversPagePerformance : cette page affiche UN
   // programme à la fois, pas l'ensemble de l'entreprise.
+  //
+  // IMPORTANT (voir le même commentaire dans LeversPagePerformance.tsx) : `programId` est
+  // optionnel sur `Lever` — un filtre `===` strict faisait disparaître tout levier importé/créé
+  // sans rattachement à un programme, ou rattaché à un programme depuis supprimé. Ces leviers
+  // restent donc TOUJOURS visibles, quel que soit le programme sélectionné.
+  const performanceProgramIds = new Set(performancePrograms.map((p) => p.id));
   const visibleLevers = data.levers.filter(
     (lever) =>
-      lever.programId === selectedProgramId && canUserViewLever(user, lever, company?.roleClearance)
+      (!lever.programId ||
+        lever.programId === selectedProgramId ||
+        !performanceProgramIds.has(lever.programId)) &&
+      canUserViewLever(user, lever, company?.roleClearance)
   );
   const summary = engine.programSummary({ ...data, levers: visibleLevers });
 

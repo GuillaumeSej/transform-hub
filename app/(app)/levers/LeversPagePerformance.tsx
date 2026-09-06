@@ -142,9 +142,28 @@ export function LeversPagePerformance() {
   // Scope au programme Performance sélectionné (voir usePerformanceProgramSelector plus haut) —
   // appliqué AVANT les filtres de la barre (leurs options ne doivent refléter que les leviers du
   // programme courant), même principe que le dashboard exécutif (programScopedLevers).
+  //
+  // IMPORTANT : `programId` est optionnel sur `Lever` (import Excel historique sans colonne
+  // "Programme", création manuelle avant l'existence des programmes...) — un filtre `===` strict
+  // faisait purement et simplement DISPARAÎTRE ces leviers de la page dès qu'un programme était
+  // sélectionné (régression constatée sur des entreprises avec des leviers importés de longue
+  // date). Un lever SANS `programId`, ou dont le `programId` ne correspond à AUCUN programme
+  // Performance actuel de l'entreprise (programme supprimé/recréé depuis), reste donc TOUJOURS
+  // visible, quel que soit le programme sélectionné — seuls les leviers explicitement rattachés à
+  // un AUTRE programme existant sont masqués.
+  const performanceProgramIds = useMemo(
+    () => new Set(performancePrograms.map((p) => p.id)),
+    [performancePrograms]
+  );
   const programScopedLevers = useMemo(
-    () => (selectedProgramId ? scopedLevers.filter((l) => l.programId === selectedProgramId) : []),
-    [scopedLevers, selectedProgramId]
+    () =>
+      scopedLevers.filter(
+        (l) =>
+          !l.programId ||
+          l.programId === selectedProgramId ||
+          !performanceProgramIds.has(l.programId)
+      ),
+    [scopedLevers, selectedProgramId, performanceProgramIds]
   );
 
   // Leviers avec au moins une contrainte de dépendance violée (colonne ⚠ + filtre)
