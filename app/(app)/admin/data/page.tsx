@@ -17,6 +17,23 @@ import { subscribeEmployees, subscribeMovements } from "@/lib/firestore/workforc
 import { useRole } from "@/lib/hooks/useRole";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
+// Round multi-profils : chaque utilisateur peut porter 0 à 2 profils métier + des habilitations
+// admin additives (isGlobalAdmin/isCompanyAdmin). Pour cette histogramme purement indicatif, on
+// compte chaque profil métier dans son propre "bucket" (un utilisateur à 2 profils contribue à 2
+// buckets) et on ajoute des buckets "admin"/"admin_entreprise" dédiés pour ne pas faire disparaître
+// silencieusement les comptes admin (qui peuvent n'avoir aucun profil métier) du résumé.
+function tallyUserRoles(users: AuthUser[]): Record<string, number> {
+  const tally: Record<string, number> = {};
+  users.forEach((u) => {
+    u.profiles.forEach((p) => {
+      tally[p.role] = (tally[p.role] || 0) + 1;
+    });
+    if (u.isGlobalAdmin) tally.admin = (tally.admin || 0) + 1;
+    if (u.isCompanyAdmin) tally.admin_entreprise = (tally.admin_entreprise || 0) + 1;
+  });
+  return tally;
+}
+
 function StatusDot({ filled }: { filled: boolean }) {
   return (
     <span
@@ -145,10 +162,7 @@ export default function AdminDataPage() {
     const cEmployees = workforceByCompany[c.id]?.employees ?? [];
     const cMovements = workforceByCompany[c.id]?.movements ?? [];
 
-    const userRoles: Record<string, number> = {};
-    cUsers.forEach((u) => {
-      userRoles[u.role] = (userRoles[u.role] || 0) + 1;
-    });
+    const userRoles = tallyUserRoles(cUsers);
 
     return {
       company: c,
@@ -163,10 +177,7 @@ export default function AdminDataPage() {
     };
   });
 
-  const globalUserRoles: Record<string, number> = {};
-  visibleUsers.forEach((u) => {
-    globalUserRoles[u.role] = (globalUserRoles[u.role] || 0) + 1;
-  });
+  const globalUserRoles = tallyUserRoles(visibleUsers);
 
   return (
     <div className="space-y-6">

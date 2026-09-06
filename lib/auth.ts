@@ -1,4 +1,39 @@
-import type { AuthUser } from "@/types";
+import type { AuthUser, ProfileAssignment, Role } from "@/types";
+
+/**
+ * Compatibilité round multi-profils : les documents `adminUsers` créés AVANT ce round portent un
+ * unique champ `role: Role` (parfois avec la valeur historique "admin"/"admin_entreprise", qui ne
+ * fait plus partie du type `Role`). Cette fonction lit l'un ou l'autre format et renvoie toujours
+ * la forme `profiles`/`isGlobalAdmin`/`isCompanyAdmin` — aucune migration Firestore n'est requise
+ * pour continuer à lire les anciens comptes ; `saveUser` (lib/firestore/admin.ts) réécrit toujours
+ * au nouveau format dès le prochain enregistrement (voir aussi scripts/migrate-users-multi-profile.js
+ * pour une conversion en masse, optionnelle).
+ */
+function normalizeProfileFields(data: Record<string, unknown>): {
+  profiles: ProfileAssignment[];
+  isGlobalAdmin: boolean;
+  isCompanyAdmin: boolean;
+} {
+  if (Array.isArray(data.profiles)) {
+    return {
+      profiles: data.profiles as ProfileAssignment[],
+      isGlobalAdmin: !!data.isGlobalAdmin,
+      isCompanyAdmin: !!data.isCompanyAdmin,
+    };
+  }
+  // Ancien format : un unique champ `role`.
+  const legacyRole = data.role as string | undefined;
+  if (legacyRole === "admin") return { profiles: [], isGlobalAdmin: true, isCompanyAdmin: false };
+  if (legacyRole === "admin_entreprise")
+    return { profiles: [], isGlobalAdmin: false, isCompanyAdmin: true };
+  if (legacyRole)
+    return {
+      profiles: [{ role: legacyRole as Role }],
+      isGlobalAdmin: false,
+      isCompanyAdmin: false,
+    };
+  return { profiles: [], isGlobalAdmin: false, isCompanyAdmin: false };
+}
 
 export function normalizeUsername(username: string): string {
   return username.trim().toLowerCase();
@@ -74,15 +109,19 @@ export async function resolveAuthUserProfile(slug: string): Promise<AuthUser> {
   }
 
   const data = snap.data();
+  const { profiles, isGlobalAdmin, isCompanyAdmin } = normalizeProfileFields(data);
   return {
     username: data.username,
     password: data.password,
-    role: data.role,
+    profiles,
+    isGlobalAdmin,
+    isCompanyAdmin,
     firstName: data.firstName,
     lastName: data.lastName,
     name: data.name ?? `${data.firstName} ${data.lastName}`,
     companyId: data.companyId ?? null,
     confidentialityClearance: data.confidentialityClearance,
+    direction: data.direction,
   };
 }
 

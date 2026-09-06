@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { PAGE_ROUTES, roles } from "@/lib/nav-config";
+import { PAGE_ROUTES, getDisplayRoleDefinition, resolveUserNav } from "@/lib/nav-config";
 import { assetPath, cn } from "@/lib/utils";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Avatar } from "@/components/shared/Avatar";
@@ -10,7 +10,6 @@ import { GuardedLink } from "@/components/shared/GuardedLink";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Role } from "@/types";
 
 /** Sidebar noire fixe — brand BearingPoint : wordmark officiel blanc sur noir, item actif
  * marqué par un filet rouge (accent graphique) avec texte blanc (jamais de texte coloré).
@@ -20,27 +19,29 @@ import type { Role } from "@/types";
  * au drawer de remplacer `h-screen` par `h-full` (hauteur du panneau, pas du viewport). */
 export function Sidebar({
   alertCount,
-  role,
   onNavigate,
   className,
 }: {
   alertCount: number;
-  role: Role;
   onNavigate?: () => void;
   className?: string;
 }) {
   const pathname = usePathname();
-  const { user } = useRole();
+  const { user, profiles, isGlobalAdmin, isCompanyAdmin } = useRole();
   const { t } = useTranslation();
   const { programType } = useActiveProgram();
   // Nav filtrée par TYPE de programme actif : un item sans `programTypes` reste visible partout
   // (comportement historique — c'est le cas de tous les items Performance existants), un item
   // restreint n'apparaît que pour les types listés. `programType` vaut "performance" tant qu'aucun
   // programme stratégique n'est actif (voir useActiveProgram), donc la nav d'un utilisateur
-  // Performance est strictement identique à ce qu'elle était avant.
-  const nav = roles[role].nav.filter(
+  // Performance est strictement identique à ce qu'elle était avant. `resolveUserNav` fait l'union
+  // dédupliquée des nav de tous les profils/habilitations de l'utilisateur (round multi-profils).
+  const nav = resolveUserNav({ profiles, isGlobalAdmin, isCompanyAdmin }).filter(
     (item) => !item.programTypes || item.programTypes.includes(programType)
   );
+  // Libellé/avatar affichés : profil Plan Performance, puis Plan Stratégique, puis admin — sinon
+  // repli sur le nom de l'utilisateur (cas théorique d'un compte sans profil ni habilitation).
+  const displayRole = getDisplayRoleDefinition({ profiles, isGlobalAdmin, isCompanyAdmin });
 
   return (
     <aside
@@ -107,12 +108,15 @@ export function Sidebar({
       </nav>
 
       <div className="flex items-center gap-2.5 border-t border-white/[0.08] px-4 py-3.5">
-        <Avatar initials={t(roles[role].short).slice(0, 2).toUpperCase()} variant="coral" />
+        <Avatar
+          initials={(displayRole ? t(displayRole.short) : (user?.name ?? "?"))
+            .slice(0, 2)
+            .toUpperCase()}
+          variant="coral"
+        />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-semibold text-white">
-            {user?.name ?? t(roles[role].label)}
-          </div>
-          <div className="text-[10px] text-white/50">{t(roles[role].label)}</div>
+          <div className="truncate text-xs font-semibold text-white">{user?.name ?? "—"}</div>
+          {displayRole && <div className="text-[10px] text-white/50">{t(displayRole.label)}</div>}
         </div>
       </div>
     </aside>

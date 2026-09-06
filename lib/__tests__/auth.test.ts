@@ -128,11 +128,44 @@ describe("auth — resolveAuthUserProfile", () => {
     expect(profile).toEqual({
       username: "test.cto",
       password: "test",
-      role: "cto",
+      profiles: [{ role: "cto" }],
+      isGlobalAdmin: false,
+      isCompanyAdmin: false,
       firstName: "Jean",
       lastName: "Dupont",
       name: "Jean Dupont",
       companyId: "c1",
+      confidentialityClearance: undefined,
+    });
+  });
+
+  it("passes through a NEW-shape document (profiles/isGlobalAdmin already set) unchanged", async () => {
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        username: "root",
+        password: "test",
+        profiles: [],
+        isGlobalAdmin: true,
+        isCompanyAdmin: false,
+        firstName: "Root",
+        lastName: "Admin",
+        name: "Root Admin",
+        companyId: null,
+      }),
+    });
+    const { resolveAuthUserProfile } = await import("@/lib/auth");
+    const profile = await resolveAuthUserProfile("root");
+    expect(profile).toEqual({
+      username: "root",
+      password: "test",
+      profiles: [],
+      isGlobalAdmin: true,
+      isCompanyAdmin: false,
+      firstName: "Root",
+      lastName: "Admin",
+      name: "Root Admin",
+      companyId: null,
       confidentialityClearance: undefined,
     });
   });
@@ -171,7 +204,8 @@ describe("auth — signInUser", () => {
       "admin@betrack.local",
       "test"
     );
-    expect(user.role).toBe("admin");
+    expect(user.isGlobalAdmin).toBe(true);
+    expect(user.profiles).toEqual([]);
   });
 
   it("signs in using the tenant-scoped synthetic email when a companyId is given", async () => {

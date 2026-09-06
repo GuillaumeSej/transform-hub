@@ -42,6 +42,7 @@ import {
   type PivotRow,
 } from "@/lib/dashboardPivot";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
+import { isAnyAdmin } from "@/lib/roleProfiles";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -156,17 +157,21 @@ export function DashboardPagePerformance() {
     return unsub;
   }, [user?.companyId]);
 
-  const clearance = resolveConfidentialityClearance(user, company?.roleClearance);
+  const clearance = resolveConfidentialityClearance(user, company?.roleClearance, "performance");
   const visibleLevers = useMemo(
     () =>
       data.levers.filter(
-        (l) =>
-          user?.role === "admin" ||
-          user?.role === "admin_entreprise" ||
-          isLeverVisibleForClearance(l.confidentialityLevel, clearance)
+        (l) => isAnyAdmin(user) || isLeverVisibleForClearance(l.confidentialityLevel, clearance)
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.levers, user?.role, company?.roleClearance, user?.confidentialityClearance]
+    [
+      data.levers,
+      user?.profiles,
+      user?.isGlobalAdmin,
+      user?.isCompanyAdmin,
+      company?.roleClearance,
+      user?.confidentialityClearance,
+    ]
   );
   const visibleData = useMemo(() => {
     return {

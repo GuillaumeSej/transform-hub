@@ -1,4 +1,5 @@
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
+import { hasRole } from "@/lib/roleProfiles";
 import type { Alert, AuthUser, BeTrackData, Company, Lever } from "@/types";
 
 function normalize(value: string | undefined): string {
@@ -16,13 +17,13 @@ export function resolveAlertLever(alert: Alert, data: BeTrackData): Lever | unde
 }
 
 export function canUserAccessLever(user: AuthUser, lever: Lever, company?: Company): boolean {
-  if (user.role === "admin") return true;
+  if (user.isGlobalAdmin) return true;
   if (user.companyId !== lever.companyId) return false;
-  if (user.role === "admin_entreprise") return true;
+  if (user.isCompanyAdmin) return true;
 
   const clearance = resolveConfidentialityClearance(user, company?.roleClearance);
   if (!isLeverVisibleForClearance(lever.confidentialityLevel, clearance)) return false;
-  if (user.role === "lever") return normalize(lever.owner) === normalize(user.name);
+  if (hasRole(user, "lever")) return normalize(lever.owner) === normalize(user.name);
   return true;
 }
 
@@ -40,14 +41,14 @@ export function deriveAlertRecipients(
 
   return users
     .filter((user) => {
-      if (user.role === "admin") return true;
+      if (user.isGlobalAdmin) return true;
       if (!companyId || user.companyId !== companyId) return false;
       const company = companies.find((item) => item.id === user.companyId);
       if (directLever) return canUserAccessLever(user, directLever, company);
       if (workstreamLevers.length > 0) {
         return workstreamLevers.some((lever) => canUserAccessLever(user, lever, company));
       }
-      return user.role === "admin_entreprise" || user.role === "cto";
+      return user.isCompanyAdmin || hasRole(user, "cto");
     })
     .map((user) => normalize(user.username))
     .filter(Boolean)

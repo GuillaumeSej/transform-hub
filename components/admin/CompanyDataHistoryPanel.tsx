@@ -99,9 +99,16 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
 
   const cUsers = users.filter((u) => u.companyId === companyId);
   const cPrograms = programs.filter((p) => p.companyId === companyId);
+  // Round multi-profils : voir tallyUserRoles dans app/(app)/admin/data/page.tsx (même approche —
+  // chaque profil métier compte dans son bucket, buckets admin/admin_entreprise dédiés pour ne pas
+  // faire disparaître les comptes admin sans profil métier du résumé).
   const userRoles: Record<string, number> = {};
   cUsers.forEach((u) => {
-    userRoles[u.role] = (userRoles[u.role] || 0) + 1;
+    u.profiles.forEach((p) => {
+      userRoles[p.role] = (userRoles[p.role] || 0) + 1;
+    });
+    if (u.isGlobalAdmin) userRoles.admin = (userRoles.admin || 0) + 1;
+    if (u.isCompanyAdmin) userRoles.admin_entreprise = (userRoles.admin_entreprise || 0) + 1;
   });
 
   const scopedAudit = filterAuditByCompany(audit, levers, companyId);

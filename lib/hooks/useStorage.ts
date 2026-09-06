@@ -404,7 +404,13 @@ export function useBeTrackData(companyId?: string | null) {
       ...input,
       id: `MANUAL-${crypto.randomUUID()}`,
       ts: createdAt,
-      actorRole: user.role,
+      // Simple champ d'audit (string libre, pas le type Role) — priorité aux habilitations admin,
+      // sinon le premier profil métier de l'utilisateur (round multi-profils).
+      actorRole: user.isGlobalAdmin
+        ? "admin"
+        : user.isCompanyAdmin
+          ? "admin_entreprise"
+          : (user.profiles[0]?.role ?? "inconnu"),
       owner: user.name,
       source: "manual",
       companyId: user.companyId,

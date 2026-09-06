@@ -7,9 +7,9 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
-import { roles } from "@/lib/nav-config";
+import { getDisplayRoleDefinition } from "@/lib/nav-config";
 import { Avatar } from "@/components/shared/Avatar";
-import type { Alert, Company, Role } from "@/types";
+import type { Alert, Company } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
@@ -87,20 +87,18 @@ function LanguageSwitcher() {
  * la session (choisi sur /login) : plus de sélecteur, seulement un bouton de déconnexion. */
 export function Topbar({
   alertCount,
-  role,
   onMenuClick,
   alerts,
   onAlertClick,
 }: {
   alertCount: number;
-  role: Role;
   onMenuClick: () => void;
   alerts: Alert[];
   onAlertClick: (alert: Alert) => void;
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const { logout, user } = useRole();
+  const { logout, user, profiles, isGlobalAdmin, isCompanyAdmin } = useRole();
 
   useEffect(() => {
     const unsub = subscribeCompanies(setCompanies, user?.companyId ?? null);
@@ -125,7 +123,8 @@ export function Topbar({
     ? (companies.find((c) => c.id === user.companyId)?.name ?? user.companyId)
     : t("topbar.global");
 
-  const displayName = user?.name ?? t(roles[role].label);
+  const displayRole = getDisplayRoleDefinition({ profiles, isGlobalAdmin, isCompanyAdmin });
+  const displayName = user?.name ?? (displayRole ? t(displayRole.label) : "—");
   const initials = displayName
     .split(" ")
     .map((x) => x[0])

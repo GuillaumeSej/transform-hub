@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
 import { signInUser } from "@/lib/auth";
 import { subscribeCompanyDirectory } from "@/lib/firestore/admin";
-import { PAGE_ROUTES, roles } from "@/lib/nav-config";
+import { PAGE_ROUTES, resolveUserNav } from "@/lib/nav-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
 import { assetPath } from "@/lib/utils";
@@ -44,7 +44,11 @@ export default function LoginPage() {
     try {
       const user = await signInUser(username, password, companyId || null);
       login(user);
-      router.replace(PAGE_ROUTES[roles[user.role].nav[0]?.id] ?? "/levers");
+      // Page d'atterrissage : premier item de l'union des nav de tous les profils/habilitations
+      // de l'utilisateur (voir resolveUserNav) — profil Plan Performance, puis Plan Stratégique,
+      // puis admin. Repli sur /levers si l'utilisateur n'a ni profil ni habilitation admin.
+      const firstNavItem = resolveUserNav(user)[0];
+      router.replace((firstNavItem && PAGE_ROUTES[firstNavItem.id]) ?? "/levers");
     } catch (err) {
       setError(describeSignInError(err));
     }

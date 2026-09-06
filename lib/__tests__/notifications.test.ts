@@ -80,7 +80,8 @@ const users: AuthUser[] = [
   {
     username: "admin",
     password: "x",
-    role: "admin",
+    profiles: [],
+    isGlobalAdmin: true,
     firstName: "A",
     lastName: "A",
     name: "Admin",
@@ -89,7 +90,7 @@ const users: AuthUser[] = [
   {
     username: "cto",
     password: "x",
-    role: "cto",
+    profiles: [{ role: "cto" }],
     firstName: "C",
     lastName: "C",
     name: "CTO",
@@ -98,7 +99,7 @@ const users: AuthUser[] = [
   {
     username: "owner",
     password: "x",
-    role: "lever",
+    profiles: [{ role: "lever" }],
     firstName: "P",
     lastName: "B",
     name: "Pierre Bernard",
@@ -107,7 +108,7 @@ const users: AuthUser[] = [
   {
     username: "other",
     password: "x",
-    role: "lever",
+    profiles: [{ role: "lever" }],
     firstName: "O",
     lastName: "O",
     name: "Other",
@@ -116,7 +117,7 @@ const users: AuthUser[] = [
   {
     username: "foreign",
     password: "x",
-    role: "cto",
+    profiles: [{ role: "cto" }],
     firstName: "F",
     lastName: "F",
     name: "Foreign",

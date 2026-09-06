@@ -12,7 +12,7 @@ import {
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
 import { cleanupLegacyStorage } from "@/lib/legacyStorageCleanup";
-import { PAGE_ROUTES, roles } from "@/lib/nav-config";
+import { PAGE_ROUTES, resolveUserNav } from "@/lib/nav-config";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
@@ -30,7 +30,7 @@ import type { Alert } from "@/types";
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
-  const { role, user, loading } = useRole();
+  const { user, loading } = useRole();
   // Type du programme actif — le garde-fou de routes ci-dessous doit appliquer EXACTEMENT le même
   // filtre que la Sidebar, sinon une page masquée dans la nav (ex. /hr en mode stratégique)
   // resterait accessible en tapant son URL directement.
@@ -151,51 +151,53 @@ export function AppShell({ children }: { children: ReactNode }) {
     // asynchrone d'onAuthStateChanged, voir useRole), on ne décide de rien : rediriger vers
     // /login ici serait prématuré et éjecterait un utilisateur pourtant déjà connecté.
     if (loading) return;
-    if (!role) {
+    if (!user) {
       router.replace("/login");
       return;
     }
-    // Un rôle ne peut naviguer que vers les pages listées dans sa nav (+ le détail levier, qui
-    // n'est jamais dans la sidebar). Le Lever Owner en particulier n'a pas accès à un dashboard.
+    // L'union des nav des profils/habilitations de l'utilisateur (voir resolveUserNav) borne les
+    // pages accessibles (+ le détail levier, qui n'est jamais dans la sidebar). Le Lever Owner en
+    // particulier n'a pas accès à un dashboard.
     //
     // Le périmètre autorisé suit le TYPE du programme actif, comme la Sidebar. Tant que les
     // programmes ne sont pas chargés, on retient la nav NON filtrée (surensemble des deux types) :
     // filtrer trop tôt sur le repli "performance" éjecterait un utilisateur légitimement arrivé
     // sur /kpi avec un programme stratégique. Ce surensemble est exactement le comportement
     // historique, donc rien ne change pour le Plan Performance.
+    const unfilteredNavItems = resolveUserNav(user);
     const navItems = programsLoading
-      ? roles[role].nav
-      : roles[role].nav.filter(
+      ? unfilteredNavItems
+      : unfilteredNavItems.filter(
           (item) => !item.programTypes || item.programTypes.includes(programType)
         );
     const allowedRoutes = new Set(navItems.map((item) => PAGE_ROUTES[item.id]));
     const isLeverDetail = pathname.startsWith("/levers/");
     // Hub de détail entreprise (/admin/companies/detail?id=...) : jamais dans la nav (on y accède
     // en cliquant "Gérer" depuis la liste, comme pour /levers/detail ci-dessus) et réservé au
-    // global admin — les autres rôles n'ont pas /admin/companies dans leur nav, donc
+    // global admin — les autres profils n'ont pas /admin/companies dans leur nav, donc
     // allowedRoutes.has() suffirait déjà à les bloquer, mais on le rend explicite ici.
     const isCompanyDetail = pathname === "/admin/companies/detail";
-    const companyDetailAllowed = isCompanyDetail && role === "admin";
+    const companyDetailAllowed = isCompanyDetail && !!user.isGlobalAdmin;
     if (!isLeverDetail && !companyDetailAllowed && !allowedRoutes.has(pathname)) {
       // Repli sur la première page RÉELLEMENT autorisée (nav filtrée) : renvoyer vers
-      // `roles[role].nav[0]` sans filtre pourrait pointer une page elle-même interdite pour le
-      // type de programme actif (ex. /workstreams pour un sponsor en mode stratégique) et
-      // provoquer une boucle de redirection.
+      // `navItems[0]` sans filtre pourrait pointer une page elle-même interdite pour le type de
+      // programme actif (ex. /workstreams pour un sponsor en mode stratégique) et provoquer une
+      // boucle de redirection.
       router.replace(PAGE_ROUTES[navItems[0]?.id] ?? "/levers");
       return;
     }
     cleanupLegacyStorage();
     setReady(true);
-  }, [role, loading, router, pathname, programType, programsLoading]);
+  }, [user, loading, router, pathname, programType, programsLoading]);
 
-  if (loading || !role || !ready) return null;
+  if (loading || !user || !ready) return null;
 
   return (
     <div className="flex h-dvh">
       {/* Sidebar fixe — visible seulement à partir de `lg` (1024px). En dessous, remplacée par le
           bouton hamburger du Topbar + ce drawer coulissant. */}
       <div className="hidden lg:flex">
-        <Sidebar alertCount={shellAlerts.length} role={role} />
+        <Sidebar alertCount={shellAlerts.length} />
       </div>
 
       {mobileNavOpen && (
@@ -211,7 +213,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
           <Sidebar
             alertCount={shellAlerts.length}
-            role={role}
             onNavigate={() => setMobileNavOpen(false)}
             className="relative z-10 h-dvh w-[min(248px,85vw)] min-w-0 shadow-xl"
           />
@@ -232,7 +233,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             const leverId = data.getLeverById(alert.scope)?.id;
             router.push(leverId ? `/levers/detail?id=${leverId}` : "/levers");
           }}
-          role={role}
           onMenuClick={() => setMobileNavOpen((v) => !v)}
         />
         <main className="flex-1 overflow-y-auto px-4 pb-10 pt-5 sm:px-6">{children}</main>

@@ -1,4 +1,5 @@
-import type { Role, RoleDefinition } from "@/types";
+import { getPerformanceProfile, getStrategicProfile } from "@/lib/roleProfiles";
+import type { AuthUser, NavItem, Role, RoleDefinition } from "@/types";
 
 /** Portage fidèle de `roles` (prototype HTML historique, depuis retiré du repo) — nav différente
  * par persona.
@@ -22,20 +23,6 @@ import type { Role, RoleDefinition } from "@/types";
  *   - Finance / RH / Base ETP / Workstreams / Opérations n'ont pas de sens sans leviers et sont
  *     donc réservés au Plan Performance. */
 export const roles: Record<Role, RoleDefinition> = {
-  admin: {
-    label: "roles.admin.label",
-    short: "roles.admin.short",
-    nav: [{ id: "admin-companies", icon: "Building2", label: "nav.companies" }],
-  },
-  admin_entreprise: {
-    label: "roles.admin_entreprise.label",
-    short: "roles.admin_entreprise.short",
-    nav: [
-      { id: "admin-users", icon: "Users", label: "nav.users" },
-      { id: "admin-data", icon: "BarChart3", label: "nav.data" },
-      { id: "admin-history", icon: "History", label: "nav.history" },
-    ],
-  },
   cto: {
     label: "roles.cto.label",
     short: "roles.cto.short",
@@ -248,6 +235,72 @@ export const roles: Record<Role, RoleDefinition> = {
     ],
   },
 };
+
+/** Nav des deux habilitations d'administration (`AuthUser.isGlobalAdmin`/`isCompanyAdmin`), ADDITIVES
+ *  aux profils métier (`roles` ci-dessus) plutôt que des valeurs de `Role` — voir le commentaire sur
+ *  `AuthUser` dans types/index.ts. Portées séparément de `roles` car ce ne sont plus des membres de
+ *  l'union `Role` : un utilisateur peut cumuler un profil métier ET l'une de ces habilitations
+ *  (jamais les deux habilitations à la fois en pratique, mais rien ne l'empêche techniquement). */
+export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefinition } = {
+  global: {
+    label: "roles.admin.label",
+    short: "roles.admin.short",
+    nav: [{ id: "admin-companies", icon: "Building2", label: "nav.companies" }],
+  },
+  company: {
+    label: "roles.admin_entreprise.label",
+    short: "roles.admin_entreprise.short",
+    nav: [
+      { id: "admin-users", icon: "Users", label: "nav.users" },
+      { id: "admin-data", icon: "BarChart3", label: "nav.data" },
+      { id: "admin-history", icon: "History", label: "nav.history" },
+    ],
+  },
+};
+
+/** Union dédupliquée (par `NavItem.id`, première occurrence conservée) de la nav de TOUS les
+ *  profils/habilitations de l'utilisateur : profil Plan Performance, profil Plan Stratégique,
+ *  admin global, admin entreprise — dans cet ordre. Point de passage UNIQUE pour cette logique,
+ *  consommé par AppShell (garde-fou de routes), Sidebar, Topbar et l'écran de login (page
+ *  d'atterrissage post-connexion) : ne pas la dupliquer ailleurs. */
+export function resolveUserNav(
+  user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
+): NavItem[] {
+  const navLists: NavItem[][] = [];
+  const performanceProfile = getPerformanceProfile(user);
+  const strategicProfile = getStrategicProfile(user);
+  if (performanceProfile) navLists.push(roles[performanceProfile.role].nav);
+  if (strategicProfile) navLists.push(roles[strategicProfile.role].nav);
+  if (user?.isGlobalAdmin) navLists.push(ADMIN_NAV_DEFINITIONS.global.nav);
+  if (user?.isCompanyAdmin) navLists.push(ADMIN_NAV_DEFINITIONS.company.nav);
+
+  const seen = new Set<string>();
+  const result: NavItem[] = [];
+  for (const list of navLists) {
+    for (const item of list) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      result.push(item);
+    }
+  }
+  return result;
+}
+
+/** `RoleDefinition` (label/short) à afficher pour l'utilisateur — pour un simple badge texte
+ *  (Sidebar/Topbar), PAS pour des vérifications de permission. Priorité : profil Plan Performance,
+ *  puis profil Plan Stratégique, puis admin global, puis admin entreprise. `null` = aucun profil ni
+ *  habilitation admin (cas théorique, l'appelant doit alors se rabattre sur `user.name`/générique). */
+export function getDisplayRoleDefinition(
+  user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
+): RoleDefinition | null {
+  const performanceProfile = getPerformanceProfile(user);
+  if (performanceProfile) return roles[performanceProfile.role];
+  const strategicProfile = getStrategicProfile(user);
+  if (strategicProfile) return roles[strategicProfile.role];
+  if (user?.isGlobalAdmin) return ADMIN_NAV_DEFINITIONS.global;
+  if (user?.isCompanyAdmin) return ADMIN_NAV_DEFINITIONS.company;
+  return null;
+}
 
 export const PAGE_ROUTES: Record<string, string> = {
   dashboard: "/dashboard",

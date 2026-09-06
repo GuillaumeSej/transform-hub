@@ -4,11 +4,22 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getAuthInstance } from "@/lib/firebase";
 import { accountSlugFromEmail, resolveAuthUserProfile } from "@/lib/auth";
-import type { AuthUser, Role } from "@/types";
+import type { AuthUser, ProfileAssignment, Role } from "@/types";
 
 type RoleContextValue = {
-  /** null = pas de session active, doit passer par /login */
+  /** Round multi-profils : le "premier" rôle métier de l'utilisateur, pour l'affichage simple
+   *  (ex. libellé dans la Sidebar) uniquement — PAS pour des vérifications de permission (un
+   *  utilisateur peut avoir 0, 1 ou 2 profils ; utiliser `profiles`/`isGlobalAdmin`/
+   *  `isCompanyAdmin`, ou `lib/roleProfiles.ts`, pour toute décision d'accès).
+   *  null = pas de session active, doit passer par /login, OU utilisateur sans profil métier
+   *  (ex. compte admin_entreprise pur). */
   role: Role | null;
+  /** Tous les profils métier de l'utilisateur (round multi-profils — voir types/index.ts). */
+  profiles: ProfileAssignment[];
+  /** Super-admin global (toutes entreprises). */
+  isGlobalAdmin: boolean;
+  /** Admin de sa propre entreprise (additif aux profils métier). */
+  isCompanyAdmin: boolean;
   /** Utilisateur connecté (identifiant + profil), null si pas de session. */
   user: AuthUser | null;
   /** true tant que Firebase n'a pas fini de résoudre une éventuelle session existante au premier
@@ -68,7 +79,18 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <RoleContext.Provider value={{ role: user?.role ?? null, user, loading, login, logout }}>
+    <RoleContext.Provider
+      value={{
+        role: user?.profiles?.[0]?.role ?? null,
+        profiles: user?.profiles ?? [],
+        isGlobalAdmin: !!user?.isGlobalAdmin,
+        isCompanyAdmin: !!user?.isCompanyAdmin,
+        user,
+        loading,
+        login,
+        logout,
+      }}
+    >
       {children}
     </RoleContext.Provider>
   );

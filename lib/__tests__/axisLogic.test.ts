@@ -68,7 +68,7 @@ function makeMeasurement(
 const baseUser: AuthUser = {
   username: "jean.dupont",
   password: "test",
-  role: "cto",
+  profiles: [{ role: "cto" }],
   firstName: "Jean",
   lastName: "Dupont",
   name: "Jean Dupont",
@@ -214,7 +214,7 @@ describe("countOnTrackAtRisk", () => {
 describe("canFillIndicator", () => {
   it("allows a user whose role is listed in responsibleRoles", () => {
     const indicator = makeIndicator({ responsibleRoles: ["cto", "hr"] });
-    expect(canFillIndicator(indicator, { ...baseUser, role: "hr" })).toBe(true);
+    expect(canFillIndicator(indicator, { ...baseUser, profiles: [{ role: "hr" }] })).toBe(true);
   });
 
   it("allows a user listed individually even when their role is not authorized", () => {
@@ -223,7 +223,11 @@ describe("canFillIndicator", () => {
       additionalAuthorizedUserIds: ["marie.martin"],
     });
     expect(
-      canFillIndicator(indicator, { ...baseUser, role: "ops", username: "marie.martin" })
+      canFillIndicator(indicator, {
+        ...baseUser,
+        profiles: [{ role: "ops" }],
+        username: "marie.martin",
+      })
     ).toBe(true);
   });
 
@@ -232,18 +236,32 @@ describe("canFillIndicator", () => {
       responsibleRoles: ["cto"],
       additionalAuthorizedUserIds: ["marie.martin"],
     });
-    expect(canFillIndicator(indicator, { ...baseUser, role: "ops", username: "paul.durand" })).toBe(
-      false
-    );
+    expect(
+      canFillIndicator(indicator, {
+        ...baseUser,
+        profiles: [{ role: "ops" }],
+        username: "paul.durand",
+      })
+    ).toBe(false);
   });
 
   it("always allows admin and admin_entreprise", () => {
     const indicator = makeIndicator({ responsibleRoles: ["cto"], additionalAuthorizedUserIds: [] });
-    expect(canFillIndicator(indicator, { ...baseUser, role: "admin", username: "root" })).toBe(
-      true
-    );
     expect(
-      canFillIndicator(indicator, { ...baseUser, role: "admin_entreprise", username: "root" })
+      canFillIndicator(indicator, {
+        ...baseUser,
+        profiles: [],
+        isGlobalAdmin: true,
+        username: "root",
+      })
+    ).toBe(true);
+    expect(
+      canFillIndicator(indicator, {
+        ...baseUser,
+        profiles: [],
+        isCompanyAdmin: true,
+        username: "root",
+      })
     ).toBe(true);
   });
 
@@ -389,32 +407,44 @@ describe("canManageChantier", () => {
     const chantier = makeChantier("CH1", {
       responsibleRoles: ["chantier_owner", "axis_sponsor"],
     });
-    expect(canManageChantier(chantier, { ...baseUser, role: "chantier_owner" })).toBe(true);
-    expect(canManageChantier(chantier, { ...baseUser, role: "axis_sponsor" })).toBe(true);
+    expect(
+      canManageChantier(chantier, { ...baseUser, profiles: [{ role: "chantier_owner" }] })
+    ).toBe(true);
+    expect(canManageChantier(chantier, { ...baseUser, profiles: [{ role: "axis_sponsor" }] })).toBe(
+      true
+    );
   });
 
   it("blocks a user whose role is not listed", () => {
     const chantier = makeChantier("CH1", { responsibleRoles: ["chantier_owner"] });
-    expect(canManageChantier(chantier, { ...baseUser, role: "chantier_contributor" })).toBe(false);
-    expect(canManageChantier(chantier, { ...baseUser, role: "ops" })).toBe(false);
+    expect(
+      canManageChantier(chantier, { ...baseUser, profiles: [{ role: "chantier_contributor" }] })
+    ).toBe(false);
+    expect(canManageChantier(chantier, { ...baseUser, profiles: [{ role: "ops" }] })).toBe(false);
   });
 
   it("does not restrict anyone while no responsible role has been configured", () => {
     // Défaut PERMISSIF assumé (à l'inverse de canFillIndicator) : champ absent ou liste vide =
     // aucune restriction, pour ne pas bloquer les chantiers créés avant ce champ.
-    expect(canManageChantier(makeChantier("CH1"), { ...baseUser, role: "ops" })).toBe(true);
+    expect(
+      canManageChantier(makeChantier("CH1"), { ...baseUser, profiles: [{ role: "ops" }] })
+    ).toBe(true);
     expect(
       canManageChantier(makeChantier("CH1", { responsibleRoles: [] }), {
         ...baseUser,
-        role: "ops",
+        profiles: [{ role: "ops" }],
       })
     ).toBe(true);
   });
 
   it("always allows admin and admin_entreprise, even outside responsibleRoles", () => {
     const chantier = makeChantier("CH1", { responsibleRoles: ["chantier_owner"] });
-    expect(canManageChantier(chantier, { ...baseUser, role: "admin" })).toBe(true);
-    expect(canManageChantier(chantier, { ...baseUser, role: "admin_entreprise" })).toBe(true);
+    expect(canManageChantier(chantier, { ...baseUser, profiles: [], isGlobalAdmin: true })).toBe(
+      true
+    );
+    expect(canManageChantier(chantier, { ...baseUser, profiles: [], isCompanyAdmin: true })).toBe(
+      true
+    );
   });
 
   it("blocks an anonymous user, even on an unrestricted chantier", () => {

@@ -1,9 +1,9 @@
 /**
- * Rôle applicatif d'un utilisateur — union FERMÉE, référencée partout (permissions de page via
- * `lib/nav-config.ts`, création d'utilisateur, `Indicator.responsibleRoles`,
+ * Rôle "opérationnel" applicatif d'un utilisateur — union FERMÉE, référencée partout (permissions
+ * de page via `lib/nav-config.ts`, profils d'utilisateur, `Indicator.responsibleRoles`,
  * `Chantier.responsibleRoles`).
  *
- * Les 8 premières valeurs sont les rôles historiques du Plan Performance. Les 6 suivantes portent
+ * Les 6 premières valeurs sont les rôles historiques du Plan Performance. Les 6 suivantes portent
  * l'organigramme du Plan Stratégique (méthodologie 3-5-15, axes → chantiers) défini par le PO :
  *   - `strategic_lead`      : Pilote du plan stratégique (un seul par plan) — rend compte de
  *                             l'avancement global au COMEX, anime les instances de pilotage.
@@ -18,10 +18,12 @@
  *                             budgétaire, en appui du pilote.
  * Le COMEX n'y figure PAS : c'est un organe de gouvernance collectif, pas un profil individuel
  * connectable à l'application.
+ *
+ * `admin` (super-admin global) et `admin_entreprise` (admin d'entreprise) n'en font PAS partie :
+ * ce ne sont pas des "profils métier" mais des habilitations additives, portées par
+ * `AuthUser.isGlobalAdmin`/`isCompanyAdmin` — voir le commentaire sur `AuthUser` ci-dessous.
  */
 export type Role =
-  | "admin"
-  | "admin_entreprise"
   | "cto"
   | "sponsor"
   | "lever"
@@ -35,12 +37,49 @@ export type Role =
   | "internal_comm"
   | "budget_control";
 
+/** Les 6 rôles du Plan Performance (round historique). */
+export const PERFORMANCE_ROLES: Role[] = ["cto", "sponsor", "lever", "finance", "hr", "ops"];
+
+/** Les 6 rôles du Plan Stratégique (organigramme 3-5-15). */
+export const STRATEGIC_ROLES: Role[] = [
+  "strategic_lead",
+  "axis_sponsor",
+  "chantier_owner",
+  "chantier_contributor",
+  "internal_comm",
+  "budget_control",
+];
+
+/** Un profil métier assigné à un utilisateur : un rôle, optionnellement rattaché à un programme
+ *  précis (plan de perf ou plan stratégique) de son entreprise. `programId` non défini = le rôle
+ *  s'applique à l'entreprise sans être lié à un programme particulier (cas des comptes de démo /
+ *  entreprises n'ayant qu'un seul programme d'un type donné). */
+export type ProfileAssignment = {
+  role: Role;
+  programId?: string;
+};
+
 /** Compte de test (voir lib/auth.ts) — login réel par identifiant/mot de passe, mais toujours
- * des comptes de démo (mot de passe unique "test" pour les 8 comptes/rôles). */
+ * des comptes de démo (mot de passe unique "test" pour les comptes/rôles historiques).
+ *
+ * Un utilisateur peut cumuler PLUSIEURS profils métier via `profiles` (round multi-profils) : au
+ * plus UN profil Plan Performance + UN profil Plan Stratégique (jamais deux du même type). Les
+ * habilitations d'administration (`isGlobalAdmin`/`isCompanyAdmin`) sont ADDITIVES : elles
+ * s'ajoutent aux profils métier plutôt que de les remplacer (ex. un utilisateur peut être à la
+ * fois "responsable de levier" ET admin d'entreprise). Voir `lib/roleProfiles.ts` pour les
+ * fonctions de lecture/validation de ce modèle (ne pas relire `profiles`/les flags admin à la
+ * main ailleurs dans le code). */
 export type AuthUser = {
   username: string;
   password: string;
-  role: Role;
+  /** Profils métier de l'utilisateur (0 à 2 entrées — voir contrainte ci-dessus). Une entreprise
+   *  peut avoir des comptes sans aucun profil métier (ex. un compte purement admin_entreprise). */
+  profiles: ProfileAssignment[];
+  /** Super-admin global (toutes entreprises) — remplace l'ancienne valeur de rôle "admin". */
+  isGlobalAdmin?: boolean;
+  /** Admin de SON entreprise (companyId) — remplace l'ancienne valeur de rôle "admin_entreprise".
+   *  Additif : un admin d'entreprise peut aussi avoir des profils métier dans `profiles`. */
+  isCompanyAdmin?: boolean;
   firstName: string;
   lastName: string;
   name: string; // nom affiché + utilisé pour filtrer "mes leviers" (Lever.owner)
@@ -51,7 +90,7 @@ export type AuthUser = {
    *  définie (voir Company.confidentialityLevels). Non défini = hérite du niveau de son rôle.
    *  "all" = accès à tous les niveaux de confidentialité de l'entreprise, quel que soit le rôle.
    *  string[] (peut être vide = "aucun") = liste explicite des niveaux autorisés pour CET
-   *  utilisateur. Sans effet pour admin/admin_entreprise (toujours accès total). */
+   *  utilisateur. Sans effet pour un admin (global ou entreprise, toujours accès total). */
   confidentialityClearance?: "all" | string[];
   /** Direction/service métier de rattachement (round 4, filtres Plan Stratégique — voir
    *  `Company.directions`). Contraint à la liste de l'entreprise via un `<select>`, jamais du texte

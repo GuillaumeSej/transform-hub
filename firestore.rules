@@ -77,17 +77,28 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/adminUsers/$(currentUsername())).data;
     }
 
+    // Compatible avec les deux formats de doc `adminUsers` : nouveau (`isGlobalAdmin: true`) et
+    // legacy (`role == 'admin'`, pas de migration forcée — voir lib/auth.ts:resolveAuthUserProfile
+    // pour le même raisonnement côté lecture client). `.get(field, default)` évite une erreur
+    // d'évaluation si le champ n'existe pas sur le document (nouveau format sans `role`, ou legacy
+    // sans `isGlobalAdmin`).
     function isSuperAdmin() {
-      return isSignedIn() && currentProfile().role == 'admin';
+      return isSignedIn()
+        && (currentProfile().get('isGlobalAdmin', false) == true
+            || currentProfile().get('role', '') == 'admin');
     }
 
     function myCompanyId() {
       return currentProfile().companyId;
     }
 
-    // Rôle admin d'ENTREPRISE (pas admin global) dont le companyId correspond.
+    // Rôle admin d'ENTREPRISE (pas admin global) dont le companyId correspond. Même compatibilité
+    // nouveau (`isCompanyAdmin: true`) / legacy (`role == 'admin_entreprise'`) que isSuperAdmin().
     function isCompanyAdmin(companyId) {
-      return isSignedIn() && currentProfile().role == 'admin_entreprise' && myCompanyId() == companyId;
+      return isSignedIn()
+        && (currentProfile().get('isCompanyAdmin', false) == true
+            || currentProfile().get('role', '') == 'admin_entreprise')
+        && myCompanyId() == companyId;
     }
 
     // N'IMPORTE QUEL rôle de l'entreprise donnée (pas seulement les admins) — c'est la fonction la

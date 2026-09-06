@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
+import { hasAnyRole } from "@/lib/roleProfiles";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as hr from "@/lib/hrEngine";
 import {
@@ -288,7 +289,7 @@ export default function HrDashboardPage() {
     () => buildMovementTableRows(filteredMovements, data.levers, programs),
     [filteredMovements, data.levers, programs]
   );
-  const canEditMovements = user?.role === "hr" || user?.role === "cto";
+  const canEditMovements = hasAnyRole(user, ["hr", "cto"]);
   const socialSchemeOptions = ["—", "PSE", "RC", "RCC", "PDV", "Autre"];
   const movementStatusOptions: MovementStatus[] = ["Réalisé", "Planifié", "À faire", "Abandonné"];
 

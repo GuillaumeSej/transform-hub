@@ -72,7 +72,7 @@ export function LeverDetailClientPerformance() {
     }, user?.companyId ?? null);
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.companyId, user?.role, user?.confidentialityClearance]);
+  }, [user?.companyId, user?.profiles, user?.confidentialityClearance]);
   useEffect(() => {
     const unsub = subscribePrograms(setPrograms, user?.companyId ?? null);
     return unsub;

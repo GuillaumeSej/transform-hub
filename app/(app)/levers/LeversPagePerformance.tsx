@@ -13,6 +13,7 @@ import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
+import { isAnyAdmin } from "@/lib/roleProfiles";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -85,12 +86,12 @@ export function LeversPagePerformance() {
       const company = companies.find((c) => c.id === user?.companyId);
       setHierarchyLevels(company?.hierarchyLevels ?? []);
       setGeographyHierarchyLevels(company?.geographyHierarchyLevels ?? []);
-      setClearance(resolveConfidentialityClearance(user, company?.roleClearance));
+      setClearance(resolveConfidentialityClearance(user, company?.roleClearance, "performance"));
       setRiskThresholds(company?.riskThresholds);
     }, user?.companyId ?? null);
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.companyId, user?.role, user?.confidentialityClearance]);
+  }, [user?.companyId, user?.profiles, user?.confidentialityClearance]);
 
   // `programs` (tous types confondus, pour la colonne optionnelle "Programme" de l'import Excel —
   // voir lib/leverExcelImport.ts) vient déjà de `usePerformanceProgramSelector` ci-dessus.
@@ -134,10 +135,7 @@ export function LeversPagePerformance() {
     const ownerScoped =
       role === "lever" && user ? data.levers.filter((l) => l.owner === user.name) : data.levers;
     return ownerScoped.filter(
-      (l) =>
-        role === "admin" ||
-        role === "admin_entreprise" ||
-        isLeverVisibleForClearance(l.confidentialityLevel, clearance)
+      (l) => isAnyAdmin(user) || isLeverVisibleForClearance(l.confidentialityLevel, clearance)
     );
   }, [data.levers, role, user, clearance]);
 

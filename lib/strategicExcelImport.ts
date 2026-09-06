@@ -143,14 +143,14 @@ const DIRECTION_LABEL: Record<IndicatorDirection, string> = {
 
 const DEPENDENCY_TYPES: ChantierDependencyType[] = ["FS", "SS", "FF", "SF"];
 
-/** Union fermée `Role` (types/index.ts) — les 14 valeurs internes sont acceptées TELLES QUELLES
- *  dans la colonne "Rôles responsables" (pas de table de libellés dédiée à dupliquer ici, voir le
- *  doc-comment de `RESPONSIBLE_ROLES` dans `components/admin/IndicatorsEditor.tsx` : chaque écran
- *  choisit déjà son propre sous-ensemble/libellé, il n'y a pas de référentiel partagé). Un import
- *  Excel s'adresse à un profil suffisamment technique pour taper `cto;chantier_owner`. */
+/** Union fermée `Role` (types/index.ts) — les 12 valeurs internes (rôles métier ; admin/
+ *  admin_entreprise n'en font plus partie depuis le round multi-profils, voir AuthUser) sont
+ *  acceptées TELLES QUELLES dans la colonne "Rôles responsables" (pas de table de libellés dédiée
+ *  à dupliquer ici, voir le doc-comment de `RESPONSIBLE_ROLES` dans
+ *  `components/admin/IndicatorsEditor.tsx` : chaque écran choisit déjà son propre sous-ensemble/
+ *  libellé, il n'y a pas de référentiel partagé). Un import Excel s'adresse à un profil
+ *  suffisamment technique pour taper `cto;chantier_owner`. */
 const ALL_ROLES: Role[] = [
-  "admin",
-  "admin_entreprise",
   "cto",
   "sponsor",
   "lever",

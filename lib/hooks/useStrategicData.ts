@@ -26,6 +26,7 @@ import {
 import { subscribeUsers, subscribeCompanies } from "@/lib/firestore/admin";
 import { computeIndicatorStatus } from "@/lib/axisLogic";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
+import { isAnyAdmin } from "@/lib/roleProfiles";
 import type {
   AuthUser,
   Chantier,
@@ -151,7 +152,10 @@ export function useStrategicData(
    * (lib/leversLogic.ts) le font pour les leviers du Plan de Performance — admin/admin_entreprise
    * voient toujours tout.
    */
-  user?: Pick<AuthUser, "role" | "confidentialityClearance"> | null
+  user?: Pick<
+    AuthUser,
+    "profiles" | "isGlobalAdmin" | "isCompanyAdmin" | "confidentialityClearance"
+  > | null
 ): StrategicData {
   const [allAxes, setAllAxes] = useState<StrategicAxis[]>([]);
   const [allChantiers, setAllChantiers] = useState<Chantier[]>([]);
@@ -250,9 +254,9 @@ export function useStrategicData(
     }, companyId);
     return unsub;
   }, [filterActive, companyId]);
-  const isAdmin = user?.role === "admin" || user?.role === "admin_entreprise";
+  const isAdmin = isAnyAdmin(user);
   const clearance = useMemo(
-    () => resolveConfidentialityClearance(user, company?.roleClearance),
+    () => resolveConfidentialityClearance(user, company?.roleClearance, "strategic"),
     [user, company?.roleClearance]
   );
 

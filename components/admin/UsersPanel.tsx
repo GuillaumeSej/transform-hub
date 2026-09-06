@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Users, Plus, Pencil, Trash2 } from "lucide-react";
-import type { AuthUser, Role, Company } from "@/types";
-import { subscribeUsers, saveUser, subscribeCompanies } from "@/lib/firestore/admin";
+import type { AuthUser, Role, Company, Program, ProfileAssignment } from "@/types";
+import {
+  subscribeUsers,
+  saveUser,
+  subscribeCompanies,
+  subscribePrograms,
+} from "@/lib/firestore/admin";
 import { isFirebaseErrorCode, usernameToSyntheticEmail } from "@/lib/auth";
 import { withSecondaryAuth, getAuthInstance } from "@/lib/firebase";
 import { renameUser, deleteUserAccount, AdminApiError } from "@/lib/adminApi";
@@ -13,6 +18,13 @@ import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
+import {
+  isAnyAdmin,
+  getPerformanceProfile,
+  getStrategicProfile,
+  assertValidProfiles,
+} from "@/lib/roleProfiles";
+import { resolveProgramType } from "@/lib/axisLogic";
 
 /** Longueur minimale du mot de passe — DOIT rester alignée sur la politique de Firebase Auth
  *  (aucune autre règle par défaut ; un mot de passe plus court est rejeté avec `auth/weak-password`
@@ -22,18 +34,20 @@ export const MIN_PASSWORD_LENGTH = 6;
 
 const PASSWORD_TOO_SHORT_MESSAGE = `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`;
 
-const ALL_ROLES: { value: Role; label: string }[] = [
-  { value: "admin", label: "Administrator" },
-  { value: "admin_entreprise", label: "Admin Entreprise" },
+/** Libellés FR des 6 rôles du Plan Performance (round historique) — cet écran d'admin n'est pas
+ *  traduit, mêmes libellés littéraux que les rôles du Plan Stratégique ci-dessous. */
+const PERFORMANCE_ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "cto", label: "CTO" },
   { value: "sponsor", label: "Sponsor" },
   { value: "lever", label: "Lever Owner" },
   { value: "finance", label: "Finance" },
   { value: "hr", label: "HR" },
   { value: "ops", label: "Ops" },
-  // ─── Profils du Plan Stratégique (organigramme 3-5-15) ─────────────────────────────────────
-  // Libellés littéraux comme les rôles historiques ci-dessus (cet écran d'admin n'est pas
-  // traduit) ; les clés i18n `roles.*` correspondantes existent pour la sidebar/topbar.
+];
+
+/** Libellés FR des 6 profils du Plan Stratégique (organigramme 3-5-15) — les clés i18n `roles.*`
+ *  correspondantes existent séparément pour la sidebar/topbar. */
+const STRATEGIC_ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "strategic_lead", label: "Pilote du plan stratégique" },
   { value: "axis_sponsor", label: "Sponsor d'axe" },
   { value: "chantier_owner", label: "Responsable de chantier" },
@@ -42,9 +56,10 @@ const ALL_ROLES: { value: Role; label: string }[] = [
   { value: "budget_control", label: "Contrôle de gestion" },
 ];
 
-const OPERATIONAL_ROLES = ALL_ROLES.filter(
-  (r) => r.value !== "admin" && r.value !== "admin_entreprise"
-);
+/** Réunion des deux listes ci-dessus — sert uniquement à retrouver le libellé d'un `Role` donné
+ *  (table des utilisateurs), jamais comme source d'options d'un unique `<select>` (round
+ *  multi-profils : il y a désormais deux pickers indépendants, un par type). */
+const ALL_ROLE_OPTIONS = [...PERFORMANCE_ROLE_OPTIONS, ...STRATEGIC_ROLE_OPTIONS];
 
 /** Les 4 états sémantiques de AuthUser.confidentialityClearance (voir types/index.ts) : */
 type ClearanceMode = "inherit" | "none" | "custom" | "all";
@@ -58,7 +73,9 @@ function clearanceModeOf(clearance: AuthUser["confidentialityClearance"]): Clear
 /**
  * Traduit le contrôle 4-états du formulaire en le patch à fusionner sur AuthUser avant
  * saveUser(). Fonction pure (testable sans React/Firestore) — extraite pour deux raisons :
- *  1. admin/admin_entreprise ont un accès total, ce contrôle n'a pas d'effet pour ces rôles.
+ *  1. Un admin (global ou entreprise) a un accès total, ce contrôle n'a pas d'effet pour lui —
+ *     d'où le paramètre `isAdmin` (voir `lib/roleProfiles.ts::isAnyAdmin`), qui remplace l'ancien
+ *     test `role === "admin" || role === "admin_entreprise"` du modèle à rôle scalaire.
  *  2. En mode "inherit", la clé `confidentialityClearance` est OMISE (jamais mise à `undefined`) :
  *     Firestore setDoc() rejette toute valeur de champ explicitement `undefined`. L'omettre
  *     produit le même résultat sémantique (repli sur Company.roleClearance[role]) tout en étant
@@ -66,11 +83,11 @@ function clearanceModeOf(clearance: AuthUser["confidentialityClearance"]): Clear
  *     efface bien un override individuel précédemment enregistré.
  */
 export function buildClearancePatch(
-  role: Role,
+  isAdmin: boolean,
   clearanceMode: ClearanceMode,
   clearanceLevels: string[]
 ): Pick<AuthUser, "confidentialityClearance"> | Record<string, never> {
-  if (role === "admin" || role === "admin_entreprise") return {};
+  if (isAdmin) return {};
   if (clearanceMode === "all") return { confidentialityClearance: "all" };
   if (clearanceMode === "none") return { confidentialityClearance: [] };
   if (clearanceMode === "custom") return { confidentialityClearance: clearanceLevels };
@@ -83,7 +100,9 @@ export type UserFormInput = {
   lastName: string;
   name: string;
   password: string;
-  role: Role;
+  /** Remplace l'ancien `role: Role` pour la logique d'obligation de l'entreprise : un compte
+   *  admin global n'a jamais de `companyId` (voir round multi-profils, `AuthUser.isGlobalAdmin`). */
+  isGlobalAdmin: boolean;
   companyId: string;
 };
 
@@ -96,11 +115,11 @@ export type UserFormInput = {
  *    l'écriture du champ `name`, voir save()).
  *  - Mot de passe : toujours requis — pré-rempli à "test" par défaut, mais ne doit pas pouvoir
  *    être vidé puis enregistré.
- *  - Entreprise : requise seulement quand le champ est affiché, càd rôle non-admin ET aucun
- *    `fixedCompanyId` imposé par le contexte (scope du hub `/admin/companies/detail`, ou
+ *  - Entreprise : requise seulement quand le champ est affiché, càd compte non-admin-global ET
+ *    aucun `fixedCompanyId` imposé par le contexte (scope du hub `/admin/companies/detail`, ou
  *    admin_entreprise limité à sa propre entreprise sur la page globale).
- *  Rôle n'apparaît jamais dans le résultat : le <select> a toujours une valeur par défaut valide
- *  et ne peut pas être vidé par l'utilisateur.
+ *  Les profils métier (Plan Performance / Plan Stratégique) n'apparaissent jamais dans le
+ *  résultat : les deux pickers sont toujours optionnels (0 à 2 profils).
  */
 export function missingRequiredFields(
   form: UserFormInput,
@@ -112,7 +131,7 @@ export function missingRequiredFields(
     missing.push("Nom affiché (ou Prénom + Nom)");
   }
   if (!form.password.trim()) missing.push("Mot de passe");
-  if (form.role !== "admin" && !fixedCompanyId && !form.companyId.trim()) {
+  if (!form.isGlobalAdmin && !fixedCompanyId && !form.companyId.trim()) {
     missing.push("Entreprise");
   }
   return missing;
@@ -127,17 +146,21 @@ export function missingRequiredFields(
  */
 export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {}) {
   const { t } = useTranslation();
-  const { role, user } = useRole();
+  const { isCompanyAdmin: viewerIsCompanyAdmin, user } = useRole();
   const { showToast } = useToast();
-  const isEntAdmin = role === "admin_entreprise";
+  const isEntAdmin = !!viewerIsCompanyAdmin;
   // companyId effectif imposé à ce panneau : soit le scope explicite du hub (global admin gérant
   // une entreprise précise), soit — sans scope — celui d'un admin_entreprise limité à sa propre
   // entreprise (comportement historique de la page globale).
   const fixedCompanyId =
     scopeCompanyId ?? (isEntAdmin ? (user?.companyId ?? undefined) : undefined);
-  const availableRoles = isEntAdmin && !scopeCompanyId ? OPERATIONAL_ROLES : ALL_ROLES;
+  // Un admin d'entreprise (ou tout écran scopé à une entreprise précise) ne peut jamais créer/
+  // promouvoir un compte admin GLOBAL — ce profil n'a par définition aucune entreprise. Réservé à
+  // un admin global travaillant sur la page non-scopée.
+  const canAssignGlobalAdmin = !isEntAdmin && !fixedCompanyId;
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
 
   useEffect(() => {
     const unsub = subscribeCompanies(setCompanies, fixedCompanyId ?? null);
@@ -158,7 +181,14 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     firstName: "",
     lastName: "",
     name: "",
-    role: "cto" as Role,
+    // Profils métier — round multi-profils : deux pickers indépendants ("" = aucun profil de ce
+    // type), au lieu de l'ancien `role: Role` unique.
+    performanceRole: "" as Role | "",
+    performanceProgramId: "",
+    strategicRole: "" as Role | "",
+    strategicProgramId: "",
+    isGlobalAdmin: false,
+    isCompanyAdmin: false,
     companyId: "",
     password: "test",
     clearanceMode: "inherit" as ClearanceMode,
@@ -171,6 +201,24 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   });
   const [showForm, setShowForm] = useState(false);
 
+  // Programmes de l'entreprise actuellement sélectionnée dans le formulaire (ou imposée par le
+  // scope) — sert uniquement à peupler les pickers de programme optionnels des deux profils
+  // métier ci-dessous. Non filtré côté serveur par type : le tri performance/stratégique se fait
+  // ici via `resolveProgramType`.
+  const formCompanyId = fixedCompanyId ?? form.companyId;
+  useEffect(() => {
+    if (!formCompanyId) {
+      setPrograms([]);
+      return;
+    }
+    const unsub = subscribePrograms((all) => {
+      setPrograms(all.filter((p) => p.companyId === formCompanyId));
+    }, formCompanyId);
+    return unsub;
+  }, [formCompanyId]);
+  const performancePrograms = programs.filter((p) => resolveProgramType(p) === "performance");
+  const strategicPrograms = programs.filter((p) => resolveProgramType(p) === "strategic");
+
   // Snapshot pris à l'ouverture du formulaire d'édition — permet à save() de savoir si
   // l'identifiant a RÉELLEMENT été modifié pendant cette session d'édition (pas juste comparé à
   // l'état courant du formulaire, qui ne dit rien sur ce qui a changé). `null` en mode création.
@@ -180,9 +228,9 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   // l'admin l'a explicitement modifié pendant cette édition, jamais renvoyer la valeur inchangée.
   const [passwordTouched, setPasswordTouched] = useState(false);
 
-  // Erreurs "prominentes" (mot de passe invalide, échec de renommage/suppression côté backend) —
-  // affichées dans une modale centrée plutôt qu'un simple toast, pour qu'un admin ne puisse pas les
-  // manquer.
+  // Erreurs "prominentes" (mot de passe invalide, profils invalides, échec de renommage/suppression
+  // côté backend) — affichées dans une modale centrée plutôt qu'un simple toast, pour qu'un admin
+  // ne puisse pas les manquer.
   const [errorDialog, setErrorDialog] = useState<{ title: string; messages: string[] } | null>(
     null
   );
@@ -223,7 +271,12 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       firstName: "",
       lastName: "",
       name: "",
-      role: "cto",
+      performanceRole: "",
+      performanceProgramId: "",
+      strategicRole: "",
+      strategicProgramId: "",
+      isGlobalAdmin: false,
+      isCompanyAdmin: false,
       companyId: fixedCompanyId ?? companies[0]?.id ?? "",
       password: "test",
       clearanceMode: "inherit",
@@ -237,12 +290,19 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     setEditIdx(idx);
     setOriginalUsername(u.username);
     setPasswordTouched(false);
+    const perfProfile = getPerformanceProfile(u);
+    const stratProfile = getStrategicProfile(u);
     setForm({
       username: u.username,
       firstName: u.firstName ?? "",
       lastName: u.lastName ?? "",
       name: u.name,
-      role: u.role,
+      performanceRole: perfProfile?.role ?? "",
+      performanceProgramId: perfProfile?.programId ?? "",
+      strategicRole: stratProfile?.role ?? "",
+      strategicProgramId: stratProfile?.programId ?? "",
+      isGlobalAdmin: !!u.isGlobalAdmin,
+      isCompanyAdmin: !!u.isCompanyAdmin,
       companyId: u.companyId ?? companies[0]?.id ?? "",
       password: u.password,
       clearanceMode: clearanceModeOf(u.confidentialityClearance),
@@ -253,7 +313,18 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   };
 
   const save = async () => {
-    const missing = missingRequiredFields(form, fixedCompanyId);
+    const missing = missingRequiredFields(
+      {
+        username: form.username,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        name: form.name,
+        password: form.password,
+        isGlobalAdmin: form.isGlobalAdmin,
+        companyId: form.companyId,
+      },
+      fixedCompanyId
+    );
     if (missing.length > 0) {
       showToast(
         "Champs obligatoires manquants",
@@ -269,17 +340,51 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       setErrorDialog({ title: "Mot de passe invalide", messages: [passwordError] });
       return;
     }
+
+    // Construction des profils métier à partir des deux pickers indépendants — structurellement
+    // au plus un profil Plan Performance + un profil Plan Stratégique (deux `<select>` séparés ne
+    // peuvent pas produire deux profils du même type). `assertValidProfiles` reste appelée comme
+    // filet de sécurité avant tout enregistrement (voir lib/roleProfiles.ts).
+    const profiles: ProfileAssignment[] = [];
+    if (form.performanceRole) {
+      profiles.push({
+        role: form.performanceRole,
+        ...(form.performanceProgramId ? { programId: form.performanceProgramId } : {}),
+      });
+    }
+    if (form.strategicRole) {
+      profiles.push({
+        role: form.strategicRole,
+        ...(form.strategicProgramId ? { programId: form.strategicProgramId } : {}),
+      });
+    }
+    try {
+      assertValidProfiles(profiles);
+    } catch (err) {
+      setErrorDialog({
+        title: "Profils invalides",
+        messages: [err instanceof Error ? err.message : "Erreur inconnue"],
+      });
+      return;
+    }
+
     const normalizedUsername = form.username.trim().toLowerCase();
-    const companyId = form.role === "admin" ? null : (fixedCompanyId ?? form.companyId);
+    const companyId = form.isGlobalAdmin ? null : (fixedCompanyId ?? form.companyId);
     const newUser: AuthUser = {
       username: normalizedUsername,
       password: form.password,
-      role: form.role,
+      profiles,
+      isGlobalAdmin: form.isGlobalAdmin,
+      isCompanyAdmin: form.isCompanyAdmin,
       firstName: form.firstName,
       lastName: form.lastName,
       name: form.name || `${form.firstName} ${form.lastName}`.trim(),
       companyId,
-      ...buildClearancePatch(form.role, form.clearanceMode, form.clearanceLevels),
+      ...buildClearancePatch(
+        isAnyAdmin({ isGlobalAdmin: form.isGlobalAdmin, isCompanyAdmin: form.isCompanyAdmin }),
+        form.clearanceMode,
+        form.clearanceLevels
+      ),
       // "" (non renseigné) omet la clé plutôt que de la mettre à `undefined` — même précaution que
       // buildClearancePatch en mode "inherit" : Firestore setDoc() rejette toute valeur de champ
       // explicitement `undefined`, et setDoc remplace le document entier, donc omettre la clé ici
@@ -300,7 +405,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     }
 
     if (isEditingExisting) {
-      // Édition d'un champ simple (rôle, entreprise, habilitation...) sans changement
+      // Édition d'un champ simple (profils, entreprise, habilitation...) sans changement
       // d'identifiant : reste un setDoc Firestore direct, comme avant. Ne JAMAIS appeler
       // createAuthAccount ici — aucun nouveau compte Firebase Auth ne doit être créé/touché pour
       // une édition qui ne renomme pas le compte.
@@ -429,12 +534,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   };
 
   // Contrôle affiché seulement si l'entreprise ciblée a activé une échelle de confidentialité et
-  // que le rôle sélectionné n'est pas admin/admin_entreprise (accès total, contrôle sans effet).
+  // que le compte n'est pas admin (global ou entreprise, accès total, contrôle sans effet).
   const formCompany = companies.find((c) => c.id === form.companyId);
-  const eligibleRole = form.role !== "admin" && form.role !== "admin_entreprise";
+  const eligibleForClearance = !isAnyAdmin({
+    isGlobalAdmin: form.isGlobalAdmin,
+    isCompanyAdmin: form.isCompanyAdmin,
+  });
   const companyHasLevels = (formCompany?.confidentialityLevels?.length ?? 0) > 0;
-  const showClearanceControl = eligibleRole && companyHasLevels;
-  const showClearanceHint = eligibleRole && !companyHasLevels;
+  const showClearanceControl = eligibleForClearance && companyHasLevels;
+  const showClearanceHint = eligibleForClearance && !companyHasLevels;
 
   // Suppression destructrice : passe désormais par le backend admin (supprime le compte Firebase
   // Auth ET le profil Firestore, contrairement à l'ancien deleteUser() Firestore-only) et exige une
@@ -458,6 +566,19 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       setErrorDialog({ title: "Échec de la suppression", messages: [adminApiErrorMessage(err)] });
     }
   };
+
+  /** Résumé compact des profils/habilitations d'un utilisateur pour la colonne "Profils" du
+   *  tableau : libellés des profils métier séparés par des virgules, puis badges "Admin" /
+   *  "Admin entreprise" quand les flags additifs sont actifs. Vide ("—") si aucun des deux. */
+  function profilesSummary(u: AuthUser): { profileLabels: string[]; badges: string[] } {
+    const profileLabels = (u.profiles ?? []).map(
+      (p) => ALL_ROLE_OPTIONS.find((r) => r.value === p.role)?.label ?? p.role
+    );
+    const badges: string[] = [];
+    if (u.isGlobalAdmin) badges.push("Admin");
+    if (u.isCompanyAdmin) badges.push("Admin entreprise");
+    return { profileLabels, badges };
+  }
 
   return (
     <div className="space-y-6">
@@ -549,23 +670,6 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             </div>
             <div>
               <label className="text-xs font-medium text-text-secondary">
-                Rôle <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={form.role}
-                onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                required
-              >
-                {availableRoles.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-text-secondary">
                 {t("adminUsers.directionLabel", "Direction / service (optionnel)")}
               </label>
               <select
@@ -581,7 +685,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 ))}
               </select>
             </div>
-            {form.role !== "admin" && !fixedCompanyId && (
+            {!form.isGlobalAdmin && !fixedCompanyId && (
               <div>
                 <label className="text-xs font-medium text-text-secondary">
                   Entreprise <span className="text-red-500">*</span>
@@ -602,6 +706,118 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                   ))}
                 </select>
               </div>
+            )}
+          </div>
+
+          {/* Profils métier — round multi-profils : deux pickers indépendants, chacun optionnel
+              ("Aucun" + les 6 rôles du type concerné). Structurellement au plus un profil par
+              type, donc pas de validation supplémentaire nécessaire côté UI (voir
+              assertValidProfiles, appelée comme filet de sécurité dans save()). */}
+          <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-bg-surface p-3">
+            <div>
+              <label className="text-xs font-medium text-text-secondary">
+                Profil Plan Performance
+              </label>
+              <select
+                value={form.performanceRole}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    performanceRole: e.target.value as Role | "",
+                    performanceProgramId: "",
+                  }))
+                }
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+              >
+                <option value="">Aucun</option>
+                {PERFORMANCE_ROLE_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+              {form.performanceRole && performancePrograms.length > 0 && (
+                <select
+                  value={form.performanceProgramId}
+                  onChange={(e) => setForm((f) => ({ ...f, performanceProgramId: e.target.value }))}
+                  className="mt-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                >
+                  <option value="">Tous les programmes Performance</option>
+                  {performancePrograms.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-medium text-text-secondary">
+                Profil Plan Stratégique
+              </label>
+              <select
+                value={form.strategicRole}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    strategicRole: e.target.value as Role | "",
+                    strategicProgramId: "",
+                  }))
+                }
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+              >
+                <option value="">Aucun</option>
+                {STRATEGIC_ROLE_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+              {form.strategicRole && strategicPrograms.length > 0 && (
+                <select
+                  value={form.strategicProgramId}
+                  onChange={(e) => setForm((f) => ({ ...f, strategicProgramId: e.target.value }))}
+                  className="mt-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                >
+                  <option value="">Tous les programmes Stratégique</option>
+                  {strategicPrograms.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Habilitations d'administration — additives aux profils métier ci-dessus (round
+              multi-profils, voir AuthUser.isGlobalAdmin/isCompanyAdmin). */}
+          <div className="flex flex-wrap gap-4 rounded-lg border border-border bg-bg-surface p-3">
+            {!form.isGlobalAdmin && (
+              <label className="flex items-center gap-1.5 text-xs font-medium text-text-primary">
+                <input
+                  type="checkbox"
+                  checked={form.isCompanyAdmin}
+                  onChange={(e) => setForm((f) => ({ ...f, isCompanyAdmin: e.target.checked }))}
+                />
+                Administrateur de l&apos;entreprise
+              </label>
+            )}
+            {canAssignGlobalAdmin && (
+              <label className="flex items-center gap-1.5 text-xs font-medium text-text-primary">
+                <input
+                  type="checkbox"
+                  checked={form.isGlobalAdmin}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      isGlobalAdmin: e.target.checked,
+                      isCompanyAdmin: e.target.checked ? false : f.isCompanyAdmin,
+                    }))
+                  }
+                />
+                Administrateur global
+              </label>
             )}
           </div>
 
@@ -723,7 +939,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 Nom
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                Rôle
+                Profils
               </th>
               <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
                 Entreprise
@@ -738,49 +954,69 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               .filter(
                 (u) => fixedCompanyId || companyFilter === "all" || u.companyId === companyFilter
               )
-              .map((u, idx) => (
-                <tr
-                  key={`${u.username}.${u.companyId ?? ""}`}
-                  className="border-b border-border hover:bg-bg-elevated/50"
-                >
-                  <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary sm:table-cell">
-                    {u.username}
-                  </td>
-                  <td className="hidden px-4 py-2.5 font-medium text-text-primary sm:table-cell">
-                    {u.firstName}
-                  </td>
-                  <td className="px-4 py-2.5 font-medium text-text-primary">{u.lastName}</td>
-                  <td className="px-4 py-2.5">
-                    <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral">
-                      {ALL_ROLES.find((r) => r.value === u.role)?.label ?? u.role}
-                    </span>
-                  </td>
-                  <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
-                    {companies.find((c) => c.id === u.companyId)?.name ?? u.companyId ?? "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button
-                      onClick={() => startEdit(u, idx)}
-                      className="mr-2 text-text-secondary hover:text-bp-coral"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => remove(u.username, u.companyId ?? null)}
-                      className="text-text-secondary hover:text-red-500"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              .map((u, idx) => {
+                const { profileLabels, badges } = profilesSummary(u);
+                return (
+                  <tr
+                    key={`${u.username}.${u.companyId ?? ""}`}
+                    className="border-b border-border hover:bg-bg-elevated/50"
+                  >
+                    <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary sm:table-cell">
+                      {u.username}
+                    </td>
+                    <td className="hidden px-4 py-2.5 font-medium text-text-primary sm:table-cell">
+                      {u.firstName}
+                    </td>
+                    <td className="px-4 py-2.5 font-medium text-text-primary">{u.lastName}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {profileLabels.length > 0 ? (
+                          <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral">
+                            {profileLabels.join(", ")}
+                          </span>
+                        ) : (
+                          badges.length === 0 && (
+                            <span className="text-xs text-text-secondary">—</span>
+                          )
+                        )}
+                        {badges.map((badge) => (
+                          <span
+                            key={badge}
+                            className="rounded-full bg-bg-elevated px-2 py-0.5 text-xs font-semibold text-text-secondary"
+                          >
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
+                      {companies.find((c) => c.id === u.companyId)?.name ?? u.companyId ?? "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        onClick={() => startEdit(u, idx)}
+                        className="mr-2 text-text-secondary hover:text-bp-coral"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => remove(u.username, u.companyId ?? null)}
+                        className="text-text-secondary hover:text-red-500"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>
 
-      {/* Erreur prominente : mot de passe invalide (soumission ou rejet Firebase Auth), ou échec
-          renvoyé par le backend admin lors d'un renommage/suppression. Toujours une modale centrée
-          — jamais un simple toast — pour qu'un admin ne puisse pas la manquer. */}
+      {/* Erreur prominente : mot de passe invalide (soumission ou rejet Firebase Auth), profils
+          invalides (assertValidProfiles), ou échec renvoyé par le backend admin lors d'un
+          renommage/suppression. Toujours une modale centrée — jamais un simple toast — pour qu'un
+          admin ne puisse pas la manquer. */}
       <Modal
         open={errorDialog !== null}
         onOpenChange={(next) => {
@@ -822,7 +1058,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         <p className="text-sm text-text-secondary">
           Vous vous apprêtez à renommer le compte «&nbsp;{renameConfirm?.oldUsername}&nbsp;» en «
           &nbsp;{renameConfirm?.newUser.username}&nbsp;». L&apos;ancien identifiant cessera de
-          fonctionner ; le rôle, l&apos;entreprise et les droits associés sont conservés. Cette
+          fonctionner ; les profils, l&apos;entreprise et les droits associés sont conservés. Cette
           action n&apos;est pas réversible depuis cet écran.
         </p>
       </Modal>

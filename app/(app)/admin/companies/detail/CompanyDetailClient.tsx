@@ -101,7 +101,7 @@ export default function CompanyDetailClient() {
   const TABS = companyDetailTabs(t);
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { role } = useRole();
+  const { isGlobalAdmin } = useRole();
   const { showToast } = useToast();
   const companyId = searchParams.get("id") ?? "";
   // Onglet d'arrivée pilotable par l'URL : le sélecteur de programme du Topbar amène le global
@@ -185,10 +185,10 @@ export default function CompanyDetailClient() {
   // Réservé au global admin : redirige tout autre profil (ceinture + bretelles en plus du guard
   // AppShell, qui n'autorise déjà cette route qu'à admin — voir AppShell.tsx).
   useEffect(() => {
-    if (role && role !== "admin") {
+    if (!isGlobalAdmin) {
       router.replace("/admin/companies");
     }
-  }, [role, router]);
+  }, [isGlobalAdmin, router]);
 
   const saveSettings = async () => {
     if (!company || !form.name.trim()) return;
@@ -234,7 +234,7 @@ export default function CompanyDetailClient() {
     }
   };
 
-  if (role && role !== "admin") return null;
+  if (!isGlobalAdmin) return null;
 
   if (!companyId) {
     return (

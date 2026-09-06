@@ -13,7 +13,7 @@ import type { Lever, LeverStatus } from "@/types";
 
 describe("canUserViewLever", () => {
   const user = {
-    role: "lever" as const,
+    profiles: [{ role: "lever" as const }],
     name: "Test Lever Owner",
     companyId: "c1",
   };
@@ -387,15 +387,21 @@ describe("leversLogic — resolveConfidentialityClearance", () => {
   });
 
   it('returns "all" when the individual override is "all"', () => {
-    const user = { role: "cto" as const, confidentialityClearance: "all" as const };
+    const user = { profiles: [{ role: "cto" as const }], confidentialityClearance: "all" as const };
     expect(resolveConfidentialityClearance(user, { cto: ["public"] })).toBe("all");
   });
 
   it("returns the individual override array (even empty) when defined, ignoring roleClearance", () => {
-    const userEmpty = { role: "cto" as const, confidentialityClearance: [] as string[] };
+    const userEmpty = {
+      profiles: [{ role: "cto" as const }],
+      confidentialityClearance: [] as string[],
+    };
     expect(resolveConfidentialityClearance(userEmpty, { cto: ["public", "secret"] })).toEqual([]);
 
-    const userCustom = { role: "cto" as const, confidentialityClearance: ["secret"] };
+    const userCustom = {
+      profiles: [{ role: "cto" as const }],
+      confidentialityClearance: ["secret"],
+    };
     expect(resolveConfidentialityClearance(userCustom, { cto: ["public"] })).toEqual(["secret"]);
   });
 
@@ -404,14 +410,20 @@ describe("leversLogic — resolveConfidentialityClearance", () => {
       "'additional access from the Users page' use case (e.g. a 'lever' role, which has no " +
       "roleClearance entry at all, given an explicit clearance including a level its role never sees)",
     () => {
-      const user = { role: "lever" as const, confidentialityClearance: ["executive-only"] };
+      const user = {
+        profiles: [{ role: "lever" as const }],
+        confidentialityClearance: ["executive-only"],
+      };
       // roleClearance has no entry for "lever" at all -> role default would be [] (see next test).
       expect(resolveConfidentialityClearance(user, { cto: ["public"] })).toEqual([
         "executive-only",
       ]);
 
       // Same idea but via the "all" override: broader than any role's configured levels.
-      const userAll = { role: "lever" as const, confidentialityClearance: "all" as const };
+      const userAll = {
+        profiles: [{ role: "lever" as const }],
+        confidentialityClearance: "all" as const,
+      };
       expect(resolveConfidentialityClearance(userAll, { cto: ["public"], lever: ["public"] })).toBe(
         "all"
       );
@@ -419,7 +431,7 @@ describe("leversLogic — resolveConfidentialityClearance", () => {
   );
 
   it("falls back to Company.roleClearance[role] when the override is undefined", () => {
-    const user = { role: "cto" as const, confidentialityClearance: undefined };
+    const user = { profiles: [{ role: "cto" as const }], confidentialityClearance: undefined };
     expect(resolveConfidentialityClearance(user, { cto: ["public", "secret"] })).toEqual([
       "public",
       "secret",
@@ -427,7 +439,7 @@ describe("leversLogic — resolveConfidentialityClearance", () => {
   });
 
   it("falls back to [] when roleClearance has no entry for the role", () => {
-    const user = { role: "hr" as const, confidentialityClearance: undefined };
+    const user = { profiles: [{ role: "hr" as const }], confidentialityClearance: undefined };
     expect(resolveConfidentialityClearance(user, { cto: ["public"] })).toEqual([]);
     expect(resolveConfidentialityClearance(user, undefined)).toEqual([]);
   });
@@ -457,7 +469,10 @@ describe("leversLogic — isLeverVisibleForClearance", () => {
       const restrictedLever = { confidentialityLevel: "executive-only" };
 
       // Without an override, the "lever" role only sees "public" -> this lever stays hidden.
-      const defaultUser = { role: "lever" as const, confidentialityClearance: undefined };
+      const defaultUser = {
+        profiles: [{ role: "lever" as const }],
+        confidentialityClearance: undefined,
+      };
       const defaultClearance = resolveConfidentialityClearance(defaultUser, roleClearance);
       expect(
         isLeverVisibleForClearance(restrictedLever.confidentialityLevel, defaultClearance)
@@ -465,7 +480,7 @@ describe("leversLogic — isLeverVisibleForClearance", () => {
 
       // With an individual override granting the extra level, the same lever becomes visible.
       const upgradedUser = {
-        role: "lever" as const,
+        profiles: [{ role: "lever" as const }],
         confidentialityClearance: ["public", "executive-only"],
       };
       const upgradedClearance = resolveConfidentialityClearance(upgradedUser, roleClearance);

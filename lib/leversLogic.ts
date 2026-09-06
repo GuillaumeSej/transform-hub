@@ -11,24 +11,31 @@ import type {
   LeverAction,
   Role,
 } from "@/types";
+import { getPerformanceProfile, getStrategicProfile, hasRole } from "@/lib/roleProfiles";
 
 /**
  * Résout la liste des niveaux de confidentialité auxquels un utilisateur non-admin a accès,
  * en appliquant la précédence : habilitation INDIVIDUELLE (AuthUser.confidentialityClearance)
- * prioritaire quand définie, sinon repli sur l'habilitation de son rôle (Company.roleClearance).
- * Ne s'applique pas à admin/admin_entreprise (accès total, géré par l'appelant en amont).
+ * prioritaire quand définie, sinon repli sur l'habilitation de son profil (Company.roleClearance).
+ * Ne s'applique pas à un admin (global ou entreprise, accès total, géré par l'appelant en amont).
  *  - user.confidentialityClearance === "all"  -> accès à tous les niveaux
  *  - user.confidentialityClearance: string[]  -> exactement cette liste (même vide = aucun accès)
- *  - user.confidentialityClearance === undefined -> repli sur roleClearance[user.role] (ou [])
+ *  - user.confidentialityClearance === undefined -> repli sur roleClearance[profil] (ou [])
+ * `planType` précise QUEL profil consulter pour ce repli (un utilisateur peut avoir un profil Plan
+ * Performance et un profil Plan Stratégique distincts) — "performance" par défaut, pour les
+ * appelants historiques (leviers du Plan de Performance).
  */
 export function resolveConfidentialityClearance(
-  user: Pick<AuthUser, "role" | "confidentialityClearance"> | null | undefined,
-  roleClearance: Partial<Record<Role, string[]>> | undefined
+  user: Pick<AuthUser, "profiles" | "confidentialityClearance"> | null | undefined,
+  roleClearance: Partial<Record<Role, string[]>> | undefined,
+  planType: "performance" | "strategic" = "performance"
 ): "all" | string[] {
   if (!user) return [];
   if (user.confidentialityClearance === "all") return "all";
   if (Array.isArray(user.confidentialityClearance)) return user.confidentialityClearance;
-  return roleClearance?.[user.role] ?? [];
+  const relevantRole =
+    planType === "strategic" ? getStrategicProfile(user)?.role : getPerformanceProfile(user)?.role;
+  return (relevantRole && roleClearance?.[relevantRole]) ?? [];
 }
 
 /** Un levier confidentiel est-il visible pour cette habilitation (résolue via
@@ -44,15 +51,25 @@ export function isLeverVisibleForClearance(
 
 export function canUserViewLever(
   user:
-    Pick<AuthUser, "role" | "name" | "companyId" | "confidentialityClearance"> | null | undefined,
+    | Pick<
+        AuthUser,
+        | "profiles"
+        | "isGlobalAdmin"
+        | "isCompanyAdmin"
+        | "name"
+        | "companyId"
+        | "confidentialityClearance"
+      >
+    | null
+    | undefined,
   lever: Pick<Lever, "owner" | "companyId" | "confidentialityLevel">,
   roleClearance: Partial<Record<Role, string[]>> | undefined
 ): boolean {
   if (!user) return false;
-  if (user.role === "admin") return true;
+  if (user.isGlobalAdmin) return true;
   if (lever.companyId != null && user.companyId !== lever.companyId) return false;
-  if (user.role === "admin_entreprise") return true;
-  if (user.role === "lever" && lever.owner !== user.name) return false;
+  if (user.isCompanyAdmin) return true;
+  if (hasRole(user, "lever") && lever.owner !== user.name) return false;
   return isLeverVisibleForClearance(
     lever.confidentialityLevel,
     resolveConfidentialityClearance(user, roleClearance)

@@ -153,7 +153,8 @@ async function main() {
 
   await db.doc(`adminUsers/${normalizedUsername}`).set({
     username: normalizedUsername,
-    role: "admin",
+    profiles: [],
+    isGlobalAdmin: true,
     firstName: firstName || "Admin",
     lastName: lastName || "BeTrack",
     name: `${firstName || "Admin"} ${lastName || "BeTrack"}`,

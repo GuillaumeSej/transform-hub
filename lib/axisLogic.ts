@@ -1,5 +1,6 @@
 import { daysBetween } from "@/lib/dateUtils";
 import { MILESTONE_ORDER, MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
+import { hasAnyRole, isAnyAdmin } from "@/lib/roleProfiles";
 import type {
   AuthUser,
   Chantier,
@@ -231,11 +232,12 @@ export function countOnTrackAtRisk(indicators: Indicator[]): {
  */
 export function canFillIndicator(
   indicator: Pick<Indicator, "responsibleRoles" | "additionalAuthorizedUserIds">,
-  user: Pick<AuthUser, "role" | "username"> | null | undefined
+  user:
+    Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin" | "username"> | null | undefined
 ): boolean {
   if (!user) return false;
-  if (user.role === "admin" || user.role === "admin_entreprise") return true;
-  if (indicator.responsibleRoles.includes(user.role)) return true;
+  if (isAnyAdmin(user)) return true;
+  if (hasAnyRole(user, indicator.responsibleRoles)) return true;
   return (indicator.additionalAuthorizedUserIds ?? []).includes(user.username);
 }
 
@@ -257,13 +259,13 @@ export function canFillIndicator(
  */
 export function canManageChantier(
   chantier: Pick<Chantier, "responsibleRoles">,
-  user: Pick<AuthUser, "role"> | null | undefined
+  user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
 ): boolean {
   if (!user) return false;
-  if (user.role === "admin" || user.role === "admin_entreprise") return true;
+  if (isAnyAdmin(user)) return true;
   const roles = chantier.responsibleRoles ?? [];
   if (roles.length === 0) return true;
-  return roles.includes(user.role);
+  return hasAnyRole(user, roles);
 }
 
 /**

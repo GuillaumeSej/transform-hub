@@ -50,13 +50,25 @@ export async function authorizeAdminCaller(
     throw Errors.forbidden("Profil administrateur introuvable pour ce compte.");
   }
 
-  const data = snap.data() as { username?: string; role?: string; companyId?: string | null };
+  const data = snap.data() as {
+    username?: string;
+    role?: string;
+    companyId?: string | null;
+    isGlobalAdmin?: boolean;
+    isCompanyAdmin?: boolean;
+  };
   const role = data.role;
   const companyId = data.companyId ?? null;
 
-  const isGlobalAdmin = role === "admin";
+  // Compatible avec les deux formats de doc `adminUsers` : nouveau (`isGlobalAdmin`/
+  // `isCompanyAdmin` booléens) et legacy (`role` scalaire "admin"/"admin_entreprise") — pas de
+  // migration forcée, voir lib/auth.ts:resolveAuthUserProfile pour le même raisonnement côté
+  // lecture client.
+  const isGlobalAdmin = data.isGlobalAdmin === true || role === "admin";
   const isCompanyAdminForTarget =
-    role === "admin_entreprise" && targetCompanyId !== null && companyId === targetCompanyId;
+    (data.isCompanyAdmin === true || role === "admin_entreprise") &&
+    targetCompanyId !== null &&
+    companyId === targetCompanyId;
 
   if (!isGlobalAdmin && !isCompanyAdminForTarget) {
     throw Errors.forbidden(
