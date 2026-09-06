@@ -233,9 +233,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             router.push(leverId ? `/levers/detail?id=${leverId}` : "/levers");
           }}
           role={role}
-          onReset={() => {
-            data.resetToMockData().finally(() => window.location.reload());
-          }}
           onMenuClick={() => setMobileNavOpen((v) => !v)}
         />
         <main className="flex-1 overflow-y-auto px-4 pb-10 pt-5 sm:px-6">{children}</main>

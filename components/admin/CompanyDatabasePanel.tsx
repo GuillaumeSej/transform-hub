@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Database, AlertTriangle, Trash2, RotateCcw } from "lucide-react";
+import { Database, Trash2 } from "lucide-react";
 import type { Company } from "@/types";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
-import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { planCompanyReset, resetCompanyData } from "@/lib/firestore/companyReset";
 import type { CompanyResetPlan } from "@/lib/companyResetLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -15,9 +14,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
  * Onglet "Base de données" du hub `/admin/companies/detail` (global admin uniquement) : permet un
  * reset SCOPÉ à cette seule entreprise (leviers, sous-leviers, nœuds de hiérarchie, et les
  * entrées de commentaires/audit qui leur sont rattachées), avec confirmation obligatoire listant
- * précisément ce qui va être supprimé. Garde aussi une "zone de danger" globale (reset TOUTES les
- * entreprises vers le jeu de données de démo — même action que le bouton du Topbar, désormais
- * réservé à l'admin global, voir components/shared/ResetDemoButton.tsx).
+ * précisément ce qui va être supprimé.
  *
  * Limite connue (voir lib/companyResetLogic.ts) : les documents `comments`/`audit` sont des DOCS
  * UNIQUES PARTAGÉS entre toutes les entreprises (pas de collection par entreprise). On ne peut les
@@ -29,16 +26,11 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 export function CompanyDatabasePanel({ company }: { company: Company }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
-  // Instance dédiée du hook de données globales, uniquement pour exposer resetToMockData() ici —
-  // même mécanisme que AppShell (voir components/shared/AppShell.tsx::onReset).
-  const globalData = useBeTrackData(null);
 
   const [scopedOpen, setScopedOpen] = useState(false);
   const [scopedPlan, setScopedPlan] = useState<CompanyResetPlan | null>(null);
   const [scopedLoading, setScopedLoading] = useState(false);
   const [scopedBusy, setScopedBusy] = useState(false);
-
-  const [globalOpen, setGlobalOpen] = useState(false);
 
   const openScopedModal = async () => {
     setScopedOpen(true);
@@ -118,30 +110,6 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
         </Button>
       </div>
 
-      <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 space-y-3">
-        <div className="flex items-center gap-2 text-red-700">
-          <AlertTriangle size={16} />
-          <h3 className="text-xs font-semibold uppercase tracking-wide">
-            {t("adminCompanyDb.dangerZoneTitle", "Zone de danger — toutes les entreprises")}
-          </h3>
-        </div>
-        <p className="max-w-2xl text-sm text-text-secondary">
-          {t(
-            "adminCompanyDb.dangerZoneBodyPrefix",
-            "Réinitialise l'intégralité des données de démonstration (leviers, commentaires, audit, effectifs) pour"
-          )}{" "}
-          <strong>{t("adminCompanyDb.allCompanies", "toutes les entreprises")}</strong>
-          {t(
-            "adminCompanyDb.dangerZoneBodySuffix",
-            ", sans distinction. À réserver aux environnements de démo/test."
-          )}
-        </p>
-        <Button variant="danger" size="sm" onClick={() => setGlobalOpen(true)}>
-          <RotateCcw size={14} />{" "}
-          {t("adminCompanyDb.resetAllButton", "Réinitialiser toutes les données de démo")}
-        </Button>
-      </div>
-
       {/* Modale de confirmation — reset scopé entreprise */}
       <Modal
         open={scopedOpen}
@@ -217,51 +185,6 @@ export function CompanyDatabasePanel({ company }: { company: Company }) {
             </p>
           </div>
         )}
-      </Modal>
-
-      {/* Modale de confirmation — reset global toutes entreprises */}
-      <Modal
-        open={globalOpen}
-        onOpenChange={setGlobalOpen}
-        title={t("adminCompanyDb.globalModalTitle", "Réinitialiser toutes les données de démo ?")}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setGlobalOpen(false)}>
-              {t("common.cancel", "Annuler")}
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                globalData.resetToMockData().finally(() => {
-                  setGlobalOpen(false);
-                  showToast(
-                    t("adminCompanyDb.toastResetSuccessTitle", "Données réinitialisées"),
-                    t(
-                      "adminCompanyDb.toastGlobalSuccessBody",
-                      "Toutes les entreprises sont revenues au jeu de données de démo initial."
-                    ),
-                    "success"
-                  );
-                  window.location.reload();
-                });
-              }}
-            >
-              {t("adminCompanyDb.resetAllConfirm", "Réinitialiser tout")}
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm text-text-secondary">
-          {t(
-            "adminCompanyDb.globalBodyPrefix",
-            "Toutes les modifications effectuées dans cette session, pour"
-          )}{" "}
-          <strong>{t("adminCompanyDb.allCompanies", "toutes les entreprises")}</strong>{" "}
-          {t(
-            "adminCompanyDb.globalBodySuffix",
-            "(leviers, commentaires, audit, effectifs), seront définitivement perdues et remplacées par le jeu de données de démo initial."
-          )}
-        </p>
       </Modal>
     </div>
   );

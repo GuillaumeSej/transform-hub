@@ -3,13 +3,24 @@
 import { useEffect, useState } from "react";
 import { Users, Plus, Pencil, Trash2 } from "lucide-react";
 import type { AuthUser, Role, Company } from "@/types";
-import { subscribeUsers, saveUser, deleteUser, subscribeCompanies } from "@/lib/firestore/admin";
+import { subscribeUsers, saveUser, subscribeCompanies } from "@/lib/firestore/admin";
 import { isFirebaseErrorCode, usernameToSyntheticEmail } from "@/lib/auth";
-import { withSecondaryAuth } from "@/lib/firebase";
+import { withSecondaryAuth, getAuthInstance } from "@/lib/firebase";
+import { renameUser, deleteUserAccount, AdminApiError } from "@/lib/adminApi";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { Modal } from "@/components/shared/Modal";
+import { Button } from "@/components/shared/Button";
+
+/** Longueur minimale du mot de passe — DOIT rester alignée sur la politique de Firebase Auth
+ *  (aucune autre règle par défaut ; un mot de passe plus court est rejeté avec `auth/weak-password`
+ *  à la création du compte). Utilisée à la fois pour la validation temps réel du formulaire et pour
+ *  le message affiché quand Firebase Auth rejette lui-même le mot de passe côté serveur. */
+export const MIN_PASSWORD_LENGTH = 6;
+
+const PASSWORD_TOO_SHORT_MESSAGE = `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`;
 
 const ALL_ROLES: { value: Role; label: string }[] = [
   { value: "admin", label: "Administrator" },
@@ -160,6 +171,37 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   });
   const [showForm, setShowForm] = useState(false);
 
+  // Snapshot pris à l'ouverture du formulaire d'édition — permet à save() de savoir si
+  // l'identifiant a RÉELLEMENT été modifié pendant cette session d'édition (pas juste comparé à
+  // l'état courant du formulaire, qui ne dit rien sur ce qui a changé). `null` en mode création.
+  const [originalUsername, setOriginalUsername] = useState<string | null>(null);
+  // Idem pour le mot de passe : en édition, le champ est pré-rempli avec le mot de passe RÉEL de
+  // l'utilisateur (pas un défaut factice) — on ne veut envoyer `newPassword` au backend que si
+  // l'admin l'a explicitement modifié pendant cette édition, jamais renvoyer la valeur inchangée.
+  const [passwordTouched, setPasswordTouched] = useState(false);
+
+  // Erreurs "prominentes" (mot de passe invalide, échec de renommage/suppression côté backend) —
+  // affichées dans une modale centrée plutôt qu'un simple toast, pour qu'un admin ne puisse pas les
+  // manquer.
+  const [errorDialog, setErrorDialog] = useState<{ title: string; messages: string[] } | null>(
+    null
+  );
+  // Confirmation obligatoire avant un renommage (save() la déclenche puis attend confirmRename()).
+  const [renameConfirm, setRenameConfirm] = useState<{
+    newUser: AuthUser;
+    oldUsername: string;
+  } | null>(null);
+  // Confirmation obligatoire avant une suppression (déclenchée par le bouton corbeille).
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    username: string;
+    companyId: string | null;
+  } | null>(null);
+
+  // Validation temps réel du mot de passe — recalculée à chaque frappe, affichée sous le champ ET
+  // utilisée pour désactiver le bouton Enregistrer tant qu'elle échoue.
+  const passwordError =
+    form.password.length < MIN_PASSWORD_LENGTH ? PASSWORD_TOO_SHORT_MESSAGE : null;
+
   // Le formulaire utilisateur est "dirty" dès qu'il est ouvert avec au moins un champ utile
   // rempli. En mode édition (editIdx != null), il est dirty tant qu'il est ouvert — on n'a pas
   // ici de snapshot facile de "l'état initial", et fermer le formulaire annule les changements.
@@ -174,6 +216,8 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
 
   const startCreate = () => {
     setEditIdx(null);
+    setOriginalUsername(null);
+    setPasswordTouched(false);
     setForm({
       username: "",
       firstName: "",
@@ -191,6 +235,8 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
 
   const startEdit = (u: AuthUser, idx: number) => {
     setEditIdx(idx);
+    setOriginalUsername(u.username);
+    setPasswordTouched(false);
     setForm({
       username: u.username,
       firstName: u.firstName ?? "",
@@ -216,7 +262,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       );
       return;
     }
+    // Le mot de passe est déjà couvert par missingRequiredFields (vide) ; ici on bloque en plus
+    // un mot de passe non-vide mais trop court — affiché en temps réel sous le champ, et rappelé
+    // ici dans une modale impossible à manquer si l'admin a quand même cliqué Enregistrer.
+    if (passwordError) {
+      setErrorDialog({ title: "Mot de passe invalide", messages: [passwordError] });
+      return;
+    }
     const normalizedUsername = form.username.trim().toLowerCase();
+    const companyId = form.role === "admin" ? null : (fixedCompanyId ?? form.companyId);
     const newUser: AuthUser = {
       username: normalizedUsername,
       password: form.password,
@@ -224,7 +278,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       firstName: form.firstName,
       lastName: form.lastName,
       name: form.name || `${form.firstName} ${form.lastName}`.trim(),
-      companyId: form.role === "admin" ? null : (fixedCompanyId ?? form.companyId),
+      companyId,
       ...buildClearancePatch(form.role, form.clearanceMode, form.clearanceLevels),
       // "" (non renseigné) omet la clé plutôt que de la mettre à `undefined` — même précaution que
       // buildClearancePatch en mode "inherit" : Firestore setDoc() rejette toute valeur de champ
@@ -232,6 +286,38 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       // efface bien un `direction` précédemment enregistré si l'admin repasse à "Non renseigné".
       ...(form.direction.trim() !== "" ? { direction: form.direction.trim() } : {}),
     };
+
+    const isEditingExisting = editIdx !== null && originalUsername !== null;
+    const usernameChanged = isEditingExisting && normalizedUsername !== originalUsername;
+
+    // Renommer un utilisateur existant touche Firebase Auth (l'identifiant technique en dépend,
+    // voir usernameToSyntheticEmail) : ça ne peut pas être un simple setDoc Firestore, ça doit
+    // passer par le backend admin — et ça exige une confirmation explicite avant d'agir (voir
+    // renameConfirm plus bas, résolu par confirmRename()/l'annulation de la modale).
+    if (isEditingExisting && usernameChanged) {
+      setRenameConfirm({ newUser, oldUsername: originalUsername! });
+      return;
+    }
+
+    if (isEditingExisting) {
+      // Édition d'un champ simple (rôle, entreprise, habilitation...) sans changement
+      // d'identifiant : reste un setDoc Firestore direct, comme avant. Ne JAMAIS appeler
+      // createAuthAccount ici — aucun nouveau compte Firebase Auth ne doit être créé/touché pour
+      // une édition qui ne renomme pas le compte.
+      try {
+        await saveUser(newUser);
+        setShowForm(false);
+      } catch (err) {
+        showToast(
+          "Échec de l'enregistrement",
+          err instanceof Error ? err.message : "Erreur inconnue",
+          "error"
+        );
+      }
+      return;
+    }
+
+    // Création d'un nouvel utilisateur — comportement inchangé.
     try {
       // Crée le compte Firebase Auth correspondant AVANT d'écrire le profil Firestore — sur une
       // instance Auth SECONDAIRE (voir withSecondaryAuth dans lib/firebase.ts), jamais sur
@@ -242,11 +328,61 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       await saveUser(newUser);
       setShowForm(false);
     } catch (err) {
+      if (isFirebaseErrorCode(err, "auth/weak-password")) {
+        setErrorDialog({ title: "Mot de passe invalide", messages: [PASSWORD_TOO_SHORT_MESSAGE] });
+        return;
+      }
       showToast(
         "Échec de l'enregistrement",
         err instanceof Error ? err.message : "Erreur inconnue",
         "error"
       );
+    }
+  };
+
+  /** Message d'erreur lisible à partir d'une erreur du backend admin (AdminApiError, dont
+   *  `.message` est déjà une chaîne française prête à afficher) ou de toute autre exception. */
+  function adminApiErrorMessage(err: unknown): string {
+    if (err instanceof AdminApiError) return err.message;
+    return err instanceof Error ? err.message : "Erreur inconnue";
+  }
+
+  /** Récupère le jeton d'ID de l'admin CONNECTÉ (session principale, jamais l'auth secondaire
+   *  utilisée pour créer des comptes — voir withSecondaryAuth) : ce sont bien les appels du backend
+   *  admin qui doivent s'authentifier comme l'admin agissant, pas comme l'utilisateur ciblé. */
+  async function getAdminIdToken(): Promise<string> {
+    const current = getAuthInstance().currentUser;
+    if (!current) {
+      throw new AdminApiError(
+        "unauthenticated",
+        "Session administrateur expirée — merci de vous reconnecter."
+      );
+    }
+    return current.getIdToken();
+  }
+
+  const confirmRename = async () => {
+    if (!renameConfirm) return;
+    const { newUser, oldUsername } = renameConfirm;
+    setRenameConfirm(null);
+    try {
+      const idToken = await getAdminIdToken();
+      await renameUser(idToken, {
+        oldUsername,
+        newUsername: newUser.username,
+        companyId: newUser.companyId ?? null,
+        newPassword: passwordTouched ? newUser.password : undefined,
+      });
+      // subscribeUsers() est un onSnapshot Firestore : le renommage écrit par le backend admin
+      // (nouveau document, ancien supprimé) redéclenche l'abonnement tout seul — rien à refaire ici.
+      setShowForm(false);
+      showToast(
+        "Utilisateur renommé",
+        `Le compte « ${oldUsername} » a été renommé en « ${newUser.username} ».`,
+        "success"
+      );
+    } catch (err) {
+      setErrorDialog({ title: "Échec du renommage", messages: [adminApiErrorMessage(err)] });
     }
   };
 
@@ -300,8 +436,27 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   const showClearanceControl = eligibleRole && companyHasLevels;
   const showClearanceHint = eligibleRole && !companyHasLevels;
 
-  const remove = async (username: string, companyId: string | null) => {
-    await deleteUser(username, companyId);
+  // Suppression destructrice : passe désormais par le backend admin (supprime le compte Firebase
+  // Auth ET le profil Firestore, contrairement à l'ancien deleteUser() Firestore-only) et exige une
+  // confirmation explicite avant d'agir — déclenchée par le bouton corbeille, résolue par
+  // confirmDelete()/l'annulation de la modale.
+  const remove = (username: string, companyId: string | null) => {
+    setDeleteConfirm({ username, companyId });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    const { username, companyId } = deleteConfirm;
+    setDeleteConfirm(null);
+    try {
+      const idToken = await getAdminIdToken();
+      await deleteUserAccount(idToken, { username, companyId });
+      // Même remarque que confirmRename() : subscribeUsers() se met à jour tout seul une fois le
+      // document Firestore supprimé côté backend.
+      showToast("Utilisateur supprimé", `Le compte « ${username} » a été supprimé.`, "success");
+    } catch (err) {
+      setErrorDialog({ title: "Échec de la suppression", messages: [adminApiErrorMessage(err)] });
+    }
   };
 
   return (
@@ -379,11 +534,18 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               </label>
               <input
                 value={form.password}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                onChange={(e) => {
+                  setForm((f) => ({ ...f, password: e.target.value }));
+                  setPasswordTouched(true);
+                }}
+                className={`mt-1 w-full rounded-lg border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral ${
+                  passwordError ? "border-red-500" : "border-border"
+                }`}
                 placeholder="test"
                 required
+                aria-invalid={passwordError !== null}
               />
+              {passwordError && <p className="mt-1 text-xs text-red-500">{passwordError}</p>}
             </div>
             <div>
               <label className="text-xs font-medium text-text-secondary">
@@ -508,7 +670,8 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           <div className="flex gap-2">
             <button
               onClick={save}
-              className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
+              disabled={passwordError !== null}
+              className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Enregistrer
             </button>
@@ -614,6 +777,80 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           </tbody>
         </table>
       </div>
+
+      {/* Erreur prominente : mot de passe invalide (soumission ou rejet Firebase Auth), ou échec
+          renvoyé par le backend admin lors d'un renommage/suppression. Toujours une modale centrée
+          — jamais un simple toast — pour qu'un admin ne puisse pas la manquer. */}
+      <Modal
+        open={errorDialog !== null}
+        onOpenChange={(next) => {
+          if (!next) setErrorDialog(null);
+        }}
+        title={errorDialog?.title ?? ""}
+        footer={
+          <Button variant="primary" onClick={() => setErrorDialog(null)}>
+            OK
+          </Button>
+        }
+      >
+        <ul className="list-disc space-y-1 pl-4 text-sm text-red-600">
+          {errorDialog?.messages.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+      </Modal>
+
+      {/* Confirmation obligatoire avant un renommage — annuler abandonne l'enregistrement sans
+          rien envoyer, le formulaire reste tel quel. */}
+      <Modal
+        open={renameConfirm !== null}
+        onOpenChange={(next) => {
+          if (!next) setRenameConfirm(null);
+        }}
+        title="Renommer l'utilisateur ?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setRenameConfirm(null)}>
+              Annuler
+            </Button>
+            <Button variant="danger" onClick={confirmRename}>
+              Confirmer
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text-secondary">
+          Vous vous apprêtez à renommer le compte «&nbsp;{renameConfirm?.oldUsername}&nbsp;» en «
+          &nbsp;{renameConfirm?.newUser.username}&nbsp;». L&apos;ancien identifiant cessera de
+          fonctionner ; le rôle, l&apos;entreprise et les droits associés sont conservés. Cette
+          action n&apos;est pas réversible depuis cet écran.
+        </p>
+      </Modal>
+
+      {/* Confirmation obligatoire avant une suppression, destructrice (compte Firebase Auth +
+          profil Firestore). */}
+      <Modal
+        open={deleteConfirm !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteConfirm(null);
+        }}
+        title="Supprimer l'utilisateur ?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>
+              Annuler
+            </Button>
+            <Button variant="danger" onClick={confirmDelete}>
+              Supprimer
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text-secondary">
+          Le compte «&nbsp;{deleteConfirm?.username}&nbsp;» sera définitivement supprimé (Firebase
+          Auth et profil). Cette action est irréversible.
+        </p>
+      </Modal>
     </div>
   );
 }

@@ -133,10 +133,14 @@ const FILTER_PARAM_BY_DIMENSION: Partial<Record<string, string>> = {
 export function DashboardPagePerformance() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
-  const lifecycle = useLifecycleLabels(user?.companyId);
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
+  // Dashboard scopé à UN programme (voir sélecteur de programme plus bas) — le cycle de vie est
+  // désormais une config par programme (lib/firestore/admin.ts), d'où la lecture anticipée de
+  // `?program=` pour alimenter `useLifecycleLabels` avec le bon scope.
+  const selectedProgramId = searchParams.get("program") ?? "";
+  const lifecycle = useLifecycleLabels(selectedProgramId || undefined);
   const { filters, setFilter, resetFilters } = useGlobalFilters();
   // Contexte global "programme actif" — synchronisé dans les deux sens avec le `?program=` de
   // cette page (voir plus bas).
@@ -185,10 +189,10 @@ export function DashboardPagePerformance() {
 
   // ── Sélecteur de programme (scope du dashboard) ─────────────────────────────
   // Le dashboard exécutif est scopé à UN programme sélectionné, porté par l'URL (?program=) pour
-  // rester partageable/rechargeable. Auto-sélection du premier programme disponible si l'URL n'en
-  // précise aucun et qu'au moins un programme existe (évite un dashboard vide inutilement pour les
-  // entreprises n'ayant qu'un seul programme).
-  const selectedProgramId = searchParams.get("program") ?? "";
+  // rester partageable/rechargeable (calculé plus haut, avant `lifecycle`, qui en a besoin).
+  // Auto-sélection du premier programme disponible si l'URL n'en précise aucun et qu'au moins un
+  // programme existe (évite un dashboard vide inutilement pour les entreprises n'ayant qu'un seul
+  // programme).
 
   // Synchronisation bidirectionnelle avec le contexte global "programme actif" : l'URL reste la
   // source de vérité DE CETTE PAGE (partageable/rechargeable), mais le programme choisi ici doit

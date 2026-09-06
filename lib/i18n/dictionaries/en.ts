@@ -1551,6 +1551,10 @@ const en: Record<string, string> = {
   "adminPrograms.back": "All programs",
   "adminPrograms.tabMaturity": "Maturity stages",
   "adminPrograms.tabIndicators": "Indicators",
+  "adminPrograms.tabLifecycle": "Lifecycle",
+  "adminPrograms.badgeStrategic": "Strategic",
+  "adminPrograms.badgePerformance": "Transformation",
+  "adminPrograms.noSettings": "No configuration settings available for this program type.",
 
   // ─── Strategic Plan — Admin "Indicators" tab ──────────────────────────────
   "adminIndicators.intro":

@@ -134,7 +134,6 @@ export default function HrDashboardPage() {
   const { t } = useTranslation();
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
-  const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const [granularity, setGranularity] = useState<"month" | "quarter" | "year">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
@@ -160,6 +159,9 @@ export default function HrDashboardPage() {
     if (!selectedProgramId && programs.length > 0) setSelectedProgramId(programs[0].id);
   }, [programs, selectedProgramId]);
   const activeProgram = programs.find((p) => p.id === selectedProgramId) ?? programs[0] ?? null;
+  // Dashboard RH scopé à UN programme (voir sélecteur ci-dessus) — le cycle de vie est désormais
+  // une config par programme (lib/firestore/admin.ts).
+  const lifecycle = useLifecycleLabels(activeProgram?.id);
 
   // ─── Range picker + presets FY (Août 2026) ─────────────────────────────────
   // Plage réelle des mouvements en base (min/max des plannedDate). Sert de valeur initiale au

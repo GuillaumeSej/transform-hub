@@ -22,25 +22,32 @@ export type LifecycleLabels = {
 };
 
 /**
- * Rend le référentiel de cycle de vie (`lifecycleConfigs/{companyId}`) réellement vivant pour les
- * consommateurs "user-facing" : s'abonne à la config Firestore de l'entreprise et expose des
+ * Rend le référentiel de cycle de vie (`lifecycleConfigs/{programId}`) réellement vivant pour les
+ * consommateurs "user-facing" : s'abonne à la config Firestore DU PROGRAMME et expose des
  * fonctions de résolution de libellé prêtes à l'emploi, avec repli sur `DEFAULT_LIFECYCLE_STAGES`
- * si l'entreprise n'a rien personnalisé (ou si `companyId` est absent — aucun appel Firestore n'est
- * alors effectué).
+ * si le programme n'a rien personnalisé (ou si `programId` est absent — aucun appel Firestore
+ * n'est alors effectué).
+ *
+ * Scopé par programme (et non plus par entreprise, voir lib/firestore/admin.ts) depuis que le
+ * cycle de vie est une config Performance par programme : un appelant qui affiche des leviers de
+ * PLUSIEURS programmes à la fois (ex. LeversPagePerformance, WorkstreamsPage — pas de scope
+ * programme unique dans ces vues) ne peut pas résoudre un référentiel personnalisé unique et
+ * retombe donc sur `DEFAULT_LIFECYCLE_STAGES` (passer `undefined`/`null`) ; seules les vues déjà
+ * scopées à un programme (Dashboard, RH, détail levier) profitent des libellés personnalisés.
  */
-export function useLifecycleLabels(companyId: string | null | undefined): LifecycleLabels {
+export function useLifecycleLabels(programId: string | null | undefined): LifecycleLabels {
   const [stages, setStages] = useState<LifecycleStage[]>(DEFAULT_LIFECYCLE_STAGES);
 
   useEffect(() => {
-    if (!companyId) {
+    if (!programId) {
       setStages(DEFAULT_LIFECYCLE_STAGES);
       return;
     }
-    const unsub = subscribeLifecycleConfig(companyId, (fetched) => {
+    const unsub = subscribeLifecycleConfig(programId, (fetched) => {
       setStages(fetched.length > 0 ? fetched : DEFAULT_LIFECYCLE_STAGES);
     });
     return unsub;
-  }, [companyId]);
+  }, [programId]);
 
   return useMemo(
     () => ({

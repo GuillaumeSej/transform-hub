@@ -170,7 +170,8 @@ const ALL_STATUSES = Object.keys(STATUS_LABEL) as LeverStatus[];
 
 /**
  * Libellés "Statut" acceptés à l'import. Le cycle de vie des leviers est configurable par
- * entreprise (`LifecycleStage[]`, éditable dans /admin/lifecycle et résolu via
+ * programme (`LifecycleStage[]`, éditable depuis la fiche « Gérer » d'un programme Performance
+ * dans `components/admin/ProgramsPanel.tsx` et résolu via
  * `resolveStatusLabel`/`useLifecycleLabels`) : c'est CE référentiel — pas le seul `STATUS_LABEL`
  * statique — qui est réellement affiché à l'écran (Kanban, dropdown de statut du formulaire,
  * stepper du détail levier). `STATUS_LABEL` (libellés longs) reste néanmoins toujours accepté en

@@ -130,14 +130,27 @@ export async function deleteProgram(id: string): Promise<void> {
 
 // --- Lifecycle Configs ---
 
+/** Scopé PAR PROGRAMME depuis round N (auparavant un seul document par entreprise, doc id =
+ *  companyId) : le cycle de vie L1-L5 des leviers est une notion de Plan Performance (voir
+ *  `LifecycleStage`/`DEFAULT_LIFECYCLE_STAGES` dans lib/status-config.ts, indexées par
+ *  `LeverStatus`), et deux plans Performance de la même entreprise peuvent vouloir des libellés
+ *  différents — même raisonnement que `maturityStageConfigs` pour le Plan Stratégique (voir
+ *  lib/firestore/maturityStageConfigs.ts). Doc id = `programId` directement (un seul document par
+ *  programme, pas une collection à requêter comme `maturityStageConfigs` — pas besoin du motif
+ *  `${programId}__${x}`). `companyId` reste stocké sur le document pour que `firestore.rules`
+ *  puisse borner l'accès à l'entreprise de l'appelant sans jointure.
+ *
+ *  MIGRATION : les anciens documents `lifecycleConfigs/{companyId}` (un par entreprise) sont
+ *  orphelins après ce changement — aucun script de migration fourni (voir rapport de tâche) ; les
+ *  entreprises ayant déjà personnalisé leur cycle de vie devront le reconfigurer par programme. */
 const lifecycleCol = () => collection(db, "lifecycleConfigs");
 
 export function subscribeLifecycleConfig(
-  companyId: string,
+  programId: string,
   cb: (stages: LifecycleStage[]) => void
 ): Unsubscribe {
   return onSnapshot(
-    doc(lifecycleCol(), companyId),
+    doc(lifecycleCol(), programId),
     (snap) => {
       const data = snap.data();
       cb(data ? (data.stages as LifecycleStage[]) : []);
@@ -148,9 +161,10 @@ export function subscribeLifecycleConfig(
 
 export async function saveLifecycleConfig(
   companyId: string,
+  programId: string,
   stages: LifecycleStage[]
 ): Promise<void> {
-  await setDoc(doc(lifecycleCol(), companyId), { companyId, stages });
+  await setDoc(doc(lifecycleCol(), programId), { companyId, programId, stages });
 }
 
 // --- Hierarchy Nodes (arborescence financière P&L -> maille la plus fine) ---

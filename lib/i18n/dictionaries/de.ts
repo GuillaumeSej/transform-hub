@@ -1553,6 +1553,11 @@ const de: Record<string, string> = {
   "adminPrograms.back": "Alle Programme",
   "adminPrograms.tabMaturity": "Reifegrade",
   "adminPrograms.tabIndicators": "Indikatoren",
+  "adminPrograms.tabLifecycle": "Lebenszyklus",
+  "adminPrograms.badgeStrategic": "Strategisch",
+  "adminPrograms.badgePerformance": "Transformation",
+  "adminPrograms.noSettings":
+    "Für diesen Programmtyp sind keine Konfigurationseinstellungen verfügbar.",
 
   // ─── Strategieplan — Admin-Tab „Indikatoren“ ──────────────────────────────
   "adminIndicators.intro":

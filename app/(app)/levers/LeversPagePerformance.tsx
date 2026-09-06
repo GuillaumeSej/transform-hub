@@ -45,7 +45,11 @@ type LeverRow = Lever & {
 export function LeversPagePerformance() {
   const { role, user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
-  const lifecycle = useLifecycleLabels(user?.companyId);
+  // Vue agrégeant les leviers de TOUS les programmes de l'entreprise (pas de scope programme
+  // unique ici) : le cycle de vie étant désormais configuré par programme, on ne peut pas résoudre
+  // un référentiel personnalisé unique — repli sur les libellés par défaut (voir
+  // lib/hooks/useLifecycleLabels.ts).
+  const lifecycle = useLifecycleLabels(undefined);
   const { t } = useTranslation();
   const router = useRouter();
   const { showToast } = useToast();

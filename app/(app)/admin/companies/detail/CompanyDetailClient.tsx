@@ -10,7 +10,6 @@ import {
   Users,
   Network,
   Globe2,
-  Workflow,
   Database,
   BarChart3,
   FolderKanban,
@@ -26,7 +25,6 @@ import {
 } from "@/components/admin/CompanyFieldsEditor";
 import { UsersPanel } from "@/components/admin/UsersPanel";
 import { HierarchyEditor } from "@/components/admin/HierarchyEditor";
-import { LifecycleEditor } from "@/components/admin/LifecycleEditor";
 import { ProgramsPanel } from "@/components/admin/ProgramsPanel";
 import { CompanyDataHistoryPanel } from "@/components/admin/CompanyDataHistoryPanel";
 import { CompanyDatabasePanel } from "@/components/admin/CompanyDatabasePanel";
@@ -38,7 +36,6 @@ type TabId =
   | "financial-hierarchy"
   | "geographic-hierarchy"
   | "projects"
-  | "lifecycle"
   | "data"
   | "database";
 
@@ -48,7 +45,6 @@ const TAB_IDS: TabId[] = [
   "financial-hierarchy",
   "geographic-hierarchy",
   "projects",
-  "lifecycle",
   "data",
   "database",
 ];
@@ -81,7 +77,6 @@ function companyDetailTabs(
       icon: Globe2,
     },
     { id: "projects", label: t("adminCompanies.tab.programs", "Programmes"), icon: FolderKanban },
-    { id: "lifecycle", label: t("nav.lifecycle", "Cycle de vie"), icon: Workflow },
     {
       id: "data",
       label: t("adminCompanies.tab.dataHistory", "Données & Historique"),
@@ -351,7 +346,6 @@ export default function CompanyDetailClient() {
           {tab === "projects" && (
             <ProgramsPanel companyId={company.id} initialManagedProgramId={urlManageProgram} />
           )}
-          {tab === "lifecycle" && <LifecycleEditor companyId={company.id} />}
           {tab === "data" && <CompanyDataHistoryPanel company={company} />}
           {tab === "database" && <CompanyDatabasePanel company={company} />}
         </div>

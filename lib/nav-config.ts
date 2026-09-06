@@ -25,10 +25,7 @@ export const roles: Record<Role, RoleDefinition> = {
   admin: {
     label: "roles.admin.label",
     short: "roles.admin.short",
-    nav: [
-      { id: "admin-companies", icon: "Building2", label: "nav.companies" },
-      { id: "admin-lifecycle", icon: "Workflow", label: "nav.lifecycle" },
-    ],
+    nav: [{ id: "admin-companies", icon: "Building2", label: "nav.companies" }],
   },
   admin_entreprise: {
     label: "roles.admin_entreprise.label",
@@ -264,7 +261,6 @@ export const PAGE_ROUTES: Record<string, string> = {
   operations: "/operations",
   "admin-companies": "/admin/companies",
   "admin-users": "/admin/users",
-  "admin-lifecycle": "/admin/lifecycle",
   "admin-data": "/admin/data",
   "admin-history": "/admin/history",
 };

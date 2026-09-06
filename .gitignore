@@ -46,3 +46,8 @@ demo/utilisateurs.xlsx
 # agent worktrees (nested under the repo root by the harness)
 /.claude/worktrees/
 service-account-tmp.json
+
+# admin-api (separate Node project, see admin-api/README.md)
+/admin-api/node_modules
+/admin-api/dist
+/admin-api/.env

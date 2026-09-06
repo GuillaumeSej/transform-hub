@@ -24,6 +24,7 @@ import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MaturityStagesEditor } from "@/components/admin/MaturityStagesEditor";
 import { IndicatorsEditor } from "@/components/admin/IndicatorsEditor";
+import { LifecycleEditor } from "@/components/admin/LifecycleEditor";
 import { UserPicker } from "@/components/strategic/UserPicker";
 
 /** Libellés des deux types de programme. Le type est choisi À LA CRÉATION et figé ensuite : il
@@ -43,26 +44,79 @@ const PROGRAM_TYPE_OPTIONS: { value: ProgramType; label: string; hint: string }[
   },
 ];
 
-/** Sous-écrans d'administration propres à un programme STRATÉGIQUE. Le plan les veut accessibles
- *  « depuis la fiche du programme, pas depuis l'entreprise » : comme il n'existe pas de route de
- *  détail par programme, ce panneau bascule en place (liste → fiche) et rend ces deux onglets,
- *  sur le même pattern visuel que les onglets de `CompanyDetailClient`. */
-type ProgramTabId = "maturity" | "indicators";
+/** Sous-écrans d'administration propres à UN programme (Stratégique ou Performance). Le plan les
+ *  veut accessibles « depuis la fiche du programme, pas depuis l'entreprise » : comme il n'existe
+ *  pas de route de détail par programme, ce panneau bascule en place (liste → fiche) et rend ces
+ *  onglets, sur le même pattern visuel que les onglets de `CompanyDetailClient`. Chaque onglet
+ *  porte les types de programme auxquels il s'applique (`programTypes`) — `maturity`/`indicators`
+ *  sont des notions de Plan Stratégique (axes/chantiers/indicateurs 3-5-15), `lifecycle` une notion
+ *  de Plan Performance (cycle de vie L1-L5 des leviers, voir lib/status-config.ts) : les deux types
+ *  ne partagent aujourd'hui aucun onglet, la fiche « Gérer » d'un programme n'affiche donc que les
+ *  onglets pertinents pour son type. */
+type ProgramTabId = "maturity" | "indicators" | "lifecycle";
 
 const PROGRAM_TABS: {
   id: ProgramTabId;
   key: string;
   fallback: string;
   icon: typeof Workflow;
+  programTypes: ProgramType[];
 }[] = [
   {
     id: "maturity",
     key: "adminPrograms.tabMaturity",
     fallback: "Étapes de maturité",
     icon: Workflow,
+    programTypes: ["strategic"],
   },
-  { id: "indicators", key: "adminPrograms.tabIndicators", fallback: "Indicateurs", icon: Gauge },
+  {
+    id: "indicators",
+    key: "adminPrograms.tabIndicators",
+    fallback: "Indicateurs",
+    icon: Gauge,
+    programTypes: ["strategic"],
+  },
+  {
+    id: "lifecycle",
+    key: "adminPrograms.tabLifecycle",
+    fallback: "Cycle de vie",
+    icon: SlidersHorizontal,
+    programTypes: ["performance"],
+  },
 ];
+
+/** Pastille de type de programme — même style que le badge « Stratégique » historique (pill,
+ *  fond translucide + texte de la couleur d'accent), simplement sur l'accent bleu du design system
+ *  (`info-blue`, déjà utilisé pour StageBadge/AxisStageBadge) plutôt que le corail réservé aux
+ *  actions/accents primaires — pour rester visuellement distinct du corail sans introduire une
+ *  nouvelle couleur hors design system. Partagée entre la liste (lignes/cartes) et l'en-tête de la
+ *  fiche « Gérer ». */
+function ProgramTypeBadge({
+  type,
+  t,
+  className = "",
+}: {
+  type: ProgramType;
+  t: (key: string, fallback?: string) => string;
+  className?: string;
+}) {
+  if (type === "strategic") {
+    return (
+      <span
+        className={`rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bp-coral ${className}`}
+      >
+        {t("adminPrograms.badgeStrategic", "Stratégique")}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`rounded-full bg-info-blue-light px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-info-blue ${className}`}
+    >
+      {t("adminPrograms.badgePerformance", "Transformation")}
+    </span>
+  );
+}
 
 /**
  * Gestion des programmes pour UNE entreprise déjà sélectionnée. Extrait de
@@ -110,19 +164,23 @@ export function ProgramsPanel({
     actionPlanEnabled: boolean;
   }>({ name: "", sponsor: undefined, type: "performance", actionPlanEnabled: true });
   const [showForm, setShowForm] = useState(false);
-  /** Programme stratégique dont on affiche la fiche de configuration (null = liste). */
+  /** Programme (Stratégique ou Performance) dont on affiche la fiche de configuration (null =
+   *  liste). */
   const [managedProgramId, setManagedProgramId] = useState<string | null>(
     initialManagedProgramId ?? null
   );
-  const [programTab, setProgramTab] = useState<ProgramTabId>("maturity");
+  const [programTab, setProgramTab] = useState<ProgramTabId | null>(null);
 
   // Ré-appliqué quand le paramètre d'URL change (arrivée successive sur deux programmes différents
   // depuis le Topbar sans remontage du composant). Une valeur absente ne referme jamais une fiche
   // déjà ouverte : seul un choix explicite de l'utilisateur (« Tous les programmes ») le fait.
+  // `programTab` est remis à `null` plutôt qu'à un onglet fixe — le type du programme visé n'est
+  // pas forcément déjà chargé ici (course avec `subscribePrograms`), le rendu plus bas retombe sur
+  // le premier onglet pertinent pour SON type dès que `managedProgram` est résolu.
   useEffect(() => {
     if (!initialManagedProgramId) return;
     setManagedProgramId(initialManagedProgramId);
-    setProgramTab("maturity");
+    setProgramTab(null);
     setShowForm(false);
   }, [initialManagedProgramId]);
 
@@ -198,17 +256,31 @@ export function ProgramsPanel({
 
   const openManage = (p: Program) => {
     setShowForm(false);
-    setProgramTab("maturity");
+    setProgramTab(null);
     setManagedProgramId(p.id);
   };
 
-  // Fiche de configuration d'un programme stratégique — remplace la liste tant qu'elle est
-  // ouverte (pas de route dédiée : ce panneau est lui-même un onglet de `CompanyDetailClient`,
-  // imbriquer une seconde barre d'onglets sous un en-tête « retour » reste lisible, là où un
-  // dépliage inline à la HierarchyEditor mêlerait deux éditeurs complets aux lignes de la liste).
+  // Fiche de configuration d'UN programme (Stratégique OU Performance) — remplace la liste tant
+  // qu'elle est ouverte (pas de route dédiée : ce panneau est lui-même un onglet de
+  // `CompanyDetailClient`, imbriquer une seconde barre d'onglets sous un en-tête « retour » reste
+  // lisible, là où un dépliage inline à la HierarchyEditor mêlerait deux éditeurs complets aux
+  // lignes de la liste). Généralisé aux deux types : auparavant réservé aux programmes stratégiques
+  // (seuls dotés d'une fiche « Gérer »), désormais les programmes Performance en ont une aussi
+  // (cycle de vie L1-L5, voir PROGRAM_TABS ci-dessus).
   const managedProgram = managedProgramId
-    ? programs.find((p) => p.id === managedProgramId && resolveProgramType(p) === "strategic")
+    ? programs.find((p) => p.id === managedProgramId)
     : undefined;
+  const managedProgramType = managedProgram ? resolveProgramType(managedProgram) : undefined;
+  const availableTabs = managedProgramType
+    ? PROGRAM_TABS.filter((tabDef) => tabDef.programTypes.includes(managedProgramType))
+    : [];
+  // Onglet effectivement affiché : celui choisi explicitement s'il reste pertinent pour CE
+  // programme, sinon le premier onglet de son type (cas initial, ou bascule depuis un programme
+  // d'un autre type sans passer par `openManage`, ex. paramètre d'URL `manageProgram`).
+  const activeProgramTab: ProgramTabId | undefined =
+    programTab && availableTabs.some((tabDef) => tabDef.id === programTab)
+      ? programTab
+      : availableTabs[0]?.id;
 
   if (managedProgram) {
     return (
@@ -223,37 +295,50 @@ export function ProgramsPanel({
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <FolderKanban size={22} className="text-bp-coral" />
             <h1 className="text-xl font-bold text-text-primary">{managedProgram.name}</h1>
-            <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-              Stratégique
-            </span>
+            {managedProgramType && <ProgramTypeBadge type={managedProgramType} t={t} />}
           </div>
         </div>
 
-        <div className="flex snap-x gap-2 overflow-x-auto border-b border-border pb-2">
-          {PROGRAM_TABS.map((tabDef) => {
-            const Icon = tabDef.icon;
-            const active = programTab === tabDef.id;
-            return (
-              <button
-                key={tabDef.id}
-                onClick={() => setProgramTab(tabDef.id)}
-                className={`flex min-h-10 shrink-0 snap-start items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  active
-                    ? "bg-bp-coral text-white"
-                    : "border border-border text-text-secondary hover:bg-bg-elevated"
-                }`}
-              >
-                <Icon size={14} /> {t(tabDef.key, tabDef.fallback)}
-              </button>
-            );
-          })}
-        </div>
+        {availableTabs.length > 0 && (
+          <div className="flex snap-x gap-2 overflow-x-auto border-b border-border pb-2">
+            {availableTabs.map((tabDef) => {
+              const Icon = tabDef.icon;
+              const active = activeProgramTab === tabDef.id;
+              return (
+                <button
+                  key={tabDef.id}
+                  onClick={() => setProgramTab(tabDef.id)}
+                  className={`flex min-h-10 shrink-0 snap-start items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    active
+                      ? "bg-bp-coral text-white"
+                      : "border border-border text-text-secondary hover:bg-bg-elevated"
+                  }`}
+                >
+                  <Icon size={14} /> {t(tabDef.key, tabDef.fallback)}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-        {programTab === "maturity" && (
+        {activeProgramTab === "maturity" && (
           <MaturityStagesEditor companyId={companyId} programId={managedProgram.id} />
         )}
-        {programTab === "indicators" && (
+        {activeProgramTab === "indicators" && (
           <IndicatorsEditor companyId={companyId} programId={managedProgram.id} />
+        )}
+        {activeProgramTab === "lifecycle" && (
+          <LifecycleEditor companyId={companyId} programId={managedProgram.id} />
+        )}
+        {/* Aucun onglet pour ce type de programme (ne devrait pas arriver : tout programme a au
+         * moins un onglet dans PROGRAM_TABS) — garde-fou plutôt qu'une fiche vide muette. */}
+        {availableTabs.length === 0 && (
+          <p className="text-sm text-text-secondary">
+            {t(
+              "adminPrograms.noSettings",
+              "Aucun paramètre de configuration disponible pour ce type de programme."
+            )}
+          </p>
         )}
       </div>
     );
@@ -417,22 +502,16 @@ export function ProgramsPanel({
                 </td>
                 <td className="px-4 py-2.5 font-medium text-text-primary">
                   {p.name}
-                  {resolveProgramType(p) === "strategic" && (
-                    <span className="ml-2 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                      Stratégique
-                    </span>
-                  )}
+                  <ProgramTypeBadge type={resolveProgramType(p)} t={t} className="ml-2" />
                 </td>
                 <td className="px-4 py-2.5 text-text-secondary">{p.sponsor}</td>
                 <td className="whitespace-nowrap px-4 py-2.5 text-right">
-                  {resolveProgramType(p) === "strategic" && (
-                    <button
-                      onClick={() => openManage(p)}
-                      className="mr-3 inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-secondary hover:bg-bg-surface hover:text-bp-coral"
-                    >
-                      <SlidersHorizontal size={13} /> {t("adminPrograms.manage", "Gérer")}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => openManage(p)}
+                    className="mr-3 inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-secondary hover:bg-bg-surface hover:text-bp-coral"
+                  >
+                    <SlidersHorizontal size={13} /> {t("adminPrograms.manage", "Gérer")}
+                  </button>
                   <button
                     onClick={() => startEdit(p)}
                     className="mr-2 text-text-secondary hover:text-bp-coral"
@@ -467,24 +546,18 @@ export function ProgramsPanel({
               <div>
                 <div className="font-medium text-text-primary">
                   {p.name}
-                  {resolveProgramType(p) === "strategic" && (
-                    <span className="ml-2 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                      Stratégique
-                    </span>
-                  )}
+                  <ProgramTypeBadge type={resolveProgramType(p)} t={t} className="ml-2" />
                 </div>
                 <div className="text-xs text-text-secondary">{p.sponsor}</div>
               </div>
             </div>
             <div className="mt-2 flex items-center justify-end gap-3">
-              {resolveProgramType(p) === "strategic" && (
-                <button
-                  onClick={() => openManage(p)}
-                  className="mr-auto inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-secondary hover:bg-bg-surface hover:text-bp-coral"
-                >
-                  <SlidersHorizontal size={13} /> {t("adminPrograms.manage", "Gérer")}
-                </button>
-              )}
+              <button
+                onClick={() => openManage(p)}
+                className="mr-auto inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-secondary hover:bg-bg-surface hover:text-bp-coral"
+              >
+                <SlidersHorizontal size={13} /> {t("adminPrograms.manage", "Gérer")}
+              </button>
               <button
                 onClick={() => startEdit(p)}
                 className="text-text-secondary hover:text-bp-coral"

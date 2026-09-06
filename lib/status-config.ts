@@ -6,9 +6,10 @@ import type { DependencyType, LifecycleStage, LeverStatus } from "@/types";
  * filtres, Excel et le stepper du détail levier.
  *
  * Les libellés par défaut ci-dessous (STATUS_LABEL / STATUS_SHORT_LABEL / STATUS_LEVEL) servent de
- * base de repli pour les endroits sans contexte entreprise (Excel, moteur de calcul). Le référentiel
- * réellement affiché à l'utilisateur est la config par entreprise (`LifecycleConfig`, éditable dans
- * /admin/lifecycle et consommée via `useLifecycleLabels`) — voir plus bas.
+ * base de repli pour les endroits sans contexte programme (Excel, moteur de calcul). Le référentiel
+ * réellement affiché à l'utilisateur est la config PAR PROGRAMME (`LifecycleStage[]`, éditable
+ * depuis la fiche « Gérer » d'un programme Performance dans `components/admin/ProgramsPanel.tsx` et
+ * consommée via `useLifecycleLabels`) — voir plus bas.
  */
 
 export const STATUS_LEVEL: Record<LeverStatus, string> = {

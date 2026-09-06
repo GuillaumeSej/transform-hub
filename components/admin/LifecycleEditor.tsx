@@ -9,12 +9,20 @@ import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
- * Édition des étapes du cycle de vie pour UNE entreprise déjà sélectionnée. Extrait de
- * `admin/lifecycle/page.tsx` — cette page garde son propre sélecteur d'entreprise et rend ce
- * composant scopé ; le hub `/admin/companies/detail` le rend directement, sans sélecteur. Seule
+ * Édition des étapes du cycle de vie d'UN programme Performance déjà sélectionné. Scopé PAR
+ * PROGRAMME (voir `subscribeLifecycleConfig`/`saveLifecycleConfig` dans lib/firestore/admin.ts) —
+ * auparavant scopé par entreprise avec sa propre page `admin/lifecycle` (retirée, voir
+ * ProgramsPanel.tsx) ; désormais monté dans la fiche « Gérer » d'un programme Performance de
+ * `ProgramsPanel`, aux côtés de `MaturityStagesEditor` pour les programmes Stratégiques. Seule
  * source de vérité pour ce CRUD.
  */
-export function LifecycleEditor({ companyId }: { companyId: string }) {
+export function LifecycleEditor({
+  companyId,
+  programId,
+}: {
+  companyId: string;
+  programId: string;
+}) {
   const { t } = useTranslation();
   const [stages, setStages] = useState<LifecycleStage[]>(structuredClone(DEFAULT_LIFECYCLE_STAGES));
   // Snapshot du dernier état persisté — utilisé pour détecter les modifs non enregistrées.
@@ -23,17 +31,17 @@ export function LifecycleEditor({ companyId }: { companyId: string }) {
   );
 
   useEffect(() => {
-    if (!companyId) return;
-    const unsub = subscribeLifecycleConfig(companyId, (fetched) => {
+    if (!programId) return;
+    const unsub = subscribeLifecycleConfig(programId, (fetched) => {
       const next = fetched.length > 0 ? fetched : structuredClone(DEFAULT_LIFECYCLE_STAGES);
       setStages(next);
       setSavedStages(structuredClone(next));
     });
     return unsub;
-  }, [companyId]);
+  }, [programId]);
 
   const stagesDirty = JSON.stringify(stages) !== JSON.stringify(savedStages);
-  useRegisterUnsavedChanges(`admin:lifecycle:${companyId}`, stagesDirty);
+  useRegisterUnsavedChanges(`admin:lifecycle:${programId}`, stagesDirty);
 
   const updateStage = (key: LeverStatus, patch: Partial<LifecycleStage>) => {
     setStages((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
@@ -195,8 +203,8 @@ export function LifecycleEditor({ companyId }: { companyId: string }) {
       <div className="flex gap-3">
         <button
           onClick={async () => {
-            if (!companyId) return;
-            await saveLifecycleConfig(companyId, stages);
+            if (!programId) return;
+            await saveLifecycleConfig(companyId, programId, stages);
             // Rafraîchit le snapshot "sauvegardé" — sans attendre l'écho de la souscription
             // Firestore, sinon le bouton peut rester "dirty" quelques ms après le clic.
             setSavedStages(structuredClone(stages));

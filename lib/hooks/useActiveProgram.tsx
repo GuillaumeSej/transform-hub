@@ -98,9 +98,15 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
   const loading = firestoreLoading || !restored;
 
   const activeProgram = useMemo(() => {
+    // Un admin global (companyId null) n'a pas de contexte "entreprise" : il ne faut jamais lui
+    // attribuer arbitrairement le premier programme d'une entreprise au hasard (voir le
+    // sélecteur de programme, retiré du Topbar pour cette même raison). Les pages qui dépendent
+    // de `activeProgram` savent déjà dégrader proprement en son absence (cas déjà rencontré pour
+    // un utilisateur normal sans aucun programme).
+    if (!companyId) return null;
     if (programs.length === 0) return null;
     return programs.find((p) => p.id === selectedId) ?? programs[0];
-  }, [programs, selectedId]);
+  }, [companyId, programs, selectedId]);
 
   const setActiveProgramId = useCallback(
     (id: string | null) => {

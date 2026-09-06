@@ -1548,6 +1548,11 @@ const es: Record<string, string> = {
   "adminPrograms.back": "Todos los programas",
   "adminPrograms.tabMaturity": "Etapas de madurez",
   "adminPrograms.tabIndicators": "Indicadores",
+  "adminPrograms.tabLifecycle": "Ciclo de vida",
+  "adminPrograms.badgeStrategic": "Estratégico",
+  "adminPrograms.badgePerformance": "Transformación",
+  "adminPrograms.noSettings":
+    "No hay parámetros de configuración disponibles para este tipo de programa.",
 
   // ─── Plan Estratégico — pestaña Admin «Indicadores» ───────────────────────
   "adminIndicators.intro":

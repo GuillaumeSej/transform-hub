@@ -77,7 +77,6 @@ export function LeverDetailClientPerformance() {
     const unsub = subscribePrograms(setPrograms, user?.companyId ?? null);
     return unsub;
   }, [user?.companyId]);
-  const lifecycle = useLifecycleLabels(user?.companyId);
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = searchParams.get("id") ?? "";
@@ -97,6 +96,9 @@ export function LeverDetailClientPerformance() {
   const lever = data.getLeverById(id);
   const actionPlanEnabled =
     programs.find((p) => p.id === lever?.programId)?.actionPlanEnabled ?? true;
+  // Détail levier scopé au programme DU levier — le cycle de vie est désormais une config par
+  // programme (lib/firestore/admin.ts).
+  const lifecycle = useLifecycleLabels(lever?.programId);
   useEffect(() => {
     if (requestedTab) setTab(requestedTab);
   }, [requestedTab, searchParams]);

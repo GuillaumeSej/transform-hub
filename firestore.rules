@@ -148,13 +148,22 @@ service cloud.firestore {
       allow delete: if canWriteCompanyScoped(resource.data.companyId);
     }
 
-    // ─── lifecycleConfigs/{companyId} — un seul document par entreprise, doc id = companyId. ─────
-    // Lecture ouverte à toute l'entreprise (les libellés d'étapes L1-L5 sont lus partout via
-    // useLifecycleLabels) ; édition réservée aux admins (LifecycleEditor n'est monté que dans le
-    // hub admin).
-    match /lifecycleConfigs/{companyId} {
-      allow read: if canReadCompanyScoped(companyId);
-      allow write: if isSuperAdmin() || isCompanyAdmin(companyId);
+    // ─── lifecycleConfigs/{programId} — scopé PAR PROGRAMME depuis round N (auparavant un seul
+    // document par entreprise, doc id = companyId) : le cycle de vie L1-L5 est une notion de Plan
+    // Performance, deux programmes de la même entreprise peuvent avoir des libellés différents —
+    // même raisonnement que `maturityStageConfigs` pour le Plan Stratégique ci-dessous. Un seul
+    // document par programme (pas une collection à requêter comme `maturityStageConfigs`), lu par
+    // `get()` direct sur son id (`lib/firestore/admin.ts:subscribeLifecycleConfig`) : la règle
+    // s'appuie donc sur `resource.data.companyId`/`request.resource.data.companyId` (stocké sur le
+    // document, voir `saveLifecycleConfig`) plutôt que sur un filtre de requête. Lecture ouverte à
+    // toute l'entreprise (les libellés d'étapes sont lus partout via useLifecycleLabels) ; édition
+    // réservée aux admins (LifecycleEditor n'est monté que dans le hub admin).
+    match /lifecycleConfigs/{programId} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if isSuperAdmin() || isCompanyAdmin(request.resource.data.companyId);
+      allow update: if (isSuperAdmin() || isCompanyAdmin(resource.data.companyId))
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if isSuperAdmin() || isCompanyAdmin(resource.data.companyId);
     }
 
     // ─── levers/{id} — companyId optionnel (legacy : les leviers orphelins, sans companyId,

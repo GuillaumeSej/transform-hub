@@ -8,8 +8,6 @@ import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 
 import { roles } from "@/lib/nav-config";
-import { ResetDemoButton } from "@/components/shared/ResetDemoButton";
-import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 import { Avatar } from "@/components/shared/Avatar";
 import type { Alert, Company, Role } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
@@ -90,14 +88,12 @@ function LanguageSwitcher() {
 export function Topbar({
   alertCount,
   role,
-  onReset,
   onMenuClick,
   alerts,
   onAlertClick,
 }: {
   alertCount: number;
   role: Role;
-  onReset: () => void;
   onMenuClick: () => void;
   alerts: Alert[];
   onAlertClick: (alert: Alert) => void;
@@ -161,11 +157,6 @@ export function Topbar({
         >
           <Avatar initials={initials || "?"} size="sm" />
         </span>
-        {/* Sélecteur de programme actif — contrairement au sélecteur de langue, il reste visible
-            sur téléphone : le programme actif pilote désormais la nav entière (voir
-            ProgramSwitcher), c'est un contrôle de contexte, pas un réglage. Il s'efface de
-            lui-même quand l'utilisateur n'a qu'un seul programme. */}
-        <ProgramSwitcher />
         {/* Sélecteur de langue — desktop uniquement : sur téléphone il encombrait la barre pour
             une action rarissime en situation de consultation (la langue se choisit au login). */}
         <span className="hidden sm:block">
@@ -236,11 +227,6 @@ export function Topbar({
             </div>
           )}
         </div>
-        {/* Réservé au global admin : ce bouton réinitialise TOUTES les entreprises, pas
-            seulement celle de l'utilisateur courant — le rendre visible à tous les rôles était
-            un oubli (voir composant CompanyDatabasePanel pour l'équivalent scopé à une seule
-            entreprise, réservé lui aussi à l'admin global). */}
-        {role === "admin" && <ResetDemoButton onReset={onReset} />}
         <button
           onClick={async () => {
             // La déconnexion perdra tout le travail non enregistré — on demande confirmation.
