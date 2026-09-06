@@ -122,8 +122,8 @@ export function useBeTrackData(companyId?: string | null) {
         // Le seed doit être terminé avant les subscriptions : lors d'un changement de schéma,
         // cela évite d'afficher brièvement les anciennes données/sous-leviers.
         await Promise.all([
-          leversDb.ensureLeversSeeded(lockedSeed()),
-          workforceDb.ensureWorkforceSeeded(workforceSeed()),
+          leversDb.ensureLeversSeeded(lockedSeed(), companyId),
+          workforceDb.ensureWorkforceSeeded(workforceSeed(), companyId),
           ensureAdminSeeded(),
           alertsDb.ensureAlertsSeeded(),
           programDb.ensureProgramSeeded(programSeed(), companyId),
@@ -141,11 +141,11 @@ export function useBeTrackData(companyId?: string | null) {
 
       unsubscribers.push(
         leversDb.subscribeLevers((l) => !cancelled && setLevers(l), companyId),
-        leversDb.subscribeComments((c) => !cancelled && setComments(c)),
-        leversDb.subscribeAuditLog((a) => !cancelled && setAudit(a)),
-        workforceDb.subscribeEmployees((e) => !cancelled && setEmployees(e)),
-        workforceDb.subscribeMovements((m) => !cancelled && setMovements(m)),
-        workforceDb.subscribeWorkforceMeta((m) => !cancelled && setWorkforceMeta(m)),
+        leversDb.subscribeComments((c) => !cancelled && setComments(c), companyId),
+        leversDb.subscribeAuditLog((a) => !cancelled && setAudit(a), companyId),
+        workforceDb.subscribeEmployees((e) => !cancelled && setEmployees(e), companyId),
+        workforceDb.subscribeMovements((m) => !cancelled && setMovements(m), companyId),
+        workforceDb.subscribeWorkforceMeta((m) => !cancelled && setWorkforceMeta(m), companyId),
         alertsDb.subscribeAlerts((a) => !cancelled && setAlerts(a), companyId),
         alertsDb.subscribeAlertStates((s) => !cancelled && setAlertStates(s), companyId),
         subscribeCompanies((items) => !cancelled && setCompanies(items), companyId),
@@ -173,13 +173,18 @@ export function useBeTrackData(companyId?: string | null) {
     };
   }, [companyId]);
 
-  const persistAudit = useCallback((entries: AuditEntry[]) => {
-    if (entries.length === 0) return;
-    const next = [...entries.slice().reverse(), ...auditRef.current];
-    auditRef.current = next;
-    setAudit(next);
-    leversDb.saveAuditLog(next).catch((err) => console.error("[betrack] audit :", err));
-  }, []);
+  const persistAudit = useCallback(
+    (entries: AuditEntry[]) => {
+      if (entries.length === 0) return;
+      const next = [...entries.slice().reverse(), ...auditRef.current];
+      auditRef.current = next;
+      setAudit(next);
+      leversDb
+        .saveAuditLog(companyId, next)
+        .catch((err) => console.error("[betrack] audit :", err));
+    },
+    [companyId]
+  );
 
   const data = useMemo(
     () => {
@@ -386,11 +391,11 @@ export function useBeTrackData(companyId?: string | null) {
       setComments(result.comments);
       persistAudit([result.auditEntry]);
       leversDb
-        .saveComments(result.comments)
+        .saveComments(companyId, result.comments)
         .catch((err) => console.error("[betrack] commentaire :", err));
       return result.leverComments;
     },
-    [persistAudit]
+    [persistAudit, companyId]
   );
 
   const createManualAlert = useCallback((input: ManualAlertInput, user: AuthUser) => {
@@ -441,11 +446,11 @@ export function useBeTrackData(companyId?: string | null) {
       setMovements(result.movements);
       persistAudit(result.auditEntries);
       workforceDb
-        .saveMovements(result.movements)
+        .saveMovements(companyId, result.movements)
         .catch((err) => console.error("[betrack] mouvement :", err));
       return result.movement;
     },
-    [persistAudit]
+    [persistAudit, companyId]
   );
 
   const createWorkforceMovement = useCallback(
@@ -455,11 +460,11 @@ export function useBeTrackData(companyId?: string | null) {
       setMovements(result.movements);
       persistAudit(result.auditEntries);
       workforceDb
-        .saveMovements(result.movements)
+        .saveMovements(companyId, result.movements)
         .catch((err) => console.error("[betrack] mouvement :", err));
       return result.movement;
     },
-    [persistAudit]
+    [persistAudit, companyId]
   );
 
   /** Validation RH : statut Réalisé + date réelle + flag hrValidated, en un clic. */
@@ -470,11 +475,11 @@ export function useBeTrackData(companyId?: string | null) {
       setMovements(result.movements);
       persistAudit(result.auditEntries);
       workforceDb
-        .saveMovements(result.movements)
+        .saveMovements(companyId, result.movements)
         .catch((err) => console.error("[betrack] mouvement :", err));
       return result.movement;
     },
-    [persistAudit]
+    [persistAudit, companyId]
   );
 
   const deleteWorkforceMovement = useCallback(
@@ -484,10 +489,10 @@ export function useBeTrackData(companyId?: string | null) {
       setMovements(result.movements);
       persistAudit(result.auditEntries);
       workforceDb
-        .saveMovements(result.movements)
+        .saveMovements(companyId, result.movements)
         .catch((err) => console.error("[betrack] mouvement :", err));
     },
-    [persistAudit]
+    [persistAudit, companyId]
   );
 
   /** Créé (import Excel, recrutement intégré) ou met à jour (édition inline) un employé. */
@@ -498,35 +503,38 @@ export function useBeTrackData(companyId?: string | null) {
       setEmployees(result.employees);
       persistAudit(result.auditEntries);
       workforceDb
-        .saveEmployees(result.employees)
+        .saveEmployees(companyId, result.employees)
         .catch((err) => console.error("[betrack] employé :", err));
       return result.employee;
     },
-    [persistAudit]
+    [persistAudit, companyId]
   );
 
-  const updateDepartment = useCallback((name: string, patch: Partial<Department>) => {
-    const currentMeta = workforceMetaRef.current ?? workforceSeed().meta;
-    const departments = currentMeta.departments.map((d) =>
-      d.name === name ? { ...d, ...patch } : d
-    );
-    const nextMeta = { ...currentMeta, departments };
-    workforceMetaRef.current = nextMeta;
-    setWorkforceMeta(nextMeta);
-    workforceDb
-      .saveWorkforceMeta(nextMeta)
-      .catch((err) => console.error("[betrack] workforce meta :", err));
-    return departments.find((d) => d.name === name)!;
-  }, []);
+  const updateDepartment = useCallback(
+    (name: string, patch: Partial<Department>) => {
+      const currentMeta = workforceMetaRef.current ?? workforceSeed().meta;
+      const departments = currentMeta.departments.map((d) =>
+        d.name === name ? { ...d, ...patch } : d
+      );
+      const nextMeta = { ...currentMeta, departments };
+      workforceMetaRef.current = nextMeta;
+      setWorkforceMeta(nextMeta);
+      workforceDb
+        .saveWorkforceMeta(companyId, nextMeta)
+        .catch((err) => console.error("[betrack] workforce meta :", err));
+      return departments.find((d) => d.name === name)!;
+    },
+    [companyId]
+  );
 
   const resetToMockData = useCallback(async () => {
     setProgramConfig(programSeed());
     await Promise.all([
       leversDb
-        .forceReseedLevers(lockedSeed())
+        .forceReseedLevers(lockedSeed(), companyId)
         .catch((err) => console.error("[betrack] échec du reset Firestore des leviers :", err)),
       workforceDb
-        .forceReseedWorkforce(workforceSeed())
+        .forceReseedWorkforce(workforceSeed(), companyId)
         .catch((err) => console.error("[betrack] échec du reset Firestore workforce :", err)),
       programDb
         .forceReseedProgram(programSeed(), companyId)

@@ -122,9 +122,15 @@ service cloud.firestore {
     // collection la plus sensible du modèle actuel. doc id = username normalisé (voir
     // lib/firestore/admin.ts:saveUser). `resolveAuthUserProfile` (lib/auth.ts) interroge par le
     // CHAMP `username` (pas seulement par id) — la règle de lecture couvre donc les deux. ────────
-    match /adminUsers/{username} {
+    // doc id = "accountSlug" = partie locale de l'e-mail synthétique Firebase Auth : `username` seul
+    // pour un admin global (compte unique, pas de notion d'entreprise), `username.companyId` pour un
+    // compte d'entreprise (voir lib/auth.ts:usernameToSyntheticEmail) — c'est ce qui permet à un
+    // même `username` humain d'exister une fois PAR entreprise, avec un compte Firebase Auth et un
+    // mot de passe distincts, sans collision. `currentUsername()` (mal nommée historiquement, en
+    // réalité "accountSlug courant") renvoie exactement cette même chaîne pour l'appelant.
+    match /adminUsers/{accountSlug} {
       allow read: if isSuperAdmin()
-        || resource.data.username == currentUsername()
+        || accountSlug == currentUsername()
         || belongsToCompany(resource.data.companyId);
       allow create: if isSuperAdmin() || isCompanyAdmin(request.resource.data.companyId);
       allow update: if isSuperAdmin()
@@ -256,16 +262,36 @@ service cloud.firestore {
       allow delete: if canWriteCompanyScoped(resource.data.companyId);
     }
 
-    // ─── Documents "mega-doc" partagés entre TOUTES les entreprises (voir note en tête de
-    // fichier) : leverMeta/{comments,auditLog,workforceEmployees,workforceMovements,
-    // workforceSummary} et meta/{levers,alertsSeed,workforce,program__*} — pas de tenant isolable
-    // au niveau Firestore sans restructuration. On ferme au moins l'accès anonyme/public (avant :
-    // `if true`) en exigeant une session authentifiée valide avec un profil adminUsers résolu. ───
+    // ─── leverMeta/{docId} — restructuré : chaque document est maintenant partitionné par
+    // entreprise via son ID, motif `{companyId}__{comments|auditLog|workforceEmployees|
+    // workforceMovements|workforceSummary}` (voir lib/firestore/levers.ts, workforce.ts). Un doc
+    // id qui suit ce motif est isolé comme n'importe quelle collection scopée entreprise
+    // ci-dessus. Les anciens documents NON préfixés (`comments`, `auditLog`, `workforceEmployees`,
+    // `workforceMovements`, `workforceSummary` — pré-migration, mutualisant encore toutes les
+    // entreprises) restent accessibles en lecture/écriture à tout utilisateur authentifié UNIQUEMENT
+    // le temps de la bascule (scripts/migrate-lever-meta-tenant-split.js) : à supprimer une fois la
+    // migration vérifiée et le code applicatif entièrement basculé sur les documents préfixés — ne
+    // JAMAIS élargir cette clause, c'est une dette de migration temporaire, pas un choix durable.
     match /leverMeta/{docId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn() && (
+        (docId.matches('.*__.*') && canReadCompanyScoped(docId.split('__')[0]))
+        || (!docId.matches('.*__.*'))
+      );
     }
     match /meta/{docId} {
       allow read, write: if isSignedIn();
+    }
+
+    // ─── companyDirectory/{companyId} — annuaire PUBLIC minimal (id + nom uniquement, jamais de
+    // donnée financière/RH/utilisateur), lu AVANT authentification par l'écran de connexion pour
+    // permettre à l'utilisateur de choisir son entreprise quand son identifiant existe dans
+    // plusieurs (voir lib/auth.ts, app/login/page.tsx — nécessaire depuis qu'un même `username`
+    // humain peut correspondre à un compte Firebase Auth distinct par entreprise). Tenu à jour
+    // automatiquement à chaque création/renommage d'entreprise (voir lib/firestore/admin.ts:
+    // saveCompany). Écriture réservée à l'admin global (une entreprise ne renomme pas les autres).
+    match /companyDirectory/{companyId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
     }
 
     // Route legacy retirée de la nav (voir lib/nav-config.ts) — plus alimentée, gardée en lecture/

@@ -40,8 +40,13 @@ const leversCol = () => collection(db, "levers");
  * traîner aucune donnée orpheline d'un ancien schéma. */
 const subLeversCol = () => collection(db, "subLevers");
 const metaDoc = () => doc(db, "meta", "levers");
-const commentsDoc = () => doc(db, "leverMeta", "comments");
-const auditDoc = () => doc(db, "leverMeta", "auditLog");
+
+/** Documents `leverMeta/{companyId}__{comments|auditLog}` — partitionnés par entreprise (voir
+ * firestore.rules, section `match /leverMeta/{docId}`, et scripts/migrate-lever-meta-tenant-split.js
+ * pour la migration depuis les anciens documents mutualisés `leverMeta/comments` /
+ * `leverMeta/auditLog`, qui mélangeaient les données de TOUTES les entreprises). */
+const commentsDoc = (companyId: string) => doc(db, "leverMeta", `${companyId}__comments`);
+const auditDoc = (companyId: string) => doc(db, "leverMeta", `${companyId}__auditLog`);
 
 /** Normalise les dépendances lues depuis Firestore : les documents écrits avant l'introduction
  * des types de dépendance stockent des ids bruts (`string[]`) — on les convertit en
@@ -108,9 +113,21 @@ export function subscribeLevers(
   );
 }
 
-export function subscribeComments(cb: (comments: Record<string, Comment[]>) => void): Unsubscribe {
+/** `companyId` null/undefined = admin global : le document partitionné par entreprise n'a plus
+ *  d'équivalent "toutes entreprises confondues" (voir firestore.rules) — l'appelant reçoit un
+ *  objet vide et n'a rien à s'abonner (pas d'erreur, pas de fuite entre entreprises). En pratique
+ *  seul `admin_entreprise` (companyId toujours renseigné) atteint ce code (voir lib/nav-config.ts,
+ *  "admin-data"/"admin-history" absents du nav "admin" global). */
+export function subscribeComments(
+  cb: (comments: Record<string, Comment[]>) => void,
+  companyId?: string | null
+): Unsubscribe {
+  if (!companyId) {
+    cb({});
+    return () => {};
+  }
   return onSnapshot(
-    commentsDoc(),
+    commentsDoc(companyId),
     (snap) => {
       cb((snap.data() as Record<string, Comment[]>) ?? {});
     },
@@ -118,9 +135,16 @@ export function subscribeComments(cb: (comments: Record<string, Comment[]>) => v
   );
 }
 
-export function subscribeAuditLog(cb: (audit: AuditEntry[]) => void): Unsubscribe {
+export function subscribeAuditLog(
+  cb: (audit: AuditEntry[]) => void,
+  companyId?: string | null
+): Unsubscribe {
+  if (!companyId) {
+    cb([]);
+    return () => {};
+  }
   return onSnapshot(
-    auditDoc(),
+    auditDoc(companyId),
     (snap) => {
       cb((snap.data()?.entries as AuditEntry[]) ?? []);
     },
@@ -171,12 +195,26 @@ export async function saveLeversBatch(levers: Lever[]): Promise<void> {
   }
 }
 
-export async function saveComments(comments: Record<string, Comment[]>): Promise<void> {
-  await setDoc(commentsDoc(), comments);
+export async function saveComments(
+  companyId: string | null | undefined,
+  comments: Record<string, Comment[]>
+): Promise<void> {
+  if (!companyId) {
+    console.warn("[betrack] saveComments ignoré : pas de companyId (admin global).");
+    return;
+  }
+  await setDoc(commentsDoc(companyId), comments);
 }
 
-export async function saveAuditLog(entries: AuditEntry[]): Promise<void> {
-  await setDoc(auditDoc(), { entries });
+export async function saveAuditLog(
+  companyId: string | null | undefined,
+  entries: AuditEntry[]
+): Promise<void> {
+  if (!companyId) {
+    console.warn("[betrack] saveAuditLog ignoré : pas de companyId (admin global).");
+    return;
+  }
+  await setDoc(auditDoc(companyId), { entries });
 }
 
 type LeversSeed = {
@@ -187,8 +225,15 @@ type LeversSeed = {
 
 /** Purge les leviers (et les sous-leviers résiduels d'un ancien schéma) existants et réécrit le
  * seed fourni — utilisé au premier démarrage (schéma jamais initialisé) et par le bouton
- * "réinitialiser la démo". */
-export async function forceReseedLevers(seed: LeversSeed): Promise<void> {
+ * "réinitialiser la démo". `companyId` détermine sous quel document partitionné
+ * (`leverMeta/{companyId}__comments`/`__auditLog`) le seed de commentaires/audit est écrit — sans
+ * companyId (admin global), ces deux documents ne sont pas écrits (pas de partition valide), seuls
+ * les leviers et le marqueur de schéma le sont, comme c'était déjà globalement le cas avant cette
+ * migration pour la collection `levers` (non concernée par le cloisonnement `leverMeta`). */
+export async function forceReseedLevers(
+  seed: LeversSeed,
+  companyId?: string | null
+): Promise<void> {
   const [existingLevers, existingSubLevers] = await Promise.all([
     getDocs(leversCol()),
     getDocs(subLeversCol()),
@@ -202,18 +247,27 @@ export async function forceReseedLevers(seed: LeversSeed): Promise<void> {
   // peut lui-même valoir `undefined`, ce qui laisse la clé présente avec une valeur `undefined`.
   // round-trip JSON pour purger ces clés avant écriture, plutôt que de traquer chaque site d'origine.
   seed.levers.forEach((l) => batch.set(doc(leversCol(), l.id), JSON.parse(JSON.stringify(l))));
-  batch.set(commentsDoc(), seed.comments);
-  batch.set(auditDoc(), { entries: seed.audit });
+  if (companyId) {
+    batch.set(commentsDoc(companyId), seed.comments);
+    batch.set(auditDoc(companyId), { entries: seed.audit });
+  } else {
+    console.warn(
+      "[betrack] forceReseedLevers : comments/auditLog non réécrits (pas de companyId)."
+    );
+  }
   batch.set(metaDoc(), { schemaVersion: SCHEMA_VERSION });
   await batch.commit();
 }
 
 /** Amorce Firestore avec le seed mockData si la BDD n'a jamais été initialisée pour ce schéma
  * (démarrage à vide ou schéma changé) — idempotent, ne touche à rien si déjà initialisé. */
-export async function ensureLeversSeeded(seed: LeversSeed): Promise<void> {
+export async function ensureLeversSeeded(
+  seed: LeversSeed,
+  companyId?: string | null
+): Promise<void> {
   const meta = await getDoc(metaDoc());
   if (meta.exists() && meta.data().schemaVersion === SCHEMA_VERSION) return;
-  await forceReseedLevers(seed);
+  await forceReseedLevers(seed, companyId);
 }
 
 const MIGRATION_COMPANY_ID_KEY = "betrack_company_migration_v1";

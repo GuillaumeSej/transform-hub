@@ -54,9 +54,9 @@ export default function AdminHistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    const unsub = subscribeAuditLog(setAudit);
+    const unsub = subscribeAuditLog(setAudit, companyId);
     return unsub;
-  }, []);
+  }, [companyId]);
 
   useEffect(() => {
     const unsub = subscribeLevers(setLevers, companyId);

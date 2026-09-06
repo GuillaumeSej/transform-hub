@@ -23,6 +23,7 @@ import type {
   Program,
 } from "@/types";
 import { hierarchyDomain } from "@/lib/hierarchyLogic";
+import { accountSlug } from "@/lib/auth";
 import { DEMO_HIERARCHY_NODES } from "@/data/mockData";
 
 // --- Companies ---
@@ -57,6 +58,29 @@ export function subscribeCompanies(
 
 export async function saveCompany(company: Company): Promise<void> {
   await setDoc(doc(companiesCol(), company.id), company);
+  // Tenu à jour en même temps que la fiche entreprise complète : l'annuaire ne porte QUE id+nom
+  // (jamais de configuration financière/RH), lisible avant authentification par l'écran de
+  // connexion pour le sélecteur d'entreprise (voir lib/auth.ts, app/login/page.tsx, firestore.rules
+  // — collection `companyDirectory`, seule collection publique de l'app).
+  await setDoc(doc(collection(db, "companyDirectory"), company.id), {
+    id: company.id,
+    name: company.name,
+  });
+}
+
+/** Annuaire public (id + nom uniquement) de toutes les entreprises — alimente le sélecteur
+ *  d'entreprise de l'écran de connexion, lu AVANT authentification (voir firestore.rules :
+ *  `companyDirectory` est la seule collection à `allow read: if true`). Ne JAMAIS y ajouter un
+ *  autre champ que `id`/`name` sans repasser par firestore.rules (elle est volontairement plus
+ *  ouverte que tout le reste de l'app). */
+export function subscribeCompanyDirectory(
+  cb: (entries: { id: string; name: string }[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, "companyDirectory"),
+    (snap) => cb(snap.docs.map((d) => d.data() as { id: string; name: string })),
+    onListenerError("companyDirectory")
+  );
 }
 
 export async function saveCompanyHierarchyLevels(
@@ -70,6 +94,7 @@ export async function saveCompanyHierarchyLevels(
 
 export async function deleteCompany(id: string): Promise<void> {
   await deleteDoc(doc(companiesCol(), id));
+  await deleteDoc(doc(collection(db, "companyDirectory"), id));
 }
 
 // --- Programs ---
@@ -210,19 +235,37 @@ export function subscribeUsers(
   return onSnapshot(
     scopedQuery,
     (snap) => {
-      cb(snap.docs.map((d) => d.data() as AuthUser));
+      // Filet de dédoublonnage pendant la fenêtre de migration (round 5) :
+      // scripts/migrate-adminusers-tenant-keys.js crée le nouveau document
+      // `{username}.{companyId}` SANS supprimer l'ancien `{username}` (id = username brut), pour
+      // pouvoir vérifier avant nettoyage définitif. Le champ `companyId` étant identique sur les
+      // deux, une requête filtrée par entreprise les retournerait TOUS LES DEUX pour le même
+      // utilisateur humain. On ne garde que le document dont l'id EST l'accountSlug attendu
+      // (`accountSlug(username, companyId)`, voir lib/auth.ts) — l'ancien doc, dont l'id ne
+      // correspond plus à ce calcul une fois migré, est silencieusement ignoré ici (il reste en
+      // base tel quel, ce n'est qu'un filtre d'affichage/lecture, pas une suppression).
+      const users = snap.docs
+        .map((d) => ({ id: d.id, data: d.data() as AuthUser }))
+        .filter(({ id, data }) => id === accountSlug(data.username, data.companyId))
+        .map(({ data }) => data);
+      cb(users);
     },
     onListenerError("adminUsers")
   );
 }
 
+/** ID de document = `accountSlug(username, companyId)` (voir lib/auth.ts) — `username` seul pour
+ *  un admin global, `username.companyId` pour un compte d'entreprise, ce qui permet à un même
+ *  `username` humain d'exister une fois PAR entreprise (round 5). Le champ `username` stocké dans
+ *  le document reste le nom humain SANS suffixe (affichage, et requête par nom dans
+ *  companyDirectory/UsersPanel) — ne jamais confondre les deux. */
 export async function saveUser(user: AuthUser): Promise<void> {
   const normalized = { ...user, username: user.username.trim().toLowerCase() };
-  await setDoc(doc(usersCol(), normalized.username), normalized);
+  await setDoc(doc(usersCol(), accountSlug(normalized.username, normalized.companyId)), normalized);
 }
 
-export async function deleteUser(username: string): Promise<void> {
-  await deleteDoc(doc(usersCol(), username));
+export async function deleteUser(username: string, companyId?: string | null): Promise<void> {
+  await deleteDoc(doc(usersCol(), accountSlug(username, companyId)));
 }
 
 // --- Seed: ensure test company + test users exist in Firestore ---

@@ -10,12 +10,10 @@ vi.mock("firebase/auth", () => ({
   signInWithEmailAndPassword: (...args: unknown[]) => signInWithEmailAndPassword(...args),
 }));
 
-const getDocs = vi.fn();
+const getDoc = vi.fn();
 vi.mock("firebase/firestore", () => ({
-  collection: vi.fn(() => "adminUsers-collection"),
-  query: vi.fn((...args: unknown[]) => args),
-  where: vi.fn((...args: unknown[]) => args),
-  getDocs: (...args: unknown[]) => getDocs(...args),
+  doc: (...args: unknown[]) => args,
+  getDoc: (...args: unknown[]) => getDoc(...args),
 }));
 
 const PRIMARY_AUTH = { __brand: "primary" };
@@ -42,7 +40,7 @@ describe("auth — normalizeUsername", () => {
 });
 
 describe("auth — usernameToSyntheticEmail", () => {
-  it("builds a synthetic @betrack.local email from the username", async () => {
+  it("builds a synthetic @betrack.local email for a global admin (no companyId)", async () => {
     const { usernameToSyntheticEmail } = await import("@/lib/auth");
     expect(usernameToSyntheticEmail("admin")).toBe("admin@betrack.local");
   });
@@ -50,6 +48,37 @@ describe("auth — usernameToSyntheticEmail", () => {
   it("normalizes the username first (trim + lowercase)", async () => {
     const { usernameToSyntheticEmail } = await import("@/lib/auth");
     expect(usernameToSyntheticEmail("  Test.CTO  ")).toBe("test.cto@betrack.local");
+  });
+
+  it("appends the companyId for a company account, so the same username can have a distinct account per company", async () => {
+    const { usernameToSyntheticEmail } = await import("@/lib/auth");
+    expect(usernameToSyntheticEmail("alice", "c1")).toBe("alice.c1@betrack.local");
+  });
+
+  it("falls back to the global-admin form when companyId is null/undefined", async () => {
+    const { usernameToSyntheticEmail } = await import("@/lib/auth");
+    expect(usernameToSyntheticEmail("alice", null)).toBe("alice@betrack.local");
+    expect(usernameToSyntheticEmail("alice", undefined)).toBe("alice@betrack.local");
+  });
+});
+
+describe("auth — accountSlug", () => {
+  it("is the username alone for a global admin", async () => {
+    const { accountSlug } = await import("@/lib/auth");
+    expect(accountSlug("admin")).toBe("admin");
+  });
+
+  it("is username.companyId for a company account", async () => {
+    const { accountSlug } = await import("@/lib/auth");
+    expect(accountSlug("Alice", "c1")).toBe("alice.c1");
+  });
+});
+
+describe("auth — accountSlugFromEmail", () => {
+  it("extracts the local part of the synthetic email", async () => {
+    const { accountSlugFromEmail } = await import("@/lib/auth");
+    expect(accountSlugFromEmail("alice.c1@betrack.local")).toBe("alice.c1");
+    expect(accountSlugFromEmail("admin@betrack.local")).toBe("admin");
   });
 });
 
@@ -78,28 +107,24 @@ describe("auth — isFirebaseErrorCode", () => {
 
 describe("auth — resolveAuthUserProfile", () => {
   beforeEach(() => {
-    getDocs.mockReset();
+    getDoc.mockReset();
   });
 
-  it("maps the matching Firestore document to an AuthUser", async () => {
-    getDocs.mockResolvedValue({
-      empty: false,
-      docs: [
-        {
-          data: () => ({
-            username: "test.cto",
-            password: "test",
-            role: "cto",
-            firstName: "Jean",
-            lastName: "Dupont",
-            name: "Jean Dupont",
-            companyId: "c1",
-          }),
-        },
-      ],
+  it("maps the Firestore document at adminUsers/{slug} to an AuthUser", async () => {
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        username: "test.cto",
+        password: "test",
+        role: "cto",
+        firstName: "Jean",
+        lastName: "Dupont",
+        name: "Jean Dupont",
+        companyId: "c1",
+      }),
     });
     const { resolveAuthUserProfile } = await import("@/lib/auth");
-    const profile = await resolveAuthUserProfile("test.cto");
+    const profile = await resolveAuthUserProfile("test.cto.c1");
     expect(profile).toEqual({
       username: "test.cto",
       password: "test",
@@ -113,7 +138,7 @@ describe("auth — resolveAuthUserProfile", () => {
   });
 
   it("throws an explicit error when no Firestore profile matches", async () => {
-    getDocs.mockResolvedValue({ empty: true, docs: [] });
+    getDoc.mockResolvedValue({ exists: () => false });
     const { resolveAuthUserProfile } = await import("@/lib/auth");
     await expect(resolveAuthUserProfile("ghost")).rejects.toThrow(/profil introuvable/);
   });
@@ -122,26 +147,22 @@ describe("auth — resolveAuthUserProfile", () => {
 describe("auth — signInUser", () => {
   beforeEach(() => {
     signInWithEmailAndPassword.mockReset();
-    getDocs.mockReset();
+    getDoc.mockReset();
   });
 
-  it("signs in against the PRIMARY auth instance using the synthetic email, then resolves the Firestore profile", async () => {
+  it("signs in against the PRIMARY auth instance using the global-admin synthetic email when no companyId is given", async () => {
     signInWithEmailAndPassword.mockResolvedValue({ user: { uid: "abc" } });
-    getDocs.mockResolvedValue({
-      empty: false,
-      docs: [
-        {
-          data: () => ({
-            username: "admin",
-            password: "test",
-            role: "admin",
-            firstName: "Admin",
-            lastName: "BeTrack",
-            name: "Admin BeTrack",
-            companyId: null,
-          }),
-        },
-      ],
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        username: "admin",
+        password: "test",
+        role: "admin",
+        firstName: "Admin",
+        lastName: "BeTrack",
+        name: "Admin BeTrack",
+        companyId: null,
+      }),
     });
     const { signInUser } = await import("@/lib/auth");
     const user = await signInUser("admin", "test");
@@ -151,6 +172,30 @@ describe("auth — signInUser", () => {
       "test"
     );
     expect(user.role).toBe("admin");
+  });
+
+  it("signs in using the tenant-scoped synthetic email when a companyId is given", async () => {
+    signInWithEmailAndPassword.mockResolvedValue({ user: { uid: "xyz" } });
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        username: "alice",
+        password: "test",
+        role: "cto",
+        firstName: "Alice",
+        lastName: "Martin",
+        name: "Alice Martin",
+        companyId: "c1",
+      }),
+    });
+    const { signInUser } = await import("@/lib/auth");
+    const user = await signInUser("alice", "test", "c1");
+    expect(signInWithEmailAndPassword).toHaveBeenCalledWith(
+      PRIMARY_AUTH,
+      "alice.c1@betrack.local",
+      "test"
+    );
+    expect(user.companyId).toBe("c1");
   });
 
   it("lets a Firebase sign-in error propagate untouched (e.g. wrong password)", async () => {
