@@ -25,6 +25,12 @@ function ctx(levers: Lever[] = []): Ctx {
 
 const emptySheets: LeverImportRawSheets = { leviers: [], actions: [], impacts: [] };
 
+/** Programme unique par défaut pour la plupart des tests : la colonne "Programme" du fichier peut
+ *  alors rester vide (rattachement sans ambiguïté) — voir `validateLeverImportRows` /
+ *  `Lever.programId` (désormais obligatoire). Les tests qui portent spécifiquement sur la
+ *  résolution de la colonne "Programme" passent leur propre tableau `programs`. */
+const singleProgram = [{ id: "prog1", name: "Programme Test" }];
+
 function baseLeverRow(overrides: Record<string, unknown> = {}) {
   return {
     Code: "PROC-001",
@@ -120,7 +126,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       ],
     };
 
-    const preview = validateLeverImportRows(sheets, ctx(), "c1");
+    const preview = validateLeverImportRows(sheets, ctx(), "c1", singleProgram);
 
     expect(preview.errors).toEqual([]);
     expect(preview.toUpsert).toHaveLength(1);
@@ -149,6 +155,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
   it("updates a lever whose Code already exists in the database", () => {
     const existing: Lever = {
       id: "L001",
+      programId: "p1",
       code: "PROC-001",
       type: "Sourcing & Achats",
       name: "Ancien nom",
@@ -189,7 +196,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       impacts: [],
     };
 
-    const preview = validateLeverImportRows(sheets, ctx([existing]), "c1");
+    const preview = validateLeverImportRows(sheets, ctx([existing]), "c1", singleProgram);
 
     expect(preview.errors).toEqual([]);
     expect(preview.toUpsert).toHaveLength(1);
@@ -209,7 +216,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       impacts: [],
     };
 
-    const preview = validateLeverImportRows(sheets, ctx(), "c1");
+    const preview = validateLeverImportRows(sheets, ctx(), "c1", singleProgram);
 
     expect(preview.errors).toHaveLength(1);
     expect(preview.errors[0].sheet).toBe("Actions");
@@ -224,7 +231,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       impacts: [baseImpactRow({ "Nom de l'action": "Action fantôme" })],
     };
 
-    const preview = validateLeverImportRows(sheets, ctx(), "c1");
+    const preview = validateLeverImportRows(sheets, ctx(), "c1", singleProgram);
 
     expect(preview.errors).toHaveLength(1);
     expect(preview.errors[0].sheet).toBe("Impacts");
@@ -259,7 +266,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       ],
     };
 
-    const preview = validateLeverImportRows(sheets, ctx(), "c1");
+    const preview = validateLeverImportRows(sheets, ctx(), "c1", singleProgram);
 
     expect(preview.errors).toEqual([]);
     const lever = preview.toUpsert[0];
@@ -285,7 +292,8 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     const preview1 = validateLeverImportRows(
       { ...emptySheets, leviers: [baseLeverRow({ Workstream: "Excellence Nordique" })] },
       ctx(),
-      "c1"
+      "c1",
+      singleProgram
     );
     expect(preview1.errors).toEqual([]);
     expect(preview1.toCreateWorkstreams).toHaveLength(1);
@@ -293,18 +301,20 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     expect(preview1.toUpsert[0].ws).toBe(preview1.toCreateWorkstreams[0].id);
   });
 
-  it("resolves an optional Programme column by name, leaves programId undefined when blank, and errors on an unknown Programme (no auto-create, unlike Workstream)", () => {
+  it("resolves the Programme column by name, auto-resolves a blank column when exactly one program exists, and errors on an unknown Programme (no auto-create, unlike Workstream) or an unresolvable blank column (0 or 2+ programs)", () => {
     const programs = [{ id: "p1", name: "NordicRetail Excellence 2026" }];
 
-    const noProgram = validateLeverImportRows(
+    // Colonne vide + un SEUL programme pour l'entreprise -> rattachement sans ambiguïté.
+    const blankSingleProgram = validateLeverImportRows(
       { ...emptySheets, leviers: [baseLeverRow()] },
       ctx(),
       "c1",
       programs
     );
-    expect(noProgram.errors).toEqual([]);
-    expect(noProgram.toUpsert[0].programId).toBeUndefined();
+    expect(blankSingleProgram.errors).toEqual([]);
+    expect(blankSingleProgram.toUpsert[0].programId).toBe("p1");
 
+    // Colonne renseignée -> résolue par nom.
     const withProgram = validateLeverImportRows(
       { ...emptySheets, leviers: [baseLeverRow({ Programme: "NordicRetail Excellence 2026" })] },
       ctx(),
@@ -314,6 +324,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     expect(withProgram.errors).toEqual([]);
     expect(withProgram.toUpsert[0].programId).toBe("p1");
 
+    // Nom de programme inconnu -> erreur de ligne (pas d'auto-création, contrairement au Workstream).
     const unknownProgram = validateLeverImportRows(
       { ...emptySheets, leviers: [baseLeverRow({ Programme: "Programme fantôme" })] },
       ctx(),
@@ -321,20 +332,48 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       programs
     );
     expect(unknownProgram.errors[0].reason).toMatch(/Programme/);
+
+    // Colonne vide + AUCUN programme pour l'entreprise -> `programId` obligatoire ne peut pas être
+    // résolu, la ligne est rejetée (au lieu d'être acceptée avec un levier "non rattaché").
+    const blankNoProgram = validateLeverImportRows(
+      { ...emptySheets, leviers: [baseLeverRow()] },
+      ctx(),
+      "c1",
+      []
+    );
+    expect(blankNoProgram.errors).toHaveLength(1);
+    expect(blankNoProgram.errors[0].reason).toMatch(/Programme/);
+    expect(blankNoProgram.toUpsert).toEqual([]);
+
+    // Colonne vide + PLUSIEURS programmes pour l'entreprise -> ambiguïté, la ligne est rejetée.
+    const blankMultiplePrograms = validateLeverImportRows(
+      {
+        ...emptySheets,
+        leviers: [baseLeverRow()],
+      },
+      ctx(),
+      "c1",
+      [...programs, { id: "p2", name: "Autre programme" }]
+    );
+    expect(blankMultiplePrograms.errors).toHaveLength(1);
+    expect(blankMultiplePrograms.errors[0].reason).toMatch(/Programme/);
+    expect(blankMultiplePrograms.toUpsert).toEqual([]);
   });
 
   it("rejects a row with an unknown PnL account or Statut", () => {
     const preview2 = validateLeverImportRows(
       { ...emptySheets, leviers: [baseLeverRow({ "Compte P&L impacté": "ZZZ" })] },
       ctx(),
-      "c1"
+      "c1",
+      singleProgram
     );
     expect(preview2.errors[0].reason).toMatch(/Compte P&L/);
 
     const preview3 = validateLeverImportRows(
       { ...emptySheets, leviers: [baseLeverRow({ Statut: "Statut bidon" })] },
       ctx(),
-      "c1"
+      "c1",
+      singleProgram
     );
     expect(preview3.errors[0].reason).toMatch(/Statut/);
   });
@@ -343,7 +382,8 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     const preview = validateLeverImportRows(
       { ...emptySheets, leviers: [baseLeverRow(), baseLeverRow({ "Nom du levier": "Doublon" })] },
       ctx(),
-      "c1"
+      "c1",
+      singleProgram
     );
     expect(preview.toUpsert).toHaveLength(1);
     expect(preview.errors).toHaveLength(1);
@@ -355,7 +395,8 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     const preview = validateLeverImportRows(
       { leviers: [emptyRow], actions: [], impacts: [] },
       ctx(),
-      "c1"
+      "c1",
+      singleProgram
     );
     expect(preview.toUpsert).toEqual([]);
     expect(preview.errors).toEqual([]);
@@ -370,7 +411,8 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       const preview = validateLeverImportRows(
         { ...emptySheets, leviers: [baseLeverRow({ Statut: "Exécuté" })] },
         ctx(),
-        "c1"
+        "c1",
+        singleProgram
       );
       expect(preview.errors).toEqual([]);
       expect(preview.toUpsert[0].status).toBe("in_progress");
@@ -380,7 +422,8 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       const preview = validateLeverImportRows(
         { ...emptySheets, leviers: [baseLeverRow({ Statut: "En cours d'exécution" })] },
         ctx(),
-        "c1"
+        "c1",
+        singleProgram
       );
       expect(preview.errors).toEqual([]);
       expect(preview.toUpsert[0].status).toBe("in_progress");
@@ -398,7 +441,8 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       const rejected = validateLeverImportRows(
         { ...emptySheets, leviers: [baseLeverRow({ Statut: "Déploiement" })] },
         ctx(),
-        "c1"
+        "c1",
+        singleProgram
         // pas de lifecycleStages custom passé -> le libellé personnalisé n'est pas (encore) connu
       );
       expect(rejected.errors[0].reason).toMatch(/Statut/);
@@ -407,7 +451,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
         { ...emptySheets, leviers: [baseLeverRow({ Statut: "Déploiement" })] },
         ctx(),
         "c1",
-        [],
+        singleProgram,
         customStages
       );
       expect(accepted.errors).toEqual([]);
@@ -418,7 +462,8 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       const preview = validateLeverImportRows(
         { ...emptySheets, leviers: [baseLeverRow({ Statut: "Statut bidon" })] },
         ctx(),
-        "c1"
+        "c1",
+        singleProgram
       );
       expect(preview.errors[0].reason).toMatch(/Statut "Statut bidon" inconnu/);
       // Les libellés suggérés sont ceux du référentiel par défaut réellement affiché (courts),

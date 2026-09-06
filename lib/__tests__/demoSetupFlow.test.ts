@@ -78,11 +78,16 @@ describe("parcours de setup complet avec les 4 fichiers demo/ (doc/demo-script.m
       actions: readSheet("leviers_demo.xlsx", "Actions"),
       impacts: readSheet("leviers_demo.xlsx", "Impacts"),
     };
+    // `programId` est désormais OBLIGATOIRE (voir types/index.ts) : la colonne "Programme" du
+    // fichier de démo, laissée vide, ne se résout sans ambiguïté que si l'entreprise a EXACTEMENT
+    // un seul programme — cas réaliste d'une entreprise qui vient de créer son unique Programme
+    // Performance dans Admin > Entreprises > Programmes avant d'importer ses leviers.
+    const programs = [{ id: "p-demo-setup", name: "Programme de démo" }];
     const leverPreview = validateLeverImportRows(
       sheets,
       { levers: [], workstreams: [], pnlAccounts },
       COMPANY_ID,
-      [] // aucun programme : la colonne "Programme" du fichier de démo est vide
+      programs
     );
     expect(leverPreview.errors).toEqual([]);
     expect(leverPreview.toUpsert.length).toBe(sheets.leviers.length);

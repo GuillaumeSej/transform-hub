@@ -5,6 +5,7 @@ import type { Alert, Lever, Workstream } from "@/types";
 function lever(overrides: Partial<Lever> = {}): Lever {
   return {
     id: "L1",
+    programId: "p1",
     code: "L1",
     type: "Digital",
     name: "Initiative",

@@ -343,12 +343,13 @@ export function validateLeverImportRows(
   sheets: LeverImportRawSheets,
   data: Pick<BeTrackData, "levers" | "workstreams" | "pnlAccounts">,
   companyId: string | null | undefined,
-  /** Programmes existants de l'entreprise, pour résoudre la colonne optionnelle "Programme" (par
-   *  nom ou id, insensible à la casse). Contrairement au Workstream, un Programme non trouvé est
-   *  une ERREUR de ligne plutôt qu'une auto-création : un Programme porte une ambition/sponsor/
-   *  dates propres qu'un import de leviers n'a pas vocation à définir — il doit déjà exister (créé
-   *  dans Admin > Entreprises > Programmes). Colonne vide = levier non rattaché (comportement
-   *  historique, modifiable ensuite manuellement dans la fiche du levier). */
+  /** Programmes existants de l'entreprise, pour résoudre la colonne "Programme" (par nom ou id,
+   *  insensible à la casse). Contrairement au Workstream, un Programme non trouvé est une ERREUR
+   *  de ligne plutôt qu'une auto-création : un Programme porte une ambition/sponsor/dates propres
+   *  qu'un import de leviers n'a pas vocation à définir — il doit déjà exister (créé dans
+   *  Admin > Entreprises > Programmes). `programId` étant OBLIGATOIRE sur `Lever` (voir
+   *  types/index.ts), la colonne ne peut rester vide QUE si l'entreprise n'a qu'un seul programme
+   *  (rattachement alors sans ambiguïté) ; sinon la ligne est rejetée. */
   programs: { id: string; name: string }[] = [],
   /** Référentiel de cycle de vie ACTIF de l'entreprise cible (voir `subscribeLifecycleConfig` /
    *  `useLifecycleLabels`), quand l'appelant le connaît — ses libellés personnalisés sont alors
@@ -458,7 +459,7 @@ export function validateLeverImportRows(
     }
 
     const programRaw = str(row["Programme"]);
-    let programId: string | undefined;
+    let programId: string;
     if (programRaw) {
       const program = programs.find(
         (p) =>
@@ -474,6 +475,25 @@ export function validateLeverImportRows(
         return;
       }
       programId = program.id;
+    } else if (programs.length === 1) {
+      // Colonne vide, mais un SEUL programme existe pour cette entreprise : rattachement sans
+      // ambiguïté, pas la peine d'obliger à le retaper sur chaque ligne (cas très majoritaire —
+      // une entreprise avec un seul Plan Performance).
+      programId = programs[0].id;
+    } else {
+      // `programId` est désormais OBLIGATOIRE (voir types/index.ts) : un levier ne peut plus
+      // exister sans être rattaché à un programme. Colonne vide + 0 ou plusieurs programmes =
+      // ambiguïté qu'on ne peut plus résoudre silencieusement (avant ce round, la ligne était
+      // acceptée avec un levier "non rattaché" — ce n'est plus permis).
+      errors.push({
+        sheet: "Leviers",
+        rowNumber,
+        reason:
+          programs.length === 0
+            ? `"Programme" est obligatoire, mais aucun programme n'existe pour cette entreprise — créez-en un dans Admin > Entreprises > Programmes avant d'importer des leviers`
+            : `"Programme" est obligatoire dès que l'entreprise a plusieurs programmes (attendu : ${programs.map((p) => p.name).join(", ")})`,
+      });
+      return;
     }
 
     const values: LeverImportRow = {

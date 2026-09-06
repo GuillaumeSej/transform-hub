@@ -227,9 +227,13 @@ export type Lever = {
   hierarchyLeafId?: string;
   /** Maille la plus fine de l'arborescence géographique configurée pour l'entreprise. */
   geographyLeafId?: string;
-  /** Id du Program (voir type Program) auquel ce levier est rattaché. Le dashboard exécutif est
-   *  scopé à un Program sélectionné : un levier sans programId n'apparaît sur aucun dashboard. */
-  programId?: string;
+  /** Id du Program (voir type Program) auquel ce levier est rattaché — OBLIGATOIRE : un levier ne
+   *  peut pas exister sans être rattaché à un programme (LeverForm/l'import Excel l'imposent
+   *  désormais). Les leviers antérieurs à cette règle ont été rattrapés une fois via
+   *  scripts/backfill-lever-programid.js ; certaines lectures défensives (dashboard exécutif,
+   *  export Excel...) conservent malgré tout un repli `?? "Non assigné"` pour rester robustes à un
+   *  programme supprimé après coup (orphelin), pas parce que le champ redeviendrait optionnel. */
+  programId: string;
 };
 
 /** Ligne d'impact d'une action — décrit UN effet financier/RH sur UN poste de coût.

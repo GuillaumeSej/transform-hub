@@ -179,10 +179,17 @@ service cloud.firestore {
 
     // ─── levers/{id} — companyId optionnel (legacy : les leviers orphelins, sans companyId,
     // deviennent invisibles pour toute entreprise non-admin — comportement déjà voulu côté client,
-    // voir lib/firestore/levers.ts:byCompany). ─────────────────────────────────────────────────
+    // voir lib/firestore/levers.ts:byCompany). `programId` en revanche est OBLIGATOIRE à la
+    // CRÉATION (voir types/index.ts : un levier ne peut plus exister sans être rattaché à un
+    // programme — round "programId requis"). Pas de contrainte équivalente sur `update` : les
+    // leviers antérieurs à cette règle, pas encore rattrapés par
+    // scripts/backfill-lever-programid.js, doivent rester éditables (seul un nouveau levier est
+    // bloqué s'il n'a pas de programme). ─────────────────────────────────────────────────
     match /levers/{id} {
       allow read: if canReadCompanyScoped(resource.data.companyId);
-      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId)
+        && request.resource.data.programId is string
+        && request.resource.data.programId.size() > 0;
       allow update: if canWriteCompanyScoped(resource.data.companyId)
         && request.resource.data.companyId == resource.data.companyId;
       allow delete: if canWriteCompanyScoped(resource.data.companyId);

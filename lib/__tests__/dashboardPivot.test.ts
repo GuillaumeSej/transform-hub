@@ -13,6 +13,7 @@ import type { BeTrackData, HierarchyLevelDef, HierarchyNode, Lever, LeverStatus 
 const baseLever: Lever = {
   id: "L001",
   code: "L001",
+  programId: "p1",
   type: "Sourcing",
   name: "Test Lever",
   ws: "WS-01",

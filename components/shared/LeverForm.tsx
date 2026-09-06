@@ -19,6 +19,7 @@ import type {
   Program,
 } from "@/types";
 import { hierarchyPathValue, resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import { resolveProgramType } from "@/lib/axisLogic";
 
 export type LeverFormValues = Omit<Lever, "id" | "createdAt" | "lastUpdate" | "dependencies">;
 
@@ -49,6 +50,11 @@ function emptyValues(data: BeTrackData): LeverFormValues {
   );
   return {
     code: "",
+    // Vide au départ, jamais soumissible tel quel : `programId` est OBLIGATOIRE (voir types/index.ts
+    // — un levier ne peut plus exister sans programme depuis le round "programId requis"). Le champ
+    // ci-dessous est renseigné dès que la liste des programmes Plan Performance de l'entreprise est
+    // connue (voir l'effet plus bas), avant que l'utilisateur n'ait la main.
+    programId: "",
     type: data.leverTypes[0] ?? "",
     name: "",
     ws: data.workstreams[0]?.id ?? "",
@@ -199,18 +205,36 @@ export function LeverForm({
     });
   };
 
-  const [projects, setProjects] = useState<Program[]>([]);
+  const [allPrograms, setAllPrograms] = useState<Program[]>([]);
   useEffect(() => {
     if (!companyId) {
-      setProjects([]);
+      setAllPrograms([]);
       return;
     }
     const unsub = subscribePrograms(
-      (all) => setProjects(all.filter((p) => p.companyId === companyId)),
+      (all) => setAllPrograms(all.filter((p) => p.companyId === companyId)),
       companyId
     );
     return unsub;
   }, [companyId]);
+  // Un levier est une entité du Plan Performance : seuls les programmes de ce type sont des
+  // rattachements valides (voir `resolveProgramType` — `type` absent = "performance" par défaut,
+  // donc les programmes historiques sans `type` restent proposés).
+  const projects = allPrograms.filter((p) => resolveProgramType(p) === "performance");
+
+  // `programId` étant désormais obligatoire (voir types/index.ts), on le pré-remplit dès que la
+  // liste des programmes Plan Performance est connue — sauf en édition d'un levier existant déjà
+  // rattaché à un programme toujours valide (on ne force pas un changement silencieux). Si le
+  // programme initial n'existe plus (supprimé depuis), on retombe sur le premier disponible plutôt
+  // que de laisser un id fantôme dans le formulaire.
+  useEffect(() => {
+    if (projects.length === 0) return;
+    setValues((current) => {
+      if (current.programId && projects.some((p) => p.id === current.programId)) return current;
+      return { ...current, programId: projects[0].id };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects.map((p) => p.id).join(",")]);
 
   const set = <K extends keyof LeverFormValues>(key: K, value: LeverFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -223,7 +247,7 @@ export function LeverForm({
       id="lever-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!values.code.trim() || !values.name.trim()) return;
+        if (!values.code.trim() || !values.name.trim() || !values.programId) return;
         onSubmit(values);
       }}
     >
@@ -263,21 +287,34 @@ export function LeverForm({
             ))}
           </select>
         </Field>
-        {projects.length > 0 && (
+        {projects.length > 0 ? (
           <Field label={t("leverForm.project")}>
-            <select
-              className={inputClass}
-              value={values.programId ?? ""}
-              onChange={(e) => set("programId", e.target.value || undefined)}
-            >
-              <option value="">{t("leverForm.notAssigned")}</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            {projects.length > 1 ? (
+              <select
+                required
+                className={inputClass}
+                value={values.programId}
+                onChange={(e) => set("programId", e.target.value)}
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              // Un seul programme Performance : rien à choisir, on l'affiche en lecture seule
+              // plutôt qu'un select à une unique option (même convention que LeversPagePerformance).
+              <div className={`${inputClass} bg-neutral-50 text-secondary`}>{projects[0].name}</div>
+            )}
           </Field>
+        ) : (
+          <div className="col-span-1 rounded-sm border border-bp-coral/40 bg-bp-coral/5 px-2.5 py-1.5 text-[11px] font-medium text-bp-coral sm:col-span-2 md:col-span-3">
+            {t(
+              "leverForm.noProgramBlocking",
+              "Aucun programme Performance n'existe pour cette entreprise — un administrateur doit en créer un avant qu'un levier puisse être créé."
+            )}
+          </div>
         )}
         <div className="col-span-1 sm:col-span-2 md:col-span-3">
           <Field label={t("leverForm.name")}>
@@ -611,7 +648,7 @@ export function LeverForm({
         <Button type="button" variant="ghost" onClick={onCancel}>
           {t("common.cancel")}
         </Button>
-        <Button type="submit" variant="primary">
+        <Button type="submit" variant="primary" disabled={!values.programId}>
           {submitLabel ?? t("common.save")}
         </Button>
       </div>

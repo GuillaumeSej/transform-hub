@@ -35,6 +35,7 @@ import type {
 const baseLever: Lever = {
   id: "L001",
   code: "L001",
+  programId: "p1",
   type: "Sourcing",
   name: "Test Lever",
   ws: "WS-01",
@@ -442,7 +443,17 @@ describe("engine — byCountry / byProgram", () => {
     const data = makeData({
       levers: [
         { ...baseLever, programId: "p1", netSavings: 5, progress: 100 },
-        { ...baseLever, id: "L002", netSavings: 3, progress: 100 },
+        // `programId` est désormais obligatoire au niveau du type (voir types/index.ts) ; on
+        // simule ici un levier orphelin/legacy (programme supprimé après coup, ou donnée
+        // antérieure à ce champ) via un "escape hatch" de typage délibéré, pour continuer à
+        // couvrir le bucketing défensif "Non assigné" de `byProgram`.
+        {
+          ...baseLever,
+          id: "L002",
+          programId: undefined,
+          netSavings: 3,
+          progress: 100,
+        } as unknown as Lever,
       ],
     });
     const result = byProgram(data, programs);
@@ -514,7 +525,16 @@ describe("engine — marimekko2D", () => {
     const data = makeData({
       levers: [
         { ...baseLever, id: "L001", ws: "WS-01", programId: "p1", netSavings: 5, progress: 100 },
-        { ...baseLever, id: "L002", ws: "WS-01", netSavings: 3, progress: 100 },
+        // Idem : levier volontairement "non assigné" pour couvrir le bucketing défensif de
+        // `marimekko2D` — escape hatch de typage nécessaire depuis que `programId` est requis.
+        {
+          ...baseLever,
+          id: "L002",
+          ws: "WS-01",
+          programId: undefined,
+          netSavings: 3,
+          progress: 100,
+        } as unknown as Lever,
       ],
     });
     const columns = marimekko2D(data, "workstream-project", programs);

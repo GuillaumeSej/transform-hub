@@ -46,12 +46,18 @@ describe("leverExcelImport — demo/leviers_demo.xlsx (généré par scripts/gen
     expect(sheets.leviers.length).toBeGreaterThan(0);
 
     // Entreprise flambant neuve : aucun workstream préexistant (auto-créés par l'import), aucun
-    // levier existant, aucun programme (la colonne "Programme" du fichier de démo est vide).
+    // levier existant. La colonne "Programme" du fichier de démo est vide, et `programId` étant
+    // désormais OBLIGATOIRE (voir types/index.ts), une colonne vide ne se résout sans ambiguïté
+    // que si l'entreprise n'a EXACTEMENT qu'un seul programme — cas réaliste d'une entreprise qui
+    // vient de créer son unique Programme Performance dans Admin > Entreprises > Programmes avant
+    // d'importer ses leviers (étape désormais nécessaire, avant cette obligation le rattachement
+    // pouvait être laissé de côté).
+    const programs = [{ id: "p-demo", name: "Programme de démo" }];
     const preview = validateLeverImportRows(
       sheets,
       { levers: [], workstreams: [], pnlAccounts },
       "c-demo",
-      []
+      programs
     );
 
     expect(preview.errors).toEqual([]);

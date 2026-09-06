@@ -19,6 +19,7 @@ import type { Alert, BeTrackData, Lever, LeverStatus } from "@/types";
 const baseLever: Lever = {
   id: "L001",
   code: "L001",
+  programId: "p1",
   type: "Sourcing",
   name: "Test Lever",
   ws: "WS-01",
@@ -58,6 +59,12 @@ const workstreams: Pick<BeTrackData, "workstreams">["workstreams"] = [
 const pnlAccounts: Pick<BeTrackData, "pnlAccounts">["pnlAccounts"] = [
   { id: "GA", name: "General & Admin", baseline: -72, sign: -1 },
 ];
+
+/** Programme unique de l'entreprise de test : la feuille exportée n'a pas de colonne "Programme"
+ *  ci-dessous (non couverte par `leverToExcelRow`/le round-trip testé ici), donc la colonne est
+ *  vide à la ré-importation — un seul programme la résout sans ambiguïté (voir
+ *  `validateLeverImportRows` / `Lever.programId`, désormais obligatoire). */
+const singleProgram = [{ id: "p1", name: "Test Program" }];
 
 function makeData(overrides?: Partial<BeTrackData>): BeTrackData {
   return {
@@ -169,7 +176,8 @@ describe("leverExcel — leverToExcelRow (Statut)", () => {
       const preview = validateLeverImportRows(
         sheets,
         { levers: [], workstreams, pnlAccounts },
-        "c1"
+        "c1",
+        singleProgram
       );
 
       expect(preview.errors).toEqual([]);
@@ -226,7 +234,7 @@ describe("leverExcel — leverToExcelRow (Statut)", () => {
       sheets,
       { levers: [], workstreams, pnlAccounts },
       "c1",
-      [],
+      singleProgram,
       customStages
     );
 

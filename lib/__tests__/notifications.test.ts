@@ -4,6 +4,7 @@ import type { Alert, AuthUser, BeTrackData, Company, Lever } from "@/types";
 
 const lever = {
   id: "L1",
+  programId: "p1",
   code: "L1",
   type: "Test",
   name: "Lever",
