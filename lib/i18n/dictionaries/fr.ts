@@ -751,6 +751,7 @@ const fr: Record<string, string> = {
   "adminCompanies.saveFailedBody": "L'entreprise n'a pas pu être sauvegardée.",
   "adminCompanies.settingsSaveFailedBody": "Les paramètres n'ont pas pu être sauvegardés.",
   "adminCompanies.tab.settings": "Paramètres",
+  "adminCompanies.tab.configuration": "Configuration",
   "adminCompanies.tab.geoHierarchy": "Arborescence géographique",
   "adminCompanies.tab.programs": "Programmes",
   "adminCompanies.tab.dataHistory": "Données & Historique",
@@ -762,6 +763,27 @@ const fr: Record<string, string> = {
   "adminCompanies.fallbackName": "Entreprise",
   "adminCompanies.loading": "Chargement…",
   "adminCompanies.saving": "Enregistrement…",
+
+  // ─── adminProgramConfig (Admin > Entreprises > Configuration) ──────────────
+  "adminProgramConfig.hint":
+    "Configuration du programme historique de l'entreprise (nom, sponsor, exercice, cibles financières) et de ses workstreams — utilisée par le tableau de bord et les calculs financiers.",
+  "adminProgramConfig.name": "Nom du programme",
+  "adminProgramConfig.namePlaceholder": "Ex : Plan de Performance 2026",
+  "adminProgramConfig.sponsor": "Sponsor",
+  "adminProgramConfig.currency": "Devise",
+  "adminProgramConfig.target": "Cible d'économies totale (€M)",
+  "adminProgramConfig.baselineEBIT": "EBIT de référence (€M)",
+  "adminProgramConfig.revenue": "Chiffre d'affaires (€M)",
+  "adminProgramConfig.workstreamsTitle": "Workstreams",
+  "adminProgramConfig.workstreamsEmpty": "Aucun workstream configuré pour ce programme.",
+  "adminProgramConfig.colId": "ID",
+  "adminProgramConfig.colName": "Nom",
+  "adminProgramConfig.colColor": "Couleur",
+  "adminProgramConfig.colTarget": "Cible (€M)",
+  "adminProgramConfig.newWorkstreamPlaceholder": "Ex : Sourcing",
+  "adminProgramConfig.addWorkstream": "Ajouter le workstream",
+  "adminProgramConfig.saveSuccessTitle": "Configuration enregistrée",
+  "adminProgramConfig.saveFailedBody": "La configuration programme n'a pas pu être sauvegardée.",
 
   // ─── adminData ──────────────────────────────────────────────────────────────
   "adminData.title": "Vue d'ensemble des Données",

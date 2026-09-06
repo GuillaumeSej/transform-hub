@@ -29,6 +29,26 @@ export function realizedSavings(lever: Lever): number {
   return Math.round(lever.netSavings * (lever.progress / 100) * 100) / 100;
 }
 
+/** Valeur "Plan initial" affichée pour un levier : le snapshot figé s'il existe, sinon la valeur
+ * courante de `netSavings` en repli — même chaîne que celle utilisée par `sCurve3`/`financialTotal`
+ * pour la courbe "Plan" agrégée, afin que la page détail d'un levier et le dashboard exécutif ne
+ * se contredisent jamais. `isLocked` distingue un vrai snapshot figé d'une valeur de repli non
+ * figée, pour que l'UI puisse le signaler sans induire l'utilisateur en erreur. */
+export function displayedLockedPlanNet(lever: Lever): { value: number; isLocked: boolean } {
+  return lever.lockedPlan
+    ? { value: lever.lockedPlan.netSavings, isLocked: true }
+    : { value: lever.netSavings, isLocked: false };
+}
+
+/** Valeur "Réactualisé" affichée pour un levier : le reforecast s'il existe, sinon le plan figé,
+ * sinon `netSavings` — même chaîne de repli que la courbe "Réactualisé" de `sCurve3` (voir aussi
+ * `programSummary.reforecastTarget`). `isReforecast` distingue un vrai reforecast d'une valeur de
+ * repli non réactualisée. */
+export function displayedReforecastNet(lever: Lever): { value: number; isReforecast: boolean } {
+  if (lever.reforecast) return { value: lever.reforecast.netSavings, isReforecast: true };
+  return { value: lever.lockedPlan?.netSavings ?? lever.netSavings, isReforecast: false };
+}
+
 export function realizedFte(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   return Math.round(lever.fteImpact * (lever.progress / 100) * 10) / 10;

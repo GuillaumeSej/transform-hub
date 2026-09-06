@@ -709,6 +709,7 @@ const es: Record<string, string> = {
   "adminCompanies.saveFailedBody": "No se pudo guardar la empresa.",
   "adminCompanies.settingsSaveFailedBody": "No se pudieron guardar los ajustes.",
   "adminCompanies.tab.settings": "Ajustes",
+  "adminCompanies.tab.configuration": "Configuración",
   "adminCompanies.tab.geoHierarchy": "Jerarquía geográfica",
   "adminCompanies.tab.programs": "Programas",
   "adminCompanies.tab.dataHistory": "Datos e Historial",
@@ -720,6 +721,27 @@ const es: Record<string, string> = {
   "adminCompanies.fallbackName": "Empresa",
   "adminCompanies.loading": "Cargando…",
   "adminCompanies.saving": "Guardando…",
+
+  // ─── adminProgramConfig (Admin > Empresas > Configuración) ─────────────────
+  "adminProgramConfig.hint":
+    "Configuración del programa histórico de la empresa (nombre, patrocinador, ejercicio, objetivos financieros) y de sus workstreams — utilizada por el panel y los cálculos financieros.",
+  "adminProgramConfig.name": "Nombre del programa",
+  "adminProgramConfig.namePlaceholder": "Ej.: Plan de Rendimiento 2026",
+  "adminProgramConfig.sponsor": "Patrocinador",
+  "adminProgramConfig.currency": "Moneda",
+  "adminProgramConfig.target": "Objetivo total de ahorro (€M)",
+  "adminProgramConfig.baselineEBIT": "EBIT de referencia (€M)",
+  "adminProgramConfig.revenue": "Facturación (€M)",
+  "adminProgramConfig.workstreamsTitle": "Workstreams",
+  "adminProgramConfig.workstreamsEmpty": "Ningún workstream configurado para este programa.",
+  "adminProgramConfig.colId": "ID",
+  "adminProgramConfig.colName": "Nombre",
+  "adminProgramConfig.colColor": "Color",
+  "adminProgramConfig.colTarget": "Objetivo (€M)",
+  "adminProgramConfig.newWorkstreamPlaceholder": "Ej.: Sourcing",
+  "adminProgramConfig.addWorkstream": "Añadir workstream",
+  "adminProgramConfig.saveSuccessTitle": "Configuración guardada",
+  "adminProgramConfig.saveFailedBody": "No se pudo guardar la configuración del programa.",
 
   // ─── adminData ──────────────────────────────────────────────────────────────
   "adminData.title": "Resumen de Datos",

@@ -152,6 +152,8 @@ export function LeverDetailClientPerformance() {
   const ws = data.workstreams.find((w) => w.id === lever.ws);
   const real = engine.realizedSavings(lever);
   const realFte = engine.realizedFte(lever);
+  const lockedPlanDisplay = engine.displayedLockedPlanNet(lever);
+  const reforecastDisplay = engine.displayedReforecastNet(lever);
   const comments = data.getComments(lever.id);
   const actions = lever.actions ?? [];
   const hasAnyActions = actions.length > 0;
@@ -564,11 +566,23 @@ export function LeverDetailClientPerformance() {
                     "{stage}",
                     lifecycle.label("validated")
                   )}
-                  value={lever.lockedPlan ? engine.fmtCurr(lever.lockedPlan.netSavings) : "—"}
+                  value={
+                    <ProvisionalValue
+                      amount={lockedPlanDisplay.value}
+                      isFinal={lockedPlanDisplay.isLocked}
+                      provisionalHint={t("leverDetail.notYetLocked", "non figé")}
+                    />
+                  }
                 />
                 <BigStat
                   label={t("leverDetail.plannedReforecast", "Planifié (réactualisé)")}
-                  value={lever.reforecast ? engine.fmtCurr(lever.reforecast.netSavings) : "—"}
+                  value={
+                    <ProvisionalValue
+                      amount={reforecastDisplay.value}
+                      isFinal={reforecastDisplay.isReforecast}
+                      provisionalHint={t("leverDetail.notYetReforecast", "non réactualisé")}
+                    />
+                  }
                 />
                 <BigStat
                   label={t("leverDetail.netSavingsTarget", "Net savings visé")}
@@ -984,13 +998,21 @@ export function LeverDetailClientPerformance() {
                 ).replace("{stage}", lifecycle.label("validated"))}
                 accent
               >
-                {lever.lockedPlan ? engine.fmtCurr(lever.lockedPlan.netSavings) : "—"}
+                <ProvisionalValue
+                  amount={lockedPlanDisplay.value}
+                  isFinal={lockedPlanDisplay.isLocked}
+                  provisionalHint={t("leverDetail.notYetLocked", "non figé")}
+                />
               </Stat>
               <Stat label={t("leverDetail.realizedToDateEuro", "Réalisé à date (€)")}>
                 {engine.fmtCurr(real)}
               </Stat>
               <Stat label={t("leverDetail.reforecastNet", "Réactualisé (net)")}>
-                {lever.reforecast ? engine.fmtCurr(lever.reforecast.netSavings) : "—"}
+                <ProvisionalValue
+                  amount={reforecastDisplay.value}
+                  isFinal={reforecastDisplay.isReforecast}
+                  provisionalHint={t("leverDetail.notYetReforecast", "non réactualisé")}
+                />
               </Stat>
               <Stat label="CAPEX">{engine.fmtCurr(consolidatedKPIs?.capex ?? lever.capex)}</Stat>
               <Stat label="One-off">
@@ -1212,6 +1234,28 @@ function BigStat({
         {value}
       </div>
     </div>
+  );
+}
+
+/** Affiche un montant financier en signalant, quand `isFinal` est faux, qu'il s'agit d'un simple
+ *  repli sur la valeur courante du levier (net savings visé) et non d'un snapshot figé/réactualisé
+ *  — même valeur que celle agrégée par la courbe en S du dashboard exécutif (`sCurve3`), pour ne
+ *  jamais afficher un "—" qui contredirait ce total. */
+function ProvisionalValue({
+  amount,
+  isFinal,
+  provisionalHint,
+}: {
+  amount: number;
+  isFinal: boolean;
+  provisionalHint: string;
+}) {
+  if (isFinal) return <>{engine.fmtCurr(amount)}</>;
+  return (
+    <span className="italic text-tertiary" title={provisionalHint}>
+      {engine.fmtCurr(amount)}{" "}
+      <span className="not-italic text-[10.5px] font-semibold">({provisionalHint})</span>
+    </span>
   );
 }
 

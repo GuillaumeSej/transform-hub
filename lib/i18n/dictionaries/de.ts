@@ -708,6 +708,7 @@ const de: Record<string, string> = {
   "adminCompanies.saveFailedBody": "Das Unternehmen konnte nicht gespeichert werden.",
   "adminCompanies.settingsSaveFailedBody": "Die Einstellungen konnten nicht gespeichert werden.",
   "adminCompanies.tab.settings": "Einstellungen",
+  "adminCompanies.tab.configuration": "Konfiguration",
   "adminCompanies.tab.geoHierarchy": "Geografische Hierarchie",
   "adminCompanies.tab.programs": "Programme",
   "adminCompanies.tab.dataHistory": "Daten & Verlauf",
@@ -719,6 +720,27 @@ const de: Record<string, string> = {
   "adminCompanies.fallbackName": "Unternehmen",
   "adminCompanies.loading": "Wird geladen…",
   "adminCompanies.saving": "Wird gespeichert…",
+
+  // ─── adminProgramConfig (Admin > Unternehmen > Konfiguration) ──────────────
+  "adminProgramConfig.hint":
+    "Konfiguration des historischen Programms des Unternehmens (Name, Sponsor, Geschäftsjahr, Finanzziele) und seiner Workstreams — wird vom Dashboard und den Finanzberechnungen verwendet.",
+  "adminProgramConfig.name": "Programmname",
+  "adminProgramConfig.namePlaceholder": "Z. B.: Performanceplan 2026",
+  "adminProgramConfig.sponsor": "Sponsor",
+  "adminProgramConfig.currency": "Währung",
+  "adminProgramConfig.target": "Gesamteinsparziel (€M)",
+  "adminProgramConfig.baselineEBIT": "EBIT-Basiswert (€M)",
+  "adminProgramConfig.revenue": "Umsatz (€M)",
+  "adminProgramConfig.workstreamsTitle": "Workstreams",
+  "adminProgramConfig.workstreamsEmpty": "Kein Workstream für dieses Programm konfiguriert.",
+  "adminProgramConfig.colId": "ID",
+  "adminProgramConfig.colName": "Name",
+  "adminProgramConfig.colColor": "Farbe",
+  "adminProgramConfig.colTarget": "Ziel (€M)",
+  "adminProgramConfig.newWorkstreamPlaceholder": "Z. B.: Sourcing",
+  "adminProgramConfig.addWorkstream": "Workstream hinzufügen",
+  "adminProgramConfig.saveSuccessTitle": "Konfiguration gespeichert",
+  "adminProgramConfig.saveFailedBody": "Die Programmkonfiguration konnte nicht gespeichert werden.",
 
   // ─── adminData ──────────────────────────────────────────────────────────────
   "adminData.title": "Datenübersicht",

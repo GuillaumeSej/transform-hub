@@ -725,6 +725,7 @@ const en: Record<string, string> = {
   "adminCompanies.saveFailedBody": "The company could not be saved.",
   "adminCompanies.settingsSaveFailedBody": "The settings could not be saved.",
   "adminCompanies.tab.settings": "Settings",
+  "adminCompanies.tab.configuration": "Configuration",
   "adminCompanies.tab.geoHierarchy": "Geographic hierarchy",
   "adminCompanies.tab.programs": "Programs",
   "adminCompanies.tab.dataHistory": "Data & History",
@@ -736,6 +737,27 @@ const en: Record<string, string> = {
   "adminCompanies.fallbackName": "Company",
   "adminCompanies.loading": "Loading…",
   "adminCompanies.saving": "Saving…",
+
+  // ─── adminProgramConfig (Admin > Companies > Configuration) ────────────────
+  "adminProgramConfig.hint":
+    "Configuration of the company's legacy program (name, sponsor, fiscal year, financial targets) and its workstreams — used by the dashboard and financial calculations.",
+  "adminProgramConfig.name": "Program name",
+  "adminProgramConfig.namePlaceholder": "E.g.: 2026 Performance Plan",
+  "adminProgramConfig.sponsor": "Sponsor",
+  "adminProgramConfig.currency": "Currency",
+  "adminProgramConfig.target": "Total savings target (€M)",
+  "adminProgramConfig.baselineEBIT": "Baseline EBIT (€M)",
+  "adminProgramConfig.revenue": "Revenue (€M)",
+  "adminProgramConfig.workstreamsTitle": "Workstreams",
+  "adminProgramConfig.workstreamsEmpty": "No workstream configured for this program.",
+  "adminProgramConfig.colId": "ID",
+  "adminProgramConfig.colName": "Name",
+  "adminProgramConfig.colColor": "Color",
+  "adminProgramConfig.colTarget": "Target (€M)",
+  "adminProgramConfig.newWorkstreamPlaceholder": "E.g.: Sourcing",
+  "adminProgramConfig.addWorkstream": "Add workstream",
+  "adminProgramConfig.saveSuccessTitle": "Configuration saved",
+  "adminProgramConfig.saveFailedBody": "The program configuration could not be saved.",
 
   // ─── adminData ──────────────────────────────────────────────────────────────
   "adminData.title": "Data Overview",

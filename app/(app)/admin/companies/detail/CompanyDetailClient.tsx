@@ -13,6 +13,7 @@ import {
   Database,
   BarChart3,
   FolderKanban,
+  SlidersHorizontal,
 } from "lucide-react";
 import type { Company } from "@/types";
 import { subscribeCompanies, saveCompany } from "@/lib/firestore/admin";
@@ -26,12 +27,14 @@ import {
 import { UsersPanel } from "@/components/admin/UsersPanel";
 import { HierarchyEditor } from "@/components/admin/HierarchyEditor";
 import { ProgramsPanel } from "@/components/admin/ProgramsPanel";
+import { ProgramConfigEditor } from "@/components/admin/ProgramConfigEditor";
 import { CompanyDataHistoryPanel } from "@/components/admin/CompanyDataHistoryPanel";
 import { CompanyDatabasePanel } from "@/components/admin/CompanyDatabasePanel";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type TabId =
   | "settings"
+  | "configuration"
   | "users"
   | "financial-hierarchy"
   | "geographic-hierarchy"
@@ -41,6 +44,7 @@ type TabId =
 
 const TAB_IDS: TabId[] = [
   "settings",
+  "configuration",
   "users",
   "financial-hierarchy",
   "geographic-hierarchy",
@@ -65,6 +69,11 @@ function companyDetailTabs(
 ): { id: TabId; label: string; icon: typeof Building2 }[] {
   return [
     { id: "settings", label: t("adminCompanies.tab.settings", "Paramètres"), icon: Building2 },
+    {
+      id: "configuration",
+      label: t("adminCompanies.tab.configuration", "Configuration"),
+      icon: SlidersHorizontal,
+    },
     { id: "users", label: t("nav.users", "Utilisateurs"), icon: Users },
     {
       id: "financial-hierarchy",
@@ -336,6 +345,7 @@ export default function CompanyDetailClient() {
               </button>
             </div>
           )}
+          {tab === "configuration" && <ProgramConfigEditor companyId={company.id} />}
           {tab === "users" && <UsersPanel scopeCompanyId={company.id} />}
           {tab === "financial-hierarchy" && (
             <HierarchyEditor companies={companies} companyId={company.id} domain="financial" />

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   realizedSavings,
+  displayedLockedPlanNet,
+  displayedReforecastNet,
   realizedFte,
   worstRisk,
   stageCounts,
@@ -126,6 +128,49 @@ describe("engine — realizedSavings", () => {
   it("rounds to 2 decimals", () => {
     const lever = { ...baseLever, netSavings: 3.33, progress: 33 };
     expect(realizedSavings(lever)).toBe(1.1);
+  });
+});
+
+describe("engine — displayedLockedPlanNet (cohérence avec la courbe en S 'Plan')", () => {
+  it("falls back to live netSavings, flagged as not locked, when no lockedPlan snapshot exists", () => {
+    const lever = { ...baseLever, netSavings: 8, lockedPlan: undefined };
+    expect(displayedLockedPlanNet(lever)).toEqual({ value: 8, isLocked: false });
+  });
+
+  it("uses the locked snapshot's netSavings, flagged as locked, once one exists", () => {
+    const lever = {
+      ...baseLever,
+      netSavings: 8,
+      lockedPlan: { grossSavings: 12, netSavings: 9, opexOneOff: 1, opexRec: 0.5, capex: 2 },
+    };
+    expect(displayedLockedPlanNet(lever)).toEqual({ value: 9, isLocked: true });
+  });
+});
+
+describe("engine — displayedReforecastNet (cohérence avec la courbe en S 'Réactualisé')", () => {
+  it("falls back to live netSavings, flagged as not reforecast, when neither snapshot exists", () => {
+    const lever = { ...baseLever, netSavings: 8, lockedPlan: undefined, reforecast: undefined };
+    expect(displayedReforecastNet(lever)).toEqual({ value: 8, isReforecast: false });
+  });
+
+  it("falls back to the locked plan, still flagged as not reforecast, when only lockedPlan exists", () => {
+    const lever = {
+      ...baseLever,
+      netSavings: 8,
+      lockedPlan: { grossSavings: 12, netSavings: 9, opexOneOff: 1, opexRec: 0.5, capex: 2 },
+      reforecast: undefined,
+    };
+    expect(displayedReforecastNet(lever)).toEqual({ value: 9, isReforecast: false });
+  });
+
+  it("uses the reforecast snapshot's netSavings, flagged as reforecast, once one exists", () => {
+    const lever = {
+      ...baseLever,
+      netSavings: 8,
+      lockedPlan: { grossSavings: 12, netSavings: 9, opexOneOff: 1, opexRec: 0.5, capex: 2 },
+      reforecast: { grossSavings: 11, netSavings: 7, opexOneOff: 1, opexRec: 0.5, capex: 2 },
+    };
+    expect(displayedReforecastNet(lever)).toEqual({ value: 7, isReforecast: true });
   });
 });
 
