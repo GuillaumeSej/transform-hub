@@ -618,6 +618,9 @@ const en: Record<string, string> = {
   "shared.appShell.strategicIndicatorTitle": "Indicator at risk · {name}",
   "shared.appShell.strategicIndicatorDesc":
     "The latest measurement misses the target: {objective}.",
+  "shared.appShell.noAccessTitle": "No access configured",
+  "shared.appShell.noAccessDesc":
+    "Your account doesn't have any profile or permission yet. Contact an administrator to have one assigned.",
 
   // ─── shared (shared components: Modal, Topbar, Sidebar, ResetDemoButton…) ──
   "shared.resetDemoButton.label": "Reset demo data",

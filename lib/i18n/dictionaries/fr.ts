@@ -643,6 +643,9 @@ const fr: Record<string, string> = {
   "shared.appShell.strategicIndicatorTitle": "Indicateur à risque · {name}",
   "shared.appShell.strategicIndicatorDesc":
     "La dernière mesure est en dehors de l'objectif : {objective}.",
+  "shared.appShell.noAccessTitle": "Aucun accès configuré",
+  "shared.appShell.noAccessDesc":
+    "Votre compte n'a encore aucun profil ni habilitation associé. Contactez un administrateur pour qu'il vous en attribue un.",
 
   // ─── shared (composants partagés : Modal, Topbar, Sidebar, ResetDemoButton…) ─
   "shared.resetDemoButton.label": "Réinitialiser les données démo",

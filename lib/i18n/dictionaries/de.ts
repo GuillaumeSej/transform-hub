@@ -603,6 +603,9 @@ const de: Record<string, string> = {
   "shared.appShell.strategicDependencyTitle": "Abhängigkeit gefährdet · {chantier}",
   "shared.appShell.strategicIndicatorTitle": "Indikator gefährdet · {name}",
   "shared.appShell.strategicIndicatorDesc": "Die letzte Messung verfehlt das Ziel: {objective}.",
+  "shared.appShell.noAccessTitle": "Kein Zugriff konfiguriert",
+  "shared.appShell.noAccessDesc":
+    "Ihrem Konto ist noch kein Profil oder keine Berechtigung zugewiesen. Wenden Sie sich an einen Administrator.",
 
   // ─── shared (gemeinsame Komponenten: Modal, Topbar, Sidebar, ResetDemoButton…) ─
   "shared.resetDemoButton.label": "Demodaten zurücksetzen",

@@ -6,6 +6,7 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
+import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import {
   chantierDependencyAlerts,
   latestMeasurement,
@@ -30,7 +31,8 @@ import type { Alert } from "@/types";
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
-  const { user, loading } = useRole();
+  const { user, loading, logout } = useRole();
+  const { confirmDiscard } = useUnsavedChanges();
   // Type du programme actif — le garde-fou de routes ci-dessous doit appliquer EXACTEMENT le même
   // filtre que la Sidebar, sinon une page masquée dans la nav (ex. /hr en mode stratégique)
   // resterait accessible en tapant son URL directement.
@@ -40,6 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const data = useBeTrackData(user?.companyId ?? null);
   const notifications = useNotifications(data, user);
   const [ready, setReady] = useState(false);
+  const [noAccess, setNoAccess] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // ── Notifications : un jeu d'alertes PAR TYPE DE PROGRAMME ────────────────────────────────
@@ -165,6 +168,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     // sur /kpi avec un programme stratégique. Ce surensemble est exactement le comportement
     // historique, donc rien ne change pour le Plan Performance.
     const unfilteredNavItems = resolveUserNav(user);
+    // Utilisateur sans AUCUN profil métier ni habilitation admin (round multi-profils : un compte
+    // peut exister avec `profiles: []`, `isGlobalAdmin`/`isCompanyAdmin` absents — ex. pendant la
+    // configuration d'un nouveau compte, ou un profil retiré) — `resolveUserNav` renvoie alors un
+    // tableau vide, donc AUCUNE page ne lui est destinée. Avant, `PAGE_ROUTES[navItems[0]?.id] ??
+    // "/levers"` repliait silencieusement sur /levers, qui affichait son contenu par défaut comme
+    // si de rien n'était : un compte sans droit voyait quand même une page avec des données.
+    // Prise en charge explicite ici, AVANT tout calcul de route : écran dédié "aucun accès" plutôt
+    // qu'une page qui n'a jamais vérifié qu'elle avait le droit de s'afficher pour ce profil.
+    if (unfilteredNavItems.length === 0) {
+      setNoAccess(true);
+      setReady(true);
+      return;
+    }
+    setNoAccess(false);
     const navItems = programsLoading
       ? unfilteredNavItems
       : unfilteredNavItems.filter(
@@ -179,11 +196,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     const isCompanyDetail = pathname === "/admin/companies/detail";
     const companyDetailAllowed = isCompanyDetail && !!user.isGlobalAdmin;
     if (!isLeverDetail && !companyDetailAllowed && !allowedRoutes.has(pathname)) {
-      // Repli sur la première page RÉELLEMENT autorisée (nav filtrée) : renvoyer vers
-      // `navItems[0]` sans filtre pourrait pointer une page elle-même interdite pour le type de
-      // programme actif (ex. /workstreams pour un sponsor en mode stratégique) et provoquer une
-      // boucle de redirection.
-      router.replace(PAGE_ROUTES[navItems[0]?.id] ?? "/levers");
+      // Repli sur la première page RÉELLEMENT autorisée (nav filtrée elle ne peut plus être vide
+      // ici, voir le retour anticipé ci-dessus) : renvoyer vers `navItems[0]` SANS le filtre par
+      // type de programme pourrait pointer une page elle-même interdite pour le type de programme
+      // actif (ex. /workstreams pour un sponsor en mode stratégique) et provoquer une boucle de
+      // redirection — d'où `navItems[0]` (filtré), avec `unfilteredNavItems[0]` en dernier repli
+      // si le filtrage par programme a lui-même tout exclu (programme actif d'un type que ce
+      // profil ne couvre pas du tout).
+      router.replace(PAGE_ROUTES[navItems[0]?.id ?? unfilteredNavItems[0]?.id] ?? "/levers");
       return;
     }
     cleanupLegacyStorage();
@@ -191,6 +211,36 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [user, loading, router, pathname, programType, programsLoading]);
 
   if (loading || !user || !ready) return null;
+
+  if (noAccess) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-neutral-50 px-6">
+        <div className="max-w-sm text-center">
+          <h1 className="text-lg font-semibold text-primary">
+            {t("shared.appShell.noAccessTitle", "Aucun accès configuré")}
+          </h1>
+          <p className="mt-2 text-sm text-secondary">
+            {t(
+              "shared.appShell.noAccessDesc",
+              "Votre compte n'a encore aucun profil ni habilitation associé. Contactez un administrateur pour qu'il vous en attribue un."
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={async () => {
+              const proceed = await confirmDiscard();
+              if (!proceed) return;
+              logout();
+              router.push("/login");
+            }}
+            className="mt-5 rounded-full border border-border bg-white px-4 py-2 text-xs font-semibold text-secondary transition hover:border-black"
+          >
+            {t("topbar.logout", "Déconnexion")}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-dvh">
