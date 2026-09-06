@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
+import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 
 import { getDisplayRoleDefinition } from "@/lib/nav-config";
 import { Avatar } from "@/components/shared/Avatar";
@@ -83,8 +84,9 @@ function LanguageSwitcher() {
   );
 }
 
-/** Barre supérieure — porté depuis `.topbar` du prototype legacy. Le profil est verrouillé pour
- * la session (choisi sur /login) : plus de sélecteur, seulement un bouton de déconnexion. */
+/** Barre supérieure — porté depuis `.topbar` du prototype legacy. Le PROFIL (rôle) est verrouillé
+ * pour la session (choisi sur /login), mais le PROGRAMME actif reste sélectionnable ici via
+ * `ProgramSwitcher` quand l'utilisateur en a plusieurs autorisés (round multi-profils). */
 export function Topbar({
   alertCount,
   onMenuClick,
@@ -156,6 +158,7 @@ export function Topbar({
         >
           <Avatar initials={initials || "?"} size="sm" />
         </span>
+        <ProgramSwitcher />
         {/* Sélecteur de langue — desktop uniquement : sur téléphone il encombrait la barre pour
             une action rarissime en situation de consultation (la langue se choisit au login). */}
         <span className="hidden sm:block">
