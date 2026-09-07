@@ -5,14 +5,12 @@ import { Activity, Sigma, TrendingDown } from "lucide-react";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
 import { RadialProgress } from "@/components/shared/RadialProgress";
+import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
-import { IndicatorDeltaStat } from "@/components/strategic/IndicatorDeltaStat";
-import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import {
   computeIndicatorDelta,
   countOnTrackAtRisk,
   latestMeasurement,
-  resolveIndicatorStatus,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
 import type { Indicator, IndicatorMeasurement } from "@/types";
@@ -263,7 +261,6 @@ function BusinessKpiCard({
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const latest = latestMeasurement(indicator.id, measurements);
-  const status = resolveIndicatorStatus(indicator);
   const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
   const value =
     latest?.value !== undefined ? `${latest.value}${unitSuffix}` : (latest?.note ?? l.noValue);
@@ -278,40 +275,23 @@ function BusinessKpiCard({
 
   const content = (
     <>
+      {/* Round 7, point 3 : un seul camembert remplace le badge de statut + la sparkline + la
+          barre de delta — signal unique (statut ET progression vers la cible en un coup d'œil).
+          Le texte visible ("à risque"/"sur la trajectoire") disparaît au profit de l'`aria-label`/
+          `title` du camembert lui-même. */}
       <div className="flex items-start justify-between gap-2">
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-secondary">
+        <span className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-secondary">
           {indicator.name}
         </span>
-        <IndicatorStatusBadge
-          status={status}
-          label={status === "at_risk" ? l.atRisk : l.onTrack}
-          title={status === "at_risk" ? l.atRiskTooltip || undefined : undefined}
+        <IndicatorDonut
+          delta={delta}
+          labels={{ onTrack: l.onTrack, atRisk: l.atRisk, noData: l.noValue }}
           className="flex-shrink-0"
         />
       </div>
       <div className="mt-1.5 truncate text-xl font-bold leading-tight tracking-tight text-primary">
         {value}
       </div>
-      {/* Sparkline : la tendance des dernières périodes, sans axes ni infobulle — le détail
-          chiffré se lit dans la modale d'historique complet. */}
-      <div className="mt-1.5">
-        <IndicatorChart
-          measurements={measurements}
-          objectiveValue={indicator.objectiveValue}
-          direction={indicator.direction}
-          unit={indicator.unit}
-          qualitative={indicator.kind === "qualitative"}
-          frequency={indicator.frequency}
-          compact
-        />
-      </div>
-      {/* Progression vers la cible — la sparkline dit "où on va", ce bloc dit "à quel point on est
-          proche" (le constat du PO : 82 % contre une cible à 80 % n'est PAS un grand écart). */}
-      {delta && (
-        <div className="mt-1.5">
-          <IndicatorDeltaStat delta={delta} unit={indicator.unit} compact />
-        </div>
-      )}
       <div className="mt-auto pt-1 text-[11px] text-tertiary">
         {indicator.objectiveValue !== undefined
           ? `${l.objective} : ${indicator.objectiveValue}${unitSuffix}`

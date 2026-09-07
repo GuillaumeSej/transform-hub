@@ -4,19 +4,13 @@ import { useMemo, useState } from "react";
 import { LineChart, Lock, Pencil, Plus, Target } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
+import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
-import { IndicatorDeltaStat } from "@/components/strategic/IndicatorDeltaStat";
-import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import {
   BusinessKpiCards,
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
-import {
-  canFillIndicator,
-  computeIndicatorDelta,
-  latestMeasurement,
-  resolveIndicatorStatus,
-} from "@/lib/axisLogic";
+import { canFillIndicator, computeIndicatorDelta, latestMeasurement } from "@/lib/axisLogic";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
@@ -219,7 +213,6 @@ function IndicatorCard({
     }
   };
 
-  const status = resolveIndicatorStatus(indicator);
   const authorizedRoles = indicator.responsibleRoles
     .map((role) => t(roleDefinitions[role].short))
     .join(", ");
@@ -240,10 +233,16 @@ function IndicatorCard({
           </span>
         }
         actions={
-          <IndicatorStatusBadge
-            status={status}
-            label={t(status === "at_risk" ? "indicatorStatus.atRisk" : "indicatorStatus.onTrack")}
-            title={status === "at_risk" ? t("strategicAxes.atRiskTooltip") : undefined}
+          // Round 7, point 3 : un seul camembert remplace le badge de statut + la barre de delta
+          // dupliquée plus bas dans le bloc objectif — le pourcentage vient de `computeIndicatorDelta`
+          // (`delta`, déjà calculé ci-dessus), aucune nouvelle formule.
+          <IndicatorDonut
+            delta={delta}
+            labels={{
+              onTrack: t("indicatorStatus.onTrack"),
+              atRisk: t("indicatorStatus.atRisk"),
+              noData: t("kpi.noMeasurement"),
+            }}
           />
         }
       />
@@ -269,6 +268,10 @@ function IndicatorCard({
               labelViewFull={t("kpi.chart.viewFull")}
               fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
               labelProgress={t("kpi.chart.progressToTarget")}
+              // Round 7, point 3 : le camembert d'en-tête (`IndicatorDonut`) porte déjà le signal
+              // "trajectoire" — sans ce flag, `IndicatorChart` superposerait son propre
+              // `IndicatorDeltaStat` par-dessus la courbe, un 2ᵉ signal identique en double.
+              hideDeltaStat
             />
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-text-secondary">
               <span className="font-semibold uppercase tracking-wide">{t("kpi.latestValue")}</span>
@@ -368,14 +371,6 @@ function IndicatorCard({
                       {indicator.unit ? ` ${indicator.unit}` : ""} ·{" "}
                       {t(`kpi.direction.${indicator.direction ?? "up"}`)}
                     </p>
-                  )}
-                  {delta && (
-                    <IndicatorDeltaStat
-                      delta={delta}
-                      unit={indicator.unit}
-                      labels={{ progress: t("kpi.chart.progressToTarget") }}
-                      className="pt-1"
-                    />
                   )}
                 </div>
               )}

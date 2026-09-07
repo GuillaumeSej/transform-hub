@@ -1188,11 +1188,11 @@ const de: Record<string, string> = {
   // Gantt der Arbeitspakete
   "strategicAxes.ganttSection": "Arbeitspakete dieser Achse",
   "strategicAxes.ganttHint":
-    "Ein Block = ein Arbeitspaket, begrenzt durch seine erste und letzte Maßnahme. Klicken Sie auf einen Block oder eine Maßnahme, um das Arbeitspaket mit seinen Liefergegenständen zu öffnen.",
+    "Ein Block = ein Arbeitspaket, begrenzt durch seinen ersten und letzten Hebel. Klicken Sie auf einen Block oder einen Hebel, um das Arbeitspaket mit seinen Liefergegenständen zu öffnen.",
   "strategicAxes.noChantiers": "Kein Arbeitspaket auf dieser Achse.",
-  "strategicAxes.chantierUnplanned": "Arbeitspakete ohne geplante Maßnahme",
-  "strategicAxes.chantierNoDates": "Noch kein Datum — Maßnahme hinzufügen",
-  "strategicAxes.actionsSuffix": "Maßnahmen",
+  "strategicAxes.chantierUnplanned": "Arbeitspakete ohne geplanten Hebel",
+  "strategicAxes.chantierNoDates": "Noch kein Datum — Hebel hinzufügen",
+  "strategicAxes.actionsSuffix": "Hebel",
   // Gantt: einstellbare Zeitskala, Fortschritt, Übersicht des Arbeitspakets
   "strategicAxes.ganttScale": "Skala",
   "strategicAxes.ganttScaleMonth": "Monat",
@@ -1200,11 +1200,11 @@ const de: Record<string, string> = {
   "strategicAxes.ganttScaleSemester": "Halbjahr",
   "strategicAxes.progress": "Fortschritt",
   "strategicAxes.ganttToday": "Heute",
-  "strategicAxes.actionsCompleted": "Maßnahmen abgeschlossen",
+  "strategicAxes.actionsCompleted": "Hebel abgeschlossen",
   "strategicAxes.moreActionsSuffix": "weitere",
-  "strategicAxes.cardNoActions": "Keine Maßnahme",
+  "strategicAxes.cardNoActions": "Kein Hebel",
   "strategicAxes.chantierOwner": "Verantwortlich für das Arbeitspaket",
-  "strategicAxes.ownerFromActions": "abgeleitet aus den Maßnahmenverantwortlichen",
+  "strategicAxes.ownerFromActions": "abgeleitet aus den Hebelverantwortlichen",
   "strategicAxes.chantierPeriod": "Zeitraum",
   "strategicAxes.newChantier": "Neues Arbeitspaket",
   "strategicAxes.newChantierModalTitle": "Neues Arbeitspaket",
@@ -1212,20 +1212,19 @@ const de: Record<string, string> = {
   "strategicAxes.chantierCreated": "Arbeitspaket angelegt",
   "strategicAxes.chantierDeleted": "Arbeitspaket gelöscht",
   "strategicAxes.deleteChantier": "Arbeitspaket löschen",
-  "strategicAxes.confirmDeleteChantier":
-    "Löschen des Arbeitspakets und seiner Maßnahmen bestätigen",
+  "strategicAxes.confirmDeleteChantier": "Löschen des Arbeitspakets und seiner Hebel bestätigen",
   // Pop-up Arbeitspaket / Maßnahmen / Liefergegenstände
   "strategicAxes.chantierModalTitle": "Detail des Arbeitspakets",
   "strategicAxes.dependsOn": "Hängt ab von",
-  "strategicAxes.chantierActions": "Maßnahmen des Arbeitspakets",
-  "strategicAxes.noActions": "Keine Maßnahme in diesem Arbeitspaket.",
-  "strategicAxes.newAction": "Neue Maßnahme",
+  "strategicAxes.chantierActions": "Hebel des Arbeitspakets",
+  "strategicAxes.noActions": "Kein Hebel in diesem Arbeitspaket.",
+  "strategicAxes.newAction": "Neuer Hebel",
   "strategicAxes.editAction": "Bearbeiten",
-  "strategicAxes.actionCreated": "Maßnahme angelegt",
-  "strategicAxes.actionUpdated": "Maßnahme aktualisiert",
-  "strategicAxes.actionDeleted": "Maßnahme gelöscht",
+  "strategicAxes.actionCreated": "Hebel angelegt",
+  "strategicAxes.actionUpdated": "Hebel aktualisiert",
+  "strategicAxes.actionDeleted": "Hebel gelöscht",
   "strategicAxes.confirmDelete": "Bestätigen",
-  "strategicAxes.actionName": "Name der Maßnahme",
+  "strategicAxes.actionName": "Name des Hebels",
   "strategicAxes.actionOwner": "Verantwortlich",
   "strategicAxes.actionStart": "Beginn",
   "strategicAxes.actionEnd": "Ende",
@@ -1263,7 +1262,7 @@ const de: Record<string, string> = {
   "strategicAxes.chantierSaveErrorTitle": "Speichern fehlgeschlagen",
   "strategicAxes.chantierSaveError": "Das Vorhaben konnte nicht gespeichert werden.",
   "strategicAxes.actionSaveErrorTitle": "Speichern fehlgeschlagen",
-  "strategicAxes.actionSaveError": "Die Aktion konnte nicht gespeichert werden.",
+  "strategicAxes.actionSaveError": "Der Hebel konnte nicht gespeichert werden.",
   "strategicAxes.atRiskPopoverTitle": "Gefährdete Indikatoren",
   "strategicAxes.atRiskTooltip":
     "Ungünstige Abweichung zwischen dem letzten gemessenen Wert und dem Ziel des Indikators.",
@@ -1315,23 +1314,20 @@ const de: Record<string, string> = {
   "strategicChantierDetail.raci.empty": "Niemand zugewiesen.",
   "strategicChantierDetail.raci.letter": "RACI-Buchstabe",
 
-  "strategicChantierDetail.prerequisites.title": "Voraussetzungen",
-  "strategicChantierDetail.prerequisites.kindAction": "Aktion des Plans",
+  "strategicChantierDetail.prerequisites.title": "Abhängigkeiten / Voraussetzungen",
+  "strategicChantierDetail.prerequisites.kindAction": "Hebel des Plans",
   "strategicChantierDetail.prerequisites.kindExternal": "Externe Voraussetzung",
   "strategicChantierDetail.prerequisites.blockedBy": "Blockiert durch:",
   "strategicChantierDetail.prerequisites.addRow": "Voraussetzung hinzufügen",
   "strategicChantierDetail.prerequisites.kind": "Typ",
-  "strategicChantierDetail.prerequisites.targetPlaceholder": "Aktion auswählen",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Hebel auswählen",
   "strategicChantierDetail.prerequisites.externalPlaceholder":
-    "Z. B. Einstellung des Projektleiters",
+    "Z. B. Einstellung, Beschaffung, Budgetfreigabe…",
   "strategicChantierDetail.prerequisites.done": "Erledigt",
   "strategicChantierDetail.prerequisites.removeRow": "Diese Voraussetzung entfernen",
   "strategicChantierDetail.prerequisites.none": "Keine Voraussetzungen.",
   "strategicChantierDetail.prerequisites.noOtherActions":
-    "Keine weitere Aktion in diesem Workstream.",
-
-  "strategicChantierDetail.dependencies.title": "Abhängigkeiten",
-  "strategicChantierDetail.dependencies.none": "Keine Abhängigkeiten.",
+    "Kein weiterer Hebel in diesem Workstream.",
 
   "strategicChantierDetail.raci.chantierTitle": "RACI des Workstreams",
   "strategicChantierDetail.raci.deliverableTitle": "RACI des Liefergegenstands",
@@ -1339,7 +1335,7 @@ const de: Record<string, string> = {
   "strategicChantierDetail.timeline.title": "Zeitleiste der Liefergegenstände",
   "strategicChantierDetail.timeline.empty": "Noch kein phasierter Liefergegenstand.",
 
-  "strategicChantierDetail.actionFocused": "Über den Link geöffnete Aktion",
+  "strategicChantierDetail.actionFocused": "Über den Link geöffneter Hebel",
   "strategicChantierDetail.actionForm.missingHint": "Name und Daten ausfüllen, um zu speichern.",
   "strategicChantierDetail.successCriteria.placeholder": "Wir sind im [Jahr] zufrieden, wenn...",
 
@@ -1413,14 +1409,14 @@ const de: Record<string, string> = {
   "strategicImport.lineLabel": "Zeile",
   "strategicImport.axesCountLabel": "Achse(n) zu erstellen",
   "strategicImport.chantiersCountLabel": "Arbeitspaket(e) zu erstellen",
-  "strategicImport.actionsCountLabel": "Aktion(en) zu erstellen",
+  "strategicImport.actionsCountLabel": "Hebel zu erstellen",
   "strategicImport.indicatorsCountLabel": "Indikator(en) zu erstellen",
   "strategicImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "strategicImport.templateDownloadedBody":
     "5 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencode = FK), Aktionen (Arbeitspaketcode = FK), Ergebnisse (Aktionscode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.",
   "strategicImport.ignoredRowsNote": "{n} Zeile(n) ignoriert",
   "strategicImport.importDoneBody":
-    "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Aktion(en) · {indicators} Indikator(en) erstellt",
+    "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Hebel · {indicators} Indikator(en) erstellt",
   "strategicImport.errorTitle": "Import fehlgeschlagen",
 
   // ─── Strategieplan — KPI-Seite (Messwerterfassung, Zielbearbeitung) ────────
@@ -1440,7 +1436,7 @@ const de: Record<string, string> = {
   "kpi.summary.indicatorsSuffix": "Indikatoren",
 
   // ─── Business-KPIs (Indikatoren auf Achsenebene) — KPI-Seite UND Strategie-Dashboard ───
-  "businessKpis.title": "Business-KPIs",
+  "businessKpis.title": "Business-KPIs — Marktbeobachtung",
   "businessKpis.empty":
     "Kein Business-KPI definiert — fügen Sie im Reiter Admin > Indikatoren einen direkt einer Achse zugeordneten Indikator hinzu.",
   "businessKpis.noValue": "Keine Messung",
@@ -1511,6 +1507,10 @@ const de: Record<string, string> = {
   "staffing.function.operations": "Operations",
   "staffing.function.achats": "Einkauf",
   "staffing.function.autre": "Sonstige",
+  "staffing.startDate": "Beginn",
+  "staffing.endDate": "Ende",
+  "staffing.action": "Betroffener Hebel",
+  "staffing.actionNone": "Kein bestimmter Hebel",
 
   // ─── Seite Personaleinsatz (/effectifs, Strategieplan) ────────────────────
   "effectifs.title": "Personaleinsatz (VZÄ)",
@@ -1525,11 +1525,6 @@ const de: Record<string, string> = {
     "Öffnen Sie ein Vorhaben aus einer strategischen Achse und erfassen Sie VZÄ je Funktion.",
   "effectifs.kpi.totalFte": "Eingesetzte VZÄ insgesamt",
   "effectifs.kpi.totalFteSub": "Summe aller Einsatzzeilen des Programms",
-  "effectifs.kpi.functions": "Beteiligte Funktionen",
-  "effectifs.kpi.functionsSub": "Funktionen im Referenzrahmen",
-  "effectifs.kpi.chantiers": "Besetzte Vorhaben",
-  "effectifs.kpi.chantiersSub": "Vorhaben mit mindestens einem erfassten VZÄ",
-  "effectifs.byFunction": "Gesamt, nach Fachfunktion",
   "effectifs.byAxis": "Verteilung nach Achse",
   "effectifs.byAxisFor": "Verteilung nach Achse",
   "effectifs.allFunctions": "Alle Funktionen",
@@ -1542,6 +1537,33 @@ const de: Record<string, string> = {
   "effectifs.budget.title": "Verfügbare VZÄ je Funktion",
   "effectifs.budget.inputLabel": "VZÄ-Budget",
   "effectifs.budget.usedLabel": "% VZÄ genutzt / verfügbar",
+
+  // ─── VZÄ-Verteilung nach Periode (Runde 7 — StaffingPeriodBreakdown.tsx) ──────────────────
+  "staffingPeriod.title": "VZÄ-Verteilung nach Periode",
+  "staffingPeriod.subtitle":
+    "Nur datierte VZÄ, gruppiert nach Quartal, Halbjahr oder Jahr. Klicken Sie auf eine Funktion, um ihre Verteilung nach Achse zu sehen.",
+  "staffingPeriod.granularity.quarterly": "Quartal",
+  "staffingPeriod.granularity.semiannual": "Halbjahr",
+  "staffingPeriod.granularity.annual": "Jahr",
+  "staffingPeriod.empty": "Keine datierten VZÄ für diese Granularität.",
+  "staffingPeriod.undatedNote":
+    "{n} Personaleinsatzzeile(n) ohne Startdatum, in dieser Ansicht nicht dargestellt.",
+
+  // ─── Excel-Import des Personaleinsatzes (Runde 7 — StaffingImportButton.tsx) ──────────────
+  "staffingImport.templateButton": "Vorlage herunterladen",
+  "staffingImport.uploadButton": "Datei importieren",
+  "staffingImport.previewTitle": "Import-Vorschau — {file}",
+  "staffingImport.confirmButton": "Import bestätigen",
+  "staffingImport.toCreateLabel": "Zeile(n) zu erstellen",
+  "staffingImport.toUpdateLabel": "Zeile(n) zu aktualisieren",
+  "staffingImport.errorRow": "Zeile(n) mit Fehler",
+  "staffingImport.lineLabel": "Zeile",
+  "staffingImport.templateDownloadedTitle": "Vorlage heruntergeladen",
+  "staffingImport.templateDownloadedBody":
+    "Spalten: Vorhaben (exakter Name), Funktion, VZÄ, Startdatum, Enddatum, Hebel (optional, exakter Name), Bemerkung (optional). Eine Zeile, die einem bestehenden Eintrag entspricht (gleiches Vorhaben + Funktion + Daten + Hebel), wird aktualisiert statt dupliziert.",
+  "staffingImport.successMessage": "Import abgeschlossen",
+  "staffingImport.importDoneBody": "{created} Zeile(n) erstellt · {updated} Zeile(n) aktualisiert",
+  "staffingImport.errorTitle": "Import fehlgeschlagen",
 
   // ─── Programmtyp (Programmauswahl in der Topbar) ──────────────────────────
   "programType.performance": "Performance",
@@ -1561,6 +1583,7 @@ const de: Record<string, string> = {
   "strategicDashboard.axesSuffix": "Achsen",
   "strategicDashboard.chantiersSuffix": "Arbeitspakete",
   "strategicDashboard.indicatorsSuffix": "Indikatoren",
+  "strategicDashboard.allocatedBudget": "Zugewiesenes Budget",
   "strategicDashboard.tracked": "Verfolgte Indikatoren",
   "strategicDashboard.onTrack": "Im Plan",
   "strategicDashboard.atRisk": "Gefährdet",
@@ -1575,9 +1598,9 @@ const de: Record<string, string> = {
   "strategicDashboard.removeWidget": "Dieses Widget entfernen",
   // Beschriftungen aus dem Widget-Register (lib/strategicDashboardWidgets.ts, Feld `label`).
   "strategicDashboard.widget.indicatorStatus": "Indikatoren · im Plan",
-  "strategicDashboard.widget.businessKpis": "Business-KPIs",
+  "strategicDashboard.widget.businessKpis": "Business-KPIs — Marktbeobachtung",
   "strategicDashboard.widget.axisBreakdown": "Verteilung nach Achse",
-  "strategicDashboard.widget.chantierHealth": "Gesundheit der Arbeitspakete",
+  "strategicDashboard.widget.chantierHealth": "Fortschrittsstatus der Arbeitspakete",
   "strategicDashboard.widget.chantierDependencyAlerts":
     "Abhängigkeitswarnungen zwischen Arbeitspaketen",
   "strategicDashboard.chantierHealth.watch": "Zu beobachten",

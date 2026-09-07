@@ -1559,6 +1559,7 @@ export function ChantierDetailPanel({
           programId={activeProgramId ?? ""}
           axisId={chantier.axisId}
           chantierId={chantier.id}
+          chantierActions={chantierActions}
         />
       </div>
 

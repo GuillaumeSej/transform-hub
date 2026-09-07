@@ -1201,11 +1201,11 @@ const en: Record<string, string> = {
   // Workstream Gantt
   "strategicAxes.ganttSection": "Workstreams of this axis",
   "strategicAxes.ganttHint":
-    "One block = one workstream, spanning its first to its last action. Click a block or an action to open the workstream detail and its deliverables.",
+    "One block = one workstream, spanning its first to its last lever. Click a block or a lever to open the workstream detail and its deliverables.",
   "strategicAxes.noChantiers": "No workstream on this axis.",
-  "strategicAxes.chantierUnplanned": "Workstreams with no planned action",
-  "strategicAxes.chantierNoDates": "No dates yet — add an action",
-  "strategicAxes.actionsSuffix": "actions",
+  "strategicAxes.chantierUnplanned": "Workstreams with no planned lever",
+  "strategicAxes.chantierNoDates": "No dates yet — add a lever",
+  "strategicAxes.actionsSuffix": "levers",
   // Gantt: adjustable time scale, progress, workstream summary
   "strategicAxes.ganttScale": "Scale",
   "strategicAxes.ganttScaleMonth": "Month",
@@ -1213,11 +1213,11 @@ const en: Record<string, string> = {
   "strategicAxes.ganttScaleSemester": "Half-year",
   "strategicAxes.progress": "Progress",
   "strategicAxes.ganttToday": "Today",
-  "strategicAxes.actionsCompleted": "actions completed",
+  "strategicAxes.actionsCompleted": "levers completed",
   "strategicAxes.moreActionsSuffix": "more",
-  "strategicAxes.cardNoActions": "No action",
+  "strategicAxes.cardNoActions": "No levers",
   "strategicAxes.chantierOwner": "Workstream lead",
-  "strategicAxes.ownerFromActions": "based on action owners",
+  "strategicAxes.ownerFromActions": "based on lever owners",
   "strategicAxes.chantierPeriod": "Period",
   "strategicAxes.newChantier": "New workstream",
   "strategicAxes.newChantierModalTitle": "New workstream",
@@ -1225,19 +1225,19 @@ const en: Record<string, string> = {
   "strategicAxes.chantierCreated": "Workstream created",
   "strategicAxes.chantierDeleted": "Workstream deleted",
   "strategicAxes.deleteChantier": "Delete workstream",
-  "strategicAxes.confirmDeleteChantier": "Confirm deletion of the workstream and its actions",
+  "strategicAxes.confirmDeleteChantier": "Confirm deletion of the workstream and its levers",
   // Workstream / actions / deliverables pop-up
   "strategicAxes.chantierModalTitle": "Workstream detail",
   "strategicAxes.dependsOn": "Depends on",
-  "strategicAxes.chantierActions": "Workstream actions",
-  "strategicAxes.noActions": "No action on this workstream.",
-  "strategicAxes.newAction": "New action",
+  "strategicAxes.chantierActions": "Workstream levers",
+  "strategicAxes.noActions": "No levers on this workstream.",
+  "strategicAxes.newAction": "New lever",
   "strategicAxes.editAction": "Edit",
-  "strategicAxes.actionCreated": "Action created",
-  "strategicAxes.actionUpdated": "Action updated",
-  "strategicAxes.actionDeleted": "Action deleted",
+  "strategicAxes.actionCreated": "Lever created",
+  "strategicAxes.actionUpdated": "Lever updated",
+  "strategicAxes.actionDeleted": "Lever deleted",
   "strategicAxes.confirmDelete": "Confirm",
-  "strategicAxes.actionName": "Action name",
+  "strategicAxes.actionName": "Lever name",
   "strategicAxes.actionOwner": "Owner",
   "strategicAxes.actionStart": "Start",
   "strategicAxes.actionEnd": "End",
@@ -1275,7 +1275,7 @@ const en: Record<string, string> = {
   "strategicAxes.chantierSaveErrorTitle": "Save failed",
   "strategicAxes.chantierSaveError": "The workstream could not be saved.",
   "strategicAxes.actionSaveErrorTitle": "Save failed",
-  "strategicAxes.actionSaveError": "The action could not be saved.",
+  "strategicAxes.actionSaveError": "The lever could not be saved.",
   "strategicAxes.atRiskPopoverTitle": "At-risk indicators",
   "strategicAxes.atRiskTooltip":
     "Unfavorable gap between the latest measured value and the indicator's target.",
@@ -1327,21 +1327,19 @@ const en: Record<string, string> = {
   "strategicChantierDetail.raci.empty": "No one assigned.",
   "strategicChantierDetail.raci.letter": "RACI letter",
 
-  "strategicChantierDetail.prerequisites.title": "Prerequisites",
-  "strategicChantierDetail.prerequisites.kindAction": "Plan action",
+  "strategicChantierDetail.prerequisites.title": "Dependencies / Prerequisites",
+  "strategicChantierDetail.prerequisites.kindAction": "Plan lever",
   "strategicChantierDetail.prerequisites.kindExternal": "External prerequisite",
   "strategicChantierDetail.prerequisites.blockedBy": "Blocked by:",
   "strategicChantierDetail.prerequisites.addRow": "Add a prerequisite",
   "strategicChantierDetail.prerequisites.kind": "Type",
-  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choose an action",
-  "strategicChantierDetail.prerequisites.externalPlaceholder": "E.g. Hire the project lead",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choose a lever",
+  "strategicChantierDetail.prerequisites.externalPlaceholder":
+    "E.g. Hiring, purchasing, budget approval…",
   "strategicChantierDetail.prerequisites.done": "Done",
   "strategicChantierDetail.prerequisites.removeRow": "Remove this prerequisite",
   "strategicChantierDetail.prerequisites.none": "No prerequisites.",
-  "strategicChantierDetail.prerequisites.noOtherActions": "No other action on this workstream.",
-
-  "strategicChantierDetail.dependencies.title": "Dependencies",
-  "strategicChantierDetail.dependencies.none": "No dependencies.",
+  "strategicChantierDetail.prerequisites.noOtherActions": "No other levers on this workstream.",
 
   "strategicChantierDetail.raci.chantierTitle": "Workstream RACI",
   "strategicChantierDetail.raci.deliverableTitle": "Deliverable RACI",
@@ -1349,7 +1347,7 @@ const en: Record<string, string> = {
   "strategicChantierDetail.timeline.title": "Deliverables timeline",
   "strategicChantierDetail.timeline.empty": "No phased deliverable yet.",
 
-  "strategicChantierDetail.actionFocused": "Action opened from the link",
+  "strategicChantierDetail.actionFocused": "Lever opened from the link",
   "strategicChantierDetail.actionForm.missingHint": "Fill in the name and dates to save.",
   "strategicChantierDetail.successCriteria.placeholder": "We'll be happy in [year] if...",
 
@@ -1418,14 +1416,14 @@ const en: Record<string, string> = {
   "strategicImport.lineLabel": "Row",
   "strategicImport.axesCountLabel": "axis/axes to create",
   "strategicImport.chantiersCountLabel": "workstream(s) to create",
-  "strategicImport.actionsCountLabel": "action(s) to create",
+  "strategicImport.actionsCountLabel": "lever(s) to create",
   "strategicImport.indicatorsCountLabel": "indicator(s) to create",
   "strategicImport.templateDownloadedTitle": "Template downloaded",
   "strategicImport.templateDownloadedBody":
     "5 sheets: Axes (Code = key), Workstreams (Axis Code = FK), Actions (Workstream Code = FK), Deliverables (Action Code = FK, optional), Indicators (Axis Code OR Workstream Code = FK). Delete the example rows before filling in.",
   "strategicImport.ignoredRowsNote": "{n} row(s) ignored",
   "strategicImport.importDoneBody":
-    "{axes} axis/axes · {chantiers} workstream(s) · {actions} action(s) · {indicators} indicator(s) created",
+    "{axes} axis/axes · {chantiers} workstream(s) · {actions} lever(s) · {indicators} indicator(s) created",
   "strategicImport.errorTitle": "Import failed",
 
   // ─── Strategic Plan — KPI page (measurement entry, objective editing) ──────
@@ -1444,7 +1442,7 @@ const en: Record<string, string> = {
   "kpi.summary.indicatorsSuffix": "indicators",
 
   // ─── Business KPIs (axis-level indicators) — KPI page AND strategic dashboard ───
-  "businessKpis.title": "Business KPIs",
+  "businessKpis.title": "Business KPIs — Market tracking",
   "businessKpis.empty":
     "No business KPI defined — add an indicator attached directly to an axis from the Admin > Indicators tab.",
   "businessKpis.noValue": "No measurement",
@@ -1515,6 +1513,10 @@ const en: Record<string, string> = {
   "staffing.function.operations": "Operations",
   "staffing.function.achats": "Procurement",
   "staffing.function.autre": "Other",
+  "staffing.startDate": "Start",
+  "staffing.endDate": "End",
+  "staffing.action": "Related lever",
+  "staffing.actionNone": "No specific lever",
 
   // ─── Staffing page (/effectifs, Strategic Plan) ───────────────────────────
   "effectifs.title": "Staffing (FTE)",
@@ -1527,11 +1529,6 @@ const en: Record<string, string> = {
   "effectifs.emptyHint": "Open a workstream from a strategic axis and add FTEs per function.",
   "effectifs.kpi.totalFte": "Total FTEs assigned",
   "effectifs.kpi.totalFteSub": "Sum of every staffing line in the programme",
-  "effectifs.kpi.functions": "Functions involved",
-  "effectifs.kpi.functionsSub": "functions in the reference list",
-  "effectifs.kpi.chantiers": "Staffed workstreams",
-  "effectifs.kpi.chantiersSub": "Workstreams carrying at least one declared FTE",
-  "effectifs.byFunction": "Overall, by business function",
   "effectifs.byAxis": "Split by axis",
   "effectifs.byAxisFor": "Split by axis",
   "effectifs.allFunctions": "All functions",
@@ -1544,6 +1541,32 @@ const en: Record<string, string> = {
   "effectifs.budget.title": "Available FTEs by function",
   "effectifs.budget.inputLabel": "FTE budget",
   "effectifs.budget.usedLabel": "% FTEs used / available",
+
+  // ─── FTE split by period (round 7 — StaffingPeriodBreakdown.tsx) ──────────────────────────
+  "staffingPeriod.title": "FTE split by period",
+  "staffingPeriod.subtitle":
+    "Dated FTEs only, grouped by quarter, half-year, or year. Click a function to see its split by axis.",
+  "staffingPeriod.granularity.quarterly": "Quarter",
+  "staffingPeriod.granularity.semiannual": "Half-year",
+  "staffingPeriod.granularity.annual": "Year",
+  "staffingPeriod.empty": "No dated FTE for this granularity.",
+  "staffingPeriod.undatedNote": "{n} staffing line(s) with no start date, not shown in this view.",
+
+  // ─── Staffing Excel import (round 7 — StaffingImportButton.tsx) ───────────────────────────
+  "staffingImport.templateButton": "Download the template",
+  "staffingImport.uploadButton": "Import a file",
+  "staffingImport.previewTitle": "Import preview — {file}",
+  "staffingImport.confirmButton": "Confirm import",
+  "staffingImport.toCreateLabel": "line(s) to create",
+  "staffingImport.toUpdateLabel": "line(s) to update",
+  "staffingImport.errorRow": "row(s) in error",
+  "staffingImport.lineLabel": "Row",
+  "staffingImport.templateDownloadedTitle": "Template downloaded",
+  "staffingImport.templateDownloadedBody":
+    "Columns: Workstream (exact name), Function, FTE, Start date, End date, Lever (optional, exact name), Note (optional). A row matching an existing entry (same workstream + function + dates + lever) is updated rather than duplicated.",
+  "staffingImport.successMessage": "Import complete",
+  "staffingImport.importDoneBody": "{created} line(s) created · {updated} line(s) updated",
+  "staffingImport.errorTitle": "Import failed",
 
   // ─── Program type (Topbar program selector) ───────────────────────────────
   "programType.performance": "Performance",
@@ -1562,6 +1585,7 @@ const en: Record<string, string> = {
   "strategicDashboard.axesSuffix": "axes",
   "strategicDashboard.chantiersSuffix": "work packages",
   "strategicDashboard.indicatorsSuffix": "indicators",
+  "strategicDashboard.allocatedBudget": "Allocated budget",
   "strategicDashboard.tracked": "Indicators tracked",
   "strategicDashboard.onTrack": "On track",
   "strategicDashboard.atRisk": "At risk",
@@ -1576,9 +1600,9 @@ const en: Record<string, string> = {
   "strategicDashboard.removeWidget": "Remove this widget",
   // Widget registry labels (lib/strategicDashboardWidgets.ts, `label` field).
   "strategicDashboard.widget.indicatorStatus": "Indicators · on track",
-  "strategicDashboard.widget.businessKpis": "Business KPIs",
+  "strategicDashboard.widget.businessKpis": "Business KPIs — Market tracking",
   "strategicDashboard.widget.axisBreakdown": "Breakdown by axis",
-  "strategicDashboard.widget.chantierHealth": "Work package health",
+  "strategicDashboard.widget.chantierHealth": "Work package progress status",
   "strategicDashboard.widget.chantierDependencyAlerts": "Work package dependency alerts",
   "strategicDashboard.chantierHealth.watch": "Watch",
   "strategicDashboard.chantierHealth.critical": "Critical",

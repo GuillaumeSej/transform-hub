@@ -4,19 +4,16 @@ import type { ChantierHealthState } from "@/lib/axisLogic";
 import type { Chantier } from "@/types";
 
 /**
- * Matrice de santé par chantier — widget dashboard "chantier-health" (round 6, point 5), inspirée
- * de `components/shared/charts/InitiativeHealthMatrix.tsx` (Plan Performance) : une grille de
- * cellules colorées cliquables, groupées par colonne, infobulle au survol. Deux différences
- * assumées avec son modèle :
- *  - les colonnes sont des AXES stratégiques (pas des workstreams) et les cellules des CHANTIERS
- *    (pas des leviers) — `ChantierHealthState` (`lib/axisLogic.ts`) plutôt que `LeverHealthStatus` ;
- *  - la couleur des cellules utilise les tokens `rag-*` du domaine stratégique (`bg-rag-green` /
- *    `bg-rag-amber` / `bg-rag-red`, voir `components/strategic/MilestoneChecklistPanel.tsx`/
- *    `components/shared/ProgressBar.tsx` pour le même usage en remplissage plein) plutôt que les
- *    hex littéraux codés en dur du composant Performance — cohérent avec la charte round 5 (seul
- *    `rag-red` rend un vrai rouge, `rag-green`/`rag-amber` restent teintés neutre/marque, voir
- *    `IndicatorDeltaStat.tsx`), et surtout avec le reste du dashboard stratégique qui ne connaît
- *    QUE ces tokens (jamais de couleur brute).
+ * Matrice de santé par chantier — widget dashboard "chantier-health" (round 6, point 5 ; refonte
+ * visuelle round 7, point 2). Groupée par colonne d'AXE stratégique, une LIGNE par chantier avec
+ * son nom en texte visible (round 6 ne montrait le nom qu'au survol/`aria-label`, retour PO : la
+ * matrice devait pouvoir se lire sans avoir à survoler chaque case).
+ *
+ * Contrat de props inchangé (`groups`/`labels`/`onChantierClick`, voir `StrategicDashboardView.tsx`)
+ * — refonte purement interne au rendu. La couleur des pastilles utilise toujours les tokens
+ * `rag-*` du domaine stratégique (`bg-rag-green`/`bg-rag-amber`/`bg-rag-red`, voir
+ * `MilestoneChecklistPanel.tsx`/`ProgressBar.tsx` pour le même usage en remplissage plein), jamais
+ * de couleur littérale — cohérent avec le reste du dashboard stratégique.
  */
 
 const HEALTH_STYLE: Record<ChantierHealthState, string> = {
@@ -25,14 +22,20 @@ const HEALTH_STYLE: Record<ChantierHealthState, string> = {
   critical: "bg-rag-red",
 };
 
-/** Pire état d'abord — même tri que `InitiativeHealthMatrix` (les cellules les plus graves en
- *  tête de chaque colonne, pas d'ordre alphabétique arbitraire). */
+const HEALTH_TEXT_STYLE: Record<ChantierHealthState, string> = {
+  onTrack: "text-primary",
+  watch: "text-rag-amber",
+  critical: "text-rag-red",
+};
+
+/** Pire état d'abord au sein d'une colonne d'axe — les chantiers les plus en difficulté remontent
+ *  en tête de leur groupe plutôt qu'un ordre alphabétique arbitraire. */
 const HEALTH_ORDER: ChantierHealthState[] = ["critical", "watch", "onTrack"];
 
 export type ChantierHealthCell = {
   chantier: Chantier;
   health: ChantierHealthState;
-  /** Avancement (`milestoneProgressPct`, 0-100) — affiché dans l'infobulle de la cellule. */
+  /** Avancement (`chantierMilestoneProgressPct`, 0-100) — affiché à côté du nom du chantier. */
   progressPct: number;
 };
 
@@ -62,54 +65,64 @@ export function ChantierHealthMatrix({
     return <p className="py-10 text-center text-sm text-tertiary">{labels.empty}</p>;
   }
 
-  const maxRows = Math.max(1, ...groups.map((group) => Math.ceil(group.cells.length / 4)));
-
   return (
-    <div className="space-y-3">
-      <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-max items-end gap-3">
-          {groups.map((group) => {
-            const cells = [...group.cells].sort(
-              (a, b) => HEALTH_ORDER.indexOf(a.health) - HEALTH_ORDER.indexOf(b.health)
-            );
-            return (
-              <div key={group.key} className="w-[108px] shrink-0">
-                <div
-                  className="flex items-end rounded-sm border border-border bg-neutral-50 p-1.5"
-                  style={{
-                    minHeight: `${maxRows * 22 + 12}px`,
-                    ...(group.color ? { borderColor: group.color } : {}),
-                  }}
+    <div className="space-y-5">
+      {groups.map((group) => {
+        const cells = [...group.cells].sort(
+          (a, b) => HEALTH_ORDER.indexOf(a.health) - HEALTH_ORDER.indexOf(b.health)
+        );
+        return (
+          <div key={group.key}>
+            {/* En-tête de groupe (axe) — pastille colorée de l'axe + nom + volumétrie, même accent
+                que le widget "Répartition par axe" juste au-dessus dans le layout par défaut. */}
+            <div
+              className="mb-2 flex items-center gap-2 border-b border-border pb-1.5"
+              style={{ borderBottomColor: group.color ?? undefined }}
+            >
+              <span
+                aria-hidden
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: group.color ?? "var(--bp-warm-taupe)" }}
+              />
+              <span className="text-[12.5px] font-bold uppercase tracking-wide text-primary">
+                {group.label}
+              </span>
+              <span className="text-[11px] text-tertiary">({group.cells.length})</span>
+            </div>
+            <div className="space-y-1.5">
+              {cells.map(({ chantier, health, progressPct }) => (
+                <button
+                  key={chantier.id}
+                  type="button"
+                  onClick={() => onChantierClick(chantier.id)}
+                  className="flex w-full items-center gap-3 rounded-md border border-border bg-white p-2.5 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black"
+                  title={`${chantier.name} · ${labels[health]} · ${progressPct}%`}
                 >
-                  <div className="grid w-full grid-cols-4 gap-1">
-                    {cells.map(({ chantier, health, progressPct }) => (
-                      <button
-                        key={chantier.id}
-                        type="button"
-                        onClick={() => onChantierClick(chantier.id)}
-                        className={`h-[18px] rounded-[2px] transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-black ${HEALTH_STYLE[health]}`}
-                        title={`${chantier.name}\n${group.label} · ${labels[health]}\n${progressPct}%`}
-                        aria-label={`${chantier.name} ${group.label} ${labels[health]}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div
-                  className="mt-1.5 truncate text-center text-[10.5px] font-semibold text-secondary"
-                  title={group.label}
-                >
-                  {group.label}
-                </div>
-                <div className="text-center text-[10px] text-tertiary">{group.cells.length}</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+                  <span
+                    aria-hidden
+                    className={`h-3 w-3 shrink-0 rounded-full ${HEALTH_STYLE[health]}`}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-primary">
+                    {chantier.name}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${HEALTH_TEXT_STYLE[health]}`}
+                  >
+                    {labels[health]}
+                  </span>
+                  <span className="w-9 shrink-0 text-right text-[11px] font-semibold tabular-nums text-tertiary">
+                    {progressPct}%
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-border pt-2 text-[11px] text-secondary">
         {HEALTH_ORDER.map((status) => (
           <span key={status} className="inline-flex items-center gap-1.5">
-            <span className={`h-2.5 w-2.5 rounded-[2px] ${HEALTH_STYLE[status]}`} />
+            <span className={`h-2.5 w-2.5 rounded-full ${HEALTH_STYLE[status]}`} />
             {labels[status]}
           </span>
         ))}

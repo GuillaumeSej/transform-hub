@@ -74,6 +74,12 @@ export type IndicatorChartProps = {
   /** Sous-libellé de la barre de progression-vers-la-cible affichée à côté de l'écart signé
    *  (voir `IndicatorDeltaStat`) — repli français. */
   labelProgress?: string;
+  /** Round 7, point 3 : masque le `IndicatorDeltaStat` superposé en interne (visible seulement en
+   *  rendu non-`compact`, voir `deltaStat` plus bas) — pour un appelant qui affiche déjà ce même
+   *  signal ailleurs sur la carte (ex. `IndicatorDonut` en en-tête de `KpiPageClient.tsx`) et ne
+   *  veut pas le tripler. Défaut `false` : comportement historique inchangé pour tous les autres
+   *  appelants (modales d'historique complet comprises). */
+  hideDeltaStat?: boolean;
 };
 
 function formatValue(value: number | string, unit?: string): string {
@@ -96,6 +102,7 @@ export function IndicatorChart({
   labelViewFull = "Voir l'historique complet",
   fullHistoryTitle = "Historique complet",
   labelProgress,
+  hideDeltaStat = false,
 }: IndicatorChartProps) {
   // Hook appelé avant tout retour anticipé (repli qualitatif / absence de mesure).
   const [fullHistoryOpen, setFullHistoryOpen] = useState(false);
@@ -199,7 +206,7 @@ export function IndicatorChart({
   // fenêtre "récente" masque ou non la mesure la plus récente. `undefined` (pas d'objectif chiffré,
   // ou dernière mesure sans valeur) : `IndicatorDeltaStat` ne rend alors rien.
   const deltaStat =
-    !compact && objectiveValue !== undefined
+    !compact && !hideDeltaStat && objectiveValue !== undefined
       ? computeIndicatorDelta({ objectiveValue, direction }, all[all.length - 1])
       : undefined;
 

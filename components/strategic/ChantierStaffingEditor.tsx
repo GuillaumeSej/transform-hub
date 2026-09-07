@@ -10,7 +10,7 @@ import {
 } from "@/lib/firestore/chantierStaffing";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { ChantierStaffing, StaffingFunction } from "@/types";
+import type { ChantierAction, ChantierStaffing, StaffingFunction } from "@/types";
 
 /**
  * Bloc « ETP mobilisés » d'une fiche chantier : la liste des lignes de staffing du chantier
@@ -89,11 +89,15 @@ export function ChantierStaffingEditor({
   programId,
   axisId,
   chantierId,
+  chantierActions,
 }: {
   companyId: string;
   programId: string;
   axisId: string;
   chantierId: string;
+  /** Leviers du chantier (round 7) — univers du sélecteur optionnel « levier concerné » ci-dessous.
+   *  Un staffing transverse au chantier reste possible en laissant le sélecteur vide. */
+  chantierActions: ChantierAction[];
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -103,7 +107,15 @@ export function ChantierStaffingEditor({
   const [functionDraft, setFunctionDraft] = useState<StaffingFunction>("rh");
   const [fteDraft, setFteDraft] = useState("1");
   const [noteDraft, setNoteDraft] = useState("");
+  const [startDateDraft, setStartDateDraft] = useState("");
+  const [endDateDraft, setEndDateDraft] = useState("");
+  const [actionDraft, setActionDraft] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const actionNameById = useMemo(
+    () => new Map(chantierActions.map((a) => [a.id, a.name])),
+    [chantierActions]
+  );
 
   // Abonnement scopé entreprise côté serveur (comme toutes les collections stratégiques) ; le
   // filtrage chantier/programme est appliqué ci-dessous côté client.
@@ -138,6 +150,8 @@ export function ChantierStaffingEditor({
       return;
     }
     const note = noteDraft.trim();
+    const startDate = startDateDraft.trim();
+    const endDate = endDateDraft.trim();
     setSaving(true);
     try {
       await saveChantierStaffing({
@@ -148,12 +162,18 @@ export function ChantierStaffingEditor({
         chantierId,
         function: functionDraft,
         fte,
-        // Champ optionnel OMIS plutôt que passé à `undefined` : Firestore rejette `undefined`.
+        // Champs optionnels OMIS plutôt que passés à `undefined` : Firestore rejette `undefined`.
         ...(note !== "" ? { note } : {}),
+        ...(startDate !== "" ? { startDate } : {}),
+        ...(endDate !== "" ? { endDate } : {}),
+        ...(actionDraft !== "" ? { actionId: actionDraft } : {}),
         createdAt: new Date().toISOString().slice(0, 10),
       });
       setFteDraft("1");
       setNoteDraft("");
+      setStartDateDraft("");
+      setEndDateDraft("");
+      setActionDraft("");
     } catch {
       showToast(t("staffing.saveError"), "", "error");
     } finally {
@@ -195,6 +215,16 @@ export function ChantierStaffingEditor({
               <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-primary">
                 {t(`staffing.function.${entry.function}`)}
                 {entry.note && <span className="ml-1.5 text-tertiary">· {entry.note}</span>}
+                {(entry.startDate || entry.endDate) && (
+                  <span className="ml-1.5 text-tertiary">
+                    · {entry.startDate ?? "…"} → {entry.endDate ?? "…"}
+                  </span>
+                )}
+                {entry.actionId && (
+                  <span className="ml-1.5 text-tertiary">
+                    · {actionNameById.get(entry.actionId) ?? t("staffing.actionNone")}
+                  </span>
+                )}
               </span>
               <span className="whitespace-nowrap text-[12px] font-semibold text-primary">
                 {formatFte(entry.fte)} {t("staffing.fteUnit")}
@@ -247,6 +277,39 @@ export function ChantierStaffingEditor({
               placeholder={t("staffing.notePlaceholder")}
               className={INPUT_CLASS}
             />
+          </label>
+          <label className="block text-[11px] font-medium text-secondary">
+            {t("staffing.startDate")}
+            <input
+              type="date"
+              value={startDateDraft}
+              onChange={(e) => setStartDateDraft(e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </label>
+          <label className="block text-[11px] font-medium text-secondary">
+            {t("staffing.endDate")}
+            <input
+              type="date"
+              value={endDateDraft}
+              onChange={(e) => setEndDateDraft(e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </label>
+          <label className="block text-[11px] font-medium text-secondary">
+            {t("staffing.action")}
+            <select
+              value={actionDraft}
+              onChange={(e) => setActionDraft(e.target.value)}
+              className={INPUT_CLASS}
+            >
+              <option value="">{t("staffing.actionNone")}</option>
+              {chantierActions.map((action) => (
+                <option key={action.id} value={action.id}>
+                  {action.name}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
         <div className="flex items-end">

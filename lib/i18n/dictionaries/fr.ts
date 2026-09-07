@@ -1243,11 +1243,11 @@ const fr: Record<string, string> = {
   // Gantt des chantiers
   "strategicAxes.ganttSection": "Chantiers de l'axe",
   "strategicAxes.ganttHint":
-    "Un bloc = un chantier, borné par sa première et sa dernière action. Cliquez sur un bloc ou sur une action pour ouvrir le détail du chantier et ses livrables.",
+    "Un bloc = un chantier, borné par son premier et son dernier levier. Cliquez sur un bloc ou sur un levier pour ouvrir le détail du chantier et ses livrables.",
   "strategicAxes.noChantiers": "Aucun chantier sur cet axe.",
-  "strategicAxes.chantierUnplanned": "Chantiers sans action planifiée",
-  "strategicAxes.chantierNoDates": "Pas encore de date — ajoutez une action",
-  "strategicAxes.actionsSuffix": "actions",
+  "strategicAxes.chantierUnplanned": "Chantiers sans levier planifié",
+  "strategicAxes.chantierNoDates": "Pas encore de date — ajoutez un levier",
+  "strategicAxes.actionsSuffix": "leviers",
   // Gantt : échelle temporelle réglable, avancement, synthèse de chantier
   "strategicAxes.ganttScale": "Échelle",
   "strategicAxes.ganttScaleMonth": "Mois",
@@ -1255,11 +1255,11 @@ const fr: Record<string, string> = {
   "strategicAxes.ganttScaleSemester": "Semestre",
   "strategicAxes.progress": "Avancement",
   "strategicAxes.ganttToday": "Aujourd'hui",
-  "strategicAxes.actionsCompleted": "actions terminées",
+  "strategicAxes.actionsCompleted": "leviers terminés",
   "strategicAxes.moreActionsSuffix": "autres",
-  "strategicAxes.cardNoActions": "Aucune action",
+  "strategicAxes.cardNoActions": "Aucun levier",
   "strategicAxes.chantierOwner": "Responsable du chantier",
-  "strategicAxes.ownerFromActions": "d'après les responsables d'actions",
+  "strategicAxes.ownerFromActions": "d'après les responsables de leviers",
   "strategicAxes.chantierPeriod": "Période",
   "strategicAxes.newChantier": "Nouveau chantier",
   "strategicAxes.newChantierModalTitle": "Nouveau chantier",
@@ -1267,19 +1267,19 @@ const fr: Record<string, string> = {
   "strategicAxes.chantierCreated": "Chantier créé",
   "strategicAxes.chantierDeleted": "Chantier supprimé",
   "strategicAxes.deleteChantier": "Supprimer le chantier",
-  "strategicAxes.confirmDeleteChantier": "Confirmer la suppression du chantier et de ses actions",
+  "strategicAxes.confirmDeleteChantier": "Confirmer la suppression du chantier et de ses leviers",
   // Pop-up chantier / actions / livrables
   "strategicAxes.chantierModalTitle": "Détail du chantier",
   "strategicAxes.dependsOn": "Dépend de",
-  "strategicAxes.chantierActions": "Actions du chantier",
-  "strategicAxes.noActions": "Aucune action sur ce chantier.",
-  "strategicAxes.newAction": "Nouvelle action",
+  "strategicAxes.chantierActions": "Leviers du chantier",
+  "strategicAxes.noActions": "Aucun levier sur ce chantier.",
+  "strategicAxes.newAction": "Nouveau levier",
   "strategicAxes.editAction": "Modifier",
-  "strategicAxes.actionCreated": "Action créée",
-  "strategicAxes.actionUpdated": "Action mise à jour",
-  "strategicAxes.actionDeleted": "Action supprimée",
+  "strategicAxes.actionCreated": "Levier créé",
+  "strategicAxes.actionUpdated": "Levier mis à jour",
+  "strategicAxes.actionDeleted": "Levier supprimé",
   "strategicAxes.confirmDelete": "Confirmer",
-  "strategicAxes.actionName": "Nom de l'action",
+  "strategicAxes.actionName": "Nom du levier",
   "strategicAxes.actionOwner": "Responsable",
   "strategicAxes.actionStart": "Début",
   "strategicAxes.actionEnd": "Fin",
@@ -1321,7 +1321,7 @@ const fr: Record<string, string> = {
   "strategicAxes.chantierSaveErrorTitle": "Enregistrement impossible",
   "strategicAxes.chantierSaveError": "Le chantier n'a pas pu être enregistré.",
   "strategicAxes.actionSaveErrorTitle": "Enregistrement impossible",
-  "strategicAxes.actionSaveError": "L'action n'a pas pu être enregistrée.",
+  "strategicAxes.actionSaveError": "Le levier n'a pas pu être enregistré.",
   "strategicAxes.atRiskPopoverTitle": "Indicateurs à risque",
   // Round 6, point 4 : infobulle explicative sur la pastille "N à risque" elle-même (avant même
   // l'ouverture du popover), réutilisée par `AtRiskCountPill` partout où elle apparaît.
@@ -1378,21 +1378,19 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.raci.empty": "Aucune personne assignée.",
   "strategicChantierDetail.raci.letter": "Lettre RACI",
 
-  "strategicChantierDetail.prerequisites.title": "Prérequis",
-  "strategicChantierDetail.prerequisites.kindAction": "Action du plan",
+  "strategicChantierDetail.prerequisites.title": "Dépendances / Prérequis",
+  "strategicChantierDetail.prerequisites.kindAction": "Levier du plan",
   "strategicChantierDetail.prerequisites.kindExternal": "Prérequis externe",
   "strategicChantierDetail.prerequisites.blockedBy": "Bloqué par :",
   "strategicChantierDetail.prerequisites.addRow": "Ajouter un prérequis",
   "strategicChantierDetail.prerequisites.kind": "Type",
-  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choisir une action",
-  "strategicChantierDetail.prerequisites.externalPlaceholder": "Ex. Recrutement du chef de projet",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choisir un levier",
+  "strategicChantierDetail.prerequisites.externalPlaceholder":
+    "Ex. Recrutement, achat, validation budgétaire…",
   "strategicChantierDetail.prerequisites.done": "Fait",
   "strategicChantierDetail.prerequisites.removeRow": "Retirer ce prérequis",
   "strategicChantierDetail.prerequisites.none": "Aucun prérequis.",
-  "strategicChantierDetail.prerequisites.noOtherActions": "Aucune autre action sur ce chantier.",
-
-  "strategicChantierDetail.dependencies.title": "Dépendances",
-  "strategicChantierDetail.dependencies.none": "Aucune dépendance.",
+  "strategicChantierDetail.prerequisites.noOtherActions": "Aucun autre levier sur ce chantier.",
 
   "strategicChantierDetail.raci.chantierTitle": "RACI du chantier",
   "strategicChantierDetail.raci.deliverableTitle": "RACI du livrable",
@@ -1400,7 +1398,7 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.timeline.title": "Timeline des livrables",
   "strategicChantierDetail.timeline.empty": "Aucun livrable phasé pour l'instant.",
 
-  "strategicChantierDetail.actionFocused": "Action ouverte depuis le lien",
+  "strategicChantierDetail.actionFocused": "Levier ouvert depuis le lien",
   "strategicChantierDetail.actionForm.missingHint":
     "Renseignez le nom et les dates pour enregistrer.",
   "strategicChantierDetail.successCriteria.placeholder": "On sera content en [année] si...",
@@ -1471,14 +1469,14 @@ const fr: Record<string, string> = {
   "strategicImport.lineLabel": "Ligne",
   "strategicImport.axesCountLabel": "axe(s) à créer",
   "strategicImport.chantiersCountLabel": "chantier(s) à créer",
-  "strategicImport.actionsCountLabel": "action(s) à créer",
+  "strategicImport.actionsCountLabel": "levier(s) à créer",
   "strategicImport.indicatorsCountLabel": "indicateur(s) à créer",
   "strategicImport.templateDownloadedTitle": "Modèle téléchargé",
   "strategicImport.templateDownloadedBody":
     "5 feuilles : Axes (Code = clé), Chantiers (Code Axe = FK), Actions (Code Chantier = FK), Livrables (Code Action = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK). Supprimez les lignes d'exemple avant de remplir.",
   "strategicImport.ignoredRowsNote": "{n} ligne(s) ignorée(s)",
   "strategicImport.importDoneBody":
-    "{axes} axe(s) · {chantiers} chantier(s) · {actions} action(s) · {indicators} indicateur(s) créé(s)",
+    "{axes} axe(s) · {chantiers} chantier(s) · {actions} levier(s) · {indicators} indicateur(s) créé(s)",
   "strategicImport.errorTitle": "Échec de l'import",
 
   // ─── Plan Stratégique — page KPI (saisie de mesures, édition d'objectif) ───
@@ -1499,7 +1497,7 @@ const fr: Record<string, string> = {
   "kpi.summary.indicatorsSuffix": "indicateurs",
 
   // ─── KPI business (indicateurs de niveau axe) — page KPI ET dashboard stratégique ───
-  "businessKpis.title": "KPI business",
+  "businessKpis.title": "KPI business — Suivi du marché",
   "businessKpis.empty":
     "Aucun KPI business défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs.",
   "businessKpis.noValue": "Aucune mesure",
@@ -1574,6 +1572,10 @@ const fr: Record<string, string> = {
   "staffing.function.operations": "Opérations",
   "staffing.function.achats": "Achats",
   "staffing.function.autre": "Autre",
+  "staffing.startDate": "Début",
+  "staffing.endDate": "Fin",
+  "staffing.action": "Levier concerné",
+  "staffing.actionNone": "Aucun levier en particulier",
 
   // ─── Page Effectifs mobilisés (/effectifs, Plan Stratégique) ──────────────
   "effectifs.title": "Effectifs mobilisés",
@@ -1588,11 +1590,6 @@ const fr: Record<string, string> = {
     "Ouvrez un chantier depuis un axe stratégique et ajoutez-y des ETP par fonction.",
   "effectifs.kpi.totalFte": "ETP mobilisés au total",
   "effectifs.kpi.totalFteSub": "Somme de toutes les lignes de staffing du programme",
-  "effectifs.kpi.functions": "Fonctions mobilisées",
-  "effectifs.kpi.functionsSub": "fonctions au référentiel",
-  "effectifs.kpi.chantiers": "Chantiers staffés",
-  "effectifs.kpi.chantiersSub": "Chantiers portant au moins un ETP déclaré",
-  "effectifs.byFunction": "Au global, par grande fonction",
   "effectifs.byAxis": "Répartition par axe",
   "effectifs.byAxisFor": "Répartition par axe",
   "effectifs.allFunctions": "Toutes les fonctions",
@@ -1605,6 +1602,34 @@ const fr: Record<string, string> = {
   "effectifs.budget.title": "ETP disponibles par fonction",
   "effectifs.budget.inputLabel": "Budget ETP",
   "effectifs.budget.usedLabel": "% ETP utilisés / disponibles",
+
+  // ─── Répartition des ETP par période (round 7 — StaffingPeriodBreakdown.tsx) ──────────────
+  "staffingPeriod.title": "Répartition des ETP par période",
+  "staffingPeriod.subtitle":
+    "ETP datés uniquement, regroupés par trimestre, semestre ou année. Cliquez une fonction pour voir sa répartition par axe.",
+  "staffingPeriod.granularity.quarterly": "Trimestre",
+  "staffingPeriod.granularity.semiannual": "Semestre",
+  "staffingPeriod.granularity.annual": "Année",
+  "staffingPeriod.empty": "Aucun ETP daté pour cette granularité.",
+  "staffingPeriod.undatedNote":
+    "{n} ligne(s) de staffing sans date de début, non représentée(s) dans cette vue.",
+
+  // ─── Import Excel des effectifs (round 7 — StaffingImportButton.tsx) ──────────────────────
+  "staffingImport.templateButton": "Télécharger le modèle",
+  "staffingImport.uploadButton": "Importer un fichier",
+  "staffingImport.previewTitle": "Prévisualisation de l'import — {file}",
+  "staffingImport.confirmButton": "Confirmer l'import",
+  "staffingImport.toCreateLabel": "ligne(s) à créer",
+  "staffingImport.toUpdateLabel": "ligne(s) à mettre à jour",
+  "staffingImport.errorRow": "ligne(s) en erreur",
+  "staffingImport.lineLabel": "Ligne",
+  "staffingImport.templateDownloadedTitle": "Modèle téléchargé",
+  "staffingImport.templateDownloadedBody":
+    "Colonnes : Chantier (nom exact), Fonction, ETP, Date début, Date fin, Levier (optionnel, nom exact), Note (optionnel). Une ligne déjà existante (même chantier + fonction + dates + levier) est mise à jour plutôt que dupliquée.",
+  "staffingImport.successMessage": "Import terminé",
+  "staffingImport.importDoneBody":
+    "{created} ligne(s) créée(s) · {updated} ligne(s) mise(s) à jour",
+  "staffingImport.errorTitle": "Échec de l'import",
 
   // ─── Type de programme (sélecteur de programme du Topbar) ─────────────────
   "programType.performance": "Performance",
@@ -1624,6 +1649,7 @@ const fr: Record<string, string> = {
   "strategicDashboard.axesSuffix": "axes",
   "strategicDashboard.chantiersSuffix": "chantiers",
   "strategicDashboard.indicatorsSuffix": "indicateurs",
+  "strategicDashboard.allocatedBudget": "Budget alloué",
   "strategicDashboard.tracked": "Indicateurs suivis",
   "strategicDashboard.onTrack": "Sur la trajectoire",
   "strategicDashboard.atRisk": "À risque",
@@ -1638,9 +1664,9 @@ const fr: Record<string, string> = {
   "strategicDashboard.removeWidget": "Retirer ce widget",
   // Libellés du registre de widgets (lib/strategicDashboardWidgets.ts, champ `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
-  "strategicDashboard.widget.businessKpis": "KPI business",
+  "strategicDashboard.widget.businessKpis": "KPI business — Suivi du marché",
   "strategicDashboard.widget.axisBreakdown": "Répartition par axe",
-  "strategicDashboard.widget.chantierHealth": "Santé des chantiers",
+  "strategicDashboard.widget.chantierHealth": "État des lieux d'avancement des chantiers",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendance entre chantiers",
   // Round 6, point 5 : libellés des 3 états de `ChantierHealthMatrix` — "onTrack" réutilise
   // `strategicDashboard.onTrack` (déjà "Sur la trajectoire"), seuls "watch"/"critical" sont
