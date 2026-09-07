@@ -1323,6 +1323,10 @@ const fr: Record<string, string> = {
   "strategicAxes.actionSaveErrorTitle": "Enregistrement impossible",
   "strategicAxes.actionSaveError": "L'action n'a pas pu être enregistrée.",
   "strategicAxes.atRiskPopoverTitle": "Indicateurs à risque",
+  // Round 6, point 4 : infobulle explicative sur la pastille "N à risque" elle-même (avant même
+  // l'ouverture du popover), réutilisée par `AtRiskCountPill` partout où elle apparaît.
+  "strategicAxes.atRiskTooltip":
+    "Écart défavorable entre la dernière valeur mesurée et l'objectif de l'indicateur.",
   "strategicAxes.filterDirection": "Direction",
   "strategicAxes.filterPerson": "Personne",
   "strategicAxes.filterSponsor": "Sponsor",
@@ -1597,6 +1601,9 @@ const fr: Record<string, string> = {
   "effectifs.chantierUnknown": "Chantier inconnu",
   "effectifs.noStaffingOnAxis": "Aucun ETP déclaré sur cet axe.",
   "effectifs.noStaffingForFunction": "Aucun ETP de cette fonction sur les axes du programme.",
+  "effectifs.budget.title": "ETP disponibles par fonction",
+  "effectifs.budget.inputLabel": "Budget ETP",
+  "effectifs.budget.usedLabel": "% ETP utilisés / disponibles",
 
   // ─── Type de programme (sélecteur de programme du Topbar) ─────────────────
   "programType.performance": "Performance",
@@ -1621,7 +1628,6 @@ const fr: Record<string, string> = {
   "strategicDashboard.atRisk": "À risque",
   "strategicDashboard.cumulative": "Cumul des indicateurs",
   "strategicDashboard.noIndicators": "Aucun indicateur défini pour ce programme",
-  "strategicDashboard.noIndicatorsAtRisk": "Aucun indicateur à risque",
   "strategicDashboard.noDependencyAlerts": "Aucune alerte de dépendance entre chantiers",
   "strategicDashboard.delayDays": "jours de décalage",
   "strategicDashboard.dragToReorder": "Glisser pour réordonner",
@@ -1633,9 +1639,13 @@ const fr: Record<string, string> = {
   "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
   "strategicDashboard.widget.businessKpis": "KPI business",
   "strategicDashboard.widget.axisBreakdown": "Répartition par axe",
-  "strategicDashboard.widget.indicatorsAtRisk": "Indicateurs à risque",
-  "strategicDashboard.widget.axisMaturity": "Avancement par étape de maturité",
+  "strategicDashboard.widget.chantierHealth": "Santé des chantiers",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendance entre chantiers",
+  // Round 6, point 5 : libellés des 3 états de `ChantierHealthMatrix` — "onTrack" réutilise
+  // `strategicDashboard.onTrack` (déjà "Sur la trajectoire"), seuls "watch"/"critical" sont
+  // nouveaux (l'état à risque binaire des indicateurs n'a pas d'équivalent "critique").
+  "strategicDashboard.chantierHealth.watch": "À surveiller",
+  "strategicDashboard.chantierHealth.critical": "Critique",
 
   // ─── Plan Stratégique — fiche de configuration d'un programme (admin) ─────
   "adminPrograms.manage": "Gérer",

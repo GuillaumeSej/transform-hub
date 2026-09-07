@@ -1265,6 +1265,8 @@ const de: Record<string, string> = {
   "strategicAxes.actionSaveErrorTitle": "Speichern fehlgeschlagen",
   "strategicAxes.actionSaveError": "Die Aktion konnte nicht gespeichert werden.",
   "strategicAxes.atRiskPopoverTitle": "Gefährdete Indikatoren",
+  "strategicAxes.atRiskTooltip":
+    "Ungünstige Abweichung zwischen dem letzten gemessenen Wert und dem Ziel des Indikators.",
   "strategicAxes.filterDirection": "Bereich",
   "strategicAxes.filterPerson": "Person",
   "strategicAxes.filterSponsor": "Sponsor",
@@ -1536,6 +1538,9 @@ const de: Record<string, string> = {
   "effectifs.chantierUnknown": "Unbekanntes Vorhaben",
   "effectifs.noStaffingOnAxis": "Für diese Achse sind keine VZÄ erfasst.",
   "effectifs.noStaffingForFunction": "Keine VZÄ dieser Funktion auf den Achsen des Programms.",
+  "effectifs.budget.title": "Verfügbare VZÄ je Funktion",
+  "effectifs.budget.inputLabel": "VZÄ-Budget",
+  "effectifs.budget.usedLabel": "% VZÄ genutzt / verfügbar",
 
   // ─── Programmtyp (Programmauswahl in der Topbar) ──────────────────────────
   "programType.performance": "Performance",
@@ -1560,7 +1565,6 @@ const de: Record<string, string> = {
   "strategicDashboard.atRisk": "Gefährdet",
   "strategicDashboard.cumulative": "Summe der Indikatoren",
   "strategicDashboard.noIndicators": "Für dieses Programm ist kein Indikator definiert",
-  "strategicDashboard.noIndicatorsAtRisk": "Kein Indikator gefährdet",
   "strategicDashboard.noDependencyAlerts": "Keine Abhängigkeitswarnung zwischen Arbeitspaketen",
   "strategicDashboard.delayDays": "Tage Verzug",
   "strategicDashboard.dragToReorder": "Zum Umsortieren ziehen",
@@ -1572,10 +1576,11 @@ const de: Record<string, string> = {
   "strategicDashboard.widget.indicatorStatus": "Indikatoren · im Plan",
   "strategicDashboard.widget.businessKpis": "Business-KPIs",
   "strategicDashboard.widget.axisBreakdown": "Verteilung nach Achse",
-  "strategicDashboard.widget.indicatorsAtRisk": "Gefährdete Indikatoren",
-  "strategicDashboard.widget.axisMaturity": "Fortschritt nach Reifegrad",
+  "strategicDashboard.widget.chantierHealth": "Gesundheit der Arbeitspakete",
   "strategicDashboard.widget.chantierDependencyAlerts":
     "Abhängigkeitswarnungen zwischen Arbeitspaketen",
+  "strategicDashboard.chantierHealth.watch": "Zu beobachten",
+  "strategicDashboard.chantierHealth.critical": "Kritisch",
 
   // ─── Strategieplan — Konfigurationsseite eines Programms (Admin) ──────────
   "adminPrograms.manage": "Verwalten",

@@ -1264,6 +1264,8 @@ const es: Record<string, string> = {
   "strategicAxes.actionSaveErrorTitle": "No se pudo guardar",
   "strategicAxes.actionSaveError": "No se pudo guardar la acción.",
   "strategicAxes.atRiskPopoverTitle": "Indicadores en riesgo",
+  "strategicAxes.atRiskTooltip":
+    "Desviación desfavorable entre el último valor medido y el objetivo del indicador.",
   "strategicAxes.filterDirection": "Dirección",
   "strategicAxes.filterPerson": "Persona",
   "strategicAxes.filterSponsor": "Patrocinador",
@@ -1531,6 +1533,9 @@ const es: Record<string, string> = {
   "effectifs.chantierUnknown": "Proyecto desconocido",
   "effectifs.noStaffingOnAxis": "No hay ETC declarados en este eje.",
   "effectifs.noStaffingForFunction": "No hay ETC de esta función en los ejes del programa.",
+  "effectifs.budget.title": "ETC disponibles por función",
+  "effectifs.budget.inputLabel": "Presupuesto de ETC",
+  "effectifs.budget.usedLabel": "% ETC utilizados / disponibles",
 
   // ─── Tipo de programa (selector de programa de la Topbar) ─────────────────
   "programType.performance": "Rendimiento",
@@ -1555,7 +1560,6 @@ const es: Record<string, string> = {
   "strategicDashboard.atRisk": "En riesgo",
   "strategicDashboard.cumulative": "Acumulado de indicadores",
   "strategicDashboard.noIndicators": "Ningún indicador definido para este programa",
-  "strategicDashboard.noIndicatorsAtRisk": "Ningún indicador en riesgo",
   "strategicDashboard.noDependencyAlerts": "Ninguna alerta de dependencia entre frentes de trabajo",
   "strategicDashboard.delayDays": "días de desfase",
   "strategicDashboard.dragToReorder": "Arrastrar para reordenar",
@@ -1567,10 +1571,11 @@ const es: Record<string, string> = {
   "strategicDashboard.widget.indicatorStatus": "Indicadores · trayectoria",
   "strategicDashboard.widget.businessKpis": "KPI de negocio",
   "strategicDashboard.widget.axisBreakdown": "Distribución por eje",
-  "strategicDashboard.widget.indicatorsAtRisk": "Indicadores en riesgo",
-  "strategicDashboard.widget.axisMaturity": "Avance por etapa de madurez",
+  "strategicDashboard.widget.chantierHealth": "Salud de los frentes de trabajo",
   "strategicDashboard.widget.chantierDependencyAlerts":
     "Alertas de dependencia entre frentes de trabajo",
+  "strategicDashboard.chantierHealth.watch": "A vigilar",
+  "strategicDashboard.chantierHealth.critical": "Crítico",
 
   // ─── Plan Estratégico — ficha de configuración de un programa (admin) ─────
   "adminPrograms.manage": "Gestionar",
