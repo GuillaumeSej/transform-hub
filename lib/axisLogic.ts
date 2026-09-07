@@ -714,18 +714,65 @@ export function milestoneProgressPct(entity: { milestones?: ChantierMilestoneSta
  * = moyenne des leviers"). Remplace `milestoneProgressPct(chantier)` sur tous les points d'appel
  * historiques : le suivi E0→E4 vit désormais par levier, `Chantier.milestones` est `@deprecated`.
  *
- * 0 si le chantier n'a aucun levier — même parti pris que `chantierProgress()`, pas de division
- * par zéro déguisée. Arrondi (`Math.round`) car `milestoneProgressPct` ne retourne que des
- * multiples de 20 mais leur moyenne ne l'est en général pas.
+ * Round 8 : le suivi E0→E4 devient CONDITIONNÉ au rattachement d'un levier à un KPI
+ * (`ChantierAction.indicatorId` défini — voir son commentaire) ; un levier sans KPI utilise à la
+ * place un kanban classique (`kanbanStatus`), hors de la notion de jalon. La moyenne ne porte donc
+ * QUE sur les leviers du chantier RATTACHÉS À UN KPI (`a.chantierId === chantier.id && a.indicatorId`)
+ * — un levier sans KPI est exclu du DÉNOMINATEUR (ni compté à 0 %, ni ignoré silencieusement dans un
+ * dénominateur qui l'inclurait quand même).
+ *
+ * 0 si le chantier n'a aucun levier RATTACHÉ À UN KPI (aucun levier du tout, ou uniquement des
+ * leviers sans KPI) — même parti pris que `chantierProgress()`, pas de division par zéro déguisée ;
+ * un chantier dont aucun levier n'est KPI-lié se comporte donc exactement comme un chantier sans
+ * aucun levier. Arrondi (`Math.round`) car `milestoneProgressPct` ne retourne que des multiples de
+ * 20 mais leur moyenne ne l'est en général pas.
  */
 export function chantierMilestoneProgressPct(
   chantier: Pick<Chantier, "id">,
   actions: ChantierAction[]
 ): number {
-  const own = actions.filter((a) => a.chantierId === chantier.id);
+  const own = actions.filter((a) => a.chantierId === chantier.id && a.indicatorId);
   if (own.length === 0) return 0;
   const total = own.reduce((sum, action) => sum + milestoneProgressPct(action), 0);
   return Math.round(total / own.length);
+}
+
+// ─── Couleur déterministe par chantier (round 8) ───────────────────────────────────────────────
+
+/** Palette catégorielle fixe (Tailwind, fond plein) — même convention que
+ *  `STAFFING_FUNCTION_COLORS` (`components/strategic/ChantierStaffingEditor.tsx`) : classes
+ *  `bg-*-500` de la palette Tailwind par défaut, pas de token `bp-*` de marque (déjà réservés à
+ *  d'autres usages). Purement catégorielle, sans rapport avec un statut à-risque (`rag-*`). Ordre
+ *  arbitraire mais stable : ne jamais réordonner ce tableau, `colorForChantier` en dépend pour
+ *  rester déterministe dans le temps. */
+const CHANTIER_COLOR_PALETTE = [
+  "bg-blue-500",
+  "bg-emerald-500",
+  "bg-violet-500",
+  "bg-pink-500",
+  "bg-amber-500",
+  "bg-indigo-500",
+  "bg-teal-500",
+  "bg-orange-500",
+  "bg-rose-500",
+  "bg-cyan-500",
+] as const;
+
+/**
+ * Couleur déterministe d'un chantier, dérivée de son id — round 8, alimente la nouvelle vue E0→E4
+ * par axe ET le kanban classique (widget dashboard "État des lieux") pour qu'un même chantier
+ * affiche systématiquement la MÊME couleur dans les deux blocs, sans nouveau champ Firestore (pas
+ * de couleur choisie à la main, contrairement à `StrategicAxis.color`).
+ *
+ * Hash volontairement trivial (somme des codes de caractère de l'id, modulo la taille de la
+ * palette) : aucune exigence de distribution uniforme, seulement de DÉTERMINISME (même id ⇒ même
+ * couleur, à tout moment, sur tout composant) — voir le test associé dans
+ * `lib/__tests__/axisLogic.test.ts`.
+ */
+export function colorForChantier(chantierId: string): string {
+  let sum = 0;
+  for (let i = 0; i < chantierId.length; i += 1) sum += chantierId.charCodeAt(i);
+  return CHANTIER_COLOR_PALETTE[sum % CHANTIER_COLOR_PALETTE.length];
 }
 
 // ─── Staffing par période (round 7) ────────────────────────────────────────────────────────────

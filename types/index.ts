@@ -700,15 +700,6 @@ export type ChantierDependency = {
   type: ChantierDependencyType;
 };
 
-/** Lettre RACI standard (Responsable/Autorité/Consulté/Informé), assignée à une personne sur un
- *  chantier ou un livrable — round 4, demande PO. */
-export type RaciLetter = "R" | "A" | "C" | "I";
-
-/** `userId` stocke un `AuthUser.username` (pas d'uid Firebase) — même convention que
- *  `Indicator.additionalAuthorizedUserIds` : c'est la clé primaire "métier" déjà utilisée partout
- *  ailleurs dans l'app pour référencer une personne (voir `canFillIndicator`). */
-export type RaciAssignment = { userId: string; letter: RaciLetter };
-
 /** Échelon 1-4 d'une dimension de la grille d'effort (voir `ChantierEffort`) — mêmes 4 échelons
  *  pour les 4 dimensions, libellés distincts par dimension (voir `strategicChantierDetail.effort.*`
  *  dans les dictionnaires i18n). */
@@ -798,8 +789,6 @@ export type Chantier = {
   pilote?: string;
   /** Critère de succès en texte libre ("On sera content en [année] si..."), demande PO explicite. */
   successCriteria?: string;
-  /** RACI du chantier (personnes attachées, pas rôles applicatifs — voir `RaciAssignment`). */
-  raci?: RaciAssignment[];
   /** Grille de notation d'effort — voir `ChantierEffort`, affichée uniquement sur la fiche
    *  chantier dédiée. */
   effort?: ChantierEffort;
@@ -839,9 +828,6 @@ export type Deliverable = {
   id: string;
   label: string;
   phases: DeliverablePhase[];
-  /** RACI du livrable — indépendant du RACI du chantier (un livrable peut avoir des personnes
-   *  différentes de celles pilotant le chantier dans son ensemble). */
-  raci?: RaciAssignment[];
 };
 
 export type ChantierAction = {
@@ -869,9 +855,38 @@ export type ChantierAction = {
    *  le chantier : un chantier regroupe plusieurs leviers, chacun avance à son propre rythme dans
    *  la méthode E0→E4. Absent sur un levier créé avant l'introduction de ce suivi, ou avant round
    *  7 : traité comme "encore à E0, rien de répondu" par les lecteurs plutôt que de migrer les
-   *  documents existants. */
+   *  documents existants.
+   *
+   *  Round 8 : la lecture de ce champ (stepper, `chantierMilestoneProgressPct`, checklist) n'est
+   *  pertinente QUE si `indicatorId` est défini — voir son commentaire. Un levier sans KPI continue
+   *  techniquement à pouvoir porter un `milestones` résiduel (ex. retiré de son KPI après avoir déjà
+   *  progressé) mais l'UI n'y lit plus rien tant que `indicatorId` est absent, au profit de
+   *  `kanbanStatus`. */
   milestones?: ChantierMilestoneState;
+  /** Lien optionnel vers un `Indicator` (KPI) de l'axe ou du chantier de ce levier — round 8.
+   *  Présent ⇒ le suivi E0→E4 (`milestones` ci-dessus) s'applique à ce levier ; absent ⇒ le levier
+   *  utilise à la place le statut simple `kanbanStatus` (kanban classique à faire/en cours/terminé).
+   *  Liste des KPI proposés à un levier donné (décision PO) : indicateurs "macro" de l'axe du
+   *  chantier (`Indicator.axisId === chantier.axisId && !Indicator.chantierId`) + indicateurs déjà
+   *  rattachés à CE chantier précis (`Indicator.chantierId === chantier.id`) — jamais un indicateur
+   *  d'un autre axe/chantier. */
+  indicatorId?: string;
+  /** Statut simple "kanban classique" d'un levier SANS `indicatorId` — round 8. N'a de sens que
+   *  lorsque `indicatorId` est absent (voir son commentaire) ; ignoré par l'UI sinon. Absent =
+   *  affiché comme `"todo"` par défaut (pas de valeur forcée en base tant que l'utilisateur n'a pas
+   *  interagi, même parti pris défensif que `milestones`). */
+  kanbanStatus?: LevierKanbanStatus;
 };
+
+/** Statut à 3 états du "kanban classique" d'un levier sans KPI rattaché — round 8, voir
+ *  `ChantierAction.kanbanStatus`. Même FORME que `ActionStatus` du Plan Performance
+ *  (`components/shared/ActionKanban.tsx`, gabarit visuel suivi pour le composant équivalent côté
+ *  Plan Stratégique) mais type entièrement SÉPARÉ — ne jamais importer/réutiliser `ActionStatus`
+ *  ici, les deux domaines restent strictement indépendants (voir le commentaire de tête de
+ *  `lib/axisLogic.ts`). Pas de valeur "delayed" (contrairement à `ActionStatus`) : ce statut est un
+ *  simple aiguillage de projet, la notion de retard n'a pas de sens ici (pas de calcul de date de
+ *  fin dépassée pour un levier sans jalons). */
+export type LevierKanbanStatus = "todo" | "in_progress" | "done";
 
 /** Un prérequis peut cibler une autre action du plan ("action", satisfait quand son étape est
  *  terminale) ou un événement hors plan ("external", ex. un recrutement — satisfait via `done`). */

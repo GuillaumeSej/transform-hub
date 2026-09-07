@@ -1304,16 +1304,13 @@ const de: Record<string, string> = {
   "strategicChantierDetail.effort.changeManagement.option3": "Erhebliche Veränderung",
   "strategicChantierDetail.effort.changeManagement.option4": "Große Veränderung",
 
-  "strategicChantierDetail.raci.title": "RACI",
-  "strategicChantierDetail.raci.responsible": "Durchführend (R)",
-  "strategicChantierDetail.raci.accountable": "Verantwortlich (A)",
-  "strategicChantierDetail.raci.consulted": "Konsultiert (C)",
-  "strategicChantierDetail.raci.informed": "Informiert (I)",
-  "strategicChantierDetail.raci.noAccountableHint": 'Kein „Verantwortlich" (A) zugewiesen.',
-  "strategicChantierDetail.raci.addRow": "Zeile hinzufügen",
-  "strategicChantierDetail.raci.removeRow": "Diese Zeile entfernen",
-  "strategicChantierDetail.raci.empty": "Niemand zugewiesen.",
-  "strategicChantierDetail.raci.letter": "RACI-Buchstabe",
+  // ─── Plan Stratégique — round 8 (optionale KPI-Verknüpfung des Hebels + Kanban ohne KPI) ─
+  "strategicChantierDetail.indicatorSelect.label": "Verknüpfter KPI",
+  "strategicChantierDetail.indicatorSelect.none": "Kein KPI",
+  "strategicChantierDetail.kanban.title": "Status",
+  "strategicChantierDetail.kanban.todo": "Zu erledigen",
+  "strategicChantierDetail.kanban.inProgress": "In Bearbeitung",
+  "strategicChantierDetail.kanban.done": "Erledigt",
 
   "strategicChantierDetail.prerequisites.title": "Abhängigkeiten / Voraussetzungen",
   "strategicChantierDetail.prerequisites.kindAction": "Aktivität des Plans",
@@ -1329,9 +1326,6 @@ const de: Record<string, string> = {
   "strategicChantierDetail.prerequisites.none": "Keine Voraussetzungen.",
   "strategicChantierDetail.prerequisites.noOtherActions":
     "Keine weitere Aktivität in diesem Workstream.",
-
-  "strategicChantierDetail.raci.chantierTitle": "RACI des Workstreams",
-  "strategicChantierDetail.raci.deliverableTitle": "RACI des Liefergegenstands",
 
   "strategicChantierDetail.timeline.title": "Zeitleiste der Liefergegenstände",
   "strategicChantierDetail.timeline.empty": "Noch kein phasierter Liefergegenstand.",

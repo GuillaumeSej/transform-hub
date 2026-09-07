@@ -9,6 +9,7 @@ import {
   chantierDependencyAlerts,
   chantierHealthState,
   chantierMilestoneProgressPct,
+  colorForChantier,
   computeIndicatorDelta,
   computeIndicatorStatus,
   countOnTrackAtRisk,
@@ -936,18 +937,21 @@ describe("chantierMilestoneProgressPct", () => {
     expect(chantierMilestoneProgressPct(makeChantier("CH1"), [])).toBe(0);
   });
 
-  it("averages the progress of the chantier's own leviers, rounding sensibly", () => {
+  it("averages the progress of the chantier's own KPI-linked leviers, rounding sensibly", () => {
     const actions: ChantierAction[] = [
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
+        indicatorId: "IND-A1",
         milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 40%
       },
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
+        indicatorId: "IND-A2",
         milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 20%
       },
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A3"),
+        indicatorId: "IND-A3",
         milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 20%
       },
     ];
@@ -959,15 +963,57 @@ describe("chantierMilestoneProgressPct", () => {
     const actions: ChantierAction[] = [
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
+        indicatorId: "IND-A1",
         milestones: {
           currentMilestone: "E4",
           passedMilestones: ["E0", "E1", "E2", "E3", "E4"],
           checklists: {},
         }, // 100%
       },
-      makeAction("CH2", "2026-01-01", "2026-01-31", "A2"), // sans jalons, autre chantier
+      { ...makeAction("CH2", "2026-01-01", "2026-01-31", "A2"), indicatorId: "IND-A2" }, // sans jalons, autre chantier
     ];
     expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(100);
+  });
+
+  // Round 8 : le suivi E0→E4 est conditionné au rattachement KPI d'un levier (`indicatorId`).
+  it("excludes leviers without a KPI link from the average (not counted as 0%, excluded from the denominator)", () => {
+    const actions: ChantierAction[] = [
+      {
+        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
+        indicatorId: "IND-A1",
+        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 40%
+      },
+      {
+        // Sans KPI : garde un `kanbanStatus` plutôt qu'un `indicatorId`, exclu du calcul.
+        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
+        kanbanStatus: "done",
+      },
+    ];
+    // Seul A1 (KPI-lié) compte : 40 / 1 = 40, pas (40 + 0) / 2 = 20.
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(40);
+  });
+
+  it("returns 0 when the chantier has leviers but none is KPI-linked (same as no levier at all)", () => {
+    const actions: ChantierAction[] = [
+      { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"), kanbanStatus: "in_progress" },
+      { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"), kanbanStatus: "todo" },
+    ];
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(0);
+  });
+});
+
+// ─── Couleur déterministe par chantier (round 8) ───────────────────────────────────────────────
+
+describe("colorForChantier", () => {
+  it("returns the same color for the same chantier id across calls", () => {
+    const first = colorForChantier("CH-cyber");
+    const second = colorForChantier("CH-cyber");
+    expect(second).toBe(first);
+  });
+
+  it("returns a non-empty Tailwind background class for any id", () => {
+    expect(colorForChantier("CH1")).toMatch(/^bg-\w+-500$/);
+    expect(colorForChantier("")).toMatch(/^bg-\w+-500$/);
   });
 });
 

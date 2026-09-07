@@ -1316,16 +1316,13 @@ const en: Record<string, string> = {
   "strategicChantierDetail.effort.changeManagement.option3": "Significant change",
   "strategicChantierDetail.effort.changeManagement.option4": "Major change",
 
-  "strategicChantierDetail.raci.title": "RACI",
-  "strategicChantierDetail.raci.responsible": "Responsible (R)",
-  "strategicChantierDetail.raci.accountable": "Accountable (A)",
-  "strategicChantierDetail.raci.consulted": "Consulted (C)",
-  "strategicChantierDetail.raci.informed": "Informed (I)",
-  "strategicChantierDetail.raci.noAccountableHint": "No « Accountable » (A) is assigned.",
-  "strategicChantierDetail.raci.addRow": "Add a row",
-  "strategicChantierDetail.raci.removeRow": "Remove this row",
-  "strategicChantierDetail.raci.empty": "No one assigned.",
-  "strategicChantierDetail.raci.letter": "RACI letter",
+  // ─── Plan Stratégique — round 8 (optional levier KPI + kanban without KPI) ─────────────
+  "strategicChantierDetail.indicatorSelect.label": "Linked KPI",
+  "strategicChantierDetail.indicatorSelect.none": "No KPI",
+  "strategicChantierDetail.kanban.title": "Status",
+  "strategicChantierDetail.kanban.todo": "To do",
+  "strategicChantierDetail.kanban.inProgress": "In progress",
+  "strategicChantierDetail.kanban.done": "Done",
 
   "strategicChantierDetail.prerequisites.title": "Dependencies / Prerequisites",
   "strategicChantierDetail.prerequisites.kindAction": "Plan lever",
@@ -1340,9 +1337,6 @@ const en: Record<string, string> = {
   "strategicChantierDetail.prerequisites.removeRow": "Remove this prerequisite",
   "strategicChantierDetail.prerequisites.none": "No prerequisites.",
   "strategicChantierDetail.prerequisites.noOtherActions": "No other levers on this workstream.",
-
-  "strategicChantierDetail.raci.chantierTitle": "Workstream RACI",
-  "strategicChantierDetail.raci.deliverableTitle": "Deliverable RACI",
 
   "strategicChantierDetail.timeline.title": "Deliverables timeline",
   "strategicChantierDetail.timeline.empty": "No phased deliverable yet.",
