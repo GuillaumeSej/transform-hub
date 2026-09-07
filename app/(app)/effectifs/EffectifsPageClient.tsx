@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Layers, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
-import { Button } from "@/components/shared/Button";
 import { KPICard } from "@/components/shared/KPICard";
 import {
   STAFFING_FUNCTIONS,
   STAFFING_FUNCTION_COLORS,
   formatFte,
 } from "@/components/strategic/ChantierStaffingEditor";
+import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
+import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
 import { saveProgram } from "@/lib/firestore/admin";
+import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
@@ -21,18 +23,24 @@ import type { ChantierStaffing, StaffingFunction, StrategicAxis } from "@/types"
 
 /**
  * Page « Effectifs mobilisés » — lecture transverse du staffing saisi chantier par chantier
- * (`ChantierStaffingEditor`, dans la pop-up de détail d'un chantier). Deux niveaux de lecture,
- * dans l'ordre demandé par le PO :
+ * (`ChantierStaffingEditor`, dans la pop-up de détail d'un chantier), ou importé en lot via
+ * `StaffingImportButton` (round 7). Deux niveaux de lecture, dans l'ordre demandé par le PO :
  *
- *  1. AU GLOBAL, par grande fonction : combien d'ETP RH / Finance / IT… le programme mobilise-t-il
- *     au total. Chaque fonction est CLIQUABLE et devient le filtre du bloc suivant.
+ *  1. PAR PÉRIODE (`StaffingPeriodBreakdown`, round 7) : combien d'ETP le programme mobilise-t-il,
+ *     trimestre/semestre/année par trimestre/semestre/année, et par grande fonction dans chaque
+ *     période. Cliquer une fonction (dans n'importe quelle période) la sélectionne et devient le
+ *     filtre du bloc suivant — rôle hérité de l'ancienne section « Au global, par grande fonction »
+ *     (remplacée round 7, sans dimension temporelle).
  *  2. PAR AXE : où ces ETP sont-ils consommés. Sans sélection, une carte par axe donne sa
  *     répartition complète ; une fonction sélectionnée bascule le bloc en comparaison directe
  *     entre axes pour CETTE fonction — la lecture « sur-staffage » attendue (un axe qui capte
  *     l'essentiel d'une fonction saute alors aux yeux).
  *
- * Aucune écriture ici : la saisie vit exclusivement dans la fiche chantier, pour ne pas avoir deux
- * flux de saisie divergents sur la même donnée (même parti pris que la page KPI vs la fiche axe).
+ * Aucune écriture MANUELLE ici : la saisie ligne par ligne vit exclusivement dans la fiche
+ * chantier, pour ne pas avoir deux flux de saisie divergents sur la même donnée (même parti pris
+ * que la page KPI vs la fiche axe). Seule exception, round 7 : le bouton d'import Excel
+ * (`StaffingImportButton`) délègue l'écriture EN LOT à `saveChantierStaffing` — après aperçu et
+ * confirmation explicite, jamais en silence (voir `lib/staffingExcelImport.ts`).
  *
  * Barres : pur CSS/Tailwind (largeur en %), comme les barres de `KPICard` — pas de dépendance
  * graphique pour une répartition à une dimension. Chaque barre porte la couleur PROPRE à sa
@@ -99,6 +107,7 @@ export function EffectifsPageClient() {
   const {
     axes,
     chantiers,
+    chantierActions,
     staffing,
     loading: dataLoading,
   } = useStrategicData(user?.companyId ?? null, activeProgramId);
@@ -173,11 +182,18 @@ export function EffectifsPageClient() {
 
   const globalTotals = useMemo(() => totalsByFunction(staffing), [staffing]);
   const totalFte = useMemo(() => staffing.reduce((sum, e) => sum + (e.fte || 0), 0), [staffing]);
-  const maxFunctionFte = globalTotals[0]?.fte ?? 0;
 
-  const staffedChantierCount = useMemo(
-    () => new Set(staffing.map((e) => e.chantierId)).size,
-    [staffing]
+  /** Segments colorés (un par fonction mobilisée) pour la barre de la tuile « Total ETP » —
+   *  remplace, en un coup d'œil sur la tuile restante, l'information que portait l'ancienne tuile
+   *  « Fonctions mobilisées » (supprimée round 7, voir plan). Même couleur par fonction que partout
+   *  ailleurs sur cette page (`STAFFING_FUNCTION_COLORS`). */
+  const totalFteBarSegments = useMemo(
+    () =>
+      globalTotals.map(({ fn, fte }) => ({
+        pct: totalFte > 0 ? (fte / totalFte) * 100 : 0,
+        className: STAFFING_FUNCTION_COLORS[fn],
+      })),
+    [globalTotals, totalFte]
   );
 
   const chantierNames = useMemo(() => new Map(chantiers.map((c) => [c.id, c.name])), [chantiers]);
@@ -217,11 +233,31 @@ export function EffectifsPageClient() {
   const selectedTotal = selectedByAxis.reduce((sum, row) => sum + row.fte, 0);
   const selectedMax = selectedByAxis[0]?.fte ?? 0;
 
+  // Bouton d'import Excel : rendu directement dans l'en-tête (réutilisé par toutes les branches de
+  // retour ci-dessous) plutôt que dans une variable de toolbar séparée — n'apparaît que lorsque
+  // `chantiers`/`chantierActions`/`staffing` sont effectivement disponibles (programme actif de
+  // type stratégique), jamais pendant le chargement ou en l'absence de programme.
   const header = (
-    <div className="flex flex-wrap items-center gap-3">
-      <Users size={22} className="text-bp-coral" />
-      <h1 className="text-xl font-bold text-text-primary">{t("effectifs.title")}</h1>
-      {activeProgram && <span className="text-sm text-text-secondary">{activeProgram.name}</span>}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Users size={22} className="text-bp-coral" />
+        <h1 className="text-xl font-bold text-text-primary">{t("effectifs.title")}</h1>
+        {activeProgram && <span className="text-sm text-text-secondary">{activeProgram.name}</span>}
+      </div>
+      {activeProgram && programType === "strategic" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <StaffingImportButton
+            companyId={user?.companyId}
+            programId={activeProgramId}
+            chantiers={chantiers}
+            chantierActions={chantierActions}
+            staffing={staffing}
+            onImport={async (entries) => {
+              for (const entry of entries) await saveChantierStaffing(entry);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 
@@ -320,94 +356,24 @@ export function EffectifsPageClient() {
       <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
       {budgetSection}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="max-w-sm">
         <KPICard
           label={t("effectifs.kpi.totalFte")}
           value={`${formatFte(totalFte)} ${t("staffing.fteUnit")}`}
           icon={Users}
           sub={t("effectifs.kpi.totalFteSub")}
-        />
-        <KPICard
-          label={t("effectifs.kpi.functions")}
-          value={String(globalTotals.length)}
-          icon={Layers}
-          sub={`${STAFFING_FUNCTIONS.length} ${t("effectifs.kpi.functionsSub")}`}
-        />
-        <KPICard
-          label={t("effectifs.kpi.chantiers")}
-          value={`${staffedChantierCount} / ${chantiers.length}`}
-          icon={Building2}
-          sub={t("effectifs.kpi.chantiersSub")}
+          barSegments={totalFteBarSegments}
         />
       </div>
 
-      {/* ── 1. Au global, par grande fonction (cliquable) ──────────────────────────────────── */}
-      <Card className="mb-0">
-        <CardHeader
-          title={t("effectifs.byFunction")}
-          actions={
-            selectedFunction && (
-              <Button variant="ghost" size="sm" onClick={() => setSelectedFunction(null)}>
-                {t("effectifs.allFunctions")}
-              </Button>
-            )
-          }
-        />
-        <CardBody>
-          <p className="mb-3 text-xs text-tertiary">{t("effectifs.clickHint")}</p>
-          <ul className="space-y-2.5">
-            {globalTotals.map(({ fn, fte }) => {
-              const selected = selectedFunction === fn;
-              const sharePct = totalFte > 0 ? (fte / totalFte) * 100 : 0;
-              // Budget d'ETP configuré pour cette fonction (peut être absent) : augmente la ligne
-              // existante d'une seconde jauge "% utilisé" plutôt que de dupliquer cette liste dans
-              // une section séparée — voir `budgetSection` plus haut pour la SAISIE du budget.
-              const budget = activeProgram.staffingBudgets?.[fn];
-              const usedPct = budget !== undefined && budget > 0 ? (fte / budget) * 100 : 0;
-              return (
-                <li key={fn}>
-                  <button
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => setSelectedFunction(selected ? null : fn)}
-                    className={`w-full rounded-md border px-3 py-2 text-left transition ${
-                      selected
-                        ? "border-bp-coral bg-neutral-50"
-                        : "border-border bg-white hover:bg-neutral-50"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="text-[13px] font-semibold text-primary">
-                        {t(`staffing.function.${fn}`)}
-                      </span>
-                      <span className="text-[12px] text-secondary">
-                        <strong className="text-primary">{formatFte(fte)}</strong>{" "}
-                        {t("staffing.fteUnit")} · {Math.round(sharePct)}%
-                      </span>
-                    </div>
-                    <div className="mt-1.5">
-                      <Bar
-                        pct={maxFunctionFte > 0 ? (fte / maxFunctionFte) * 100 : 0}
-                        highlighted={selected}
-                        fn={fn}
-                      />
-                    </div>
-                    {budget !== undefined && (
-                      <div className="mt-2">
-                        <Bar pct={usedPct} fn={fn} />
-                        <p className="mt-1 text-[11px] text-tertiary">
-                          {t("effectifs.budget.usedLabel")} : {formatFte(fte)} / {formatFte(budget)}{" "}
-                          {t("staffing.fteUnit")} ({Math.round(usedPct)}%)
-                        </p>
-                      </div>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </CardBody>
-      </Card>
+      {/* ── 1. Répartition par période (round 7 — remplace l'ancienne section "Au global, par
+          grande fonction", sans dimension temporelle) ─────────────────────────────────────── */}
+      <StaffingPeriodBreakdown
+        staffing={staffing}
+        activeProgram={activeProgram}
+        selectedFunction={selectedFunction}
+        onSelectFunction={setSelectedFunction}
+      />
 
       {/* ── 2. Répartition par axe ─────────────────────────────────────────────────────────── */}
       {selectedFunction ? (

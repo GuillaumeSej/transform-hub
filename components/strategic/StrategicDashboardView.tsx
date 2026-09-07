@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Target,
   TriangleAlert,
+  Wallet,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -25,8 +26,8 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   chantierDependencyAlerts,
   chantierHealthState,
+  chantierMilestoneProgressPct,
   countOnTrackAtRisk,
-  milestoneProgressPct,
 } from "@/lib/axisLogic";
 import {
   STRATEGIC_DASHBOARD_WIDGET_REGISTRY,
@@ -85,7 +86,9 @@ function DashboardStatChip({
   tone = "neutral",
 }: {
   icon: LucideIcon;
-  value: number;
+  /** Chaîne déjà formatée acceptée en plus d'un nombre brut — round 7, point 2 : la puce budget
+   *  affiche une somme suffixée de la devise du programme, pas un simple compteur entier. */
+  value: number | string;
   label: string;
   /** "amber" réservé au signal "à risque" — même token que `IndicatorStatusBadge`, jamais un
    *  vert/rouge littéral (charte BearingPoint, voir skill dataviz). */
@@ -129,6 +132,14 @@ export function StrategicDashboardView() {
 
   // ─── Agrégats (toute la logique de calcul vient de lib/axisLogic.ts) ──────────────────────
   const counts = useMemo(() => countOnTrackAtRisk(indicators), [indicators]);
+
+  /** Round 7, point 2 : somme du budget alloué (`Chantier.allocatedBudget`, fondation) sur tout le
+   *  programme actif — puce supplémentaire du bandeau d'en-tête, même esprit que les compteurs
+   *  axes/chantiers/indicateurs juste à côté. Pas de nouveau widget : un chiffre agrégé de plus. */
+  const allocatedBudgetTotal = useMemo(
+    () => chantiers.reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0),
+    [chantiers]
+  );
 
   /** Une ligne par axe : volumétrie (chantiers/indicateurs), part d'indicateurs sur la trajectoire
    *  ET la liste de SES chantiers (round 6, point 3-4 : imbriqués via `ChantierProgressRow`, même
@@ -182,7 +193,7 @@ export function StrategicDashboardView() {
               chantiers,
               chantierActions
             ),
-            progressPct: milestoneProgressPct(chantier),
+            progressPct: chantierMilestoneProgressPct(chantier, chantierActions),
           })),
         })),
     [axisBreakdown, indicators, measurements, chantiers, chantierActions]
@@ -480,6 +491,7 @@ export function StrategicDashboardView() {
                             <ChantierProgressRow
                               key={chantier.id}
                               chantier={chantier}
+                              chantierActions={chantierActions}
                               stages={stages}
                               indicators={indicators}
                               measurements={measurements}
@@ -616,6 +628,11 @@ export function StrategicDashboardView() {
               icon={ListChecks}
               value={counts.total}
               label={t("strategicDashboard.indicatorsSuffix")}
+            />
+            <DashboardStatChip
+              icon={Wallet}
+              value={`${allocatedBudgetTotal.toLocaleString()} ${activeProgram.currency}`}
+              label={t("strategicDashboard.allocatedBudget")}
             />
             {counts.atRisk > 0 && (
               <DashboardStatChip

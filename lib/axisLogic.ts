@@ -6,6 +6,8 @@ import type {
   Chantier,
   ChantierAction,
   ChantierDependencyType,
+  ChantierMilestoneState,
+  ChantierStaffing,
   ChecklistFlag,
   Indicator,
   IndicatorMeasurement,
@@ -15,6 +17,7 @@ import type {
   MilestoneId,
   Program,
   ProgramType,
+  StaffingFunction,
 } from "@/types";
 
 /**
@@ -453,6 +456,9 @@ export type ChantierHealthState = "onTrack" | "watch" | "critical";
  *    lenteur retarde un AUTRE chantier en aval (signal à surveiller, pas encore critique pour LUI).
  *  - `onTrack` : sinon.
  */
+// Round 7 : re-vérifiée — ne lit toujours que `chantierDependencyAlerts`/`chantierAtRiskIndicators`,
+// jamais `.milestones` (chantier ou levier). Aucune modification nécessaire malgré le déplacement
+// du suivi E0→E4 vers les leviers.
 export function chantierHealthState(
   chantier: Chantier,
   indicators: Indicator[],
@@ -591,27 +597,36 @@ export function canStartAction(
  * Calcule le feu des items AUTOMATIQUES d'un jalon donné (`ChecklistItemDef.auto`, contenu défini
  * dans `lib/milestoneChecklist.ts`) — les items manuels de ce même jalon n'apparaissent PAS dans le
  * résultat, c'est à l'appelant (l'UI) de fusionner cette map avec les feux manuels déjà enregistrés
- * sur le chantier (`chantier.milestones.checklists[milestoneId]`).
+ * sur le LEVIER (`action.milestones.checklists[milestoneId]`).
+ *
+ * Round 7 : retargetée du chantier vers le LEVIER (`ChantierAction`) — le suivi E0→E4 vit
+ * désormais par levier (voir `ChantierAction.milestones`), un chantier regroupant plusieurs
+ * leviers qui avancent chacun à leur rythme. `dependencyAlert` et `effortComplete` restent des
+ * signaux CHANTIER (dépendances et grille d'effort n'ont pas été déplacées ce round) : ils
+ * résolvent le chantier PARENT via `action.chantierId` puis lisent son propre état — c'est
+ * pourquoi tous les leviers d'un même chantier affichent la MÊME valeur pour ces deux items,
+ * intentionnellement.
  *
  * Les trois tags `auto` correspondent chacun à une règle de la note PMO du PO, rendue automatique
  * plutôt que posée comme une question (voir le commentaire de `ChecklistItemDef` pour le détail de
  * chaque règle) :
- *  - `previousOranges` : vert si tous les items orange du jalon PRÉCÉDENT sont soldés
+ *  - `previousOranges` : vert si tous les items orange du jalon PRÉCÉDENT du LEVIER sont soldés
  *    (`resolved === true`), vert aussi s'il n'y en avait aucun (vacuously) — rouge sinon. N'apparaît
  *    jamais sur E0 (pas de jalon précédent dans `MILESTONE_ORDER`).
- *  - `dependencyAlert` : rouge si ce chantier est le côté BLOQUÉ (`sourceId`) d'au moins une alerte
- *    de `chantierDependencyAlerts` — vert sinon (y compris si l'alerte existe mais bloque un AUTRE
- *    chantier).
- *  - `effortComplete` : vert si les 4 dimensions de `chantier.effort` sont toutes renseignées
- *    (`!== undefined`), rouge sinon.
+ *  - `dependencyAlert` : rouge si le CHANTIER PARENT du levier est le côté BLOQUÉ (`sourceId`)
+ *    d'au moins une alerte de `chantierDependencyAlerts` — vert sinon (y compris si le chantier
+ *    parent est introuvable, ou si l'alerte existe mais bloque un AUTRE chantier).
+ *  - `effortComplete` : vert si les 4 dimensions de `chantierParent.effort` sont toutes renseignées
+ *    (`!== undefined`), rouge sinon (y compris si le chantier parent est introuvable).
  */
 export function resolveMilestoneAutoFlags(
   milestoneId: MilestoneId,
-  chantier: Chantier,
+  action: ChantierAction,
   allChantiers: Chantier[],
   allActions: ChantierAction[]
 ): Record<string, ChecklistFlag> {
   const flags: Record<string, ChecklistFlag> = {};
+  const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
 
   for (const item of MILESTONE_CHECKLISTS[milestoneId]) {
     if (!item.auto) continue;
@@ -621,7 +636,7 @@ export function resolveMilestoneAutoFlags(
         const index = MILESTONE_ORDER.indexOf(milestoneId);
         const previousMilestone = index > 0 ? MILESTONE_ORDER[index - 1] : undefined;
         const previousItems = previousMilestone
-          ? (chantier.milestones?.checklists?.[previousMilestone] ?? [])
+          ? (action.milestones?.checklists?.[previousMilestone] ?? [])
           : [];
         const hasUnresolvedOrange = previousItems.some((i) => i.flag === "orange" && !i.resolved);
         flags[item.itemId] = hasUnresolvedOrange ? "red" : "green";
@@ -629,12 +644,14 @@ export function resolveMilestoneAutoFlags(
       }
       case "dependencyAlert": {
         const alerts = chantierDependencyAlerts(allChantiers, allActions);
-        const isAffected = alerts.some((a) => a.sourceId === chantier.id);
+        const isAffected = parentChantier
+          ? alerts.some((a) => a.sourceId === parentChantier.id)
+          : false;
         flags[item.itemId] = isAffected ? "red" : "green";
         break;
       }
       case "effortComplete": {
-        const effort = chantier.effort;
+        const effort = parentChantier?.effort;
         const isComplete =
           effort?.financialImpact !== undefined &&
           effort?.humanImpact !== undefined &&
@@ -678,11 +695,104 @@ export function canPassMilestone(
 }
 
 /**
- * Avancement d'un chantier en pourcentage, dérivé du nombre de jalons E0→E4 FRANCHIS (round 5) —
- * remplace `chantierProgress()` sur les 3 affichages de progression (fiche chantier, Gantt, carte
- * d'axe). 5 jalons possibles × 20% chacun, donc toujours un multiple de 20 entre 0 et 100.
- * `chantierProgress()` reste dans le code (peut resservir) mais n'est plus branché ici.
+ * Avancement en pourcentage, dérivé du nombre de jalons E0→E4 FRANCHIS (round 5) — remplace
+ * `chantierProgress()` sur les affichages de progression. 5 jalons possibles × 20% chacun, donc
+ * toujours un multiple de 20 entre 0 et 100. `chantierProgress()` reste dans le code (peut
+ * resservir) mais n'est plus branché ici.
+ *
+ * Round 7 : retypé STRUCTURELLEMENT (plutôt que `Pick<Chantier, "milestones">`) pour accepter
+ * aussi bien un `Chantier` (usage historique, `@deprecated` — voir son commentaire) qu'un
+ * `ChantierAction`/levier (nouvel usage round 7, un jalon par levier) sans duplication de fonction.
  */
-export function milestoneProgressPct(chantier: Pick<Chantier, "milestones">): number {
-  return (chantier.milestones?.passedMilestones.length ?? 0) * 20;
+export function milestoneProgressPct(entity: { milestones?: ChantierMilestoneState }): number {
+  return (entity.milestones?.passedMilestones.length ?? 0) * 20;
+}
+
+/**
+ * Avancement AGRÉGÉ d'un chantier en pourcentage (round 7) — moyenne de `milestoneProgressPct`
+ * sur les leviers (`ChantierAction`) du chantier, décision actée avec le PO ("agrégation chantier
+ * = moyenne des leviers"). Remplace `milestoneProgressPct(chantier)` sur tous les points d'appel
+ * historiques : le suivi E0→E4 vit désormais par levier, `Chantier.milestones` est `@deprecated`.
+ *
+ * 0 si le chantier n'a aucun levier — même parti pris que `chantierProgress()`, pas de division
+ * par zéro déguisée. Arrondi (`Math.round`) car `milestoneProgressPct` ne retourne que des
+ * multiples de 20 mais leur moyenne ne l'est en général pas.
+ */
+export function chantierMilestoneProgressPct(
+  chantier: Pick<Chantier, "id">,
+  actions: ChantierAction[]
+): number {
+  const own = actions.filter((a) => a.chantierId === chantier.id);
+  if (own.length === 0) return 0;
+  const total = own.reduce((sum, action) => sum + milestoneProgressPct(action), 0);
+  return Math.round(total / own.length);
+}
+
+// ─── Staffing par période (round 7) ────────────────────────────────────────────────────────────
+
+/** Une entrée de staffing par période/fonction, alimentant `StaffingPeriodBreakdown.tsx`. */
+export type StaffingPeriodBucket = {
+  /** Étiquette de période, format lexicographiquement triable — même convention que
+   *  `IndicatorMeasurement.period` : `"YYYY-Q#"` (trimestriel), `"YYYY-S#"` (semestriel),
+   *  `"YYYY"` (annuel). */
+  period: string;
+  totalFte: number;
+  byFunction: Partial<Record<StaffingFunction, number>>;
+};
+
+/** Calcule le libellé de période (voir `StaffingPeriodBucket.period`) d'une date ISO pour une
+ *  granularité donnée. Fonction interne, pas exportée : `staffingPeriodBuckets` est le seul point
+ *  d'entrée public de ce découpage. */
+function periodLabelForDate(
+  isoDate: string,
+  granularity: "quarterly" | "semiannual" | "annual"
+): string {
+  const year = isoDate.slice(0, 4);
+  const month = Number(isoDate.slice(5, 7)); // 1-12
+  switch (granularity) {
+    case "quarterly": {
+      const quarter = Math.floor((month - 1) / 3) + 1;
+      return `${year}-Q${quarter}`;
+    }
+    case "semiannual": {
+      const semester = month <= 6 ? 1 : 2;
+      return `${year}-S${semester}`;
+    }
+    case "annual":
+      return year;
+  }
+}
+
+/**
+ * Répartit les entrées de staffing DATÉES (`ChantierStaffing.startDate` défini) en buckets de
+ * période calendaire, sommant les ETP par période et par période+fonction (round 7, page
+ * Effectifs — vue trimestre/semestre/année). Les entrées sans `startDate` sont volontairement
+ * IGNORÉES : un staffing "non daté" reste compté dans les totaux globaux existants
+ * (`EffectifsPageClient.tsx`) mais ne peut pas être positionné dans le temps ici.
+ *
+ * Buckets triés chronologiquement croissant (tri lexicographique du `period`, cohérent avec
+ * `sortMeasurementsByPeriod` — les trois formats retenus sont tous lexicographiquement ordonnés).
+ *
+ * Fonction pure, distincte de `DateRangePicker.summarizeRange` (qui répond à une question
+ * différente — la durée d'une plage de dates, pas une répartition par période calendaire).
+ */
+export function staffingPeriodBuckets(
+  entries: ChantierStaffing[],
+  granularity: "quarterly" | "semiannual" | "annual"
+): StaffingPeriodBucket[] {
+  const byPeriod = new Map<string, StaffingPeriodBucket>();
+
+  for (const entry of entries) {
+    if (!entry.startDate) continue;
+    const period = periodLabelForDate(entry.startDate, granularity);
+    let bucket = byPeriod.get(period);
+    if (!bucket) {
+      bucket = { period, totalFte: 0, byFunction: {} };
+      byPeriod.set(period, bucket);
+    }
+    bucket.totalFte += entry.fte;
+    bucket.byFunction[entry.function] = (bucket.byFunction[entry.function] ?? 0) + entry.fte;
+  }
+
+  return Array.from(byPeriod.values()).sort((a, b) => a.period.localeCompare(b.period));
 }

@@ -30,6 +30,8 @@ import { UserPicker } from "@/components/strategic/UserPicker";
 import {
   canStartAction,
   chantierBounds,
+  chantierDependencyAlerts,
+  chantierMilestoneProgressPct,
   milestoneProgressPct,
   resolveMilestoneAutoFlags,
 } from "@/lib/axisLogic";
@@ -188,6 +190,151 @@ type ChantierActionFormLabels = {
   cancel: string;
 };
 
+type PrerequisitesEditorLabels = Pick<
+  ChantierActionFormLabels,
+  | "prerequisitesTitle"
+  | "prerequisiteKind"
+  | "prerequisiteKindAction"
+  | "prerequisiteKindExternal"
+  | "prerequisiteTargetPlaceholder"
+  | "prerequisiteExternalPlaceholder"
+  | "prerequisiteDone"
+  | "prerequisiteRemoveRow"
+  | "prerequisiteAddRow"
+  | "prerequisiteNone"
+  | "prerequisiteNoOtherActions"
+>;
+
+/**
+ * Éditeur de prérequis go/no-go (round 4, point 5) — EXTRAIT de `ChantierActionForm` au round 7
+ * pour être réutilisable en dehors du formulaire : chaque levier l'affiche désormais directement
+ * sur sa propre ligne dans la carte "Dépendances / Prérequis" fusionnée (voir plus bas), EN PLUS de
+ * son usage historique dans le formulaire de création/édition ci-dessous. MÉCANIQUE INCHANGÉE
+ * (sélecteur de nature action/externe, ajout/suppression de lignes) — seul le mode de pilotage
+ * change : purement CONTRÔLÉ (`value`/`onChange`, aucun état interne), pour que chaque appelant
+ * décide s'il bufferise (le formulaire, soumis en bloc via `setPrerequisites`) ou persiste
+ * immédiatement (la ligne de levier, même discipline d'auto-sauvegarde que le reste de cette fiche
+ * — RACI, critères de succès...).
+ *
+ * v1 toujours PUREMENT INFORMATIVE (voir `canStartAction` dans `lib/axisLogic.ts`) : rien
+ * n'intercepte un changement de statut/étape, un prérequis non satisfait n'empêche rien.
+ */
+function PrerequisitesEditor({
+  value,
+  otherActions,
+  labels,
+  onChange,
+}: {
+  value: ActionPrerequisite[];
+  /** Autres actions du MÊME chantier (l'action éditée exclue) — univers du sélecteur de prérequis
+   *  "action". Un prérequis ne référence jamais l'action qui le porte elle-même. */
+  otherActions: ChantierAction[];
+  labels: PrerequisitesEditorLabels;
+  onChange: (next: ActionPrerequisite[]) => void;
+}) {
+  const patchPrerequisite = (id: string, patch: Partial<ActionPrerequisite>) =>
+    onChange(value.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+
+  const removePrerequisite = (id: string) => onChange(value.filter((p) => p.id !== id));
+
+  const addPrerequisite = () =>
+    onChange([
+      ...value,
+      otherActions.length > 0
+        ? { id: makePrerequisiteId(), kind: "action", targetActionId: otherActions[0].id }
+        : { id: makePrerequisiteId(), kind: "external", label: "", done: false },
+    ]);
+
+  return (
+    <div>
+      <span className="text-xs font-medium text-secondary">{labels.prerequisitesTitle}</span>
+      {value.length === 0 ? (
+        <p className="mt-1 text-[12px] text-tertiary">{labels.prerequisiteNone}</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {value.map((p) => (
+            <li
+              key={p.id}
+              className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white p-2"
+            >
+              <select
+                aria-label={labels.prerequisiteKind}
+                value={p.kind}
+                onChange={(e) => {
+                  const kind = e.target.value as ActionPrerequisiteKind;
+                  patchPrerequisite(
+                    p.id,
+                    kind === "action"
+                      ? { kind, targetActionId: otherActions[0]?.id }
+                      : { kind, label: "", done: false }
+                  );
+                }}
+                className={`${SMALL_INPUT_CLASS} w-auto shrink-0`}
+              >
+                <option value="action">{labels.prerequisiteKindAction}</option>
+                <option value="external">{labels.prerequisiteKindExternal}</option>
+              </select>
+
+              {p.kind === "action" ? (
+                otherActions.length === 0 ? (
+                  <span className="text-[11.5px] text-tertiary">
+                    {labels.prerequisiteNoOtherActions}
+                  </span>
+                ) : (
+                  <select
+                    value={p.targetActionId ?? ""}
+                    onChange={(e) => patchPrerequisite(p.id, { targetActionId: e.target.value })}
+                    className={`${SMALL_INPUT_CLASS} min-w-0 flex-1`}
+                  >
+                    <option value="">{labels.prerequisiteTargetPlaceholder}</option>
+                    {otherActions.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                )
+              ) : (
+                <>
+                  <input
+                    value={p.label ?? ""}
+                    onChange={(e) => patchPrerequisite(p.id, { label: e.target.value })}
+                    placeholder={labels.prerequisiteExternalPlaceholder}
+                    className={`${SMALL_INPUT_CLASS} min-w-0 flex-1`}
+                  />
+                  <label className="flex shrink-0 items-center gap-1 text-[11px] text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={p.done ?? false}
+                      onChange={(e) => patchPrerequisite(p.id, { done: e.target.checked })}
+                    />
+                    {labels.prerequisiteDone}
+                  </label>
+                </>
+              )}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={labels.prerequisiteRemoveRow}
+                title={labels.prerequisiteRemoveRow}
+                onClick={() => removePrerequisite(p.id)}
+              >
+                <Trash2 size={12} />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-2">
+        <Button variant="outline" size="sm" onClick={addPrerequisite}>
+          <Plus size={12} /> {labels.prerequisiteAddRow}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Formulaire d'action de chantier, rendu INLINE sur la fiche chantier (déplacé depuis l'ancienne
  * modale de `AxisDetailClient.tsx`, round 4 point 9). Enrichi par ce round : `owner`/`sponsor` via
@@ -269,20 +416,6 @@ function ChantierActionForm({
         d.id === deliverableId ? { ...d, phases: d.phases.filter((p) => p.id !== phaseId) } : d
       )
     );
-
-  const patchPrerequisite = (id: string, patch: Partial<ActionPrerequisite>) =>
-    setPrerequisites((list) => list.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-
-  const removePrerequisite = (id: string) =>
-    setPrerequisites((list) => list.filter((p) => p.id !== id));
-
-  const addPrerequisite = () =>
-    setPrerequisites((list) => [
-      ...list,
-      otherActions.length > 0
-        ? { id: makePrerequisiteId(), kind: "action", targetActionId: otherActions[0].id }
-        : { id: makePrerequisiteId(), kind: "external", label: "", done: false },
-    ]);
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -425,92 +558,12 @@ function ChantierActionForm({
       </div>
 
       {/* ── Prérequis go/no-go (round 4, point 5) — purement informatif ─────────────────────── */}
-      <div>
-        <span className="text-xs font-medium text-secondary">{labels.prerequisitesTitle}</span>
-        {prerequisites.length === 0 ? (
-          <p className="mt-1 text-[12px] text-tertiary">{labels.prerequisiteNone}</p>
-        ) : (
-          <ul className="mt-2 space-y-1.5">
-            {prerequisites.map((p) => (
-              <li
-                key={p.id}
-                className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white p-2"
-              >
-                <select
-                  aria-label={labels.prerequisiteKind}
-                  value={p.kind}
-                  onChange={(e) => {
-                    const kind = e.target.value as ActionPrerequisiteKind;
-                    patchPrerequisite(
-                      p.id,
-                      kind === "action"
-                        ? { kind, targetActionId: otherActions[0]?.id }
-                        : { kind, label: "", done: false }
-                    );
-                  }}
-                  className={`${SMALL_INPUT_CLASS} w-auto shrink-0`}
-                >
-                  <option value="action">{labels.prerequisiteKindAction}</option>
-                  <option value="external">{labels.prerequisiteKindExternal}</option>
-                </select>
-
-                {p.kind === "action" ? (
-                  otherActions.length === 0 ? (
-                    <span className="text-[11.5px] text-tertiary">
-                      {labels.prerequisiteNoOtherActions}
-                    </span>
-                  ) : (
-                    <select
-                      value={p.targetActionId ?? ""}
-                      onChange={(e) => patchPrerequisite(p.id, { targetActionId: e.target.value })}
-                      className={`${SMALL_INPUT_CLASS} min-w-0 flex-1`}
-                    >
-                      <option value="">{labels.prerequisiteTargetPlaceholder}</option>
-                      {otherActions.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
-                  )
-                ) : (
-                  <>
-                    <input
-                      value={p.label ?? ""}
-                      onChange={(e) => patchPrerequisite(p.id, { label: e.target.value })}
-                      placeholder={labels.prerequisiteExternalPlaceholder}
-                      className={`${SMALL_INPUT_CLASS} min-w-0 flex-1`}
-                    />
-                    <label className="flex shrink-0 items-center gap-1 text-[11px] text-secondary">
-                      <input
-                        type="checkbox"
-                        checked={p.done ?? false}
-                        onChange={(e) => patchPrerequisite(p.id, { done: e.target.checked })}
-                      />
-                      {labels.prerequisiteDone}
-                    </label>
-                  </>
-                )}
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={labels.prerequisiteRemoveRow}
-                  title={labels.prerequisiteRemoveRow}
-                  onClick={() => removePrerequisite(p.id)}
-                >
-                  <Trash2 size={12} />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="mt-2">
-          <Button variant="outline" size="sm" onClick={addPrerequisite}>
-            <Plus size={12} /> {labels.prerequisiteAddRow}
-          </Button>
-        </div>
-      </div>
+      <PrerequisitesEditor
+        value={prerequisites}
+        otherActions={otherActions}
+        labels={labels}
+        onChange={setPrerequisites}
+      />
 
       <div>
         <span className="text-xs font-medium text-secondary">
@@ -653,7 +706,7 @@ export function ChantierDetailPanel({
   onClose: () => void;
 }) {
   const { user } = useRole();
-  const { activeProgramId } = useActiveProgram();
+  const { activeProgram, activeProgramId } = useActiveProgram();
   const { t } = useTranslation();
   const router = useRouter();
   const { showToast } = useToast();
@@ -703,7 +756,25 @@ export function ChantierDetailPanel({
     () => (chantier ? chantierBounds(chantier.id, chantierActions) : undefined),
     [chantier, chantierActions]
   );
-  const progressPct = useMemo(() => (chantier ? milestoneProgressPct(chantier) : 0), [chantier]);
+  // Round 7 : moyenne des leviers (`chantierMilestoneProgressPct`) — remplace l'ancienne lecture
+  // directe de `chantier.milestones` (@deprecated, le suivi E0→E4 vit désormais par levier).
+  const progressPct = useMemo(
+    () => (chantier ? chantierMilestoneProgressPct(chantier, chantierActions) : 0),
+    [chantier, chantierActions]
+  );
+
+  // Alertes de dépendance dont CE chantier est le côté bloqué (`sourceId`) — même valeur affichée
+  // sur la carte "Dépendances / Prérequis" de CHAQUE levier (round 7, décision actée : les
+  // dépendances restent une donnée de chantier, pas de levier).
+  const chantierBlockingAlerts = useMemo(
+    () =>
+      chantier
+        ? chantierDependencyAlerts(data.chantiers, data.chantierActions).filter(
+            (a) => a.sourceId === chantier.id
+          )
+        : [],
+    [chantier, data.chantiers, data.chantierActions]
+  );
 
   // Bloc "critères de succès" — texte libre, sauvegardé au blur (pas de bouton dédié : cohérent
   // avec le reste de la fiche, où chaque bloc round 4 s'auto-sauvegarde à la modification). Resync
@@ -712,6 +783,18 @@ export function ChantierDetailPanel({
   useEffect(() => {
     setSuccessCriteria(chantier?.successCriteria ?? "");
   }, [chantier?.id, chantier?.successCriteria]);
+
+  // Bloc "budget alloué" (round 7) — même discipline de saisie que "critères de succès" ci-dessus
+  // (texte libre saisi localement, sauvegardé au blur). Champ optionnel : une valeur vidée doit
+  // RETIRER la clé (voir `clearChantierField` plus bas), pas juste écrire `undefined`.
+  const [allocatedBudgetInput, setAllocatedBudgetInput] = useState(
+    chantier?.allocatedBudget !== undefined ? String(chantier.allocatedBudget) : ""
+  );
+  useEffect(() => {
+    setAllocatedBudgetInput(
+      chantier?.allocatedBudget !== undefined ? String(chantier.allocatedBudget) : ""
+    );
+  }, [chantier?.id, chantier?.allocatedBudget]);
 
   const [actionForm, setActionForm] = useState<{
     mode: "create" | "edit";
@@ -803,15 +886,18 @@ export function ChantierDetailPanel({
     }
   };
 
-  /** Retire `confidentialityLevel` du chantier ("Aucun" choisi dans le sélecteur ci-dessous) — cas
-   *  particulier qui ne peut PAS passer par `updateChantierField` : celle-ci fusionne un patch sur
-   *  le document existant (`{...existing, ...patch}`), et une clé valant explicitement `undefined`
-   *  ferait échouer `setDoc` (Firestore rejette toute valeur `undefined`). On écrit donc ici le
-   *  document complet, la clé simplement ABSENTE de l'objet. */
-  const clearChantierConfidentiality = async () => {
+  /** Retire une clé optionnelle du chantier (ex. "Aucun" choisi dans le sélecteur de
+   *  confidentialité, budget alloué vidé) — cas particulier qui ne peut PAS passer par
+   *  `updateChantierField` : celle-ci fusionne un patch sur le document existant
+   *  (`{...existing, ...patch}`), et une clé valant explicitement `undefined` ferait échouer
+   *  `setDoc` (Firestore rejette toute valeur `undefined`). On écrit donc ici le document complet,
+   *  la clé simplement ABSENTE de l'objet. Restreint aux deux champs réellement effacables depuis
+   *  cette fiche (pas un `keyof Chantier` générique : les autres champs de `Chantier` sont
+   *  obligatoires, les en retirer casserait le type). */
+  const clearChantierField = async (field: "confidentialityLevel" | "allocatedBudget") => {
     try {
       const rest = { ...chantier };
-      delete rest.confidentialityLevel;
+      delete rest[field];
       await saveChantier({ ...rest, lastUpdate: new Date().toISOString().slice(0, 10) });
     } catch (error) {
       console.error("[betrack] échec d'enregistrement du chantier :", error);
@@ -823,13 +909,38 @@ export function ChantierDetailPanel({
     }
   };
 
-  /** Défaut défensif pour un chantier créé avant l'introduction des jalons E0→E4 (round 5) — ou
-   *  jamais encore touché par cette carte : "encore à E0, rien de répondu". N'est écrit en base
-   *  qu'à la première interaction réelle (via `updateChantierField`), jamais au simple rendu. */
-  const milestones: ChantierMilestoneState = chantier.milestones ?? {
-    currentMilestone: "E0",
-    passedMilestones: [],
-    checklists: {},
+  /** Écrit les jalons E0→E4 d'UN LEVIER (round 7 — déplacé depuis le chantier, voir
+   *  `ChantierAction.milestones`) — passe par `updateChantierAction`/`saveChantierAction`, jamais
+   *  `updateChantierField`/`updateChantier` : ce sont deux collections/documents distincts. */
+  const updateActionMilestones = async (actionId: string, nextState: ChantierMilestoneState) => {
+    try {
+      await data.updateChantierAction(actionId, { milestones: nextState });
+    } catch (error) {
+      console.error("[betrack] échec d'enregistrement des jalons du levier :", error);
+      showToast(
+        t("strategicAxes.actionSaveErrorTitle"),
+        t("strategicAxes.actionSaveError"),
+        "error"
+      );
+    }
+  };
+
+  /** Écrit les prérequis d'UN LEVIER depuis sa carte "Dépendances / Prérequis" (round 7) — auto-
+   *  sauvegarde immédiate à chaque changement (contrairement à `ChantierActionForm`, qui bufferise
+   *  jusqu'au submit) : TOUJOURS écrire le tableau complet, y compris vide, pour qu'une suppression
+   *  de la dernière ligne persiste réellement (`updateChantierAction` fusionne un patch sur le
+   *  document existant, une clé omise laisserait l'ancien tableau en place). */
+  const updateActionPrerequisites = async (actionId: string, next: ActionPrerequisite[]) => {
+    try {
+      await data.updateChantierAction(actionId, { prerequisites: next });
+    } catch (error) {
+      console.error("[betrack] échec d'enregistrement des prérequis du levier :", error);
+      showToast(
+        t("strategicAxes.actionSaveErrorTitle"),
+        t("strategicAxes.actionSaveError"),
+        "error"
+      );
+    }
   };
 
   const actionFormLabels: ChantierActionFormLabels = {
@@ -939,6 +1050,34 @@ export function ChantierDetailPanel({
               </div>
             </div>
             <div>
+              <label
+                className="text-xs font-medium text-text-secondary"
+                htmlFor="chantier-allocated-budget"
+              >
+                {t("strategicChantierDetail.allocatedBudget")}
+                {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
+              </label>
+              <input
+                id="chantier-allocated-budget"
+                type="number"
+                inputMode="decimal"
+                value={allocatedBudgetInput}
+                onChange={(e) => setAllocatedBudgetInput(e.target.value)}
+                onBlur={() => {
+                  const trimmed = allocatedBudgetInput.trim();
+                  if (trimmed === "") {
+                    if (chantier.allocatedBudget !== undefined)
+                      clearChantierField("allocatedBudget");
+                    return;
+                  }
+                  const parsed = Number(trimmed);
+                  if (Number.isNaN(parsed) || parsed === chantier.allocatedBudget) return;
+                  updateChantierField({ allocatedBudget: parsed });
+                }}
+                className={INPUT_CLASS}
+              />
+            </div>
+            <div>
               <span className="text-xs font-medium text-text-secondary">
                 {t("strategicAxes.progress")}
               </span>
@@ -970,7 +1109,7 @@ export function ChantierDetailPanel({
                   onChange={(e) =>
                     e.target.value
                       ? updateChantierField({ confidentialityLevel: e.target.value })
-                      : clearChantierConfidentiality()
+                      : clearChantierField("confidentialityLevel")
                   }
                 >
                   <option value="">
@@ -987,63 +1126,6 @@ export function ChantierDetailPanel({
                 </select>
               </div>
             )}
-          </div>
-        </CardBody>
-      </Card>
-
-      {/* ── Jalons E0→E4 (round 5, méthode PMO) ────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader title={t("strategicChantierDetail.milestones.title")} />
-        <CardBody>
-          <MilestoneStepper
-            currentMilestone={milestones.currentMilestone}
-            passedMilestones={milestones.passedMilestones}
-          />
-          <div className="mt-4">
-            <MilestoneChecklistPanel
-              milestoneId={milestones.currentMilestone}
-              items={milestones.checklists[milestones.currentMilestone] ?? []}
-              autoFlags={resolveMilestoneAutoFlags(
-                milestones.currentMilestone,
-                chantier,
-                data.chantiers,
-                data.chantierActions
-              )}
-              users={data.users}
-              onChange={(nextItems) => {
-                updateChantierField({
-                  milestones: {
-                    currentMilestone: milestones.currentMilestone,
-                    passedMilestones: milestones.passedMilestones,
-                    checklists: {
-                      ...milestones.checklists,
-                      [milestones.currentMilestone]: nextItems,
-                    },
-                  },
-                });
-              }}
-              onValidateMilestone={() => {
-                // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà le dernier),
-                // on le laisse tel quel — MilestoneStepper affiche alors E4 à la fois "franchi"
-                // (dans passedMilestones) et "courant" (currentMilestone), priorité donnée au style
-                // "franchi" (vert) pour éviter qu'un jalon validé ne s'affiche comme encore actif.
-                const currentIndex = MILESTONE_ORDER.indexOf(milestones.currentMilestone);
-                const nextMilestone =
-                  MILESTONE_ORDER[currentIndex + 1] ?? milestones.currentMilestone;
-                const passedMilestones = milestones.passedMilestones.includes(
-                  milestones.currentMilestone
-                )
-                  ? milestones.passedMilestones
-                  : [...milestones.passedMilestones, milestones.currentMilestone];
-                updateChantierField({
-                  milestones: {
-                    currentMilestone: nextMilestone,
-                    passedMilestones,
-                    checklists: milestones.checklists,
-                  },
-                });
-              }}
-            />
           </div>
         </CardBody>
       </Card>
@@ -1091,26 +1173,6 @@ export function ChantierDetailPanel({
             value={chantier.raci ?? []}
             onChange={(next) => updateChantierField({ raci: next })}
           />
-        </CardBody>
-      </Card>
-
-      {/* ── Dépendances (migration telle quelle de l'affichage lecture seule) ─────────────────── */}
-      <Card>
-        <CardHeader title={t("strategicChantierDetail.dependencies.title")} />
-        <CardBody>
-          {chantier.dependencies.length === 0 ? (
-            <p className="text-[13px] text-tertiary">
-              {t("strategicChantierDetail.dependencies.none")}
-            </p>
-          ) : (
-            <ul className="space-y-1 text-[13px] text-primary">
-              {chantier.dependencies.map((d) => (
-                <li key={`${d.targetId}-${d.type}`}>
-                  {data.chantiers.find((c) => c.id === d.targetId)?.name ?? d.targetId} ({d.type})
-                </li>
-              ))}
-            </ul>
-          )}
         </CardBody>
       </Card>
 
@@ -1173,6 +1235,15 @@ export function ChantierDetailPanel({
                 const isFocused = action.id === focusActionId;
                 const actionDeliverables = normalizeDeliverables(action.deliverables);
                 const startInfo = canStartAction(action, data.chantierActions, stages);
+                // Défaut défensif pour un levier créé avant l'introduction des jalons E0→E4 (round
+                // 5, déplacé au levier round 7) — ou jamais encore touché : "encore à E0, rien de
+                // répondu". N'est écrit en base qu'à la première interaction réelle.
+                const actionMilestones: ChantierMilestoneState = action.milestones ?? {
+                  currentMilestone: "E0",
+                  passedMilestones: [],
+                  checklists: {},
+                };
+                const actionProgressPct = milestoneProgressPct(action);
                 return (
                   <li
                     key={action.id}
@@ -1290,6 +1361,98 @@ export function ChantierDetailPanel({
                         </ul>
                       )}
                     </div>
+
+                    {/* ── Jalons E0→E4 du LEVIER (round 7 — déplacé depuis le chantier) ──────── */}
+                    <div className="mt-3 border-t border-border pt-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                          {t("strategicChantierDetail.milestones.title")}
+                        </span>
+                        <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                          {actionProgressPct}%
+                        </span>
+                      </div>
+                      <div className="mt-2">
+                        <MilestoneStepper
+                          currentMilestone={actionMilestones.currentMilestone}
+                          passedMilestones={actionMilestones.passedMilestones}
+                        />
+                      </div>
+                      <div className="mt-3">
+                        <MilestoneChecklistPanel
+                          milestoneId={actionMilestones.currentMilestone}
+                          items={
+                            actionMilestones.checklists[actionMilestones.currentMilestone] ?? []
+                          }
+                          autoFlags={resolveMilestoneAutoFlags(
+                            actionMilestones.currentMilestone,
+                            action,
+                            data.chantiers,
+                            data.chantierActions
+                          )}
+                          users={data.users}
+                          onChange={(nextItems) => {
+                            updateActionMilestones(action.id, {
+                              currentMilestone: actionMilestones.currentMilestone,
+                              passedMilestones: actionMilestones.passedMilestones,
+                              checklists: {
+                                ...actionMilestones.checklists,
+                                [actionMilestones.currentMilestone]: nextItems,
+                              },
+                            });
+                          }}
+                          onValidateMilestone={() => {
+                            // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
+                            // le dernier), on le laisse tel quel — voir même commentaire historique
+                            // sur l'ancien callback chantier-level, mécanique identique ici.
+                            const currentIndex = MILESTONE_ORDER.indexOf(
+                              actionMilestones.currentMilestone
+                            );
+                            const nextMilestone =
+                              MILESTONE_ORDER[currentIndex + 1] ??
+                              actionMilestones.currentMilestone;
+                            const passedMilestones = actionMilestones.passedMilestones.includes(
+                              actionMilestones.currentMilestone
+                            )
+                              ? actionMilestones.passedMilestones
+                              : [
+                                  ...actionMilestones.passedMilestones,
+                                  actionMilestones.currentMilestone,
+                                ];
+                            updateActionMilestones(action.id, {
+                              currentMilestone: nextMilestone,
+                              passedMilestones,
+                              checklists: actionMilestones.checklists,
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* ── Dépendances / Prérequis du LEVIER (round 7 — fusion) ──────────────────
+                        titre à changer en "Dépendances / Prérequis" par un round i18n suivant
+                        (workstream C, renommage "action" → "levier") — key `prerequisites.title`
+                        inchangée volontairement, hors scope ici. */}
+                    <div className="mt-3 border-t border-border pt-3">
+                      {chantierBlockingAlerts.length > 0 && (
+                        <div className="mb-2 space-y-1">
+                          {chantierBlockingAlerts.map((alert) => (
+                            <div
+                              key={`${alert.targetId}-${alert.type}`}
+                              className="inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber"
+                            >
+                              <Lock size={10} /> {alert.message}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <PrerequisitesEditor
+                        value={action.prerequisites ?? []}
+                        otherActions={chantierActions.filter((a) => a.id !== action.id)}
+                        labels={actionFormLabels}
+                        onChange={(next) => updateActionPrerequisites(action.id, next)}
+                      />
+                    </div>
                   </li>
                 );
               })}
@@ -1396,6 +1559,7 @@ export function ChantierDetailPanel({
           programId={activeProgramId ?? ""}
           axisId={chantier.axisId}
           chantierId={chantier.id}
+          chantierActions={chantierActions}
         />
       </div>
 

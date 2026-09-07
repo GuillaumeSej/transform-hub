@@ -19,9 +19,9 @@ import { StrategicImportButton } from "@/components/strategic/StrategicImportBut
 import {
   chantierAtRiskIndicators,
   chantierDependencyAlerts,
+  chantierMilestoneProgressPct,
   computeIndicatorDelta,
   latestMeasurement,
-  milestoneProgressPct,
   resolveIndicatorStatus,
   type IndicatorDelta,
 } from "@/lib/axisLogic";
@@ -572,6 +572,7 @@ export function StrategicAxesView() {
           indicators={data.indicators}
           measurements={data.measurements}
           chantiersByAxis={chantiersByAxis}
+          chantierActions={data.chantierActions}
           onCardClick={openAxis}
           onOpenChantier={openChantierPanel}
           atRiskItemsOf={(axisId) =>
@@ -639,7 +640,7 @@ export function StrategicAxesView() {
                       const chantierActions = actionsByChantier.get(chantier.id) ?? [];
                       const shownActions = chantierActions.slice(0, CARD_ACTIONS_SHOWN);
                       const hiddenActions = chantierActions.length - shownActions.length;
-                      const progressPct = milestoneProgressPct(chantier);
+                      const progressPct = chantierMilestoneProgressPct(chantier, chantierActions);
                       // Popover-cliquable (round 4, point 2) : le badge "N à risque" est un vrai
                       // <button>, donc la carte NE PEUT PLUS être elle-même un <button> (imbrication
                       // invalide) — `role="button"` + gestion clavier reproduit le même comportement.

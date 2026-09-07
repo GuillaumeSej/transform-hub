@@ -93,6 +93,13 @@ export const STRATEGIC_DASHBOARD_WIDGET_REGISTRY: StrategicDashboardWidgetDef[] 
     allowedSpans: ["M", "L", "XL"],
   },
   {
+    type: "chantier-health",
+    label: "strategicDashboard.widget.chantierHealth",
+    icon: "ShieldCheck",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+  },
+  {
     type: "axis-breakdown",
     label: "strategicDashboard.widget.axisBreakdown",
     icon: "Columns3",
@@ -100,13 +107,6 @@ export const STRATEGIC_DASHBOARD_WIDGET_REGISTRY: StrategicDashboardWidgetDef[] 
     // chantiers (`ChantierProgressRow`), un `M`/`L` étriquerait la lecture.
     defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "chantier-health",
-    label: "strategicDashboard.widget.chantierHealth",
-    icon: "ShieldCheck",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
   },
   {
     type: "chantier-dependency-alerts",
@@ -170,8 +170,16 @@ export function setWidgetSpan(
 
 /** Clé DÉDIÉE, distincte de `betrack_dashboard_layout_v10` (dashboard exécutif) : les deux
  *  dashboards ont des registres disjoints, partager la clé réinitialiserait l'un à chaque
- *  personnalisation de l'autre. */
-const LAYOUT_KEY = "betrack_strategic_dashboard_layout_v1";
+ *  personnalisation de l'autre.
+ *
+ *  Round 7, point 2 : bump `_v1` → `_v2`, délibéré — `chantier-health` passe désormais AVANT
+ *  `axis-breakdown` dans `STRATEGIC_DASHBOARD_WIDGET_REGISTRY` ci-dessus, mais un simple
+ *  réordonnancement du registre ne re-trie PAS un layout déjà persisté en localStorage
+ *  (`loadStrategicDashboardLayout` ne retombe sur le défaut que si le layout est absent, corrompu,
+ *  ou référence un type de widget disparu du registre — jamais pour un changement d'ordre). Changer
+ *  la clé force donc `buildDefaultLayout()` pour tout le monde, une seule fois, pour que le nouvel
+ *  ordre par défaut soit réellement visible. */
+const LAYOUT_KEY = "betrack_strategic_dashboard_layout_v2";
 
 const isBrowser = () => typeof window !== "undefined";
 

@@ -2,8 +2,14 @@
 
 import { AtRiskCountPill } from "@/components/strategic/AtRiskCountPill";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
-import { chantierAtRiskIndicators, milestoneProgressPct } from "@/lib/axisLogic";
-import type { Chantier, Indicator, IndicatorMeasurement, MaturityStageConfig } from "@/types";
+import { chantierAtRiskIndicators, chantierMilestoneProgressPct } from "@/lib/axisLogic";
+import type {
+  Chantier,
+  ChantierAction,
+  Indicator,
+  IndicatorMeasurement,
+  MaturityStageConfig,
+} from "@/types";
 
 /**
  * Ligne compacte "chantier" — nom, badge d'étape (`AxisStageBadge`), barre d'avancement dérivée des
@@ -18,6 +24,7 @@ import type { Chantier, Indicator, IndicatorMeasurement, MaturityStageConfig } f
  */
 export function ChantierProgressRow({
   chantier,
+  chantierActions,
   stages,
   indicators,
   measurements,
@@ -26,6 +33,11 @@ export function ChantierProgressRow({
   className,
 }: {
   chantier: Chantier;
+  /** Tous les leviers (ex-actions) de l'entreprise/du programme — filtrés en interne par
+   *  `chantier.id`. Round 7 : la progression du chantier est désormais la moyenne de la
+   *  progression E0→E4 de ses leviers (`chantierMilestoneProgressPct`), le suivi par jalon
+   *  n'existant plus qu'au niveau levier. */
+  chantierActions: ChantierAction[];
   /** Étapes du programme, déjà triées par `order` (voir `useMaturityStages`). */
   stages: MaturityStageConfig[];
   indicators: Indicator[];
@@ -39,7 +51,7 @@ export function ChantierProgressRow({
   };
   className?: string;
 }) {
-  const progressPct = milestoneProgressPct(chantier);
+  const progressPct = chantierMilestoneProgressPct(chantier, chantierActions);
   const atRiskItems = chantierAtRiskIndicators(chantier.id, indicators, measurements);
 
   return (

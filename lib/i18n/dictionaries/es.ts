@@ -1188,11 +1188,11 @@ const es: Record<string, string> = {
   // Gantt de los proyectos
   "strategicAxes.ganttSection": "Proyectos del eje",
   "strategicAxes.ganttHint":
-    "Un bloque = un proyecto, delimitado por su primera y su última acción. Haga clic en un bloque o en una acción para abrir el detalle del proyecto y sus entregables.",
+    "Un bloque = un proyecto, delimitado por su primera y su última actividad. Haga clic en un bloque o en una actividad para abrir el detalle del proyecto y sus entregables.",
   "strategicAxes.noChantiers": "Ningún proyecto en este eje.",
-  "strategicAxes.chantierUnplanned": "Proyectos sin acción planificada",
-  "strategicAxes.chantierNoDates": "Aún sin fecha — añada una acción",
-  "strategicAxes.actionsSuffix": "acciones",
+  "strategicAxes.chantierUnplanned": "Proyectos sin actividad planificada",
+  "strategicAxes.chantierNoDates": "Aún sin fecha — añada una actividad",
+  "strategicAxes.actionsSuffix": "actividades",
   // Gantt: escala temporal ajustable, avance, resumen del proyecto
   "strategicAxes.ganttScale": "Escala",
   "strategicAxes.ganttScaleMonth": "Mes",
@@ -1200,11 +1200,11 @@ const es: Record<string, string> = {
   "strategicAxes.ganttScaleSemester": "Semestre",
   "strategicAxes.progress": "Avance",
   "strategicAxes.ganttToday": "Hoy",
-  "strategicAxes.actionsCompleted": "acciones finalizadas",
+  "strategicAxes.actionsCompleted": "actividades finalizadas",
   "strategicAxes.moreActionsSuffix": "más",
-  "strategicAxes.cardNoActions": "Sin acciones",
+  "strategicAxes.cardNoActions": "Sin actividades",
   "strategicAxes.chantierOwner": "Responsable del proyecto",
-  "strategicAxes.ownerFromActions": "según los responsables de las acciones",
+  "strategicAxes.ownerFromActions": "según los responsables de las actividades",
   "strategicAxes.chantierPeriod": "Periodo",
   "strategicAxes.newChantier": "Nuevo proyecto",
   "strategicAxes.newChantierModalTitle": "Nuevo proyecto",
@@ -1212,19 +1212,19 @@ const es: Record<string, string> = {
   "strategicAxes.chantierCreated": "Proyecto creado",
   "strategicAxes.chantierDeleted": "Proyecto eliminado",
   "strategicAxes.deleteChantier": "Eliminar el proyecto",
-  "strategicAxes.confirmDeleteChantier": "Confirmar la eliminación del proyecto y sus acciones",
+  "strategicAxes.confirmDeleteChantier": "Confirmar la eliminación del proyecto y sus actividades",
   // Ventana proyecto / acciones / entregables
   "strategicAxes.chantierModalTitle": "Detalle del proyecto",
   "strategicAxes.dependsOn": "Depende de",
-  "strategicAxes.chantierActions": "Acciones del proyecto",
-  "strategicAxes.noActions": "Ninguna acción en este proyecto.",
-  "strategicAxes.newAction": "Nueva acción",
+  "strategicAxes.chantierActions": "Actividades del proyecto",
+  "strategicAxes.noActions": "Ninguna actividad en este proyecto.",
+  "strategicAxes.newAction": "Nueva actividad",
   "strategicAxes.editAction": "Editar",
-  "strategicAxes.actionCreated": "Acción creada",
-  "strategicAxes.actionUpdated": "Acción actualizada",
-  "strategicAxes.actionDeleted": "Acción eliminada",
+  "strategicAxes.actionCreated": "Actividad creada",
+  "strategicAxes.actionUpdated": "Actividad actualizada",
+  "strategicAxes.actionDeleted": "Actividad eliminada",
   "strategicAxes.confirmDelete": "Confirmar",
-  "strategicAxes.actionName": "Nombre de la acción",
+  "strategicAxes.actionName": "Nombre de la actividad",
   "strategicAxes.actionOwner": "Responsable",
   "strategicAxes.actionStart": "Inicio",
   "strategicAxes.actionEnd": "Fin",
@@ -1262,7 +1262,7 @@ const es: Record<string, string> = {
   "strategicAxes.chantierSaveErrorTitle": "No se pudo guardar",
   "strategicAxes.chantierSaveError": "No se pudo guardar el proyecto.",
   "strategicAxes.actionSaveErrorTitle": "No se pudo guardar",
-  "strategicAxes.actionSaveError": "No se pudo guardar la acción.",
+  "strategicAxes.actionSaveError": "No se pudo guardar la actividad.",
   "strategicAxes.atRiskPopoverTitle": "Indicadores en riesgo",
   "strategicAxes.atRiskTooltip":
     "Desviación desfavorable entre el último valor medido y el objetivo del indicador.",
@@ -1277,6 +1277,7 @@ const es: Record<string, string> = {
   "strategicChantierDetail.successCriteria": "Criterios de éxito",
   "strategicChantierDetail.sponsor": "Patrocinador",
   "strategicChantierDetail.pilote": "Responsable",
+  "strategicChantierDetail.allocatedBudget": "Presupuesto asignado",
   "strategicChantierDetail.confidentialityLevel": "Nivel de confidencialidad",
   "strategicChantierDetail.confidentialityLevelNone": "Ninguno (visible para todos)",
 
@@ -1313,22 +1314,20 @@ const es: Record<string, string> = {
   "strategicChantierDetail.raci.empty": "Nadie asignado.",
   "strategicChantierDetail.raci.letter": "Letra RACI",
 
-  "strategicChantierDetail.prerequisites.title": "Prerrequisitos",
-  "strategicChantierDetail.prerequisites.kindAction": "Acción del plan",
+  "strategicChantierDetail.prerequisites.title": "Dependencias / Prerrequisitos",
+  "strategicChantierDetail.prerequisites.kindAction": "Actividad del plan",
   "strategicChantierDetail.prerequisites.kindExternal": "Prerrequisito externo",
   "strategicChantierDetail.prerequisites.blockedBy": "Bloqueado por:",
   "strategicChantierDetail.prerequisites.addRow": "Añadir un prerrequisito",
   "strategicChantierDetail.prerequisites.kind": "Tipo",
-  "strategicChantierDetail.prerequisites.targetPlaceholder": "Elegir una acción",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Elegir una actividad",
   "strategicChantierDetail.prerequisites.externalPlaceholder":
-    "Ej. Contratación del jefe de proyecto",
+    "Ej. Contratación, compra, validación presupuestaria…",
   "strategicChantierDetail.prerequisites.done": "Hecho",
   "strategicChantierDetail.prerequisites.removeRow": "Quitar este prerrequisito",
   "strategicChantierDetail.prerequisites.none": "Sin prerrequisitos.",
-  "strategicChantierDetail.prerequisites.noOtherActions": "Ninguna otra acción en este workstream.",
-
-  "strategicChantierDetail.dependencies.title": "Dependencias",
-  "strategicChantierDetail.dependencies.none": "Sin dependencias.",
+  "strategicChantierDetail.prerequisites.noOtherActions":
+    "Ninguna otra actividad en este workstream.",
 
   "strategicChantierDetail.raci.chantierTitle": "RACI del workstream",
   "strategicChantierDetail.raci.deliverableTitle": "RACI del entregable",
@@ -1336,13 +1335,13 @@ const es: Record<string, string> = {
   "strategicChantierDetail.timeline.title": "Cronología de entregables",
   "strategicChantierDetail.timeline.empty": "Ningún entregable con fases todavía.",
 
-  "strategicChantierDetail.actionFocused": "Acción abierta desde el enlace",
+  "strategicChantierDetail.actionFocused": "Actividad abierta desde el enlace",
   "strategicChantierDetail.actionForm.missingHint": "Complete el nombre y las fechas para guardar.",
   "strategicChantierDetail.successCriteria.placeholder": "Estaremos satisfechos en [año] si...",
 
   // ─── Plan Estratégico — hitos E0-E4 (ronda 5) ────────────────────────────────
   "strategicChantierDetail.milestones.title": "Método de hitos E0-E4",
-  "strategicChantierDetail.milestones.stepper.title": "Hitos del chantier",
+  "strategicChantierDetail.milestones.stepper.title": "Hitos de la actividad",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Se desbloquea tras el hito actual",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Hito superado",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Hito actual",
@@ -1407,14 +1406,14 @@ const es: Record<string, string> = {
   "strategicImport.lineLabel": "Línea",
   "strategicImport.axesCountLabel": "eje(s) a crear",
   "strategicImport.chantiersCountLabel": "proyecto(s) a crear",
-  "strategicImport.actionsCountLabel": "acción(es) a crear",
+  "strategicImport.actionsCountLabel": "actividad(es) a crear",
   "strategicImport.indicatorsCountLabel": "indicador(es) a crear",
   "strategicImport.templateDownloadedTitle": "Plantilla descargada",
   "strategicImport.templateDownloadedBody":
     "5 hojas: Ejes (Code = clave), Proyectos (Code Eje = FK), Acciones (Code Proyecto = FK), Entregables (Code Acción = FK, opcional), Indicadores (Code Eje O Code Proyecto = FK). Elimine las filas de ejemplo antes de completar.",
   "strategicImport.ignoredRowsNote": "{n} línea(s) ignorada(s)",
   "strategicImport.importDoneBody":
-    "{axes} eje(s) · {chantiers} proyecto(s) · {actions} acción(es) · {indicators} indicador(es) creado(s)",
+    "{axes} eje(s) · {chantiers} proyecto(s) · {actions} actividad(es) · {indicators} indicador(es) creado(s)",
   "strategicImport.errorTitle": "Fallo en la importación",
 
   // ─── Plan Estratégico — página KPI (registro de medidas, edición de objetivo) ─
@@ -1435,7 +1434,7 @@ const es: Record<string, string> = {
   "kpi.summary.indicatorsSuffix": "indicadores",
 
   // ─── KPI de negocio (indicadores de nivel eje) — página KPI Y panel estratégico ───
-  "businessKpis.title": "KPI de negocio",
+  "businessKpis.title": "KPI de negocio — Seguimiento del mercado",
   "businessKpis.empty":
     "Ningún KPI de negocio definido — añada un indicador vinculado directamente a un eje desde la pestaña Admin > Indicadores.",
   "businessKpis.noValue": "Sin medición",
@@ -1506,6 +1505,10 @@ const es: Record<string, string> = {
   "staffing.function.operations": "Operaciones",
   "staffing.function.achats": "Compras",
   "staffing.function.autre": "Otra",
+  "staffing.startDate": "Inicio",
+  "staffing.endDate": "Fin",
+  "staffing.action": "Actividad relacionada",
+  "staffing.actionNone": "Ninguna actividad en particular",
 
   // ─── Página Personal movilizado (/effectifs, Plan Estratégico) ────────────
   "effectifs.title": "Personal movilizado (ETC)",
@@ -1519,11 +1522,6 @@ const es: Record<string, string> = {
   "effectifs.emptyHint": "Abra un proyecto desde un eje estratégico y añada ETC por función.",
   "effectifs.kpi.totalFte": "ETC movilizados en total",
   "effectifs.kpi.totalFteSub": "Suma de todas las líneas de dotación del programa",
-  "effectifs.kpi.functions": "Funciones movilizadas",
-  "effectifs.kpi.functionsSub": "funciones en el referencial",
-  "effectifs.kpi.chantiers": "Proyectos con dotación",
-  "effectifs.kpi.chantiersSub": "Proyectos con al menos un ETC declarado",
-  "effectifs.byFunction": "En global, por gran función",
   "effectifs.byAxis": "Reparto por eje",
   "effectifs.byAxisFor": "Reparto por eje",
   "effectifs.allFunctions": "Todas las funciones",
@@ -1536,6 +1534,34 @@ const es: Record<string, string> = {
   "effectifs.budget.title": "ETC disponibles por función",
   "effectifs.budget.inputLabel": "Presupuesto de ETC",
   "effectifs.budget.usedLabel": "% ETC utilizados / disponibles",
+
+  // ─── Reparto de ETC por periodo (ronda 7 — StaffingPeriodBreakdown.tsx) ───────────────────
+  "staffingPeriod.title": "Reparto de ETC por periodo",
+  "staffingPeriod.subtitle":
+    "Solo ETC con fecha, agrupados por trimestre, semestre o año. Haga clic en una función para ver su reparto por eje.",
+  "staffingPeriod.granularity.quarterly": "Trimestre",
+  "staffingPeriod.granularity.semiannual": "Semestre",
+  "staffingPeriod.granularity.annual": "Año",
+  "staffingPeriod.empty": "No hay ETC con fecha para esta granularidad.",
+  "staffingPeriod.undatedNote":
+    "{n} línea(s) de dotación sin fecha de inicio, no mostradas en esta vista.",
+
+  // ─── Importación Excel de personal movilizado (ronda 7 — StaffingImportButton.tsx) ───────
+  "staffingImport.templateButton": "Descargar la plantilla",
+  "staffingImport.uploadButton": "Importar un archivo",
+  "staffingImport.previewTitle": "Vista previa de la importación — {file}",
+  "staffingImport.confirmButton": "Confirmar la importación",
+  "staffingImport.toCreateLabel": "línea(s) a crear",
+  "staffingImport.toUpdateLabel": "línea(s) a actualizar",
+  "staffingImport.errorRow": "línea(s) con error",
+  "staffingImport.lineLabel": "Línea",
+  "staffingImport.templateDownloadedTitle": "Plantilla descargada",
+  "staffingImport.templateDownloadedBody":
+    "Columnas: Proyecto (nombre exacto), Función, ETC, Fecha inicio, Fecha fin, Actividad (opcional, nombre exacto), Nota (opcional). Una línea que coincida con una entrada existente (mismo proyecto + función + fechas + actividad) se actualiza en lugar de duplicarse.",
+  "staffingImport.successMessage": "Importación completada",
+  "staffingImport.importDoneBody":
+    "{created} línea(s) creada(s) · {updated} línea(s) actualizada(s)",
+  "staffingImport.errorTitle": "Error en la importación",
 
   // ─── Tipo de programa (selector de programa de la Topbar) ─────────────────
   "programType.performance": "Rendimiento",
@@ -1555,6 +1581,7 @@ const es: Record<string, string> = {
   "strategicDashboard.axesSuffix": "ejes",
   "strategicDashboard.chantiersSuffix": "frentes de trabajo",
   "strategicDashboard.indicatorsSuffix": "indicadores",
+  "strategicDashboard.allocatedBudget": "Presupuesto asignado",
   "strategicDashboard.tracked": "Indicadores seguidos",
   "strategicDashboard.onTrack": "En trayectoria",
   "strategicDashboard.atRisk": "En riesgo",
@@ -1569,9 +1596,9 @@ const es: Record<string, string> = {
   "strategicDashboard.removeWidget": "Quitar este widget",
   // Etiquetas del registro de widgets (lib/strategicDashboardWidgets.ts, campo `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicadores · trayectoria",
-  "strategicDashboard.widget.businessKpis": "KPI de negocio",
+  "strategicDashboard.widget.businessKpis": "KPI de negocio — Seguimiento del mercado",
   "strategicDashboard.widget.axisBreakdown": "Distribución por eje",
-  "strategicDashboard.widget.chantierHealth": "Salud de los frentes de trabajo",
+  "strategicDashboard.widget.chantierHealth": "Estado de avance de los frentes de trabajo",
   "strategicDashboard.widget.chantierDependencyAlerts":
     "Alertas de dependencia entre frentes de trabajo",
   "strategicDashboard.chantierHealth.watch": "A vigilar",

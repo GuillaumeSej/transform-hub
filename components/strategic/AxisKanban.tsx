@@ -6,6 +6,7 @@ import { ChantierProgressRow } from "@/components/strategic/ChantierProgressRow"
 import type { IndicatorDelta } from "@/lib/axisLogic";
 import type {
   Chantier,
+  ChantierAction,
   Indicator,
   IndicatorMeasurement,
   MaturityStageConfig,
@@ -32,6 +33,7 @@ export function AxisKanban({
   indicators,
   measurements,
   chantiersByAxis,
+  chantierActions,
   onCardClick,
   onOpenChantier,
   atRiskItemsOf,
@@ -46,6 +48,10 @@ export function AxisKanban({
   /** Chantiers DE CHAQUE axe, déjà groupés par l'appelant (voir `StrategicAxesView.chantiersByAxis`) —
    *  pas de callback ici, la même map alimente déjà la vue "Chantiers" du même fichier. */
   chantiersByAxis: Map<string, Chantier[]>;
+  /** Tous les leviers de l'entreprise/du programme — transmis tels quels à `ChantierProgressRow`,
+   *  qui filtre en interne par chantier (round 7 : la progression affichée par chantier est la
+   *  moyenne de la progression E0→E4 de ses leviers). */
+  chantierActions: ChantierAction[];
   /** Clic sur l'en-tête de la carte d'axe → navigation vers la fiche de l'axe (inchangé). */
   onCardClick: (axisId: string) => void;
   /** Clic sur une ligne de chantier → ouvre le panneau chantier (round 6, point 0). */
@@ -136,6 +142,7 @@ export function AxisKanban({
                   <ChantierProgressRow
                     key={chantier.id}
                     chantier={chantier}
+                    chantierActions={chantierActions}
                     stages={stages}
                     indicators={indicators}
                     measurements={measurements}
