@@ -19,8 +19,9 @@
  *                         `MaturityStageConfig` (dont les libellés sont saisis par l'admin et ne
  *                         passent donc jamais par ce dictionnaire)
  *  - strategicAxes.*      Page « Axes stratégiques » + fiche détail d'un axe
- *  - strategicChantierDetail.* Fiche chantier dédiée (round 4 : succès, effort, RACI, prérequis ;
- *                              round 5 : jalons E0-E4, KPI de succès)
+ *  - strategicChantierDetail.* Fiche chantier dédiée (round 4 : succès, effort, prérequis ;
+ *                              round 5 : jalons E0-E4, KPI de succès ; round 8 : KPI optionnel du
+ *                              levier + kanban classique, RACI retiré)
  *  - strategicImport.*    Import Excel d'un plan stratégique complet (round 4)
  *  - kpi.*                Page KPI (saisie de mesures, édition d'objectif)
  *  - strategicDashboard.* Dashboard stratégique + son registre de widgets
@@ -1367,16 +1368,13 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.effort.changeManagement.option3": "Changement important",
   "strategicChantierDetail.effort.changeManagement.option4": "Changement majeur",
 
-  "strategicChantierDetail.raci.title": "RACI",
-  "strategicChantierDetail.raci.responsible": "Responsable (R)",
-  "strategicChantierDetail.raci.accountable": "Autorité (A)",
-  "strategicChantierDetail.raci.consulted": "Consulté (C)",
-  "strategicChantierDetail.raci.informed": "Informé (I)",
-  "strategicChantierDetail.raci.noAccountableHint": "Aucun « Autorité » (A) n'est assigné.",
-  "strategicChantierDetail.raci.addRow": "Ajouter une ligne",
-  "strategicChantierDetail.raci.removeRow": "Retirer cette ligne",
-  "strategicChantierDetail.raci.empty": "Aucune personne assignée.",
-  "strategicChantierDetail.raci.letter": "Lettre RACI",
+  // ─── Plan Stratégique — round 8 (KPI optionnel du levier + kanban classique sans KPI) ──
+  "strategicChantierDetail.indicatorSelect.label": "KPI rattaché",
+  "strategicChantierDetail.indicatorSelect.none": "Aucun KPI",
+  "strategicChantierDetail.kanban.title": "Statut",
+  "strategicChantierDetail.kanban.todo": "À faire",
+  "strategicChantierDetail.kanban.inProgress": "En cours",
+  "strategicChantierDetail.kanban.done": "Terminé",
 
   "strategicChantierDetail.prerequisites.title": "Dépendances / Prérequis",
   "strategicChantierDetail.prerequisites.kindAction": "Levier du plan",
@@ -1391,9 +1389,6 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.prerequisites.removeRow": "Retirer ce prérequis",
   "strategicChantierDetail.prerequisites.none": "Aucun prérequis.",
   "strategicChantierDetail.prerequisites.noOtherActions": "Aucun autre levier sur ce chantier.",
-
-  "strategicChantierDetail.raci.chantierTitle": "RACI du chantier",
-  "strategicChantierDetail.raci.deliverableTitle": "RACI du livrable",
 
   "strategicChantierDetail.timeline.title": "Timeline des livrables",
   "strategicChantierDetail.timeline.empty": "Aucun livrable phasé pour l'instant.",
@@ -1665,14 +1660,12 @@ const fr: Record<string, string> = {
   // Libellés du registre de widgets (lib/strategicDashboardWidgets.ts, champ `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
   "strategicDashboard.widget.businessKpis": "KPI business — Suivi du marché",
-  "strategicDashboard.widget.axisBreakdown": "Répartition par axe",
-  "strategicDashboard.widget.chantierHealth": "État des lieux d'avancement des chantiers",
+  // Round 8 : "Répartition par axe" a disparu (remplacé par la vue E0→E4 ci-dessous), et le
+  // libellé de "chantier-health" est retitré — le grain de lecture passe du chantier au levier.
+  "strategicDashboard.widget.chantierHealth": "État des lieux d'avancement des leviers",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendance entre chantiers",
-  // Round 6, point 5 : libellés des 3 états de `ChantierHealthMatrix` — "onTrack" réutilise
-  // `strategicDashboard.onTrack` (déjà "Sur la trajectoire"), seuls "watch"/"critical" sont
-  // nouveaux (l'état à risque binaire des indicateurs n'a pas d'équivalent "critique").
-  "strategicDashboard.chantierHealth.watch": "À surveiller",
-  "strategicDashboard.chantierHealth.critical": "Critique",
+  // Round 8 : placeholder d'une colonne de jalon E0-E4 sans levier (`LevierMilestoneBoard.tsx`).
+  "strategicDashboard.levierBoard.emptyColumn": "—",
 
   // ─── Plan Stratégique — fiche de configuration d'un programme (admin) ─────
   "adminPrograms.manage": "Gérer",

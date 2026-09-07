@@ -10,8 +10,6 @@ import { ChantierStaffingEditor } from "@/components/strategic/ChantierStaffingE
 import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
 import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
 import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
-import { RaciChips } from "@/components/strategic/RaciChips";
-import { RaciEditor } from "@/components/strategic/RaciEditor";
 import { SuccessKpiList } from "@/components/strategic/SuccessKpiList";
 import {
   formatTimelineDay,
@@ -35,6 +33,7 @@ import {
   milestoneProgressPct,
   resolveMilestoneAutoFlags,
 } from "@/lib/axisLogic";
+import { cn } from "@/lib/utils";
 import { addDays } from "@/lib/dateUtils";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantier } from "@/lib/firestore/chantiers";
@@ -54,6 +53,8 @@ import type {
   ChantierMilestoneState,
   Deliverable,
   DeliverablePhase,
+  Indicator,
+  LevierKanbanStatus,
   MaturityStageConfig,
 } from "@/types";
 
@@ -72,9 +73,9 @@ import type {
  * qui appellent chacun ce hook indépendamment, ce n'est pas un nouveau pattern.
  *
  * Porte TOUT le détail chantier : critères de succès, grille de notation d'effort (round 4, point 7
- * — SEUL endroit qui l'importe), RACI de chantier et de livrable (point 6), dépendances (migration
- * telle quelle), actions avec formulaire inline enrichi (prérequis go/no-go, owner/sponsor via
- * `UserPicker`), et la timeline colorée par livrable façon PERIAL (extraction `TimelineBars.tsx`,
+ * — SEUL endroit qui l'importe), dépendances (migration telle quelle), actions avec formulaire
+ * inline enrichi (prérequis go/no-go, owner/sponsor via `UserPicker`, KPI optionnel round 8), et la
+ * timeline colorée par livrable façon PERIAL (extraction `TimelineBars.tsx`,
  * voir `ChantierGantt.tsx`).
  */
 
@@ -89,6 +90,7 @@ type ChantierActionFormValues = Pick<
   | "status"
   | "deliverables"
   | "prerequisites"
+  | "indicatorId"
 >;
 
 const INPUT_CLASS =
@@ -160,6 +162,8 @@ type ChantierActionFormLabels = {
   start: string;
   end: string;
   stage: string;
+  indicator: string;
+  indicatorNone: string;
   description: string;
   deliverables: string;
   deliverablesHint: string;
@@ -167,7 +171,6 @@ type ChantierActionFormLabels = {
   deliverableLabel: string;
   addDeliverable: string;
   removeDeliverable: string;
-  deliverableRaciTitle: string;
   noPhases: string;
   phaseStart: string;
   phaseEnd: string;
@@ -336,17 +339,74 @@ function PrerequisitesEditor({
 }
 
 /**
+ * Kanban classique 3 états d'UN LEVIER SANS KPI rattaché (round 8) — remplace le bloc jalons
+ * E0→E4 pour ce mode de levier (voir `ChantierAction.indicatorId`). Même esprit visuel que
+ * `components/shared/ActionKanban.tsx` du Plan Performance (bouton actif rempli en noir, inactifs
+ * en contour) mais écrit ici en JSX Strategic-only, purement contrôlé (`status`/`onChange`,
+ * auto-sauvegarde immédiate à chaque clic — même discipline que `PrerequisitesEditor` sur la ligne
+ * de levier, pas de formulaire bufferisé). N'importe jamais `ActionKanban.tsx` ni son type
+ * `ActionStatus`, domaines strictement séparés.
+ */
+function LevierKanbanStatusControl({
+  status,
+  onChange,
+  labels,
+}: {
+  /** `undefined` traité comme "todo" pour la mise en avant du bouton actif — voir
+   *  `ChantierAction.kanbanStatus`, jamais forcé en base tant que l'utilisateur n'a pas cliqué. */
+  status: LevierKanbanStatus | undefined;
+  onChange: (next: LevierKanbanStatus) => void;
+  labels: { title: string; todo: string; inProgress: string; done: string };
+}) {
+  const effectiveStatus: LevierKanbanStatus = status ?? "todo";
+  const COLUMNS: { value: LevierKanbanStatus; label: string }[] = [
+    { value: "todo", label: labels.todo },
+    { value: "in_progress", label: labels.inProgress },
+    { value: "done", label: labels.done },
+  ];
+  return (
+    <div>
+      <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+        {labels.title}
+      </span>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {COLUMNS.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            onClick={() => onChange(c.value)}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
+              effectiveStatus === c.value
+                ? "border-bp-coral bg-black text-white"
+                : "border-border bg-white text-secondary hover:border-black"
+            )}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Formulaire d'action de chantier, rendu INLINE sur la fiche chantier (déplacé depuis l'ancienne
  * modale de `AxisDetailClient.tsx`, round 4 point 9). Enrichi par ce round : `owner`/`sponsor` via
  * `UserPicker` (point 8, nécessaire pour que les filtres Direction/Personne/Sponsor matchent une
- * vraie personne), éditeur de prérequis go/no-go (point 5), RACI par livrable (point 6), et
- * marquage obligatoire/optionnel + message d'aide sous le bouton désactivé (point 4).
+ * vraie personne), éditeur de prérequis go/no-go (point 5), et marquage obligatoire/optionnel +
+ * message d'aide sous le bouton désactivé (point 4).
+ *
+ * Round 8 : gagne le sélecteur optionnel de KPI (`indicatorId`) qui conditionne le mode de suivi du
+ * levier (jalons E0→E4 vs kanban classique) — voir `ChantierAction.indicatorId`. RACI par livrable
+ * retiré (jugé peu pertinent par le PO, voir `RaciEditor`/`RaciChips`, supprimés).
  */
 function ChantierActionForm({
   initial,
   stages,
   users,
   otherActions,
+  indicators,
   onSubmit,
   onCancel,
   labels,
@@ -357,6 +417,11 @@ function ChantierActionForm({
   /** Autres actions du MÊME chantier (l'action éditée exclue) — univers du sélecteur de prérequis
    *  "action". Un prérequis ne référence jamais l'action qui le porte elle-même. */
   otherActions: ChantierAction[];
+  /** KPI proposables à ce levier — DÉJÀ FILTRÉS par l'appelant (`ChantierDetailPanel`) : indicateurs
+   *  macro de l'axe du chantier + indicateurs déjà rattachés à ce chantier précis (voir
+   *  `ChantierAction.indicatorId`). Ce composant ne refiltre rien, il ne fait qu'afficher la liste
+   *  reçue. */
+  indicators: Indicator[];
   onSubmit: (values: ChantierActionFormValues) => void | Promise<void>;
   onCancel: () => void;
   labels: ChantierActionFormLabels;
@@ -368,9 +433,11 @@ function ChantierActionForm({
   const [start, setStart] = useState(initial?.start ?? today);
   const [end, setEnd] = useState(initial?.end ?? addDays(today, 30));
   const [status, setStatus] = useState(initial?.status ?? stages[0]?.id ?? "");
+  // KPI optionnel du levier (round 8) — présence ⇒ suivi E0→E4, absence ⇒ kanban classique.
+  const [indicatorId, setIndicatorId] = useState<string | undefined>(initial?.indicatorId);
   const [description, setDescription] = useState(initial?.description ?? "");
   // Un champ de saisie PAR livrable (plus de convention « une ligne = un livrable »), chacun
-  // portant ses propres sous-étapes temporelles et son propre RACI.
+  // portant ses propres sous-étapes temporelles.
   const [deliverables, setDeliverables] = useState<Deliverable[]>(() =>
     normalizeDeliverables(initial?.deliverables)
   );
@@ -428,7 +495,6 @@ function ChantierActionForm({
           ...d,
           label: d.label.trim(),
           phases: d.phases.filter((p) => p.start.length > 0 && p.end.length > 0),
-          raci: d.raci ?? [],
         }))
         .filter((d) => d.label.length > 0);
 
@@ -458,6 +524,7 @@ function ChantierActionForm({
         start,
         end,
         status,
+        ...(indicatorId ? { indicatorId } : {}),
         ...(parsedDeliverables.length > 0 ? { deliverables: parsedDeliverables } : {}),
         ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
       });
@@ -514,6 +581,24 @@ function ChantierActionForm({
             {stages.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-secondary" htmlFor="ca-indicator">
+            {labels.indicator} {labels.optional}
+          </label>
+          <select
+            id="ca-indicator"
+            value={indicatorId ?? ""}
+            onChange={(e) => setIndicatorId(e.target.value || undefined)}
+            className={INPUT_CLASS}
+          >
+            <option value="">{labels.indicatorNone}</option>
+            {indicators.map((indicator) => (
+              <option key={indicator.id} value={indicator.id}>
+                {indicator.name}
               </option>
             ))}
           </select>
@@ -647,20 +732,6 @@ function ChantierActionForm({
                     <Plus size={12} /> {labels.addPhase}
                   </Button>
                 </div>
-
-                {/* RACI du livrable (round 4, point 6) — indépendant du RACI du chantier. */}
-                <div className="mt-2 border-l border-border pl-2.5">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                    {labels.deliverableRaciTitle}
-                  </span>
-                  <div className="mt-1">
-                    <RaciEditor
-                      users={users}
-                      value={d.raci ?? []}
-                      onChange={(next) => patchDeliverable(d.id, { raci: next })}
-                    />
-                  </div>
-                </div>
               </li>
             ))}
           </ul>
@@ -750,6 +821,20 @@ export function ChantierDetailPanel({
             .sort((a, b) => a.start.localeCompare(b.start))
         : [],
     [data.chantierActions, chantier]
+  );
+
+  // KPI proposables au sélecteur optionnel d'un levier (round 8) — même filtre que `KpiPageClient.tsx`
+  // (`grouped` useMemo, `macro`/`byChantier`) : indicateurs macro de l'AXE du chantier (pas de
+  // `chantierId`) + indicateurs déjà rattachés à CE chantier précis. Jamais un indicateur d'un autre
+  // axe/chantier.
+  const chantierAvailableIndicators = useMemo(
+    () =>
+      chantier
+        ? data.indicators.filter(
+            (i) => (i.axisId === chantier.axisId && !i.chantierId) || i.chantierId === chantier.id
+          )
+        : [],
+    [data.indicators, chantier]
   );
 
   const bounds = useMemo(
@@ -943,6 +1028,22 @@ export function ChantierDetailPanel({
     }
   };
 
+  /** Écrit le statut kanban classique d'UN LEVIER SANS KPI (round 8) — même discipline
+   *  d'auto-sauvegarde immédiate que `updateActionPrerequisites`/`updateActionMilestones`
+   *  ci-dessus. */
+  const updateActionKanbanStatus = async (actionId: string, kanbanStatus: LevierKanbanStatus) => {
+    try {
+      await data.updateChantierAction(actionId, { kanbanStatus });
+    } catch (error) {
+      console.error("[betrack] échec d'enregistrement du statut kanban du levier :", error);
+      showToast(
+        t("strategicAxes.actionSaveErrorTitle"),
+        t("strategicAxes.actionSaveError"),
+        "error"
+      );
+    }
+  };
+
   const actionFormLabels: ChantierActionFormLabels = {
     name: t("strategicAxes.actionName"),
     owner: t("strategicAxes.actionOwner"),
@@ -950,6 +1051,8 @@ export function ChantierDetailPanel({
     start: t("strategicAxes.actionStart"),
     end: t("strategicAxes.actionEnd"),
     stage: t("strategicAxes.actionStage"),
+    indicator: t("strategicChantierDetail.indicatorSelect.label"),
+    indicatorNone: t("strategicChantierDetail.indicatorSelect.none"),
     description: t("strategicAxes.actionDescription"),
     deliverables: t("strategicAxes.deliverables"),
     deliverablesHint: t("strategicAxes.deliverablesHint"),
@@ -957,7 +1060,6 @@ export function ChantierDetailPanel({
     deliverableLabel: t("strategicAxes.deliverableLabel"),
     addDeliverable: t("strategicAxes.addDeliverable"),
     removeDeliverable: t("strategicAxes.removeDeliverable"),
-    deliverableRaciTitle: t("strategicChantierDetail.raci.deliverableTitle"),
     noPhases: t("strategicAxes.noPhases"),
     phaseStart: t("strategicAxes.phaseStart"),
     phaseEnd: t("strategicAxes.phaseEnd"),
@@ -1164,19 +1266,7 @@ export function ChantierDetailPanel({
         </CardBody>
       </Card>
 
-      {/* ── RACI du chantier ────────────────────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader title={t("strategicChantierDetail.raci.chantierTitle")} />
-        <CardBody>
-          <RaciEditor
-            users={data.users}
-            value={chantier.raci ?? []}
-            onChange={(next) => updateChantierField({ raci: next })}
-          />
-        </CardBody>
-      </Card>
-
-      {/* ── Actions, prérequis, livrables + RACI livrable ──────────────────────────────────── */}
+      {/* ── Actions, prérequis, livrables ───────────────────────────────────────────────────── */}
       <Card>
         <CardHeader
           title={t("strategicAxes.chantierActions")}
@@ -1197,6 +1287,7 @@ export function ChantierDetailPanel({
                 stages={stages}
                 users={data.users}
                 otherActions={chantierActions.filter((a) => a.id !== actionForm.actionId)}
+                indicators={chantierAvailableIndicators}
                 labels={actionFormLabels}
                 onCancel={() => setActionForm(null)}
                 onSubmit={async (values) => {
@@ -1351,83 +1442,96 @@ export function ChantierDetailPanel({
                                   ))}
                                 </div>
                               )}
-                              {d.raci && d.raci.length > 0 && (
-                                <div className="mt-1.5">
-                                  <RaciChips users={data.users} value={d.raci} />
-                                </div>
-                              )}
                             </li>
                           ))}
                         </ul>
                       )}
                     </div>
 
-                    {/* ── Jalons E0→E4 du LEVIER (round 7 — déplacé depuis le chantier) ──────── */}
-                    <div className="mt-3 border-t border-border pt-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                          {t("strategicChantierDetail.milestones.title")}
-                        </span>
-                        <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
-                          {actionProgressPct}%
-                        </span>
+                    {/* ── Suivi du LEVIER : jalons E0→E4 si rattaché à un KPI, sinon kanban
+                        classique (round 8, conditionné à `action.indicatorId`) ─────────────── */}
+                    {action.indicatorId ? (
+                      <div className="mt-3 border-t border-border pt-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                            {t("strategicChantierDetail.milestones.title")}
+                          </span>
+                          <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                            {actionProgressPct}%
+                          </span>
+                        </div>
+                        <div className="mt-2">
+                          <MilestoneStepper
+                            currentMilestone={actionMilestones.currentMilestone}
+                            passedMilestones={actionMilestones.passedMilestones}
+                          />
+                        </div>
+                        <div className="mt-3">
+                          <MilestoneChecklistPanel
+                            milestoneId={actionMilestones.currentMilestone}
+                            items={
+                              actionMilestones.checklists[actionMilestones.currentMilestone] ?? []
+                            }
+                            autoFlags={resolveMilestoneAutoFlags(
+                              actionMilestones.currentMilestone,
+                              action,
+                              data.chantiers,
+                              data.chantierActions
+                            )}
+                            users={data.users}
+                            onChange={(nextItems) => {
+                              updateActionMilestones(action.id, {
+                                currentMilestone: actionMilestones.currentMilestone,
+                                passedMilestones: actionMilestones.passedMilestones,
+                                checklists: {
+                                  ...actionMilestones.checklists,
+                                  [actionMilestones.currentMilestone]: nextItems,
+                                },
+                              });
+                            }}
+                            onValidateMilestone={() => {
+                              // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
+                              // le dernier), on le laisse tel quel — voir même commentaire historique
+                              // sur l'ancien callback chantier-level, mécanique identique ici.
+                              const currentIndex = MILESTONE_ORDER.indexOf(
+                                actionMilestones.currentMilestone
+                              );
+                              const nextMilestone =
+                                MILESTONE_ORDER[currentIndex + 1] ??
+                                actionMilestones.currentMilestone;
+                              const passedMilestones = actionMilestones.passedMilestones.includes(
+                                actionMilestones.currentMilestone
+                              )
+                                ? actionMilestones.passedMilestones
+                                : [
+                                    ...actionMilestones.passedMilestones,
+                                    actionMilestones.currentMilestone,
+                                  ];
+                              updateActionMilestones(action.id, {
+                                currentMilestone: nextMilestone,
+                                passedMilestones,
+                                checklists: actionMilestones.checklists,
+                              });
+                            }}
+                          />
+                        </div>
                       </div>
-                      <div className="mt-2">
-                        <MilestoneStepper
-                          currentMilestone={actionMilestones.currentMilestone}
-                          passedMilestones={actionMilestones.passedMilestones}
-                        />
-                      </div>
-                      <div className="mt-3">
-                        <MilestoneChecklistPanel
-                          milestoneId={actionMilestones.currentMilestone}
-                          items={
-                            actionMilestones.checklists[actionMilestones.currentMilestone] ?? []
+                    ) : (
+                      <div className="mt-3 border-t border-border pt-3">
+                        <LevierKanbanStatusControl
+                          status={action.kanbanStatus}
+                          labels={{
+                            title: t("strategicChantierDetail.kanban.title"),
+                            todo: t("strategicChantierDetail.kanban.todo"),
+                            inProgress: t("strategicChantierDetail.kanban.inProgress"),
+                            done: t("strategicChantierDetail.kanban.done"),
+                          }}
+                          onChange={(kanbanStatus) =>
+                            updateActionKanbanStatus(action.id, kanbanStatus)
                           }
-                          autoFlags={resolveMilestoneAutoFlags(
-                            actionMilestones.currentMilestone,
-                            action,
-                            data.chantiers,
-                            data.chantierActions
-                          )}
-                          users={data.users}
-                          onChange={(nextItems) => {
-                            updateActionMilestones(action.id, {
-                              currentMilestone: actionMilestones.currentMilestone,
-                              passedMilestones: actionMilestones.passedMilestones,
-                              checklists: {
-                                ...actionMilestones.checklists,
-                                [actionMilestones.currentMilestone]: nextItems,
-                              },
-                            });
-                          }}
-                          onValidateMilestone={() => {
-                            // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
-                            // le dernier), on le laisse tel quel — voir même commentaire historique
-                            // sur l'ancien callback chantier-level, mécanique identique ici.
-                            const currentIndex = MILESTONE_ORDER.indexOf(
-                              actionMilestones.currentMilestone
-                            );
-                            const nextMilestone =
-                              MILESTONE_ORDER[currentIndex + 1] ??
-                              actionMilestones.currentMilestone;
-                            const passedMilestones = actionMilestones.passedMilestones.includes(
-                              actionMilestones.currentMilestone
-                            )
-                              ? actionMilestones.passedMilestones
-                              : [
-                                  ...actionMilestones.passedMilestones,
-                                  actionMilestones.currentMilestone,
-                                ];
-                            updateActionMilestones(action.id, {
-                              currentMilestone: nextMilestone,
-                              passedMilestones,
-                              checklists: actionMilestones.checklists,
-                            });
-                          }}
                         />
                       </div>
-                    </div>
+                    )}
 
                     {/* ── Dépendances / Prérequis du LEVIER (round 7 — fusion) ──────────────────
                         titre à changer en "Dépendances / Prérequis" par un round i18n suivant

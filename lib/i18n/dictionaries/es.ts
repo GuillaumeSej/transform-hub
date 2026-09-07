@@ -1303,16 +1303,13 @@ const es: Record<string, string> = {
   "strategicChantierDetail.effort.changeManagement.option3": "Cambio importante",
   "strategicChantierDetail.effort.changeManagement.option4": "Cambio mayor",
 
-  "strategicChantierDetail.raci.title": "RACI",
-  "strategicChantierDetail.raci.responsible": "Responsable (R)",
-  "strategicChantierDetail.raci.accountable": "Aprobador (A)",
-  "strategicChantierDetail.raci.consulted": "Consultado (C)",
-  "strategicChantierDetail.raci.informed": "Informado (I)",
-  "strategicChantierDetail.raci.noAccountableHint": "No hay ningún « Aprobador » (A) asignado.",
-  "strategicChantierDetail.raci.addRow": "Añadir una línea",
-  "strategicChantierDetail.raci.removeRow": "Quitar esta línea",
-  "strategicChantierDetail.raci.empty": "Nadie asignado.",
-  "strategicChantierDetail.raci.letter": "Letra RACI",
+  // ─── Plan Stratégique — round 8 (KPI opcional del levier + kanban clásico sin KPI) ─────
+  "strategicChantierDetail.indicatorSelect.label": "KPI vinculado",
+  "strategicChantierDetail.indicatorSelect.none": "Sin KPI",
+  "strategicChantierDetail.kanban.title": "Estado",
+  "strategicChantierDetail.kanban.todo": "Por hacer",
+  "strategicChantierDetail.kanban.inProgress": "En curso",
+  "strategicChantierDetail.kanban.done": "Terminado",
 
   "strategicChantierDetail.prerequisites.title": "Dependencias / Prerrequisitos",
   "strategicChantierDetail.prerequisites.kindAction": "Actividad del plan",
@@ -1328,9 +1325,6 @@ const es: Record<string, string> = {
   "strategicChantierDetail.prerequisites.none": "Sin prerrequisitos.",
   "strategicChantierDetail.prerequisites.noOtherActions":
     "Ninguna otra actividad en este workstream.",
-
-  "strategicChantierDetail.raci.chantierTitle": "RACI del workstream",
-  "strategicChantierDetail.raci.deliverableTitle": "RACI del entregable",
 
   "strategicChantierDetail.timeline.title": "Cronología de entregables",
   "strategicChantierDetail.timeline.empty": "Ningún entregable con fases todavía.",
@@ -1597,12 +1591,14 @@ const es: Record<string, string> = {
   // Etiquetas del registro de widgets (lib/strategicDashboardWidgets.ts, campo `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicadores · trayectoria",
   "strategicDashboard.widget.businessKpis": "KPI de negocio — Seguimiento del mercado",
-  "strategicDashboard.widget.axisBreakdown": "Distribución por eje",
-  "strategicDashboard.widget.chantierHealth": "Estado de avance de los frentes de trabajo",
+  // Ronda 8: "Distribución por eje" desaparece (sustituida por la vista E0-E4 de abajo), y la
+  // etiqueta de "chantier-health" se retitula — el grano de lectura pasa del frente de trabajo
+  // a la actividad (levier).
+  "strategicDashboard.widget.chantierHealth": "Estado de avance de las actividades",
   "strategicDashboard.widget.chantierDependencyAlerts":
     "Alertas de dependencia entre frentes de trabajo",
-  "strategicDashboard.chantierHealth.watch": "A vigilar",
-  "strategicDashboard.chantierHealth.critical": "Crítico",
+  // Ronda 8: marcador de una columna de jalón E0-E4 vacía (`LevierMilestoneBoard.tsx`).
+  "strategicDashboard.levierBoard.emptyColumn": "—",
 
   // ─── Plan Estratégico — ficha de configuración de un programa (admin) ─────
   "adminPrograms.manage": "Gestionar",

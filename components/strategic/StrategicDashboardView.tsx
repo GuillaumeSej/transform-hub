@@ -21,14 +21,10 @@ import {
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
-import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import {
-  chantierDependencyAlerts,
-  chantierHealthState,
-  chantierMilestoneProgressPct,
-  countOnTrackAtRisk,
-} from "@/lib/axisLogic";
+import { chantierDependencyAlerts, colorForChantier, countOnTrackAtRisk } from "@/lib/axisLogic";
+import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import type { LevierKanbanStatus, MilestoneId } from "@/types";
 import {
   STRATEGIC_DASHBOARD_WIDGET_REGISTRY,
   SPAN_COL_CLASS,
@@ -45,15 +41,18 @@ import {
 } from "@/lib/strategicDashboardWidgets";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
-import { ProgressBar } from "@/components/shared/ProgressBar";
 import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import {
   BusinessKpiCards,
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
-import { ChantierHealthMatrix } from "@/components/strategic/ChantierHealthMatrix";
-import { ChantierProgressRow } from "@/components/strategic/ChantierProgressRow";
+import {
+  LevierMilestoneBoard,
+  type LevierBoardCard,
+  type LevierBoardGroup,
+} from "@/components/strategic/LevierMilestoneBoard";
+import { LevierKanbanBoard } from "@/components/strategic/LevierKanbanBoard";
 
 /**
  * Dashboard du PLAN STRATÉGIQUE — pendant de `DashboardPagePerformance.tsx` pour un programme de
@@ -119,15 +118,15 @@ export function StrategicDashboardView() {
   const { t } = useTranslation();
   const router = useRouter();
   const strategic = useStrategicData(user?.companyId ?? null, activeProgramId, user);
-  const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
   const { axes, chantiers, chantierActions, indicators, measurements } = strategic;
 
   /** Navigation vers le panneau chantier (`ChantierDetailPanel`, round 6, point 0) — le dashboard
    *  est une page DIFFÉRENTE de `/levers` (Kanban/Cartes/Chantiers), donc contrairement à ces vues
    *  qui ne font qu'ajuster `?chantier=` sur la page courante, ouvrir le panneau depuis ici exige
-   *  une vraie navigation. Réutilisé par le widget "Répartition par axe" (`ChantierProgressRow`)
-   *  ET par la nouvelle matrice de santé (`ChantierHealthMatrix`, point 5) — même destination. */
+   *  une vraie navigation. Réutilisé par la vue E0→E4 par axe (`LevierMilestoneBoard`/
+   *  `LevierKanbanBoard`, round 8) — un levier n'a pas de panneau propre, cliquer dessus ouvre
+   *  toujours le panneau de son CHANTIER parent. */
   const openChantierPanel = (chantierId: string) => router.push(`/levers?chantier=${chantierId}`);
 
   // ─── Agrégats (toute la logique de calcul vient de lib/axisLogic.ts) ──────────────────────
@@ -173,30 +172,54 @@ export function StrategicDashboardView() {
     [chantiers, chantierActions]
   );
 
-  /** Groupes (un par axe, colonnes) de cellules de santé (une par chantier) — alimente
-   *  `ChantierHealthMatrix` (round 6, point 5, remplace l'ancien "Avancement par étape de
-   *  maturité"). Un axe sans aucun chantier n'ouvre pas de colonne vide. */
-  const chantierHealthGroups = useMemo(
+  /** Groupes (un par axe) de la vue E0→E4 par levier (round 8, remplace l'ancienne matrice de
+   *  santé PAR CHANTIER) — alimente `LevierMilestoneBoard`/`LevierKanbanBoard`. Un axe sans aucun
+   *  chantier n'ouvre pas de section vide (même filtre que `axisBreakdown` ci-dessus, dont ce calcul
+   *  dérive). Pour chaque axe :
+   *   - `milestones` : leviers RATTACHÉS À UN KPI (`action.indicatorId` défini) de tous les
+   *     chantiers de l'axe, groupés par `action.milestones?.currentMilestone ?? "E0"` (5 colonnes) ;
+   *   - `withoutKpi` : leviers SANS KPI, à plat — c'est `LevierKanbanBoard` qui les reboucle par
+   *     `kanbanStatus` (mêmes 3 colonnes que le kanban classique du Plan Performance).
+   *  Chaque entrée porte `chantierColor` (`colorForChantier`, lib/axisLogic.ts) pour que le même
+   *  chantier affiche systématiquement la même couleur dans les deux blocs (E0-E4 et kanban). */
+  const levierBoardGroups = useMemo<(LevierBoardGroup & { withoutKpi: LevierBoardCard[] })[]>(
     () =>
       axisBreakdown
         .filter((row) => row.chantiers.length > 0)
-        .map((row) => ({
-          key: row.axis.id,
-          label: row.axis.name,
-          color: row.axis.color,
-          cells: row.chantiers.map((chantier) => ({
-            chantier,
-            health: chantierHealthState(
+        .map((row) => {
+          const chantierById = new Map(row.chantiers.map((chantier) => [chantier.id, chantier]));
+
+          const milestones = MILESTONE_ORDER.reduce(
+            (acc, milestoneId) => ({ ...acc, [milestoneId]: [] as LevierBoardCard[] }),
+            {} as Record<MilestoneId, LevierBoardCard[]>
+          );
+          const withoutKpi: LevierBoardCard[] = [];
+
+          for (const action of chantierActions) {
+            const chantier = chantierById.get(action.chantierId);
+            if (!chantier) continue; // Levier d'un chantier hors de cet axe.
+            const card: LevierBoardCard = {
+              action,
               chantier,
-              indicators,
-              measurements,
-              chantiers,
-              chantierActions
-            ),
-            progressPct: chantierMilestoneProgressPct(chantier, chantierActions),
-          })),
-        })),
-    [axisBreakdown, indicators, measurements, chantiers, chantierActions]
+              chantierColor: colorForChantier(chantier.id),
+            };
+            if (action.indicatorId) {
+              const milestoneId = action.milestones?.currentMilestone ?? "E0";
+              milestones[milestoneId].push(card);
+            } else {
+              withoutKpi.push(card);
+            }
+          }
+
+          return {
+            key: row.axis.id,
+            label: row.axis.name,
+            color: row.axis.color,
+            milestones,
+            withoutKpi,
+          };
+        }),
+    [axisBreakdown, chantierActions]
   );
 
   const summaryLabels = {
@@ -217,21 +240,20 @@ export function StrategicDashboardView() {
     progressToTarget: t("kpi.chart.progressToTarget"),
   };
 
-  /** Libellés de `ChantierProgressRow` (nom + badge d'étape + barre + pastille "N à risque") —
-   *  mêmes clés que `AxisKanban`/`StrategicAxesView` (round 6, point 0/5) : trois lectures du même
-   *  avancement ne doivent jamais diverger sur leur vocabulaire. */
-  const chantierRowLabels = {
-    atRisk: t("strategicAxes.atRiskCount"),
-    atRiskPopoverTitle: t("strategicAxes.atRiskPopoverTitle"),
-    atRiskTooltip: t("strategicAxes.atRiskTooltip"),
-    progress: t("kpi.chart.progressToTarget"),
+  /** Placeholder d'une colonne de jalon E0-E4 sans levier (round 8) — un texte discret plutôt que
+   *  rien du tout, pour que la structure à 5 colonnes reste lisible même quand une colonne est
+   *  vide. */
+  const levierMilestoneLabels = {
+    emptyColumn: t("strategicDashboard.levierBoard.emptyColumn"),
   };
 
-  const chantierHealthLabels = {
-    onTrack: t("strategicDashboard.onTrack"),
-    watch: t("strategicDashboard.chantierHealth.watch"),
-    critical: t("strategicDashboard.chantierHealth.critical"),
-    empty: t("strategicAxes.axisNoChantier"),
+  /** En-têtes des 3 colonnes du kanban classique des leviers sans KPI — MÊMES clés que le kanban
+   *  de la fiche chantier (`ChantierDetailPanel.tsx`, fondation round 8) : deux lectures du même
+   *  statut ne doivent jamais diverger sur leur vocabulaire. */
+  const levierKanbanLabels: Record<LevierKanbanStatus, string> = {
+    todo: t("strategicChantierDetail.kanban.todo"),
+    in_progress: t("strategicChantierDetail.kanban.inProgress"),
+    done: t("strategicChantierDetail.kanban.done"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────
@@ -417,113 +439,39 @@ export function StrategicDashboardView() {
           </Card>
         );
 
-      // ── Répartition des indicateurs par axe, chantiers de chaque axe imbriqués ────────────
-      case "axis-breakdown":
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader title={t("strategicDashboard.widget.axisBreakdown")} />
-            <CardBody>
-              {axisBreakdown.length === 0
-                ? emptyLine(t("strategicDashboard.noAxes"))
-                : axisBreakdown.map((row) => (
-                    <div
-                      key={row.axis.id}
-                      // Accent coloré propre à l'axe (`StrategicAxis.color`, round 6, point 3) —
-                      // même bordure gauche que `AxisKanban`/vue "Cartes", pour que la couleur d'un
-                      // axe se lise pareil partout où il apparaît.
-                      className="mb-3 overflow-hidden rounded-md border border-border bg-white last:mb-0"
-                      style={{
-                        borderLeft: `4px solid ${row.axis.color ?? "var(--bp-warm-taupe)"}`,
-                      }}
-                    >
-                      {/* En-tête cliquable → fiche de l'axe (navigation inchangée). `div
-                          role="button"` plutôt qu'un `<button>` : les lignes `ChantierProgressRow`
-                          imbriquées ci-dessous portent elles-mêmes un `AtRiskCountPill`
-                          (`<button>`), un bouton dans un bouton étant une imbrication invalide. */}
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => router.push(`/levers/detail?id=${row.axis.id}`)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            router.push(`/levers/detail?id=${row.axis.id}`);
-                          }
-                        }}
-                        className="flex cursor-pointer items-start gap-2 p-2.5 text-left transition hover:bg-neutral-50"
-                      >
-                        <span
-                          aria-hidden
-                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: row.axis.color ?? "var(--bp-warm-taupe)" }}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-baseline justify-between gap-3">
-                            <span className="truncate text-[12.5px] font-semibold text-primary">
-                              {row.axis.name}
-                            </span>
-                            <span className="flex-shrink-0 text-[11px] text-tertiary">
-                              {row.chantierCount} {t("strategicDashboard.chantiersSuffix")} ·{" "}
-                              {row.total} {t("strategicDashboard.indicatorsSuffix")}
-                            </span>
-                          </span>
-                          <span className="mt-1.5 flex items-center gap-3">
-                            <ProgressBar pct={row.onTrackPct} className="flex-1" />
-                            {row.atRisk > 0 && (
-                              <span className="flex-shrink-0 text-[11px] font-semibold text-rag-amber">
-                                {row.atRisk} {t("strategicDashboard.atRisk").toLowerCase()}
-                              </span>
-                            )}
-                          </span>
-                        </span>
-                      </div>
-                      {/* Chantiers de l'axe (round 6, point 3) — même composant que le Kanban et
-                          l'onglet "Chantiers" (`ChantierProgressRow`), chaque ligne ouvre le
-                          panneau chantier plutôt que la fiche d'axe. */}
-                      <div className="space-y-1.5 border-t border-border bg-neutral-50/60 p-2.5">
-                        {row.chantiers.length === 0 ? (
-                          <p className="py-1 text-center text-[11px] text-tertiary">
-                            {t("strategicAxes.axisNoChantier")}
-                          </p>
-                        ) : (
-                          row.chantiers.map((chantier) => (
-                            <ChantierProgressRow
-                              key={chantier.id}
-                              chantier={chantier}
-                              chantierActions={chantierActions}
-                              stages={stages}
-                              indicators={indicators}
-                              measurements={measurements}
-                              onOpen={openChantierPanel}
-                              labels={chantierRowLabels}
-                              className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white p-2 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm"
-                            />
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  ))}
-            </CardBody>
-          </Card>
-        );
-
-      // ── Matrice de santé par chantier (colonnes = axes) ───────────────────────────────────
-      // Round 6, point 5 : remplace l'ancien "Avancement par étape de maturité" (répartition déjà
-      // lisible via le badge d'étape de chaque `ChantierProgressRow' ci-dessus) par un signal de
-      // RISQUE, croisant indicateurs à risque et alertes de cascade de retard (`chantierHealthState`,
-      // lib/axisLogic.ts) — première apparition d'un état à 3 niveaux côté Plan Stratégique.
+      // ── Vue E0→E4 par levier, une section par axe + kanban classique pour les leviers sans
+      //    KPI (round 8, remplace l'ancienne matrice de santé PAR CHANTIER — le grain de lecture
+      //    passe du chantier au levier, voir `levierBoardGroups` ci-dessus) ────────────────────
       case "chantier-health":
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader title={t("strategicDashboard.widget.chantierHealth")} />
             <CardBody>
-              <ChantierHealthMatrix
-                groups={chantierHealthGroups}
-                labels={chantierHealthLabels}
-                onChantierClick={openChantierPanel}
-              />
+              {levierBoardGroups.length === 0 ? (
+                emptyLine(t("strategicAxes.axisNoChantier"))
+              ) : (
+                <div className="space-y-6">
+                  {levierBoardGroups.map((group) => (
+                    <div key={group.key}>
+                      <LevierMilestoneBoard
+                        groups={[group]}
+                        labels={levierMilestoneLabels}
+                        onLevierClick={openChantierPanel}
+                      />
+                      {/* Ligne kanban classique — seulement si cet axe a au moins un levier sans
+                          KPI (pas de ligne vide, demande PO explicite). */}
+                      {group.withoutKpi.length > 0 && (
+                        <LevierKanbanBoard
+                          items={group.withoutKpi}
+                          labels={levierKanbanLabels}
+                          onLevierClick={openChantierPanel}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardBody>
           </Card>
         );
