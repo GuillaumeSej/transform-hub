@@ -8,6 +8,7 @@ import {
   chantierBounds,
   chantierDependencyAlerts,
   chantierHealthState,
+  chantierMilestoneProgressPct,
   computeIndicatorDelta,
   computeIndicatorStatus,
   countOnTrackAtRisk,
@@ -16,12 +17,14 @@ import {
   resolveIndicatorStatus,
   resolveMilestoneAutoFlags,
   resolveProgramType,
+  staffingPeriodBuckets,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
 import type {
   AuthUser,
   Chantier,
   ChantierAction,
+  ChantierStaffing,
   Indicator,
   IndicatorMeasurement,
   MaturityStageConfig,
@@ -751,52 +754,63 @@ describe("canStartAction", () => {
 
 // ─── Jalons E0→E4 (round 5) ─────────────────────────────────────────────────────────────────────
 
+// Round 7 : `resolveMilestoneAutoFlags` est retargetée sur un LEVIER (`ChantierAction`) plutôt que
+// sur le chantier lui-même — `previousOranges` lit désormais les checklists du levier, tandis que
+// `dependencyAlert`/`effortComplete` restent des signaux CHANTIER résolus via le chantier parent
+// (`action.chantierId`). D'où le montage systématique chantier parent + levier ci-dessous.
 describe("resolveMilestoneAutoFlags", () => {
   it("flags 'previousOranges' green when the previous milestone has no unresolved orange", () => {
     // Aucun item orange du tout sur E0 → vacuously vert pour l'item auto de E1.
-    const chantier = makeChantier("CH1", {
+    const chantier = makeChantier("CH1");
+    const action = {
+      ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
       milestones: {
-        currentMilestone: "E1",
-        passedMilestones: ["E0"],
-        checklists: { E0: [{ itemId: "E0-B1", flag: "green" }] },
+        currentMilestone: "E1" as const,
+        passedMilestones: ["E0" as const],
+        checklists: { E0: [{ itemId: "E0-B1", flag: "green" as const }] },
       },
-    });
-    const flags = resolveMilestoneAutoFlags("E1", chantier, [chantier], []);
+    };
+    const flags = resolveMilestoneAutoFlags("E1", action, [chantier], [action]);
     expect(flags["E1-A1"]).toBe("green");
   });
 
   it("flags 'previousOranges' red when the previous milestone has an unresolved orange", () => {
-    const chantier = makeChantier("CH1", {
+    const chantier = makeChantier("CH1");
+    const action = {
+      ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
       milestones: {
-        currentMilestone: "E1",
-        passedMilestones: ["E0"],
+        currentMilestone: "E1" as const,
+        passedMilestones: ["E0" as const],
         checklists: {
-          E0: [{ itemId: "E0-B1", flag: "orange", resolved: false }],
+          E0: [{ itemId: "E0-B1", flag: "orange" as const, resolved: false }],
         },
       },
-    });
-    expect(resolveMilestoneAutoFlags("E1", chantier, [chantier], [])["E1-A1"]).toBe("red");
+    };
+    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe("red");
   });
 
   it("flags 'previousOranges' green once the orange item is marked resolved", () => {
-    const chantier = makeChantier("CH1", {
+    const chantier = makeChantier("CH1");
+    const action = {
+      ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
       milestones: {
-        currentMilestone: "E1",
-        passedMilestones: ["E0"],
+        currentMilestone: "E1" as const,
+        passedMilestones: ["E0" as const],
         checklists: {
-          E0: [{ itemId: "E0-B1", flag: "orange", resolved: true }],
+          E0: [{ itemId: "E0-B1", flag: "orange" as const, resolved: true }],
         },
       },
-    });
-    expect(resolveMilestoneAutoFlags("E1", chantier, [chantier], [])["E1-A1"]).toBe("green");
+    };
+    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe("green");
   });
 
-  it("flags 'dependencyAlert' green when this chantier is not the blocked side of any alert", () => {
+  it("flags 'dependencyAlert' green when the parent chantier is not the blocked side of any alert", () => {
     const chantier = makeChantier("CH1");
-    expect(resolveMilestoneAutoFlags("E0", chantier, [chantier], [])["E0-A1"]).toBe("green");
+    const action = makeAction("CH1", "2026-01-01", "2026-01-31", "A1");
+    expect(resolveMilestoneAutoFlags("E0", action, [chantier], [action])["E0-A1"]).toBe("green");
   });
 
-  it("flags 'dependencyAlert' red when this chantier is the blocked side of a violated dependency", () => {
+  it("flags 'dependencyAlert' red when the parent chantier is the blocked side of a violated dependency — same value for every levier of that chantier", () => {
     const chantiers = [
       makeChantier("CH1", { name: "Refonte SI" }),
       makeChantier("CH2", {
@@ -804,31 +818,47 @@ describe("resolveMilestoneAutoFlags", () => {
         dependencies: [{ targetId: "CH1", type: "FS" }],
       }),
     ];
-    const actions = [
-      makeAction("CH1", "2026-01-01", "2026-03-31"),
-      makeAction("CH2", "2026-03-01", "2026-06-30"),
-    ];
-    // CH2 est le côté bloqué (sourceId) : son item auto E0-A1 doit être rouge.
-    const ch2 = chantiers[1];
-    expect(resolveMilestoneAutoFlags("E0", ch2, chantiers, actions)["E0-A1"]).toBe("red");
-    // CH1 n'est pas bloqué (c'est lui le bloqueur) : son propre item auto reste vert.
-    const ch1 = chantiers[0];
-    expect(resolveMilestoneAutoFlags("E0", ch1, chantiers, actions)["E0-A1"]).toBe("green");
+    const ch1Action = makeAction("CH1", "2026-01-01", "2026-03-31", "A-CH1");
+    // Deux leviers sur CH2 (le chantier bloqué) : les deux doivent afficher la MÊME valeur, c'est
+    // voulu (dépendances = donnée de chantier, pas de levier).
+    const ch2Action1 = makeAction("CH2", "2026-03-01", "2026-06-30", "A-CH2-1");
+    const ch2Action2 = makeAction("CH2", "2026-03-01", "2026-06-30", "A-CH2-2");
+    const actions = [ch1Action, ch2Action1, ch2Action2];
+
+    expect(resolveMilestoneAutoFlags("E0", ch2Action1, chantiers, actions)["E0-A1"]).toBe("red");
+    expect(resolveMilestoneAutoFlags("E0", ch2Action2, chantiers, actions)["E0-A1"]).toBe("red");
+    // Le levier du chantier bloqueur (pas bloqué lui-même) reste vert.
+    expect(resolveMilestoneAutoFlags("E0", ch1Action, chantiers, actions)["E0-A1"]).toBe("green");
   });
 
-  it("flags 'effortComplete' green only when all 4 effort dimensions are set", () => {
-    const complete = makeChantier("CH1", {
+  it("flags 'dependencyAlert' green (not red) and never throws when the parent chantier cannot be found", () => {
+    const orphanAction = makeAction("GHOST-CHANTIER", "2026-01-01", "2026-01-31", "A1");
+    expect(() => resolveMilestoneAutoFlags("E0", orphanAction, [], [orphanAction])).not.toThrow();
+    expect(resolveMilestoneAutoFlags("E0", orphanAction, [], [orphanAction])["E0-A1"]).toBe(
+      "green"
+    );
+  });
+
+  it("flags 'effortComplete' from the PARENT CHANTIER's own effort grid, green only when all 4 dimensions are set", () => {
+    const completeChantier = makeChantier("CH1", {
       effort: { financialImpact: 1, humanImpact: 2, duration: 3, changeManagement: 4 },
     });
-    expect(resolveMilestoneAutoFlags("E1", complete, [complete], [])["E1-C-effort"]).toBe("green");
+    const action1 = makeAction("CH1", "2026-01-01", "2026-01-31", "A1");
+    expect(
+      resolveMilestoneAutoFlags("E1", action1, [completeChantier], [action1])["E1-C-effort"]
+    ).toBe("green");
 
-    const partial = makeChantier("CH1", {
-      effort: { financialImpact: 1, humanImpact: 2 },
-    });
-    expect(resolveMilestoneAutoFlags("E1", partial, [partial], [])["E1-C-effort"]).toBe("red");
+    const partialChantier = makeChantier("CH1", { effort: { financialImpact: 1, humanImpact: 2 } });
+    const action2 = makeAction("CH1", "2026-01-01", "2026-01-31", "A2");
+    expect(
+      resolveMilestoneAutoFlags("E1", action2, [partialChantier], [action2])["E1-C-effort"]
+    ).toBe("red");
 
-    const none = makeChantier("CH1");
-    expect(resolveMilestoneAutoFlags("E1", none, [none], [])["E1-C-effort"]).toBe("red");
+    const noneChantier = makeChantier("CH1");
+    const action3 = makeAction("CH1", "2026-01-01", "2026-01-31", "A3");
+    expect(resolveMilestoneAutoFlags("E1", action3, [noneChantier], [action3])["E1-C-effort"]).toBe(
+      "red"
+    );
   });
 });
 
@@ -896,5 +926,107 @@ describe("milestoneProgressPct", () => {
         },
       })
     ).toBe(100);
+  });
+});
+
+// ─── Avancement AGRÉGÉ d'un chantier — moyenne des leviers (round 7) ───────────────────────────
+
+describe("chantierMilestoneProgressPct", () => {
+  it("returns 0 when the chantier has no levier", () => {
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), [])).toBe(0);
+  });
+
+  it("averages the progress of the chantier's own leviers, rounding sensibly", () => {
+    const actions: ChantierAction[] = [
+      {
+        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
+        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 40%
+      },
+      {
+        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
+        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 20%
+      },
+      {
+        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A3"),
+        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 20%
+      },
+    ];
+    // (40 + 20 + 20) / 3 = 26.67 → arrondi à 27.
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(27);
+  });
+
+  it("ignores leviers belonging to another chantier", () => {
+    const actions: ChantierAction[] = [
+      {
+        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
+        milestones: {
+          currentMilestone: "E4",
+          passedMilestones: ["E0", "E1", "E2", "E3", "E4"],
+          checklists: {},
+        }, // 100%
+      },
+      makeAction("CH2", "2026-01-01", "2026-01-31", "A2"), // sans jalons, autre chantier
+    ];
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(100);
+  });
+});
+
+// ─── Staffing par période (round 7) ────────────────────────────────────────────────────────────
+
+function makeStaffing(overrides?: Partial<ChantierStaffing>): ChantierStaffing {
+  return {
+    id: "ST1",
+    companyId: "c1",
+    programId: "p1",
+    axisId: "AX001",
+    chantierId: "CH1",
+    function: "it",
+    fte: 1,
+    createdAt: "2026-01-01",
+    ...overrides,
+  };
+}
+
+describe("staffingPeriodBuckets", () => {
+  it("ignores entries without a startDate", () => {
+    const entries = [
+      makeStaffing({ id: "S1" }), // pas de startDate → ignoré, "non daté"
+      makeStaffing({ id: "S2", startDate: "2026-02-15" }),
+    ];
+    const buckets = staffingPeriodBuckets(entries, "quarterly");
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0].period).toBe("2026-Q1");
+    expect(buckets[0].totalFte).toBe(1);
+  });
+
+  it("labels periods correctly per granularity (YYYY-Q#, YYYY-S#, YYYY)", () => {
+    const entry = makeStaffing({ id: "S1", startDate: "2026-08-10" });
+    expect(staffingPeriodBuckets([entry], "quarterly")[0].period).toBe("2026-Q3");
+    expect(staffingPeriodBuckets([entry], "semiannual")[0].period).toBe("2026-S2");
+    expect(staffingPeriodBuckets([entry], "annual")[0].period).toBe("2026");
+  });
+
+  it("sums fte per period and per period+function", () => {
+    const entries = [
+      makeStaffing({ id: "S1", function: "it", fte: 2, startDate: "2026-01-10" }),
+      makeStaffing({ id: "S2", function: "it", fte: 1, startDate: "2026-02-20" }),
+      makeStaffing({ id: "S3", function: "finance", fte: 0.5, startDate: "2026-03-01" }),
+    ];
+    const buckets = staffingPeriodBuckets(entries, "quarterly");
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0].period).toBe("2026-Q1");
+    expect(buckets[0].totalFte).toBeCloseTo(3.5);
+    expect(buckets[0].byFunction.it).toBeCloseTo(3);
+    expect(buckets[0].byFunction.finance).toBeCloseTo(0.5);
+  });
+
+  it("sorts buckets chronologically ascending", () => {
+    const entries = [
+      makeStaffing({ id: "S1", startDate: "2027-01-05" }),
+      makeStaffing({ id: "S2", startDate: "2026-01-05" }),
+      makeStaffing({ id: "S3", startDate: "2026-07-05" }),
+    ];
+    const periods = staffingPeriodBuckets(entries, "semiannual").map((b) => b.period);
+    expect(periods).toEqual(["2026-S1", "2026-S2", "2027-S1"]);
   });
 });

@@ -22,7 +22,7 @@ import {
 import {
   canStartAction,
   chantierBounds,
-  milestoneProgressPct,
+  chantierMilestoneProgressPct,
   type ChantierDependencyAlert,
 } from "@/lib/axisLogic";
 import { resolveMaturityStageLabel } from "@/lib/hooks/useMaturityStages";
@@ -263,7 +263,7 @@ export function ChantierGantt({
                 const widthPct = Math.max(1.5, pctOf(bounds.end) - startPct);
                 const isAlerted = alertedChantierIds.has(chantier.id);
                 const chantierAlerts = alertsByChantier.get(chantier.id) ?? [];
-                const progressPct = milestoneProgressPct(chantier);
+                const progressPct = chantierMilestoneProgressPct(chantier, items);
                 const lanes = packTimelineLanes(items);
                 const trackHeight = LANES_TOP + Math.max(1, lanes.length) * ACTION_LANE_HEIGHT;
                 const blockColor = isAlerted ? ALERT_COLOR : color;

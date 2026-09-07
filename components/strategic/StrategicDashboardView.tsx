@@ -25,8 +25,8 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   chantierDependencyAlerts,
   chantierHealthState,
+  chantierMilestoneProgressPct,
   countOnTrackAtRisk,
-  milestoneProgressPct,
 } from "@/lib/axisLogic";
 import {
   STRATEGIC_DASHBOARD_WIDGET_REGISTRY,
@@ -182,7 +182,7 @@ export function StrategicDashboardView() {
               chantiers,
               chantierActions
             ),
-            progressPct: milestoneProgressPct(chantier),
+            progressPct: chantierMilestoneProgressPct(chantier, chantierActions),
           })),
         })),
     [axisBreakdown, indicators, measurements, chantiers, chantierActions]
@@ -480,6 +480,7 @@ export function StrategicDashboardView() {
                             <ChantierProgressRow
                               key={chantier.id}
                               chantier={chantier}
+                              chantierActions={chantierActions}
                               stages={stages}
                               indicators={indicators}
                               measurements={measurements}

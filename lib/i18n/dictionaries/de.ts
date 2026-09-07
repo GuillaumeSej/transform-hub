@@ -1278,6 +1278,7 @@ const de: Record<string, string> = {
   "strategicChantierDetail.successCriteria": "Erfolgskriterien",
   "strategicChantierDetail.sponsor": "Sponsor",
   "strategicChantierDetail.pilote": "Leitung",
+  "strategicChantierDetail.allocatedBudget": "Zugewiesenes Budget",
   "strategicChantierDetail.confidentialityLevel": "Vertraulichkeitsstufe",
   "strategicChantierDetail.confidentialityLevelNone": "Keine (für alle sichtbar)",
 

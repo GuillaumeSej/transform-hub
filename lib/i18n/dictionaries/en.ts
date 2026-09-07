@@ -1290,6 +1290,7 @@ const en: Record<string, string> = {
   "strategicChantierDetail.successCriteria": "Success criteria",
   "strategicChantierDetail.sponsor": "Sponsor",
   "strategicChantierDetail.pilote": "Lead",
+  "strategicChantierDetail.allocatedBudget": "Allocated budget",
   "strategicChantierDetail.confidentialityLevel": "Confidentiality level",
   "strategicChantierDetail.confidentialityLevelNone": "None (visible to everyone)",
 

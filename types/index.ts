@@ -803,13 +803,20 @@ export type Chantier = {
   /** Grille de notation d'effort — voir `ChantierEffort`, affichée uniquement sur la fiche
    *  chantier dédiée. */
   effort?: ChantierEffort;
-  /** Suivi des jalons E0→E4 (round 5) — voir `ChantierMilestoneState`. Absent sur un chantier créé
-   *  avant l'introduction de la méthode : traité comme "encore à E0, rien de répondu" par les
-   *  lecteurs plutôt que de migrer les documents existants. */
+  /** @deprecated Suivi des jalons E0→E4 (round 5) — DÉPLACÉ au niveau de chaque levier
+   *  (`ChantierAction.milestones`) en round 7 : un chantier regroupe plusieurs leviers, le suivi
+   *  E0→E4 n'a plus de sens agrégé à ce niveau (voir `chantierMilestoneProgressPct` dans
+   *  `lib/axisLogic.ts`, moyenne des leviers). Champ conservé pour compat des documents Firestore
+   *  existants (aucun script de migration) mais plus LU par le code depuis round 7 — ne pas
+   *  réutiliser dans du nouveau code. */
   milestones?: ChantierMilestoneState;
   /** Critères de succès mesurables, en complément de `successCriteria` (texte libre, INCHANGÉ) —
    *  demande PO round 5 : une liste de KPI cochables plutôt qu'un unique paragraphe. */
   successKpis?: { id: string; label: string; achieved?: boolean }[];
+  /** Budget alloué au chantier (round 7, demande PO), affiché avec `Program.currency` du programme
+   *  actif. Optionnel : `undefined` tant qu'aucun budget n'a été saisi (distinct de 0, qui signifie
+   *  "budget nul mais renseigné"). */
+  allocatedBudget?: number;
   createdAt: string;
   lastUpdate: string;
 };
@@ -857,6 +864,13 @@ export type ChantierAction = {
    *  (lib/axisLogic.ts). v1 purement informatif : rien n'intercepte aujourd'hui un changement de
    *  statut, donc un prérequis non satisfait n'empêche pas la transition, il l'affiche seulement. */
   prerequisites?: ActionPrerequisite[];
+  /** Suivi des jalons E0→E4 (round 7) — même type que l'ancien `Chantier.milestones` (voir son
+   *  commentaire `@deprecated`), réutilisé tel quel mais désormais porté par le LEVIER plutôt que
+   *  le chantier : un chantier regroupe plusieurs leviers, chacun avance à son propre rythme dans
+   *  la méthode E0→E4. Absent sur un levier créé avant l'introduction de ce suivi, ou avant round
+   *  7 : traité comme "encore à E0, rien de répondu" par les lecteurs plutôt que de migrer les
+   *  documents existants. */
+  milestones?: ChantierMilestoneState;
 };
 
 /** Un prérequis peut cibler une autre action du plan ("action", satisfait quand son étape est
@@ -969,6 +983,17 @@ export type ChantierStaffing = {
   fte: number;
   /** Précision libre (nom de la personne, périmètre, fonction réelle derrière "autre"…). */
   note?: string;
+  /** Date de début du staffing (ISO), round 7 — permet de répartir les ETP par période
+   *  (trimestre/semestre/année, voir `staffingPeriodBuckets` dans `lib/axisLogic.ts`). Absente =
+   *  staffing "non daté" : compté dans les totaux globaux mais ignoré par la vue par période. */
+  startDate?: string;
+  /** Date de fin du staffing (ISO), round 7 — optionnelle même quand `startDate` est renseignée
+   *  (staffing sans échéance connue). */
+  endDate?: string;
+  /** Lien optionnel vers un levier précis (`ChantierAction.id`) de ce même chantier, round 7 — un
+   *  staffing transverse au chantier (pas rattaché à un levier particulier) reste valide sans ce
+   *  champ. */
+  actionId?: string;
   createdAt: string;
 };
 

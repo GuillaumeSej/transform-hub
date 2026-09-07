@@ -4,10 +4,14 @@ import type { MilestoneId } from "@/types";
  * Source unique du CONTENU des check-lists de jalon E0→E4 (libellés, sections A/B/C, quels items
  * sont automatiques) — pendant stratégique de `lib/status-config.ts` : une config statique, pure
  * donnée, aucune logique ni accès Firestore. Seules les RÉPONSES (feux, plans d'action) sont
- * persistées par chantier (`Chantier.milestones`, voir `types/index.ts`) ; le contenu lui-même vit
- * ici pour éviter un document Firestore énorme et permettre d'ajuster un libellé plus tard sans
- * migration de données.
+ * persistées ; le contenu lui-même vit ici pour éviter un document Firestore énorme et permettre
+ * d'ajuster un libellé plus tard sans migration de données.
  *
+ * Round 7 : les réponses sont désormais consommées au niveau du LEVIER (`ChantierAction.milestones`,
+ * voir `types/index.ts`) plutôt que du chantier — un chantier regroupe plusieurs leviers, chacun
+ * avec son propre avancement E0→E4. `Chantier.milestones` reste dans le type (`@deprecated`) pour
+ * les documents Firestore existants mais n'est plus lu. Le CONTENU des check-lists ci-dessous
+ * (items, sections, feux automatiques) est agnostique du porteur et reste byte-for-byte identique.
  * SIMPLIFIÉ par rapport à la note de méthode PMO complète du PO (autorisation explicite) : chaque
  * jalon est réduit à 3-6 items au lieu de reproduire chaque sous-bullet du document. Les libellés
  * eux-mêmes sont dans les dictionnaires i18n (`strategicChantierDetail.milestones.item.*`), jamais
