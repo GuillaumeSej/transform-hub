@@ -43,6 +43,25 @@ export const STAFFING_FUNCTIONS: StaffingFunction[] = [
   "autre",
 ];
 
+/** Une couleur Tailwind (fond plein) par fonction — variété PUREMENT catégorielle, sans rapport
+ *  avec les tokens `rag-*` (statut à-risque) : ici il n'y a ni bon ni mauvais état, seulement 9
+ *  catégories à distinguer d'un coup d'œil sur les barres de `app/(app)/effectifs/
+ *  EffectifsPageClient.tsx` (répartition globale, par axe, et jauges de budget d'ETP). Palette
+ *  Tailwind par défaut (pas de token `bp-*`, qui n'a que 9 teintes de marque déjà réservées à
+ *  d'autres usages) — "autre" reste gris pour rester visuellement en retrait, cohérent avec sa
+ *  place systématiquement en fin de liste. */
+export const STAFFING_FUNCTION_COLORS: Record<StaffingFunction, string> = {
+  rh: "bg-blue-500",
+  finance: "bg-emerald-500",
+  it: "bg-violet-500",
+  marketing: "bg-pink-500",
+  commercial: "bg-amber-500",
+  juridique: "bg-indigo-500",
+  operations: "bg-teal-500",
+  achats: "bg-orange-500",
+  autre: "bg-gray-400",
+};
+
 const INPUT_CLASS =
   "mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral";
 

@@ -634,6 +634,15 @@ export type Program = {
    *  l'introduction du toggle, alors porté par `Company.actionPlanEnabled`, retiré depuis :
    *  l'activation se décide par programme, pas globalement pour toute l'entreprise). */
   actionPlanEnabled?: boolean;
+  /** Budget/cible d'ETP par fonction pour ce programme (Plan Stratégique uniquement) — permet de
+   *  comparer, sur `app/(app)/effectifs/EffectifsPageClient.tsx`, les ETP réellement déclarés
+   *  (`ChantierStaffing.fte`, sommés sur tous les chantiers du programme) au budget alloué et d'en
+   *  afficher un taux d'utilisation par fonction. Additif et optionnel : `undefined` tant qu'aucun
+   *  budget n'a été saisi ; `Partial` car une fonction sans budget défini reste absente de l'objet
+   *  plutôt que d'y figurer à 0 (0 ETP budgété n'est pas la même chose qu'un budget non fixé).
+   *  Scope PROGRAMME (pas entreprise), cohérent avec `ChantierStaffing.programId` déjà scopé
+   *  programme. */
+  staffingBudgets?: Partial<Record<StaffingFunction, number>>;
 };
 
 // ─── Plan Stratégique (méthodologie 3-5-15 : Vision → Axes → Chantiers → Actions) ─────────────

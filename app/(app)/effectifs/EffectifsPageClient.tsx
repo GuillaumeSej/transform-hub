@@ -1,15 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Building2, Layers, Users } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { KPICard } from "@/components/shared/KPICard";
-import { STAFFING_FUNCTIONS, formatFte } from "@/components/strategic/ChantierStaffingEditor";
+import {
+  STAFFING_FUNCTIONS,
+  STAFFING_FUNCTION_COLORS,
+  formatFte,
+} from "@/components/strategic/ChantierStaffingEditor";
+import { saveProgram } from "@/lib/firestore/admin";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
+import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { getStrategicProfile, isAnyAdmin } from "@/lib/roleProfiles";
 import type { ChantierStaffing, StaffingFunction, StrategicAxis } from "@/types";
 
 /**
@@ -28,7 +35,11 @@ import type { ChantierStaffing, StaffingFunction, StrategicAxis } from "@/types"
  * flux de saisie divergents sur la même donnée (même parti pris que la page KPI vs la fiche axe).
  *
  * Barres : pur CSS/Tailwind (largeur en %), comme les barres de `KPICard` — pas de dépendance
- * graphique pour une répartition à une dimension.
+ * graphique pour une répartition à une dimension. Chaque barre porte la couleur PROPRE à sa
+ * fonction (`STAFFING_FUNCTION_COLORS`, source unique co-localisée avec `STAFFING_FUNCTIONS` dans
+ * `ChantierStaffingEditor.tsx`) plutôt qu'une couleur unique — la sélection reste signalée par le
+ * halo `ring-*` autour de la piste (voir `Bar` ci-dessous), pas par un changement de couleur qui
+ * effacerait l'identité de la fonction.
  *
  * Rien à voir avec les écrans RH du Plan Performance : `Chantier`/`ChantierStaffing` n'existent
  * que côté stratégique, et la route est fermée aux programmes Performance (voir la garde
@@ -48,12 +59,27 @@ function totalsByFunction(entries: ChantierStaffing[]): { fn: StaffingFunction; 
     .sort((a, b) => b.fte - a.fte);
 }
 
-/** Barre horizontale simple — `pct` déjà borné par l'appelant. */
-function Bar({ pct, highlighted = false }: { pct: number; highlighted?: boolean }) {
+/** Barre horizontale simple — `pct` déjà borné par l'appelant. `fn` détermine la couleur de
+ *  remplissage (identité de la fonction, toujours visible) ; `highlighted` ajoute un halo corail
+ *  autour de la piste plutôt que de remplacer la couleur — deux signaux indépendants (fonction vs
+ *  sélection) qui ne se marchent pas dessus. */
+function Bar({
+  pct,
+  fn,
+  highlighted = false,
+}: {
+  pct: number;
+  fn: StaffingFunction;
+  highlighted?: boolean;
+}) {
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-200">
+    <div
+      className={`h-2 w-full overflow-hidden rounded-full bg-neutral-200 ${
+        highlighted ? "ring-2 ring-bp-coral ring-offset-1" : ""
+      }`}
+    >
       <div
-        className={`h-full rounded-full transition-all ${highlighted ? "bg-bp-coral" : "bg-black"}`}
+        className={`h-full rounded-full transition-all ${STAFFING_FUNCTION_COLORS[fn]}`}
         style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
       />
     </div>
@@ -62,6 +88,7 @@ function Bar({ pct, highlighted = false }: { pct: number; highlighted?: boolean 
 
 export function EffectifsPageClient() {
   const { t } = useTranslation();
+  const { showToast } = useToast();
   const { user, loading: roleLoading } = useRole();
   const {
     activeProgram,
@@ -78,6 +105,71 @@ export function EffectifsPageClient() {
 
   /** Fonction sélectionnée = filtre du bloc « par axe ». `null` = vue complète. */
   const [selectedFunction, setSelectedFunction] = useState<StaffingFunction | null>(null);
+
+  // ── Budget d'ETP par fonction (programme actif) ────────────────────────────────────────────
+  // Seul un admin (global/entreprise) ou le pilote (`strategic_lead`) du Plan Stratégique peut
+  // éditer ces budgets — même raisonnement que `canFillIndicator` (lib/axisLogic.ts) pour la
+  // saisie d'indicateurs. Un viewer sans ce droit voit quand même la section, en lecture seule :
+  // c'est ce qui donne son sens au "% utilisé" affiché plus bas, section "par fonction".
+  const canEditBudgets = isAnyAdmin(user) || getStrategicProfile(user)?.role === "strategic_lead";
+
+  /** Brouillon de saisie (texte, pas encore validé) — état LOCAL distinct de
+   *  `activeProgram.staffingBudgets` pour permettre une frappe fluide (l'input reste contrôlé par
+   *  ce brouillon, pas par la valeur Firestore, qui ne revient qu'après l'écriture `onBlur`). */
+  const [budgetDrafts, setBudgetDrafts] = useState<Partial<Record<StaffingFunction, string>>>({});
+
+  // Resynchronise le brouillon uniquement quand le PROGRAMME ACTIF change (changement d'`id`), pas
+  // à chaque mise à jour Firestore du même programme : sinon la valeur qu'on vient nous-mêmes
+  // d'écrire (`commitBudget` ci-dessous) reviendrait via `subscribePrograms` et écraserait une
+  // frappe en cours sur un AUTRE champ pendant que l'utilisateur édite plusieurs fonctions à la
+  // suite.
+  useEffect(() => {
+    if (!activeProgram) {
+      setBudgetDrafts({});
+      return;
+    }
+    const next: Partial<Record<StaffingFunction, string>> = {};
+    for (const fn of STAFFING_FUNCTIONS) {
+      const value = activeProgram.staffingBudgets?.[fn];
+      if (value !== undefined) next[fn] = String(value);
+    }
+    setBudgetDrafts(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProgram?.id]);
+
+  /** Valide et enregistre le budget d'UNE fonction au blur du champ. `saveProgram` fait un
+   *  `setDoc` de document COMPLET (pas un merge) : on repart donc toujours de `{...activeProgram}`
+   *  pour ne jamais effacer le reste du programme (sponsor, devise, etc.). */
+  const commitBudget = async (fn: StaffingFunction, raw: string) => {
+    if (!activeProgram) return;
+    const trimmed = raw.trim();
+    let nextValue: number | undefined;
+    if (trimmed === "") {
+      nextValue = undefined;
+    } else {
+      const parsed = Number(trimmed.replace(",", "."));
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        showToast(t("staffing.fteInvalid"), "", "error");
+        const previous = activeProgram.staffingBudgets?.[fn];
+        setBudgetDrafts((prev) => ({
+          ...prev,
+          [fn]: previous !== undefined ? String(previous) : "",
+        }));
+        return;
+      }
+      nextValue = parsed;
+    }
+    const currentBudgets = activeProgram.staffingBudgets ?? {};
+    if ((currentBudgets[fn] ?? undefined) === nextValue) return; // pas de changement, pas d'écriture
+    const nextBudgets: Partial<Record<StaffingFunction, number>> = { ...currentBudgets };
+    if (nextValue === undefined) delete nextBudgets[fn];
+    else nextBudgets[fn] = nextValue;
+    try {
+      await saveProgram({ ...activeProgram, staffingBudgets: nextBudgets });
+    } catch {
+      showToast(t("staffing.saveError"), "", "error");
+    }
+  };
 
   const globalTotals = useMemo(() => totalsByFunction(staffing), [staffing]);
   const totalFte = useMemo(() => staffing.reduce((sum, e) => sum + (e.fte || 0), 0), [staffing]);
@@ -162,11 +254,56 @@ export function EffectifsPageClient() {
     );
   }
 
+  // Section budget d'ETP : scope PROGRAMME, indépendante de la présence de lignes de staffing
+  // (un budget peut être fixé avant tout ETP réellement déclaré) — construite une seule fois et
+  // rendue dans les deux branches ci-dessous (staffing vide ou non), plutôt que seulement dans le
+  // corps principal.
+  const budgetSection = (
+    <Card className="mb-0">
+      <CardHeader title={t("effectifs.budget.title")} />
+      <CardBody>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {STAFFING_FUNCTIONS.map((fn) => {
+            const savedBudget = activeProgram.staffingBudgets?.[fn];
+            return (
+              <label key={fn} className="block text-[11px] font-medium text-secondary">
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full ${STAFFING_FUNCTION_COLORS[fn]}`}
+                  />
+                  {t(`staffing.function.${fn}`)}
+                </span>
+                {canEditBudgets ? (
+                  <input
+                    value={budgetDrafts[fn] ?? ""}
+                    onChange={(e) => setBudgetDrafts((prev) => ({ ...prev, [fn]: e.target.value }))}
+                    onBlur={(e) => commitBudget(fn, e.target.value)}
+                    inputMode="decimal"
+                    placeholder="—"
+                    aria-label={t("effectifs.budget.inputLabel")}
+                    className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral"
+                  />
+                ) : (
+                  <span className="mt-1 block text-[13px] font-semibold text-primary">
+                    {savedBudget !== undefined
+                      ? `${formatFte(savedBudget)} ${t("staffing.fteUnit")}`
+                      : "—"}
+                  </span>
+                )}
+              </label>
+            );
+          })}
+        </div>
+      </CardBody>
+    </Card>
+  );
+
   if (staffing.length === 0) {
     return (
       <div className="space-y-6">
         {header}
         <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
+        {budgetSection}
         <Card>
           <CardBody>
             <p className="text-sm text-text-secondary">{t("effectifs.empty")}</p>
@@ -181,6 +318,7 @@ export function EffectifsPageClient() {
     <div className="space-y-6">
       {header}
       <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
+      {budgetSection}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <KPICard
@@ -221,6 +359,11 @@ export function EffectifsPageClient() {
             {globalTotals.map(({ fn, fte }) => {
               const selected = selectedFunction === fn;
               const sharePct = totalFte > 0 ? (fte / totalFte) * 100 : 0;
+              // Budget d'ETP configuré pour cette fonction (peut être absent) : augmente la ligne
+              // existante d'une seconde jauge "% utilisé" plutôt que de dupliquer cette liste dans
+              // une section séparée — voir `budgetSection` plus haut pour la SAISIE du budget.
+              const budget = activeProgram.staffingBudgets?.[fn];
+              const usedPct = budget !== undefined && budget > 0 ? (fte / budget) * 100 : 0;
               return (
                 <li key={fn}>
                   <button
@@ -246,8 +389,18 @@ export function EffectifsPageClient() {
                       <Bar
                         pct={maxFunctionFte > 0 ? (fte / maxFunctionFte) * 100 : 0}
                         highlighted={selected}
+                        fn={fn}
                       />
                     </div>
+                    {budget !== undefined && (
+                      <div className="mt-2">
+                        <Bar pct={usedPct} fn={fn} />
+                        <p className="mt-1 text-[11px] text-tertiary">
+                          {t("effectifs.budget.usedLabel")} : {formatFte(fte)} / {formatFte(budget)}{" "}
+                          {t("staffing.fteUnit")} ({Math.round(usedPct)}%)
+                        </p>
+                      </div>
+                    )}
                   </button>
                 </li>
               );
@@ -289,7 +442,7 @@ export function EffectifsPageClient() {
                       <div className="mt-1.5">
                         <Bar
                           pct={selectedMax > 0 ? (row.fte / selectedMax) * 100 : 0}
-                          highlighted
+                          fn={selectedFunction}
                         />
                       </div>
                       <p className="mt-1 text-[11px] text-tertiary">
@@ -341,7 +494,7 @@ export function EffectifsPageClient() {
                               </span>
                             </div>
                             <div className="mt-1">
-                              <Bar pct={axisMax > 0 ? (fte / axisMax) * 100 : 0} />
+                              <Bar pct={axisMax > 0 ? (fte / axisMax) * 100 : 0} fn={fn} />
                             </div>
                           </li>
                         ))}
