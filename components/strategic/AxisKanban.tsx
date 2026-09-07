@@ -1,162 +1,158 @@
 "use client";
 
-import { Popover } from "@/components/shared/Popover";
-import { AtRiskIndicatorPopoverContent } from "@/components/strategic/AtRiskIndicatorPopoverContent";
+import { AtRiskCountPill } from "@/components/strategic/AtRiskCountPill";
+import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
+import { ChantierProgressRow } from "@/components/strategic/ChantierProgressRow";
 import type { IndicatorDelta } from "@/lib/axisLogic";
-import type { Indicator, MaturityStageConfig, StrategicAxis } from "@/types";
+import type {
+  Chantier,
+  Indicator,
+  IndicatorMeasurement,
+  MaturityStageConfig,
+  StrategicAxis,
+} from "@/types";
 
 /**
- * Vue kanban du portefeuille d'axes — une colonne par étape de maturité du programme. Clone
- * délibéré de `components/shared/Kanban.tsx` (pipeline des leviers) plutôt qu'une généricisation :
- * celui-ci est typé sur l'union fermée `LeverStatus`, avec 5 colonnes câblées dans la grille et
- * des cartes qui affichent des montants (`fmtCurr`) et une progression — deux hypothèses fausses
- * ici, où le nombre de colonnes est libre (4 comme 12 étapes selon le programme) et où un axe ne
- * porte aucune donnée financière.
+ * Vue kanban du portefeuille d'axes — round 6, point 5 : ne bucket plus les axes par étape de
+ * maturité du programme (l'étape de CHAQUE CHANTIER se lisait déjà, une fois ouvert, sur sa propre
+ * fiche — colonniser les AXES par étape ne répondait pas à la vraie question du PO, « où en est
+ * chaque chantier de l'axe ? »). Devient une grille de cartes, une par axe (teintée de la couleur
+ * propre de l'axe, `StrategicAxis.color`), imbriquant la liste de SES chantiers via
+ * `ChantierProgressRow` (round 6, point 0) — même composant que l'onglet « Chantiers » et le futur
+ * widget dashboard « Répartition par axe », pour ne jamais faire diverger trois lectures du même
+ * avancement.
  *
- * Aucun drag & drop : le changement d'étape se fait depuis la fiche de l'axe (stepper), seul
- * endroit où l'on voit le contexte nécessaire (chantiers, indicateurs) pour décider d'un passage
- * d'étape.
+ * Aucun drag & drop, inchangé : le changement d'étape se fait depuis la fiche de l'axe (stepper) ou
+ * la fiche du chantier, seuls endroits où l'on voit le contexte nécessaire pour décider d'un
+ * passage d'étape.
  */
 export function AxisKanban({
   axes,
   stages,
+  indicators,
+  measurements,
+  chantiersByAxis,
   onCardClick,
-  counts,
+  onOpenChantier,
   atRiskItemsOf,
   labels,
 }: {
   axes: StrategicAxis[];
-  /** Étapes du programme, déjà triées par `order` (voir `useMaturityStages`). */
+  /** Étapes du programme, déjà triées par `order` (voir `useMaturityStages`) — transmises telles
+   *  quelles à `AxisStageBadge`/`ChantierProgressRow`. */
   stages: MaturityStageConfig[];
-  onCardClick: (id: string) => void;
-  /** Compteurs par axe, calculés par l'appelant (chantiers / indicateurs / indicateurs à risque). */
-  counts?: (axisId: string) => { chantiers: number; indicators: number; atRisk: number };
-  /** Indicateurs à risque D'UN AXE, écart calculé — alimente le contenu du `Popover` déclenché par
-   *  le badge "N à risque" (round 4, point 2), même contrat que `StrategicAxesView.axisAtRiskIndicators`. */
+  indicators: Indicator[];
+  measurements: IndicatorMeasurement[];
+  /** Chantiers DE CHAQUE axe, déjà groupés par l'appelant (voir `StrategicAxesView.chantiersByAxis`) —
+   *  pas de callback ici, la même map alimente déjà la vue "Chantiers" du même fichier. */
+  chantiersByAxis: Map<string, Chantier[]>;
+  /** Clic sur l'en-tête de la carte d'axe → navigation vers la fiche de l'axe (inchangé). */
+  onCardClick: (axisId: string) => void;
+  /** Clic sur une ligne de chantier → ouvre le panneau chantier (round 6, point 0). */
+  onOpenChantier: (chantierId: string) => void;
+  /** Indicateurs à risque D'UN AXE (macro + tous ses chantiers confondus), écart calculé — alimente
+   *  le contenu du popover déclenché par `AtRiskCountPill` au niveau de l'axe, même contrat que
+   *  `StrategicAxesView.axisAtRiskIndicators`. */
   atRiskItemsOf?: (axisId: string) => { indicator: Indicator; delta: IndicatorDelta | undefined }[];
   labels?: {
-    emptyColumn?: string;
+    emptyAxisChantiers?: string;
     chantiers?: string;
-    indicators?: string;
     atRisk?: string;
-    noStage?: string;
     atRiskPopoverTitle?: string;
+    atRiskTooltip?: string;
     progress?: string;
   };
 }) {
   const l = {
-    emptyColumn: labels?.emptyColumn ?? "Aucun axe",
+    emptyAxisChantiers: labels?.emptyAxisChantiers ?? "Aucun chantier",
     chantiers: labels?.chantiers ?? "chantiers",
-    indicators: labels?.indicators ?? "indicateurs",
     atRisk: labels?.atRisk ?? "à risque",
-    noStage: labels?.noStage ?? "Sans étape",
     atRiskPopoverTitle: labels?.atRiskPopoverTitle ?? "Indicateurs à risque",
+    atRiskTooltip: labels?.atRiskTooltip,
     progress: labels?.progress,
   };
 
-  // Les axes dont l'étape ne correspond à aucune étape connue (étape supprimée du référentiel
-  // depuis l'affectation) sont regroupés dans une colonne de rattrapage plutôt que masqués — même
-  // principe que le repli sur l'id brut d'`AxisStageBadge` : jamais d'entité invisible.
-  const knownStageIds = new Set(stages.map((s) => s.id));
-  const orphans = axes.filter((a) => !knownStageIds.has(a.stage));
-  const columns: { id: string; label: string; list: StrategicAxis[] }[] = [
-    ...stages.map((s) => ({
-      id: s.id,
-      label: s.label,
-      list: axes.filter((a) => a.stage === s.id),
-    })),
-    ...(orphans.length > 0 ? [{ id: "__orphans__", label: l.noStage, list: orphans }] : []),
-  ];
-
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
-      {columns.map((col) => (
-        <div
-          key={col.id}
-          className="min-h-[200px] w-[240px] shrink-0 rounded-lg border border-border bg-neutral-50 p-2.5"
-        >
-          <div className="flex items-center justify-between gap-2 px-2 pb-2.5 pt-1">
-            <div className="truncate text-[11.5px] font-bold uppercase tracking-wide text-primary">
-              {col.label}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {axes.map((axis) => {
+        const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
+        const atRiskItems = atRiskItemsOf?.(axis.id) ?? [];
+        return (
+          <div
+            key={axis.id}
+            className="flex flex-col overflow-hidden rounded-lg border border-border bg-white shadow-sm"
+            style={{ borderLeft: `4px solid ${axis.color ?? "var(--bp-warm-taupe)"}` }}
+          >
+            {/* En-tête cliquable → fiche de l'axe. `div role="button"` plutôt qu'un vrai `<button>` :
+                il imbrique `AtRiskCountPill`, lui-même un `<button>` (Popover-déclencheur) — un
+                bouton dans un bouton est une imbrication HTML invalide, même motif que les vues
+                "cartes"/"chantiers" de `StrategicAxesView`. */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => onCardClick(axis.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onCardClick(axis.id);
+                }
+              }}
+              className="flex cursor-pointer items-start gap-2 border-b border-border p-3 text-left transition hover:bg-neutral-50"
+            >
+              <span
+                aria-hidden
+                className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-bold text-primary">{axis.name}</span>
+                {axis.owner && (
+                  <span className="mt-0.5 block truncate text-[10.5px] text-tertiary">
+                    {axis.owner}
+                  </span>
+                )}
+              </span>
+              <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                <AxisStageBadge stageId={axis.stage} stages={stages} />
+                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
+                  {axisChantiers.length} {l.chantiers}
+                </span>
+                <AtRiskCountPill
+                  count={atRiskItems.length}
+                  items={atRiskItems}
+                  title={l.atRiskPopoverTitle}
+                  label={l.atRisk}
+                  progressLabel={l.progress}
+                  tooltip={l.atRiskTooltip}
+                />
+              </span>
             </div>
-            <div className="shrink-0 rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-secondary">
-              {col.list.length}
+
+            <div className="flex flex-1 flex-col gap-1.5 p-2.5">
+              {axisChantiers.length === 0 ? (
+                <p className="py-4 text-center text-[11px] text-tertiary">{l.emptyAxisChantiers}</p>
+              ) : (
+                axisChantiers.map((chantier) => (
+                  <ChantierProgressRow
+                    key={chantier.id}
+                    chantier={chantier}
+                    stages={stages}
+                    indicators={indicators}
+                    measurements={measurements}
+                    onOpen={onOpenChantier}
+                    labels={{
+                      atRisk: l.atRisk,
+                      atRiskPopoverTitle: l.atRiskPopoverTitle,
+                      atRiskTooltip: l.atRiskTooltip,
+                      progress: l.progress,
+                    }}
+                  />
+                ))
+              )}
             </div>
           </div>
-          {col.list.length === 0 && (
-            <div className="py-5 text-center text-[11px] text-tertiary">{l.emptyColumn}</div>
-          )}
-          {col.list.map((axis) => {
-            const c = counts?.(axis.id);
-            // Même conversion bouton -> div que `StrategicAxesView` (vues "cartes"/"chantiers") : le
-            // badge "N à risque" est un Popover-déclencheur, donc un vrai <button>, qui ne peut pas
-            // être imbriqué dans un <button> parent (imbrication invalide en HTML).
-            return (
-              <div
-                key={axis.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onCardClick(axis.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onCardClick(axis.id);
-                  }
-                }}
-                className="mb-2 block w-full cursor-pointer rounded-sm border border-border bg-white p-2.5 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm"
-              >
-                <div className="flex items-start gap-2">
-                  <span
-                    aria-hidden
-                    className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold text-primary">{axis.name}</span>
-                    {axis.owner && (
-                      <span className="mt-0.5 block truncate text-[10px] text-tertiary">
-                        {axis.owner}
-                      </span>
-                    )}
-                  </span>
-                </div>
-                {c && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
-                      {c.chantiers} {l.chantiers}
-                    </span>
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
-                      {c.indicators} {l.indicators}
-                    </span>
-                    {c.atRisk > 0 && (
-                      <Popover
-                        trigger={({ toggle }) => (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggle();
-                            }}
-                            className="rounded-full bg-rag-amber-light px-2 py-0.5 font-semibold text-rag-amber hover:brightness-95"
-                          >
-                            {c.atRisk} {l.atRisk}
-                          </button>
-                        )}
-                      >
-                        <AtRiskIndicatorPopoverContent
-                          items={atRiskItemsOf?.(axis.id) ?? []}
-                          title={l.atRiskPopoverTitle}
-                          progressLabel={l.progress}
-                        />
-                      </Popover>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
