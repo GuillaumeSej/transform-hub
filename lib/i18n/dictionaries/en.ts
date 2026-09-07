@@ -1277,6 +1277,8 @@ const en: Record<string, string> = {
   "strategicAxes.actionSaveErrorTitle": "Save failed",
   "strategicAxes.actionSaveError": "The action could not be saved.",
   "strategicAxes.atRiskPopoverTitle": "At-risk indicators",
+  "strategicAxes.atRiskTooltip":
+    "Unfavorable gap between the latest measured value and the indicator's target.",
   "strategicAxes.filterDirection": "Direction",
   "strategicAxes.filterPerson": "Person",
   "strategicAxes.filterSponsor": "Sponsor",
@@ -1538,6 +1540,9 @@ const en: Record<string, string> = {
   "effectifs.chantierUnknown": "Unknown workstream",
   "effectifs.noStaffingOnAxis": "No FTE declared on this axis.",
   "effectifs.noStaffingForFunction": "No FTE from this function on the programme's axes.",
+  "effectifs.budget.title": "Available FTEs by function",
+  "effectifs.budget.inputLabel": "FTE budget",
+  "effectifs.budget.usedLabel": "% FTEs used / available",
 
   // ─── Program type (Topbar program selector) ───────────────────────────────
   "programType.performance": "Performance",
@@ -1561,7 +1566,6 @@ const en: Record<string, string> = {
   "strategicDashboard.atRisk": "At risk",
   "strategicDashboard.cumulative": "Indicator total",
   "strategicDashboard.noIndicators": "No indicator defined for this program",
-  "strategicDashboard.noIndicatorsAtRisk": "No indicator at risk",
   "strategicDashboard.noDependencyAlerts": "No dependency alert between work packages",
   "strategicDashboard.delayDays": "days of slippage",
   "strategicDashboard.dragToReorder": "Drag to reorder",
@@ -1573,9 +1577,10 @@ const en: Record<string, string> = {
   "strategicDashboard.widget.indicatorStatus": "Indicators · on track",
   "strategicDashboard.widget.businessKpis": "Business KPIs",
   "strategicDashboard.widget.axisBreakdown": "Breakdown by axis",
-  "strategicDashboard.widget.indicatorsAtRisk": "Indicators at risk",
-  "strategicDashboard.widget.axisMaturity": "Progress by maturity stage",
+  "strategicDashboard.widget.chantierHealth": "Work package health",
   "strategicDashboard.widget.chantierDependencyAlerts": "Work package dependency alerts",
+  "strategicDashboard.chantierHealth.watch": "Watch",
+  "strategicDashboard.chantierHealth.critical": "Critical",
 
   // ─── Strategic Plan — program configuration screen (admin) ────────────────
   "adminPrograms.manage": "Manage",

@@ -9,6 +9,7 @@ import { Modal } from "@/components/shared/Modal";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
+import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
 import { ChantierForm, type ChantierFormValues } from "@/components/strategic/ChantierForm";
 import { ChantierGantt } from "@/components/strategic/ChantierGantt";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
@@ -35,17 +36,19 @@ import type { Indicator } from "@/types";
  * Quatre blocs, dans cet ordre :
  *  1. compteur d'ensemble des indicateurs de l'axe (`IndicatorStatusSummary`) + alertes de cascade
  *     de dépendance entre chantiers ;
- *  2. Gantt des chantiers (`ChantierGantt`) — PUREMENT NAVIGATIONNEL depuis le round 4 (voir plus
- *     bas) : un clic sur un bloc chantier ou une action navigue vers la fiche chantier dédiée
- *     (`/levers/chantier?id=…`), qui porte désormais tout le détail (round 4, point 9) ;
- *  3. modale "nouveau chantier", qui crée puis navigue vers cette même fiche dédiée ;
+ *  2. Gantt des chantiers (`ChantierGantt`) — un clic sur un bloc chantier ou une action ouvre le
+ *     panneau chantier (`ChantierDetailPanel`, round 6, point 0) directement SUR CETTE PAGE via
+ *     `?chantier=`/`&action=`, plutôt qu'une navigation vers une route dédiée — préserve le
+ *     contexte de scroll/zoom du Gantt ;
+ *  3. modale "nouveau chantier", qui crée puis ouvre ce même panneau ;
  *  4. indicateurs de l'axe EN LECTURE SEULE — macro d'abord, puis groupés par chantier.
  *
- * Round 4 : la pop-up de détail chantier (actions/livrables/RACI/effort/prérequis) a été RETIRÉE
- * d'ici — voir `app/(app)/levers/chantier/ChantierDetailClient.tsx`, qui porte désormais tout ce
- * contenu sur sa propre route (décision PO : format "fiche PERIAL", incompatible avec une modale
- * 720px). Cette fiche d'axe ne garde que ce qui reste au niveau AXE (pas chantier) : en-tête,
- * stepper d'étape, indicateurs, Gantt navigationnel.
+ * Round 6 (point 0) : le détail chantier (jalons/critères de succès/effort/RACI/dépendances/
+ * actions/timeline/effectifs) vivait jusque-là sur sa propre route (`/levers/chantier?id=…`,
+ * round 4) ; il vit désormais dans `components/strategic/ChantierDetailPanel.tsx`, monté ici dans
+ * un `Modal` — décision PO explicite : "tout apparaisse dans le kanban, sur une seule page". Cette
+ * fiche d'axe ne garde que ce qui reste au niveau AXE (pas chantier) : en-tête, stepper d'étape,
+ * indicateurs, Gantt.
  *
  * La lecture seule des indicateurs est une décision de conception explicite (voir plan, section
  * « Page KPI ») : la saisie d'une mesure et la ré-édition de l'objectif/seuil vivent à UN SEUL
@@ -102,16 +105,30 @@ export function AxisDetailClient() {
     return all.filter((a) => chantierIds.has(a.sourceId) || chantierIds.has(a.targetId));
   }, [data.chantiers, data.chantierActions, chantierIds]);
 
-  /** Navigation vers la fiche chantier dédiée (round 4, point 9) — l'id d'axe n'est plus nécessaire
-   *  en paramètre, le document chantier porte déjà `axisId` (le lien retour de la fiche chantier le
-   *  résout). `focusActionId` optionnel : ouverture ciblée sur une action précise, lue par
-   *  `ChantierDetailClient` via `?action=…`. */
-  const openChantier = (chantierId: string, focusActionId?: string) =>
-    router.push(
-      focusActionId
-        ? `/levers/chantier?id=${chantierId}&action=${focusActionId}`
-        : `/levers/chantier?id=${chantierId}`
-    );
+  /** Panneau chantier (round 6, point 0 — remplace l'ancienne route `/levers/chantier?id=…`) : monté
+   *  ICI plutôt que renvoyé vers la page portefeuille, pour ne pas faire perdre à l'utilisateur son
+   *  contexte de Gantt (scroll, zoom) sur un aller-retour inutile. Pose `?chantier=`/`&action=` À
+   *  CÔTÉ du `?id=` déjà utilisé par cette page pour l'axe — pas de collision de nom possible.
+   *  `focusActionId` optionnel : ouverture ciblée sur une action précise. */
+  const openChantier = (chantierId: string, focusActionId?: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("chantier", chantierId);
+    if (focusActionId) params.set("action", focusActionId);
+    else params.delete("action");
+    router.push(`/levers/detail?${params.toString()}`);
+  };
+
+  /** Ferme le panneau chantier — conserve le `?id=` de l'axe (`router.replace` pour ne pas empiler
+   *  d'entrée d'historique par simple fermeture). */
+  const closeChantierPanel = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("chantier");
+    params.delete("action");
+    router.replace(`/levers/detail?${params.toString()}`);
+  };
+
+  const openChantierId = searchParams.get("chantier");
+  const focusActionId = searchParams.get("action") ?? undefined;
 
   if (data.loading) {
     return (
@@ -171,6 +188,11 @@ export function AxisDetailClient() {
                 ? "indicatorStatus.atRisk"
                 : "indicatorStatus.onTrack"
             )}
+            title={
+              resolveIndicatorStatus(indicator) === "at_risk"
+                ? t("strategicAxes.atRiskTooltip")
+                : undefined
+            }
           />
         </div>
 
@@ -475,6 +497,28 @@ export function AxisDetailClient() {
           )}
         </CardBody>
       </Card>
+
+      {/* ── Panneau chantier (round 6, point 0) — ouvert depuis le Gantt ci-dessus, monté ICI plutôt
+          que sur une route séparée pour préserver le contexte de scroll/zoom du Gantt. ──────────── */}
+      <Modal
+        open={!!openChantierId}
+        onOpenChange={(open) => {
+          if (!open) closeChantierPanel();
+        }}
+        title={
+          (openChantierId && data.chantiers.find((c) => c.id === openChantierId)?.name) ??
+          t("strategicChantierDetail.title")
+        }
+        maxWidth="1100px"
+      >
+        {openChantierId && (
+          <ChantierDetailPanel
+            chantierId={openChantierId}
+            focusActionId={focusActionId}
+            onClose={closeChantierPanel}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

@@ -217,6 +217,10 @@ type BusinessKpiLabels = {
   objective?: string;
   onTrack?: string;
   atRisk?: string;
+  /** Round 6, point 2 : infobulle explicative portée par `IndicatorStatusBadge` sur l'état "à
+   *  risque" (ex. `strategicAxes.atRiskTooltip`) — absente par défaut plutôt qu'un repli français
+   *  en dur, cohérent avec le reste de ce composant (labels optionnels fournis par l'appelant). */
+  atRiskTooltip?: string;
   /** Titre de la modale d'historique complet (le nom de l'indicateur y est ajouté). */
   fullHistory?: string;
   chartValue?: string;
@@ -233,6 +237,7 @@ function resolveBusinessKpiLabels(labels?: BusinessKpiLabels): Required<Business
     objective: labels?.objective ?? "Objectif",
     onTrack: labels?.onTrack ?? "Sur la trajectoire",
     atRisk: labels?.atRisk ?? "À risque",
+    atRiskTooltip: labels?.atRiskTooltip ?? "",
     fullHistory: labels?.fullHistory ?? "Historique complet",
     chartValue: labels?.chartValue ?? "Valeur",
     chartObjective: labels?.chartObjective ?? "Objectif",
@@ -280,6 +285,7 @@ function BusinessKpiCard({
         <IndicatorStatusBadge
           status={status}
           label={status === "at_risk" ? l.atRisk : l.onTrack}
+          title={status === "at_risk" ? l.atRiskTooltip || undefined : undefined}
           className="flex-shrink-0"
         />
       </div>

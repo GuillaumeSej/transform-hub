@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   ChevronUp,
@@ -23,9 +24,9 @@ import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   chantierDependencyAlerts,
+  chantierHealthState,
   countOnTrackAtRisk,
-  latestMeasurement,
-  resolveIndicatorStatus,
+  milestoneProgressPct,
 } from "@/lib/axisLogic";
 import {
   STRATEGIC_DASHBOARD_WIDGET_REGISTRY,
@@ -50,8 +51,8 @@ import {
   BusinessKpiCards,
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
-import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
-import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
+import { ChantierHealthMatrix } from "@/components/strategic/ChantierHealthMatrix";
+import { ChantierProgressRow } from "@/components/strategic/ChantierProgressRow";
 
 /**
  * Dashboard du PLAN STRATÉGIQUE — pendant de `DashboardPagePerformance.tsx` pour un programme de
@@ -113,30 +114,36 @@ export function StrategicDashboardView() {
   const { user } = useRole();
   const { activeProgram, activeProgramId, programs, loading: programsLoading } = useActiveProgram();
   const { t } = useTranslation();
+  const router = useRouter();
   const strategic = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
   const { axes, chantiers, chantierActions, indicators, measurements } = strategic;
 
+  /** Navigation vers le panneau chantier (`ChantierDetailPanel`, round 6, point 0) — le dashboard
+   *  est une page DIFFÉRENTE de `/levers` (Kanban/Cartes/Chantiers), donc contrairement à ces vues
+   *  qui ne font qu'ajuster `?chantier=` sur la page courante, ouvrir le panneau depuis ici exige
+   *  une vraie navigation. Réutilisé par le widget "Répartition par axe" (`ChantierProgressRow`)
+   *  ET par la nouvelle matrice de santé (`ChantierHealthMatrix`, point 5) — même destination. */
+  const openChantierPanel = (chantierId: string) => router.push(`/levers?chantier=${chantierId}`);
+
   // ─── Agrégats (toute la logique de calcul vient de lib/axisLogic.ts) ──────────────────────
   const counts = useMemo(() => countOnTrackAtRisk(indicators), [indicators]);
-  const atRiskIndicators = useMemo(
-    () => indicators.filter((i) => resolveIndicatorStatus(i) === "at_risk"),
-    [indicators]
-  );
-  const axisNameById = useMemo(() => new Map(axes.map((a) => [a.id, a.name])), [axes]);
 
-  /** Une ligne par axe : volumétrie (chantiers/indicateurs) et part d'indicateurs sur la
-   *  trajectoire — la « répartition par axe » demandée au plan. */
+  /** Une ligne par axe : volumétrie (chantiers/indicateurs), part d'indicateurs sur la trajectoire
+   *  ET la liste de SES chantiers (round 6, point 3-4 : imbriqués via `ChantierProgressRow`, même
+   *  composant que le Kanban et l'onglet "Chantiers" — une seule lecture de l'avancement). */
   const axisBreakdown = useMemo(
     () =>
       axes
         .map((axis) => {
           const axisIndicators = indicators.filter((i) => i.axisId === axis.id);
           const { total, onTrack, atRisk } = countOnTrackAtRisk(axisIndicators);
+          const axisChantiers = chantiers.filter((c) => c.axisId === axis.id);
           return {
             axis,
-            chantierCount: chantiers.filter((c) => c.axisId === axis.id).length,
+            chantiers: axisChantiers,
+            chantierCount: axisChantiers.length,
             total,
             onTrack,
             atRisk,
@@ -147,27 +154,38 @@ export function StrategicDashboardView() {
     [axes, chantiers, indicators]
   );
 
-  /** Nombre d'axes ET de chantiers par étape de maturité, dans l'ordre du référentiel du
-   *  programme (`order`). Les entités dont l'étape a été supprimée du référentiel depuis sont
-   *  regroupées dans une ligne « étape inconnue » plutôt que d'être perdues du décompte. */
-  const maturityBreakdown = useMemo(() => {
-    const rows = stages.map((stage) => ({
-      stage,
-      axisCount: axes.filter((a) => a.stage === stage.id).length,
-      chantierCount: chantiers.filter((c) => c.stage === stage.id).length,
-    }));
-    const knownIds = new Set(stages.map((s) => s.id));
-    const orphanAxes = axes.filter((a) => !knownIds.has(a.stage)).length;
-    const orphanChantiers = chantiers.filter((c) => !knownIds.has(c.stage)).length;
-    return { rows, orphanAxes, orphanChantiers };
-  }, [stages, axes, chantiers]);
-
   const dependencyAlerts = useMemo(
     () =>
       chantierDependencyAlerts(chantiers, chantierActions).sort(
         (a, b) => b.delayDays - a.delayDays
       ),
     [chantiers, chantierActions]
+  );
+
+  /** Groupes (un par axe, colonnes) de cellules de santé (une par chantier) — alimente
+   *  `ChantierHealthMatrix` (round 6, point 5, remplace l'ancien "Avancement par étape de
+   *  maturité"). Un axe sans aucun chantier n'ouvre pas de colonne vide. */
+  const chantierHealthGroups = useMemo(
+    () =>
+      axisBreakdown
+        .filter((row) => row.chantiers.length > 0)
+        .map((row) => ({
+          key: row.axis.id,
+          label: row.axis.name,
+          color: row.axis.color,
+          cells: row.chantiers.map((chantier) => ({
+            chantier,
+            health: chantierHealthState(
+              chantier,
+              indicators,
+              measurements,
+              chantiers,
+              chantierActions
+            ),
+            progressPct: milestoneProgressPct(chantier),
+          })),
+        })),
+    [axisBreakdown, indicators, measurements, chantiers, chantierActions]
   );
 
   const summaryLabels = {
@@ -183,8 +201,26 @@ export function StrategicDashboardView() {
     objective: t("kpi.objectiveValue"),
     onTrack: t("indicatorStatus.onTrack"),
     atRisk: t("indicatorStatus.atRisk"),
+    atRiskTooltip: t("strategicAxes.atRiskTooltip"),
     fullHistory: t("kpi.chart.fullHistory"),
     progressToTarget: t("kpi.chart.progressToTarget"),
+  };
+
+  /** Libellés de `ChantierProgressRow` (nom + badge d'étape + barre + pastille "N à risque") —
+   *  mêmes clés que `AxisKanban`/`StrategicAxesView` (round 6, point 0/5) : trois lectures du même
+   *  avancement ne doivent jamais diverger sur leur vocabulaire. */
+  const chantierRowLabels = {
+    atRisk: t("strategicAxes.atRiskCount"),
+    atRiskPopoverTitle: t("strategicAxes.atRiskPopoverTitle"),
+    atRiskTooltip: t("strategicAxes.atRiskTooltip"),
+    progress: t("kpi.chart.progressToTarget"),
+  };
+
+  const chantierHealthLabels = {
+    onTrack: t("strategicDashboard.onTrack"),
+    watch: t("strategicDashboard.chantierHealth.watch"),
+    critical: t("strategicDashboard.chantierHealth.critical"),
+    empty: t("strategicAxes.axisNoChantier"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────
@@ -335,7 +371,11 @@ export function StrategicDashboardView() {
                   measurements={measurements}
                   showTotal={false}
                   labels={summaryLabels}
-                  className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                  // Round 6, point 1 : le widget passe en XL (largeur pleine) mais cette grille
+                  // interne restait plafonnée à 2 colonnes quelle que soit la coquille — seulement
+                  // 2 cartes ici (sur la trajectoire / à risque), `lg:grid-cols-3` laisse une
+                  // marge inoffensive plutôt que d'étirer les cartes elles-mêmes.
+                  className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
                   radialHero
                 />
               )}
@@ -356,13 +396,17 @@ export function StrategicDashboardView() {
                 indicators={indicators}
                 measurements={measurements}
                 labels={businessKpiLabels}
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                // Round 6, point 1 : idem `IndicatorStatusSummary` ci-dessus. Le jeu de démo
+                // (`scripts/seed-strategic-demo.js`) compte 5 KPI business (un macro-indicateur par
+                // axe) — `xl:grid-cols-4` remplit une coquille XL sans jamais forcer plus de 4
+                // cartes par ligne (elles restent lisibles, sparkline comprise).
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
               />
             </CardBody>
           </Card>
         );
 
-      // ── Répartition des indicateurs par axe ───────────────────────────────────────────────
+      // ── Répartition des indicateurs par axe, chantiers de chaque axe imbriqués ────────────
       case "axis-breakdown":
         return renderWidgetShell(
           instance,
@@ -374,23 +418,76 @@ export function StrategicDashboardView() {
                 : axisBreakdown.map((row) => (
                     <div
                       key={row.axis.id}
-                      className="border-b border-border py-2.5 last:border-0 first:pt-0"
+                      // Accent coloré propre à l'axe (`StrategicAxis.color`, round 6, point 3) —
+                      // même bordure gauche que `AxisKanban`/vue "Cartes", pour que la couleur d'un
+                      // axe se lise pareil partout où il apparaît.
+                      className="mb-3 overflow-hidden rounded-md border border-border bg-white last:mb-0"
+                      style={{
+                        borderLeft: `4px solid ${row.axis.color ?? "var(--bp-warm-taupe)"}`,
+                      }}
                     >
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-[12.5px] font-semibold text-primary">
-                          {row.axis.name}
-                        </span>
-                        <span className="flex-shrink-0 text-[11px] text-tertiary">
-                          {row.chantierCount} {t("strategicDashboard.chantiersSuffix")} ·{" "}
-                          {row.total} {t("strategicDashboard.indicatorsSuffix")}
+                      {/* En-tête cliquable → fiche de l'axe (navigation inchangée). `div
+                          role="button"` plutôt qu'un `<button>` : les lignes `ChantierProgressRow`
+                          imbriquées ci-dessous portent elles-mêmes un `AtRiskCountPill`
+                          (`<button>`), un bouton dans un bouton étant une imbrication invalide. */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => router.push(`/levers/detail?id=${row.axis.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            router.push(`/levers/detail?id=${row.axis.id}`);
+                          }
+                        }}
+                        className="flex cursor-pointer items-start gap-2 p-2.5 text-left transition hover:bg-neutral-50"
+                      >
+                        <span
+                          aria-hidden
+                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: row.axis.color ?? "var(--bp-warm-taupe)" }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline justify-between gap-3">
+                            <span className="truncate text-[12.5px] font-semibold text-primary">
+                              {row.axis.name}
+                            </span>
+                            <span className="flex-shrink-0 text-[11px] text-tertiary">
+                              {row.chantierCount} {t("strategicDashboard.chantiersSuffix")} ·{" "}
+                              {row.total} {t("strategicDashboard.indicatorsSuffix")}
+                            </span>
+                          </span>
+                          <span className="mt-1.5 flex items-center gap-3">
+                            <ProgressBar pct={row.onTrackPct} className="flex-1" />
+                            {row.atRisk > 0 && (
+                              <span className="flex-shrink-0 text-[11px] font-semibold text-rag-amber">
+                                {row.atRisk} {t("strategicDashboard.atRisk").toLowerCase()}
+                              </span>
+                            )}
+                          </span>
                         </span>
                       </div>
-                      <div className="mt-1.5 flex items-center gap-3">
-                        <ProgressBar pct={row.onTrackPct} className="flex-1" />
-                        {row.atRisk > 0 && (
-                          <span className="flex-shrink-0 text-[11px] font-semibold text-rag-amber">
-                            {row.atRisk} {t("strategicDashboard.atRisk").toLowerCase()}
-                          </span>
+                      {/* Chantiers de l'axe (round 6, point 3) — même composant que le Kanban et
+                          l'onglet "Chantiers" (`ChantierProgressRow`), chaque ligne ouvre le
+                          panneau chantier plutôt que la fiche d'axe. */}
+                      <div className="space-y-1.5 border-t border-border bg-neutral-50/60 p-2.5">
+                        {row.chantiers.length === 0 ? (
+                          <p className="py-1 text-center text-[11px] text-tertiary">
+                            {t("strategicAxes.axisNoChantier")}
+                          </p>
+                        ) : (
+                          row.chantiers.map((chantier) => (
+                            <ChantierProgressRow
+                              key={chantier.id}
+                              chantier={chantier}
+                              stages={stages}
+                              indicators={indicators}
+                              measurements={measurements}
+                              onOpen={openChantierPanel}
+                              labels={chantierRowLabels}
+                              className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white p-2 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm"
+                            />
+                          ))
                         )}
                       </div>
                     </div>
@@ -399,108 +496,25 @@ export function StrategicDashboardView() {
           </Card>
         );
 
-      // ── Indicateurs actuellement à risque ─────────────────────────────────────────────────
-      case "indicators-at-risk":
+      // ── Matrice de santé par chantier (colonnes = axes) ───────────────────────────────────
+      // Round 6, point 5 : remplace l'ancien "Avancement par étape de maturité" (répartition déjà
+      // lisible via le badge d'étape de chaque `ChantierProgressRow' ci-dessus) par un signal de
+      // RISQUE, croisant indicateurs à risque et alertes de cascade de retard (`chantierHealthState`,
+      // lib/axisLogic.ts) — première apparition d'un état à 3 niveaux côté Plan Stratégique.
+      case "chantier-health":
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader
-              title={t("strategicDashboard.widget.indicatorsAtRisk")}
-              actions={
-                atRiskIndicators.length > 0 ? (
-                  <span className="rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-bold text-rag-amber">
-                    {atRiskIndicators.length}
-                  </span>
-                ) : undefined
-              }
-            />
+            <CardHeader title={t("strategicDashboard.widget.chantierHealth")} />
             <CardBody>
-              {atRiskIndicators.length === 0
-                ? emptyLine(t("strategicDashboard.noIndicatorsAtRisk"))
-                : atRiskIndicators.map((indicator) => {
-                    const latest = latestMeasurement(indicator.id, measurements);
-                    return (
-                      <div
-                        key={indicator.id}
-                        className="flex items-start justify-between gap-3 border-b border-border py-2.5 last:border-0 first:pt-0"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-[12.5px] font-semibold text-primary">
-                            {indicator.name}
-                          </div>
-                          <div className="mt-0.5 truncate text-[11px] text-secondary">
-                            {axisNameById.get(indicator.axisId) ?? indicator.axisId}
-                          </div>
-                          {indicator.objectiveValue !== undefined && (
-                            <div className="mt-0.5 text-[11px] text-tertiary">
-                              {latest?.value !== undefined
-                                ? `${latest.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
-                                : "—"}{" "}
-                              / {indicator.objectiveValue}
-                              {indicator.unit ? ` ${indicator.unit}` : ""}
-                            </div>
-                          )}
-                        </div>
-                        <IndicatorStatusBadge
-                          status="at_risk"
-                          label={t("indicatorStatus.atRisk")}
-                          className="flex-shrink-0"
-                        />
-                      </div>
-                    );
-                  })}
+              <ChantierHealthMatrix
+                groups={chantierHealthGroups}
+                labels={chantierHealthLabels}
+                onChantierClick={openChantierPanel}
+              />
             </CardBody>
           </Card>
         );
-
-      // ── Avancement des axes/chantiers par étape de maturité ───────────────────────────────
-      case "axis-maturity": {
-        const maxCount = Math.max(
-          1,
-          ...maturityBreakdown.rows.map((r) => r.axisCount + r.chantierCount)
-        );
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader title={t("strategicDashboard.widget.axisMaturity")} />
-            <CardBody>
-              {maturityBreakdown.rows.length === 0
-                ? emptyLine(t("axisStage.none"))
-                : maturityBreakdown.rows.map((row) => (
-                    <div
-                      key={row.stage.id}
-                      className="flex items-center gap-3 border-b border-border py-2.5 last:border-0 first:pt-0"
-                    >
-                      <AxisStageBadge
-                        stageId={row.stage.id}
-                        stages={stages}
-                        className="w-[150px] flex-shrink-0 justify-center"
-                      />
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-100">
-                        <div
-                          className="h-full rounded-full bg-bp-warm-taupe"
-                          style={{
-                            width: `${((row.axisCount + row.chantierCount) / maxCount) * 100}%`,
-                          }}
-                        />
-                      </div>
-                      <span className="w-[150px] flex-shrink-0 text-right text-[11px] font-semibold text-secondary">
-                        {row.axisCount} {t("strategicDashboard.axesSuffix")} · {row.chantierCount}{" "}
-                        {t("strategicDashboard.chantiersSuffix")}
-                      </span>
-                    </div>
-                  ))}
-              {(maturityBreakdown.orphanAxes > 0 || maturityBreakdown.orphanChantiers > 0) && (
-                <p className="pt-2.5 text-[11px] text-tertiary">
-                  {t("axisStage.unknown")} : {maturityBreakdown.orphanAxes}{" "}
-                  {t("strategicDashboard.axesSuffix")} · {maturityBreakdown.orphanChantiers}{" "}
-                  {t("strategicDashboard.chantiersSuffix")}
-                </p>
-              )}
-            </CardBody>
-          </Card>
-        );
-      }
 
       // ── Alertes de cascade de retard entre chantiers (mise en évidence) ───────────────────
       case "chantier-dependency-alerts":

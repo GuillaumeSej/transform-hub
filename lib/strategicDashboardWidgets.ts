@@ -44,12 +44,12 @@ export type StrategicDashboardWidgetType =
   | "business-kpis"
   /** Compteur "X sur la trajectoire · Y à risque". */
   | "indicator-status"
-  /** Répartition des indicateurs (ou des chantiers) par axe stratégique. */
+  /** Répartition des indicateurs par axe stratégique, chantiers de chaque axe imbriqués. */
   | "axis-breakdown"
-  /** Liste des indicateurs actuellement à risque. */
-  | "indicators-at-risk"
-  /** Avancement des axes par étape de maturité (référentiel du programme). */
-  | "axis-maturity"
+  /** Matrice de santé par chantier (colonnes = axes) — round 6, point 5, remplace
+   *  "axis-maturity" (avancement par étape de maturité, retiré : le PO voulait un signal de
+   *  RISQUE par chantier, pas une photo de répartition par étape déjà lisible ailleurs). */
+  | "chantier-health"
   /** Alertes de cascade de retard entre chantiers (sans montant financier). */
   | "chantier-dependency-alerts";
 
@@ -78,34 +78,33 @@ export const STRATEGIC_DASHBOARD_WIDGET_REGISTRY: StrategicDashboardWidgetDef[] 
     type: "indicator-status",
     label: "strategicDashboard.widget.indicatorStatus",
     icon: "Gauge",
-    defaultSpan: "M",
+    // Round 6, point 1 : XL par défaut (comme `axis-breakdown`/`chantier-health` ci-dessous) — le
+    // widget ne s'étirait pas dans une coquille plus large qu'un `M` sans que sa grille interne
+    // (voir `IndicatorStatusSummary` dans `StrategicDashboardView.tsx`) suive, d'où l'effet
+    // "coupé en deux" remonté par le PO.
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "business-kpis",
     label: "strategicDashboard.widget.businessKpis",
     icon: "Target",
-    defaultSpan: "M",
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "axis-breakdown",
     label: "strategicDashboard.widget.axisBreakdown",
     icon: "Columns3",
-    defaultSpan: "M",
+    // Round 6, point 3-4 : XL également — chaque bloc d'axe imbrique désormais la liste de ses
+    // chantiers (`ChantierProgressRow`), un `M`/`L` étriquerait la lecture.
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
   },
   {
-    type: "indicators-at-risk",
-    label: "strategicDashboard.widget.indicatorsAtRisk",
-    icon: "TrendingDown",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "axis-maturity",
-    label: "strategicDashboard.widget.axisMaturity",
-    icon: "Workflow",
+    type: "chantier-health",
+    label: "strategicDashboard.widget.chantierHealth",
+    icon: "ShieldCheck",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
   },

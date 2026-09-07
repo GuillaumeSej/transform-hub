@@ -7,6 +7,7 @@ import {
   chantierAtRiskIndicators,
   chantierBounds,
   chantierDependencyAlerts,
+  chantierHealthState,
   computeIndicatorDelta,
   computeIndicatorStatus,
   countOnTrackAtRisk,
@@ -267,6 +268,56 @@ describe("canFillIndicator", () => {
 
   it("blocks an anonymous user", () => {
     expect(canFillIndicator(makeIndicator(), null)).toBe(false);
+  });
+
+  it("allows a program-agnostic strategic_lead to fill an indicator in any program", () => {
+    const indicator = makeIndicator({ responsibleRoles: ["cto"], programId: "p1" });
+    expect(
+      canFillIndicator(indicator, {
+        ...baseUser,
+        profiles: [{ role: "strategic_lead" }],
+        username: "someone.else",
+      })
+    ).toBe(true);
+    const otherProgramIndicator = makeIndicator({ responsibleRoles: ["cto"], programId: "p2" });
+    expect(
+      canFillIndicator(otherProgramIndicator, {
+        ...baseUser,
+        profiles: [{ role: "strategic_lead" }],
+        username: "someone.else",
+      })
+    ).toBe(true);
+  });
+
+  it("scopes a strategic_lead with a programId to that program only", () => {
+    const sameProgramIndicator = makeIndicator({ responsibleRoles: ["cto"], programId: "p1" });
+    expect(
+      canFillIndicator(sameProgramIndicator, {
+        ...baseUser,
+        profiles: [{ role: "strategic_lead", programId: "p1" }],
+        username: "someone.else",
+      })
+    ).toBe(true);
+
+    const otherProgramIndicator = makeIndicator({ responsibleRoles: ["cto"], programId: "p2" });
+    expect(
+      canFillIndicator(otherProgramIndicator, {
+        ...baseUser,
+        profiles: [{ role: "strategic_lead", programId: "p1" }],
+        username: "someone.else",
+      })
+    ).toBe(false);
+  });
+
+  it("does not grant blanket access to a non-strategic_lead strategic role", () => {
+    const indicator = makeIndicator({ responsibleRoles: ["cto"], programId: "p1" });
+    expect(
+      canFillIndicator(indicator, {
+        ...baseUser,
+        profiles: [{ role: "axis_sponsor" }],
+        username: "someone.else",
+      })
+    ).toBe(false);
   });
 });
 
@@ -556,6 +607,70 @@ describe("chantierAtRiskIndicators", () => {
     expect(result).toHaveLength(1);
     // Pas de mesure : le delta reste undefined, mais l'indicateur est bien remonté.
     expect(result[0].delta).toBeUndefined();
+  });
+});
+
+// ─── Santé globale d'un chantier (round 6, point 5) ────────────────────────────────────────────
+
+describe("chantierHealthState", () => {
+  it("is onTrack when there is no at-risk indicator and no dependency alert", () => {
+    const chantier = makeChantier("CH1");
+    expect(chantierHealthState(chantier, [], [], [chantier], [])).toBe("onTrack");
+  });
+
+  it("is watch when the chantier has an at-risk indicator, even without any dependency alert", () => {
+    const chantier = makeChantier("CH1");
+    const indicators = [makeIndicator({ id: "IND001", chantierId: "CH1", status: "at_risk" })];
+    expect(chantierHealthState(chantier, indicators, [], [chantier], [])).toBe("watch");
+  });
+
+  it("is critical when the chantier is the blocked side (sourceId) of a violated alert", () => {
+    // Même montage que le cas FS de `chantierDependencyAlerts` : CH2 (source) est bloqué par CH1
+    // (target), qui finit en retard.
+    const chantiers = [
+      makeChantier("CH1", { name: "Refonte SI" }),
+      makeChantier("CH2", {
+        name: "Déploiement terrain",
+        dependencies: [{ targetId: "CH1", type: "FS" }],
+      }),
+    ];
+    const actions = [
+      makeAction("CH1", "2026-01-01", "2026-03-31"),
+      makeAction("CH2", "2026-03-01", "2026-06-30"),
+    ];
+    expect(chantierHealthState(chantiers[1], [], [], chantiers, actions)).toBe("critical");
+  });
+
+  it("is watch (not critical) when the chantier only delays another one downstream (targetId)", () => {
+    const chantiers = [
+      makeChantier("CH1", { name: "Refonte SI" }),
+      makeChantier("CH2", {
+        name: "Déploiement terrain",
+        dependencies: [{ targetId: "CH1", type: "FS" }],
+      }),
+    ];
+    const actions = [
+      makeAction("CH1", "2026-01-01", "2026-03-31"),
+      makeAction("CH2", "2026-03-01", "2026-06-30"),
+    ];
+    // CH1 est `targetId` de l'alerte (il retarde CH2 en aval) mais n'est lui-même bloqué par rien.
+    expect(chantierHealthState(chantiers[0], [], [], chantiers, actions)).toBe("watch");
+  });
+
+  it("prioritizes critical over watch when both signals apply to the blocked chantier", () => {
+    const chantiers = [
+      makeChantier("CH1", { name: "Refonte SI" }),
+      makeChantier("CH2", {
+        name: "Déploiement terrain",
+        dependencies: [{ targetId: "CH1", type: "FS" }],
+      }),
+    ];
+    const actions = [
+      makeAction("CH1", "2026-01-01", "2026-03-31"),
+      makeAction("CH2", "2026-03-01", "2026-06-30"),
+    ];
+    const indicators = [makeIndicator({ id: "IND001", chantierId: "CH2", status: "at_risk" })];
+    expect(chantierHealthState(chantiers[1], indicators, [], chantiers, actions)).toBe("critical");
   });
 });
 
