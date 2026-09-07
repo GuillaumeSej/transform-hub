@@ -169,12 +169,20 @@ export function useBeTrackData(companyId?: string | null) {
     void (async () => {
       try {
         // Plus aucun seed implicite de données démo ici (voir le commentaire sur l'état initial
-        // ci-dessus) — seule `ensureAdminSeeded` reste automatique : elle ne crée des entreprises
-        // de test que si la collection `companies` est ENTIÈREMENT vide (voir
-        // lib/firestore/admin.ts), ce qui ne peut arriver que sur un projet Firebase flambant
-        // neuf, jamais comme effet de bord sur une entreprise réelle déjà existante.
-        await ensureAdminSeeded();
-        if (companyId) await leversDb.migrateCompanyIds(companyId);
+        // ci-dessus) — seule `ensureAdminSeeded` reste automatique, et UNIQUEMENT pour un admin
+        // global (`companyId` null/undefined, voir la convention `byCompany` dans
+        // lib/firestore/levers.ts et le commentaire de tête de lib/firestore/admin.ts) : elle fait
+        // un `getDocs` non filtré sur `companies`/`programs`, que `firestore.rules` rejette en
+        // bloc (permission-denied) pour tout utilisateur scopé à une entreprise — voir
+        // `canReadCompanyScoped`. L'appeler pour un utilisateur normal ne faisait donc que jeter
+        // une exception avalée ci-dessous à chaque chargement, sans jamais rien seeder.
+        // `migrateCompanyIds` (migration ponctuelle historique) est retirée du chargement
+        // automatique pour la même raison : son `getDocs(leversCol())` non filtré échoue
+        // systématiquement pour un utilisateur scopé et ne pose jamais son flag "done", donc elle
+        // re-tentait — et re-échouait — à chaque page vue. Elle reste disponible dans
+        // lib/firestore/levers.ts pour un déclenchement manuel/admin si un rattrapage est encore
+        // nécessaire.
+        if (!companyId) await ensureAdminSeeded();
       } catch (err) {
         // Les subscriptions sont tout de même tentées : si la lecture est autorisée mais pas
         // l'admin-seed, elles peuplent l'état dès que Firestore répond.
