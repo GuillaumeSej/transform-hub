@@ -1405,7 +1405,7 @@ const fr: Record<string, string> = {
 
   // ─── Plan Stratégique — jalons E0→E4 (round 5) ─────────────────────────────────────────
   "strategicChantierDetail.milestones.title": "Méthode de jalons E0→E4",
-  "strategicChantierDetail.milestones.stepper.title": "Jalons du chantier",
+  "strategicChantierDetail.milestones.stepper.title": "Jalons du levier",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Se débloque après le jalon courant",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Jalon franchi",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Jalon courant",

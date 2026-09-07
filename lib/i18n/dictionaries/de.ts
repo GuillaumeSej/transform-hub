@@ -1342,7 +1342,7 @@ const de: Record<string, string> = {
 
   // ─── Strategieplan — Meilensteine E0-E4 (Runde 5) ───────────────────────────
   "strategicChantierDetail.milestones.title": "E0-E4-Meilensteinmethode",
-  "strategicChantierDetail.milestones.stepper.title": "Chantier-Meilensteine",
+  "strategicChantierDetail.milestones.stepper.title": "Meilensteine der Aktivität",
   "strategicChantierDetail.milestones.stepper.lockedTooltip":
     "Wird nach dem aktuellen Meilenstein freigeschaltet",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Meilenstein erreicht",

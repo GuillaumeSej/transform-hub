@@ -1353,7 +1353,7 @@ const en: Record<string, string> = {
 
   // ─── Strategic Plan — E0-E4 milestones (round 5) ────────────────────────────
   "strategicChantierDetail.milestones.title": "E0-E4 milestone method",
-  "strategicChantierDetail.milestones.stepper.title": "Chantier milestones",
+  "strategicChantierDetail.milestones.stepper.title": "Lever milestones",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Unlocks after the current milestone",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Milestone passed",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Current milestone",

@@ -1341,7 +1341,7 @@ const es: Record<string, string> = {
 
   // ─── Plan Estratégico — hitos E0-E4 (ronda 5) ────────────────────────────────
   "strategicChantierDetail.milestones.title": "Método de hitos E0-E4",
-  "strategicChantierDetail.milestones.stepper.title": "Hitos del chantier",
+  "strategicChantierDetail.milestones.stepper.title": "Hitos de la actividad",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Se desbloquea tras el hito actual",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Hito superado",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Hito actual",
