@@ -340,7 +340,34 @@ const ACTIONS = [
     start: "2026-06-01",
     end: "2027-06-30",
     status: "planned",
-    kanbanStatus: "todo",
+    indicatorId: "IND-rebut",
+    milestones: {
+      currentMilestone: "E1",
+      passedMilestones: ["E0"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          {
+            itemId: "E1-B3",
+            flag: "orange",
+            resolved: false,
+            actionPlan: {
+              description:
+                "Revue multi-angles engagée mais pas encore bouclée sur le volet conduite du changement des sites Allemagne/Pologne.",
+              owner: "antoine.mercier",
+              dueDate: "2026-08-15",
+            },
+          },
+        ],
+      },
+    },
     deliverables: [
       {
         id: "DLV-lean-1",
@@ -414,7 +441,39 @@ const ACTIONS = [
     start: "2026-10-01",
     end: "2027-03-31",
     status: "planned",
-    kanbanStatus: "todo",
+    indicatorId: "IND-delai",
+    milestones: {
+      currentMilestone: "E2",
+      passedMilestones: ["E0", "E1"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B3", flag: "green" },
+          { itemId: "E1-C2", flag: "green" },
+        ],
+        E2: [
+          { itemId: "E2-B1", flag: "green" },
+          {
+            itemId: "E2-B2",
+            flag: "orange",
+            resolved: false,
+            actionPlan: {
+              description:
+                "Ressources de déploiement pas toutes attribuées — poste de coordinateur S&OP encore ouvert.",
+              owner: "isabelle.faure",
+              dueDate: "2026-11-01",
+            },
+          },
+        ],
+      },
+    },
   },
   {
     id: "ACT-qualite-1",
@@ -426,20 +485,36 @@ const ACTIONS = [
     status: "defined",
     indicatorId: "IND-service-client",
     milestones: {
-      currentMilestone: "E0",
-      passedMilestones: [],
+      currentMilestone: "E1",
+      passedMilestones: ["E0"],
       checklists: {
         E0: [
+          { itemId: "E0-A2", flag: "green" },
           { itemId: "E0-B1", flag: "green" },
           {
             itemId: "E0-B2",
             flag: "orange",
+            resolved: true,
+            actionPlan: {
+              description:
+                "Périmètre du plan qualité pas encore arbitré avec les sites pilotes ; tranché en réunion de cadrage complémentaire avec la Qualité Groupe.",
+              owner: "camille.rousseau",
+              dueDate: "2026-04-20",
+            },
+          },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          {
+            itemId: "E1-B2",
+            flag: "orange",
             resolved: false,
             actionPlan: {
               description:
-                "Périmètre du plan qualité pas encore arbitré avec les sites pilotes ; réunion de cadrage complémentaire prévue avec la Qualité Groupe.",
+                "Objectif chiffré du plan qualité encore en arbitrage entre la Qualité Groupe et les sites pilotes.",
               owner: "camille.rousseau",
-              dueDate: "2026-04-20",
+              dueDate: "2026-06-10",
             },
           },
         ],
@@ -512,7 +587,25 @@ const ACTIONS = [
     start: "2027-01-01",
     end: "2027-06-30",
     status: "planned",
-    kanbanStatus: "in_progress",
+    indicatorId: "IND-sources",
+    milestones: {
+      currentMilestone: "E1",
+      passedMilestones: ["E0"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B3", flag: "green" },
+          { itemId: "E1-C2", flag: "green" },
+        ],
+      },
+    },
   },
   {
     id: "ACT-rpa-1",
@@ -524,8 +617,8 @@ const ACTIONS = [
     status: "achieved",
     indicatorId: "IND-heures",
     milestones: {
-      currentMilestone: "E3",
-      passedMilestones: ["E0", "E1", "E2"],
+      currentMilestone: "E2",
+      passedMilestones: ["E0", "E1"],
       checklists: {
         E0: [
           { itemId: "E0-A2", flag: "green" },
@@ -542,12 +635,8 @@ const ACTIONS = [
         E2: [
           { itemId: "E2-B1", flag: "green" },
           { itemId: "E2-B2", flag: "green" },
-          { itemId: "E2-B3", flag: "green" },
-        ],
-        E3: [
-          { itemId: "E3-B1", flag: "green" },
           {
-            itemId: "E3-B2",
+            itemId: "E2-B3",
             flag: "orange",
             resolved: false,
             actionPlan: {
@@ -649,20 +738,37 @@ const ACTIONS = [
     status: "planned",
     indicatorId: "IND-conversion",
     milestones: {
-      currentMilestone: "E0",
-      passedMilestones: [],
+      currentMilestone: "E1",
+      passedMilestones: ["E0"],
       checklists: {
         E0: [
           { itemId: "E0-A2", flag: "green" },
           {
             itemId: "E0-B1",
             flag: "orange",
+            resolved: true,
+            actionPlan: {
+              description:
+                "Cadrage encore ouvert sur le choix du CMS cible ; arbitré après benchmark complémentaire en faveur d'une solution headless.",
+              owner: "camille.rousseau",
+              dueDate: "2026-03-01",
+            },
+          },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          {
+            itemId: "E1-B3",
+            flag: "red",
             resolved: false,
             actionPlan: {
               description:
-                "Cadrage encore ouvert sur le choix du CMS cible ; benchmark complémentaire en cours avant arbitrage.",
-              owner: "camille.rousseau",
-              dueDate: "2026-03-01",
+                "Revue multi-angles pas encore engagée sur le volet délais — dépendance forte à la disponibilité de l'agence e-commerce retenue.",
+              owner: "thomas.girard",
+              dueDate: "2026-04-15",
             },
           },
         ],
@@ -677,7 +783,29 @@ const ACTIONS = [
     start: "2026-12-01",
     end: "2027-05-31",
     status: "defined",
-    kanbanStatus: "todo",
+    indicatorId: "IND-conversion",
+    milestones: {
+      currentMilestone: "E2",
+      passedMilestones: ["E0", "E1"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B3", flag: "green" },
+          { itemId: "E1-C2", flag: "green" },
+        ],
+        E2: [
+          { itemId: "E2-B1", flag: "green" },
+          { itemId: "E2-B2", flag: "green" },
+        ],
+      },
+    },
   },
   {
     id: "ACT-fidelite-1",
@@ -757,7 +885,33 @@ const ACTIONS = [
     start: "2026-07-01",
     end: "2027-12-31",
     status: "planned",
-    kanbanStatus: "in_progress",
+    indicatorId: "IND-energie",
+    milestones: {
+      currentMilestone: "E1",
+      passedMilestones: ["E0"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          {
+            itemId: "E1-B2",
+            flag: "orange",
+            resolved: false,
+            actionPlan: {
+              description:
+                "Choix entre solaire toiture et contrat PPA éolien pas encore arbitré pour les sites Allemagne.",
+              owner: "antoine.mercier",
+              dueDate: "2026-09-01",
+            },
+          },
+        ],
+      },
+    },
   },
   {
     id: "ACT-emballages-1",
