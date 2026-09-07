@@ -5,12 +5,18 @@ import { LineChart, Lock, Pencil, Plus, Target } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
+import { IndicatorDeltaStat } from "@/components/strategic/IndicatorDeltaStat";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import {
   BusinessKpiCards,
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
-import { canFillIndicator, latestMeasurement, resolveIndicatorStatus } from "@/lib/axisLogic";
+import {
+  canFillIndicator,
+  computeIndicatorDelta,
+  latestMeasurement,
+  resolveIndicatorStatus,
+} from "@/lib/axisLogic";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
@@ -104,6 +110,10 @@ function IndicatorCard({
   const canFill = canFillIndicator(indicator, user);
   const quantitative = indicator.kind === "quantitative";
   const latest = latestMeasurement(indicator.id, measurements);
+  // Écart signé + progression vers la cible (round 6, point 6) : `undefined` sans objectif chiffré
+  // ou sans mesure numérique exploitable — même garde-fou que `BusinessKpiCard`, rien à afficher
+  // plutôt qu'un écart inventé.
+  const delta = computeIndicatorDelta(indicator, latest);
 
   // ── Brouillon de mesure ────────────────────────────────────────────────────────────────────
   const [period, setPeriod] = useState(() => currentPeriod(indicator.frequency));
@@ -233,6 +243,7 @@ function IndicatorCard({
           <IndicatorStatusBadge
             status={status}
             label={t(status === "at_risk" ? "indicatorStatus.atRisk" : "indicatorStatus.onTrack")}
+            title={status === "at_risk" ? t("strategicAxes.atRiskTooltip") : undefined}
           />
         }
       />
@@ -357,6 +368,14 @@ function IndicatorCard({
                       {indicator.unit ? ` ${indicator.unit}` : ""} ·{" "}
                       {t(`kpi.direction.${indicator.direction ?? "up"}`)}
                     </p>
+                  )}
+                  {delta && (
+                    <IndicatorDeltaStat
+                      delta={delta}
+                      unit={indicator.unit}
+                      labels={{ progress: t("kpi.chart.progressToTarget") }}
+                      className="pt-1"
+                    />
                   )}
                 </div>
               )}
