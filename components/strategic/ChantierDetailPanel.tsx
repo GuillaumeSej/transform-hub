@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -56,16 +56,24 @@ import type {
 } from "@/types";
 
 /**
- * Fiche chantier dédiée (round 4, point 9) — pendant de `AxisDetailClient.tsx` pour un CHANTIER
- * plutôt qu'un axe, sur sa propre route (`/levers/chantier?id=…`) plutôt qu'une popup 720px : le PO
- * veut le format "fiche PERIAL" (sponsor/pilote/critères de succès/timeline de livrables), qui n'a
- * pas sa place dans une modale.
+ * Fiche chantier dédiée (round 4, point 9 ; devenue panneau au round 6, point 0) — pendant de
+ * `AxisDetailClient.tsx` pour un CHANTIER plutôt qu'un axe. Portait jusqu'au round 6 sa propre route
+ * (`/levers/chantier?id=…`, format "fiche PERIAL" demandé par le PO : sponsor/pilote/critères de
+ * succès/timeline de livrables, qui n'avait pas sa place dans une modale 720px de l'époque).
  *
- * Porte désormais TOUT le détail chantier retiré de l'ancienne modale de `AxisDetailClient.tsx` :
- * critères de succès, grille de notation d'effort (round 4, point 7 — SEUL endroit qui l'importe),
- * RACI de chantier et de livrable (point 6), dépendances (migration telle quelle), actions avec
- * formulaire inline enrichi (prérequis go/no-go, owner/sponsor via `UserPicker`), et la timeline
- * colorée par livrable façon PERIAL (extraction `TimelineBars.tsx`, voir `ChantierGantt.tsx`).
+ * Round 6, point 0 (retour PO explicite) : reste montée dans un `Modal` PLUS LARGE (1100px, voir les
+ * appelants `StrategicAxesView.tsx`/`AxisDetailClient.tsx`) plutôt que sur sa propre route — "tout
+ * apparaisse dans le kanban, sur une seule page". RIEN n'est retiré de cette fiche par ce
+ * changement : mêmes sections, même contenu, simplement paramétrée par props (`chantierId`,
+ * `focusActionId`, `onClose`) au lieu de lire `useSearchParams()`. Garde son propre
+ * `useStrategicData(...)` interne — cohérent avec `AxisDetailClient.tsx`/`StrategicDashboardView.tsx`,
+ * qui appellent chacun ce hook indépendamment, ce n'est pas un nouveau pattern.
+ *
+ * Porte TOUT le détail chantier : critères de succès, grille de notation d'effort (round 4, point 7
+ * — SEUL endroit qui l'importe), RACI de chantier et de livrable (point 6), dépendances (migration
+ * telle quelle), actions avec formulaire inline enrichi (prérequis go/no-go, owner/sponsor via
+ * `UserPicker`), et la timeline colorée par livrable façon PERIAL (extraction `TimelineBars.tsx`,
+ * voir `ChantierGantt.tsx`).
  */
 
 type ChantierActionFormValues = Pick<
@@ -629,20 +637,37 @@ function ChantierActionForm({
   );
 }
 
-export function ChantierDetailClient() {
+export function ChantierDetailPanel({
+  chantierId,
+  focusActionId = "",
+  onClose,
+}: {
+  /** Id du chantier affiché — remplace l'ancien `?id=…` de la route dédiée. */
+  chantierId: string;
+  /** Action à mettre en évidence à l'ouverture (ex. venant d'un clic sur le Gantt) — remplace
+   *  l'ancien `?action=…`. */
+  focusActionId?: string;
+  /** Ferme le panneau (typiquement : retire `?chantier=`/`&action=` de l'URL de la page appelante).
+   *  Appelé par tout ce qui, sur l'ancienne route, naviguait AILLEURS (lien retour, suppression) —
+   *  voir `navigateAway` ci-dessous pour le cas où il faut en plus une VRAIE navigation. */
+  onClose: () => void;
+}) {
   const { user } = useRole();
   const { activeProgramId } = useActiveProgram();
   const { t } = useTranslation();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { showToast } = useToast();
-  const id = searchParams.get("id") ?? "";
-  /** Action à mettre en évidence à l'ouverture (ex. venant d'un lien du Gantt) — voir l'effet de
-   *  défilement plus bas. */
-  const focusActionId = searchParams.get("action") ?? "";
 
   const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
+
+  /** Ferme le panneau PUIS navigue vers une page réellement différente (ex. la fiche d'axe) — le
+   *  panneau ne doit pas rester ouvert « au-dessus » d'une page que l'utilisateur vient de quitter
+   *  si jamais il revient en arrière (round 6, point 0). */
+  const navigateAway = (path: string) => {
+    onClose();
+    router.push(path);
+  };
 
   // Échelle de confidentialité de l'entreprise — pour le sélecteur inline de l'en-tête (voir plus
   // bas), même pattern que `components/shared/LeverForm.tsx:291-300` côté Plan Performance.
@@ -655,7 +680,10 @@ export function ChantierDetailClient() {
     return unsub;
   }, [user?.companyId]);
 
-  const chantier = useMemo(() => data.chantiers.find((c) => c.id === id), [data.chantiers, id]);
+  const chantier = useMemo(
+    () => data.chantiers.find((c) => c.id === chantierId),
+    [data.chantiers, chantierId]
+  );
   const axis = useMemo(
     () => (chantier ? data.axes.find((a) => a.id === chantier.axisId) : undefined),
     [data.axes, chantier]
@@ -732,7 +760,7 @@ export function ChantierDetailClient() {
   );
   const timelinePctOfComputed = useMemo(() => timelinePctOf(minTime, maxTime), [minTime, maxTime]);
 
-  // ── Ouverture ciblée sur une action (`?action=…`) — défilement + mise en avant ─────────────
+  // ── Ouverture ciblée sur une action (`focusActionId`) — défilement + mise en avant ─────────
   const actionRefs = useRef<Record<string, HTMLLIElement | null>>({});
   useEffect(() => {
     if (!focusActionId) return;
@@ -752,10 +780,7 @@ export function ChantierDetailClient() {
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
         {t("strategicChantierDetail.notFound")}{" "}
-        <button
-          onClick={() => router.push("/levers")}
-          className="font-medium text-bp-coral hover:underline"
-        >
+        <button onClick={onClose} className="font-medium text-bp-coral hover:underline">
           {t("strategicAxes.back")}
         </button>
       </div>
@@ -855,7 +880,7 @@ export function ChantierDetailClient() {
     <div>
       <div className="mb-4 flex items-center justify-between gap-2">
         <button
-          onClick={() => router.push(axis ? `/levers/detail?id=${axis.id}` : "/levers")}
+          onClick={onClose}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-bp-coral hover:underline"
         >
           <ArrowLeft size={14} /> {t("strategicChantierDetail.back")}
@@ -874,7 +899,7 @@ export function ChantierDetailClient() {
           actions={
             axis && (
               <button
-                onClick={() => router.push(`/levers/detail?id=${axis.id}`)}
+                onClick={() => navigateAway(`/levers/detail?id=${axis.id}`)}
                 className="text-xs font-medium text-secondary hover:text-primary hover:underline"
               >
                 {axis.name}
@@ -1391,7 +1416,7 @@ export function ChantierDetailClient() {
             }
             await data.removeChantier(chantier.id);
             showToast(t("strategicAxes.chantierDeleted"), chantier.name, "success");
-            router.push(axis ? `/levers/detail?id=${axis.id}` : "/levers");
+            onClose();
           }}
         >
           <Trash2 size={12} />{" "}
