@@ -1,6 +1,6 @@
 import { daysBetween } from "@/lib/dateUtils";
 import { MILESTONE_ORDER, MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
-import { hasAnyRole, isAnyAdmin } from "@/lib/roleProfiles";
+import { getStrategicProfile, hasAnyRole, isAnyAdmin } from "@/lib/roleProfiles";
 import type {
   AuthUser,
   Chantier,
@@ -229,14 +229,26 @@ export function countOnTrackAtRisk(indicators: Indicator[]): {
  * `responsibleRoles`, OU son identifiant est listé dans `additionalAuthorizedUserIds` (comptes
  * ajoutés au cas par cas, en plus des rôles). admin/admin_entreprise sont toujours autorisés,
  * comme partout ailleurs dans l'app (voir `leversLogic.canUserViewLever`).
+ *
+ * Round 6, point 7 : le pilote (`strategic_lead`) peut en plus renseigner N'IMPORTE QUEL
+ * indicateur de SON programme, même sans figurer dans `responsibleRoles`/
+ * `additionalAuthorizedUserIds` — un `strategic_lead` sans `programId` (profil non rattaché à un
+ * programme précis) est autorisé sur TOUS les programmes, cohérent avec `getAuthorizedPrograms`.
  */
 export function canFillIndicator(
-  indicator: Pick<Indicator, "responsibleRoles" | "additionalAuthorizedUserIds">,
+  indicator: Pick<Indicator, "responsibleRoles" | "additionalAuthorizedUserIds" | "programId">,
   user:
     Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin" | "username"> | null | undefined
 ): boolean {
   if (!user) return false;
   if (isAnyAdmin(user)) return true;
+  const strategicProfile = getStrategicProfile(user);
+  if (
+    strategicProfile?.role === "strategic_lead" &&
+    (!strategicProfile.programId || strategicProfile.programId === indicator.programId)
+  ) {
+    return true;
+  }
   if (hasAnyRole(user, indicator.responsibleRoles)) return true;
   return (indicator.additionalAuthorizedUserIds ?? []).includes(user.username);
 }
@@ -413,6 +425,51 @@ export function chantierDependencyAlerts(
   }
 
   return alerts;
+}
+
+// ─── Santé globale d'un chantier (round 6, point 5) ────────────────────────────────────────────
+
+/** État de santé à TROIS niveaux d'un chantier — première apparition d'un état à trois niveaux
+ *  côté Plan Stratégique (le reste du domaine indicateur ne connaît que le binaire
+ *  `IndicatorRiskStatus`). Alimente `ChantierHealthMatrix` (widget dashboard "chantier-health"). */
+export type ChantierHealthState = "onTrack" | "watch" | "critical";
+
+/**
+ * État de santé global d'un chantier, croisant deux signaux DÉJÀ existants (`chantierAtRiskIndicators`,
+ * `chantierDependencyAlerts`) — aucune nouvelle donnée saisie, purement dérivé.
+ *
+ * **Sens de `sourceId`/`targetId` d'une alerte** (voir `chantierDependencyAlerts` ci-dessus) :
+ * `source` est le chantier qui PORTE la dépendance (`Chantier.dependencies`), `target` celui dont
+ * il dépend. Une alerte violée signifie que `target` n'a pas tenu la contrainte attendue par
+ * `source` — c'est donc `source` qui est concrètement BLOQUÉ/retardé par `target`, et `target` qui
+ * RETARDE `source` (voir le cas FS testé dans `lib/__tests__/axisLogic.test.ts` :
+ * "Déploiement terrain" est `sourceId`, bloqué par "Refonte SI" en `targetId`, qui finit en
+ * retard). D'où l'affectation ci-dessous — délibérément la correspondance inverse de la première
+ * lecture littérale des noms de champs :
+ *  - `critical` : ce chantier est `sourceId` d'au moins une alerte — il est le côté BLOQUÉ, le
+ *    signal le plus grave (son propre avancement est concrètement entravé).
+ *  - `watch` : `chantierAtRiskIndicators(...)` non vide, OU ce chantier est `targetId` d'une
+ *    alerte — il n'est pas lui-même bloqué, mais soit un de ses indicateurs dérape, soit sa propre
+ *    lenteur retarde un AUTRE chantier en aval (signal à surveiller, pas encore critique pour LUI).
+ *  - `onTrack` : sinon.
+ */
+export function chantierHealthState(
+  chantier: Chantier,
+  indicators: Indicator[],
+  measurements: IndicatorMeasurement[],
+  chantiers: Chantier[],
+  chantierActions: ChantierAction[]
+): ChantierHealthState {
+  const alerts = chantierDependencyAlerts(chantiers, chantierActions);
+  const isBlocked = alerts.some((alert) => alert.sourceId === chantier.id);
+  if (isBlocked) return "critical";
+
+  const hasAtRiskIndicator =
+    chantierAtRiskIndicators(chantier.id, indicators, measurements).length > 0;
+  const isDelayingDownstream = alerts.some((alert) => alert.targetId === chantier.id);
+  if (hasAtRiskIndicator || isDelayingDownstream) return "watch";
+
+  return "onTrack";
 }
 
 // ─── Avancement d'un chantier ──────────────────────────────────────────────────────────────────
