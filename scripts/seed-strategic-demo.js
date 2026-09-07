@@ -182,16 +182,19 @@ const AXES = [
 ];
 
 const CHANTIERS = [
-  { id: "CH-lean", axisId: "AX-excop", name: "Lean Manufacturing Sites EU", stage: "planned" },
+  {
+    id: "CH-lean",
+    axisId: "AX-excop",
+    name: "Lean Manufacturing Sites EU",
+    stage: "planned",
+    allocatedBudget: 1500000,
+  },
   {
     id: "CH-supply",
     axisId: "AX-excop",
     name: "Optimisation Supply Chain",
     stage: "validated",
-    raci: [
-      { userId: "thomas.girard", letter: "A" },
-      { userId: "lucie.bernard", letter: "C" },
-    ],
+    allocatedBudget: 2200000,
   },
   { id: "CH-qualite", axisId: "AX-excop", name: "Amélioration Qualité Produits", stage: "defined" },
 
@@ -203,6 +206,7 @@ const CHANTIERS = [
     sponsorName: "isabelle.faure",
     pilote: "camille.rousseau",
     effort: { financialImpact: 3, humanImpact: 2, duration: 3, changeManagement: 2 },
+    allocatedBudget: 3400000,
   },
   { id: "CH-rpa", axisId: "AX-digital", name: "Automatisation RPA Finance", stage: "achieved" },
   {
@@ -213,14 +217,7 @@ const CHANTIERS = [
     sponsorName: "isabelle.faure",
     pilote: "camille.rousseau",
     effort: { financialImpact: 3, humanImpact: 3, duration: 3, changeManagement: 4 },
-    raci: [
-      { userId: "isabelle.faure", letter: "A" },
-      { userId: "camille.rousseau", letter: "R" },
-      { userId: "antoine.mercier", letter: "R" },
-      { userId: "nicolas.petit", letter: "C" },
-      { userId: "lucie.bernard", letter: "C" },
-      { userId: "thomas.girard", letter: "I" },
-    ],
+    allocatedBudget: 4800000,
     successCriteria:
       "On sera satisfait fin 2027 si l'ensemble des applications critiques tourne sur l'infrastructure cloud sécurisée, sans incident de sécurité majeur, et si les équipes opérationnelles sont autonomes sur les nouveaux outils de sécurité.",
     successKpis: [
@@ -237,6 +234,357 @@ const CHANTIERS = [
         achieved: true,
       },
     ],
+  },
+
+  {
+    id: "CH-omnicanal",
+    axisId: "AX-expclient",
+    name: "Refonte Parcours Client Omnicanal",
+    stage: "planned",
+    allocatedBudget: 2800000,
+  },
+  {
+    id: "CH-fidelite",
+    axisId: "AX-expclient",
+    name: "Programme Fidélité Nouvelle Génération",
+    stage: "defined",
+  },
+  {
+    id: "CH-scia",
+    axisId: "AX-expclient",
+    name: "Service Client IA",
+    stage: "defined",
+    dependencies: [{ targetId: "CH-data", type: "FS" }],
+  },
+
+  {
+    id: "CH-carbone",
+    axisId: "AX-durable",
+    name: "Réduction Empreinte Carbone Sites",
+    stage: "planned",
+    allocatedBudget: 2000000,
+  },
+  {
+    id: "CH-emballages",
+    axisId: "AX-durable",
+    name: "Économie Circulaire Emballages",
+    stage: "defined",
+  },
+
+  {
+    id: "CH-succession",
+    axisId: "AX-talents",
+    name: "Programme Leadership & Succession",
+    stage: "validated",
+    allocatedBudget: 650000,
+  },
+  { id: "CH-upskilling", axisId: "AX-talents", name: "Digital Upskilling", stage: "planned" },
+  {
+    id: "CH-orga",
+    axisId: "AX-talents",
+    name: "Nouvelle Organisation Matricielle",
+    stage: "defined",
+  },
+];
+
+// Actions par chantier — bornes utilisées pour le Gantt (chantierBounds), quelques-unes avec
+// livrables à sous-étapes datées pour illustrer la fonctionnalité.
+const ACTIONS = [
+  {
+    id: "ACT-lean-1",
+    chantierId: "CH-lean",
+    name: "Diagnostic 5S sites pilotes",
+    owner: "Marc Delattre",
+    start: "2026-02-01",
+    end: "2026-05-31",
+    status: "achieved",
+    indicatorId: "IND-rebut",
+    milestones: {
+      currentMilestone: "E4",
+      passedMilestones: ["E0", "E1", "E2", "E3"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B3", flag: "green" },
+          { itemId: "E1-C2", flag: "green" },
+        ],
+        E2: [
+          { itemId: "E2-B1", flag: "green" },
+          { itemId: "E2-B2", flag: "green" },
+          { itemId: "E2-B3", flag: "green" },
+        ],
+        E3: [
+          { itemId: "E3-B1", flag: "green" },
+          { itemId: "E3-B2", flag: "green" },
+          { itemId: "E3-B3", flag: "green" },
+        ],
+        E4: [
+          { itemId: "E4-B1", flag: "green" },
+          { itemId: "E4-B2", flag: "green" },
+        ],
+      },
+    },
+  },
+  {
+    id: "ACT-lean-2",
+    chantierId: "CH-lean",
+    name: "Déploiement Lean sites EU",
+    owner: "Marc Delattre",
+    start: "2026-06-01",
+    end: "2027-06-30",
+    status: "planned",
+    kanbanStatus: "todo",
+    deliverables: [
+      {
+        id: "DLV-lean-1",
+        label: "Cellules pilotes converties (3 sites)",
+        phases: [
+          {
+            id: "PH-lean-1a",
+            start: "2026-06-01",
+            end: "2026-12-31",
+            note: "Vague 1 — sites France",
+          },
+          {
+            id: "PH-lean-1b",
+            start: "2027-01-01",
+            end: "2027-06-30",
+            note: "Vague 2 — sites Allemagne/Pologne",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "ACT-supply-1",
+    chantierId: "CH-supply",
+    name: "Refonte réseau logistique EU",
+    owner: "Marc Delattre",
+    start: "2026-01-15",
+    end: "2026-09-30",
+    status: "validated",
+    indicatorId: "IND-delai",
+    milestones: {
+      currentMilestone: "E3",
+      passedMilestones: ["E0", "E1", "E2"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          {
+            itemId: "E1-B2",
+            flag: "orange",
+            resolved: true,
+            actionPlan: {
+              description:
+                "Analyse coûts/bénéfices du nouveau schéma réseau initialement incomplète sur le volet transport amont ; complétée avant validation du jalon.",
+              owner: "thomas.girard",
+              dueDate: "2026-04-05",
+            },
+          },
+          { itemId: "E1-B3", flag: "green" },
+          { itemId: "E1-C2", flag: "green" },
+        ],
+        E2: [
+          { itemId: "E2-B1", flag: "green" },
+          { itemId: "E2-B2", flag: "green" },
+          { itemId: "E2-B3", flag: "green" },
+        ],
+        E3: [{ itemId: "E3-B1", flag: "green" }],
+      },
+    },
+  },
+  {
+    id: "ACT-supply-2",
+    chantierId: "CH-supply",
+    name: "Mise en place S&OP",
+    owner: "Marc Delattre",
+    start: "2026-10-01",
+    end: "2027-03-31",
+    status: "planned",
+    kanbanStatus: "todo",
+  },
+  {
+    id: "ACT-qualite-1",
+    chantierId: "CH-qualite",
+    name: "Cadrage plan qualité",
+    owner: "Marc Delattre",
+    start: "2026-03-01",
+    end: "2026-06-30",
+    status: "defined",
+    indicatorId: "IND-service-client",
+    milestones: {
+      currentMilestone: "E0",
+      passedMilestones: [],
+      checklists: {
+        E0: [
+          { itemId: "E0-B1", flag: "green" },
+          {
+            itemId: "E0-B2",
+            flag: "orange",
+            resolved: false,
+            actionPlan: {
+              description:
+                "Périmètre du plan qualité pas encore arbitré avec les sites pilotes ; réunion de cadrage complémentaire prévue avec la Qualité Groupe.",
+              owner: "camille.rousseau",
+              dueDate: "2026-04-20",
+            },
+          },
+        ],
+      },
+    },
+  },
+
+  {
+    id: "ACT-data-1",
+    chantierId: "CH-data",
+    name: "Cartographie sources & gouvernance",
+    owner: "Sophie Nguyen",
+    start: "2026-06-01",
+    end: "2026-12-31",
+    status: "validated",
+    indicatorId: "IND-sources",
+    milestones: {
+      currentMilestone: "E2",
+      passedMilestones: ["E0", "E1"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B3", flag: "green" },
+          {
+            itemId: "E1-C2",
+            flag: "orange",
+            resolved: true,
+            actionPlan: {
+              description:
+                "Estimation initiale de l'effort de cartographie sous-évaluée sur le périmètre IoT usines ; révisée avec la DSI avant validation du jalon.",
+              owner: "camille.rousseau",
+              dueDate: "2026-08-01",
+            },
+          },
+        ],
+        E2: [
+          { itemId: "E2-B1", flag: "red" },
+          { itemId: "E2-B2", flag: "green" },
+        ],
+      },
+    },
+    deliverables: [
+      {
+        id: "DLV-data-1",
+        label: "Cartographie des sources de données",
+        phases: [
+          { id: "PH-data-1a", start: "2026-06-01", end: "2026-09-30", note: "Sources ERP/CRM" },
+          { id: "PH-data-1b", start: "2026-10-01", end: "2026-12-31", note: "Sources IoT usines" },
+        ],
+      },
+      {
+        id: "DLV-data-2",
+        label: "Migration vers le data lake",
+        phases: [{ id: "PH-data-2a", start: "2027-01-01", end: "2027-06-30" }],
+      },
+    ],
+  },
+  {
+    id: "ACT-data-2",
+    chantierId: "CH-data",
+    name: "Mise en production plateforme data",
+    owner: "Sophie Nguyen",
+    start: "2027-01-01",
+    end: "2027-06-30",
+    status: "planned",
+    kanbanStatus: "in_progress",
+  },
+  {
+    id: "ACT-rpa-1",
+    chantierId: "CH-rpa",
+    name: "Robots facturation fournisseurs",
+    owner: "Sophie Nguyen",
+    start: "2026-01-01",
+    end: "2026-06-30",
+    status: "achieved",
+    indicatorId: "IND-heures",
+    milestones: {
+      currentMilestone: "E3",
+      passedMilestones: ["E0", "E1", "E2"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B3", flag: "green" },
+          { itemId: "E1-C2", flag: "green" },
+        ],
+        E2: [
+          { itemId: "E2-B1", flag: "green" },
+          { itemId: "E2-B2", flag: "green" },
+          { itemId: "E2-B3", flag: "green" },
+        ],
+        E3: [
+          { itemId: "E3-B1", flag: "green" },
+          {
+            itemId: "E3-B2",
+            flag: "orange",
+            resolved: false,
+            actionPlan: {
+              description:
+                "Transfert opérationnel vers les équipes comptables partiellement engagé ; formation complémentaire à planifier avant clôture du jalon.",
+              owner: "nicolas.petit",
+              dueDate: "2026-07-15",
+            },
+          },
+        ],
+      },
+    },
+    deliverables: [
+      {
+        id: "DLV-rpa-1",
+        label: "Robots RPA facturation fournisseurs",
+        phases: [
+          { id: "PH-rpa-1a", start: "2026-01-01", end: "2026-03-31", note: "Pilote 2 sites" },
+          {
+            id: "PH-rpa-1b",
+            start: "2026-04-01",
+            end: "2026-06-30",
+            note: "Déploiement généralisé",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "ACT-cyber-1",
+    chantierId: "CH-cyber",
+    name: "Migration cloud sécurisée",
+    owner: "Sophie Nguyen",
+    start: "2026-04-01",
+    end: "2027-01-31",
+    status: "validated",
+    indicatorId: "IND-digitalisation",
     milestones: {
       currentMilestone: "E2",
       passedMilestones: ["E0", "E1"],
@@ -292,190 +640,6 @@ const CHANTIERS = [
   },
 
   {
-    id: "CH-omnicanal",
-    axisId: "AX-expclient",
-    name: "Refonte Parcours Client Omnicanal",
-    stage: "planned",
-  },
-  {
-    id: "CH-fidelite",
-    axisId: "AX-expclient",
-    name: "Programme Fidélité Nouvelle Génération",
-    stage: "defined",
-  },
-  {
-    id: "CH-scia",
-    axisId: "AX-expclient",
-    name: "Service Client IA",
-    stage: "defined",
-    dependencies: [{ targetId: "CH-data", type: "FS" }],
-  },
-
-  {
-    id: "CH-carbone",
-    axisId: "AX-durable",
-    name: "Réduction Empreinte Carbone Sites",
-    stage: "planned",
-  },
-  {
-    id: "CH-emballages",
-    axisId: "AX-durable",
-    name: "Économie Circulaire Emballages",
-    stage: "defined",
-  },
-
-  {
-    id: "CH-succession",
-    axisId: "AX-talents",
-    name: "Programme Leadership & Succession",
-    stage: "validated",
-  },
-  { id: "CH-upskilling", axisId: "AX-talents", name: "Digital Upskilling", stage: "planned" },
-  {
-    id: "CH-orga",
-    axisId: "AX-talents",
-    name: "Nouvelle Organisation Matricielle",
-    stage: "defined",
-  },
-];
-
-// Actions par chantier — bornes utilisées pour le Gantt (chantierBounds), quelques-unes avec
-// livrables à sous-étapes datées pour illustrer la fonctionnalité.
-const ACTIONS = [
-  {
-    id: "ACT-lean-1",
-    chantierId: "CH-lean",
-    name: "Diagnostic 5S sites pilotes",
-    owner: "Marc Delattre",
-    start: "2026-02-01",
-    end: "2026-05-31",
-    status: "achieved",
-  },
-  {
-    id: "ACT-lean-2",
-    chantierId: "CH-lean",
-    name: "Déploiement Lean sites EU",
-    owner: "Marc Delattre",
-    start: "2026-06-01",
-    end: "2027-06-30",
-    status: "planned",
-    deliverables: [
-      {
-        id: "DLV-lean-1",
-        label: "Cellules pilotes converties (3 sites)",
-        phases: [
-          {
-            id: "PH-lean-1a",
-            start: "2026-06-01",
-            end: "2026-12-31",
-            note: "Vague 1 — sites France",
-          },
-          {
-            id: "PH-lean-1b",
-            start: "2027-01-01",
-            end: "2027-06-30",
-            note: "Vague 2 — sites Allemagne/Pologne",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "ACT-supply-1",
-    chantierId: "CH-supply",
-    name: "Refonte réseau logistique EU",
-    owner: "Marc Delattre",
-    start: "2026-01-15",
-    end: "2026-09-30",
-    status: "validated",
-  },
-  {
-    id: "ACT-supply-2",
-    chantierId: "CH-supply",
-    name: "Mise en place S&OP",
-    owner: "Marc Delattre",
-    start: "2026-10-01",
-    end: "2027-03-31",
-    status: "planned",
-  },
-  {
-    id: "ACT-qualite-1",
-    chantierId: "CH-qualite",
-    name: "Cadrage plan qualité",
-    owner: "Marc Delattre",
-    start: "2026-03-01",
-    end: "2026-06-30",
-    status: "defined",
-  },
-
-  {
-    id: "ACT-data-1",
-    chantierId: "CH-data",
-    name: "Cartographie sources & gouvernance",
-    owner: "Sophie Nguyen",
-    start: "2026-06-01",
-    end: "2026-12-31",
-    status: "validated",
-    deliverables: [
-      {
-        id: "DLV-data-1",
-        label: "Cartographie des sources de données",
-        phases: [
-          { id: "PH-data-1a", start: "2026-06-01", end: "2026-09-30", note: "Sources ERP/CRM" },
-          { id: "PH-data-1b", start: "2026-10-01", end: "2026-12-31", note: "Sources IoT usines" },
-        ],
-      },
-      {
-        id: "DLV-data-2",
-        label: "Migration vers le data lake",
-        phases: [{ id: "PH-data-2a", start: "2027-01-01", end: "2027-06-30" }],
-      },
-    ],
-  },
-  {
-    id: "ACT-data-2",
-    chantierId: "CH-data",
-    name: "Mise en production plateforme data",
-    owner: "Sophie Nguyen",
-    start: "2027-01-01",
-    end: "2027-06-30",
-    status: "planned",
-  },
-  {
-    id: "ACT-rpa-1",
-    chantierId: "CH-rpa",
-    name: "Robots facturation fournisseurs",
-    owner: "Sophie Nguyen",
-    start: "2026-01-01",
-    end: "2026-06-30",
-    status: "achieved",
-    deliverables: [
-      {
-        id: "DLV-rpa-1",
-        label: "Robots RPA facturation fournisseurs",
-        phases: [
-          { id: "PH-rpa-1a", start: "2026-01-01", end: "2026-03-31", note: "Pilote 2 sites" },
-          {
-            id: "PH-rpa-1b",
-            start: "2026-04-01",
-            end: "2026-06-30",
-            note: "Déploiement généralisé",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "ACT-cyber-1",
-    chantierId: "CH-cyber",
-    name: "Migration cloud sécurisée",
-    owner: "Sophie Nguyen",
-    start: "2026-04-01",
-    end: "2027-01-31",
-    status: "validated",
-  },
-
-  {
     id: "ACT-omni-1",
     chantierId: "CH-omnicanal",
     name: "Refonte site e-commerce",
@@ -483,6 +647,27 @@ const ACTIONS = [
     start: "2026-02-01",
     end: "2026-11-30",
     status: "planned",
+    indicatorId: "IND-conversion",
+    milestones: {
+      currentMilestone: "E0",
+      passedMilestones: [],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          {
+            itemId: "E0-B1",
+            flag: "orange",
+            resolved: false,
+            actionPlan: {
+              description:
+                "Cadrage encore ouvert sur le choix du CMS cible ; benchmark complémentaire en cours avant arbitrage.",
+              owner: "camille.rousseau",
+              dueDate: "2026-03-01",
+            },
+          },
+        ],
+      },
+    },
   },
   {
     id: "ACT-omni-2",
@@ -492,6 +677,7 @@ const ACTIONS = [
     start: "2026-12-01",
     end: "2027-05-31",
     status: "defined",
+    kanbanStatus: "todo",
   },
   {
     id: "ACT-fidelite-1",
@@ -501,6 +687,7 @@ const ACTIONS = [
     start: "2026-05-01",
     end: "2026-08-31",
     status: "defined",
+    kanbanStatus: "in_progress",
   },
   {
     id: "ACT-scia-1",
@@ -510,6 +697,17 @@ const ACTIONS = [
     start: "2027-01-01",
     end: "2027-09-30",
     status: "defined",
+    indicatorId: "IND-resolution",
+    milestones: {
+      currentMilestone: "E0",
+      passedMilestones: [],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-C1", flag: "red" },
+        ],
+      },
+    },
   },
 
   {
@@ -520,6 +718,36 @@ const ACTIONS = [
     start: "2026-01-01",
     end: "2026-06-30",
     status: "achieved",
+    indicatorId: "IND-energie",
+    milestones: {
+      currentMilestone: "E2",
+      passedMilestones: ["E0", "E1"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B3", flag: "green" },
+          {
+            itemId: "E1-C2",
+            flag: "orange",
+            resolved: true,
+            actionPlan: {
+              description:
+                "Plan d'étude énergétique initialement limité aux sites France ; élargi aux sites Allemagne/Pologne avant validation du jalon.",
+              owner: "antoine.mercier",
+              dueDate: "2026-02-20",
+            },
+          },
+        ],
+        E2: [{ itemId: "E2-B1", flag: "green" }],
+      },
+    },
   },
   {
     id: "ACT-carbone-2",
@@ -529,6 +757,7 @@ const ACTIONS = [
     start: "2026-07-01",
     end: "2027-12-31",
     status: "planned",
+    kanbanStatus: "in_progress",
   },
   {
     id: "ACT-emballages-1",
@@ -538,6 +767,7 @@ const ACTIONS = [
     start: "2026-04-01",
     end: "2026-07-31",
     status: "defined",
+    kanbanStatus: "done",
   },
 
   {
@@ -548,6 +778,46 @@ const ACTIONS = [
     start: "2026-01-01",
     end: "2026-12-31",
     status: "validated",
+    indicatorId: "IND-succession",
+    milestones: {
+      currentMilestone: "E4",
+      passedMilestones: ["E0", "E1", "E2", "E3"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-B2", flag: "green" },
+          { itemId: "E0-C1", flag: "green" },
+        ],
+        E1: [
+          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B3", flag: "green" },
+          { itemId: "E1-C2", flag: "green" },
+        ],
+        E2: [
+          { itemId: "E2-B1", flag: "green" },
+          { itemId: "E2-B2", flag: "green" },
+          { itemId: "E2-B3", flag: "green" },
+        ],
+        E3: [
+          { itemId: "E3-B1", flag: "green" },
+          { itemId: "E3-B2", flag: "green" },
+          {
+            itemId: "E3-B3",
+            flag: "orange",
+            resolved: true,
+            actionPlan: {
+              description:
+                "Date de bouclage du plan de succession Comité de Direction initialement non fixée ; arrêtée avec le COMEX avant validation du jalon.",
+              owner: "thomas.girard",
+              dueDate: "2026-11-15",
+            },
+          },
+        ],
+        E4: [{ itemId: "E4-B1", flag: "green" }],
+      },
+    },
     deliverables: [
       {
         id: "DLV-succession-1",
@@ -564,6 +834,7 @@ const ACTIONS = [
     start: "2026-03-01",
     end: "2026-06-30",
     status: "planned",
+    kanbanStatus: "done",
   },
   {
     id: "ACT-orga-1",
@@ -573,6 +844,7 @@ const ACTIONS = [
     start: "2026-02-01",
     end: "2026-05-31",
     status: "defined",
+    kanbanStatus: "done",
   },
 ];
 
@@ -909,9 +1181,9 @@ async function main() {
     if (chantier.pilote) payload.pilote = chantier.pilote;
     if (chantier.successCriteria) payload.successCriteria = chantier.successCriteria;
     if (chantier.successKpis) payload.successKpis = chantier.successKpis;
-    if (chantier.raci) payload.raci = chantier.raci;
     if (chantier.effort) payload.effort = chantier.effort;
     if (chantier.milestones) payload.milestones = chantier.milestones;
+    if (chantier.allocatedBudget) payload.allocatedBudget = chantier.allocatedBudget;
     await setDoc(doc(db, "chantiers", chantier.id), payload);
   }
 
@@ -928,6 +1200,9 @@ async function main() {
       status: action.status,
     };
     if (action.deliverables) payload.deliverables = action.deliverables;
+    if (action.indicatorId) payload.indicatorId = action.indicatorId;
+    if (action.milestones) payload.milestones = action.milestones;
+    if (action.kanbanStatus) payload.kanbanStatus = action.kanbanStatus;
     await setDoc(doc(db, "chantierActions", action.id), payload);
   }
 
@@ -987,7 +1262,7 @@ async function main() {
     "  1 dépendance en retard (Plateforme Data Unifiée → Service Client IA, FS) pour illustrer l'alerte de cascade."
   );
   console.log(
-    "  CH-cyber : exemple complet (RACI, effort, jalons E0→E2 avec check-lists, critères/KPI de succès)."
+    "  CH-cyber : exemple complet (effort, budget alloué, critères/KPI de succès, levier ACT-cyber-1 avec jalons E0→E2 rattachés à un KPI)."
   );
   process.exit(0);
 }

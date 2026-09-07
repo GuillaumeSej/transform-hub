@@ -87,11 +87,11 @@ export function IndicatorStatusSummary({
   return (
     <>
       {radialHero && total > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-neutral-50 p-3.5">
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-6 rounded-lg border border-border bg-neutral-50 p-5">
           <RadialProgress
             pct={onTrackPct}
-            size={80}
-            strokeWidth={7}
+            size={140}
+            strokeWidth={12}
             color={RADIAL_ON_TRACK_COLOR}
             trackColor={RADIAL_ON_TRACK_TRACK}
             label={l.onTrack}
@@ -103,38 +103,43 @@ export function IndicatorStatusSummary({
           </p>
         </div>
       )}
-      <div
-        className={
-          className ??
-          "grid grid-cols-1 gap-3 sm:grid-cols-2 " +
-            (showTotal ? "lg:grid-cols-3" : "lg:grid-cols-2")
-        }
-      >
-        <KPICard
-          label={l.onTrack}
-          value={`${onTrack} / ${total}`}
-          icon={Activity}
-          accent="green"
-          sub={`${total} ${l.indicatorsSuffix} ${l.tracked.toLowerCase()}`}
-          barPct={onTrackPct}
-        />
-        <KPICard
-          label={l.atRisk}
-          value={String(atRisk)}
-          icon={TrendingDown}
-          accent="amber"
-          sub={`${Math.round(atRiskPct)}% du portefeuille d'indicateurs`}
-          barPct={atRiskPct}
-        />
-        {showTotal && (
+      {/* Round 8 : en mode `radialHero`, le PO ne veut QUE le donut agrandi ci-dessus — la grille
+          de `KPICard` ci-dessous (redondante avec la phrase déjà affichée dans le bandeau) reste
+          réservée aux appelants non-hero (page KPI, fiche d'axe), inchangés. */}
+      {!radialHero && (
+        <div
+          className={
+            className ??
+            "grid grid-cols-1 gap-3 sm:grid-cols-2 " +
+              (showTotal ? "lg:grid-cols-3" : "lg:grid-cols-2")
+          }
+        >
           <KPICard
-            label={l.total}
-            value={totalUnit ? `${cumulative} ${totalUnit}` : String(cumulative)}
-            icon={Sigma}
-            sub="Somme des dernières valeurs quantitatives"
+            label={l.onTrack}
+            value={`${onTrack} / ${total}`}
+            icon={Activity}
+            accent="green"
+            sub={`${total} ${l.indicatorsSuffix} ${l.tracked.toLowerCase()}`}
+            barPct={onTrackPct}
           />
-        )}
-      </div>
+          <KPICard
+            label={l.atRisk}
+            value={String(atRisk)}
+            icon={TrendingDown}
+            accent="amber"
+            sub={`${Math.round(atRiskPct)}% du portefeuille d'indicateurs`}
+            barPct={atRiskPct}
+          />
+          {showTotal && (
+            <KPICard
+              label={l.total}
+              value={totalUnit ? `${cumulative} ${totalUnit}` : String(cumulative)}
+              icon={Sigma}
+              sub="Somme des dernières valeurs quantitatives"
+            />
+          )}
+        </div>
+      )}
     </>
   );
 }

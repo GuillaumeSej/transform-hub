@@ -1591,12 +1591,14 @@ const es: Record<string, string> = {
   // Etiquetas del registro de widgets (lib/strategicDashboardWidgets.ts, campo `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicadores · trayectoria",
   "strategicDashboard.widget.businessKpis": "KPI de negocio — Seguimiento del mercado",
-  "strategicDashboard.widget.axisBreakdown": "Distribución por eje",
-  "strategicDashboard.widget.chantierHealth": "Estado de avance de los frentes de trabajo",
+  // Ronda 8: "Distribución por eje" desaparece (sustituida por la vista E0-E4 de abajo), y la
+  // etiqueta de "chantier-health" se retitula — el grano de lectura pasa del frente de trabajo
+  // a la actividad (levier).
+  "strategicDashboard.widget.chantierHealth": "Estado de avance de las actividades",
   "strategicDashboard.widget.chantierDependencyAlerts":
     "Alertas de dependencia entre frentes de trabajo",
-  "strategicDashboard.chantierHealth.watch": "A vigilar",
-  "strategicDashboard.chantierHealth.critical": "Crítico",
+  // Ronda 8: marcador de una columna de jalón E0-E4 vacía (`LevierMilestoneBoard.tsx`).
+  "strategicDashboard.levierBoard.emptyColumn": "—",
 
   // ─── Plan Estratégico — ficha de configuración de un programa (admin) ─────
   "adminPrograms.manage": "Gestionar",

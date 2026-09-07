@@ -1594,12 +1594,14 @@ const de: Record<string, string> = {
   // Beschriftungen aus dem Widget-Register (lib/strategicDashboardWidgets.ts, Feld `label`).
   "strategicDashboard.widget.indicatorStatus": "Indikatoren · im Plan",
   "strategicDashboard.widget.businessKpis": "Business-KPIs — Marktbeobachtung",
-  "strategicDashboard.widget.axisBreakdown": "Verteilung nach Achse",
-  "strategicDashboard.widget.chantierHealth": "Fortschrittsstatus der Arbeitspakete",
+  // Runde 8: "Verteilung nach Achse" entfällt (ersetzt durch die E0-E4-Ansicht unten), und die
+  // Beschriftung von "chantier-health" wird umbenannt — der Blickwinkel wechselt vom
+  // Arbeitspaket zur Aktivität (Hebel).
+  "strategicDashboard.widget.chantierHealth": "Fortschrittsstatus der Aktivitäten",
   "strategicDashboard.widget.chantierDependencyAlerts":
     "Abhängigkeitswarnungen zwischen Arbeitspaketen",
-  "strategicDashboard.chantierHealth.watch": "Zu beobachten",
-  "strategicDashboard.chantierHealth.critical": "Kritisch",
+  // Runde 8: Platzhalter einer leeren E0-E4-Jalonspalte (`LevierMilestoneBoard.tsx`).
+  "strategicDashboard.levierBoard.emptyColumn": "—",
 
   // ─── Strategieplan — Konfigurationsseite eines Programms (Admin) ──────────
   "adminPrograms.manage": "Verwalten",

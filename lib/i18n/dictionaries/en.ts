@@ -1595,11 +1595,12 @@ const en: Record<string, string> = {
   // Widget registry labels (lib/strategicDashboardWidgets.ts, `label` field).
   "strategicDashboard.widget.indicatorStatus": "Indicators · on track",
   "strategicDashboard.widget.businessKpis": "Business KPIs — Market tracking",
-  "strategicDashboard.widget.axisBreakdown": "Breakdown by axis",
-  "strategicDashboard.widget.chantierHealth": "Work package progress status",
+  // Round 8: "Breakdown by axis" is gone (replaced by the E0-E4 view below), and the
+  // "chantier-health" label is retitled — the reading grain moves from work package to lever.
+  "strategicDashboard.widget.chantierHealth": "Lever progress status",
   "strategicDashboard.widget.chantierDependencyAlerts": "Work package dependency alerts",
-  "strategicDashboard.chantierHealth.watch": "Watch",
-  "strategicDashboard.chantierHealth.critical": "Critical",
+  // Round 8: placeholder for an empty E0-E4 milestone column (`LevierMilestoneBoard.tsx`).
+  "strategicDashboard.levierBoard.emptyColumn": "—",
 
   // ─── Strategic Plan — program configuration screen (admin) ────────────────
   "adminPrograms.manage": "Manage",

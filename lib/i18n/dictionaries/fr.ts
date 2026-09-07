@@ -1660,14 +1660,12 @@ const fr: Record<string, string> = {
   // Libellés du registre de widgets (lib/strategicDashboardWidgets.ts, champ `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
   "strategicDashboard.widget.businessKpis": "KPI business — Suivi du marché",
-  "strategicDashboard.widget.axisBreakdown": "Répartition par axe",
-  "strategicDashboard.widget.chantierHealth": "État des lieux d'avancement des chantiers",
+  // Round 8 : "Répartition par axe" a disparu (remplacé par la vue E0→E4 ci-dessous), et le
+  // libellé de "chantier-health" est retitré — le grain de lecture passe du chantier au levier.
+  "strategicDashboard.widget.chantierHealth": "État des lieux d'avancement des leviers",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendance entre chantiers",
-  // Round 6, point 5 : libellés des 3 états de `ChantierHealthMatrix` — "onTrack" réutilise
-  // `strategicDashboard.onTrack` (déjà "Sur la trajectoire"), seuls "watch"/"critical" sont
-  // nouveaux (l'état à risque binaire des indicateurs n'a pas d'équivalent "critique").
-  "strategicDashboard.chantierHealth.watch": "À surveiller",
-  "strategicDashboard.chantierHealth.critical": "Critique",
+  // Round 8 : placeholder d'une colonne de jalon E0-E4 sans levier (`LevierMilestoneBoard.tsx`).
+  "strategicDashboard.levierBoard.emptyColumn": "—",
 
   // ─── Plan Stratégique — fiche de configuration d'un programme (admin) ─────
   "adminPrograms.manage": "Gérer",
