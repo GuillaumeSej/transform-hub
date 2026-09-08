@@ -1153,7 +1153,6 @@ export function ChantierDetailPanel({
             title={
               <div className="flex flex-wrap items-center gap-2">
                 <span>{chantier.name}</span>
-                <AxisStageBadge stageId={chantier.stage} stages={stages} />
               </div>
             }
             actions={
@@ -1436,7 +1435,9 @@ export function ChantierDetailPanel({
                                 {resolveUserLabel(action.sponsor, data.users)}
                               </span>
                             )}
-                            <AxisStageBadge stageId={action.status} stages={stages} />
+                            {!action.indicatorId && (
+                              <AxisStageBadge stageId={action.status} stages={stages} />
+                            )}
                           </div>
                           {startInfo.blocked && (
                             <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber">

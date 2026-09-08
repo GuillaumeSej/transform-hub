@@ -9,7 +9,6 @@ import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shar
 import { Modal } from "@/components/shared/Modal";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisKanban } from "@/components/strategic/AxisKanban";
-import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
 import { numberIndicators, resolveIndicatorStatus } from "@/lib/axisLogic";
@@ -19,7 +18,7 @@ import { saveChantier } from "@/lib/firestore/chantiers";
 import { saveIndicator } from "@/lib/firestore/indicators";
 import { saveStrategicAxis } from "@/lib/firestore/strategicAxes";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
-import { useMaturityStages, resolveMaturityStageLabel } from "@/lib/hooks/useMaturityStages";
+import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
@@ -143,10 +142,10 @@ export function StrategicAxesView() {
 
   /**
    * Filtre "Jalon" E0-E4 (round 9, points 3/9) — SCOPÉ à l'onglet "Avancement des chantiers"
-   * uniquement, indépendant du filtre "Étape de maturité" ci-dessous (qui opère sur
-   * `StrategicAxis.stage`, une entité différente des jalons de LEVIER). État purement local (pas
-   * d'URL) : comme l'ancien filtre chantier qu'il remplace en partie, il ne s'applique qu'à un seul
-   * onglet et n'a pas besoin d'être partageable par lien pour ce round.
+   * uniquement, TECHNIQUEMENT indépendant du filtre "Responsable" ci-dessous (entités et
+   * persistances différentes — voir `filterDefs`). État purement local (pas d'URL) : comme l'ancien
+   * filtre chantier qu'il remplace en partie, il ne s'applique qu'à un seul onglet et n'a pas besoin
+   * d'être partageable par lien pour ce round.
    *
    * Filtre les CHANTIERS affichés dans `AxisKanban` : un chantier reste visible si au moins un de
    * ses leviers rattachés à un KPI est actuellement à l'un des jalons cochés (logique implémentée
@@ -195,24 +194,20 @@ export function StrategicAxesView() {
   const filterDefs: FilterDef<StrategicAxis>[] = useMemo(
     () => [
       {
-        key: "f_stage",
-        label: t("strategicAxes.filterStage"),
-        getValue: (a) => resolveMaturityStageLabel(a.stage, stages),
-      },
-      {
         key: "f_owner",
         label: t("strategicAxes.filterOwner"),
         getValue: (a) => a.owner ?? t("strategicAxes.unassigned"),
       },
     ],
-    [stages, t]
+    [t]
   );
 
   /**
    * Filtres OUVERTS mais encore sans valeur cochée — état purement local, indispensable au
-   * fonctionnement des boutons « Étape de maturité » / « Responsable ».
+   * fonctionnement du bouton « Responsable » (seul filtre restant depuis le retrait round 11 de
+   * « Étape de maturité »).
    *
-   * Bug corrigé : `FilterBar` signale l'ouverture d'un filtre en remontant `{ f_stage: [] }`, or
+   * Bug corrigé : `FilterBar` signale l'ouverture d'un filtre en remontant `{ f_owner: [] }`, or
    * `setFilters` n'écrit dans l'URL que les clés AYANT des valeurs (`v.length > 0`) et
    * `activeFilters` était dérivé EXCLUSIVEMENT de l'URL. Un filtre ouvert-mais-vide n'avait donc
    * aucune représentation persistante : le clic était annulé au rendu suivant et le panneau de
@@ -371,11 +366,13 @@ export function StrategicAxesView() {
 
       <Card>
         <CardBody flush>
-          {/* Filtres "Étape de maturité" + "Jalon" réunis dans une même zone (round 10, point 3) —
-              restent deux mécanismes TECHNIQUEMENT distincts (entités et persistances différentes,
-              voir doc-comment de `milestoneFilters`), regroupés visuellement sous un libellé combiné
+          {/* Filtres "Responsable" + "Jalon" réunis dans une même zone (round 10, point 3) — restent
+              deux mécanismes TECHNIQUEMENT distincts (entités et persistances différentes, voir
+              doc-comment de `milestoneFilters`), regroupés visuellement sous un libellé générique
               uniquement quand les deux sont pertinents (vue "Avancement des chantiers" — le filtre
-              "Jalon" n'a pas de sens en vue "Cartes", où aucun composant ne le consomme). */}
+              "Jalon" n'a pas de sens en vue "Cartes", où aucun composant ne le consomme). Libellé
+              volontairement générique (round 11) depuis le retrait du filtre "Étape de maturité" :
+              énumérer les filtres concrets n'a plus de sens avec un seul type par vue. */}
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
             {view === "kanban" && (
               <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
@@ -430,7 +427,6 @@ export function StrategicAxesView() {
       ) : view === "kanban" ? (
         <AxisKanban
           axes={filteredAxes}
-          stages={stages}
           chantiersByAxis={chantiersByAxis}
           chantierActions={data.chantierActions}
           onCardClick={openAxis}
@@ -489,7 +485,6 @@ export function StrategicAxesView() {
                       {axis.owner ?? t("strategicAxes.unassigned")}
                     </span>
                   </span>
-                  <AxisStageBadge stageId={axis.stage} stages={stages} className="shrink-0" />
                 </div>
 
                 {axis.description && (
@@ -505,8 +500,8 @@ export function StrategicAxesView() {
                     (`IndicatorChart`), changement de comportement délibéré (round 10 : le PO veut
                     atterrir sur la page KPI, pas un aperçu). */}
                 {axisIndicators.length > 0 && (
-                  <div className="mt-2.5 flex flex-wrap items-center gap-1">
-                    <span className="mr-0.5 text-[10px] text-tertiary">
+                  <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
+                    <span className="mr-0.5 text-xs text-tertiary">
                       {t("strategicAxes.indicatorsCount")}
                     </span>
                     {shownIndicators.map((indicator) => {
