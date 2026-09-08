@@ -21,8 +21,14 @@ import {
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
+import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { chantierDependencyAlerts, colorForChantier, countOnTrackAtRisk } from "@/lib/axisLogic";
+import {
+  chantierDependencyAlerts,
+  colorForChantier,
+  countOnTrackAtRisk,
+  programBlockedActions,
+} from "@/lib/axisLogic";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import type { LevierKanbanStatus, MilestoneId } from "@/types";
 import {
@@ -118,6 +124,10 @@ export function StrategicDashboardView() {
   const { t } = useTranslation();
   const router = useRouter();
   const strategic = useStrategicData(user?.companyId ?? null, activeProgramId, user);
+  // Référentiel d'étapes de maturité du programme actif — nécessaire à `programBlockedActions`
+  // (round 9, alimente la sous-section "Prérequis en attente" ci-dessous), même appel que
+  // `StrategicAxesView.tsx`.
+  const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
   const { axes, chantiers, chantierActions, indicators, measurements } = strategic;
 
@@ -170,6 +180,23 @@ export function StrategicDashboardView() {
         (a, b) => b.delayDays - a.delayDays
       ),
     [chantiers, chantierActions]
+  );
+
+  /** Round 9, point 1 : leviers dont au moins un prérequis n'est pas satisfait
+   *  (`programBlockedActions`, lib/axisLogic.ts) — même parti pris purement informatif que
+   *  `dependencyAlerts` ci-dessus, alimente la deuxième sous-section du widget
+   *  "chantier-dependency-alerts". */
+  const blockedActions = useMemo(
+    () => programBlockedActions(chantierActions, stages),
+    [chantierActions, stages]
+  );
+
+  /** Nom de chantier par id — la sous-section "Prérequis en attente" doit afficher le CHANTIER
+   *  parent d'un levier bloqué (le levier seul ne dit pas de quel chantier il relève, contrairement
+   *  au message déjà formaté de `dependencyAlerts`). */
+  const chantierNameById = useMemo(
+    () => new Map(chantiers.map((chantier) => [chantier.id, chantier.name])),
+    [chantiers]
   );
 
   /** Groupes (un par axe) de la vue E0→E4 par levier (round 8, remplace l'ancienne matrice de
@@ -503,6 +530,12 @@ export function StrategicDashboardView() {
               }
             />
             <CardBody>
+              {/* Sous-section 1 : dépendances entre chantiers (inchangée, round 6). */}
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
+                  {t("strategicDashboard.dependencyAlertsHeading")}
+                </span>
+              </div>
               {dependencyAlerts.length === 0
                 ? emptyLine(t("strategicDashboard.noDependencyAlerts"))
                 : dependencyAlerts.map((alert) => (
@@ -521,6 +554,46 @@ export function StrategicDashboardView() {
                       </p>
                     </div>
                   ))}
+
+              {/* Sous-section 2 (round 9, point 1) : prérequis non satisfaits (`programBlockedActions`,
+                  lib/axisLogic.ts) — même carte que les alertes de dépendance pour rester un seul
+                  repère visuel "alertes" sur le dashboard, mais visuellement DISTINCTE (séparateur
+                  renforcé + teinte amber plutôt que corail) pour ne pas fusionner deux types
+                  d'alerte différents en une liste indifférenciée. */}
+              <div className="mt-4 border-t-2 border-border pt-3">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
+                    {t("strategicDashboard.pendingPrerequisitesHeading")}
+                  </span>
+                  {blockedActions.length > 0 && (
+                    <span className="rounded-full bg-rag-amber px-2 py-0.5 text-[10.5px] font-bold text-white">
+                      {blockedActions.length}
+                    </span>
+                  )}
+                </div>
+                {blockedActions.length === 0
+                  ? emptyLine(t("strategicDashboard.noPrerequisiteAlerts"))
+                  : blockedActions.map(({ action, reasons }) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        onClick={() => openChantierPanel(action.chantierId)}
+                        className="block w-full border-b border-border py-2.5 text-left transition last:border-0 first:pt-0 hover:bg-neutral-50"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-semibold text-rag-amber">
+                            {action.name}
+                          </span>
+                          <span className="text-[10.5px] text-tertiary">
+                            {chantierNameById.get(action.chantierId) ?? action.chantierId}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[12px] leading-snug text-secondary">
+                          {reasons.join(", ")}
+                        </p>
+                      </button>
+                    ))}
+              </div>
             </CardBody>
           </Card>
         );

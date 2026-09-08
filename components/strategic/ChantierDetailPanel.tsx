@@ -250,7 +250,7 @@ function PrerequisitesEditor({
 
   return (
     <div>
-      <span className="text-xs font-medium text-secondary">{labels.prerequisitesTitle}</span>
+      <span className="text-[13px] font-bold text-primary">{labels.prerequisitesTitle}</span>
       {value.length === 0 ? (
         <p className="mt-1 text-[12px] text-tertiary">{labels.prerequisiteNone}</p>
       ) : (
@@ -366,7 +366,7 @@ function LevierKanbanStatusControl({
   ];
   return (
     <div>
-      <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+      <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
         {labels.title}
       </span>
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1342,7 +1342,9 @@ export function ChantierDetailPanel({
                       actionRefs.current[action.id] = el;
                     }}
                     className={`rounded-md border p-3 ${
-                      isFocused ? "border-bp-coral ring-1 ring-bp-coral/40" : "border-border"
+                      isFocused
+                        ? "border-bp-coral ring-1 ring-bp-coral/40"
+                        : "border-border bg-neutral-50 shadow-sm"
                     }`}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1453,7 +1455,7 @@ export function ChantierDetailPanel({
                     {action.indicatorId ? (
                       <div className="mt-3 border-t border-border pt-3">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                          <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
                             {t("strategicChantierDetail.milestones.title")}
                           </span>
                           <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
@@ -1536,8 +1538,11 @@ export function ChantierDetailPanel({
                     {/* ── Dépendances / Prérequis du LEVIER (round 7 — fusion) ──────────────────
                         titre à changer en "Dépendances / Prérequis" par un round i18n suivant
                         (workstream C, renommage "action" → "levier") — key `prerequisites.title`
-                        inchangée volontairement, hors scope ici. */}
-                    <div className="mt-3 border-t border-border pt-3">
+                        inchangée volontairement, hors scope ici.
+                        Round 9, point 2 : `border-t-2` (plus marqué que le `border-t` du bloc
+                        jalons/kanban ci-dessus) pour que les deux sous-sections internes du levier
+                        se distinguent d'un coup d'œil. */}
+                    <div className="mt-3 border-t-2 border-border pt-3">
                       {chantierBlockingAlerts.length > 0 && (
                         <div className="mb-2 space-y-1">
                           {chantierBlockingAlerts.map((alert) => (

@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle, Check, X } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { UserPicker } from "@/components/strategic/UserPicker";
 import { canPassMilestone } from "@/lib/axisLogic";
@@ -37,6 +38,15 @@ const FLAG_DOT_CLASS: Record<ChecklistFlag, string> = {
   green: "bg-rag-green",
   orange: "bg-rag-amber",
   red: "bg-rag-red",
+};
+
+/** Icône distinctive par feu (round 9, point 2) — la teinte seule (vert quasi-noir vs orange
+ *  taupe, cf. charte) est trop discrète pour distinguer les 3 états d'un coup d'œil ; la FORME
+ *  vient en renfort de la couleur, jamais en remplacement. */
+const FLAG_ICON: Record<ChecklistFlag, typeof Check> = {
+  green: Check,
+  orange: AlertTriangle,
+  red: X,
 };
 
 const SECTIONS: Array<"A" | "B" | "C"> = ["A", "B", "C"];
@@ -134,7 +144,7 @@ export function MilestoneChecklistPanel({
                   className="flex items-center gap-2 text-[12.5px] text-secondary"
                 >
                   <span
-                    className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                    className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${
                       flag ? FLAG_DOT_CLASS[flag] : "bg-neutral-300"
                     }`}
                   />
@@ -171,18 +181,20 @@ export function MilestoneChecklistPanel({
                   <div className="flex overflow-hidden rounded-md border border-border sm:w-56 sm:shrink-0">
                     {FLAGS.map((candidate) => {
                       const isSelected = flag === candidate;
+                      const FlagIcon = FLAG_ICON[candidate];
                       return (
                         <button
                           key={candidate}
                           type="button"
                           aria-pressed={isSelected}
                           onClick={() => patchManualItem(def.itemId, { flag: candidate })}
-                          className={`flex-1 px-2 py-1.5 text-center text-[10.5px] font-semibold leading-tight transition ${
+                          className={`flex flex-1 items-center justify-center gap-1 border-2 px-2 py-1.5 text-center text-[10.5px] font-semibold leading-tight transition ${
                             isSelected
                               ? FLAG_SELECTED_CLASS[candidate]
-                              : "bg-white text-secondary hover:text-primary"
+                              : "border-transparent bg-white text-secondary hover:text-primary"
                           }`}
                         >
+                          <FlagIcon size={12} className="shrink-0" />
                           {t(`strategicChantierDetail.milestones.flag.${candidate}`)}
                         </button>
                       );

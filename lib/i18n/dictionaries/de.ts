@@ -1161,11 +1161,17 @@ const de: Record<string, string> = {
   "strategicAxes.axisCreated": "Achse angelegt",
   "strategicAxes.axisUpdated": "Achse aktualisiert",
   "strategicAxes.cards": "Karten",
-  "strategicAxes.kanban": "Kanban",
+  "strategicAxes.kanban": "Fortschritt der Arbeitspakete",
   "strategicAxes.chantiersView": "Arbeitspakete",
   "strategicAxes.axisNoChantier": "Kein Arbeitspaket",
   "strategicAxes.chantierAlerted": "Abhängigkeitswarnung",
   "strategicAxes.kanbanEmptyColumn": "Keine Achse",
+  "strategicAxes.filterMilestone": "Meilenstein",
+  "strategicAxes.kanbanFilteredEmpty": "Kein Arbeitspaket bei diesem Meilenstein",
+  "strategicAxes.kanbanNoLeviers": "Kein Hebel",
+  "strategicAxes.kanbanBadgePrefix": "Kanban",
+  "strategicAxes.kanbanDrilldownTitle": "Hebel",
+  "strategicAxes.kanbanDrilldownEmpty": "Kein Hebel auf dieser Stufe.",
   "strategicAxes.noStage": "Ohne Stufe",
   "strategicAxes.filterStage": "Reifegrad",
   "strategicAxes.filterOwner": "Verantwortlich",
@@ -1543,6 +1549,7 @@ const de: Record<string, string> = {
   "staffingPeriod.empty": "Keine datierten VZÄ für diese Granularität.",
   "staffingPeriod.undatedNote":
     "{n} Personaleinsatzzeile(n) ohne Startdatum, in dieser Ansicht nicht dargestellt.",
+  "staffingPeriod.utilization": "{pct}% Auslastung",
 
   // ─── Excel-Import des Personaleinsatzes (Runde 7 — StaffingImportButton.tsx) ──────────────
   "staffingImport.templateButton": "Vorlage herunterladen",
@@ -1586,6 +1593,12 @@ const de: Record<string, string> = {
   "strategicDashboard.noIndicators": "Für dieses Programm ist kein Indikator definiert",
   "strategicDashboard.noDependencyAlerts": "Keine Abhängigkeitswarnung zwischen Arbeitspaketen",
   "strategicDashboard.delayDays": "Tage Verzug",
+  // Runde 9: Zwischenüberschriften der beiden Unterabschnitte des Widgets
+  // "chantier-dependency-alerts" (Abhängigkeiten + ausstehende Voraussetzungen,
+  // `lib/axisLogic.ts` `programBlockedActions`).
+  "strategicDashboard.dependencyAlertsHeading": "Abhängigkeiten zwischen Arbeitspaketen",
+  "strategicDashboard.pendingPrerequisitesHeading": "Ausstehende Voraussetzungen",
+  "strategicDashboard.noPrerequisiteAlerts": "Keine blockierende Voraussetzung ausstehend",
   "strategicDashboard.dragToReorder": "Zum Umsortieren ziehen",
   "strategicDashboard.moveUp": "Nach oben",
   "strategicDashboard.moveDown": "Nach unten",

@@ -356,15 +356,13 @@ export function EffectifsPageClient() {
       <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
       {budgetSection}
 
-      <div className="max-w-sm">
-        <KPICard
-          label={t("effectifs.kpi.totalFte")}
-          value={`${formatFte(totalFte)} ${t("staffing.fteUnit")}`}
-          icon={Users}
-          sub={t("effectifs.kpi.totalFteSub")}
-          barSegments={totalFteBarSegments}
-        />
-      </div>
+      <KPICard
+        label={t("effectifs.kpi.totalFte")}
+        value={`${formatFte(totalFte)} ${t("staffing.fteUnit")}`}
+        icon={Users}
+        sub={t("effectifs.kpi.totalFteSub")}
+        barSegments={totalFteBarSegments}
+      />
 
       {/* ── 1. Répartition par période (round 7 — remplace l'ancienne section "Au global, par
           grande fonction", sans dimension temporelle) ─────────────────────────────────────── */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Activity, Sigma, TrendingDown } from "lucide-react";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
@@ -87,7 +88,16 @@ export function IndicatorStatusSummary({
   return (
     <>
       {radialHero && total > 0 && (
-        <div className="mb-3 flex flex-wrap items-center justify-center gap-6 rounded-lg border border-border bg-neutral-50 p-5">
+        // Round 9, point 1 : le bandeau héros devient cliquable → navigue vers la page KPI
+        // (`/kpi`, `lib/nav-config.ts`) — un `next/link` enveloppant tout le bloc plutôt qu'un
+        // callback remonté au parent : aucun nouveau prop à faire transiter depuis
+        // `StrategicDashboardView.tsx`, et aucun élément interactif imbriqué ici (`RadialProgress`
+        // et le paragraphe sont tous deux du contenu statique) donc le bloc entier peut être un
+        // seul lien sans conflit d'accessibilité.
+        <Link
+          href="/kpi"
+          className="mb-3 flex cursor-pointer flex-wrap items-center justify-center gap-6 rounded-lg border border-border bg-neutral-50 p-5 transition hover:border-bp-coral hover:shadow-md"
+        >
           <RadialProgress
             pct={onTrackPct}
             size={140}
@@ -101,7 +111,7 @@ export function IndicatorStatusSummary({
             {atRisk} {l.atRisk.toLowerCase()} · {total} {l.indicatorsSuffix}{" "}
             {l.tracked.toLowerCase()}
           </p>
-        </div>
+        </Link>
       )}
       {/* Round 8 : en mode `radialHero`, le PO ne veut QUE le donut agrandi ci-dessus — la grille
           de `KPICard` ci-dessous (redondante avec la phrase déjà affichée dans le bandeau) reste

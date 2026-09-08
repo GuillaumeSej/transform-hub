@@ -1031,6 +1031,273 @@ const ACTIONS = [
   },
 ];
 
+// Staffing ETP par chantier (ChantierStaffing, round 9) — `axisId` dénormalisé depuis le chantier
+// parent (voir types/index.ts), `actionId` sur ~1/3 des lignes pour illustrer le suivi "ETP par
+// levier" demandé par le PO, les autres restant au niveau chantier seul. `startDate`/`endDate`
+// étalées sur 2026-2027 pour peupler plusieurs buckets trimestre/semestre/année distincts
+// (`staffingPeriodBuckets`, lib/axisLogic.ts). Pas d'id/companyId/createdAt ici : générés à
+// l'écriture, comme les autres entités de ce script.
+const STAFFING = [
+  {
+    chantierId: "CH-lean",
+    axisId: "AX-excop",
+    function: "operations",
+    fte: 2.0,
+    startDate: "2026-02-01",
+    endDate: "2026-08-31",
+  },
+  {
+    chantierId: "CH-lean",
+    axisId: "AX-excop",
+    function: "rh",
+    fte: 0.5,
+    startDate: "2026-06-01",
+    endDate: "2027-01-31",
+    actionId: "ACT-lean-2",
+    note: "Accompagnement conduite du changement sites EU",
+  },
+  {
+    chantierId: "CH-lean",
+    axisId: "AX-excop",
+    function: "achats",
+    fte: 0.3,
+    startDate: "2026-09-01",
+    endDate: "2027-03-31",
+  },
+  {
+    chantierId: "CH-supply",
+    axisId: "AX-excop",
+    function: "operations",
+    fte: 1.5,
+    startDate: "2026-01-15",
+    endDate: "2026-09-30",
+    actionId: "ACT-supply-1",
+  },
+  {
+    chantierId: "CH-supply",
+    axisId: "AX-excop",
+    function: "finance",
+    fte: 0.4,
+    startDate: "2026-10-01",
+    endDate: "2027-03-31",
+  },
+  {
+    chantierId: "CH-supply",
+    axisId: "AX-excop",
+    function: "achats",
+    fte: 1.0,
+    startDate: "2026-04-01",
+    endDate: "2026-12-31",
+  },
+  {
+    chantierId: "CH-supply",
+    axisId: "AX-excop",
+    function: "autre",
+    fte: 0.3,
+    startDate: "2026-01-15",
+    endDate: "2026-09-30",
+    note: "Consultant logistique externe",
+  },
+  {
+    chantierId: "CH-qualite",
+    axisId: "AX-excop",
+    function: "operations",
+    fte: 0.8,
+    startDate: "2026-03-01",
+    endDate: "2026-06-30",
+  },
+  {
+    chantierId: "CH-qualite",
+    axisId: "AX-excop",
+    function: "rh",
+    fte: 0.2,
+    startDate: "2026-04-01",
+    endDate: "2026-06-30",
+    note: "Formation qualité ponctuelle",
+  },
+  {
+    chantierId: "CH-data",
+    axisId: "AX-digital",
+    function: "it",
+    fte: 3.0,
+    startDate: "2026-06-01",
+    endDate: "2027-06-30",
+    actionId: "ACT-data-1",
+  },
+  {
+    chantierId: "CH-data",
+    axisId: "AX-digital",
+    function: "it",
+    fte: 1.2,
+    startDate: "2027-01-01",
+    endDate: "2027-06-30",
+  },
+  {
+    chantierId: "CH-data",
+    axisId: "AX-digital",
+    function: "finance",
+    fte: 0.5,
+    startDate: "2026-06-01",
+    endDate: "2026-12-31",
+  },
+  {
+    chantierId: "CH-rpa",
+    axisId: "AX-digital",
+    function: "it",
+    fte: 1.0,
+    startDate: "2026-01-01",
+    endDate: "2026-06-30",
+    actionId: "ACT-rpa-1",
+  },
+  {
+    chantierId: "CH-rpa",
+    axisId: "AX-digital",
+    function: "operations",
+    fte: 0.3,
+    startDate: "2026-01-01",
+    endDate: "2026-06-30",
+    note: "Support process comptable",
+  },
+  {
+    chantierId: "CH-cyber",
+    axisId: "AX-digital",
+    function: "it",
+    fte: 2.5,
+    startDate: "2026-04-01",
+    endDate: "2027-01-31",
+    actionId: "ACT-cyber-1",
+  },
+  {
+    chantierId: "CH-cyber",
+    axisId: "AX-digital",
+    function: "juridique",
+    fte: 0.4,
+    startDate: "2026-04-01",
+    endDate: "2026-10-31",
+    note: "Volet conformité RGPD",
+  },
+  {
+    chantierId: "CH-omnicanal",
+    axisId: "AX-expclient",
+    function: "it",
+    fte: 1.8,
+    startDate: "2026-02-01",
+    endDate: "2026-11-30",
+    actionId: "ACT-omni-1",
+  },
+  {
+    chantierId: "CH-omnicanal",
+    axisId: "AX-expclient",
+    function: "marketing",
+    fte: 1.0,
+    startDate: "2026-02-01",
+    endDate: "2026-11-30",
+  },
+  {
+    chantierId: "CH-omnicanal",
+    axisId: "AX-expclient",
+    function: "marketing",
+    fte: 0.6,
+    startDate: "2026-12-01",
+    endDate: "2027-05-31",
+  },
+  {
+    chantierId: "CH-fidelite",
+    axisId: "AX-expclient",
+    function: "marketing",
+    fte: 0.5,
+    startDate: "2026-05-01",
+    endDate: "2026-08-31",
+    actionId: "ACT-fidelite-1",
+  },
+  {
+    chantierId: "CH-fidelite",
+    axisId: "AX-expclient",
+    function: "commercial",
+    fte: 0.7,
+    startDate: "2026-05-01",
+    endDate: "2026-08-31",
+  },
+  {
+    chantierId: "CH-scia",
+    axisId: "AX-expclient",
+    function: "it",
+    fte: 0.4,
+    startDate: "2027-01-01",
+    endDate: "2027-09-30",
+    note: "Cadrage assistant IA support",
+  },
+  {
+    chantierId: "CH-carbone",
+    axisId: "AX-durable",
+    function: "operations",
+    fte: 1.2,
+    startDate: "2026-01-01",
+    endDate: "2026-06-30",
+    actionId: "ACT-carbone-1",
+  },
+  {
+    chantierId: "CH-carbone",
+    axisId: "AX-durable",
+    function: "achats",
+    fte: 0.6,
+    startDate: "2026-07-01",
+    endDate: "2027-12-31",
+  },
+  {
+    chantierId: "CH-emballages",
+    axisId: "AX-durable",
+    function: "operations",
+    fte: 0.4,
+    startDate: "2026-04-01",
+    endDate: "2026-07-31",
+  },
+  {
+    chantierId: "CH-succession",
+    axisId: "AX-talents",
+    function: "rh",
+    fte: 1.5,
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    actionId: "ACT-succession-1",
+  },
+  {
+    chantierId: "CH-succession",
+    axisId: "AX-talents",
+    function: "rh",
+    fte: 0.3,
+    startDate: "2027-01-01",
+    endDate: "2027-06-30",
+    note: "Renfort ponctuel Q1",
+  },
+  {
+    chantierId: "CH-upskilling",
+    axisId: "AX-talents",
+    function: "rh",
+    fte: 0.8,
+    startDate: "2026-03-01",
+    endDate: "2026-06-30",
+  },
+  {
+    chantierId: "CH-orga",
+    axisId: "AX-talents",
+    function: "rh",
+    fte: 0.5,
+    startDate: "2026-02-01",
+    endDate: "2026-05-31",
+    actionId: "ACT-orga-1",
+  },
+  {
+    chantierId: "CH-orga",
+    axisId: "AX-talents",
+    function: "juridique",
+    fte: 0.2,
+    startDate: "2026-02-01",
+    endDate: "2026-05-31",
+    note: "Revue impacts contractuels réorganisation",
+  },
+];
+
 // Indicateurs macro (rattachés à l'axe, pas de chantierId) + indicateurs de chantier.
 const INDICATORS = [
   {
@@ -1280,6 +1547,7 @@ async function main() {
     "indicators",
     "indicatorMeasurements",
     "maturityStageConfigs",
+    "chantierStaffing",
   ]) {
     const n = await deleteWhereCompany(col);
     if (n > 0) console.log(`  ${col} : ${n} document(s) supprimé(s)`);
@@ -1306,6 +1574,20 @@ async function main() {
     revenue: 892.0,
     createdAt: TODAY,
     type: "strategic",
+    // Budget/cible d'ETP par fonction (types/index.ts, Program.staffingBudgets) — calibré pour que
+    // les totaux STAFFING ci-dessous (voir plus bas) donnent un taux d'utilisation par fonction
+    // réaliste (~60-90%), ni ridicule ni à 300%, une fois affiché sur la page Effectifs.
+    staffingBudgets: {
+      rh: 5,
+      finance: 1.2,
+      it: 11,
+      marketing: 3,
+      commercial: 1,
+      juridique: 1,
+      operations: 7.5,
+      achats: 2.5,
+      autre: 0.5,
+    },
   });
 
   console.log(`Utilisateurs de démo (${DEMO_USERS.length})...`);
@@ -1389,6 +1671,28 @@ async function main() {
     await setDoc(doc(db, "chantierActions", action.id), payload);
   }
 
+  console.log(`Staffing ETP (${STAFFING.length})...`);
+  let staffingSeq = 0;
+  for (const s of STAFFING) {
+    staffingSeq++;
+    const staffingId = `STAFF-${staffingSeq}`;
+    const payload = {
+      id: staffingId,
+      companyId: COMPANY_ID,
+      programId: PROGRAM_ID,
+      axisId: s.axisId,
+      chantierId: s.chantierId,
+      function: s.function,
+      fte: s.fte,
+      createdAt: TODAY,
+    };
+    if (s.startDate) payload.startDate = s.startDate;
+    if (s.endDate) payload.endDate = s.endDate;
+    if (s.actionId) payload.actionId = s.actionId;
+    if (s.note) payload.note = s.note;
+    await setDoc(doc(db, "chantierStaffing", staffingId), payload);
+  }
+
   console.log(`Indicateurs (${INDICATORS.length}) + mesures...`);
   let measurementCount = 0;
   for (const ind of INDICATORS) {
@@ -1439,7 +1743,7 @@ async function main() {
     '\nTerminé. Programme stratégique "Excellence Opérationnelle 2026-2028" créé pour Acme Corp.'
   );
   console.log(
-    `  5 axes · ${CHANTIERS.length} chantiers · ${ACTIONS.length} actions · ${INDICATORS.length} indicateurs · ${measurementCount} mesures · ${DEMO_USERS.length} utilisateurs de démo`
+    `  5 axes · ${CHANTIERS.length} chantiers · ${ACTIONS.length} actions · ${STAFFING.length} lignes de staffing · ${INDICATORS.length} indicateurs · ${measurementCount} mesures · ${DEMO_USERS.length} utilisateurs de démo`
   );
   console.log(
     "  1 dépendance en retard (Plateforme Data Unifiée → Service Client IA, FS) pour illustrer l'alerte de cascade."
