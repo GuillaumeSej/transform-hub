@@ -1,4 +1,4 @@
-import type { Chantier, ChantierAction, ChantierStaffing, StaffingFunction } from "@/types";
+import type { Chantier, ChantierAction, ChantierStaffing } from "@/types";
 
 /**
  * Import Excel des lignes de staffing (`ChantierStaffing`) d'un programme — utilisé par
@@ -42,19 +42,23 @@ export const STAFFING_IMPORT_HEADERS = [
   "Note",
 ] as const;
 
+// Round 13 : la colonne "Fonction" doit désormais matcher le nom EXACT d'une équipe de la base ETP
+// entreprise (`Employee.department`, `/hr/etp`) — plus une union fermée à 9 valeurs. Les libellés
+// d'exemple ci-dessous sont volontairement génériques (pas garantis d'exister dans une base ETP
+// réelle) : la note "à remplacer avant import" le précise explicitement sur la 1re ligne.
 export const STAFFING_IMPORT_EXAMPLE_ROWS: (string | number)[][] = [
   [
     "Refonte du parcours achats",
-    "RH",
+    "Support (IT/Finance/HR)",
     1,
     "2026-01-01",
     "2026-06-30",
     "",
-    "Exemple — à remplacer ou supprimer avant import",
+    'Exemple — remplacer "Fonction" par le nom exact d\'une équipe de votre base ETP (/hr/etp)',
   ],
   [
     "Refonte du parcours achats",
-    "IT / SI",
+    "Support (IT/Finance/HR)",
     0.5,
     "2026-01-01",
     "",
@@ -63,47 +67,24 @@ export const STAFFING_IMPORT_EXAMPLE_ROWS: (string | number)[][] = [
   ],
 ];
 
-// ---------- Référentiel fonction (libellés humains <-> valeurs internes) ----------
+// ---------- Référentiel équipe (round 13 : base ETP entreprise, plus de 9 valeurs figées) --------
 
-/** Même ordre/valeurs que `STAFFING_FUNCTIONS` (components/strategic/ChantierStaffingEditor.tsx),
- *  dupliqué plutôt qu'importé : ce fichier `lib/` reste autonome, sans dépendre d'un composant
- *  React (même discipline que `lib/strategicExcelImport.ts` vis-à-vis de ses propres libellés). */
-const STAFFING_FUNCTION_VALUES: StaffingFunction[] = [
-  "rh",
-  "finance",
-  "it",
-  "marketing",
-  "commercial",
-  "juridique",
-  "operations",
-  "achats",
-  "autre",
-];
-
-/** Mêmes libellés français que `staffing.function.*` dans `lib/i18n/dictionaries/fr.ts`. */
-const STAFFING_FUNCTION_LABEL: Record<StaffingFunction, string> = {
-  rh: "RH",
-  finance: "Finance",
-  it: "IT / SI",
-  marketing: "Marketing",
-  commercial: "Commercial",
-  juridique: "Juridique",
-  operations: "Opérations",
-  achats: "Achats",
-  autre: "Autre",
-};
-
-function resolveFunction(raw: string): StaffingFunction | undefined {
+/** Résout la cellule "Fonction" contre la liste des équipes RÉELLES de la base ETP entreprise
+ *  (`Employee.department`, passée par l'appelant — voir `validateStaffingImportRows`), insensible
+ *  à la casse/aux espaces. Remplace l'ancienne résolution contre `StaffingFunction` (union fermée à
+ *  9 valeurs, retirée de `types/index.ts`) : la liste d'équipes n'est plus figée dans ce fichier,
+ *  elle vient de la base ETP de l'entreprise important le fichier. Renvoie le nom CANONIQUE tel que
+ *  stocké dans la base ETP (pas la casse saisie dans le fichier) pour que les agrégats par équipe
+ *  ne se fragmentent jamais sur une différence de casse. */
+function resolveFunction(raw: string, knownDepartments: string[]): string | undefined {
   const lower = raw.trim().toLowerCase();
-  const byLabel = STAFFING_FUNCTION_VALUES.find(
-    (v) => STAFFING_FUNCTION_LABEL[v].toLowerCase() === lower
-  );
-  if (byLabel) return byLabel;
-  return STAFFING_FUNCTION_VALUES.find((v) => v === lower);
+  return knownDepartments.find((d) => d.toLowerCase() === lower);
 }
 
-function functionNamesForError(): string {
-  return STAFFING_FUNCTION_VALUES.map((v) => STAFFING_FUNCTION_LABEL[v]).join(", ");
+function functionNamesForError(knownDepartments: string[]): string {
+  return knownDepartments.length > 0
+    ? knownDepartments.join(", ")
+    : "aucune équipe dans la base ETP";
 }
 
 // ---------- Parsing utilitaire (mêmes conventions que lib/strategicExcelImport.ts) ----------
@@ -189,7 +170,7 @@ function resolveAction(
  *  échappement plus robuste. */
 function staffingMatchKey(
   chantierId: string,
-  fn: StaffingFunction,
+  fn: string,
   startDate: string,
   endDate: string,
   actionId: string | undefined
@@ -225,7 +206,10 @@ export function validateStaffingImportRows(
   programId: string | null | undefined,
   chantiers: Chantier[],
   chantierActions: ChantierAction[],
-  existingStaffing: ChantierStaffing[]
+  existingStaffing: ChantierStaffing[],
+  /** Noms d'équipe réels de la base ETP entreprise (round 13) — la colonne "Fonction" doit
+   *  matcher l'un de ces noms, voir `resolveFunction` ci-dessus. */
+  knownDepartments: string[]
 ): StaffingImportPreview {
   const errors: StaffingImportError[] = [];
   const rows: StaffingImportRow[] = [];
@@ -265,11 +249,11 @@ export function validateStaffingImportRows(
     }
 
     const functionRaw = str(row["Fonction"]);
-    const fn = functionRaw ? resolveFunction(functionRaw) : undefined;
+    const fn = functionRaw ? resolveFunction(functionRaw, knownDepartments) : undefined;
     if (!fn) {
       errors.push({
         rowNumber,
-        reason: `Fonction "${functionRaw}" inconnue (attendu : ${functionNamesForError()})`,
+        reason: `Fonction "${functionRaw}" inconnue (attendu : ${functionNamesForError(knownDepartments)})`,
       });
       return;
     }
