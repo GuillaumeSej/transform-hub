@@ -35,6 +35,14 @@ import type {
  * `FilterBar` dédié), transmis ici en simple valeur : ce composant ne connaît rien de l'état de
  * filtre lui-même, seulement son résultat.
  *
+ * `kanbanFilter` (round 12) : même principe pour le statut kanban (todo/in_progress/done) des
+ * leviers SANS KPI — ces leviers n'ont pas de jalon E0-E4, `milestoneFilter` ne les concerne donc
+ * jamais et il n'existait jusqu'ici aucun moyen de filtrer/repérer où ils en sont depuis cette vue.
+ * Un chantier reste visible si AU MOINS UN de ses leviers sans KPI est au statut coché. Les deux
+ * filtres se combinent en ET quand ils sont actifs simultanément (un chantier doit satisfaire
+ * chacun des filtres actifs, indépendamment l'un de l'autre) — cohérent avec le fait que ce sont
+ * deux facettes distinctes (leviers avec KPI vs sans KPI) d'un même chantier.
+ *
  * Aucun drag & drop, inchangé : le changement de jalon/statut se fait depuis la fiche chantier.
  *
  * Round 11 : le badge d'étape de maturité (`AxisStageBadge`) est retiré des en-têtes d'axe et des
@@ -67,6 +75,7 @@ export function AxisKanban({
   onCardClick,
   onOpenChantier,
   milestoneFilter,
+  kanbanFilter,
   currency,
   labels,
 }: {
@@ -89,14 +98,19 @@ export function AxisKanban({
    *  filtre, tous les chantiers restent affichés. Un chantier reste visible si AU MOINS UN de ses
    *  leviers rattachés à un KPI est actuellement à l'un des jalons sélectionnés. */
   milestoneFilter?: MilestoneId[];
+  /** Statuts kanban (todo/in_progress/done) sélectionnés par le filtre "Statut kanban" (round 12) —
+   *  vide/undefined = aucun filtre. Un chantier reste visible si AU MOINS UN de ses leviers SANS KPI
+   *  est actuellement à l'un des statuts sélectionnés. Voir doc-comment de tête pour la combinaison
+   *  avec `milestoneFilter`. */
+  kanbanFilter?: LevierKanbanStatus[];
   /** Devise du programme actif (`Program.currency`) — round 10, point 3 : affichée à côté du budget
    *  alloué de chaque chantier, pour rester cohérent avec la vue "Cartes". `undefined` masque
    *  simplement l'unité (chantier sans budget renseigné, ou devise indisponible). */
   currency?: string;
   labels?: {
     emptyAxisChantiers?: string;
-    /** Distinct de `emptyAxisChantiers` : l'axe A des chantiers, mais aucun ne correspond au filtre
-     *  "Jalon" actif. */
+    /** Distinct de `emptyAxisChantiers` : l'axe A des chantiers, mais aucun ne correspond au(x)
+     *  filtre(s) actif(s) ("Jalon" et/ou "Statut kanban"). */
     filteredEmptyAxisChantiers?: string;
     chantiers?: string;
     /** Chantier sans aucun levier (ni suivi KPI, ni kanban classique). */
@@ -109,7 +123,8 @@ export function AxisKanban({
 }) {
   const l = {
     emptyAxisChantiers: labels?.emptyAxisChantiers ?? "Aucun chantier",
-    filteredEmptyAxisChantiers: labels?.filteredEmptyAxisChantiers ?? "Aucun chantier à ce jalon",
+    filteredEmptyAxisChantiers:
+      labels?.filteredEmptyAxisChantiers ?? "Aucun chantier pour ce filtre",
     chantiers: labels?.chantiers ?? "chantiers",
     noLeviers: labels?.noLeviers ?? "Aucun levier",
     kanbanBadgePrefix: labels?.kanbanBadgePrefix ?? "Kanban",
@@ -150,6 +165,13 @@ export function AxisKanban({
     return milestoneFilter.some((m) => counts.milestoneCounts[m] > 0);
   };
 
+  const chantierMatchesKanbanFilter = (chantierId: string): boolean => {
+    if (!kanbanFilter || kanbanFilter.length === 0) return true;
+    const counts = perChantierCounts.get(chantierId);
+    if (!counts) return false;
+    return kanbanFilter.some((status) => counts.kanbanCounts[status] > 0);
+  };
+
   /** Leviers de l'axe du drill-down ouvert, filtrés par jalon OU statut kanban selon `drilldown.kind` —
    *  recalculé à chaque ouverture plutôt que pré-bucketé pour tous les axes/jalons à l'avance (pas
    *  besoin, un seul drill-down ouvert à la fois). */
@@ -180,8 +202,8 @@ export function AxisKanban({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {axes.map((axis) => {
           const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
-          const visibleChantiers = axisChantiers.filter((c) =>
-            chantierMatchesMilestoneFilter(c.id)
+          const visibleChantiers = axisChantiers.filter(
+            (c) => chantierMatchesMilestoneFilter(c.id) && chantierMatchesKanbanFilter(c.id)
           );
           return (
             <div

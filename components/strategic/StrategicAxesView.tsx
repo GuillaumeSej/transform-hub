@@ -24,7 +24,14 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { StrategicImportPreview } from "@/lib/strategicExcelImport";
-import type { Chantier, ChantierAction, Indicator, MilestoneId, StrategicAxis } from "@/types";
+import type {
+  Chantier,
+  ChantierAction,
+  Indicator,
+  LevierKanbanStatus,
+  MilestoneId,
+  StrategicAxis,
+} from "@/types";
 
 /** Nombre de puces numérotées d'indicateur affichées sur une carte d'axe (vue "cartes", round 6,
  *  point 3) avant repli sur une puce "+N". */
@@ -141,6 +148,17 @@ export function StrategicAxesView() {
   );
 
   /**
+   * Leviers SANS KPI (`indicatorId` absent, round 12) — le pendant "Statut kanban" de
+   * `milestoneTrackedActions` ci-dessus. Ces leviers n'ont pas de jalon E0-E4 significatif, seul
+   * `kanbanStatus` (todo/in_progress/done) les décrit ; jusqu'ici aucun filtre ne permettait de
+   * repérer où ils en sont depuis cette vue "Avancement des chantiers".
+   */
+  const kanbanTrackedActions = useMemo(
+    () => data.chantierActions.filter((a) => !a.indicatorId),
+    [data.chantierActions]
+  );
+
+  /**
    * Filtre "Jalon" E0-E4 (round 9, points 3/9) — SCOPÉ à l'onglet "Avancement des chantiers"
    * uniquement, TECHNIQUEMENT indépendant du filtre "Responsable" ci-dessous (entités et
    * persistances différentes — voir `filterDefs`). État purement local (pas d'URL) : comme l'ancien
@@ -153,6 +171,14 @@ export function StrategicAxesView() {
    * l'état + le `FilterBar`).
    */
   const [milestoneFilters, setMilestoneFilters] = useState<ActiveFilters>({});
+
+  /**
+   * Filtre "Statut kanban" (round 12) — même mécanisme que `milestoneFilters` ci-dessus mais pour
+   * les leviers SANS KPI (`kanbanTrackedActions`). Filtre les CHANTIERS affichés dans `AxisKanban` :
+   * un chantier reste visible si au moins un de ses leviers sans KPI est au statut coché (logique
+   * dans `AxisKanban` via la prop `kanbanFilter`).
+   */
+  const [kanbanFilters, setKanbanFilters] = useState<ActiveFilters>({});
 
   /** Nombre de leviers rattachés à un KPI par jalon E0-E4 (round 10, point 3) — précalculé pour que
    *  `milestoneFilterDefs.getValue` (ci-dessous) puisse renvoyer une valeur DÉJÀ suffixée du compte
@@ -188,6 +214,59 @@ export function StrategicAxesView() {
   const activeMilestones = (milestoneFilters["jalon"] ?? []).map(
     (value) => value.split(" ")[0]
   ) as MilestoneId[];
+
+  /** Nombre de leviers SANS KPI par statut kanban (round 12) — même rôle que `milestoneCounts`,
+   *  précalculé pour suffixer les options du filtre "Statut kanban" (ex. "En cours (3)"). */
+  const kanbanCounts = useMemo(() => {
+    const map = new Map<LevierKanbanStatus, number>();
+    for (const action of kanbanTrackedActions) {
+      const status = action.kanbanStatus ?? "todo";
+      map.set(status, (map.get(status) ?? 0) + 1);
+    }
+    return map;
+  }, [kanbanTrackedActions]);
+
+  /** Libellé traduit par statut kanban — mêmes clés i18n que `ChantierDetailPanel`/`AxisKanban`
+   *  (vocabulaire déjà unifié dans l'app, voir doc-comment d'`AxisKanban.tsx`). */
+  const kanbanStatusLabel = useMemo<Record<LevierKanbanStatus, string>>(
+    () => ({
+      todo: t("strategicChantierDetail.kanban.todo"),
+      in_progress: t("strategicChantierDetail.kanban.inProgress"),
+      done: t("strategicChantierDetail.kanban.done"),
+    }),
+    [t]
+  );
+
+  const kanbanFilterDefs: FilterDef<ChantierAction>[] = useMemo(
+    () => [
+      {
+        key: "statut",
+        label: t("strategicAxes.filterKanban"),
+        getValue: (a) => {
+          const status = a.kanbanStatus ?? "todo";
+          return `${kanbanStatusLabel[status]} (${kanbanCounts.get(status) ?? 0})`;
+        },
+      },
+    ],
+    [t, kanbanCounts, kanbanStatusLabel]
+  );
+
+  // Contrairement au jalon (id lui-même affiché, `activeMilestones` ci-dessus), le libellé
+  // affiché ici est traduit ("En cours") — on retrouve le `LevierKanbanStatus` via une table
+  // inverse libellé → statut plutôt qu'un découpage de chaîne, plus robuste qu'un `split(" ")`
+  // face à des libellés à plusieurs mots.
+  const kanbanLabelToStatus = useMemo(
+    () =>
+      new Map<string, LevierKanbanStatus>(
+        (Object.entries(kanbanStatusLabel) as [LevierKanbanStatus, string][]).map(
+          ([status, label]) => [label, status]
+        )
+      ),
+    [kanbanStatusLabel]
+  );
+  const activeKanbanStatuses = (kanbanFilters["statut"] ?? [])
+    .map((value) => kanbanLabelToStatus.get(value.replace(/\s*\(\d+\)$/, "")))
+    .filter((s): s is LevierKanbanStatus => Boolean(s));
 
   // Filtres persistés dans l'URL sous le préfixe `f_`, exactement comme la page leviers — un lien
   // vers une vue filtrée reste partageable et survit à un rafraîchissement.
@@ -393,6 +472,14 @@ export function StrategicAxesView() {
                 onChange={setMilestoneFilters}
               />
             )}
+            {view === "kanban" && (
+              <FilterBar
+                items={kanbanTrackedActions}
+                defs={kanbanFilterDefs}
+                active={kanbanFilters}
+                onChange={setKanbanFilters}
+              />
+            )}
             <div className="ml-auto flex overflow-hidden rounded-md border border-border">
               <button
                 onClick={() => setView("cards")}
@@ -432,6 +519,7 @@ export function StrategicAxesView() {
           onCardClick={openAxis}
           onOpenChantier={openChantierPanel}
           milestoneFilter={activeMilestones}
+          kanbanFilter={activeKanbanStatuses}
           currency={activeProgram?.currency}
           labels={{
             emptyAxisChantiers: t("strategicAxes.axisNoChantier"),
