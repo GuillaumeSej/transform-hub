@@ -1,6 +1,6 @@
 "use client";
 
-import { milestoneWeightPct } from "@/lib/axisLogic";
+import { colorForChantier, milestoneWeightPct } from "@/lib/axisLogic";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import type { Chantier, ChantierAction, MilestoneId } from "@/types";
 
@@ -38,6 +38,10 @@ export type LevierBoardGroup = {
   color?: string;
   /** Leviers RATTACHÉS À UN KPI de l'axe, groupés par jalon courant (E0…E4). */
   milestones: Record<MilestoneId, LevierBoardCard[]>;
+  /** Chantiers de l'axe (round 10, point 1) — alimente la légende de couleur affichée sous
+   *  l'en-tête de section, juste avant les colonnes E0→E4. Optionnel : un appelant qui ne l'a pas
+   *  sous la main (aucun aujourd'hui) n'affiche simplement pas de légende. */
+  chantiers?: Chantier[];
 };
 
 /** Correspondance `bg-*-500` → `border-*-500` pour la palette FIXE de `colorForChantier`
@@ -67,7 +71,9 @@ export function LevierCard({
   chantier,
   chantierColor,
   onLevierClick,
-}: LevierBoardCard & { onLevierClick: (chantierId: string) => void }) {
+}: LevierBoardCard & {
+  onLevierClick: (chantierId: string, focusActionId?: string) => void;
+}) {
   const borderClass = CHANTIER_BORDER_CLASS[chantierColor] ?? "border-border";
   // Round 9, point 1 : remplissage pondéré par le poids du jalon COURANT (`milestoneWeightPct`,
   // lib/axisLogic.ts — E0/E1/E2 cadrage léger, E3 exécution longue, E4 clôture) — un DEUXIÈME
@@ -79,7 +85,7 @@ export function LevierCard({
   return (
     <button
       type="button"
-      onClick={() => onLevierClick(chantier.id)}
+      onClick={() => onLevierClick(chantier.id, action.id)}
       title={`${action.name} · ${chantier.name} · ${weightPct}%`}
       className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 bg-white p-2 pb-2.5 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass}`}
     >
@@ -110,7 +116,7 @@ export function LevierMilestoneBoard({
   /** `emptyColumn` : placeholder discret d'une colonne de jalon sans levier — un texte plutôt que
    *  rien du tout, pour que la structure à 5 colonnes reste lisible même axe par axe. */
   labels: { emptyColumn: string };
-  onLevierClick: (chantierId: string) => void;
+  onLevierClick: (chantierId: string, focusActionId?: string) => void;
 }) {
   return (
     <div className="space-y-5">
@@ -130,6 +136,28 @@ export function LevierMilestoneBoard({
               {group.label}
             </span>
           </div>
+          {/* Légende de couleur des chantiers (round 10, point 1) — même `colorForChantier` que les
+              bordures/pastilles des bulles ci-dessous, pour qu'un chantier se reconnaisse d'un
+              coup d'œil entre la légende et les colonnes E0-E4. Compacte : pastille + nom, pas une
+              liste détaillée. */}
+          {group.chantiers && group.chantiers.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {group.chantiers.map((chantier) => (
+                <span
+                  key={chantier.id}
+                  className="flex items-center gap-1.5 text-[10.5px] text-tertiary"
+                >
+                  <span
+                    aria-hidden
+                    className={`h-2 w-2 shrink-0 rounded-full ${colorForChantier(chantier.id)}`}
+                  />
+                  <span className="max-w-[140px] truncate" title={chantier.name}>
+                    {chantier.name}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-2 min-[640px]:grid-cols-5">
             {MILESTONE_ORDER.map((milestoneId) => {
               const cards = group.milestones[milestoneId] ?? [];

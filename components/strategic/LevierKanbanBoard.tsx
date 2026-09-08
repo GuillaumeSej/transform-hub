@@ -26,7 +26,7 @@ export function LevierKanbanBoard({
 }: {
   items: LevierBoardCard[];
   labels: Record<LevierKanbanStatus, string>;
-  onLevierClick: (chantierId: string) => void;
+  onLevierClick: (chantierId: string, focusActionId?: string) => void;
 }) {
   if (items.length === 0) return null;
 

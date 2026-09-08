@@ -31,6 +31,7 @@ import {
   chantierDependencyAlerts,
   chantierMilestoneProgressPct,
   milestoneProgressPct,
+  numberIndicators,
   resolveMilestoneAutoFlags,
 } from "@/lib/axisLogic";
 import { cn } from "@/lib/utils";
@@ -837,6 +838,14 @@ export function ChantierDetailPanel({
     [data.indicators, chantier]
   );
 
+  // Numéro global de KPI (fondation round 10, `lib/axisLogic.ts`) — même calcul que `KpiPageClient.tsx`
+  // et les cartes d'axe, pour que le "KPI n°<N>" affiché sur un levier soit toujours cohérent avec
+  // le reste de la plateforme.
+  const indicatorNumbers = useMemo(
+    () => numberIndicators(data.axes, data.chantiers, data.indicators),
+    [data.axes, data.chantiers, data.indicators]
+  );
+
   const bounds = useMemo(
     () => (chantier ? chantierBounds(chantier.id, chantierActions) : undefined),
     [chantier, chantierActions]
@@ -927,6 +936,19 @@ export function ChantierDetailPanel({
     [timelineColumnsComputed]
   );
   const timelinePctOfComputed = useMemo(() => timelinePctOf(minTime, maxTime), [minTime, maxTime]);
+
+  // ── Onglets (round 10, point 2) — réduisent le long défilement vertical de la fiche ─────────
+  // Toujours initialisé sur "leviers" si le panneau s'ouvre déjà avec un `focusActionId` (sinon le
+  // surlignage/défilement ci-dessous serait invisible, l'onglet "Leviers" n'étant pas affiché).
+  const [activeTab, setActiveTab] = useState<"overview" | "leviers" | "timeline" | "staffing">(
+    focusActionId ? "leviers" : "overview"
+  );
+  // Même déclencheur que l'effet de défilement ci-dessous (`focusActionId`) : si le panneau reste
+  // monté et qu'un NOUVEAU levier est ciblé (ex. l'utilisateur avait changé d'onglet, puis reclique
+  // un autre levier depuis le dashboard), on rebascule sur "Leviers" à chaque changement.
+  useEffect(() => {
+    if (focusActionId) setActiveTab("leviers");
+  }, [focusActionId]);
 
   // ── Ouverture ciblée sur une action (`focusActionId`) — défilement + mise en avant ─────────
   const actionRefs = useRef<Record<string, HTMLLIElement | null>>({});
@@ -1100,579 +1122,652 @@ export function ChantierDetailPanel({
         </button>
       </div>
 
-      {/* ── En-tête : nom/étape, sponsor/pilote (éditables), période, avancement ────────────── */}
-      <Card>
-        <CardHeader
-          title={
-            <div className="flex flex-wrap items-center gap-2">
-              <span>{chantier.name}</span>
-              <AxisStageBadge stageId={chantier.stage} stages={stages} />
-            </div>
-          }
-          actions={
-            axis && (
-              <button
-                onClick={() => navigateAway(`/levers/detail?id=${axis.id}`)}
-                className="text-xs font-medium text-secondary hover:text-primary hover:underline"
-              >
-                {axis.name}
-              </button>
-            )
-          }
-        />
-        <CardBody>
-          {chantier.description && (
-            <p className="mb-3 max-w-2xl text-[13px] text-secondary">{chantier.description}</p>
-          )}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <UserPicker
-              users={data.users}
-              value={chantier.sponsorName}
-              onChange={(v) => updateChantierField(v ? { sponsorName: v } : {})}
-              label={t("strategicChantierDetail.sponsor")}
-              placeholder={t("strategicAxes.unassigned")}
-              id="chantier-sponsor"
-            />
-            <UserPicker
-              users={data.users}
-              value={chantier.pilote}
-              onChange={(v) => updateChantierField(v ? { pilote: v } : {})}
-              label={t("strategicChantierDetail.pilote")}
-              placeholder={t("strategicAxes.unassigned")}
-              id="chantier-pilote"
-            />
-            <div>
-              <span className="text-xs font-medium text-text-secondary">
-                {t("strategicAxes.chantierPeriod")}
-              </span>
-              <div className="mt-1.5 text-[13px] font-semibold text-primary">
-                {bounds
-                  ? formatRange(bounds.start, bounds.end)
-                  : t("strategicAxes.chantierNoDates")}
+      {/* ── Onglets (round 10, point 2) — même langage visuel que `StrategicAxesView.tsx`
+          (bouton actif `bg-black text-white`, inactif `bg-white text-secondary`) ────────────── */}
+      <div className="mb-4 flex w-fit overflow-hidden rounded-md border border-border">
+        {(
+          [
+            { id: "overview", label: t("strategicChantierDetail.tabs.overview", "Vue d'ensemble") },
+            { id: "leviers", label: t("strategicAxes.chantierActions") },
+            { id: "timeline", label: t("strategicChantierDetail.timeline.title") },
+            { id: "staffing", label: t("strategicChantierDetail.tabs.staffing", "Effectifs") },
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-3 py-1.5 text-xs font-semibold ${
+              activeTab === tab.id ? "bg-black text-white" : "bg-white text-secondary"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Onglet "Vue d'ensemble" : en-tête, critères de succès, grille d'effort ──────────── */}
+      <div className={activeTab === "overview" ? undefined : "hidden"}>
+        {/* ── En-tête : nom/étape, sponsor/pilote (éditables), période, avancement ────────────── */}
+        <Card>
+          <CardHeader
+            title={
+              <div className="flex flex-wrap items-center gap-2">
+                <span>{chantier.name}</span>
+                <AxisStageBadge stageId={chantier.stage} stages={stages} />
               </div>
-            </div>
-            <div>
-              <label
-                className="text-xs font-medium text-text-secondary"
-                htmlFor="chantier-allocated-budget"
-              >
-                {t("strategicChantierDetail.allocatedBudget")}
-                {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
-              </label>
-              <input
-                id="chantier-allocated-budget"
-                type="number"
-                inputMode="decimal"
-                value={allocatedBudgetInput}
-                onChange={(e) => setAllocatedBudgetInput(e.target.value)}
-                onBlur={() => {
-                  const trimmed = allocatedBudgetInput.trim();
-                  if (trimmed === "") {
-                    if (chantier.allocatedBudget !== undefined)
-                      clearChantierField("allocatedBudget");
-                    return;
-                  }
-                  const parsed = Number(trimmed);
-                  if (Number.isNaN(parsed) || parsed === chantier.allocatedBudget) return;
-                  updateChantierField({ allocatedBudget: parsed });
-                }}
-                className={INPUT_CLASS}
+            }
+            actions={
+              axis && (
+                <button
+                  onClick={() => navigateAway(`/levers/detail?id=${axis.id}`)}
+                  className="text-xs font-medium text-secondary hover:text-primary hover:underline"
+                >
+                  {axis.name}
+                </button>
+              )
+            }
+          />
+          <CardBody>
+            {chantier.description && (
+              <p className="mb-3 max-w-2xl text-[13px] text-secondary">{chantier.description}</p>
+            )}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <UserPicker
+                users={data.users}
+                value={chantier.sponsorName}
+                onChange={(v) => updateChantierField(v ? { sponsorName: v } : {})}
+                label={t("strategicChantierDetail.sponsor")}
+                placeholder={t("strategicAxes.unassigned")}
+                id="chantier-sponsor"
               />
-            </div>
-            <div>
-              <span className="text-xs font-medium text-text-secondary">
-                {t("strategicAxes.progress")}
-              </span>
-              <div className="mt-2 flex items-center gap-2">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${progressPct}%`,
-                      backgroundColor: axis?.color ?? "var(--bp-warm-taupe)",
-                    }}
-                  />
+              <UserPicker
+                users={data.users}
+                value={chantier.pilote}
+                onChange={(v) => updateChantierField(v ? { pilote: v } : {})}
+                label={t("strategicChantierDetail.pilote")}
+                placeholder={t("strategicAxes.unassigned")}
+                id="chantier-pilote"
+              />
+              <div>
+                <span className="text-xs font-medium text-text-secondary">
+                  {t("strategicAxes.chantierPeriod")}
+                </span>
+                <div className="mt-1.5 text-[13px] font-semibold text-primary">
+                  {bounds
+                    ? formatRange(bounds.start, bounds.end)
+                    : t("strategicAxes.chantierNoDates")}
                 </div>
-                <span className="shrink-0 text-[13px] font-bold text-primary">{progressPct}%</span>
               </div>
-            </div>
-            {confidentialityLevels.length > 0 && (
               <div>
                 <label
                   className="text-xs font-medium text-text-secondary"
-                  htmlFor="chantier-confidentiality"
+                  htmlFor="chantier-allocated-budget"
                 >
-                  {t("strategicChantierDetail.confidentialityLevel", "Niveau de confidentialité")}
+                  {t("strategicChantierDetail.allocatedBudget")}
+                  {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
                 </label>
-                <select
-                  id="chantier-confidentiality"
+                <input
+                  id="chantier-allocated-budget"
+                  type="number"
+                  inputMode="decimal"
+                  value={allocatedBudgetInput}
+                  onChange={(e) => setAllocatedBudgetInput(e.target.value)}
+                  onBlur={() => {
+                    const trimmed = allocatedBudgetInput.trim();
+                    if (trimmed === "") {
+                      if (chantier.allocatedBudget !== undefined)
+                        clearChantierField("allocatedBudget");
+                      return;
+                    }
+                    const parsed = Number(trimmed);
+                    if (Number.isNaN(parsed) || parsed === chantier.allocatedBudget) return;
+                    updateChantierField({ allocatedBudget: parsed });
+                  }}
                   className={INPUT_CLASS}
-                  value={chantier.confidentialityLevel ?? ""}
-                  onChange={(e) =>
-                    e.target.value
-                      ? updateChantierField({ confidentialityLevel: e.target.value })
-                      : clearChantierField("confidentialityLevel")
-                  }
-                >
-                  <option value="">
-                    {t(
-                      "strategicChantierDetail.confidentialityLevelNone",
-                      "Aucun (visible par tous)"
-                    )}
-                  </option>
-                  {confidentialityLevels.map((level) => (
-                    <option key={level} value={level}>
-                      {level}
+                />
+              </div>
+              <div>
+                <span className="text-xs font-medium text-text-secondary">
+                  {t("strategicAxes.progress")}
+                </span>
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${progressPct}%`,
+                        backgroundColor: axis?.color ?? "var(--bp-warm-taupe)",
+                      }}
+                    />
+                  </div>
+                  <span className="shrink-0 text-[13px] font-bold text-primary">
+                    {progressPct}%
+                  </span>
+                </div>
+              </div>
+              {confidentialityLevels.length > 0 && (
+                <div>
+                  <label
+                    className="text-xs font-medium text-text-secondary"
+                    htmlFor="chantier-confidentiality"
+                  >
+                    {t("strategicChantierDetail.confidentialityLevel", "Niveau de confidentialité")}
+                  </label>
+                  <select
+                    id="chantier-confidentiality"
+                    className={INPUT_CLASS}
+                    value={chantier.confidentialityLevel ?? ""}
+                    onChange={(e) =>
+                      e.target.value
+                        ? updateChantierField({ confidentialityLevel: e.target.value })
+                        : clearChantierField("confidentialityLevel")
+                    }
+                  >
+                    <option value="">
+                      {t(
+                        "strategicChantierDetail.confidentialityLevelNone",
+                        "Aucun (visible par tous)"
+                      )}
                     </option>
-                  ))}
-                </select>
+                    {confidentialityLevels.map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* ── Critères de succès ──────────────────────────────────────────────────────────────── */}
+        <Card>
+          <CardHeader title={t("strategicChantierDetail.successCriteria")} />
+          <CardBody>
+            <textarea
+              value={successCriteria}
+              onChange={(e) => setSuccessCriteria(e.target.value)}
+              onBlur={() => {
+                const trimmed = successCriteria.trim();
+                if (trimmed === (chantier.successCriteria ?? "").trim()) return;
+                updateChantierField(trimmed ? { successCriteria: trimmed } : {});
+              }}
+              rows={3}
+              placeholder={t("strategicChantierDetail.successCriteria.placeholder")}
+              className={INPUT_CLASS}
+            />
+            <SuccessKpiList
+              value={chantier.successKpis ?? []}
+              onChange={(next) => updateChantierField({ successKpis: next })}
+            />
+          </CardBody>
+        </Card>
+
+        {/* ── Grille de notation d'effort (round 4, point 7 — SEUL endroit qui l'importe) ────── */}
+        <Card>
+          <CardHeader title={t("strategicChantierDetail.effort.title")} />
+          <CardBody>
+            <EffortScoringGrid
+              value={chantier.effort ?? {}}
+              onChange={(next) => updateChantierField({ effort: next })}
+            />
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* ── Onglet "Leviers" : actions, prérequis, livrables ────────────────────────────────── */}
+      <div className={activeTab === "leviers" ? undefined : "hidden"}>
+        {/* ── Actions, prérequis, livrables ───────────────────────────────────────────────────── */}
+        <Card>
+          <CardHeader
+            title={t("strategicAxes.chantierActions")}
+            actions={
+              !actionForm && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActionForm({ mode: "create" })}
+                >
+                  <Plus size={12} /> {t("strategicAxes.newAction")}
+                </Button>
+              )
+            }
+          />
+          <CardBody>
+            {actionForm && (
+              <div className="mb-3">
+                <ChantierActionForm
+                  key={actionForm.actionId ?? "new"}
+                  initial={editedAction}
+                  stages={stages}
+                  users={data.users}
+                  otherActions={chantierActions.filter((a) => a.id !== actionForm.actionId)}
+                  indicators={chantierAvailableIndicators}
+                  labels={actionFormLabels}
+                  onCancel={() => setActionForm(null)}
+                  onSubmit={async (values) => {
+                    try {
+                      if (actionForm.mode === "edit" && actionForm.actionId) {
+                        await data.updateChantierAction(actionForm.actionId, values);
+                        showToast(t("strategicAxes.actionUpdated"), values.name, "success");
+                      } else {
+                        await data.createChantierAction({ ...values, chantierId: chantier.id });
+                        showToast(t("strategicAxes.actionCreated"), values.name, "success");
+                      }
+                      setActionForm(null);
+                    } catch (error) {
+                      console.error(
+                        "[betrack] échec d'enregistrement de l'action de chantier :",
+                        error
+                      );
+                      showToast(
+                        t("strategicAxes.actionSaveErrorTitle"),
+                        t("strategicAxes.actionSaveError"),
+                        "error"
+                      );
+                    }
+                  }}
+                />
               </div>
             )}
-          </div>
-        </CardBody>
-      </Card>
 
-      {/* ── Critères de succès ──────────────────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader title={t("strategicChantierDetail.successCriteria")} />
-        <CardBody>
-          <textarea
-            value={successCriteria}
-            onChange={(e) => setSuccessCriteria(e.target.value)}
-            onBlur={() => {
-              const trimmed = successCriteria.trim();
-              if (trimmed === (chantier.successCriteria ?? "").trim()) return;
-              updateChantierField(trimmed ? { successCriteria: trimmed } : {});
-            }}
-            rows={3}
-            placeholder={t("strategicChantierDetail.successCriteria.placeholder")}
-            className={INPUT_CLASS}
-          />
-          <SuccessKpiList
-            value={chantier.successKpis ?? []}
-            onChange={(next) => updateChantierField({ successKpis: next })}
-          />
-        </CardBody>
-      </Card>
-
-      {/* ── Grille de notation d'effort (round 4, point 7 — SEUL endroit qui l'importe) ────── */}
-      <Card>
-        <CardHeader title={t("strategicChantierDetail.effort.title")} />
-        <CardBody>
-          <EffortScoringGrid
-            value={chantier.effort ?? {}}
-            onChange={(next) => updateChantierField({ effort: next })}
-          />
-        </CardBody>
-      </Card>
-
-      {/* ── Actions, prérequis, livrables ───────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader
-          title={t("strategicAxes.chantierActions")}
-          actions={
-            !actionForm && (
-              <Button variant="outline" size="sm" onClick={() => setActionForm({ mode: "create" })}>
-                <Plus size={12} /> {t("strategicAxes.newAction")}
-              </Button>
-            )
-          }
-        />
-        <CardBody>
-          {actionForm && (
-            <div className="mb-3">
-              <ChantierActionForm
-                key={actionForm.actionId ?? "new"}
-                initial={editedAction}
-                stages={stages}
-                users={data.users}
-                otherActions={chantierActions.filter((a) => a.id !== actionForm.actionId)}
-                indicators={chantierAvailableIndicators}
-                labels={actionFormLabels}
-                onCancel={() => setActionForm(null)}
-                onSubmit={async (values) => {
-                  try {
-                    if (actionForm.mode === "edit" && actionForm.actionId) {
-                      await data.updateChantierAction(actionForm.actionId, values);
-                      showToast(t("strategicAxes.actionUpdated"), values.name, "success");
-                    } else {
-                      await data.createChantierAction({ ...values, chantierId: chantier.id });
-                      showToast(t("strategicAxes.actionCreated"), values.name, "success");
-                    }
-                    setActionForm(null);
-                  } catch (error) {
-                    console.error(
-                      "[betrack] échec d'enregistrement de l'action de chantier :",
-                      error
-                    );
-                    showToast(
-                      t("strategicAxes.actionSaveErrorTitle"),
-                      t("strategicAxes.actionSaveError"),
-                      "error"
-                    );
-                  }
-                }}
-              />
-            </div>
-          )}
-
-          {chantierActions.length === 0 && !actionForm ? (
-            <p className="py-4 text-center text-[13px] text-tertiary">
-              {t("strategicAxes.noActions")}
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {chantierActions.map((action) => {
-                const isFocused = action.id === focusActionId;
-                const actionDeliverables = normalizeDeliverables(action.deliverables);
-                const startInfo = canStartAction(action, data.chantierActions, stages);
-                // Défaut défensif pour un levier créé avant l'introduction des jalons E0→E4 (round
-                // 5, déplacé au levier round 7) — ou jamais encore touché : "encore à E0, rien de
-                // répondu". N'est écrit en base qu'à la première interaction réelle.
-                const actionMilestones: ChantierMilestoneState = action.milestones ?? {
-                  currentMilestone: "E0",
-                  passedMilestones: [],
-                  checklists: {},
-                };
-                const actionProgressPct = milestoneProgressPct(action);
-                return (
-                  <li
-                    key={action.id}
-                    ref={(el) => {
-                      actionRefs.current[action.id] = el;
-                    }}
-                    className={`rounded-md border p-3 ${
-                      isFocused
-                        ? "border-bp-coral ring-1 ring-bp-coral/40"
-                        : "border-border bg-neutral-50 shadow-sm"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-[13px] font-semibold text-primary">
-                            {action.name}
-                          </span>
-                          {isFocused && (
-                            <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold text-bp-coral">
-                              {t("strategicChantierDetail.actionFocused")}
+            {chantierActions.length === 0 && !actionForm ? (
+              <p className="py-4 text-center text-[13px] text-tertiary">
+                {t("strategicAxes.noActions")}
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {chantierActions.map((action) => {
+                  const isFocused = action.id === focusActionId;
+                  const actionDeliverables = normalizeDeliverables(action.deliverables);
+                  const startInfo = canStartAction(action, data.chantierActions, stages);
+                  // Défaut défensif pour un levier créé avant l'introduction des jalons E0→E4 (round
+                  // 5, déplacé au levier round 7) — ou jamais encore touché : "encore à E0, rien de
+                  // répondu". N'est écrit en base qu'à la première interaction réelle.
+                  const actionMilestones: ChantierMilestoneState = action.milestones ?? {
+                    currentMilestone: "E0",
+                    passedMilestones: [],
+                    checklists: {},
+                  };
+                  const actionProgressPct = milestoneProgressPct(action);
+                  // KPI rattaché au levier (round 8 : `indicatorId` servait jusqu'ici uniquement de
+                  // bascule jalons/kanban) — résolu ici pour affichage round 10 (nom + numéro global).
+                  const linkedIndicator = action.indicatorId
+                    ? data.indicators.find((i) => i.id === action.indicatorId)
+                    : undefined;
+                  const linkedIndicatorNumber = linkedIndicator
+                    ? indicatorNumbers.get(linkedIndicator.id)
+                    : undefined;
+                  return (
+                    <li
+                      key={action.id}
+                      ref={(el) => {
+                        actionRefs.current[action.id] = el;
+                      }}
+                      className={`rounded-md border p-3 ${
+                        isFocused
+                          ? "border-bp-coral ring-1 ring-bp-coral/40"
+                          : "border-border bg-neutral-50 shadow-sm"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[13px] font-semibold text-primary">
+                              {action.name}
                             </span>
-                          )}
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">
-                          <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-secondary">
-                            {formatRange(action.start, action.end)}
-                          </span>
-                          {action.owner && (
-                            <span>· {resolveUserLabel(action.owner, data.users)}</span>
-                          )}
-                          {action.sponsor && (
-                            <span>
-                              · {t("strategicChantierDetail.sponsor")} :{" "}
-                              {resolveUserLabel(action.sponsor, data.users)}
-                            </span>
-                          )}
-                          <AxisStageBadge stageId={action.status} stages={stages} />
-                        </div>
-                        {startInfo.blocked && (
-                          <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber">
-                            <Lock size={10} />{" "}
-                            {t("strategicChantierDetail.prerequisites.blockedBy")}{" "}
-                            {startInfo.reasons.join(", ")}
+                            {isFocused && (
+                              <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold text-bp-coral">
+                                {t("strategicChantierDetail.actionFocused")}
+                              </span>
+                            )}
                           </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">
+                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-secondary">
+                              {formatRange(action.start, action.end)}
+                            </span>
+                            {action.owner && (
+                              <span>· {resolveUserLabel(action.owner, data.users)}</span>
+                            )}
+                            {action.sponsor && (
+                              <span>
+                                · {t("strategicChantierDetail.sponsor")} :{" "}
+                                {resolveUserLabel(action.sponsor, data.users)}
+                              </span>
+                            )}
+                            <AxisStageBadge stageId={action.status} stages={stages} />
+                          </div>
+                          {startInfo.blocked && (
+                            <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber">
+                              <Lock size={10} />{" "}
+                              {t("strategicChantierDetail.prerequisites.blockedBy")}{" "}
+                              {startInfo.reasons.join(", ")}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setActionForm({ mode: "edit", actionId: action.id })}
+                          >
+                            <Pencil size={12} /> {t("strategicAxes.editAction")}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              if (pendingDeleteAction !== action.id) {
+                                setPendingDeleteAction(action.id);
+                                return;
+                              }
+                              await data.removeChantierAction(action.id);
+                              setPendingDeleteAction(null);
+                              showToast(t("strategicAxes.actionDeleted"), action.name, "success");
+                            }}
+                          >
+                            <Trash2 size={12} />{" "}
+                            {pendingDeleteAction === action.id
+                              ? t("strategicAxes.confirmDelete")
+                              : t("common.delete")}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {action.description && (
+                        <p className="mt-1.5 text-[12px] text-secondary">{action.description}</p>
+                      )}
+
+                      <div className="mt-2">
+                        <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                          {t("strategicAxes.deliverables")}
+                        </div>
+                        {actionDeliverables.length === 0 ? (
+                          <p className="text-[12px] text-tertiary">
+                            {t("strategicAxes.noDeliverables")}
+                          </p>
+                        ) : (
+                          <ul className="mt-1 space-y-2">
+                            {actionDeliverables.map((d) => (
+                              <li
+                                key={d.id}
+                                className="rounded-md border border-border bg-neutral-50 p-2"
+                              >
+                                <div className="text-[12px] font-medium text-primary">
+                                  {d.label}
+                                </div>
+                                {d.phases.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {d.phases.map((p) => (
+                                      <span
+                                        key={p.id}
+                                        className="rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] text-secondary"
+                                      >
+                                        {formatRange(p.start, p.end)}
+                                        {p.note ? ` · ${p.note}` : ""}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
                         )}
                       </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setActionForm({ mode: "edit", actionId: action.id })}
-                        >
-                          <Pencil size={12} /> {t("strategicAxes.editAction")}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={async () => {
-                            if (pendingDeleteAction !== action.id) {
-                              setPendingDeleteAction(action.id);
-                              return;
-                            }
-                            await data.removeChantierAction(action.id);
-                            setPendingDeleteAction(null);
-                            showToast(t("strategicAxes.actionDeleted"), action.name, "success");
-                          }}
-                        >
-                          <Trash2 size={12} />{" "}
-                          {pendingDeleteAction === action.id
-                            ? t("strategicAxes.confirmDelete")
-                            : t("common.delete")}
-                        </Button>
-                      </div>
-                    </div>
 
-                    {action.description && (
-                      <p className="mt-1.5 text-[12px] text-secondary">{action.description}</p>
-                    )}
-
-                    <div className="mt-2">
-                      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                        {t("strategicAxes.deliverables")}
-                      </div>
-                      {actionDeliverables.length === 0 ? (
-                        <p className="text-[12px] text-tertiary">
-                          {t("strategicAxes.noDeliverables")}
-                        </p>
-                      ) : (
-                        <ul className="mt-1 space-y-2">
-                          {actionDeliverables.map((d) => (
-                            <li
-                              key={d.id}
-                              className="rounded-md border border-border bg-neutral-50 p-2"
-                            >
-                              <div className="text-[12px] font-medium text-primary">{d.label}</div>
-                              {d.phases.length > 0 && (
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {d.phases.map((p) => (
-                                    <span
-                                      key={p.id}
-                                      className="rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] text-secondary"
-                                    >
-                                      {formatRange(p.start, p.end)}
-                                      {p.note ? ` · ${p.note}` : ""}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-
-                    {/* ── Suivi du LEVIER : jalons E0→E4 si rattaché à un KPI, sinon kanban
+                      {/* ── Suivi du LEVIER : jalons E0→E4 si rattaché à un KPI, sinon kanban
                         classique (round 8, conditionné à `action.indicatorId`) ─────────────── */}
-                    {action.indicatorId ? (
-                      <div className="mt-3 border-t border-border pt-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
-                            {t("strategicChantierDetail.milestones.title")}
-                          </span>
-                          <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
-                            {actionProgressPct}%
-                          </span>
-                        </div>
-                        <div className="mt-2">
-                          <MilestoneStepper
-                            currentMilestone={actionMilestones.currentMilestone}
-                            passedMilestones={actionMilestones.passedMilestones}
-                          />
-                        </div>
-                        <div className="mt-3">
-                          <MilestoneChecklistPanel
-                            milestoneId={actionMilestones.currentMilestone}
-                            items={
-                              actionMilestones.checklists[actionMilestones.currentMilestone] ?? []
-                            }
-                            autoFlags={resolveMilestoneAutoFlags(
-                              actionMilestones.currentMilestone,
-                              action,
-                              data.chantiers,
-                              data.chantierActions
+                      {action.indicatorId ? (
+                        <div className="mt-3 border-t border-border pt-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+                              {t("strategicChantierDetail.milestones.title")}
+                            </span>
+                            <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                              {actionProgressPct}%
+                            </span>
+                          </div>
+                          <div className="mt-1">
+                            {linkedIndicator ? (
+                              <button
+                                onClick={() => navigateAway(`/kpi?indicator=${action.indicatorId}`)}
+                                className="text-[11px] font-medium text-bp-coral hover:underline"
+                              >
+                                {t(
+                                  "strategicChantierDetail.indicatorLink.label",
+                                  "KPI n°{n} · {name}"
+                                )
+                                  .replace("{n}", String(linkedIndicatorNumber ?? "?"))
+                                  .replace("{name}", linkedIndicator.name)}
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-tertiary">
+                                {t(
+                                  "strategicChantierDetail.indicatorLink.notFound",
+                                  "KPI introuvable"
+                                )}
+                              </span>
                             )}
-                            users={data.users}
-                            onChange={(nextItems) => {
-                              updateActionMilestones(action.id, {
-                                currentMilestone: actionMilestones.currentMilestone,
-                                passedMilestones: actionMilestones.passedMilestones,
-                                checklists: {
-                                  ...actionMilestones.checklists,
-                                  [actionMilestones.currentMilestone]: nextItems,
-                                },
-                              });
+                          </div>
+                          <div className="mt-2">
+                            <MilestoneStepper
+                              currentMilestone={actionMilestones.currentMilestone}
+                              passedMilestones={actionMilestones.passedMilestones}
+                            />
+                          </div>
+                          <div className="mt-3">
+                            <MilestoneChecklistPanel
+                              milestoneId={actionMilestones.currentMilestone}
+                              items={
+                                actionMilestones.checklists[actionMilestones.currentMilestone] ?? []
+                              }
+                              autoFlags={resolveMilestoneAutoFlags(
+                                actionMilestones.currentMilestone,
+                                action,
+                                data.chantiers,
+                                data.chantierActions
+                              )}
+                              users={data.users}
+                              onChange={(nextItems) => {
+                                updateActionMilestones(action.id, {
+                                  currentMilestone: actionMilestones.currentMilestone,
+                                  passedMilestones: actionMilestones.passedMilestones,
+                                  checklists: {
+                                    ...actionMilestones.checklists,
+                                    [actionMilestones.currentMilestone]: nextItems,
+                                  },
+                                });
+                              }}
+                              onValidateMilestone={() => {
+                                // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
+                                // le dernier), on le laisse tel quel — voir même commentaire historique
+                                // sur l'ancien callback chantier-level, mécanique identique ici.
+                                const currentIndex = MILESTONE_ORDER.indexOf(
+                                  actionMilestones.currentMilestone
+                                );
+                                const nextMilestone =
+                                  MILESTONE_ORDER[currentIndex + 1] ??
+                                  actionMilestones.currentMilestone;
+                                const passedMilestones = actionMilestones.passedMilestones.includes(
+                                  actionMilestones.currentMilestone
+                                )
+                                  ? actionMilestones.passedMilestones
+                                  : [
+                                      ...actionMilestones.passedMilestones,
+                                      actionMilestones.currentMilestone,
+                                    ];
+                                updateActionMilestones(action.id, {
+                                  currentMilestone: nextMilestone,
+                                  passedMilestones,
+                                  checklists: actionMilestones.checklists,
+                                });
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-3 border-t border-border pt-3">
+                          <LevierKanbanStatusControl
+                            status={action.kanbanStatus}
+                            labels={{
+                              title: t("strategicChantierDetail.kanban.title"),
+                              todo: t("strategicChantierDetail.kanban.todo"),
+                              inProgress: t("strategicChantierDetail.kanban.inProgress"),
+                              done: t("strategicChantierDetail.kanban.done"),
                             }}
-                            onValidateMilestone={() => {
-                              // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
-                              // le dernier), on le laisse tel quel — voir même commentaire historique
-                              // sur l'ancien callback chantier-level, mécanique identique ici.
-                              const currentIndex = MILESTONE_ORDER.indexOf(
-                                actionMilestones.currentMilestone
-                              );
-                              const nextMilestone =
-                                MILESTONE_ORDER[currentIndex + 1] ??
-                                actionMilestones.currentMilestone;
-                              const passedMilestones = actionMilestones.passedMilestones.includes(
-                                actionMilestones.currentMilestone
-                              )
-                                ? actionMilestones.passedMilestones
-                                : [
-                                    ...actionMilestones.passedMilestones,
-                                    actionMilestones.currentMilestone,
-                                  ];
-                              updateActionMilestones(action.id, {
-                                currentMilestone: nextMilestone,
-                                passedMilestones,
-                                checklists: actionMilestones.checklists,
-                              });
-                            }}
+                            onChange={(kanbanStatus) =>
+                              updateActionKanbanStatus(action.id, kanbanStatus)
+                            }
                           />
                         </div>
-                      </div>
-                    ) : (
-                      <div className="mt-3 border-t border-border pt-3">
-                        <LevierKanbanStatusControl
-                          status={action.kanbanStatus}
-                          labels={{
-                            title: t("strategicChantierDetail.kanban.title"),
-                            todo: t("strategicChantierDetail.kanban.todo"),
-                            inProgress: t("strategicChantierDetail.kanban.inProgress"),
-                            done: t("strategicChantierDetail.kanban.done"),
-                          }}
-                          onChange={(kanbanStatus) =>
-                            updateActionKanbanStatus(action.id, kanbanStatus)
-                          }
-                        />
-                      </div>
-                    )}
+                      )}
 
-                    {/* ── Dépendances / Prérequis du LEVIER (round 7 — fusion) ──────────────────
+                      {/* ── Dépendances / Prérequis du LEVIER (round 7 — fusion) ──────────────────
                         titre à changer en "Dépendances / Prérequis" par un round i18n suivant
                         (workstream C, renommage "action" → "levier") — key `prerequisites.title`
                         inchangée volontairement, hors scope ici.
                         Round 9, point 2 : `border-t-2` (plus marqué que le `border-t` du bloc
                         jalons/kanban ci-dessus) pour que les deux sous-sections internes du levier
                         se distinguent d'un coup d'œil. */}
-                    <div className="mt-3 border-t-2 border-border pt-3">
-                      {chantierBlockingAlerts.length > 0 && (
-                        <div className="mb-2 space-y-1">
-                          {chantierBlockingAlerts.map((alert) => (
-                            <div
-                              key={`${alert.targetId}-${alert.type}`}
-                              className="inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber"
-                            >
-                              <Lock size={10} /> {alert.message}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <PrerequisitesEditor
-                        value={action.prerequisites ?? []}
-                        otherActions={chantierActions.filter((a) => a.id !== action.id)}
-                        labels={actionFormLabels}
-                        onChange={(next) => updateActionPrerequisites(action.id, next)}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
-
-      {/* ── Timeline colorée par livrable, façon PERIAL ────────────────────────────────────── */}
-      <Card>
-        <CardHeader
-          title={t("strategicChantierDetail.timeline.title")}
-          actions={
-            timelineHasData && (
-              <div className="flex items-center gap-2">
-                <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                  {t("strategicAxes.ganttScale")}
-                </span>
-                <TimelineScaleToggle
-                  value={timelineScale}
-                  onChange={setTimelineScale}
-                  options={[
-                    { value: "month", label: t("strategicAxes.ganttScaleMonth") },
-                    { value: "quarter", label: t("strategicAxes.ganttScaleQuarter") },
-                    { value: "semester", label: t("strategicAxes.ganttScaleSemester") },
-                  ]}
-                />
-              </div>
-            )
-          }
-        />
-        <CardBody>
-          {!timelineHasData ? (
-            <p className="py-6 text-center text-[13px] text-tertiary">
-              {t("strategicChantierDetail.timeline.empty")}
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="min-w-[560px]">
-                <TimelineHeaderRow
-                  columns={timelineColumnsComputed}
-                  yearBands={timelineYearBandsComputed}
-                  labelWidthClassName={TIMELINE_LABEL_WIDTH}
-                />
-                {deliverablesWithPhases.map((d) => {
-                  const lanes = packTimelineLanes(d.phases);
-                  const trackHeight = Math.max(1, lanes.length) * DELIVERABLE_LANE_HEIGHT;
-                  const color = axis?.color ?? FALLBACK_COLOR;
-                  return (
-                    <div
-                      key={d.id}
-                      className="flex items-stretch gap-2 border-b border-border py-1.5 last:border-b-0"
-                    >
-                      <div className={`${TIMELINE_LABEL_WIDTH} shrink-0`}>
-                        <div
-                          className="truncate text-[11.5px] font-semibold text-primary"
-                          title={d.label}
-                        >
-                          {d.label}
-                        </div>
-                        <div className="truncate text-[10px] text-tertiary">{d.actionName}</div>
-                      </div>
-                      <div className="relative flex-1" style={{ height: trackHeight }}>
-                        <TimelineGridColumns columns={timelineColumnsComputed} />
-                        {lanes.map((lane, laneIndex) =>
-                          lane.map((phase) => {
-                            const left = timelinePctOfComputed(phase.start);
-                            const width = Math.max(1.5, timelinePctOfComputed(phase.end) - left);
-                            return (
-                              <TimelineBar
-                                key={phase.id}
-                                left={left}
-                                width={width}
-                                top={laneIndex * DELIVERABLE_LANE_HEIGHT}
-                                height={DELIVERABLE_BAR_HEIGHT}
-                                color={color}
-                                variant="solid"
-                                roundedClassName="rounded-sm"
-                                ariaLabel={d.label}
-                                tooltipText={`${d.label} · ${formatTimelineDay(phase.start)} → ${formatTimelineDay(phase.end)}${
-                                  phase.note ? ` · ${phase.note}` : ""
-                                }`}
-                                label={phase.note || formatRange(phase.start, phase.end)}
-                                labelClassName="min-w-0 flex-1 truncate text-[10px] font-medium"
-                                inlineMinWidthPct={10}
-                              />
-                            );
-                          })
+                      <div className="mt-3 border-t-2 border-border pt-3">
+                        {chantierBlockingAlerts.length > 0 && (
+                          <div className="mb-2 space-y-1">
+                            {chantierBlockingAlerts.map((alert) => (
+                              <div
+                                key={`${alert.targetId}-${alert.type}`}
+                                className="inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber"
+                              >
+                                <Lock size={10} /> {alert.message}
+                              </div>
+                            ))}
+                          </div>
                         )}
+                        <PrerequisitesEditor
+                          value={action.prerequisites ?? []}
+                          otherActions={chantierActions.filter((a) => a.id !== action.id)}
+                          labels={actionFormLabels}
+                          onChange={(next) => updateActionPrerequisites(action.id, next)}
+                        />
                       </div>
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
-            </div>
-          )}
-        </CardBody>
-      </Card>
-
-      {/* ── Effectifs mobilisés sur le chantier (composant autonome du lot « Effectifs ») ──── */}
-      <div className="mt-4">
-        <ChantierStaffingEditor
-          companyId={user?.companyId ?? ""}
-          programId={activeProgramId ?? ""}
-          axisId={chantier.axisId}
-          chantierId={chantier.id}
-          chantierActions={chantierActions}
-        />
+              </ul>
+            )}
+          </CardBody>
+        </Card>
       </div>
 
-      {/* ── Suppression du chantier ─────────────────────────────────────────────────────────── */}
+      {/* ── Onglet "Timeline" ────────────────────────────────────────────────────────────────── */}
+      <div className={activeTab === "timeline" ? undefined : "hidden"}>
+        {/* ── Timeline colorée par livrable, façon PERIAL ────────────────────────────────────── */}
+        <Card>
+          <CardHeader
+            title={t("strategicChantierDetail.timeline.title")}
+            actions={
+              timelineHasData && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                    {t("strategicAxes.ganttScale")}
+                  </span>
+                  <TimelineScaleToggle
+                    value={timelineScale}
+                    onChange={setTimelineScale}
+                    options={[
+                      { value: "month", label: t("strategicAxes.ganttScaleMonth") },
+                      { value: "quarter", label: t("strategicAxes.ganttScaleQuarter") },
+                      { value: "semester", label: t("strategicAxes.ganttScaleSemester") },
+                    ]}
+                  />
+                </div>
+              )
+            }
+          />
+          <CardBody>
+            {!timelineHasData ? (
+              <p className="py-6 text-center text-[13px] text-tertiary">
+                {t("strategicChantierDetail.timeline.empty")}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="min-w-[560px]">
+                  <TimelineHeaderRow
+                    columns={timelineColumnsComputed}
+                    yearBands={timelineYearBandsComputed}
+                    labelWidthClassName={TIMELINE_LABEL_WIDTH}
+                  />
+                  {deliverablesWithPhases.map((d) => {
+                    const lanes = packTimelineLanes(d.phases);
+                    const trackHeight = Math.max(1, lanes.length) * DELIVERABLE_LANE_HEIGHT;
+                    const color = axis?.color ?? FALLBACK_COLOR;
+                    return (
+                      <div
+                        key={d.id}
+                        className="flex items-stretch gap-2 border-b border-border py-1.5 last:border-b-0"
+                      >
+                        <div className={`${TIMELINE_LABEL_WIDTH} shrink-0`}>
+                          <div
+                            className="truncate text-[11.5px] font-semibold text-primary"
+                            title={d.label}
+                          >
+                            {d.label}
+                          </div>
+                          <div className="truncate text-[10px] text-tertiary">{d.actionName}</div>
+                        </div>
+                        <div className="relative flex-1" style={{ height: trackHeight }}>
+                          <TimelineGridColumns columns={timelineColumnsComputed} />
+                          {lanes.map((lane, laneIndex) =>
+                            lane.map((phase) => {
+                              const left = timelinePctOfComputed(phase.start);
+                              const width = Math.max(1.5, timelinePctOfComputed(phase.end) - left);
+                              return (
+                                <TimelineBar
+                                  key={phase.id}
+                                  left={left}
+                                  width={width}
+                                  top={laneIndex * DELIVERABLE_LANE_HEIGHT}
+                                  height={DELIVERABLE_BAR_HEIGHT}
+                                  color={color}
+                                  variant="solid"
+                                  roundedClassName="rounded-sm"
+                                  ariaLabel={d.label}
+                                  tooltipText={`${d.label} · ${formatTimelineDay(phase.start)} → ${formatTimelineDay(phase.end)}${
+                                    phase.note ? ` · ${phase.note}` : ""
+                                  }`}
+                                  label={phase.note || formatRange(phase.start, phase.end)}
+                                  labelClassName="min-w-0 flex-1 truncate text-[10px] font-medium"
+                                  inlineMinWidthPct={10}
+                                />
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* ── Onglet "Effectifs" ───────────────────────────────────────────────────────────────── */}
+      <div className={activeTab === "staffing" ? undefined : "hidden"}>
+        {/* ── Effectifs mobilisés sur le chantier (composant autonome du lot « Effectifs ») ──── */}
+        <div className="mt-4">
+          <ChantierStaffingEditor
+            companyId={user?.companyId ?? ""}
+            programId={activeProgramId ?? ""}
+            axisId={chantier.axisId}
+            chantierId={chantier.id}
+            chantierActions={chantierActions}
+          />
+        </div>
+      </div>
+
+      {/* ── Suppression du chantier — reste HORS onglets, action globale au chantier ─────────── */}
       <div className="mt-4 border-t border-border pt-3">
         <Button
           variant="ghost"

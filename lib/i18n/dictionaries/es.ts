@@ -1168,6 +1168,7 @@ const es: Record<string, string> = {
   "strategicAxes.chantierAlerted": "Alerta de dependencia",
   "strategicAxes.kanbanEmptyColumn": "Ningún eje",
   "strategicAxes.filterMilestone": "Hito",
+  "strategicAxes.filterStageAndMilestone": "Etapa / Hito",
   "strategicAxes.kanbanFilteredEmpty": "Ningún proyecto en este hito",
   "strategicAxes.kanbanNoLeviers": "Ninguna palanca",
   "strategicAxes.kanbanBadgePrefix": "Kanban",
@@ -1275,6 +1276,7 @@ const es: Record<string, string> = {
   "strategicAxes.filterDirection": "Dirección",
   "strategicAxes.filterPerson": "Persona",
   "strategicAxes.filterSponsor": "Patrocinador",
+  "strategicAxes.sponsorUnassigned": "Patrocinador no asignado",
 
   // ─── Plan Estratégico — ficha de proyecto dedicada (ronda 4) ───────────────
   "strategicChantierDetail.title": "Ficha de proyecto",
@@ -1334,6 +1336,14 @@ const es: Record<string, string> = {
 
   "strategicChantierDetail.timeline.title": "Cronología de entregables",
   "strategicChantierDetail.timeline.empty": "Ningún entregable con fases todavía.",
+
+  // ─── Pestañas de la ficha de proyecto (ronda 10, punto 2) ─────────────────────────────────
+  "strategicChantierDetail.tabs.overview": "Resumen",
+  "strategicChantierDetail.tabs.staffing": "Personal",
+
+  // ─── KPI vinculado a una actividad, mostrado en su fila (ronda 10, punto 2) ───────────────
+  "strategicChantierDetail.indicatorLink.label": "KPI n.º {n} · {name}",
+  "strategicChantierDetail.indicatorLink.notFound": "KPI no encontrado",
 
   "strategicChantierDetail.actionFocused": "Actividad abierta desde el enlace",
   "strategicChantierDetail.actionForm.missingHint": "Complete el nombre y las fechas para guardar.",
@@ -1440,6 +1450,7 @@ const es: Record<string, string> = {
   "businessKpis.noValue": "Sin medición",
   "kpi.axisUnknown": "Indicadores sin eje asignado",
   "kpi.macroIndicators": "Indicadores del eje",
+  "kpi.indicatorNumber": "KPI número",
   "kpi.chantier": "Frente de trabajo",
   "kpi.kind.quantitative": "Cuantitativo",
   "kpi.kind.qualitative": "Cualitativo",
@@ -1607,8 +1618,7 @@ const es: Record<string, string> = {
   // etiqueta de "chantier-health" se retitula — el grano de lectura pasa del frente de trabajo
   // a la actividad (levier).
   "strategicDashboard.widget.chantierHealth": "Estado de avance de las actividades",
-  "strategicDashboard.widget.chantierDependencyAlerts":
-    "Alertas de dependencia entre frentes de trabajo",
+  "strategicDashboard.widget.chantierDependencyAlerts": "Alertas de dependencias y prerrequisitos",
   // Ronda 8: marcador de una columna de jalón E0-E4 vacía (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
 

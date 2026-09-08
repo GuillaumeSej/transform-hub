@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Activity, Sigma, TrendingDown } from "lucide-react";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
-import { RadialProgress } from "@/components/shared/RadialProgress";
 import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import {
@@ -15,14 +14,6 @@ import {
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
 import type { Indicator, IndicatorMeasurement } from "@/types";
-
-/** Teinte "favorable" du gabarit RAG binaire de l'app (voir `IndicatorStatusBadge` /
- *  `IndicatorDeltaStat`) — la charte BearingPoint n'utilise pas un vert littéral : `--green` est
- *  quasi noir, `--green-light` un gris clair. Repris ici en dur (comme la couleur par défaut de
- *  `RadialProgress`) plutôt qu'en `var(--green)`, un attribut SVG `stroke` ne résolvant pas les
- *  variables CSS de façon fiable sur tous les moteurs de rendu. */
-const RADIAL_ON_TRACK_COLOR = "#1a1a1a";
-const RADIAL_ON_TRACK_TRACK = "#f0f0f0";
 
 /**
  * Compteur d'ensemble « N indicateurs suivis · X sur la trajectoire · Y à risque ». Affiché en tête
@@ -91,26 +82,43 @@ export function IndicatorStatusSummary({
         // Round 9, point 1 : le bandeau héros devient cliquable → navigue vers la page KPI
         // (`/kpi`, `lib/nav-config.ts`) — un `next/link` enveloppant tout le bloc plutôt qu'un
         // callback remonté au parent : aucun nouveau prop à faire transiter depuis
-        // `StrategicDashboardView.tsx`, et aucun élément interactif imbriqué ici (`RadialProgress`
-        // et le paragraphe sont tous deux du contenu statique) donc le bloc entier peut être un
-        // seul lien sans conflit d'accessibilité.
+        // `StrategicDashboardView.tsx`, et aucun élément interactif imbriqué ici (la barre et le
+        // paragraphe sont tous deux du contenu statique) donc le bloc entier peut être un seul
+        // lien sans conflit d'accessibilité.
+        // Round 10, point 1 : le donut circulaire cède la place à un grand chiffre + une barre
+        // horizontale à deux segments (`bg-rag-green`/`bg-rag-red`, même convention que
+        // `components/shared/ProgressBar.tsx`) — plus lisible et plus dans la charte
+        // monochrome + rouge qu'un anneau.
         <Link
           href="/kpi"
-          className="mb-3 flex cursor-pointer flex-wrap items-center justify-center gap-6 rounded-lg border border-border bg-neutral-50 p-5 transition hover:border-bp-coral hover:shadow-md"
+          className="mb-3 flex cursor-pointer flex-col gap-3 rounded-lg border border-border bg-neutral-50 p-5 transition hover:border-bp-coral hover:shadow-md"
         >
-          <RadialProgress
-            pct={onTrackPct}
-            size={140}
-            strokeWidth={12}
-            color={RADIAL_ON_TRACK_COLOR}
-            trackColor={RADIAL_ON_TRACK_TRACK}
-            label={l.onTrack}
-            sublabel={`${onTrack}/${total}`}
-          />
-          <p className="max-w-sm flex-1 text-[12px] leading-relaxed text-secondary">
-            {atRisk} {l.atRisk.toLowerCase()} · {total} {l.indicatorsSuffix}{" "}
-            {l.tracked.toLowerCase()}
-          </p>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <span className="text-[42px] font-bold leading-none tracking-tight text-primary">
+                {Math.round(onTrackPct)}%
+              </span>
+              <div className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-secondary">
+                {l.onTrack} · {onTrack}/{total}
+              </div>
+            </div>
+            <p className="max-w-sm flex-1 text-[12px] leading-relaxed text-secondary">
+              {atRisk} {l.atRisk.toLowerCase()} · {total} {l.indicatorsSuffix}{" "}
+              {l.tracked.toLowerCase()}
+            </p>
+          </div>
+          <div
+            className="flex h-3 w-full overflow-hidden rounded-full bg-neutral-100"
+            role="img"
+            aria-label={`${l.onTrack} ${Math.round(onTrackPct)}% · ${l.atRisk} ${Math.round(atRiskPct)}%`}
+          >
+            {onTrackPct > 0 && (
+              <div className="h-full bg-rag-green" style={{ width: `${onTrackPct}%` }} />
+            )}
+            {atRiskPct > 0 && (
+              <div className="h-full bg-rag-red" style={{ width: `${atRiskPct}%` }} />
+            )}
+          </div>
         </Link>
       )}
       {/* Round 8 : en mode `radialHero`, le PO ne veut QUE le donut agrandi ci-dessus — la grille

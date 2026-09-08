@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { LineChart, Lock, Pencil, Plus, Target } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -10,7 +11,12 @@ import {
   BusinessKpiCards,
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
-import { canFillIndicator, computeIndicatorDelta, latestMeasurement } from "@/lib/axisLogic";
+import {
+  canFillIndicator,
+  computeIndicatorDelta,
+  latestMeasurement,
+  numberIndicators,
+} from "@/lib/axisLogic";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
@@ -90,6 +96,8 @@ function IndicatorCard({
   user,
   addMeasurement,
   updateIndicator,
+  number,
+  highlighted,
 }: {
   indicator: Indicator;
   /** Mesures DE CET indicateur uniquement (déjà filtrées par l'appelant). */
@@ -97,6 +105,13 @@ function IndicatorCard({
   user: AuthUser | null;
   addMeasurement: StrategicData["addMeasurement"];
   updateIndicator: StrategicData["updateIndicator"];
+  /** Numéro global (round 10, `axisLogic.numberIndicators`) — `undefined` si l'axe de cet
+   *  indicateur n'existe pas dans `axes` (indicateur "orphelin", voir `orphans` plus bas) : la
+   *  fonction ne lui attribue alors aucun numéro, on omet simplement le badge plutôt que de planter. */
+  number?: number;
+  /** Mise en évidence brève à l'arrivée via `/kpi?indicator=<id>` (round 10, contrat de navigation
+   *  KPI — voir le `useEffect` de `KpiPageClient`). */
+  highlighted?: boolean;
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -219,233 +234,256 @@ function IndicatorCard({
   const additionalUsers = (indicator.additionalAuthorizedUserIds ?? []).join(", ");
 
   return (
-    <Card className="mb-0">
-      <CardHeader
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-sm">{indicator.name}</span>
-            <span className="rounded-full bg-bg-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-              {t(`kpi.kind.${indicator.kind}`)}
+    // Ancre DOM stable (round 10) : cible de `document.getElementById` pour le défilement/
+    // surlignage déclenché par `?indicator=<id>` (voir le `useEffect` de `KpiPageClient`). Wrapper
+    // plutôt qu'un `id` direct sur `Card` (composant partagé par 13 appelants, on évite d'y toucher)
+    // — même raisonnement pour le surlignage : anneau posé sur ce wrapper, pas sur `Card` lui-même.
+    <div
+      id={`indicator-${indicator.id}`}
+      className={`rounded-lg transition-shadow duration-700 ${
+        highlighted ? "ring-2 ring-bp-coral/40" : ""
+      }`}
+    >
+      <Card className="mb-0">
+        <CardHeader
+          title={
+            <span className="flex flex-wrap items-center gap-2">
+              {number !== undefined && (
+                <span
+                  className="rounded-full bg-bp-coral/10 px-1.5 py-0.5 text-[10px] font-bold text-bp-coral"
+                  aria-label={`${t("kpi.indicatorNumber")} ${number}`}
+                >
+                  #{number}
+                </span>
+              )}
+              <span className="text-sm">{indicator.name}</span>
+              <span className="rounded-full bg-bg-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+                {t(`kpi.kind.${indicator.kind}`)}
+              </span>
+              <span className="rounded-full bg-bg-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+                {t(`kpi.frequency.${indicator.frequency}`)}
+              </span>
             </span>
-            <span className="rounded-full bg-bg-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-              {t(`kpi.frequency.${indicator.frequency}`)}
-            </span>
-          </span>
-        }
-        actions={
-          // Round 7, point 3 : un seul camembert remplace le badge de statut + la barre de delta
-          // dupliquée plus bas dans le bloc objectif — le pourcentage vient de `computeIndicatorDelta`
-          // (`delta`, déjà calculé ci-dessus), aucune nouvelle formule.
-          <IndicatorDonut
-            delta={delta}
-            labels={{
-              onTrack: t("indicatorStatus.onTrack"),
-              atRisk: t("indicatorStatus.atRisk"),
-              noData: t("kpi.noMeasurement"),
-            }}
-          />
-        }
-      />
-      <CardBody>
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* ── Lecture : graphique + dernière valeur ─────────────────────────────────────── */}
-          <div className="space-y-3">
-            {/* Fenêtré par défaut sur les dernières périodes (calibré par `frequency`, voir
+          }
+          actions={
+            // Round 7, point 3 : un seul camembert remplace le badge de statut + la barre de
+            // delta dupliquée plus bas dans le bloc objectif — le pourcentage vient de
+            // `computeIndicatorDelta` (`delta`, déjà calculé ci-dessus), aucune nouvelle formule.
+            <IndicatorDonut
+              delta={delta}
+              labels={{
+                onTrack: t("indicatorStatus.onTrack"),
+                atRisk: t("indicatorStatus.atRisk"),
+                noData: t("kpi.noMeasurement"),
+              }}
+            />
+          }
+        />
+        <CardBody>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {/* ── Lecture : graphique + dernière valeur ─────────────────────────────────────── */}
+            <div className="space-y-3">
+              {/* Fenêtré par défaut sur les dernières périodes (calibré par `frequency`, voir
                 `axisLogic.recentMeasurementWindow`) : sur un plan pluriannuel, empiler tout
                 l'historique écrase la tendance récente. Le bouton d'agrandissement du graphique
                 ouvre l'historique complet depuis le lancement du plan. */}
-            <IndicatorChart
-              measurements={measurements}
-              objectiveValue={indicator.objectiveValue}
-              direction={indicator.direction}
-              unit={indicator.unit}
-              qualitative={!quantitative}
-              frequency={indicator.frequency}
-              windowMeasurements="recent"
-              labelValue={t("kpi.chart.value")}
-              labelObjective={t("kpi.chart.objective")}
-              emptyLabel={t("kpi.chart.empty")}
-              labelViewFull={t("kpi.chart.viewFull")}
-              fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
-              labelProgress={t("kpi.chart.progressToTarget")}
-              // Round 7, point 3 : le camembert d'en-tête (`IndicatorDonut`) porte déjà le signal
-              // "trajectoire" — sans ce flag, `IndicatorChart` superposerait son propre
-              // `IndicatorDeltaStat` par-dessus la courbe, un 2ᵉ signal identique en double.
-              hideDeltaStat
-            />
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-text-secondary">
-              <span className="font-semibold uppercase tracking-wide">{t("kpi.latestValue")}</span>
-              {latest ? (
-                <>
-                  <span className="text-sm font-semibold text-text-primary">
-                    {latest.value !== undefined
-                      ? `${latest.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
-                      : (latest.note ?? "—")}
-                  </span>
-                  <span className="font-mono">{latest.period}</span>
-                  <span>
-                    {t("kpi.reportedBy")} {latest.reportedBy}
-                  </span>
-                </>
-              ) : (
-                <span>{t("kpi.noMeasurement")}</span>
-              )}
-            </div>
-          </div>
-
-          {/* ── Écriture : objectif + saisie de mesure ───────────────────────────────────── */}
-          <div className="space-y-4">
-            {/* Objectif / seuil — toujours visible, éditable seulement si autorisé. */}
-            <div className="rounded-lg border border-border bg-bg-surface/60 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                  <Target size={13} /> {t("kpi.objective")}
+              <IndicatorChart
+                measurements={measurements}
+                objectiveValue={indicator.objectiveValue}
+                direction={indicator.direction}
+                unit={indicator.unit}
+                qualitative={!quantitative}
+                frequency={indicator.frequency}
+                windowMeasurements="recent"
+                labelValue={t("kpi.chart.value")}
+                labelObjective={t("kpi.chart.objective")}
+                emptyLabel={t("kpi.chart.empty")}
+                labelViewFull={t("kpi.chart.viewFull")}
+                fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
+                labelProgress={t("kpi.chart.progressToTarget")}
+                // Round 7, point 3 : le camembert d'en-tête (`IndicatorDonut`) porte déjà le signal
+                // "trajectoire" — sans ce flag, `IndicatorChart` superposerait son propre
+                // `IndicatorDeltaStat` par-dessus la courbe, un 2ᵉ signal identique en double.
+                hideDeltaStat
+              />
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-text-secondary">
+                <span className="font-semibold uppercase tracking-wide">
+                  {t("kpi.latestValue")}
                 </span>
-                {canFill && !editingObjective && (
-                  <Button variant="ghost" size="sm" onClick={startEditObjective}>
-                    <Pencil size={12} /> {t("kpi.editObjective")}
-                  </Button>
+                {latest ? (
+                  <>
+                    <span className="text-sm font-semibold text-text-primary">
+                      {latest.value !== undefined
+                        ? `${latest.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
+                        : (latest.note ?? "—")}
+                    </span>
+                    <span className="font-mono">{latest.period}</span>
+                    <span>
+                      {t("kpi.reportedBy")} {latest.reportedBy}
+                    </span>
+                  </>
+                ) : (
+                  <span>{t("kpi.noMeasurement")}</span>
                 )}
               </div>
-
-              {editingObjective ? (
-                <div className="space-y-2">
-                  <label className="block text-[11px] font-medium text-text-secondary">
-                    {t("kpi.objectiveText")}
-                    <input
-                      value={objectiveDraft}
-                      onChange={(e) => setObjectiveDraft(e.target.value)}
-                      className={`mt-1 ${FIELD_CLASS}`}
-                    />
-                  </label>
-                  {quantitative && (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <label className="block text-[11px] font-medium text-text-secondary">
-                        {t("kpi.objectiveValue")}
-                        {indicator.unit ? ` (${indicator.unit})` : ""}
-                        <input
-                          value={objectiveValueDraft}
-                          onChange={(e) => setObjectiveValueDraft(e.target.value)}
-                          inputMode="decimal"
-                          className={`mt-1 ${FIELD_CLASS}`}
-                        />
-                      </label>
-                      <label className="block text-[11px] font-medium text-text-secondary">
-                        {t("kpi.direction")}
-                        <select
-                          value={directionDraft}
-                          onChange={(e) => setDirectionDraft(e.target.value as IndicatorDirection)}
-                          className={`mt-1 ${FIELD_CLASS}`}
-                        >
-                          <option value="up">{t("kpi.direction.up")}</option>
-                          <option value="down">{t("kpi.direction.down")}</option>
-                        </select>
-                      </label>
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={submitObjective}
-                      disabled={savingObjective}
-                    >
-                      {t("common.save")}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingObjective(false)}
-                      disabled={savingObjective}
-                    >
-                      {t("common.cancel")}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-1 text-sm text-text-primary">
-                  <p>{indicator.objective}</p>
-                  {quantitative && indicator.objectiveValue !== undefined && (
-                    <p className="text-xs text-text-secondary">
-                      {t("kpi.objectiveValue")} : {indicator.objectiveValue}
-                      {indicator.unit ? ` ${indicator.unit}` : ""} ·{" "}
-                      {t(`kpi.direction.${indicator.direction ?? "up"}`)}
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
 
-            {/* Saisie d'une mesure — le cœur de la page. */}
-            <div className="rounded-lg border border-border p-3">
-              <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                <Plus size={13} /> {t("kpi.addMeasurement")}
-              </span>
+            {/* ── Écriture : objectif + saisie de mesure ───────────────────────────────────── */}
+            <div className="space-y-4">
+              {/* Objectif / seuil — toujours visible, éditable seulement si autorisé. */}
+              <div className="rounded-lg border border-border bg-bg-surface/60 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                    <Target size={13} /> {t("kpi.objective")}
+                  </span>
+                  {canFill && !editingObjective && (
+                    <Button variant="ghost" size="sm" onClick={startEditObjective}>
+                      <Pencil size={12} /> {t("kpi.editObjective")}
+                    </Button>
+                  )}
+                </div>
 
-              {canFill ? (
-                <div className="space-y-2">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {editingObjective ? (
+                  <div className="space-y-2">
                     <label className="block text-[11px] font-medium text-text-secondary">
-                      {t("kpi.period")}
+                      {t("kpi.objectiveText")}
                       <input
-                        value={period}
-                        onChange={(e) => setPeriod(e.target.value)}
-                        placeholder={currentPeriod(indicator.frequency)}
+                        value={objectiveDraft}
+                        onChange={(e) => setObjectiveDraft(e.target.value)}
                         className={`mt-1 ${FIELD_CLASS}`}
                       />
                     </label>
                     {quantitative && (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <label className="block text-[11px] font-medium text-text-secondary">
+                          {t("kpi.objectiveValue")}
+                          {indicator.unit ? ` (${indicator.unit})` : ""}
+                          <input
+                            value={objectiveValueDraft}
+                            onChange={(e) => setObjectiveValueDraft(e.target.value)}
+                            inputMode="decimal"
+                            className={`mt-1 ${FIELD_CLASS}`}
+                          />
+                        </label>
+                        <label className="block text-[11px] font-medium text-text-secondary">
+                          {t("kpi.direction")}
+                          <select
+                            value={directionDraft}
+                            onChange={(e) =>
+                              setDirectionDraft(e.target.value as IndicatorDirection)
+                            }
+                            className={`mt-1 ${FIELD_CLASS}`}
+                          >
+                            <option value="up">{t("kpi.direction.up")}</option>
+                            <option value="down">{t("kpi.direction.down")}</option>
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={submitObjective}
+                        disabled={savingObjective}
+                      >
+                        {t("common.save")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingObjective(false)}
+                        disabled={savingObjective}
+                      >
+                        {t("common.cancel")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1 text-sm text-text-primary">
+                    <p>{indicator.objective}</p>
+                    {quantitative && indicator.objectiveValue !== undefined && (
+                      <p className="text-xs text-text-secondary">
+                        {t("kpi.objectiveValue")} : {indicator.objectiveValue}
+                        {indicator.unit ? ` ${indicator.unit}` : ""} ·{" "}
+                        {t(`kpi.direction.${indicator.direction ?? "up"}`)}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Saisie d'une mesure — le cœur de la page. */}
+              <div className="rounded-lg border border-border p-3">
+                <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                  <Plus size={13} /> {t("kpi.addMeasurement")}
+                </span>
+
+                {canFill ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <label className="block text-[11px] font-medium text-text-secondary">
-                        {t("kpi.value")}
-                        {indicator.unit ? ` (${indicator.unit})` : ""}
+                        {t("kpi.period")}
                         <input
-                          value={value}
-                          onChange={(e) => setValue(e.target.value)}
-                          inputMode="decimal"
+                          value={period}
+                          onChange={(e) => setPeriod(e.target.value)}
+                          placeholder={currentPeriod(indicator.frequency)}
                           className={`mt-1 ${FIELD_CLASS}`}
                         />
                       </label>
+                      {quantitative && (
+                        <label className="block text-[11px] font-medium text-text-secondary">
+                          {t("kpi.value")}
+                          {indicator.unit ? ` (${indicator.unit})` : ""}
+                          <input
+                            value={value}
+                            onChange={(e) => setValue(e.target.value)}
+                            inputMode="decimal"
+                            className={`mt-1 ${FIELD_CLASS}`}
+                          />
+                        </label>
+                      )}
+                    </div>
+                    <label className="block text-[11px] font-medium text-text-secondary">
+                      {quantitative ? t("kpi.noteOptional") : t("kpi.qualitativeNote")}
+                      <textarea
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        rows={2}
+                        className={`mt-1 ${FIELD_CLASS}`}
+                      />
+                    </label>
+                    <p className="text-[11px] text-tertiary">{t("kpi.periodHint")}</p>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={submitMeasurement}
+                      disabled={savingMeasurement}
+                    >
+                      {t("common.save")}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 rounded-md bg-bg-surface/60 p-2.5 text-xs text-text-secondary">
+                    <p className="flex items-center gap-1.5 font-medium">
+                      <Lock size={12} /> {t("kpi.readOnly")}
+                    </p>
+                    <p>
+                      {t("kpi.authorizedRoles")} : {authorizedRoles || "—"}
+                    </p>
+                    {additionalUsers && (
+                      <p>
+                        {t("kpi.authorizedUsers")} : {additionalUsers}
+                      </p>
                     )}
                   </div>
-                  <label className="block text-[11px] font-medium text-text-secondary">
-                    {quantitative ? t("kpi.noteOptional") : t("kpi.qualitativeNote")}
-                    <textarea
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      rows={2}
-                      className={`mt-1 ${FIELD_CLASS}`}
-                    />
-                  </label>
-                  <p className="text-[11px] text-tertiary">{t("kpi.periodHint")}</p>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={submitMeasurement}
-                    disabled={savingMeasurement}
-                  >
-                    {t("common.save")}
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-1.5 rounded-md bg-bg-surface/60 p-2.5 text-xs text-text-secondary">
-                  <p className="flex items-center gap-1.5 font-medium">
-                    <Lock size={12} /> {t("kpi.readOnly")}
-                  </p>
-                  <p>
-                    {t("kpi.authorizedRoles")} : {authorizedRoles || "—"}
-                  </p>
-                  {additionalUsers && (
-                    <p>
-                      {t("kpi.authorizedUsers")} : {additionalUsers}
-                    </p>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </CardBody>
-    </Card>
+        </CardBody>
+      </Card>
+    </div>
   );
 }
 
@@ -453,6 +491,7 @@ function IndicatorCard({
 
 export function KpiPageClient() {
   const { t } = useTranslation();
+  const searchParams = useSearchParams();
   const { user, loading: roleLoading } = useRole();
   const {
     activeProgram,
@@ -510,6 +549,44 @@ export function KpiPageClient() {
     return map;
   }, [measurements]);
 
+  /** Numérotation globale des KPI (round 10) — seul point de vérité `axisLogic.numberIndicators`,
+   *  répliqué nulle part ailleurs. Un indicateur "orphelin" (voir `orphans` ci-dessus) n'a pas de
+   *  numéro : `IndicatorCard` omet alors simplement son badge. */
+  const indicatorNumbers = useMemo(
+    () => numberIndicators(axes, chantiers, indicators),
+    [axes, chantiers, indicators]
+  );
+
+  // ── Contrat de navigation KPI (round 10) : `/kpi?indicator=<id>` défile jusqu'à la carte visée
+  // et la met brièvement en évidence — même esprit que le surlignage `focusActionId` de
+  // `ChantierDetailPanel.tsx` (bordure/anneau `bp-coral` temporaire), à ceci près que là-bas la
+  // cible est un prop qui reste posé tant que le panneau reste ouvert dessus, alors qu'ici on
+  // n'a qu'un paramètre d'URL ponctuel : la mise en évidence est donc bornée dans le temps (elle
+  // s'efface d'elle-même) plutôt que liée à la présence du paramètre.
+  //
+  // `pageReady` couvre TOUTES les gardes qui déterminent si l'arbre de cartes est effectivement
+  // monté (voir les branches `if (...) return <skeleton/>` plus bas) : `dataLoading` seul ne
+  // suffit pas — il peut retomber à `false` avant `roleLoading`/`programLoading`, l'effet se
+  // déclencherait alors une fois pour rien (page encore en squelette, `getElementById` bredouille)
+  // et ne serait jamais rejoué ensuite puisque ses dépendances n'auraient plus changé.
+  const [highlightedIndicatorId, setHighlightedIndicatorId] = useState<string | null>(null);
+  const targetIndicatorId = searchParams.get("indicator");
+  const pageReady =
+    !roleLoading &&
+    !programLoading &&
+    !dataLoading &&
+    !!activeProgram &&
+    programType === "strategic";
+  useEffect(() => {
+    if (!targetIndicatorId || !pageReady) return;
+    const el = document.getElementById(`indicator-${targetIndicatorId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedIndicatorId(targetIndicatorId);
+    const timeout = setTimeout(() => setHighlightedIndicatorId(null), 2500);
+    return () => clearTimeout(timeout);
+  }, [targetIndicatorId, pageReady]);
+
   const renderCard = (indicator: Indicator) => (
     <IndicatorCard
       key={indicator.id}
@@ -518,6 +595,8 @@ export function KpiPageClient() {
       user={user}
       addMeasurement={addMeasurement}
       updateIndicator={updateIndicator}
+      number={indicatorNumbers.get(indicator.id)}
+      highlighted={indicator.id === highlightedIndicatorId}
     />
   );
 
