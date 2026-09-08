@@ -16,6 +16,7 @@ import {
   latestMeasurement,
   milestoneProgressPct,
   milestoneWeightPct,
+  numberIndicators,
   programBlockedActions,
   resolveIndicatorStatus,
   resolveMilestoneAutoFlags,
@@ -32,6 +33,7 @@ import type {
   IndicatorMeasurement,
   MaturityStageConfig,
   MilestoneChecklistItem,
+  StrategicAxis,
 } from "@/types";
 
 const baseIndicator: Indicator = {
@@ -1134,5 +1136,101 @@ describe("staffingPeriodBuckets", () => {
     ];
     const periods = staffingPeriodBuckets(entries, "semiannual").map((b) => b.period);
     expect(periods).toEqual(["2026-S1", "2026-S2", "2027-S1"]);
+  });
+});
+
+// ─── Numérotation globale des KPI (round 10, fondation) ────────────────────────────────────────
+
+function makeAxis(id: string, overrides?: Partial<StrategicAxis>): StrategicAxis {
+  return {
+    id,
+    companyId: "c1",
+    programId: "p1",
+    name: `Axe ${id}`,
+    stage: "defined",
+    createdAt: "2026-01-01",
+    lastUpdate: "2026-01-01",
+    ...overrides,
+  };
+}
+
+describe("numberIndicators", () => {
+  it("numbers macro-then-chantier within each axis, continuing the running counter across axes (no reset)", () => {
+    const axes = [makeAxis("AX1"), makeAxis("AX2")];
+    const chantiers = [
+      makeChantier("CH1", { axisId: "AX1" }),
+      makeChantier("CH2", { axisId: "AX2" }),
+      makeChantier("CH3", { axisId: "AX2" }),
+    ];
+    const indicators = [
+      // Axe 1 : 2 indicateurs macro + 1 chantier (1 indicateur) = 3 au total.
+      makeIndicator({ id: "AX1-MACRO-1", axisId: "AX1" }),
+      makeIndicator({ id: "AX1-MACRO-2", axisId: "AX1" }),
+      makeIndicator({ id: "AX1-CH1-1", axisId: "AX1", chantierId: "CH1" }),
+      // Axe 2 : 1 indicateur macro + 2 chantiers (1 indicateur chacun) = 3 au total.
+      makeIndicator({ id: "AX2-MACRO-1", axisId: "AX2" }),
+      makeIndicator({ id: "AX2-CH2-1", axisId: "AX2", chantierId: "CH2" }),
+      makeIndicator({ id: "AX2-CH3-1", axisId: "AX2", chantierId: "CH3" }),
+    ];
+
+    const numbers = numberIndicators(axes, chantiers, indicators);
+
+    expect(numbers.get("AX1-MACRO-1")).toBe(1);
+    expect(numbers.get("AX1-MACRO-2")).toBe(2);
+    expect(numbers.get("AX1-CH1-1")).toBe(3);
+    // Axe 2 continue à 4, ne repart pas à 1.
+    expect(numbers.get("AX2-MACRO-1")).toBe(4);
+    expect(numbers.get("AX2-CH2-1")).toBe(5);
+    expect(numbers.get("AX2-CH3-1")).toBe(6);
+  });
+
+  it("treats an indicator whose chantierId references a chantier that no longer exists as macro (same as KpiPageClient's grouped useMemo)", () => {
+    const axes = [makeAxis("AX1")];
+    // Le chantier référencé n'existe pas dans le tableau `chantiers` passé à la fonction.
+    const chantiers: Chantier[] = [];
+    const indicators = [
+      makeIndicator({ id: "ORPHAN-REF", axisId: "AX1", chantierId: "GHOST-CHANTIER" }),
+      makeIndicator({ id: "TRUE-MACRO", axisId: "AX1" }),
+    ];
+
+    const numbers = numberIndicators(axes, chantiers, indicators);
+
+    // Les deux comptent comme macro, dans l'ordre du tableau `indicators` : ORPHAN-REF avant
+    // TRUE-MACRO, comme le filtre `!i.chantierId || !knownChantierIds.has(i.chantierId)` de
+    // `KpiPageClient.tsx` le prévoit.
+    expect(numbers.get("ORPHAN-REF")).toBe(1);
+    expect(numbers.get("TRUE-MACRO")).toBe(2);
+    expect(numbers.size).toBe(2);
+  });
+
+  it("returns an empty map for an empty indicators array", () => {
+    const axes = [makeAxis("AX1")];
+    const chantiers = [makeChantier("CH1", { axisId: "AX1" })];
+    expect(numberIndicators(axes, chantiers, [])).toEqual(new Map());
+  });
+
+  it("assigns a continuous 1..N sequence with no gaps and no duplicates for a larger mixed fixture", () => {
+    const axes = [makeAxis("AX1"), makeAxis("AX2"), makeAxis("AX3")];
+    const chantiers = [
+      makeChantier("CH1", { axisId: "AX1" }),
+      makeChantier("CH2", { axisId: "AX1" }),
+      makeChantier("CH3", { axisId: "AX3" }),
+    ];
+    const indicators = [
+      makeIndicator({ id: "I1", axisId: "AX1" }),
+      makeIndicator({ id: "I2", axisId: "AX1", chantierId: "CH1" }),
+      makeIndicator({ id: "I3", axisId: "AX1", chantierId: "CH2" }),
+      makeIndicator({ id: "I4", axisId: "AX1", chantierId: "CH1" }),
+      // AX2 : aucun indicateur, aucun chantier — ne doit rien casser.
+      makeIndicator({ id: "I5", axisId: "AX3" }),
+      makeIndicator({ id: "I6", axisId: "AX3", chantierId: "CH3" }),
+      makeIndicator({ id: "I7", axisId: "AX3", chantierId: "GHOST" }), // rabattu sur macro d'AX3
+    ];
+
+    const numbers = numberIndicators(axes, chantiers, indicators);
+
+    expect(numbers.size).toBe(indicators.length);
+    const assigned = Array.from(numbers.values()).sort((a, b) => a - b);
+    expect(assigned).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 });

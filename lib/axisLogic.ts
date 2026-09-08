@@ -18,6 +18,7 @@ import type {
   Program,
   ProgramType,
   StaffingFunction,
+  StrategicAxis,
 } from "@/types";
 
 /**
@@ -887,4 +888,75 @@ export function staffingPeriodBuckets(
   }
 
   return Array.from(byPeriod.values()).sort((a, b) => a.period.localeCompare(b.period));
+}
+
+// ─── Numérotation globale des KPI (round 10) ───────────────────────────────────────────────────
+
+/**
+ * Numéro global, unique sur toute la plateforme, de chaque indicateur d'un Plan Stratégique.
+ *
+ * **Seul point de vérité pour la numérotation des KPI** : tout affichage d'un "numéro" d'indicateur
+ * (cartes d'axe, page KPI elle-même, référence à un KPI lié depuis un levier) doit appeler CETTE
+ * fonction plutôt que recalculer un numéro local/par-axe — faute de quoi le même indicateur
+ * afficherait des numéros différents selon l'écran.
+ *
+ * Ordre — RÉPLIQUE EXACTEMENT le `grouped` useMemo de `app/(app)/kpi/KpiPageClient.tsx` (à ne
+ * jamais faire diverger : toute évolution de cet ordre doit être portée dans les deux endroits, ou
+ * mieux, `KpiPageClient.tsx` doit être migré pour consommer cette fonction) :
+ *  1. `axes` dans son ordre d'apparition (jamais retrié).
+ *  2. Pour chaque axe, d'abord ses indicateurs "macro" — `axisIndicators.filter((i) => !i.chantierId
+ *     || !knownChantierIds.has(i.chantierId))` : un indicateur sans `chantierId`, OU dont le
+ *     `chantierId` pointe un chantier qui n'existe plus (référence orpheline), compte comme macro —
+ *     dans l'ordre de `indicators` (jamais retrié).
+ *  3. Puis, pour ce même axe, ses chantiers dans l'ordre de `chantiers` (jamais retrié) ; pour
+ *     chaque chantier dont `axisId === axis.id`, ses indicateurs (`chantierId === chantier.id`)
+ *     dans l'ordre de `indicators`.
+ *  4. Le compteur ne se réinitialise JAMAIS entre deux axes : le premier indicateur du deuxième axe
+ *     continue directement après le dernier numéro attribué au premier.
+ *
+ * Un indicateur dont l'`axisId` ne correspond à AUCUN axe de `axes` (axe supprimé, ou indicateur pas
+ * encore rattaché) n'apparaît dans aucun groupe ci-dessus et ne reçoit donc pas de numéro — même
+ * partition que `KpiPageClient.tsx`, où un tel indicateur est affiché à part, dans sa section
+ * "orphelins", hors numérotation par axe.
+ *
+ * **Contrat de navigation (round 10)** : cliquer un numéro de KPI, où que ce soit sur la
+ * plateforme, navigue vers `/kpi?indicator=<indicatorId>` — c'est la page `/kpi` qui lit ce
+ * paramètre pour défiler jusqu'à la carte correspondante et la mettre en évidence. Cette fonction ne
+ * fait que calculer le numéro ; le clic/la navigation eux-mêmes sont à la charge de chaque appelant.
+ */
+export function numberIndicators(
+  axes: StrategicAxis[],
+  chantiers: Chantier[],
+  indicators: Indicator[]
+): Map<string, number> {
+  const numbers = new Map<string, number>();
+  const knownChantierIds = new Set(chantiers.map((c) => c.id));
+  let next = 1;
+
+  for (const axis of axes) {
+    const axisIndicators = indicators.filter((i) => i.axisId === axis.id);
+    const macro = axisIndicators.filter(
+      (i) => !i.chantierId || !knownChantierIds.has(i.chantierId)
+    );
+    for (const indicator of macro) {
+      numbers.set(indicator.id, next);
+      next += 1;
+    }
+
+    const byChantier = chantiers
+      .filter((c) => c.axisId === axis.id)
+      .map((chantier) => ({
+        chantier,
+        indicators: axisIndicators.filter((i) => i.chantierId === chantier.id),
+      }))
+      .filter((group) => group.indicators.length > 0);
+    for (const group of byChantier) {
+      for (const indicator of group.indicators) {
+        numbers.set(indicator.id, next);
+        next += 1;
+      }
+    }
+  }
+
+  return numbers;
 }
