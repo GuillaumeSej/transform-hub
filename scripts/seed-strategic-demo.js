@@ -11,6 +11,21 @@
  *
  * Usage : npm run seed-strategic-demo
  * Lit la config Firebase depuis .env.local (même pattern que scripts/create-admin.js).
+ *
+ * Utilise le SDK ADMIN (firebase-admin), pas le SDK client (firebase/*) : depuis le durcissement
+ * de firestore.rules (isolation par entreprise, voir lib/hooks/useStorage.ts et son commit sur
+ * ensureAdminSeeded), un `getDocs()`/`setDoc()` non authentifié via le SDK client se heurte à
+ * `permission-denied` — même raisonnement que scripts/create-admin.js. Le SDK Admin, authentifié
+ * par des identifiants de service, ignore les règles de sécurité par conception.
+ *
+ * Identifiants requis contre le VRAI projet : `GOOGLE_APPLICATION_CREDENTIALS` pointant vers une
+ * clé de compte de service JSON (Console Firebase > Paramètres du projet > Comptes de service),
+ * ou `gcloud auth application-default login` au préalable. Contre l'ÉMULATEUR local, aucun
+ * identifiant requis (FIRESTORE_EMULATOR_HOST suffit).
+ *
+ * Les shims `doc`/`setDoc`/`deleteDoc`/`collection`/`query`/`where`/`getDocs` ci-dessous
+ * reproduisent la forme d'appel du SDK client (firebase/firestore) au-dessus des primitives du
+ * SDK Admin, pour ne pas avoir à retoucher chaque site d'appel du script.
  */
 const fs = require("fs");
 const path = require("path");
@@ -30,33 +45,47 @@ function loadEnvFile(filePath) {
 loadEnvFile(path.resolve(__dirname, "..", ".env.local"));
 loadEnvFile(path.resolve(__dirname, "..", ".env.production"));
 
-if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
-  console.error("Config Firebase introuvable (NEXT_PUBLIC_FIREBASE_API_KEY manquant).");
+if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+  console.error("Config Firebase introuvable (NEXT_PUBLIC_FIREBASE_PROJECT_ID manquant).");
   process.exit(1);
 }
 
-const { initializeApp } = require("firebase/app");
-const {
-  getFirestore,
-  doc,
-  setDoc,
-  deleteDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-} = require("firebase/firestore");
+const { initializeApp, applicationDefault } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+// Contre l'émulateur : FIRESTORE_EMULATOR_HOST suffit, le SDK Admin le détecte tout seul et
+// n'exige alors aucun identifiant de service. Contre le vrai projet : applicationDefault() lit
+// GOOGLE_APPLICATION_CREDENTIALS ou les identifiants posés par `gcloud auth application-default
+// login` — voir le commentaire d'en-tête pour la marche à suivre.
+const usingEmulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+const app = initializeApp({
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-const app = initializeApp(firebaseConfig);
+  ...(usingEmulator ? {} : { credential: applicationDefault() }),
+});
 const db = getFirestore(app);
+
+// ── Shims SDK client → SDK Admin (voir commentaire d'en-tête) ─────────────────────────────────
+function doc(database, collectionName, id) {
+  return database.collection(collectionName).doc(id);
+}
+async function setDoc(ref, data) {
+  await ref.set(data);
+}
+async function deleteDoc(ref) {
+  await ref.delete();
+}
+function collection(database, collectionName) {
+  return database.collection(collectionName);
+}
+function where(field, op, value) {
+  return { field, op, value };
+}
+function query(collRef, whereClause) {
+  return collRef.where(whereClause.field, whereClause.op, whereClause.value);
+}
+async function getDocs(q) {
+  return q.get();
+}
 
 const COMPANY_ID = "c1";
 const PROGRAM_ID = "p-strat-demo-2026";
