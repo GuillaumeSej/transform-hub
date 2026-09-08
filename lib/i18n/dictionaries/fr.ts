@@ -1226,6 +1226,9 @@ const fr: Record<string, string> = {
   // Onglet "Avancement des chantiers" (round 9, points 3/9) — compteurs E0-E4 + kanban par chantier,
   // drill-down par jalon/statut, filtre "Jalon" dédié.
   "strategicAxes.filterMilestone": "Jalon",
+  // Round 10, point 3 : libellé combiné affiché quand les filtres "Étape de maturité" et "Jalon"
+  // sont regroupés visuellement (vue "Avancement des chantiers", seule où les deux coexistent).
+  "strategicAxes.filterStageAndMilestone": "Étape / Jalon",
   "strategicAxes.kanbanFilteredEmpty": "Aucun chantier à ce jalon",
   "strategicAxes.kanbanNoLeviers": "Aucun levier",
   "strategicAxes.kanbanBadgePrefix": "Kanban",
@@ -1339,6 +1342,9 @@ const fr: Record<string, string> = {
   "strategicAxes.filterDirection": "Direction",
   "strategicAxes.filterPerson": "Personne",
   "strategicAxes.filterSponsor": "Sponsor",
+  // Round 10, point 3 : repli affiché sur la carte d'axe (vue "Cartes") pour un chantier dont le
+  // sponsor n'est pas renseigné (`Chantier.sponsorName` indéfini).
+  "strategicAxes.sponsorUnassigned": "Sponsor non assigné",
 
   // ─── Plan Stratégique — fiche chantier dédiée (round 4) ────────────────────
   // Réservation de clés : la page (app/(app)/levers/chantier/ChantierDetailClient.tsx) n'est pour
@@ -1400,6 +1406,14 @@ const fr: Record<string, string> = {
 
   "strategicChantierDetail.timeline.title": "Timeline des livrables",
   "strategicChantierDetail.timeline.empty": "Aucun livrable phasé pour l'instant.",
+
+  // ─── Onglets de la fiche chantier (round 10, point 2) ─────────────────────────────────────
+  "strategicChantierDetail.tabs.overview": "Vue d'ensemble",
+  "strategicChantierDetail.tabs.staffing": "Effectifs",
+
+  // ─── KPI rattaché à un levier, affiché sur sa ligne (round 10, point 2) ───────────────────
+  "strategicChantierDetail.indicatorLink.label": "KPI n°{n} · {name}",
+  "strategicChantierDetail.indicatorLink.notFound": "KPI introuvable",
 
   "strategicChantierDetail.actionFocused": "Levier ouvert depuis le lien",
   "strategicChantierDetail.actionForm.missingHint":
@@ -1506,6 +1520,7 @@ const fr: Record<string, string> = {
   "businessKpis.noValue": "Aucune mesure",
   "kpi.axisUnknown": "Indicateurs sans axe rattaché",
   "kpi.macroIndicators": "Indicateurs de l'axe",
+  "kpi.indicatorNumber": "KPI numéro",
   "kpi.chantier": "Chantier",
   "kpi.kind.quantitative": "Quantitatif",
   "kpi.kind.qualitative": "Qualitatif",
@@ -1677,7 +1692,7 @@ const fr: Record<string, string> = {
   // Round 8 : "Répartition par axe" a disparu (remplacé par la vue E0→E4 ci-dessous), et le
   // libellé de "chantier-health" est retitré — le grain de lecture passe du chantier au levier.
   "strategicDashboard.widget.chantierHealth": "État des lieux d'avancement des leviers",
-  "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendance entre chantiers",
+  "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendances et prérequis",
   // Round 8 : placeholder d'une colonne de jalon E0-E4 sans levier (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
 

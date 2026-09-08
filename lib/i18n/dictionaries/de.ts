@@ -1167,6 +1167,7 @@ const de: Record<string, string> = {
   "strategicAxes.chantierAlerted": "Abhängigkeitswarnung",
   "strategicAxes.kanbanEmptyColumn": "Keine Achse",
   "strategicAxes.filterMilestone": "Meilenstein",
+  "strategicAxes.filterStageAndMilestone": "Phase / Meilenstein",
   "strategicAxes.kanbanFilteredEmpty": "Kein Arbeitspaket bei diesem Meilenstein",
   "strategicAxes.kanbanNoLeviers": "Kein Hebel",
   "strategicAxes.kanbanBadgePrefix": "Kanban",
@@ -1276,6 +1277,7 @@ const de: Record<string, string> = {
   "strategicAxes.filterDirection": "Bereich",
   "strategicAxes.filterPerson": "Person",
   "strategicAxes.filterSponsor": "Sponsor",
+  "strategicAxes.sponsorUnassigned": "Sponsor nicht zugewiesen",
 
   // ─── Strategieplan — eigene Vorhaben-Detailseite (Runde 4) ─────────────────
   "strategicChantierDetail.title": "Vorhabenblatt",
@@ -1335,6 +1337,14 @@ const de: Record<string, string> = {
 
   "strategicChantierDetail.timeline.title": "Zeitleiste der Liefergegenstände",
   "strategicChantierDetail.timeline.empty": "Noch kein phasierter Liefergegenstand.",
+
+  // ─── Reiter der Detailansicht des Arbeitspakets (Runde 10, Punkt 2) ───────────────────────
+  "strategicChantierDetail.tabs.overview": "Übersicht",
+  "strategicChantierDetail.tabs.staffing": "Personaleinsatz",
+
+  // ─── An eine Aktivität geknüpfter KPI, auf ihrer Zeile angezeigt (Runde 10, Punkt 2) ──────
+  "strategicChantierDetail.indicatorLink.label": "KPI Nr. {n} · {name}",
+  "strategicChantierDetail.indicatorLink.notFound": "KPI nicht gefunden",
 
   "strategicChantierDetail.actionFocused": "Über den Link geöffnete Aktivität",
   "strategicChantierDetail.actionForm.missingHint": "Name und Daten ausfüllen, um zu speichern.",
@@ -1443,6 +1453,7 @@ const de: Record<string, string> = {
   "businessKpis.noValue": "Keine Messung",
   "kpi.axisUnknown": "Indikatoren ohne Achse",
   "kpi.macroIndicators": "Indikatoren der Achse",
+  "kpi.indicatorNumber": "KPI-Nummer",
   "kpi.chantier": "Arbeitspaket",
   "kpi.kind.quantitative": "Quantitativ",
   "kpi.kind.qualitative": "Qualitativ",
@@ -1612,7 +1623,7 @@ const de: Record<string, string> = {
   // Arbeitspaket zur Aktivität (Hebel).
   "strategicDashboard.widget.chantierHealth": "Fortschrittsstatus der Aktivitäten",
   "strategicDashboard.widget.chantierDependencyAlerts":
-    "Abhängigkeitswarnungen zwischen Arbeitspaketen",
+    "Abhängigkeits- und Voraussetzungswarnungen",
   // Runde 8: Platzhalter einer leeren E0-E4-Jalonspalte (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
 

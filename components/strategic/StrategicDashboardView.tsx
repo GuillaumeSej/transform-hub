@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronDown,
   ChevronUp,
@@ -49,6 +49,8 @@ import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
+import { Modal } from "@/components/shared/Modal";
+import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
 import {
   BusinessKpiCards,
   IndicatorStatusSummary,
@@ -123,6 +125,7 @@ export function StrategicDashboardView() {
   const { activeProgram, activeProgramId, programs, loading: programsLoading } = useActiveProgram();
   const { t } = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const strategic = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   // Référentiel d'étapes de maturité du programme actif — nécessaire à `programBlockedActions`
   // (round 9, alimente la sous-section "Prérequis en attente" ci-dessous), même appel que
@@ -131,13 +134,37 @@ export function StrategicDashboardView() {
 
   const { axes, chantiers, chantierActions, indicators, measurements } = strategic;
 
-  /** Navigation vers le panneau chantier (`ChantierDetailPanel`, round 6, point 0) — le dashboard
-   *  est une page DIFFÉRENTE de `/levers` (Kanban/Cartes/Chantiers), donc contrairement à ces vues
-   *  qui ne font qu'ajuster `?chantier=` sur la page courante, ouvrir le panneau depuis ici exige
-   *  une vraie navigation. Réutilisé par la vue E0→E4 par axe (`LevierMilestoneBoard`/
-   *  `LevierKanbanBoard`, round 8) — un levier n'a pas de panneau propre, cliquer dessus ouvre
-   *  toujours le panneau de son CHANTIER parent. */
-  const openChantierPanel = (chantierId: string) => router.push(`/levers?chantier=${chantierId}`);
+  /** Panneau chantier INLINE (round 10, point 1 — remplace l'ancienne vraie navigation vers
+   *  `/levers?chantier=…`, qui faisait quitter le dashboard) : même mécanisme que
+   *  `StrategicAxesView.tsx`.openChantierPanel — pose `?chantier=`/`&action=` sur CETTE MÊME page
+   *  (`router.push`, garde l'historique — le bouton "retour" referme le panneau), monté juste en
+   *  dessous via `<ChantierDetailPanel>`. Réutilisé par la vue E0→E4 par axe
+   *  (`LevierMilestoneBoard`/`LevierKanbanBoard`, round 8) et la ligne "Prérequis en attente" — un
+   *  levier n'a pas de panneau propre, cliquer dessus ouvre toujours le panneau de son CHANTIER
+   *  parent, désormais focalisé sur ce levier précis. */
+  const openChantierPanel = (chantierId: string, focusActionId?: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("chantier", chantierId);
+    if (focusActionId) params.set("action", focusActionId);
+    else params.delete("action");
+    router.push(`/dashboard?${params.toString()}`);
+  };
+
+  /** Ferme le panneau chantier — `router.replace` (pas `push`) pour ne pas empiler une entrée
+   *  d'historique par fermeture, même convention que `StrategicAxesView.tsx`. */
+  const closeChantierPanel = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("chantier");
+    params.delete("action");
+    const qs = params.toString();
+    router.replace(qs ? `/dashboard?${qs}` : "/dashboard");
+  };
+
+  const openChantierId = searchParams.get("chantier");
+  const focusActionId = searchParams.get("action") ?? undefined;
+  const openChantierEntity = openChantierId
+    ? chantiers.find((c) => c.id === openChantierId)
+    : undefined;
 
   // ─── Agrégats (toute la logique de calcul vient de lib/axisLogic.ts) ──────────────────────
   const counts = useMemo(() => countOnTrackAtRisk(indicators), [indicators]);
@@ -243,6 +270,10 @@ export function StrategicDashboardView() {
             label: row.axis.name,
             color: row.axis.color,
             milestones,
+            // Round 10, point 1 : reporté vers `LevierMilestoneBoard` pour la légende de couleur
+            // des chantiers sous l'en-tête d'axe (déjà disponible dans cette closure via
+            // `axisBreakdown`, juste pas transmis jusqu'ici avant ce round).
+            chantiers: row.chantiers,
             withoutKpi,
           };
         }),
@@ -577,7 +608,7 @@ export function StrategicDashboardView() {
                       <button
                         key={action.id}
                         type="button"
-                        onClick={() => openChantierPanel(action.chantierId)}
+                        onClick={() => openChantierPanel(action.chantierId, action.id)}
                         className="block w-full border-b border-border py-2.5 text-left transition last:border-0 first:pt-0 hover:bg-neutral-50"
                       >
                         <div className="flex flex-wrap items-center gap-2">
@@ -762,6 +793,25 @@ export function StrategicDashboardView() {
       >
         {layout.map((instance) => renderWidget(instance))}
       </div>
+
+      {/* ── Panneau chantier inline (round 10, point 1) — même Modal que `StrategicAxesView.tsx`
+          (1100px), pour rester sur le dashboard au lieu de naviguer vers `/levers`. ─────────── */}
+      <Modal
+        open={!!openChantierId}
+        onOpenChange={(open) => {
+          if (!open) closeChantierPanel();
+        }}
+        title={openChantierEntity?.name ?? t("strategicChantierDetail.title")}
+        maxWidth="1100px"
+      >
+        {openChantierId && (
+          <ChantierDetailPanel
+            chantierId={openChantierId}
+            focusActionId={focusActionId}
+            onClose={closeChantierPanel}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

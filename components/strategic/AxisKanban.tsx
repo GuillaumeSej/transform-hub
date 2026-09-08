@@ -1,17 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AtRiskCountPill } from "@/components/strategic/AtRiskCountPill";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { LevierCard } from "@/components/strategic/LevierMilestoneBoard";
 import { Modal } from "@/components/shared/Modal";
 import { colorForChantier } from "@/lib/axisLogic";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
-import type { IndicatorDelta } from "@/lib/axisLogic";
 import type {
   Chantier,
   ChantierAction,
-  Indicator,
   LevierKanbanStatus,
   MaturityStageConfig,
   MilestoneId,
@@ -69,8 +66,8 @@ export function AxisKanban({
   chantierActions,
   onCardClick,
   onOpenChantier,
-  atRiskItemsOf,
   milestoneFilter,
+  currency,
   labels,
 }: {
   axes: StrategicAxis[];
@@ -91,23 +88,20 @@ export function AxisKanban({
   /** Clic sur le nom d'un chantier → ouvre son panneau (sans focus). Clic sur un levier du
    *  drill-down → ouvre le MÊME panneau, focalisé sur ce levier précis (round 9, point 3). */
   onOpenChantier: (chantierId: string, focusActionId?: string) => void;
-  /** Indicateurs à risque D'UN AXE (macro + tous ses chantiers confondus), écart calculé — alimente
-   *  le contenu du popover déclenché par `AtRiskCountPill` au niveau de l'axe. */
-  atRiskItemsOf?: (axisId: string) => { indicator: Indicator; delta: IndicatorDelta | undefined }[];
   /** Jalons E0-E4 sélectionnés par le filtre "Jalon" (round 9, point 9) — vide/undefined = aucun
    *  filtre, tous les chantiers restent affichés. Un chantier reste visible si AU MOINS UN de ses
    *  leviers rattachés à un KPI est actuellement à l'un des jalons sélectionnés. */
   milestoneFilter?: MilestoneId[];
+  /** Devise du programme actif (`Program.currency`) — round 10, point 3 : affichée à côté du budget
+   *  alloué de chaque chantier, pour rester cohérent avec la vue "Cartes". `undefined` masque
+   *  simplement l'unité (chantier sans budget renseigné, ou devise indisponible). */
+  currency?: string;
   labels?: {
     emptyAxisChantiers?: string;
     /** Distinct de `emptyAxisChantiers` : l'axe A des chantiers, mais aucun ne correspond au filtre
      *  "Jalon" actif. */
     filteredEmptyAxisChantiers?: string;
     chantiers?: string;
-    atRisk?: string;
-    atRiskPopoverTitle?: string;
-    atRiskTooltip?: string;
-    progress?: string;
     /** Chantier sans aucun levier (ni suivi KPI, ni kanban classique). */
     noLeviers?: string;
     kanbanBadgePrefix?: string;
@@ -120,10 +114,6 @@ export function AxisKanban({
     emptyAxisChantiers: labels?.emptyAxisChantiers ?? "Aucun chantier",
     filteredEmptyAxisChantiers: labels?.filteredEmptyAxisChantiers ?? "Aucun chantier à ce jalon",
     chantiers: labels?.chantiers ?? "chantiers",
-    atRisk: labels?.atRisk ?? "à risque",
-    atRiskPopoverTitle: labels?.atRiskPopoverTitle ?? "Indicateurs à risque",
-    atRiskTooltip: labels?.atRiskTooltip,
-    progress: labels?.progress,
     noLeviers: labels?.noLeviers ?? "Aucun levier",
     kanbanBadgePrefix: labels?.kanbanBadgePrefix ?? "Kanban",
     kanbanStatusLabels: labels?.kanbanStatusLabels ?? {
@@ -196,16 +186,14 @@ export function AxisKanban({
           const visibleChantiers = axisChantiers.filter((c) =>
             chantierMatchesMilestoneFilter(c.id)
           );
-          const atRiskItems = atRiskItemsOf?.(axis.id) ?? [];
           return (
             <div
               key={axis.id}
               className="flex flex-col overflow-hidden rounded-lg border border-border bg-white shadow-sm"
               style={{ borderLeft: `4px solid ${axis.color ?? "var(--bp-warm-taupe)"}` }}
             >
-              {/* En-tête cliquable → fiche de l'axe. `div role="button"` plutôt qu'un vrai `<button>` :
-                  il imbrique `AtRiskCountPill`, lui-même un `<button>` (Popover-déclencheur) — un
-                  bouton dans un bouton est une imbrication HTML invalide. */}
+              {/* En-tête cliquable → fiche de l'axe. `div role="button"` (pas un vrai `<button>`) car
+                  le reste de la carte imbrique déjà d'autres `<button>` (lignes de chantier). */}
               <div
                 role="button"
                 tabIndex={0}
@@ -236,14 +224,6 @@ export function AxisKanban({
                   <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
                     {axisChantiers.length} {l.chantiers}
                   </span>
-                  <AtRiskCountPill
-                    count={atRiskItems.length}
-                    items={atRiskItems}
-                    title={l.atRiskPopoverTitle}
-                    label={l.atRisk}
-                    progressLabel={l.progress}
-                    tooltip={l.atRiskTooltip}
-                  />
                 </span>
               </div>
 
@@ -278,6 +258,12 @@ export function AxisKanban({
                           >
                             {chantier.name}
                           </button>
+                          {chantier.allocatedBudget !== undefined && (
+                            <span className="shrink-0 text-[10px] font-semibold text-secondary">
+                              {chantier.allocatedBudget.toLocaleString()}
+                              {currency ? ` ${currency}` : ""}
+                            </span>
+                          )}
                           <AxisStageBadge
                             stageId={chantier.stage}
                             stages={stages}

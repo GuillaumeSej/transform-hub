@@ -7,19 +7,12 @@ import { Button } from "@/components/shared/Button";
 import { Card, CardBody } from "@/components/shared/Card";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
-import { AtRiskCountPill } from "@/components/strategic/AtRiskCountPill";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisKanban } from "@/components/strategic/AxisKanban";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
-import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
-import {
-  computeIndicatorDelta,
-  latestMeasurement,
-  resolveIndicatorStatus,
-  type IndicatorDelta,
-} from "@/lib/axisLogic";
+import { numberIndicators, resolveIndicatorStatus } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantierAction } from "@/lib/firestore/chantierActions";
 import { saveChantier } from "@/lib/firestore/chantiers";
@@ -32,39 +25,11 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { StrategicImportPreview } from "@/lib/strategicExcelImport";
-import type {
-  Chantier,
-  ChantierAction,
-  Indicator,
-  IndicatorMeasurement,
-  MilestoneId,
-  StrategicAxis,
-} from "@/types";
+import type { Chantier, ChantierAction, Indicator, MilestoneId, StrategicAxis } from "@/types";
 
 /** Nombre de puces numérotées d'indicateur affichées sur une carte d'axe (vue "cartes", round 6,
  *  point 3) avant repli sur une puce "+N". */
 const MAX_CARD_INDICATOR_CHIPS = 5;
-
-/**
- * Indicateurs à risque D'UN AXE (macro + tous ses chantiers confondus), chacun avec son écart
- * calculé — pendant de `chantierAtRiskIndicators` (lib/axisLogic.ts) mais à la maille AXE, pour le
- * badge "N à risque" des cartes de portefeuille (vues "cartes" et "kanban") plutôt que la maille
- * chantier. Gardée LOCALE à ce fichier (pas dans `lib/axisLogic.ts`) : c'est un simple filtre
- * d'agrégation d'affichage, pas une règle métier partagée entre plusieurs écrans.
- */
-function axisAtRiskIndicators(
-  axisId: string,
-  indicators: Indicator[],
-  measurements: IndicatorMeasurement[]
-): { indicator: Indicator; delta: IndicatorDelta | undefined }[] {
-  return indicators
-    .filter((indicator) => indicator.axisId === axisId)
-    .filter((indicator) => resolveIndicatorStatus(indicator) === "at_risk")
-    .map((indicator) => ({
-      indicator,
-      delta: computeIndicatorDelta(indicator, latestMeasurement(indicator.id, measurements)),
-    }));
-}
 
 /**
  * Page « Axes stratégiques » — portefeuille des axes du programme actif, servie sur la MÊME route
@@ -94,7 +59,7 @@ function axisAtRiskIndicators(
  */
 export function StrategicAxesView() {
   const { user } = useRole();
-  const { activeProgramId, loading: programsLoading } = useActiveProgram();
+  const { activeProgram, activeProgramId, loading: programsLoading } = useActiveProgram();
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -116,26 +81,16 @@ export function StrategicAxesView() {
   }, [user?.companyId]);
   const [view, setView] = useState<"cards" | "kanban">("cards");
 
-  // Compteurs par axe — chantiers, indicateurs, indicateurs à risque (statut EFFECTIF, surcharge
-  // manuelle comprise, via resolveIndicatorStatus).
-  const countsByAxis = useMemo(() => {
-    const map = new Map<string, { chantiers: number; indicators: number; atRisk: number }>();
-    for (const axis of data.axes) map.set(axis.id, { chantiers: 0, indicators: 0, atRisk: 0 });
-    for (const chantier of data.chantiers) {
-      const entry = map.get(chantier.axisId);
-      if (entry) entry.chantiers += 1;
-    }
-    for (const indicator of data.indicators) {
-      const entry = map.get(indicator.axisId);
-      if (!entry) continue;
-      entry.indicators += 1;
-      if (resolveIndicatorStatus(indicator) === "at_risk") entry.atRisk += 1;
-    }
-    return map;
-  }, [data.axes, data.chantiers, data.indicators]);
-
-  const countsOf = (axisId: string) =>
-    countsByAxis.get(axisId) ?? { chantiers: 0, indicators: 0, atRisk: 0 };
+  /**
+   * Numéro global unique par indicateur (round 10, fondation `lib/axisLogic.ts`) — SEUL point de
+   * vérité pour la numérotation des puces d'indicateur de la vue « cartes » ci-dessous, partagé
+   * avec `KpiPageClient.tsx` pour qu'un même indicateur affiche toujours le même numéro sur toute
+   * la plateforme.
+   */
+  const globalIndicatorNumbers = useMemo(
+    () => numberIndicators(data.axes, data.chantiers, data.indicators),
+    [data.axes, data.chantiers, data.indicators]
+  );
 
   // Chantiers regroupés par axe, dans l'ordre de `data.chantiers` (déjà trié par le hook) — alimente
   // exclusivement `AxisKanban` (vue "Avancement des chantiers", round 9), qui imbrique les chantiers
@@ -150,8 +105,22 @@ export function StrategicAxesView() {
     return map;
   }, [data.chantiers]);
 
-  // Indicateurs regroupés par axe (même maille que `countsByAxis.indicators`, macro ET de chantier
-  // confondus) — alimente les puces numérotées de la vue « cartes » (round 6, point 3).
+  /** Budget alloué total d'un axe (round 10, point 3) — somme de `Chantier.allocatedBudget` sur les
+   *  chantiers de l'axe (`chantiersByAxis` ci-dessus), affiché sur la carte d'axe de la vue
+   *  « cartes ». Nouveau calcul purement local, aucune donnée supplémentaire à charger. */
+  const axisBudgetByAxis = useMemo(() => {
+    const map = new Map<string, number>();
+    chantiersByAxis.forEach((chantiers, axisId) => {
+      map.set(
+        axisId,
+        chantiers.reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0)
+      );
+    });
+    return map;
+  }, [chantiersByAxis]);
+
+  // Indicateurs regroupés par axe (macro ET de chantier confondus) — alimente les puces numérotées
+  // de la vue « cartes » (round 6, point 3 ; numérotation globalisée round 10).
   const indicatorsByAxis = useMemo(() => {
     const map = new Map<string, Indicator[]>();
     for (const indicator of data.indicators) {
@@ -186,18 +155,40 @@ export function StrategicAxesView() {
    */
   const [milestoneFilters, setMilestoneFilters] = useState<ActiveFilters>({});
 
+  /** Nombre de leviers rattachés à un KPI par jalon E0-E4 (round 10, point 3) — précalculé pour que
+   *  `milestoneFilterDefs.getValue` (ci-dessous) puisse renvoyer une valeur DÉJÀ suffixée du compte
+   *  (ex. "E0 (6)") : `FilterBar` (non modifiable, voir contrainte du round) déduit ses options
+   *  directement des chaînes renvoyées par `getValue`, sans notion de libellé séparé — le compte
+   *  doit donc faire partie de la valeur elle-même. */
+  const milestoneCounts = useMemo(() => {
+    const map = new Map<MilestoneId, number>();
+    for (const action of milestoneTrackedActions) {
+      const milestoneId = action.milestones?.currentMilestone ?? "E0";
+      map.set(milestoneId, (map.get(milestoneId) ?? 0) + 1);
+    }
+    return map;
+  }, [milestoneTrackedActions]);
+
   const milestoneFilterDefs: FilterDef<ChantierAction>[] = useMemo(
     () => [
       {
         key: "jalon",
         label: t("strategicAxes.filterMilestone"),
-        getValue: (a) => a.milestones?.currentMilestone ?? "E0",
+        getValue: (a) => {
+          const milestoneId = a.milestones?.currentMilestone ?? "E0";
+          return `${milestoneId} (${milestoneCounts.get(milestoneId) ?? 0})`;
+        },
       },
     ],
-    [t]
+    [t, milestoneCounts]
   );
 
-  const activeMilestones = (milestoneFilters["jalon"] ?? []) as MilestoneId[];
+  // Les valeurs cochées par `FilterBar` sont les chaînes suffixées renvoyées par `getValue`
+  // ci-dessus (ex. "E0 (6)") — on ne garde que le jalon lui-même (premier token, avant l'espace)
+  // pour retrouver un vrai `MilestoneId` exploitable par `AxisKanban`.
+  const activeMilestones = (milestoneFilters["jalon"] ?? []).map(
+    (value) => value.split(" ")[0]
+  ) as MilestoneId[];
 
   // Filtres persistés dans l'URL sous le préfixe `f_`, exactement comme la page leviers — un lien
   // vers une vue filtrée reste partageable et survit à un rafraîchissement.
@@ -299,24 +290,6 @@ export function StrategicAxesView() {
     : undefined;
 
   /**
-   * Aperçu d'UN indicateur (round 6, point 3) — puces numérotées de la vue « cartes ». État
-   * purement local (pas d'URL, contrairement au panneau chantier ci-dessus) : c'est un aperçu
-   * rapide, pas une destination qu'on souhaite partager par lien. Même schéma que
-   * `BusinessKpiCard` (`IndicatorStatusSummary.tsx`) — modale contenant `IndicatorChart` en vue
-   * complète — mais l'état vit ICI (une seule modale partagée par toute la grille) plutôt que dans
-   * chaque carte : les cartes d'axe sont produites par un simple `.map()`, pas des composants à
-   * part entière, donc pas d'endroit pour un `useState` par carte.
-   */
-  const [openIndicatorId, setOpenIndicatorId] = useState<string | null>(null);
-  const openIndicator = openIndicatorId
-    ? data.indicators.find((i) => i.id === openIndicatorId)
-    : undefined;
-  const openIndicatorMeasurements = useMemo(
-    () => data.measurements.filter((m) => m.indicatorId === openIndicatorId),
-    [data.measurements, openIndicatorId]
-  );
-
-  /**
    * Écrit les entités validées par `StrategicImportButton` (round 4, point 3) — la librairie
    * d'import (`lib/strategicExcelImport.ts`) reste pure et n'appelle jamais Firestore, c'est donc
    * ICI, dans l'appelant, qu'on boucle sur les `save*` déjà existants. Les ids sont déjà alloués
@@ -398,13 +371,31 @@ export function StrategicAxesView() {
 
       <Card>
         <CardBody flush>
+          {/* Filtres "Étape de maturité" + "Jalon" réunis dans une même zone (round 10, point 3) —
+              restent deux mécanismes TECHNIQUEMENT distincts (entités et persistances différentes,
+              voir doc-comment de `milestoneFilters`), regroupés visuellement sous un libellé combiné
+              uniquement quand les deux sont pertinents (vue "Avancement des chantiers" — le filtre
+              "Jalon" n'a pas de sens en vue "Cartes", où aucun composant ne le consomme). */}
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+            {view === "kanban" && (
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+                {t("strategicAxes.filterStageAndMilestone")}
+              </span>
+            )}
             <FilterBar
               items={data.axes}
               defs={filterDefs}
               active={activeFilters}
               onChange={setFilters}
             />
+            {view === "kanban" && (
+              <FilterBar
+                items={milestoneTrackedActions}
+                defs={milestoneFilterDefs}
+                active={milestoneFilters}
+                onChange={setMilestoneFilters}
+              />
+            )}
             <div className="ml-auto flex overflow-hidden rounded-md border border-border">
               <button
                 onClick={() => setView("cards")}
@@ -437,62 +428,41 @@ export function StrategicAxesView() {
           <div className="mt-1 text-[13px]">{t("strategicAxes.emptyHint")}</div>
         </div>
       ) : view === "kanban" ? (
-        <div className="flex flex-col gap-3">
-          {/* Filtre "Jalon" E0-E4 (round 9, points 3/9) — scopé à cet onglet, indépendant du filtre
-              "Étape de maturité" ci-dessus (voir doc-comment de `milestoneFilters`). */}
-          <Card>
-            <CardBody flush>
-              <div className="flex flex-wrap items-center gap-2 p-3">
-                <FilterBar
-                  items={milestoneTrackedActions}
-                  defs={milestoneFilterDefs}
-                  active={milestoneFilters}
-                  onChange={setMilestoneFilters}
-                />
-              </div>
-            </CardBody>
-          </Card>
-          <AxisKanban
-            axes={filteredAxes}
-            stages={stages}
-            chantiersByAxis={chantiersByAxis}
-            chantierActions={data.chantierActions}
-            onCardClick={openAxis}
-            onOpenChantier={openChantierPanel}
-            atRiskItemsOf={(axisId) =>
-              axisAtRiskIndicators(axisId, data.indicators, data.measurements)
-            }
-            milestoneFilter={activeMilestones}
-            labels={{
-              emptyAxisChantiers: t("strategicAxes.axisNoChantier"),
-              filteredEmptyAxisChantiers: t("strategicAxes.kanbanFilteredEmpty"),
-              chantiers: t("strategicAxes.chantiersCount"),
-              atRisk: t("strategicAxes.atRiskCount"),
-              atRiskPopoverTitle: t("strategicAxes.atRiskPopoverTitle"),
-              atRiskTooltip: t("strategicAxes.atRiskTooltip"),
-              progress: t("kpi.chart.progressToTarget"),
-              noLeviers: t("strategicAxes.kanbanNoLeviers"),
-              kanbanBadgePrefix: t("strategicAxes.kanbanBadgePrefix"),
-              kanbanStatusLabels: {
-                todo: t("strategicChantierDetail.kanban.todo"),
-                in_progress: t("strategicChantierDetail.kanban.inProgress"),
-                done: t("strategicChantierDetail.kanban.done"),
-              },
-              drilldownTitlePrefix: t("strategicAxes.kanbanDrilldownTitle"),
-              drilldownEmpty: t("strategicAxes.kanbanDrilldownEmpty"),
-            }}
-          />
-        </div>
+        <AxisKanban
+          axes={filteredAxes}
+          stages={stages}
+          chantiersByAxis={chantiersByAxis}
+          chantierActions={data.chantierActions}
+          onCardClick={openAxis}
+          onOpenChantier={openChantierPanel}
+          milestoneFilter={activeMilestones}
+          currency={activeProgram?.currency}
+          labels={{
+            emptyAxisChantiers: t("strategicAxes.axisNoChantier"),
+            filteredEmptyAxisChantiers: t("strategicAxes.kanbanFilteredEmpty"),
+            chantiers: t("strategicAxes.chantiersCount"),
+            noLeviers: t("strategicAxes.kanbanNoLeviers"),
+            kanbanBadgePrefix: t("strategicAxes.kanbanBadgePrefix"),
+            kanbanStatusLabels: {
+              todo: t("strategicChantierDetail.kanban.todo"),
+              in_progress: t("strategicChantierDetail.kanban.inProgress"),
+              done: t("strategicChantierDetail.kanban.done"),
+            },
+            drilldownTitlePrefix: t("strategicAxes.kanbanDrilldownTitle"),
+            drilldownEmpty: t("strategicAxes.kanbanDrilldownEmpty"),
+          }}
+        />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filteredAxes.map((axis) => {
-            const c = countsOf(axis.id);
             const axisIndicators = indicatorsByAxis.get(axis.id) ?? [];
             const shownIndicators = axisIndicators.slice(0, MAX_CARD_INDICATOR_CHIPS);
             const hiddenIndicatorsCount = axisIndicators.length - shownIndicators.length;
-            // `div role="button"` plutôt qu'un vrai <button> : la carte imbrique deux familles de
-            // <button> (puces d'indicateur, round 6, point 3 ; et le déclencheur `AtRiskCountPill`),
-            // qui ne peuvent pas être imbriquées dans un <button> parent.
+            const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
+            const axisBudget = axisBudgetByAxis.get(axis.id) ?? 0;
+            // `div role="button"` plutôt qu'un vrai <button> : la carte imbrique d'autres <button>
+            // (puces d'indicateur, lignes de chantier), qui ne peuvent pas être imbriqués dans un
+            // <button> parent.
             return (
               <div
                 key={axis.id}
@@ -528,29 +498,42 @@ export function StrategicAxesView() {
                   </p>
                 )}
 
-                {/* Puces numérotées d'indicateur (round 6, point 3) — un aperçu d'un clic, sans
-                    quitter le portefeuille : chaque puce ouvre `IndicatorChart` de CET indicateur
-                    seul dans la modale partagée définie plus bas (`openIndicatorId`). Le nombre de
-                    puces + la puce "+N" remplacent le pastille de comptage brut d'avant ce round. */}
+                {/* Puces numérotées d'indicateur (round 10, point 3) — numéro GLOBAL sur toute la
+                    plateforme (`numberIndicators`, fondation `lib/axisLogic.ts`), coloré si le
+                    statut EFFECTIF de l'indicateur est "à risque". Le clic navigue désormais vers la
+                    vraie page KPI (`/kpi?indicator=<id>`) — remplace l'ancien aperçu en modale locale
+                    (`IndicatorChart`), changement de comportement délibéré (round 10 : le PO veut
+                    atterrir sur la page KPI, pas un aperçu). */}
                 {axisIndicators.length > 0 && (
                   <div className="mt-2.5 flex flex-wrap items-center gap-1">
                     <span className="mr-0.5 text-[10px] text-tertiary">
                       {t("strategicAxes.indicatorsCount")}
                     </span>
-                    {shownIndicators.map((indicator, idx) => (
-                      <button
-                        key={indicator.id}
-                        type="button"
-                        title={indicator.name}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenIndicatorId(indicator.id);
-                        }}
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[10px] font-bold text-secondary transition hover:bg-black hover:text-white"
-                      >
-                        {idx + 1}
-                      </button>
-                    ))}
+                    {shownIndicators.map((indicator) => {
+                      const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
+                      return (
+                        <button
+                          key={indicator.id}
+                          type="button"
+                          title={
+                            atRisk
+                              ? `${indicator.name} — ${t("indicatorStatus.atRisk")}`
+                              : indicator.name
+                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/kpi?indicator=${indicator.id}`);
+                          }}
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition hover:bg-black hover:text-white ${
+                            atRisk
+                              ? "bg-rag-amber-light text-rag-amber"
+                              : "bg-neutral-100 text-secondary"
+                          }`}
+                        >
+                          {globalIndicatorNumbers.get(indicator.id) ?? "?"}
+                        </button>
+                      );
+                    })}
                     {hiddenIndicatorsCount > 0 && (
                       <span
                         className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
@@ -562,52 +545,49 @@ export function StrategicAxesView() {
                   </div>
                 )}
 
-                <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-3 text-[10.5px]">
-                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
-                    {c.chantiers} {t("strategicAxes.chantiersCount")}
-                  </span>
-                  <AtRiskCountPill
-                    count={c.atRisk}
-                    items={axisAtRiskIndicators(axis.id, data.indicators, data.measurements)}
-                    title={t("strategicAxes.atRiskPopoverTitle")}
-                    label={t("strategicAxes.atRiskCount")}
-                    progressLabel={t("kpi.chart.progressToTarget")}
-                    tooltip={t("strategicAxes.atRiskTooltip")}
-                  />
+                {/* Chantiers de l'axe — nom + sponsor, chacun cliquable (round 10, point 3) —
+                    remplace l'ancienne pastille de comptage brut "N chantiers". Complétés par le
+                    budget total alloué de l'axe (somme de `Chantier.allocatedBudget`). */}
+                <div className="mt-auto flex flex-col gap-1 border-t border-border pt-2.5 text-[10.5px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                      {t("strategicAxes.chantiersCount")}
+                    </span>
+                    {axisChantiers.length > 0 && (
+                      <span className="shrink-0 font-semibold text-secondary">
+                        {t("strategicChantierDetail.allocatedBudget")} :{" "}
+                        {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
+                      </span>
+                    )}
+                  </div>
+                  {axisChantiers.length === 0 ? (
+                    <p className="text-tertiary">{t("strategicAxes.axisNoChantier")}</p>
+                  ) : (
+                    axisChantiers.map((chantier) => (
+                      <button
+                        key={chantier.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openChantierPanel(chantier.id);
+                        }}
+                        className="flex items-baseline justify-between gap-2 rounded px-1 py-0.5 text-left transition hover:bg-neutral-50"
+                      >
+                        <span className="truncate font-medium text-primary" title={chantier.name}>
+                          {chantier.name}
+                        </span>
+                        <span className="shrink-0 truncate text-tertiary">
+                          {chantier.sponsorName ?? t("strategicAxes.sponsorUnassigned")}
+                        </span>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
       )}
-
-      {/* ── Aperçu d'un indicateur (round 6, point 3) — même modale, quel que soit l'axe ; voir
-          doc-comment de `openIndicatorId` plus haut. ─────────────────────────────────────────── */}
-      <Modal
-        open={!!openIndicatorId}
-        onOpenChange={(open) => {
-          if (!open) setOpenIndicatorId(null);
-        }}
-        title={openIndicator?.name ?? t("strategicAxes.indicatorsSection")}
-        maxWidth="820px"
-      >
-        {openIndicator && (
-          <IndicatorChart
-            measurements={openIndicatorMeasurements}
-            objectiveValue={openIndicator.objectiveValue}
-            direction={openIndicator.direction}
-            unit={openIndicator.unit}
-            qualitative={openIndicator.kind === "qualitative"}
-            height={300}
-            windowMeasurements="all"
-            frequency={openIndicator.frequency}
-            labelValue={t("strategicAxes.chartValue")}
-            labelObjective={t("strategicAxes.chartObjective")}
-            emptyLabel={t("strategicAxes.chartEmpty")}
-            labelProgress={t("kpi.chart.progressToTarget")}
-          />
-        )}
-      </Modal>
 
       {/* ── Panneau chantier (round 6, point 0) — remplace l'ancienne route dédiée, monté dans un
           Modal plus large que les modales de formulaire (1100px) pour porter tout le détail chantier

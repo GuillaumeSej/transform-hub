@@ -1181,6 +1181,7 @@ const en: Record<string, string> = {
   "strategicAxes.chantierAlerted": "Dependency alert",
   "strategicAxes.kanbanEmptyColumn": "No axis",
   "strategicAxes.filterMilestone": "Milestone",
+  "strategicAxes.filterStageAndMilestone": "Stage / Milestone",
   "strategicAxes.kanbanFilteredEmpty": "No workstream at this milestone",
   "strategicAxes.kanbanNoLeviers": "No lever",
   "strategicAxes.kanbanBadgePrefix": "Kanban",
@@ -1288,6 +1289,7 @@ const en: Record<string, string> = {
   "strategicAxes.filterDirection": "Direction",
   "strategicAxes.filterPerson": "Person",
   "strategicAxes.filterSponsor": "Sponsor",
+  "strategicAxes.sponsorUnassigned": "Sponsor not assigned",
 
   // ─── Strategic Plan — dedicated workstream detail page (round 4) ───────────
   "strategicChantierDetail.title": "Workstream sheet",
@@ -1346,6 +1348,14 @@ const en: Record<string, string> = {
 
   "strategicChantierDetail.timeline.title": "Deliverables timeline",
   "strategicChantierDetail.timeline.empty": "No phased deliverable yet.",
+
+  // ─── Workstream detail tabs (round 10, point 2) ────────────────────────────────────────────
+  "strategicChantierDetail.tabs.overview": "Overview",
+  "strategicChantierDetail.tabs.staffing": "Staffing",
+
+  // ─── KPI linked to a lever, shown on its row (round 10, point 2) ──────────────────────────
+  "strategicChantierDetail.indicatorLink.label": "KPI #{n} · {name}",
+  "strategicChantierDetail.indicatorLink.notFound": "KPI not found",
 
   "strategicChantierDetail.actionFocused": "Lever opened from the link",
   "strategicChantierDetail.actionForm.missingHint": "Fill in the name and dates to save.",
@@ -1448,6 +1458,7 @@ const en: Record<string, string> = {
   "businessKpis.noValue": "No measurement",
   "kpi.axisUnknown": "Indicators without an axis",
   "kpi.macroIndicators": "Axis indicators",
+  "kpi.indicatorNumber": "KPI number",
   "kpi.chantier": "Work package",
   "kpi.kind.quantitative": "Quantitative",
   "kpi.kind.qualitative": "Qualitative",
@@ -1610,7 +1621,7 @@ const en: Record<string, string> = {
   // Round 8: "Breakdown by axis" is gone (replaced by the E0-E4 view below), and the
   // "chantier-health" label is retitled — the reading grain moves from work package to lever.
   "strategicDashboard.widget.chantierHealth": "Lever progress status",
-  "strategicDashboard.widget.chantierDependencyAlerts": "Work package dependency alerts",
+  "strategicDashboard.widget.chantierDependencyAlerts": "Dependency and prerequisite alerts",
   // Round 8: placeholder for an empty E0-E4 milestone column (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
 
