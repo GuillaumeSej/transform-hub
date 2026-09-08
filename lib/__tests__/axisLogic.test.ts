@@ -15,6 +15,8 @@ import {
   countOnTrackAtRisk,
   latestMeasurement,
   milestoneProgressPct,
+  milestoneWeightPct,
+  programBlockedActions,
   resolveIndicatorStatus,
   resolveMilestoneAutoFlags,
   resolveProgramType,
@@ -999,6 +1001,64 @@ describe("chantierMilestoneProgressPct", () => {
       { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"), kanbanStatus: "todo" },
     ];
     expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(0);
+  });
+});
+
+// ─── Poids illustratif par jalon (round 9) ─────────────────────────────────────────────────────
+
+describe("milestoneWeightPct", () => {
+  it("returns the weight of the CURRENT milestone (not a cumulative sum)", () => {
+    expect(
+      milestoneWeightPct({
+        milestones: { currentMilestone: "E0", passedMilestones: [], checklists: {} },
+      })
+    ).toBe(10);
+    expect(
+      milestoneWeightPct({
+        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} },
+      })
+    ).toBe(20);
+    expect(
+      milestoneWeightPct({
+        milestones: {
+          currentMilestone: "E4",
+          passedMilestones: ["E0", "E1", "E2", "E3", "E4"],
+          checklists: {},
+        },
+      })
+    ).toBe(100);
+  });
+
+  it("defaults to E0's weight when milestones is absent", () => {
+    expect(milestoneWeightPct({ milestones: undefined })).toBe(10);
+    expect(milestoneWeightPct({})).toBe(10);
+  });
+});
+
+// ─── Prérequis bloquants du programme (round 9) ────────────────────────────────────────────────
+
+describe("programBlockedActions", () => {
+  it("returns an empty result for an empty actions array", () => {
+    expect(programBlockedActions([], makeStages())).toEqual([]);
+  });
+
+  it("keeps only the blocked actions, each with its own reasons", () => {
+    const stages = makeStages();
+    const target = {
+      ...makeAction("CH1", "2026-01-01", "2026-01-31", "target-action"),
+      status: "in_progress",
+    };
+    const blockedAction = {
+      ...makeAction("CH1", "2026-02-01", "2026-02-28", "A1"),
+      prerequisites: [{ id: "pr1", kind: "action" as const, targetActionId: "target-action" }],
+    };
+    const freeAction = makeAction("CH1", "2026-01-01", "2026-01-15", "A2");
+
+    const result = programBlockedActions([target, blockedAction, freeAction], stages);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].action.id).toBe("A1");
+    expect(result[0].reasons).toEqual([expect.stringContaining("target-action")]);
   });
 });
 
