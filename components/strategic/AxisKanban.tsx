@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { LevierCard } from "@/components/strategic/LevierMilestoneBoard";
 import { Modal } from "@/components/shared/Modal";
 import { colorForChantier } from "@/lib/axisLogic";
@@ -10,7 +9,6 @@ import type {
   Chantier,
   ChantierAction,
   LevierKanbanStatus,
-  MaturityStageConfig,
   MilestoneId,
   StrategicAxis,
 } from "@/types";
@@ -32,13 +30,16 @@ import type {
  * `AxisDetailClient`/`ChantierGantt` (URLSearchParams `chantier=`/`action=` → `ChantierDetailPanel`
  * défile et surligne la bonne `<li>`), câblé tel quel par `StrategicAxesView.openChantierPanel`.
  *
- * `milestoneFilter` (round 9, point 9) : filtre "Jalon" indépendant du filtre "Étape de maturité"
- * (qui opère sur `StrategicAxis.stage`, une entité différente) — masque les lignes de chantier qui
- * n'ont aucun levier au(x) jalon(s) sélectionné(s). Calculé et piloté par l'appelant
- * (`StrategicAxesView`, `FilterBar` dédié), transmis ici en simple valeur : ce composant ne connaît
- * rien de l'état de filtre lui-même, seulement son résultat.
+ * `milestoneFilter` (round 9, point 9) : filtre "Jalon" — masque les lignes de chantier qui n'ont
+ * aucun levier au(x) jalon(s) sélectionné(s). Calculé et piloté par l'appelant (`StrategicAxesView`,
+ * `FilterBar` dédié), transmis ici en simple valeur : ce composant ne connaît rien de l'état de
+ * filtre lui-même, seulement son résultat.
  *
  * Aucun drag & drop, inchangé : le changement de jalon/statut se fait depuis la fiche chantier.
+ *
+ * Round 11 : le badge d'étape de maturité (`AxisStageBadge`) est retiré des en-têtes d'axe et des
+ * lignes de chantier de cette vue (le PO le juge sans intérêt à ces deux mailles) — il ne subsiste
+ * plus que sur les lignes de LEVIER sans KPI (`ChantierDetailPanel`, hors périmètre de ce fichier).
  */
 
 type ChantierCounts = {
@@ -61,7 +62,6 @@ type Drilldown =
 
 export function AxisKanban({
   axes,
-  stages,
   chantiersByAxis,
   chantierActions,
   onCardClick,
@@ -71,9 +71,6 @@ export function AxisKanban({
   labels,
 }: {
   axes: StrategicAxis[];
-  /** Étapes du programme, déjà triées par `order` (voir `useMaturityStages`) — transmises telles
-   *  quelles à `AxisStageBadge`. */
-  stages: MaturityStageConfig[];
   /** Chantiers DE CHAQUE axe, déjà groupés par l'appelant (voir `StrategicAxesView.chantiersByAxis`) —
    *  TOUJOURS la liste complète, non filtrée par `milestoneFilter` : le drill-down doit pouvoir
    *  retrouver le nom de n'importe quel chantier de l'axe, y compris ceux masqués par le filtre. */
@@ -220,7 +217,6 @@ export function AxisKanban({
                   )}
                 </span>
                 <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                  <AxisStageBadge stageId={axis.stage} stages={stages} />
                   <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
                     {axisChantiers.length} {l.chantiers}
                   </span>
@@ -264,11 +260,6 @@ export function AxisKanban({
                               {currency ? ` ${currency}` : ""}
                             </span>
                           )}
-                          <AxisStageBadge
-                            stageId={chantier.stage}
-                            stages={stages}
-                            className="shrink-0"
-                          />
                         </div>
                         {!hasAnyLevier ? (
                           <p className="mt-1 text-[10.5px] text-tertiary">{l.noLeviers}</p>

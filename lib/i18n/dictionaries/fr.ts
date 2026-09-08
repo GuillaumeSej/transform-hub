@@ -1228,14 +1228,12 @@ const fr: Record<string, string> = {
   "strategicAxes.filterMilestone": "Jalon",
   // Round 10, point 3 : libellé combiné affiché quand les filtres "Étape de maturité" et "Jalon"
   // sont regroupés visuellement (vue "Avancement des chantiers", seule où les deux coexistent).
-  "strategicAxes.filterStageAndMilestone": "Étape / Jalon",
+  "strategicAxes.filterStageAndMilestone": "Filtres",
   "strategicAxes.kanbanFilteredEmpty": "Aucun chantier à ce jalon",
   "strategicAxes.kanbanNoLeviers": "Aucun levier",
   "strategicAxes.kanbanBadgePrefix": "Kanban",
   "strategicAxes.kanbanDrilldownTitle": "Leviers",
   "strategicAxes.kanbanDrilldownEmpty": "Aucun levier à ce stade.",
-  "strategicAxes.noStage": "Sans étape",
-  "strategicAxes.filterStage": "Étape de maturité",
   "strategicAxes.filterOwner": "Responsable",
   "strategicAxes.unassigned": "Non assigné",
   "strategicAxes.loading": "Chargement des axes…",

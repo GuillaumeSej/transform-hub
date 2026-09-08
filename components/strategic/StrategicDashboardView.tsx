@@ -686,14 +686,6 @@ export function StrategicDashboardView() {
               value={`${allocatedBudgetTotal.toLocaleString()} ${activeProgram.currency}`}
               label={t("strategicDashboard.allocatedBudget")}
             />
-            {counts.atRisk > 0 && (
-              <DashboardStatChip
-                icon={TriangleAlert}
-                value={counts.atRisk}
-                label={t("strategicDashboard.atRisk").toLowerCase()}
-                tone="amber"
-              />
-            )}
           </div>
         </div>
         {/* Personnalisation : desktop uniquement, comme sur le dashboard exécutif (le

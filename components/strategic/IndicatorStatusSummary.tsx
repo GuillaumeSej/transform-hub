@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, Sigma, TrendingDown } from "lucide-react";
+import { Activity, Sigma } from "lucide-react";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
 import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
@@ -103,8 +103,7 @@ export function IndicatorStatusSummary({
               </div>
             </div>
             <p className="max-w-sm flex-1 text-[12px] leading-relaxed text-secondary">
-              {atRisk} {l.atRisk.toLowerCase()} · {total} {l.indicatorsSuffix}{" "}
-              {l.tracked.toLowerCase()}
+              {atRisk} {l.atRisk.toLowerCase()} · {total} {l.tracked.toLowerCase()}
             </p>
           </div>
           <div
@@ -128,8 +127,10 @@ export function IndicatorStatusSummary({
         <div
           className={
             className ??
-            "grid grid-cols-1 gap-3 sm:grid-cols-2 " +
-              (showTotal ? "lg:grid-cols-3" : "lg:grid-cols-2")
+            // Round 11 : une seule tuile "Sur la trajectoire" reste par défaut (la tuile "À
+            // risque" est retirée) — plus qu'une grille à 2/3 colonnes systématique, sinon la
+            // grille laisse une ou deux cellules vides selon `showTotal`.
+            (showTotal ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "grid grid-cols-1 gap-3")
           }
         >
           <KPICard
@@ -137,16 +138,12 @@ export function IndicatorStatusSummary({
             value={`${onTrack} / ${total}`}
             icon={Activity}
             accent="green"
-            sub={`${total} ${l.indicatorsSuffix} ${l.tracked.toLowerCase()}`}
+            // Round 11 : la tuile "À risque" séparée est retirée (chiffre redondant avec le
+            // bandeau héros et la puce d'en-tête du dashboard) — le compte à risque est replié en
+            // prose dans le sous-titre de cette tuile, même phrasé que le paragraphe du bandeau
+            // héros ci-dessus pour ne pas faire diverger deux lectures du même chiffre.
+            sub={`${total} ${l.tracked.toLowerCase()} · ${atRisk} ${l.atRisk.toLowerCase()}`}
             barPct={onTrackPct}
-          />
-          <KPICard
-            label={l.atRisk}
-            value={String(atRisk)}
-            icon={TrendingDown}
-            accent="amber"
-            sub={`${Math.round(atRiskPct)}% du portefeuille d'indicateurs`}
-            barPct={atRiskPct}
           />
           {showTotal && (
             <KPICard
