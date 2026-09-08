@@ -1162,11 +1162,17 @@ const es: Record<string, string> = {
   "strategicAxes.axisCreated": "Eje creado",
   "strategicAxes.axisUpdated": "Eje actualizado",
   "strategicAxes.cards": "Tarjetas",
-  "strategicAxes.kanban": "Kanban",
+  "strategicAxes.kanban": "Avance de los proyectos",
   "strategicAxes.chantiersView": "Proyectos",
   "strategicAxes.axisNoChantier": "Ningún proyecto",
   "strategicAxes.chantierAlerted": "Alerta de dependencia",
   "strategicAxes.kanbanEmptyColumn": "Ningún eje",
+  "strategicAxes.filterMilestone": "Hito",
+  "strategicAxes.kanbanFilteredEmpty": "Ningún proyecto en este hito",
+  "strategicAxes.kanbanNoLeviers": "Ninguna palanca",
+  "strategicAxes.kanbanBadgePrefix": "Kanban",
+  "strategicAxes.kanbanDrilldownTitle": "Palancas",
+  "strategicAxes.kanbanDrilldownEmpty": "Ninguna palanca en esta etapa.",
   "strategicAxes.noStage": "Sin etapa",
   "strategicAxes.filterStage": "Etapa de madurez",
   "strategicAxes.filterOwner": "Responsable",
@@ -1539,6 +1545,7 @@ const es: Record<string, string> = {
   "staffingPeriod.empty": "No hay ETC con fecha para esta granularidad.",
   "staffingPeriod.undatedNote":
     "{n} línea(s) de dotación sin fecha de inicio, no mostradas en esta vista.",
+  "staffingPeriod.utilization": "{pct}% de utilización",
 
   // ─── Importación Excel de personal movilizado (ronda 7 — StaffingImportButton.tsx) ───────
   "staffingImport.templateButton": "Descargar la plantilla",
@@ -1583,6 +1590,11 @@ const es: Record<string, string> = {
   "strategicDashboard.noIndicators": "Ningún indicador definido para este programa",
   "strategicDashboard.noDependencyAlerts": "Ninguna alerta de dependencia entre frentes de trabajo",
   "strategicDashboard.delayDays": "días de desfase",
+  // Ronda 9: subtítulos de las dos subsecciones del widget "chantier-dependency-alerts"
+  // (dependencias + prerrequisitos pendientes, `lib/axisLogic.ts` `programBlockedActions`).
+  "strategicDashboard.dependencyAlertsHeading": "Dependencias entre frentes de trabajo",
+  "strategicDashboard.pendingPrerequisitesHeading": "Prerrequisitos pendientes",
+  "strategicDashboard.noPrerequisiteAlerts": "Ningún prerrequisito bloqueante pendiente",
   "strategicDashboard.dragToReorder": "Arrastrar para reordenar",
   "strategicDashboard.moveUp": "Subir",
   "strategicDashboard.moveDown": "Bajar",

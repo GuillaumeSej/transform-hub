@@ -101,7 +101,9 @@ export const STRATEGIC_DASHBOARD_WIDGET_REGISTRY: StrategicDashboardWidgetDef[] 
     type: "chantier-dependency-alerts",
     label: "strategicDashboard.widget.chantierDependencyAlerts",
     icon: "Unlink",
-    defaultSpan: "M",
+    // Round 9, point 1 : XL par défaut (comme les 3 autres widgets ci-dessus) — le widget gagne
+    // une deuxième sous-section "Prérequis en attente" qui manquait de place dans une coquille M.
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
   },
 ];

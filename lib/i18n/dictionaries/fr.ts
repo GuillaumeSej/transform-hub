@@ -1218,11 +1218,19 @@ const fr: Record<string, string> = {
   "strategicAxes.axisCreated": "Axe créé",
   "strategicAxes.axisUpdated": "Axe mis à jour",
   "strategicAxes.cards": "Cartes",
-  "strategicAxes.kanban": "Kanban",
+  "strategicAxes.kanban": "Avancement des chantiers",
   "strategicAxes.chantiersView": "Chantiers",
   "strategicAxes.axisNoChantier": "Aucun chantier",
   "strategicAxes.chantierAlerted": "Dépendance en alerte",
   "strategicAxes.kanbanEmptyColumn": "Aucun axe",
+  // Onglet "Avancement des chantiers" (round 9, points 3/9) — compteurs E0-E4 + kanban par chantier,
+  // drill-down par jalon/statut, filtre "Jalon" dédié.
+  "strategicAxes.filterMilestone": "Jalon",
+  "strategicAxes.kanbanFilteredEmpty": "Aucun chantier à ce jalon",
+  "strategicAxes.kanbanNoLeviers": "Aucun levier",
+  "strategicAxes.kanbanBadgePrefix": "Kanban",
+  "strategicAxes.kanbanDrilldownTitle": "Leviers",
+  "strategicAxes.kanbanDrilldownEmpty": "Aucun levier à ce stade.",
   "strategicAxes.noStage": "Sans étape",
   "strategicAxes.filterStage": "Étape de maturité",
   "strategicAxes.filterOwner": "Responsable",
@@ -1608,6 +1616,7 @@ const fr: Record<string, string> = {
   "staffingPeriod.empty": "Aucun ETP daté pour cette granularité.",
   "staffingPeriod.undatedNote":
     "{n} ligne(s) de staffing sans date de début, non représentée(s) dans cette vue.",
+  "staffingPeriod.utilization": "{pct}% d'utilisation",
 
   // ─── Import Excel des effectifs (round 7 — StaffingImportButton.tsx) ──────────────────────
   "staffingImport.templateButton": "Télécharger le modèle",
@@ -1652,6 +1661,11 @@ const fr: Record<string, string> = {
   "strategicDashboard.noIndicators": "Aucun indicateur défini pour ce programme",
   "strategicDashboard.noDependencyAlerts": "Aucune alerte de dépendance entre chantiers",
   "strategicDashboard.delayDays": "jours de décalage",
+  // Round 9, point 1 : sous-en-têtes des deux sous-sections du widget "chantier-dependency-alerts"
+  // (dépendances + prérequis en attente, `lib/axisLogic.ts` `programBlockedActions`).
+  "strategicDashboard.dependencyAlertsHeading": "Dépendances entre chantiers",
+  "strategicDashboard.pendingPrerequisitesHeading": "Prérequis en attente",
+  "strategicDashboard.noPrerequisiteAlerts": "Aucun prérequis bloquant en attente",
   "strategicDashboard.dragToReorder": "Glisser pour réordonner",
   "strategicDashboard.moveUp": "Monter",
   "strategicDashboard.moveDown": "Descendre",

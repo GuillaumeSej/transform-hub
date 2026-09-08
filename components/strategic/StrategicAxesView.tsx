@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LayoutGrid, LayoutList, Plus, Rows3, TriangleAlert } from "lucide-react";
+import { LayoutGrid, Plus, Rows3 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody } from "@/components/shared/Card";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
-import { Popover } from "@/components/shared/Popover";
 import { AtRiskCountPill } from "@/components/strategic/AtRiskCountPill";
-import { AtRiskIndicatorPopoverContent } from "@/components/strategic/AtRiskIndicatorPopoverContent";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisKanban } from "@/components/strategic/AxisKanban";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
@@ -17,9 +15,6 @@ import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel"
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
 import {
-  chantierAtRiskIndicators,
-  chantierDependencyAlerts,
-  chantierMilestoneProgressPct,
   computeIndicatorDelta,
   latestMeasurement,
   resolveIndicatorStatus,
@@ -42,15 +37,12 @@ import type {
   ChantierAction,
   Indicator,
   IndicatorMeasurement,
+  MilestoneId,
   StrategicAxis,
 } from "@/types";
 
-/** Nombre d'actions listées en clair sur une carte chantier avant repli « +N autres ». Au-delà,
- *  la carte cesse d'être lisible d'un coup d'œil — le détail complet est dans la pop-up. */
-const CARD_ACTIONS_SHOWN = 4;
-
 /** Nombre de puces numérotées d'indicateur affichées sur une carte d'axe (vue "cartes", round 6,
- *  point 3) avant repli sur une puce "+N" — même principe que `CARD_ACTIONS_SHOWN`. */
+ *  point 3) avant repli sur une puce "+N". */
 const MAX_CARD_INDICATOR_CHIPS = 5;
 
 /**
@@ -74,26 +66,6 @@ function axisAtRiskIndicators(
     }));
 }
 
-/** Une ligne par personne référencée (owner OU sponsor) sur une action de chantier — alimente à la
- *  fois les OPTIONS des filtres chantier (round 4, point 8 : Direction/Personne/Sponsor) via
- *  `FilterBar` (qui calcule ses options en mappant CHAQUE ligne through `def.getValue`) et,
- *  indépendamment, l'ensemble de correspondance utilisé pour le filtrage réel (voir
- *  `chantierFacetsById` ci-dessous). Une ligne par (action, rôle) plutôt qu'une par chantier : un
- *  chantier a souvent PLUSIEURS personnes (un owner par action, éventuellement un sponsor
- *  distinct) — un unique champ par chantier perdrait des valeurs de filtre valides. */
-type ChantierPersonFacetRow = {
-  chantierId: string;
-  /** Direction résolue de la personne (vide si le champ owner/sponsor ne correspond à aucun
-   *  `AuthUser.username` connu — voir doc-comment de `chantierFacets` plus bas). */
-  direction: string;
-  /** Nom affiché de la personne (résolu si possible, sinon le texte brut du champ owner/sponsor —
-   *  contrairement à `direction`, qui elle reste vide sans correspondance). */
-  person: string;
-  /** Rempli UNIQUEMENT pour une ligne issue du champ `sponsor` (jamais `owner`) — c'est le filtre
-   *  "Sponsor" du plan, distinct de "Personne" qui couvre owner ET sponsor. */
-  sponsor: string;
-};
-
 /**
  * Page « Axes stratégiques » — portefeuille des axes du programme actif, servie sur la MÊME route
  * que la bibliothèque des leviers (`/levers`, voir le routeur `app/(app)/levers/page.tsx`) : c'est
@@ -105,11 +77,14 @@ type ChantierPersonFacetRow = {
  * équivalent. On garde donc une grille de cartes (lecture rapide d'un portefeuille de ~5 axes,
  * volumétrie visée par la méthodologie 3-5-15) plutôt qu'un `EditableTable` à trois colonnes.
  *
- * Trois vues, trois mailles de lecture volontairement distinctes :
- *  - « cartes » et « kanban » (`AxisKanban`) portent sur les AXES eux-mêmes (portefeuille) ;
- *  - « chantiers » descend d'un cran : une section par axe, listant SES CHANTIERS — la maille où
- *    l'avancement réel d'un axe se lit (étape de chaque chantier, actions, indicateurs à risque,
- *    alertes de cascade), sans avoir à ouvrir chaque fiche d'axe une par une.
+ * Deux vues, deux mailles de lecture volontairement distinctes, toutes deux à la maille AXE
+ * (portefeuille) :
+ *  - « cartes » : lecture large d'un axe (description, indicateurs, comptes) ;
+ *  - « kanban » (`AxisKanban`, libellé affiché "Avancement des chantiers", round 9, points 3/9) :
+ *    descend d'un cran par CHANTIER, sous forme de compteurs compacts par jalon E0→E4 (+ résumé
+ *    kanban classique pour les leviers sans KPI), avec drill-down cliquable listant les leviers de
+ *    l'axe à un jalon/statut donné — remplace l'ancien onglet "Chantiers" (round 6-8, cartes par
+ *    chantier + filtres Direction/Personne/Sponsor), jugé redondant avec cette vue enrichie.
  *
  * Le clic sur un axe pousse `/levers/detail?id=<axisId>` — même motif d'URL que les leviers, ce
  * qui laisse `LeverDetailClient` aiguiller vers `AxisDetailClient` selon le type de programme. Le
@@ -139,7 +114,7 @@ export function StrategicAxesView() {
     }, user?.companyId ?? null);
     return unsub;
   }, [user?.companyId]);
-  const [view, setView] = useState<"cards" | "kanban" | "chantiers">("cards");
+  const [view, setView] = useState<"cards" | "kanban">("cards");
 
   // Compteurs par axe — chantiers, indicateurs, indicateurs à risque (statut EFFECTIF, surcharge
   // manuelle comprise, via resolveIndicatorStatus).
@@ -162,10 +137,9 @@ export function StrategicAxesView() {
   const countsOf = (axisId: string) =>
     countsByAxis.get(axisId) ?? { chantiers: 0, indicators: 0, atRisk: 0 };
 
-  // --- Vue « chantiers » : dérivés à la maille CHANTIER (et non plus axe) -------------------
-  // Chantiers regroupés par axe, dans l'ordre de `data.chantiers` (déjà trié par le hook) — sert
-  // aussi au Kanban reconstruit (round 6, point 5), qui imbrique désormais les chantiers de chaque
-  // axe plutôt que de bucketer les axes eux-mêmes par étape.
+  // Chantiers regroupés par axe, dans l'ordre de `data.chantiers` (déjà trié par le hook) — alimente
+  // exclusivement `AxisKanban` (vue "Avancement des chantiers", round 9), qui imbrique les chantiers
+  // de chaque axe plutôt que de bucketer les axes eux-mêmes par étape.
   const chantiersByAxis = useMemo(() => {
     const map = new Map<string, Chantier[]>();
     for (const chantier of data.chantiers) {
@@ -188,137 +162,42 @@ export function StrategicAxesView() {
     return map;
   }, [data.indicators]);
 
-  // Actions de CHAQUE chantier, triées par date de début : la vue « chantiers » en affiche les
-  // NOMS sur la carte (le PO pilote au quotidien sur « ce qu'il y a à faire », pas sur un compte).
-  const actionsByChantier = useMemo(() => {
-    const map = new Map<string, ChantierAction[]>();
-    for (const action of data.chantierActions) {
-      const list = map.get(action.chantierId);
-      if (list) list.push(action);
-      else map.set(action.chantierId, [action]);
-    }
-    map.forEach((list) => list.sort((a, b) => a.start.localeCompare(b.start)));
-    return map;
-  }, [data.chantierActions]);
-
-  // Actions + indicateurs à risque rattachés à CHAQUE chantier. Un indicateur sans `chantierId`
-  // est « macro » (rattaché directement à l'axe) : il ne compte pour aucun chantier.
-  const chantierCounts = useMemo(() => {
-    const map = new Map<string, { actions: number; atRisk: number }>();
-    const entry = (id: string) => {
-      const existing = map.get(id);
-      if (existing) return existing;
-      const created = { actions: 0, atRisk: 0 };
-      map.set(id, created);
-      return created;
-    };
-    for (const chantier of data.chantiers) entry(chantier.id);
-    for (const action of data.chantierActions) entry(action.chantierId).actions += 1;
-    for (const indicator of data.indicators) {
-      if (!indicator.chantierId) continue;
-      if (resolveIndicatorStatus(indicator) === "at_risk") entry(indicator.chantierId).atRisk += 1;
-    }
-    return map;
-  }, [data.chantiers, data.chantierActions, data.indicators]);
+  /**
+   * Leviers rattachés à un KPI (`indicatorId` défini) — seuls ceux-là portent un jalon E0-E4
+   * significatif (`ChantierAction.milestones.currentMilestone`, round 8). Alimente à la fois les
+   * OPTIONS du filtre "Jalon" (round 9, point 9, ci-dessous) et son filtrage réel.
+   */
+  const milestoneTrackedActions = useMemo(
+    () => data.chantierActions.filter((a) => a.indicatorId),
+    [data.chantierActions]
+  );
 
   /**
-   * Facettes Direction/Personne/Sponsor de CHAQUE chantier (round 4, point 8), dérivées des
-   * `owner`/`sponsor` de ses actions résolus contre `data.users` (source unique, voir
-   * `useStrategicData`). Résolution PAR USERNAME uniquement : `ChantierAction.owner`/`sponsor`
-   * peuvent encore être du texte libre saisi avant la conversion `UserPicker` de ce round (la
-   * fiche chantier qui bascule `owner`/`sponsor` sur `UserPicker` n'est pas encore construite —
-   * prochaine passe d'intégration) — un champ qui ne correspond à AUCUN `AuthUser.username` ne
-   * fait simplement matcher aucune valeur de Direction (on ne peut pas deviner une direction sans
-   * utilisateur résolu), mais reste filtrable par "Personne"/"Sponsor" via son texte brut.
+   * Filtre "Jalon" E0-E4 (round 9, points 3/9) — SCOPÉ à l'onglet "Avancement des chantiers"
+   * uniquement, indépendant du filtre "Étape de maturité" ci-dessous (qui opère sur
+   * `StrategicAxis.stage`, une entité différente des jalons de LEVIER). État purement local (pas
+   * d'URL) : comme l'ancien filtre chantier qu'il remplace en partie, il ne s'applique qu'à un seul
+   * onglet et n'a pas besoin d'être partageable par lien pour ce round.
    *
-   * `rows` (une ligne par personne référencée sur une action) alimente les OPTIONS de `FilterBar`
-   * (qui les calcule en mappant CHAQUE ligne) ; `byId` (ensembles par chantier) alimente le
-   * filtrage réel plus bas — un chantier a souvent plusieurs personnes, un simple
-   * `FilterDef<Chantier>.getValue` à valeur unique perdrait des correspondances valides.
+   * Filtre les CHANTIERS affichés dans `AxisKanban` : un chantier reste visible si au moins un de
+   * ses leviers rattachés à un KPI est actuellement à l'un des jalons cochés (logique implémentée
+   * dans `AxisKanban` lui-même via la prop `milestoneFilter`, ce composant ne fait que porter
+   * l'état + le `FilterBar`).
    */
-  const { chantierFacetRows, chantierFacetsById } = useMemo(() => {
-    const usersByUsername = new Map(data.users.map((u) => [u.username, u]));
-    const rows: ChantierPersonFacetRow[] = [];
-    const byId = new Map<
-      string,
-      { directions: Set<string>; persons: Set<string>; sponsors: Set<string> }
-    >();
-    const entry = (chantierId: string) => {
-      const existing = byId.get(chantierId);
-      if (existing) return existing;
-      const created = {
-        directions: new Set<string>(),
-        persons: new Set<string>(),
-        sponsors: new Set<string>(),
-      };
-      byId.set(chantierId, created);
-      return created;
-    };
-    for (const chantier of data.chantiers) entry(chantier.id);
-    for (const action of data.chantierActions) {
-      const facets = entry(action.chantierId);
-      if (action.owner) {
-        const user = usersByUsername.get(action.owner);
-        const direction = user?.direction ?? "";
-        const person = user?.name ?? action.owner;
-        if (direction) facets.directions.add(direction);
-        if (person) facets.persons.add(person);
-        rows.push({ chantierId: action.chantierId, direction, person, sponsor: "" });
-      }
-      if (action.sponsor) {
-        const user = usersByUsername.get(action.sponsor);
-        const direction = user?.direction ?? "";
-        const person = user?.name ?? action.sponsor;
-        const sponsor = user?.name ?? action.sponsor;
-        if (direction) facets.directions.add(direction);
-        if (person) facets.persons.add(person);
-        if (sponsor) facets.sponsors.add(sponsor);
-        rows.push({ chantierId: action.chantierId, direction, person, sponsor });
-      }
-    }
-    return { chantierFacetRows: rows, chantierFacetsById: byId };
-  }, [data.chantiers, data.chantierActions, data.users]);
+  const [milestoneFilters, setMilestoneFilters] = useState<ActiveFilters>({});
 
-  const chantierFilterDefs: FilterDef<ChantierPersonFacetRow>[] = useMemo(
+  const milestoneFilterDefs: FilterDef<ChantierAction>[] = useMemo(
     () => [
       {
-        key: "cf_direction",
-        label: t("strategicAxes.filterDirection"),
-        getValue: (r) => r.direction,
+        key: "jalon",
+        label: t("strategicAxes.filterMilestone"),
+        getValue: (a) => a.milestones?.currentMilestone ?? "E0",
       },
-      { key: "cf_person", label: t("strategicAxes.filterPerson"), getValue: (r) => r.person },
-      { key: "cf_sponsor", label: t("strategicAxes.filterSponsor"), getValue: (r) => r.sponsor },
     ],
     [t]
   );
 
-  /** Filtres chantier — état purement LOCAL (pas d'URL, contrairement aux filtres d'axe) : ils ne
-   *  s'appliquent qu'à la vue "chantiers" et n'ont pas besoin d'être partageables par lien pour ce
-   *  round. Pas besoin du contournement `openFilterKeys` des filtres d'axe (voir plus haut) non
-   *  plus : ici l'état EST directement l'objet remonté par `FilterBar.onChange`, sans réécriture
-   *  intermédiaire susceptible d'en perdre une partie. */
-  const [chantierFilters, setChantierFilters] = useState<ActiveFilters>({});
-
-  const chantierMatchesFilters = (chantier: Chantier): boolean =>
-    Object.entries(chantierFilters).every(([key, values]) => {
-      if (values.length === 0) return true;
-      const facets = chantierFacetsById.get(chantier.id);
-      if (!facets) return false;
-      const set =
-        key === "cf_direction"
-          ? facets.directions
-          : key === "cf_person"
-            ? facets.persons
-            : facets.sponsors;
-      return values.some((v) => set.has(v));
-    });
-
-  // Les dépendances sont évaluées sur TOUT le programme (un chantier peut dépendre du chantier
-  // d'un autre axe — cas explicitement prévu par le modèle), exactement comme `AxisDetailClient`.
-  const alertedChantierIds = useMemo(() => {
-    const alerts = chantierDependencyAlerts(data.chantiers, data.chantierActions);
-    return new Set(alerts.flatMap((a) => [a.sourceId, a.targetId]));
-  }, [data.chantiers, data.chantierActions]);
+  const activeMilestones = (milestoneFilters["jalon"] ?? []) as MilestoneId[];
 
   // Filtres persistés dans l'URL sous le préfixe `f_`, exactement comme la page leviers — un lien
   // vers une vue filtrée reste partageable et survit à un rafraîchissement.
@@ -543,14 +422,6 @@ export function StrategicAxesView() {
               >
                 <LayoutGrid size={13} /> {t("strategicAxes.kanban")}
               </button>
-              <button
-                onClick={() => setView("chantiers")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${
-                  view === "chantiers" ? "bg-black text-white" : "bg-white text-secondary"
-                }`}
-              >
-                <LayoutList size={13} /> {t("strategicAxes.chantiersView")}
-              </button>
             </div>
           </div>
         </CardBody>
@@ -566,200 +437,51 @@ export function StrategicAxesView() {
           <div className="mt-1 text-[13px]">{t("strategicAxes.emptyHint")}</div>
         </div>
       ) : view === "kanban" ? (
-        <AxisKanban
-          axes={filteredAxes}
-          stages={stages}
-          indicators={data.indicators}
-          measurements={data.measurements}
-          chantiersByAxis={chantiersByAxis}
-          chantierActions={data.chantierActions}
-          onCardClick={openAxis}
-          onOpenChantier={openChantierPanel}
-          atRiskItemsOf={(axisId) =>
-            axisAtRiskIndicators(axisId, data.indicators, data.measurements)
-          }
-          labels={{
-            emptyAxisChantiers: t("strategicAxes.axisNoChantier"),
-            chantiers: t("strategicAxes.chantiersCount"),
-            atRisk: t("strategicAxes.atRiskCount"),
-            atRiskPopoverTitle: t("strategicAxes.atRiskPopoverTitle"),
-            atRiskTooltip: t("strategicAxes.atRiskTooltip"),
-            progress: t("kpi.chart.progressToTarget"),
-          }}
-        />
-      ) : view === "chantiers" ? (
         <div className="flex flex-col gap-3">
-          {/* Filtres CHANTIER (round 4, point 8) — Direction/Personne/Sponsor, indépendants des
-              filtres d'axe ci-dessus et scopés à cette vue uniquement (voir doc-comment de
-              `chantierFacetRows`). */}
+          {/* Filtre "Jalon" E0-E4 (round 9, points 3/9) — scopé à cet onglet, indépendant du filtre
+              "Étape de maturité" ci-dessus (voir doc-comment de `milestoneFilters`). */}
           <Card>
             <CardBody flush>
               <div className="flex flex-wrap items-center gap-2 p-3">
                 <FilterBar
-                  items={chantierFacetRows}
-                  defs={chantierFilterDefs}
-                  active={chantierFilters}
-                  onChange={setChantierFilters}
+                  items={milestoneTrackedActions}
+                  defs={milestoneFilterDefs}
+                  active={milestoneFilters}
+                  onChange={setMilestoneFilters}
                 />
               </div>
             </CardBody>
           </Card>
-          {filteredAxes.map((axis) => {
-            const axisChantiers = (chantiersByAxis.get(axis.id) ?? []).filter(
-              chantierMatchesFilters
-            );
-            return (
-              <div key={axis.id} className="rounded-lg border border-border bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-center gap-2.5 border-b border-border pb-2.5">
-                  <span
-                    aria-hidden
-                    className="h-3 w-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
-                  />
-                  <button
-                    onClick={() => openAxis(axis.id)}
-                    className="text-sm font-bold text-primary underline-offset-2 hover:underline"
-                  >
-                    {axis.name}
-                  </button>
-                  <AxisStageBadge stageId={axis.stage} stages={stages} className="shrink-0" />
-                  <span className="ml-auto text-[11px] text-tertiary">
-                    {axisChantiers.length} {t("strategicAxes.chantiersCount")}
-                  </span>
-                </div>
-
-                {axisChantiers.length === 0 ? (
-                  <p className="pt-3 text-[12px] text-tertiary">
-                    {t("strategicAxes.axisNoChantier")}
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-2 pt-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {axisChantiers.map((chantier) => {
-                      const c = chantierCounts.get(chantier.id) ?? { actions: 0, atRisk: 0 };
-                      const isAlerted = alertedChantierIds.has(chantier.id);
-                      const chantierActions = actionsByChantier.get(chantier.id) ?? [];
-                      const shownActions = chantierActions.slice(0, CARD_ACTIONS_SHOWN);
-                      const hiddenActions = chantierActions.length - shownActions.length;
-                      const progressPct = chantierMilestoneProgressPct(chantier, chantierActions);
-                      // Popover-cliquable (round 4, point 2) : le badge "N à risque" est un vrai
-                      // <button>, donc la carte NE PEUT PLUS être elle-même un <button> (imbrication
-                      // invalide) — `role="button"` + gestion clavier reproduit le même comportement.
-                      return (
-                        <div
-                          key={chantier.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => openChantierPanel(chantier.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              openChantierPanel(chantier.id);
-                            }
-                          }}
-                          className={`flex h-full cursor-pointer flex-col rounded-md border bg-white p-3 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm ${
-                            isAlerted ? "border-rag-amber bg-rag-amber-light/40" : "border-border"
-                          }`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-primary">
-                              {chantier.name}
-                            </span>
-                            {isAlerted && (
-                              <TriangleAlert
-                                size={13}
-                                className="mt-0.5 shrink-0 text-rag-amber"
-                                aria-label={t("strategicAxes.chantierAlerted")}
-                              />
-                            )}
-                          </div>
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-                            <AxisStageBadge stageId={chantier.stage} stages={stages} />
-                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-secondary">
-                              {c.actions} {t("strategicAxes.actionsSuffix")}
-                            </span>
-                            {c.atRisk > 0 && (
-                              <Popover
-                                trigger={({ toggle }) => (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggle();
-                                    }}
-                                    className="rounded-full bg-rag-amber-light px-2 py-0.5 font-semibold text-rag-amber hover:brightness-95"
-                                  >
-                                    {c.atRisk} {t("strategicAxes.atRiskCount")}
-                                  </button>
-                                )}
-                              >
-                                <AtRiskIndicatorPopoverContent
-                                  items={chantierAtRiskIndicators(
-                                    chantier.id,
-                                    data.indicators,
-                                    data.measurements
-                                  )}
-                                  title={t("strategicAxes.atRiskPopoverTitle")}
-                                  progressLabel={t("kpi.chart.progressToTarget")}
-                                />
-                              </Popover>
-                            )}
-                          </div>
-
-                          {/* Avancement dérivé des jalons E0→E4 franchis (voir milestoneProgressPct). */}
-                          <div className="mt-2 flex items-center gap-1.5">
-                            <div className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-100">
-                              <div
-                                className="h-full rounded-full"
-                                style={{
-                                  width: `${progressPct}%`,
-                                  backgroundColor: axis.color ?? "var(--bp-warm-taupe)",
-                                }}
-                              />
-                            </div>
-                            <span className="shrink-0 text-[10px] font-bold text-secondary">
-                              {progressPct}%
-                            </span>
-                          </div>
-
-                          {/* Les actions À FAIRE, nommées — la maille de pilotage quotidien. */}
-                          {chantierActions.length === 0 ? (
-                            <p className="mt-2 text-[11px] text-tertiary">
-                              {t("strategicAxes.cardNoActions")}
-                            </p>
-                          ) : (
-                            <ul className="mt-2 space-y-1">
-                              {shownActions.map((action) => (
-                                <li
-                                  key={action.id}
-                                  className="flex items-start gap-1.5 text-[11px] leading-snug text-secondary"
-                                >
-                                  <span
-                                    aria-hidden
-                                    className="mt-[5px] h-1 w-1 shrink-0 rounded-full"
-                                    style={{
-                                      backgroundColor: axis.color ?? "var(--bp-warm-taupe)",
-                                    }}
-                                  />
-                                  <span className="min-w-0 flex-1 truncate" title={action.name}>
-                                    {action.name}
-                                  </span>
-                                </li>
-                              ))}
-                              {hiddenActions > 0 && (
-                                <li className="pl-2.5 text-[10.5px] font-medium text-tertiary">
-                                  +{hiddenActions} {t("strategicAxes.moreActionsSuffix")}
-                                </li>
-                              )}
-                            </ul>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          <AxisKanban
+            axes={filteredAxes}
+            stages={stages}
+            chantiersByAxis={chantiersByAxis}
+            chantierActions={data.chantierActions}
+            onCardClick={openAxis}
+            onOpenChantier={openChantierPanel}
+            atRiskItemsOf={(axisId) =>
+              axisAtRiskIndicators(axisId, data.indicators, data.measurements)
+            }
+            milestoneFilter={activeMilestones}
+            labels={{
+              emptyAxisChantiers: t("strategicAxes.axisNoChantier"),
+              filteredEmptyAxisChantiers: t("strategicAxes.kanbanFilteredEmpty"),
+              chantiers: t("strategicAxes.chantiersCount"),
+              atRisk: t("strategicAxes.atRiskCount"),
+              atRiskPopoverTitle: t("strategicAxes.atRiskPopoverTitle"),
+              atRiskTooltip: t("strategicAxes.atRiskTooltip"),
+              progress: t("kpi.chart.progressToTarget"),
+              noLeviers: t("strategicAxes.kanbanNoLeviers"),
+              kanbanBadgePrefix: t("strategicAxes.kanbanBadgePrefix"),
+              kanbanStatusLabels: {
+                todo: t("strategicChantierDetail.kanban.todo"),
+                in_progress: t("strategicChantierDetail.kanban.inProgress"),
+                done: t("strategicChantierDetail.kanban.done"),
+              },
+              drilldownTitlePrefix: t("strategicAxes.kanbanDrilldownTitle"),
+              drilldownEmpty: t("strategicAxes.kanbanDrilldownEmpty"),
+            }}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -768,10 +490,9 @@ export function StrategicAxesView() {
             const axisIndicators = indicatorsByAxis.get(axis.id) ?? [];
             const shownIndicators = axisIndicators.slice(0, MAX_CARD_INDICATOR_CHIPS);
             const hiddenIndicatorsCount = axisIndicators.length - shownIndicators.length;
-            // Même conversion bouton -> div que la vue "chantiers" (voir plus haut) : la carte
-            // imbrique désormais deux familles de <button> (puces d'indicateur, round 6, point 3 ;
-            // et le déclencheur `AtRiskCountPill`), qui ne peuvent pas être imbriquées dans un
-            // <button> parent.
+            // `div role="button"` plutôt qu'un vrai <button> : la carte imbrique deux familles de
+            // <button> (puces d'indicateur, round 6, point 3 ; et le déclencheur `AtRiskCountPill`),
+            // qui ne peuvent pas être imbriquées dans un <button> parent.
             return (
               <div
                 key={axis.id}

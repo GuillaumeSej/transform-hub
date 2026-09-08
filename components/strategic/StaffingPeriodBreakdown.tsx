@@ -52,6 +52,16 @@ export function StaffingPeriodBreakdown({
   );
   const undatedCount = useMemo(() => staffing.filter((e) => !e.startDate).length, [staffing]);
 
+  /** Budget total tous fonctions confondues (programme actif) — dénominateur du % d'utilisation
+   *  global affiché par période. `0` à la fois quand aucun budget n'est configuré et quand tous les
+   *  budgets configurés sont nuls : dans les deux cas `pctUtilized` ci-dessous reste `null` plutôt
+   *  que d'afficher un pourcentage trompeur ou une division par zéro. */
+  const totalBudget = useMemo(
+    () =>
+      STAFFING_FUNCTIONS.reduce((sum, fn) => sum + (activeProgram?.staffingBudgets?.[fn] ?? 0), 0),
+    [activeProgram]
+  );
+
   return (
     <Card className="mb-0">
       <CardHeader
@@ -93,60 +103,75 @@ export function StaffingPeriodBreakdown({
           <p className="text-sm text-text-secondary">{t("staffingPeriod.empty")}</p>
         ) : (
           <ul className="space-y-4">
-            {buckets.map((bucket) => (
-              <li key={bucket.period} className="rounded-md border border-border p-3">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-[13px] font-bold text-primary">{bucket.period}</span>
-                  <span className="text-[12px] text-secondary">
-                    <strong className="text-primary">{formatFte(bucket.totalFte)}</strong>{" "}
-                    {t("staffing.fteUnit")}
-                  </span>
-                </div>
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-200">
-                  <div
-                    className="h-full rounded-full bg-bp-coral transition-all"
-                    style={{
-                      width: `${maxTotal > 0 ? (bucket.totalFte / maxTotal) * 100 : 0}%`,
-                    }}
-                  />
-                </div>
-                <ul className="mt-3 space-y-1.5">
-                  {STAFFING_FUNCTIONS.filter((fn) => (bucket.byFunction[fn] ?? 0) > 0).map((fn) => {
-                    const fte = bucket.byFunction[fn] ?? 0;
-                    const budget = activeProgram?.staffingBudgets?.[fn];
-                    const selected = selectedFunction === fn;
-                    return (
-                      <li key={fn}>
-                        <button
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => onSelectFunction?.(selected ? null : fn)}
-                          className={`flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left text-[12px] transition ${
-                            selected ? "bg-neutral-50 ring-1 ring-bp-coral" : "hover:bg-neutral-50"
-                          }`}
-                        >
-                          <span className="flex items-center gap-1.5 text-primary">
-                            <span
-                              className={`inline-block h-2 w-2 rounded-full ${STAFFING_FUNCTION_COLORS[fn]}`}
-                            />
-                            {t(`staffing.function.${fn}`)}
-                          </span>
-                          <span className="text-secondary">
-                            {formatFte(fte)} {t("staffing.fteUnit")}
-                            {budget !== undefined && (
-                              <span className="ml-1 text-tertiary">
-                                / {formatFte(budget)} {t("staffing.fteUnit")} (
-                                {Math.round((fte / (budget || 1)) * 100)}%)
+            {buckets.map((bucket) => {
+              const pctUtilized =
+                totalBudget > 0 ? Math.round((bucket.totalFte / totalBudget) * 100) : null;
+              return (
+                <li key={bucket.period} className="rounded-md border border-border p-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-[13px] font-bold text-primary">{bucket.period}</span>
+                    <span className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-[12px] text-secondary">
+                        <strong className="text-primary">{formatFte(bucket.totalFte)}</strong>{" "}
+                        {t("staffing.fteUnit")}
+                      </span>
+                      {pctUtilized !== null && (
+                        <span className="text-[13px] font-bold text-primary">
+                          {t("staffingPeriod.utilization").replace("{pct}", String(pctUtilized))}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-200">
+                    <div
+                      className="h-full rounded-full bg-bp-coral transition-all"
+                      style={{
+                        width: `${maxTotal > 0 ? (bucket.totalFte / maxTotal) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <ul className="mt-3 space-y-1.5">
+                    {STAFFING_FUNCTIONS.filter((fn) => (bucket.byFunction[fn] ?? 0) > 0).map(
+                      (fn) => {
+                        const fte = bucket.byFunction[fn] ?? 0;
+                        const budget = activeProgram?.staffingBudgets?.[fn];
+                        const selected = selectedFunction === fn;
+                        return (
+                          <li key={fn}>
+                            <button
+                              type="button"
+                              aria-pressed={selected}
+                              onClick={() => onSelectFunction?.(selected ? null : fn)}
+                              className={`flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left text-[12px] transition ${
+                                selected
+                                  ? "bg-neutral-50 ring-1 ring-bp-coral"
+                                  : "hover:bg-neutral-50"
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5 text-primary">
+                                <span
+                                  className={`inline-block h-2 w-2 rounded-full ${STAFFING_FUNCTION_COLORS[fn]}`}
+                                />
+                                {t(`staffing.function.${fn}`)}
                               </span>
-                            )}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </li>
-            ))}
+                              <span className="text-secondary">
+                                {formatFte(fte)} {t("staffing.fteUnit")}
+                                {budget !== undefined && (
+                                  <span className="ml-1 text-tertiary">
+                                    / {formatFte(budget)} {t("staffing.fteUnit")} (
+                                    {Math.round((fte / (budget || 1)) * 100)}%)
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      }
+                    )}
+                  </ul>
+                </li>
+              );
+            })}
           </ul>
         )}
         {undatedCount > 0 && (

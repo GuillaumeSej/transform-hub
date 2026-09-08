@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock } from "lucide-react";
+import { Check, Lock } from "lucide-react";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { MilestoneId } from "@/types";
@@ -71,6 +71,7 @@ export function MilestoneStepper({
                     : "cursor-default border-border bg-neutral-50 text-tertiary opacity-60"
               }`}
             >
+              {isPassed && <Check size={10} className="shrink-0" />}
               {isFuture && <Lock size={10} className="shrink-0" />}
               {milestoneId}
             </button>

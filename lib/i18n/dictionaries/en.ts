@@ -1175,11 +1175,17 @@ const en: Record<string, string> = {
   "strategicAxes.axisCreated": "Axis created",
   "strategicAxes.axisUpdated": "Axis updated",
   "strategicAxes.cards": "Cards",
-  "strategicAxes.kanban": "Kanban",
+  "strategicAxes.kanban": "Workstream progress",
   "strategicAxes.chantiersView": "Workstreams",
   "strategicAxes.axisNoChantier": "No workstream",
   "strategicAxes.chantierAlerted": "Dependency alert",
   "strategicAxes.kanbanEmptyColumn": "No axis",
+  "strategicAxes.filterMilestone": "Milestone",
+  "strategicAxes.kanbanFilteredEmpty": "No workstream at this milestone",
+  "strategicAxes.kanbanNoLeviers": "No lever",
+  "strategicAxes.kanbanBadgePrefix": "Kanban",
+  "strategicAxes.kanbanDrilldownTitle": "Levers",
+  "strategicAxes.kanbanDrilldownEmpty": "No lever at this stage.",
   "strategicAxes.noStage": "No stage",
   "strategicAxes.filterStage": "Maturity stage",
   "strategicAxes.filterOwner": "Owner",
@@ -1545,6 +1551,7 @@ const en: Record<string, string> = {
   "staffingPeriod.granularity.annual": "Year",
   "staffingPeriod.empty": "No dated FTE for this granularity.",
   "staffingPeriod.undatedNote": "{n} staffing line(s) with no start date, not shown in this view.",
+  "staffingPeriod.utilization": "{pct}% utilization",
 
   // ─── Staffing Excel import (round 7 — StaffingImportButton.tsx) ───────────────────────────
   "staffingImport.templateButton": "Download the template",
@@ -1587,6 +1594,11 @@ const en: Record<string, string> = {
   "strategicDashboard.noIndicators": "No indicator defined for this program",
   "strategicDashboard.noDependencyAlerts": "No dependency alert between work packages",
   "strategicDashboard.delayDays": "days of slippage",
+  // Round 9: sub-headings for the two sub-sections of the "chantier-dependency-alerts" widget
+  // (dependencies + pending prerequisites, `lib/axisLogic.ts` `programBlockedActions`).
+  "strategicDashboard.dependencyAlertsHeading": "Work package dependencies",
+  "strategicDashboard.pendingPrerequisitesHeading": "Pending prerequisites",
+  "strategicDashboard.noPrerequisiteAlerts": "No blocking prerequisite pending",
   "strategicDashboard.dragToReorder": "Drag to reorder",
   "strategicDashboard.moveUp": "Move up",
   "strategicDashboard.moveDown": "Move down",

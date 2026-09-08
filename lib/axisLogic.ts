@@ -737,6 +737,51 @@ export function chantierMilestoneProgressPct(
   return Math.round(total / own.length);
 }
 
+// ─── Poids illustratif par jalon (round 9) ─────────────────────────────────────────────────────
+
+/**
+ * Poids illustratifs par jalon, donnés directement par le PO — E0/E1/E2 sont des étapes de cadrage
+ * léger, E3 la vraie phase d'exécution (longue), E4 la clôture complète. Utilisés UNIQUEMENT pour
+ * le remplissage visuel (fond proportionnel) des blocs de `LevierMilestoneBoard.tsx` — **ne
+ * remplace ni `milestoneProgressPct` ni `chantierMilestoneProgressPct`**, qui restent la seule
+ * source pour les barres de progression existantes (chantier, Gantt, etc.).
+ */
+export const MILESTONE_WEIGHT: Record<MilestoneId, number> = {
+  E0: 10,
+  E1: 15,
+  E2: 20,
+  E3: 60,
+  E4: 100,
+};
+
+/**
+ * Poids du jalon COURANT d'une entité (pas un cumul des jalons franchis, contrairement à
+ * `milestoneProgressPct`) — alimente le remplissage visuel de `LevierMilestoneBoard.tsx`. Une
+ * entité sans état de jalon du tout (`milestones` absent) est traitée comme si elle était à E0.
+ */
+export function milestoneWeightPct(entity: { milestones?: ChantierMilestoneState }): number {
+  const current = entity.milestones?.currentMilestone;
+  return current ? MILESTONE_WEIGHT[current] : MILESTONE_WEIGHT.E0;
+}
+
+// ─── Prérequis bloquants du programme (round 9) ────────────────────────────────────────────────
+
+/**
+ * Enveloppe `canStartAction` (voir plus haut) sur TOUTES les actions passées, ne conservant que
+ * celles effectivement bloquées — alimente le nouveau bloc "prérequis en attente" du dashboard,
+ * en parallèle de `chantierDependencyAlerts`. Fonction pure, même parti pris purement informatif
+ * que `canStartAction` (rien n'empêche réellement une action bloquée de démarrer).
+ */
+export function programBlockedActions(
+  actions: ChantierAction[],
+  stages: MaturityStageConfig[]
+): { action: ChantierAction; reasons: string[] }[] {
+  return actions
+    .map((action) => ({ action, ...canStartAction(action, actions, stages) }))
+    .filter((r) => r.blocked)
+    .map(({ action, reasons }) => ({ action, reasons }));
+}
+
 // ─── Couleur déterministe par chantier (round 8) ───────────────────────────────────────────────
 
 /** Palette catégorielle fixe (Tailwind, fond plein) — même convention que

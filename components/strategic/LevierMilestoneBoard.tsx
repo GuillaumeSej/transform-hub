@@ -1,5 +1,6 @@
 "use client";
 
+import { milestoneWeightPct } from "@/lib/axisLogic";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import type { Chantier, ChantierAction, MilestoneId } from "@/types";
 
@@ -68,12 +69,19 @@ export function LevierCard({
   onLevierClick,
 }: LevierBoardCard & { onLevierClick: (chantierId: string) => void }) {
   const borderClass = CHANTIER_BORDER_CLASS[chantierColor] ?? "border-border";
+  // Round 9, point 1 : remplissage pondéré par le poids du jalon COURANT (`milestoneWeightPct`,
+  // lib/axisLogic.ts — E0/E1/E2 cadrage léger, E3 exécution longue, E4 clôture) — un DEUXIÈME
+  // signal qui doit coexister avec l'accent de couleur par chantier (`border-l-4` ci-dessus) sans
+  // le remplacer : une fine bande en bas de carte (largeur proportionnelle au poids, jamais un
+  // lavage de fond complet) reste lisible avec le texte à 100% comme à 10%, contrairement à un
+  // fond teinté qui viendrait réduire le contraste du nom du levier.
+  const weightPct = milestoneWeightPct(action);
   return (
     <button
       type="button"
       onClick={() => onLevierClick(chantier.id)}
-      title={`${action.name} · ${chantier.name}`}
-      className={`mb-1.5 flex w-full flex-col items-start gap-0.5 rounded-md border border-l-4 bg-white p-2 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass}`}
+      title={`${action.name} · ${chantier.name} · ${weightPct}%`}
+      className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 bg-white p-2 pb-2.5 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass}`}
     >
       <span className="flex w-full items-center gap-1.5">
         <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${chantierColor}`} />
@@ -84,6 +92,11 @@ export function LevierCard({
       <span className="w-full truncate pl-3.5 text-[10.5px] text-tertiary" title={chantier.name}>
         {chantier.name}
       </span>
+      <span
+        aria-hidden
+        className="absolute bottom-0 left-0 h-[3px] rounded-r-full bg-black/50 transition-[width]"
+        style={{ width: `${weightPct}%` }}
+      />
     </button>
   );
 }
