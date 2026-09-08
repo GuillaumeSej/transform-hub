@@ -1226,10 +1226,11 @@ const fr: Record<string, string> = {
   // Onglet "Avancement des chantiers" (round 9, points 3/9) — compteurs E0-E4 + kanban par chantier,
   // drill-down par jalon/statut, filtre "Jalon" dédié.
   "strategicAxes.filterMilestone": "Jalon",
+  "strategicAxes.filterKanban": "Statut kanban",
   // Round 10, point 3 : libellé combiné affiché quand les filtres "Étape de maturité" et "Jalon"
   // sont regroupés visuellement (vue "Avancement des chantiers", seule où les deux coexistent).
   "strategicAxes.filterStageAndMilestone": "Filtres",
-  "strategicAxes.kanbanFilteredEmpty": "Aucun chantier à ce jalon",
+  "strategicAxes.kanbanFilteredEmpty": "Aucun chantier pour ce filtre",
   "strategicAxes.kanbanNoLeviers": "Aucun levier",
   "strategicAxes.kanbanBadgePrefix": "Kanban",
   "strategicAxes.kanbanDrilldownTitle": "Leviers",
