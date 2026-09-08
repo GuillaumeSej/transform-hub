@@ -17,7 +17,6 @@ import type {
   MilestoneId,
   Program,
   ProgramType,
-  StaffingFunction,
   StrategicAxis,
 } from "@/types";
 
@@ -785,12 +784,11 @@ export function programBlockedActions(
 
 // ─── Couleur déterministe par chantier (round 8) ───────────────────────────────────────────────
 
-/** Palette catégorielle fixe (Tailwind, fond plein) — même convention que
- *  `STAFFING_FUNCTION_COLORS` (`components/strategic/ChantierStaffingEditor.tsx`) : classes
- *  `bg-*-500` de la palette Tailwind par défaut, pas de token `bp-*` de marque (déjà réservés à
- *  d'autres usages). Purement catégorielle, sans rapport avec un statut à-risque (`rag-*`). Ordre
- *  arbitraire mais stable : ne jamais réordonner ce tableau, `colorForChantier` en dépend pour
- *  rester déterministe dans le temps. */
+/** Palette catégorielle fixe (Tailwind, fond plein) — classes `bg-*-500` de la palette Tailwind
+ *  par défaut, pas de token `bp-*` de marque (déjà réservés à d'autres usages). Purement
+ *  catégorielle, sans rapport avec un statut à-risque (`rag-*`). Ordre arbitraire mais stable :
+ *  ne jamais réordonner ce tableau, `colorForChantier`/`colorForDepartment` en dépendent pour
+ *  rester déterministes dans le temps. */
 const CHANTIER_COLOR_PALETTE = [
   "bg-blue-500",
   "bg-emerald-500",
@@ -821,6 +819,16 @@ export function colorForChantier(chantierId: string): string {
   return CHANTIER_COLOR_PALETTE[sum % CHANTIER_COLOR_PALETTE.length];
 }
 
+/** Même hash déterministe/même palette que `colorForChantier` ci-dessus, réutilisée telle quelle
+ *  pour un nom d'équipe/département (round 13 — remplace `STAFFING_FUNCTION_COLORS`, la palette à
+ *  9 couleurs figées de l'ancienne union fermée `StaffingFunction`, retirée : la liste d'équipes
+ *  vient désormais de la base ETP, à cardinalité arbitraire, donc pas de palette à main levée
+ *  possible). Alias distinct (pas un simple ré-export de `colorForChantier`) pour que les deux
+ *  usages restent lisibles séparément aux points d'appel. */
+export function colorForDepartment(departmentName: string): string {
+  return colorForChantier(departmentName);
+}
+
 // ─── Staffing par période (round 7) ────────────────────────────────────────────────────────────
 
 /** Une entrée de staffing par période/fonction, alimentant `StaffingPeriodBreakdown.tsx`. */
@@ -830,7 +838,9 @@ export type StaffingPeriodBucket = {
    *  `"YYYY"` (annuel). */
   period: string;
   totalFte: number;
-  byFunction: Partial<Record<StaffingFunction, number>>;
+  /** Clé = nom d'équipe/département (`ChantierStaffing.function`, texte libre — voir
+   *  `types/index.ts`), plus l'ancienne union fermée à 9 valeurs (round 13). */
+  byFunction: Record<string, number>;
 };
 
 /** Calcule le libellé de période (voir `StaffingPeriodBucket.period`) d'une date ISO pour une

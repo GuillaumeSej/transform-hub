@@ -5,6 +5,10 @@ import type { Chantier, ChantierAction, ChantierStaffing } from "@/types";
 const companyId = "C1";
 const programId = "P1";
 
+// Round 13 : la colonne "Fonction" matche désormais une équipe RÉELLE de la base ETP entreprise
+// (plus l'ancienne union fermée à 9 valeurs) — voir `validateStaffingImportRows`.
+const knownDepartments = ["RH", "IT / SI"];
+
 function baseChantier(overrides: Partial<Chantier> = {}): Chantier {
   return {
     id: "CH1",
@@ -60,14 +64,15 @@ describe("validateStaffingImportRows", () => {
       programId,
       chantiers,
       chantierActions,
-      []
+      [],
+      knownDepartments
     );
 
     expect(result.errors).toEqual([]);
     expect(result.rows).toHaveLength(2);
     expect(result.rows.every((r) => !r.isUpdate)).toBe(true);
 
-    const rhRow = result.rows.find((r) => r.entry.function === "rh");
+    const rhRow = result.rows.find((r) => r.entry.function === "RH");
     expect(rhRow?.entry.chantierId).toBe("CH1");
     expect(rhRow?.entry.axisId).toBe("AX1");
     expect(rhRow?.entry.fte).toBe(1);
@@ -75,7 +80,7 @@ describe("validateStaffingImportRows", () => {
     expect(rhRow?.entry.endDate).toBe("2026-06-30");
     expect(rhRow?.entry.actionId).toBeUndefined();
 
-    const itRow = result.rows.find((r) => r.entry.function === "it");
+    const itRow = result.rows.find((r) => r.entry.function === "IT / SI");
     expect(itRow?.entry.actionId).toBe("CA1");
     expect(itRow?.entry.fte).toBe(0.5);
   });
@@ -94,7 +99,8 @@ describe("validateStaffingImportRows", () => {
       programId,
       chantiers,
       chantierActions,
-      []
+      [],
+      knownDepartments
     );
 
     expect(result.rows).toHaveLength(0);
@@ -118,7 +124,7 @@ describe("validateStaffingImportRows", () => {
         programId,
         axisId: "AX1",
         chantierId: "CH1",
-        function: "rh",
+        function: "RH",
         fte: 1,
         startDate: "2026-01-01",
         endDate: "2026-06-30",
@@ -138,7 +144,8 @@ describe("validateStaffingImportRows", () => {
       programId,
       chantiers,
       chantierActions,
-      existing
+      existing,
+      knownDepartments
     );
 
     expect(result.errors).toEqual([]);
@@ -164,7 +171,8 @@ describe("validateStaffingImportRows", () => {
       programId,
       chantiers,
       [],
-      []
+      [],
+      knownDepartments
     );
 
     expect(result.errors).toEqual([]);
@@ -192,7 +200,8 @@ describe("validateStaffingImportRows", () => {
       programId,
       [],
       [],
-      []
+      [],
+      knownDepartments
     );
     expect(result.errors).toEqual([]);
     expect(result.rows).toEqual([]);

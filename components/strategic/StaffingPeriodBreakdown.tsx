@@ -3,14 +3,10 @@
 import { useMemo, useState } from "react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
-import {
-  STAFFING_FUNCTIONS,
-  STAFFING_FUNCTION_COLORS,
-  formatFte,
-} from "@/components/strategic/ChantierStaffingEditor";
-import { staffingPeriodBuckets } from "@/lib/axisLogic";
+import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
+import { colorForDepartment, staffingPeriodBuckets } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { ChantierStaffing, Program, StaffingFunction } from "@/types";
+import type { ChantierStaffing } from "@/types";
 
 /**
  * Répartition des ETP mobilisés PAR PÉRIODE (trimestre / semestre / année), pilotée par
@@ -21,21 +17,29 @@ import type { ChantierStaffing, Program, StaffingFunction } from "@/types";
  * silencieusement ignoré.
  *
  * `selectedFunction`/`onSelectFunction` sont OPTIONNELS mais, quand fournis par l'appelant,
- * permettent de cliquer une fonction (dans n'importe quelle période) pour piloter le filtre de la
+ * permettent de cliquer une équipe (dans n'importe quelle période) pour piloter le filtre de la
  * section « Répartition par axe » restée plus bas sur `EffectifsPageClient.tsx` — c'est l'ancienne
  * section « Au global, par grande fonction » qui portait ce rôle de sélecteur ; cette carte en
- * hérite pour ne pas perdre l'interaction « cliquez une fonction pour comparer les axes ».
+ * hérite pour ne pas perdre l'interaction « cliquez une équipe pour comparer les axes ».
+ *
+ * Round 13 : le « % utilisé » se lisait auparavant contre `Program.staffingBudgets` (un budget
+ * saisi à la main, par fonction figée, scope PROGRAMME — retiré de `types/index.ts`). Il se lit
+ * désormais contre `fteByDept` (round 13, disponible RÉEL de la base ETP entreprise, voir
+ * `EffectifsPageClient.tsx`::useCompanyDepartments) — même dénominateur que la comparaison
+ * besoin/disponible affichée plus bas sur la page, jamais deux sources de vérité différentes pour
+ * le même pourcentage.
  */
 export function StaffingPeriodBreakdown({
   staffing,
-  activeProgram,
+  fteByDept,
   selectedFunction = null,
   onSelectFunction,
 }: {
   staffing: ChantierStaffing[];
-  activeProgram: Program | null;
-  selectedFunction?: StaffingFunction | null;
-  onSelectFunction?: (fn: StaffingFunction | null) => void;
+  /** Disponible réel par équipe (base ETP entreprise, live) — voir doc-comment ci-dessus. */
+  fteByDept: Record<string, number>;
+  selectedFunction?: string | null;
+  onSelectFunction?: (fn: string | null) => void;
 }) {
   const { t } = useTranslation();
   const [granularity, setGranularity] = useState<"quarterly" | "semiannual" | "annual">(
@@ -52,14 +56,12 @@ export function StaffingPeriodBreakdown({
   );
   const undatedCount = useMemo(() => staffing.filter((e) => !e.startDate).length, [staffing]);
 
-  /** Budget total tous fonctions confondues (programme actif) — dénominateur du % d'utilisation
-   *  global affiché par période. `0` à la fois quand aucun budget n'est configuré et quand tous les
-   *  budgets configurés sont nuls : dans les deux cas `pctUtilized` ci-dessous reste `null` plutôt
-   *  que d'afficher un pourcentage trompeur ou une division par zéro. */
-  const totalBudget = useMemo(
-    () =>
-      STAFFING_FUNCTIONS.reduce((sum, fn) => sum + (activeProgram?.staffingBudgets?.[fn] ?? 0), 0),
-    [activeProgram]
+  /** Disponible total tous équipes confondues (base ETP entreprise) — dénominateur du %
+   *  d'utilisation global affiché par période. `0` quand la base ETP est vide : `pctUtilized`
+   *  reste `null` plutôt que d'afficher un pourcentage trompeur ou une division par zéro. */
+  const totalAvailable = useMemo(
+    () => Object.values(fteByDept).reduce((sum, v) => sum + v, 0),
+    [fteByDept]
   );
 
   return (
@@ -105,7 +107,10 @@ export function StaffingPeriodBreakdown({
           <ul className="space-y-4">
             {buckets.map((bucket) => {
               const pctUtilized =
-                totalBudget > 0 ? Math.round((bucket.totalFte / totalBudget) * 100) : null;
+                totalAvailable > 0 ? Math.round((bucket.totalFte / totalAvailable) * 100) : null;
+              const functionsInBucket = Object.keys(bucket.byFunction)
+                .filter((fn) => (bucket.byFunction[fn] ?? 0) > 0)
+                .sort((a, b) => a.localeCompare(b));
               return (
                 <li key={bucket.period} className="rounded-md border border-border p-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -131,43 +136,41 @@ export function StaffingPeriodBreakdown({
                     />
                   </div>
                   <ul className="mt-3 space-y-1.5">
-                    {STAFFING_FUNCTIONS.filter((fn) => (bucket.byFunction[fn] ?? 0) > 0).map(
-                      (fn) => {
-                        const fte = bucket.byFunction[fn] ?? 0;
-                        const budget = activeProgram?.staffingBudgets?.[fn];
-                        const selected = selectedFunction === fn;
-                        return (
-                          <li key={fn}>
-                            <button
-                              type="button"
-                              aria-pressed={selected}
-                              onClick={() => onSelectFunction?.(selected ? null : fn)}
-                              className={`flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left text-[12px] transition ${
-                                selected
-                                  ? "bg-neutral-50 ring-1 ring-bp-coral"
-                                  : "hover:bg-neutral-50"
-                              }`}
-                            >
-                              <span className="flex items-center gap-1.5 text-primary">
-                                <span
-                                  className={`inline-block h-2 w-2 rounded-full ${STAFFING_FUNCTION_COLORS[fn]}`}
-                                />
-                                {t(`staffing.function.${fn}`)}
-                              </span>
-                              <span className="text-secondary">
-                                {formatFte(fte)} {t("staffing.fteUnit")}
-                                {budget !== undefined && (
-                                  <span className="ml-1 text-tertiary">
-                                    / {formatFte(budget)} {t("staffing.fteUnit")} (
-                                    {Math.round((fte / (budget || 1)) * 100)}%)
-                                  </span>
-                                )}
-                              </span>
-                            </button>
-                          </li>
-                        );
-                      }
-                    )}
+                    {functionsInBucket.map((fn) => {
+                      const fte = bucket.byFunction[fn] ?? 0;
+                      const available = fteByDept[fn];
+                      const selected = selectedFunction === fn;
+                      return (
+                        <li key={fn}>
+                          <button
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => onSelectFunction?.(selected ? null : fn)}
+                            className={`flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left text-[12px] transition ${
+                              selected
+                                ? "bg-neutral-50 ring-1 ring-bp-coral"
+                                : "hover:bg-neutral-50"
+                            }`}
+                          >
+                            <span className="flex items-center gap-1.5 text-primary">
+                              <span
+                                className={`inline-block h-2 w-2 rounded-full ${colorForDepartment(fn)}`}
+                              />
+                              {fn}
+                            </span>
+                            <span className="text-secondary">
+                              {formatFte(fte)} {t("staffing.fteUnit")}
+                              {available !== undefined && (
+                                <span className="ml-1 text-tertiary">
+                                  / {formatFte(available)} {t("staffing.fteUnit")} (
+                                  {Math.round((fte / (available || 1)) * 100)}%)
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </li>
               );

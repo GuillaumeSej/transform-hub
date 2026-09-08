@@ -8,59 +8,36 @@ import {
   saveChantierStaffing,
   subscribeChantierStaffing,
 } from "@/lib/firestore/chantierStaffing";
+import { colorForDepartment } from "@/lib/axisLogic";
+import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { ChantierAction, ChantierStaffing, StaffingFunction } from "@/types";
+import type { ChantierAction, ChantierStaffing } from "@/types";
 
 /**
  * Bloc « ETP mobilisés » d'une fiche chantier : la liste des lignes de staffing du chantier
- * (une fonction + un volume d'ETP par ligne) et le mini-formulaire d'ajout.
+ * (une équipe + un volume d'ETP par ligne) et le mini-formulaire d'ajout.
  *
  * Volontairement AUTONOME — il ne reçoit que les quatre identifiants de son contexte et gère
  * lui-même son abonnement Firestore et ses écritures. Motif : il est rendu à l'intérieur de la
  * pop-up de détail chantier (`components/strategic/AxisDetailClient.tsx`), qui est déjà un gros
  * composant à état ; y faire remonter une sixième collection et deux mutations de plus l'aurait
  * alourdi sans bénéfice, alors que le volume de données concerné (quelques lignes par chantier)
- * ne justifie aucune mutualisation d'abonnement.
+ * ne justifie aucune mutualisation d'abonnement. Même chose pour `useCompanyDepartments`
+ * (round 13) : léger abonnement supplémentaire, mais garde le composant capable de fonctionner
+ * seul sans dépendre d'un pré-chargement fait par l'appelant.
  *
  * Édition : ajout + suppression seulement, pas de modification en place — une ligne n'a que deux
  * champs signifiants, la corriger revient à la ressaisir (même parti pris que
  * `useStrategicData.createStaffing`, qui n'expose pas non plus d'`updateStaffing`).
+ *
+ * Round 13 : le sélecteur d'équipe listait auparavant 9 fonctions figées (`StaffingFunction`,
+ * retirée de `types/index.ts`) ; il liste désormais les départements RÉELS de la base ETP
+ * entreprise (`useCompanyDepartments`, Plan Performance) — voir la note de tête de section
+ * `ChantierStaffing` dans `types/index.ts` pour le raisonnement complet. Une entreprise sans base
+ * ETP encore saisie n'a aucune option : le champ reste vide plutôt que de retomber sur un
+ * référentiel arbitraire.
  */
-
-/** Ordre d'affichage canonique des fonctions — partagé avec la page Effectifs
- *  (`app/(app)/effectifs/EffectifsPageClient.tsx`) pour que le sélecteur de saisie et les
- *  agrégats listent les fonctions dans le même ordre. "autre" reste en fin de liste. */
-export const STAFFING_FUNCTIONS: StaffingFunction[] = [
-  "rh",
-  "finance",
-  "it",
-  "marketing",
-  "commercial",
-  "juridique",
-  "operations",
-  "achats",
-  "autre",
-];
-
-/** Une couleur Tailwind (fond plein) par fonction — variété PUREMENT catégorielle, sans rapport
- *  avec les tokens `rag-*` (statut à-risque) : ici il n'y a ni bon ni mauvais état, seulement 9
- *  catégories à distinguer d'un coup d'œil sur les barres de `app/(app)/effectifs/
- *  EffectifsPageClient.tsx` (répartition globale, par axe, et jauges de budget d'ETP). Palette
- *  Tailwind par défaut (pas de token `bp-*`, qui n'a que 9 teintes de marque déjà réservées à
- *  d'autres usages) — "autre" reste gris pour rester visuellement en retrait, cohérent avec sa
- *  place systématiquement en fin de liste. */
-export const STAFFING_FUNCTION_COLORS: Record<StaffingFunction, string> = {
-  rh: "bg-blue-500",
-  finance: "bg-emerald-500",
-  it: "bg-violet-500",
-  marketing: "bg-pink-500",
-  commercial: "bg-amber-500",
-  juridique: "bg-indigo-500",
-  operations: "bg-teal-500",
-  achats: "bg-orange-500",
-  autre: "bg-gray-400",
-};
 
 const INPUT_CLASS =
   "mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral";
@@ -102,9 +79,11 @@ export function ChantierStaffingEditor({
   const { t } = useTranslation();
   const { showToast } = useToast();
 
+  const { departmentNames } = useCompanyDepartments(companyId);
+
   const [all, setAll] = useState<ChantierStaffing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [functionDraft, setFunctionDraft] = useState<StaffingFunction>("rh");
+  const [functionDraft, setFunctionDraft] = useState("");
   const [fteDraft, setFteDraft] = useState("1");
   const [noteDraft, setNoteDraft] = useState("");
   const [startDateDraft, setStartDateDraft] = useState("");
@@ -133,6 +112,13 @@ export function ChantierStaffingEditor({
     return unsub;
   }, [companyId]);
 
+  // Présélectionne la première équipe dès que la base ETP répond, plutôt que de laisser le champ
+  // vide en permanence — ne réagit qu'à l'arrivée de la PREMIÈRE liste non vide (pas à chaque
+  // mise à jour) pour ne jamais écraser une sélection déjà faite par l'utilisateur.
+  useEffect(() => {
+    if (!functionDraft && departmentNames.length > 0) setFunctionDraft(departmentNames[0]);
+  }, [departmentNames, functionDraft]);
+
   const entries = useMemo(
     () =>
       all
@@ -144,6 +130,10 @@ export function ChantierStaffingEditor({
   const totalFte = entries.reduce((sum, e) => sum + (e.fte || 0), 0);
 
   const add = async () => {
+    if (!functionDraft) {
+      showToast(t("staffing.functionRequired"), "", "error");
+      return;
+    }
     const fte = parseFte(fteDraft);
     if (fte === null) {
       showToast(t("staffing.fteInvalid"), "", "error");
@@ -212,8 +202,12 @@ export function ChantierStaffingEditor({
               key={entry.id}
               className="flex items-center gap-2 rounded-md border border-border bg-white px-2.5 py-1.5"
             >
-              <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-primary">
-                {t(`staffing.function.${entry.function}`)}
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[12px] font-medium text-primary">
+                <span
+                  aria-hidden
+                  className={`h-2 w-2 shrink-0 rounded-full ${colorForDepartment(entry.function)}`}
+                />
+                {entry.function}
                 {entry.note && <span className="ml-1.5 text-tertiary">· {entry.note}</span>}
                 {(entry.startDate || entry.endDate) && (
                   <span className="ml-1.5 text-tertiary">
@@ -247,17 +241,26 @@ export function ChantierStaffingEditor({
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <label className="block text-[11px] font-medium text-secondary">
             {t("staffing.function")}
-            <select
-              value={functionDraft}
-              onChange={(e) => setFunctionDraft(e.target.value as StaffingFunction)}
-              className={INPUT_CLASS}
-            >
-              {STAFFING_FUNCTIONS.map((fn) => (
-                <option key={fn} value={fn}>
-                  {t(`staffing.function.${fn}`)}
-                </option>
-              ))}
-            </select>
+            {departmentNames.length > 0 ? (
+              <select
+                value={functionDraft}
+                onChange={(e) => setFunctionDraft(e.target.value)}
+                className={INPUT_CLASS}
+              >
+                {departmentNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              // Aucune équipe dans la base ETP entreprise (module RH, `/hr/etp`) : rien à
+              // proposer — plutôt qu'un référentiel arbitraire, on renvoie explicitement vers la
+              // base ETP à compléter d'abord (round 13, voir doc-comment de tête de fichier).
+              <p className={`${INPUT_CLASS} bg-neutral-50 text-tertiary`}>
+                {t("staffing.noDepartments")}
+              </p>
+            )}
           </label>
           <label className="block text-[11px] font-medium text-secondary">
             {t("staffing.fte")}
@@ -313,7 +316,12 @@ export function ChantierStaffingEditor({
           </label>
         </div>
         <div className="flex items-end">
-          <Button variant="outline" size="sm" onClick={add} disabled={saving}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={add}
+            disabled={saving || departmentNames.length === 0}
+          >
             <Plus size={12} /> {t("staffing.add")}
           </Button>
         </div>

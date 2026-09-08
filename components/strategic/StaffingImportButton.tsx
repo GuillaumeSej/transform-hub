@@ -48,6 +48,7 @@ export function StaffingImportButton({
   chantiers,
   chantierActions,
   staffing,
+  knownDepartments,
   onImport,
 }: {
   companyId?: string | null;
@@ -60,6 +61,9 @@ export function StaffingImportButton({
   /** Lignes de staffing déjà en base (programme actif) — sert de repli de résolution de la clé
    *  d'upsert (voir doc-comment de `validateStaffingImportRows`). */
   staffing: ChantierStaffing[];
+  /** Noms d'équipe réels de la base ETP entreprise (round 13 — remplace l'ancienne union fermée à
+   *  9 valeurs) : la colonne "Fonction" de l'import doit matcher l'un de ces noms. */
+  knownDepartments: string[];
   /** Écrit les entrées prêtes à upserter (appelant = `saveChantierStaffing` en boucle). Peut
    *  lever : les erreurs d'écriture sont laissées à la charge de l'appelant. */
   onImport: (entries: ChantierStaffing[]) => Promise<void>;
@@ -98,7 +102,8 @@ export function StaffingImportButton({
       programId,
       chantiers,
       chantierActions,
-      staffing
+      staffing,
+      knownDepartments
     );
     setFileName(file.name);
     setPreview(result);

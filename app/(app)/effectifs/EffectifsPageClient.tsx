@@ -1,40 +1,41 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Users } from "lucide-react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowUpRight, Users } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { KPICard } from "@/components/shared/KPICard";
-import {
-  STAFFING_FUNCTIONS,
-  STAFFING_FUNCTION_COLORS,
-  formatFte,
-} from "@/components/strategic/ChantierStaffingEditor";
+import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
-import { saveProgram } from "@/lib/firestore/admin";
+import { colorForDepartment } from "@/lib/axisLogic";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
-import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { getStrategicProfile, isAnyAdmin } from "@/lib/roleProfiles";
-import type { ChantierStaffing, StaffingFunction, StrategicAxis } from "@/types";
+import type { ChantierStaffing, StrategicAxis } from "@/types";
 
 /**
  * Page « Effectifs mobilisés » — lecture transverse du staffing saisi chantier par chantier
  * (`ChantierStaffingEditor`, dans la pop-up de détail d'un chantier), ou importé en lot via
- * `StaffingImportButton` (round 7). Deux niveaux de lecture, dans l'ordre demandé par le PO :
+ * `StaffingImportButton` (round 7). Trois niveaux de lecture, dans l'ordre demandé par le PO :
  *
+ *  0. BESOIN vs DISPONIBLE (round 13, nouveau) : pour chaque équipe (= `Employee.department` de la
+ *     base ETP entreprise, Plan Performance), le volume d'ETP demandé par le Plan Stratégique
+ *     (`ChantierStaffing.fte`, sommé) comparé au volume RÉELLEMENT disponible dans cette équipe
+ *     (`Employee.fte`, sommé — `useCompanyDepartments`, live). Remplace l'ancienne section
+ *     « Budget d'ETP par fonction », où le "disponible" était un chiffre saisi à la main
+ *     (`Program.staffingBudgets`, retiré) plutôt que la réalité de la base ETP.
  *  1. PAR PÉRIODE (`StaffingPeriodBreakdown`, round 7) : combien d'ETP le programme mobilise-t-il,
- *     trimestre/semestre/année par trimestre/semestre/année, et par grande fonction dans chaque
- *     période. Cliquer une fonction (dans n'importe quelle période) la sélectionne et devient le
- *     filtre du bloc suivant — rôle hérité de l'ancienne section « Au global, par grande fonction »
- *     (remplacée round 7, sans dimension temporelle).
+ *     trimestre/semestre/année par trimestre/semestre/année, et par équipe dans chaque période.
+ *     Cliquer une équipe (dans n'importe quelle période) la sélectionne et devient le filtre du
+ *     bloc suivant.
  *  2. PAR AXE : où ces ETP sont-ils consommés. Sans sélection, une carte par axe donne sa
- *     répartition complète ; une fonction sélectionnée bascule le bloc en comparaison directe
- *     entre axes pour CETTE fonction — la lecture « sur-staffage » attendue (un axe qui capte
- *     l'essentiel d'une fonction saute alors aux yeux).
+ *     répartition complète ; une équipe sélectionnée bascule le bloc en comparaison directe entre
+ *     axes pour CETTE équipe — la lecture « sur-staffage » attendue (un axe qui capte l'essentiel
+ *     d'une équipe saute alors aux yeux).
  *
  * Aucune écriture MANUELLE ici : la saisie ligne par ligne vit exclusivement dans la fiche
  * chantier, pour ne pas avoir deux flux de saisie divergents sur la même donnée (même parti pris
@@ -42,44 +43,44 @@ import type { ChantierStaffing, StaffingFunction, StrategicAxis } from "@/types"
  * (`StaffingImportButton`) délègue l'écriture EN LOT à `saveChantierStaffing` — après aperçu et
  * confirmation explicite, jamais en silence (voir `lib/staffingExcelImport.ts`).
  *
- * Barres : pur CSS/Tailwind (largeur en %), comme les barres de `KPICard` — pas de dépendance
- * graphique pour une répartition à une dimension. Chaque barre porte la couleur PROPRE à sa
- * fonction (`STAFFING_FUNCTION_COLORS`, source unique co-localisée avec `STAFFING_FUNCTIONS` dans
- * `ChantierStaffingEditor.tsx`) plutôt qu'une couleur unique — la sélection reste signalée par le
- * halo `ring-*` autour de la piste (voir `Bar` ci-dessous), pas par un changement de couleur qui
- * effacerait l'identité de la fonction.
+ * Round 13 : la liste des équipes n'est plus une union fermée à 9 valeurs codée en dur
+ * (`StaffingFunction`, retirée de `types/index.ts`) mais dérivée EN LIVE de la base ETP entreprise
+ * (`useCompanyDepartments`) — voir le lien « Voir la base ETP » dans l'en-tête, qui pointe vers
+ * `/hr/etp` (module RH/Plan Performance, désormais accessible aussi depuis le Plan Stratégique,
+ * voir `lib/nav-config.ts`). Une entreprise sans base ETP encore saisie voit cette page vide de
+ * toute équipe, avec un message explicite plutôt qu'un référentiel arbitraire.
  *
- * Rien à voir avec les écrans RH du Plan Performance : `Chantier`/`ChantierStaffing` n'existent
- * que côté stratégique, et la route est fermée aux programmes Performance (voir la garde
- * `programType` en bas de fichier + `programTypes: ["strategic"]` dans `lib/nav-config.ts`).
+ * Barres : pur CSS/Tailwind (largeur en %), comme les barres de `KPICard` — pas de dépendance
+ * graphique pour une répartition à une dimension. Chaque barre porte la couleur PROPRE à son
+ * équipe (`colorForDepartment`, lib/axisLogic.ts — même hash déterministe que `colorForChantier`)
+ * plutôt qu'une couleur unique — la sélection reste signalée par le halo `ring-*` autour de la
+ * piste (voir `Bar` ci-dessous), pas par un changement de couleur qui effacerait l'identité de
+ * l'équipe.
+ *
+ * Rien à voir avec les écrans RH du Plan Performance eux-mêmes : `Chantier`/`ChantierStaffing`
+ * n'existent que côté stratégique, et la route est fermée aux programmes Performance (voir la
+ * garde `programType` en bas de fichier + `programTypes: ["strategic"]` dans `lib/nav-config.ts`).
+ * Seule la base ETP (`Employee`, via `useCompanyDepartments`) est PARTAGÉE entre les deux plans.
  */
 
-/** Somme des ETP par fonction sur un lot de lignes, restreinte aux fonctions réellement
- *  mobilisées et triée par volume décroissant (le classement EST l'information : on lit d'abord
- *  la fonction la plus sollicitée). */
-function totalsByFunction(entries: ChantierStaffing[]): { fn: StaffingFunction; fte: number }[] {
-  const map = new Map<StaffingFunction, number>();
+/** Somme des ETP par équipe sur un lot de lignes, restreinte aux équipes réellement mobilisées et
+ *  triée par volume décroissant (le classement EST l'information : on lit d'abord l'équipe la plus
+ *  sollicitée). */
+function totalsByFunction(entries: ChantierStaffing[]): { fn: string; fte: number }[] {
+  const map = new Map<string, number>();
   for (const entry of entries) {
     map.set(entry.function, (map.get(entry.function) ?? 0) + (entry.fte || 0));
   }
-  return STAFFING_FUNCTIONS.filter((fn) => (map.get(fn) ?? 0) > 0)
-    .map((fn) => ({ fn, fte: map.get(fn) ?? 0 }))
+  return Array.from(map.entries())
+    .map(([fn, fte]) => ({ fn, fte }))
     .sort((a, b) => b.fte - a.fte);
 }
 
 /** Barre horizontale simple — `pct` déjà borné par l'appelant. `fn` détermine la couleur de
- *  remplissage (identité de la fonction, toujours visible) ; `highlighted` ajoute un halo corail
- *  autour de la piste plutôt que de remplacer la couleur — deux signaux indépendants (fonction vs
+ *  remplissage (identité de l'équipe, toujours visible) ; `highlighted` ajoute un halo corail
+ *  autour de la piste plutôt que de remplacer la couleur — deux signaux indépendants (équipe vs
  *  sélection) qui ne se marchent pas dessus. */
-function Bar({
-  pct,
-  fn,
-  highlighted = false,
-}: {
-  pct: number;
-  fn: StaffingFunction;
-  highlighted?: boolean;
-}) {
+function Bar({ pct, fn, highlighted = false }: { pct: number; fn: string; highlighted?: boolean }) {
   return (
     <div
       className={`h-2 w-full overflow-hidden rounded-full bg-neutral-200 ${
@@ -87,7 +88,7 @@ function Bar({
       }`}
     >
       <div
-        className={`h-full rounded-full transition-all ${STAFFING_FUNCTION_COLORS[fn]}`}
+        className={`h-full rounded-full transition-all ${colorForDepartment(fn)}`}
         style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
       />
     </div>
@@ -96,7 +97,6 @@ function Bar({
 
 export function EffectifsPageClient() {
   const { t } = useTranslation();
-  const { showToast } = useToast();
   const { user, loading: roleLoading } = useRole();
   const {
     activeProgram,
@@ -111,87 +111,40 @@ export function EffectifsPageClient() {
     staffing,
     loading: dataLoading,
   } = useStrategicData(user?.companyId ?? null, activeProgramId);
+  const { fteByDept, loading: departmentsLoading } = useCompanyDepartments(user?.companyId ?? null);
 
-  /** Fonction sélectionnée = filtre du bloc « par axe ». `null` = vue complète. */
-  const [selectedFunction, setSelectedFunction] = useState<StaffingFunction | null>(null);
-
-  // ── Budget d'ETP par fonction (programme actif) ────────────────────────────────────────────
-  // Seul un admin (global/entreprise) ou le pilote (`strategic_lead`) du Plan Stratégique peut
-  // éditer ces budgets — même raisonnement que `canFillIndicator` (lib/axisLogic.ts) pour la
-  // saisie d'indicateurs. Un viewer sans ce droit voit quand même la section, en lecture seule :
-  // c'est ce qui donne son sens au "% utilisé" affiché plus bas, section "par fonction".
-  const canEditBudgets = isAnyAdmin(user) || getStrategicProfile(user)?.role === "strategic_lead";
-
-  /** Brouillon de saisie (texte, pas encore validé) — état LOCAL distinct de
-   *  `activeProgram.staffingBudgets` pour permettre une frappe fluide (l'input reste contrôlé par
-   *  ce brouillon, pas par la valeur Firestore, qui ne revient qu'après l'écriture `onBlur`). */
-  const [budgetDrafts, setBudgetDrafts] = useState<Partial<Record<StaffingFunction, string>>>({});
-
-  // Resynchronise le brouillon uniquement quand le PROGRAMME ACTIF change (changement d'`id`), pas
-  // à chaque mise à jour Firestore du même programme : sinon la valeur qu'on vient nous-mêmes
-  // d'écrire (`commitBudget` ci-dessous) reviendrait via `subscribePrograms` et écraserait une
-  // frappe en cours sur un AUTRE champ pendant que l'utilisateur édite plusieurs fonctions à la
-  // suite.
-  useEffect(() => {
-    if (!activeProgram) {
-      setBudgetDrafts({});
-      return;
-    }
-    const next: Partial<Record<StaffingFunction, string>> = {};
-    for (const fn of STAFFING_FUNCTIONS) {
-      const value = activeProgram.staffingBudgets?.[fn];
-      if (value !== undefined) next[fn] = String(value);
-    }
-    setBudgetDrafts(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProgram?.id]);
-
-  /** Valide et enregistre le budget d'UNE fonction au blur du champ. `saveProgram` fait un
-   *  `setDoc` de document COMPLET (pas un merge) : on repart donc toujours de `{...activeProgram}`
-   *  pour ne jamais effacer le reste du programme (sponsor, devise, etc.). */
-  const commitBudget = async (fn: StaffingFunction, raw: string) => {
-    if (!activeProgram) return;
-    const trimmed = raw.trim();
-    let nextValue: number | undefined;
-    if (trimmed === "") {
-      nextValue = undefined;
-    } else {
-      const parsed = Number(trimmed.replace(",", "."));
-      if (!Number.isFinite(parsed) || parsed < 0) {
-        showToast(t("staffing.fteInvalid"), "", "error");
-        const previous = activeProgram.staffingBudgets?.[fn];
-        setBudgetDrafts((prev) => ({
-          ...prev,
-          [fn]: previous !== undefined ? String(previous) : "",
-        }));
-        return;
-      }
-      nextValue = parsed;
-    }
-    const currentBudgets = activeProgram.staffingBudgets ?? {};
-    if ((currentBudgets[fn] ?? undefined) === nextValue) return; // pas de changement, pas d'écriture
-    const nextBudgets: Partial<Record<StaffingFunction, number>> = { ...currentBudgets };
-    if (nextValue === undefined) delete nextBudgets[fn];
-    else nextBudgets[fn] = nextValue;
-    try {
-      await saveProgram({ ...activeProgram, staffingBudgets: nextBudgets });
-    } catch {
-      showToast(t("staffing.saveError"), "", "error");
-    }
-  };
+  /** Équipe sélectionnée = filtre du bloc « par axe ». `null` = vue complète. */
+  const [selectedFunction, setSelectedFunction] = useState<string | null>(null);
 
   const globalTotals = useMemo(() => totalsByFunction(staffing), [staffing]);
   const totalFte = useMemo(() => staffing.reduce((sum, e) => sum + (e.fte || 0), 0), [staffing]);
 
-  /** Segments colorés (un par fonction mobilisée) pour la barre de la tuile « Total ETP » —
-   *  remplace, en un coup d'œil sur la tuile restante, l'information que portait l'ancienne tuile
-   *  « Fonctions mobilisées » (supprimée round 7, voir plan). Même couleur par fonction que partout
-   *  ailleurs sur cette page (`STAFFING_FUNCTION_COLORS`). */
+  /** Besoin (staffing déclaré) vs disponible (base ETP réelle) par équipe — round 13, remplace la
+   *  section « Budget d'ETP par fonction ». Une équipe apparaît dès qu'elle a du besoin OU du
+   *  disponible (une équipe entièrement dispo mais jamais staffée reste visible : c'est une
+   *  information utile — "cette équipe n'est staffée sur aucun chantier du plan"). Triée par
+   *  besoin décroissant. */
+  const needVsAvailable = useMemo(() => {
+    const names = new Set<string>([
+      ...globalTotals.map((row) => row.fn),
+      ...Object.keys(fteByDept),
+    ]);
+    return Array.from(names)
+      .map((fn) => ({
+        fn,
+        needed: globalTotals.find((row) => row.fn === fn)?.fte ?? 0,
+        available: fteByDept[fn] ?? 0,
+      }))
+      .sort((a, b) => b.needed - a.needed);
+  }, [globalTotals, fteByDept]);
+
+  /** Segments colorés (un par équipe mobilisée) pour la barre de la tuile « Total ETP » — même
+   *  couleur par équipe que partout ailleurs sur cette page (`colorForDepartment`). */
   const totalFteBarSegments = useMemo(
     () =>
       globalTotals.map(({ fn, fte }) => ({
         pct: totalFte > 0 ? (fte / totalFte) * 100 : 0,
-        className: STAFFING_FUNCTION_COLORS[fn],
+        className: colorForDepartment(fn),
       })),
     [globalTotals, totalFte]
   );
@@ -211,7 +164,7 @@ export function EffectifsPageClient() {
     return groups;
   }, [axes, staffing]);
 
-  /** Comparaison inter-axes pour la fonction sélectionnée, triée par volume décroissant. */
+  /** Comparaison inter-axes pour l'équipe sélectionnée, triée par volume décroissant. */
   const selectedByAxis = useMemo(() => {
     if (!selectedFunction) return [];
     return byAxis
@@ -233,10 +186,11 @@ export function EffectifsPageClient() {
   const selectedTotal = selectedByAxis.reduce((sum, row) => sum + row.fte, 0);
   const selectedMax = selectedByAxis[0]?.fte ?? 0;
 
-  // Bouton d'import Excel : rendu directement dans l'en-tête (réutilisé par toutes les branches de
-  // retour ci-dessous) plutôt que dans une variable de toolbar séparée — n'apparaît que lorsque
-  // `chantiers`/`chantierActions`/`staffing` sont effectivement disponibles (programme actif de
-  // type stratégique), jamais pendant le chargement ou en l'absence de programme.
+  // Bouton d'import Excel + lien base ETP : rendus directement dans l'en-tête (réutilisé par
+  // toutes les branches de retour ci-dessous) plutôt que dans une variable de toolbar séparée.
+  // L'import n'apparaît que lorsque `chantiers`/`chantierActions`/`staffing` sont effectivement
+  // disponibles (programme actif de type stratégique) ; le lien base ETP, lui, ne dépend d'aucun
+  // programme (round 13 — la base ETP est scopée entreprise, pas programme).
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -244,24 +198,31 @@ export function EffectifsPageClient() {
         <h1 className="text-xl font-bold text-text-primary">{t("effectifs.title")}</h1>
         {activeProgram && <span className="text-sm text-text-secondary">{activeProgram.name}</span>}
       </div>
-      {activeProgram && programType === "strategic" && (
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href="/hr/etp"
+          className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1.5 text-[12px] font-semibold text-primary transition hover:border-black"
+        >
+          {t("effectifs.viewBaseEtp")} <ArrowUpRight size={13} />
+        </Link>
+        {activeProgram && programType === "strategic" && (
           <StaffingImportButton
             companyId={user?.companyId}
             programId={activeProgramId}
             chantiers={chantiers}
             chantierActions={chantierActions}
             staffing={staffing}
+            knownDepartments={Object.keys(fteByDept)}
             onImport={async (entries) => {
               for (const entry of entries) await saveChantierStaffing(entry);
             }}
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 
-  if (roleLoading || programLoading || dataLoading) {
+  if (roleLoading || programLoading || dataLoading || departmentsLoading) {
     return (
       <div className="space-y-6">
         {header}
@@ -290,46 +251,55 @@ export function EffectifsPageClient() {
     );
   }
 
-  // Section budget d'ETP : scope PROGRAMME, indépendante de la présence de lignes de staffing
-  // (un budget peut être fixé avant tout ETP réellement déclaré) — construite une seule fois et
-  // rendue dans les deux branches ci-dessous (staffing vide ou non), plutôt que seulement dans le
-  // corps principal.
-  const budgetSection = (
+  // Section besoin vs disponible : indépendante de la présence de lignes de staffing (une équipe
+  // de la base ETP peut être 100% disponible et n'apparaître ici que pour ça) — construite une
+  // seule fois et rendue dans les deux branches ci-dessous (staffing vide ou non).
+  const needVsAvailableSection = (
     <Card className="mb-0">
-      <CardHeader title={t("effectifs.budget.title")} />
+      <CardHeader title={t("effectifs.needVsAvailable.title")} />
       <CardBody>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {STAFFING_FUNCTIONS.map((fn) => {
-            const savedBudget = activeProgram.staffingBudgets?.[fn];
-            return (
-              <label key={fn} className="block text-[11px] font-medium text-secondary">
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className={`inline-block h-2 w-2 rounded-full ${STAFFING_FUNCTION_COLORS[fn]}`}
-                  />
-                  {t(`staffing.function.${fn}`)}
-                </span>
-                {canEditBudgets ? (
-                  <input
-                    value={budgetDrafts[fn] ?? ""}
-                    onChange={(e) => setBudgetDrafts((prev) => ({ ...prev, [fn]: e.target.value }))}
-                    onBlur={(e) => commitBudget(fn, e.target.value)}
-                    inputMode="decimal"
-                    placeholder="—"
-                    aria-label={t("effectifs.budget.inputLabel")}
-                    className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral"
-                  />
-                ) : (
-                  <span className="mt-1 block text-[13px] font-semibold text-primary">
-                    {savedBudget !== undefined
-                      ? `${formatFte(savedBudget)} ${t("staffing.fteUnit")}`
-                      : "—"}
-                  </span>
-                )}
-              </label>
-            );
-          })}
-        </div>
+        {needVsAvailable.length === 0 ? (
+          <p className="text-sm text-text-secondary">{t("effectifs.needVsAvailable.empty")}</p>
+        ) : (
+          <ul className="space-y-3">
+            {needVsAvailable.map(({ fn, needed, available }) => {
+              const pct = available > 0 ? Math.round((needed / available) * 100) : null;
+              const overAllocated = pct !== null && pct > 100;
+              return (
+                <li key={fn}>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-primary">
+                      <span
+                        aria-hidden
+                        className={`h-2 w-2 rounded-full ${colorForDepartment(fn)}`}
+                      />
+                      {fn}
+                    </span>
+                    <span className="text-[12px] text-secondary">
+                      <strong className="text-primary">{formatFte(needed)}</strong>{" "}
+                      {t("effectifs.needVsAvailable.neededOf")}{" "}
+                      <strong className="text-primary">{formatFte(available)}</strong>{" "}
+                      {t("staffing.fteUnit")}
+                      {pct !== null && (
+                        <span
+                          className={`ml-1.5 font-bold ${overAllocated ? "text-bp-coral" : ""}`}
+                        >
+                          ({pct}%)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <Bar pct={pct !== null ? Math.min(pct, 100) : 0} fn={fn} />
+                  {overAllocated && (
+                    <p className="mt-1 text-[11px] font-semibold text-bp-coral">
+                      {t("effectifs.needVsAvailable.overAllocated")}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </CardBody>
     </Card>
   );
@@ -339,7 +309,7 @@ export function EffectifsPageClient() {
       <div className="space-y-6">
         {header}
         <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
-        {budgetSection}
+        {needVsAvailableSection}
         <Card>
           <CardBody>
             <p className="text-sm text-text-secondary">{t("effectifs.empty")}</p>
@@ -354,7 +324,7 @@ export function EffectifsPageClient() {
     <div className="space-y-6">
       {header}
       <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
-      {budgetSection}
+      {needVsAvailableSection}
 
       <KPICard
         label={t("effectifs.kpi.totalFte")}
@@ -368,7 +338,7 @@ export function EffectifsPageClient() {
           grande fonction", sans dimension temporelle) ─────────────────────────────────────── */}
       <StaffingPeriodBreakdown
         staffing={staffing}
-        activeProgram={activeProgram}
+        fteByDept={fteByDept}
         selectedFunction={selectedFunction}
         onSelectFunction={setSelectedFunction}
       />
@@ -377,7 +347,7 @@ export function EffectifsPageClient() {
       {selectedFunction ? (
         <Card className="mb-0">
           <CardHeader
-            title={`${t("effectifs.byAxisFor")} · ${t(`staffing.function.${selectedFunction}`)}`}
+            title={`${t("effectifs.byAxisFor")} · ${selectedFunction}`}
             actions={
               <span className="text-[12px] text-secondary">
                 {formatFte(selectedTotal)} {t("staffing.fteUnit")}
@@ -450,9 +420,7 @@ export function EffectifsPageClient() {
                         {axisTotals.map(({ fn, fte }) => (
                           <li key={fn}>
                             <div className="flex flex-wrap items-baseline justify-between gap-2">
-                              <span className="text-[12px] text-primary">
-                                {t(`staffing.function.${fn}`)}
-                              </span>
+                              <span className="text-[12px] text-primary">{fn}</span>
                               <span className="text-[12px] text-secondary">
                                 {formatFte(fte)} {t("staffing.fteUnit")}
                               </span>

@@ -634,15 +634,6 @@ export type Program = {
    *  l'introduction du toggle, alors porté par `Company.actionPlanEnabled`, retiré depuis :
    *  l'activation se décide par programme, pas globalement pour toute l'entreprise). */
   actionPlanEnabled?: boolean;
-  /** Budget/cible d'ETP par fonction pour ce programme (Plan Stratégique uniquement) — permet de
-   *  comparer, sur `app/(app)/effectifs/EffectifsPageClient.tsx`, les ETP réellement déclarés
-   *  (`ChantierStaffing.fte`, sommés sur tous les chantiers du programme) au budget alloué et d'en
-   *  afficher un taux d'utilisation par fonction. Additif et optionnel : `undefined` tant qu'aucun
-   *  budget n'a été saisi ; `Partial` car une fonction sans budget défini reste absente de l'objet
-   *  plutôt que d'y figurer à 0 (0 ETP budgété n'est pas la même chose qu'un budget non fixé).
-   *  Scope PROGRAMME (pas entreprise), cohérent avec `ChantierStaffing.programId` déjà scopé
-   *  programme. */
-  staffingBudgets?: Partial<Record<StaffingFunction, number>>;
 };
 
 // ─── Plan Stratégique (méthodologie 3-5-15 : Vision → Axes → Chantiers → Actions) ─────────────
@@ -958,32 +949,28 @@ export type IndicatorMeasurement = {
 
 // ─── Staffing des chantiers (ETP par grande fonction) ─────────────────────────────────────────
 //
-// Répond au besoin « combien d'ETP, et de quelle direction métier, sont mobilisés sur ce
-// chantier / cet axe / ce programme ? ». Volontairement DISJOINT de `Role` (ligne 1) : `Role`
-// dit qui a le droit de se connecter et d'agir dans l'app, `StaffingFunction` dit à quelle
-// direction métier appartient une personne staffée. Les deux référentiels n'ont ni la même
-// granularité ni le même cycle de vie — les confondre obligerait à créer un rôle de connexion
-// « Juridique » ou « Achats » pour pouvoir staffer ces fonctions.
+// Répond au besoin « combien d'ETP, et de quelle équipe, sont mobilisés sur ce chantier / cet
+// axe / ce programme, et est-ce cohérent avec ce que la base ETP (Plan Performance,
+// app/(app)/hr/etp) montre réellement dans cette équipe ? ». Volontairement DISJOINT de `Role`
+// (ligne 1) : `Role` dit qui a le droit de se connecter et d'agir dans l'app, le champ `function`
+// de `ChantierStaffing` ci-dessous dit à quelle équipe appartient le besoin en ETP staffé.
+//
+// Round 13 : l'ancienne union fermée `StaffingFunction` (9 valeurs figées, RH/Finance/IT/...) a
+// été RETIRÉE — c'est désormais la base ETP ENTREPRISE (`Employee.department`, module RH/Workforce
+// du Plan Performance, voir lib/workforceLogic.ts::fteByDepartment) qui fait foi pour la liste des
+// équipes disponibles, jamais l'inverse. `ChantierStaffing.function` est donc un texte libre dont
+// la valeur est censée correspondre à un `Employee.department` existant (le sélecteur de saisie,
+// `ChantierStaffingEditor.tsx`, ne propose QUE les départements réellement présents dans la base
+// ETP de l'entreprise) — ce qui permet de comparer le BESOIN déclaré ici (`fte`, sommé par équipe)
+// au DISPONIBLE réel de cette équipe (somme des `Employee.fte` de ce département), affiché sur
+// `app/(app)/effectifs/EffectifsPageClient.tsx`. Le champ reste un `string` (pas de FK stricte) :
+// une entreprise sans base ETP encore saisie, ou une ligne historique dont le département a depuis
+// été renommé/supprimé côté RH, doit rester lisible plutôt que de casser l'affichage.
 
-/** Grandes fonctions/directions métier mobilisables sur un chantier. Union fermée (et non texte
- *  libre) : c'est la clé d'agrégation de la page Effectifs — un libellé libre produirait autant
- *  de « fonctions » que d'orthographes saisies. "autre" est la porte de sortie pour les cas non
- *  couverts, précisable via `ChantierStaffing.note`. */
-export type StaffingFunction =
-  | "rh"
-  | "finance"
-  | "it"
-  | "marketing"
-  | "commercial"
-  | "juridique"
-  | "operations"
-  | "achats"
-  | "autre";
-
-/** Une ligne de staffing = UNE fonction et son volume d'ETP sur UN chantier. Plusieurs lignes
- *  coexistent sur un même chantier (1 RH + 1 Finance = 2 ETP), et rien n'interdit deux lignes de
- *  la même fonction (deux vagues de renfort saisies séparément) : les agrégats somment `fte`, ils
- *  ne comptent pas les lignes. */
+/** Une ligne de staffing = UNE équipe (`function`, voir note ci-dessus) et son volume d'ETP sur UN
+ *  chantier. Plusieurs lignes coexistent sur un même chantier (1 ligne RH + 1 ligne Finance = 2
+ *  ETP), et rien n'interdit deux lignes de la même équipe (deux vagues de renfort saisies
+ *  séparément) : les agrégats somment `fte`, ils ne comptent pas les lignes. */
 export type ChantierStaffing = {
   id: string;
   companyId: string;
@@ -993,7 +980,9 @@ export type ChantierStaffing = {
    *  cette copie ne peut donc pas diverger. */
   axisId: string;
   chantierId: string;
-  function: StaffingFunction;
+  /** Nom d'équipe/département — voir note de tête de section. Censé correspondre à un
+   *  `Employee.department` de la base ETP entreprise, jamais une valeur figée dans ce type. */
+  function: string;
   /** Nombre d'ETP, décimal accepté (0.5 = mi-temps). Positif. */
   fte: number;
   /** Précision libre (nom de la personne, périmètre, fonction réelle derrière "autre"…). */
