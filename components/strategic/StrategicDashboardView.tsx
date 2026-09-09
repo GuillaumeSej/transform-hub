@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronDown,
@@ -27,6 +27,7 @@ import {
   chantierDependencyAlerts,
   colorForChantier,
   countOnTrackAtRisk,
+  numberIndicators,
   programBlockedActions,
 } from "@/lib/axisLogic";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
@@ -50,6 +51,7 @@ import { Button } from "@/components/shared/Button";
 import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Modal } from "@/components/shared/Modal";
+import { Popover } from "@/components/shared/Popover";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
 import {
   BusinessKpiCards,
@@ -120,6 +122,69 @@ function DashboardStatChip({
   );
 }
 
+/** Enveloppe une `DashboardStatChip` dans un `Popover` (round 12) pour la rendre cliquable : la
+ *  puce déclenche une petite liste (axes/chantiers/indicateurs/lignes de budget), chaque ligne
+ *  naviguant ou ouvrant le panneau adapté. `Popover` ne fournit `toggle` qu'au render-prop
+ *  `trigger` (pas à `children`) — on le capture donc dans un ref à chaque rendu du déclencheur
+ *  pour pouvoir fermer le panneau depuis le clic sur une ligne de la liste, sans dupliquer l'état
+ *  d'ouverture ni toucher à `Popover.tsx`. */
+function ChipPopover({
+  chip,
+  title,
+  emptyLabel,
+  items,
+}: {
+  chip: ReactNode;
+  title: string;
+  emptyLabel: string;
+  items: { key: string; label: ReactNode; onClick: () => void }[];
+}) {
+  const toggleRef = useRef<() => void>(() => {});
+  return (
+    <Popover
+      trigger={({ toggle }) => {
+        toggleRef.current = toggle;
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggle();
+            }}
+            className="cursor-pointer"
+          >
+            {chip}
+          </button>
+        );
+      }}
+      panelClassName="max-h-64 overflow-y-auto"
+    >
+      <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-secondary">
+        {title}
+      </div>
+      {items.length === 0 ? (
+        <p className="py-2 text-center text-[11px] text-tertiary">{emptyLabel}</p>
+      ) : (
+        <div className="space-y-0.5">
+          {items.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                item.onClick();
+                toggleRef.current();
+              }}
+              className="block w-full rounded px-2 py-1.5 text-left text-[12px] text-primary hover:bg-neutral-50"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </Popover>
+  );
+}
+
 export function StrategicDashboardView() {
   const { user } = useRole();
   const { activeProgram, activeProgramId, programs, loading: programsLoading } = useActiveProgram();
@@ -175,6 +240,28 @@ export function StrategicDashboardView() {
   const allocatedBudgetTotal = useMemo(
     () => chantiers.reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0),
     [chantiers]
+  );
+
+  /** Numérotation globale 3-5-15 des indicateurs (`numberIndicators`, lib/axisLogic.ts) — alimente
+   *  UNIQUEMENT la liste de la puce "indicateurs" du bandeau d'en-tête (round 12) : chaque ligne
+   *  affiche "#N · nom", même convention de numérotation que le reste de l'app. */
+  const indicatorNumbers = useMemo(
+    () => numberIndicators(axes, chantiers, indicators),
+    [axes, chantiers, indicators]
+  );
+
+  /** Budget alloué total PAR AXE (round 12) — alimente la liste de la puce "budget" du bandeau
+   *  d'en-tête : un simple regroupement/somme, pas de graphique (une répartition en camembert est
+   *  ajoutée en parallèle sur la page Axes stratégiques elle-même). */
+  const axisBudgets = useMemo(
+    () =>
+      axes.map((axis) => ({
+        axis,
+        total: chantiers
+          .filter((chantier) => chantier.axisId === axis.id)
+          .reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0),
+      })),
+    [axes, chantiers]
   );
 
   /** Une ligne par axe : volumétrie (chantiers/indicateurs), part d'indicateurs sur la trajectoire
@@ -665,26 +752,85 @@ export function StrategicDashboardView() {
           <div className="mt-2 text-[13px] text-secondary">
             {t("dashboard.program")} <strong className="text-primary">{activeProgram.name}</strong>
           </div>
+          {/* Bandeau "ambition" (round 12) — rappel permanent du programme, réglé une fois par un
+              admin (ProgramsPanel.tsx) et affiché à quiconque ouvre ce dashboard. Volontairement
+              DISTINCT des puces de stats juste en dessous (barre bordée pleine largeur plutôt
+              qu'une pastille) pour se lire comme un rappel plutôt qu'une métrique — masqué quand le
+              champ n'est pas encore renseigné (pas de placeholder). */}
+          {activeProgram.ambition && activeProgram.ambition.trim() !== "" && (
+            <div className="mt-3 max-w-2xl rounded-lg border-l-4 border-bp-coral bg-bp-coral/5 px-4 py-2.5">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-bp-coral">
+                {t("strategicDashboard.ambitionLabel")}
+              </div>
+              <div className="mt-0.5 text-[13px] font-medium leading-snug text-primary">
+                {activeProgram.ambition}
+              </div>
+            </div>
+          )}
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            <DashboardStatChip
-              icon={Target}
-              value={axes.length}
-              label={t("strategicDashboard.axesSuffix")}
+            <ChipPopover
+              chip={
+                <DashboardStatChip
+                  icon={Target}
+                  value={axes.length}
+                  label={t("strategicDashboard.axesSuffix")}
+                />
+              }
+              title={t("strategicDashboard.popover.axesTitle")}
+              emptyLabel={t("strategicDashboard.popover.emptyAxes")}
+              items={axes.map((axis) => ({
+                key: axis.id,
+                label: axis.name,
+                onClick: () => router.push("/levers"),
+              }))}
             />
-            <DashboardStatChip
-              icon={Layers}
-              value={chantiers.length}
-              label={t("strategicDashboard.chantiersSuffix")}
+            <ChipPopover
+              chip={
+                <DashboardStatChip
+                  icon={Layers}
+                  value={chantiers.length}
+                  label={t("strategicDashboard.chantiersSuffix")}
+                />
+              }
+              title={t("strategicDashboard.popover.chantiersTitle")}
+              emptyLabel={t("strategicDashboard.popover.emptyChantiers")}
+              items={chantiers.map((chantier) => ({
+                key: chantier.id,
+                label: chantier.name,
+                onClick: () => openChantierPanel(chantier.id),
+              }))}
             />
-            <DashboardStatChip
-              icon={ListChecks}
-              value={counts.total}
-              label={t("strategicDashboard.indicatorsSuffix")}
+            <ChipPopover
+              chip={
+                <DashboardStatChip
+                  icon={ListChecks}
+                  value={counts.total}
+                  label={t("strategicDashboard.indicatorsSuffix")}
+                />
+              }
+              title={t("strategicDashboard.popover.indicatorsTitle")}
+              emptyLabel={t("strategicDashboard.popover.emptyIndicators")}
+              items={indicators.map((indicator) => ({
+                key: indicator.id,
+                label: `#${indicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`,
+                onClick: () => router.push(`/kpi?indicator=${indicator.id}`),
+              }))}
             />
-            <DashboardStatChip
-              icon={Wallet}
-              value={`${allocatedBudgetTotal.toLocaleString()} ${activeProgram.currency}`}
-              label={t("strategicDashboard.allocatedBudget")}
+            <ChipPopover
+              chip={
+                <DashboardStatChip
+                  icon={Wallet}
+                  value={`${allocatedBudgetTotal.toLocaleString()} ${activeProgram.currency}`}
+                  label={t("strategicDashboard.allocatedBudget")}
+                />
+              }
+              title={t("strategicDashboard.popover.budgetTitle")}
+              emptyLabel={t("strategicDashboard.popover.emptyBudget")}
+              items={axisBudgets.map(({ axis, total }) => ({
+                key: axis.id,
+                label: `${axis.name} — ${total.toLocaleString()} ${activeProgram.currency}`,
+                onClick: () => router.push("/levers"),
+              }))}
             />
           </div>
         </div>

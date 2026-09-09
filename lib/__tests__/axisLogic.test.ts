@@ -18,11 +18,13 @@ import {
   milestoneWeightPct,
   numberIndicators,
   programBlockedActions,
+  resolveIndicatorOwner,
   resolveIndicatorStatus,
   resolveMilestoneAutoFlags,
   resolveProgramType,
   staffingPeriodBuckets,
   sumLatestQuantitativeValues,
+  sumLevierBudgets,
 } from "@/lib/axisLogic";
 import type {
   AuthUser,
@@ -764,22 +766,26 @@ describe("canStartAction", () => {
 // `dependencyAlert`/`effortComplete` restent des signaux CHANTIER résolus via le chantier parent
 // (`action.chantierId`). D'où le montage systématique chantier parent + levier ci-dessous.
 describe("resolveMilestoneAutoFlags", () => {
-  it("flags 'previousOranges' green when the previous milestone has no unresolved orange", () => {
-    // Aucun item orange du tout sur E0 → vacuously vert pour l'item auto de E1.
+  // Round 12 : encodage numérique (100/0) au lieu du feu discret "green"/"red" — voir le
+  // commentaire de tête de la fonction. "previousOranges" retraduit l'ancien orange en une valeur
+  // manuelle STRICTEMENT entre 0 et 100 (ni 0 ni 100) non `resolved`.
+  it("resolves 'previousOranges' to 100 when the previous milestone has no unresolved partial item", () => {
+    // Aucun item à progression partielle du tout sur E0 (juste un item à 100) → vacuously 100
+    // pour l'item auto de E1.
     const chantier = makeChantier("CH1");
     const action = {
       ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
       milestones: {
         currentMilestone: "E1" as const,
         passedMilestones: ["E0" as const],
-        checklists: { E0: [{ itemId: "E0-B1", flag: "green" as const }] },
+        checklists: { E0: [{ itemId: "E0-B1", progressPct: 100 }] },
       },
     };
     const flags = resolveMilestoneAutoFlags("E1", action, [chantier], [action]);
-    expect(flags["E1-A1"]).toBe("green");
+    expect(flags["E1-A1"]).toBe(100);
   });
 
-  it("flags 'previousOranges' red when the previous milestone has an unresolved orange", () => {
+  it("resolves 'previousOranges' to 0 when the previous milestone has an unresolved partial item", () => {
     const chantier = makeChantier("CH1");
     const action = {
       ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
@@ -787,14 +793,14 @@ describe("resolveMilestoneAutoFlags", () => {
         currentMilestone: "E1" as const,
         passedMilestones: ["E0" as const],
         checklists: {
-          E0: [{ itemId: "E0-B1", flag: "orange" as const, resolved: false }],
+          E0: [{ itemId: "E0-B1", progressPct: 50, resolved: false }],
         },
       },
     };
-    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe("red");
+    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe(0);
   });
 
-  it("flags 'previousOranges' green once the orange item is marked resolved", () => {
+  it("resolves 'previousOranges' to 100 once the partial item is marked resolved", () => {
     const chantier = makeChantier("CH1");
     const action = {
       ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
@@ -802,20 +808,33 @@ describe("resolveMilestoneAutoFlags", () => {
         currentMilestone: "E1" as const,
         passedMilestones: ["E0" as const],
         checklists: {
-          E0: [{ itemId: "E0-B1", flag: "orange" as const, resolved: true }],
+          E0: [{ itemId: "E0-B1", progressPct: 50, resolved: true }],
         },
       },
     };
-    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe("green");
+    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe(100);
   });
 
-  it("flags 'dependencyAlert' green when the parent chantier is not the blocked side of any alert", () => {
+  it("does not treat an unanswered previous item (progressPct undefined) as an unresolved partial", () => {
+    const chantier = makeChantier("CH1");
+    const action = {
+      ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
+      milestones: {
+        currentMilestone: "E1" as const,
+        passedMilestones: ["E0" as const],
+        checklists: { E0: [{ itemId: "E0-B1" }] },
+      },
+    };
+    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe(100);
+  });
+
+  it("resolves 'dependencyAlert' to 100 when the parent chantier is not the blocked side of any alert", () => {
     const chantier = makeChantier("CH1");
     const action = makeAction("CH1", "2026-01-01", "2026-01-31", "A1");
-    expect(resolveMilestoneAutoFlags("E0", action, [chantier], [action])["E0-A1"]).toBe("green");
+    expect(resolveMilestoneAutoFlags("E0", action, [chantier], [action])["E0-A1"]).toBe(100);
   });
 
-  it("flags 'dependencyAlert' red when the parent chantier is the blocked side of a violated dependency — same value for every levier of that chantier", () => {
+  it("resolves 'dependencyAlert' to 0 when the parent chantier is the blocked side of a violated dependency — same value for every levier of that chantier", () => {
     const chantiers = [
       makeChantier("CH1", { name: "Refonte SI" }),
       makeChantier("CH2", {
@@ -830,64 +849,66 @@ describe("resolveMilestoneAutoFlags", () => {
     const ch2Action2 = makeAction("CH2", "2026-03-01", "2026-06-30", "A-CH2-2");
     const actions = [ch1Action, ch2Action1, ch2Action2];
 
-    expect(resolveMilestoneAutoFlags("E0", ch2Action1, chantiers, actions)["E0-A1"]).toBe("red");
-    expect(resolveMilestoneAutoFlags("E0", ch2Action2, chantiers, actions)["E0-A1"]).toBe("red");
-    // Le levier du chantier bloqueur (pas bloqué lui-même) reste vert.
-    expect(resolveMilestoneAutoFlags("E0", ch1Action, chantiers, actions)["E0-A1"]).toBe("green");
+    expect(resolveMilestoneAutoFlags("E0", ch2Action1, chantiers, actions)["E0-A1"]).toBe(0);
+    expect(resolveMilestoneAutoFlags("E0", ch2Action2, chantiers, actions)["E0-A1"]).toBe(0);
+    // Le levier du chantier bloqueur (pas bloqué lui-même) reste à 100.
+    expect(resolveMilestoneAutoFlags("E0", ch1Action, chantiers, actions)["E0-A1"]).toBe(100);
   });
 
-  it("flags 'dependencyAlert' green (not red) and never throws when the parent chantier cannot be found", () => {
+  it("resolves 'dependencyAlert' to 100 (not 0) and never throws when the parent chantier cannot be found", () => {
     const orphanAction = makeAction("GHOST-CHANTIER", "2026-01-01", "2026-01-31", "A1");
     expect(() => resolveMilestoneAutoFlags("E0", orphanAction, [], [orphanAction])).not.toThrow();
-    expect(resolveMilestoneAutoFlags("E0", orphanAction, [], [orphanAction])["E0-A1"]).toBe(
-      "green"
-    );
+    expect(resolveMilestoneAutoFlags("E0", orphanAction, [], [orphanAction])["E0-A1"]).toBe(100);
   });
 
-  it("flags 'effortComplete' from the PARENT CHANTIER's own effort grid, green only when all 4 dimensions are set", () => {
+  it("resolves 'effortComplete' from the PARENT CHANTIER's own effort grid, 100 only when all 4 dimensions are set", () => {
     const completeChantier = makeChantier("CH1", {
       effort: { financialImpact: 1, humanImpact: 2, duration: 3, changeManagement: 4 },
     });
     const action1 = makeAction("CH1", "2026-01-01", "2026-01-31", "A1");
     expect(
       resolveMilestoneAutoFlags("E1", action1, [completeChantier], [action1])["E1-C-effort"]
-    ).toBe("green");
+    ).toBe(100);
 
     const partialChantier = makeChantier("CH1", { effort: { financialImpact: 1, humanImpact: 2 } });
     const action2 = makeAction("CH1", "2026-01-01", "2026-01-31", "A2");
     expect(
       resolveMilestoneAutoFlags("E1", action2, [partialChantier], [action2])["E1-C-effort"]
-    ).toBe("red");
+    ).toBe(0);
 
     const noneChantier = makeChantier("CH1");
     const action3 = makeAction("CH1", "2026-01-01", "2026-01-31", "A3");
     expect(resolveMilestoneAutoFlags("E1", action3, [noneChantier], [action3])["E1-C-effort"]).toBe(
-      "red"
+      0
     );
   });
 });
 
 describe("canPassMilestone", () => {
-  it("allows passing when every item is green", () => {
+  it("allows passing when every item is at 100", () => {
     const items: MilestoneChecklistItem[] = [
-      { itemId: "E0-A1", flag: "green" },
-      { itemId: "E0-A2", flag: "green" },
+      { itemId: "E0-A1", progressPct: 100 },
+      { itemId: "E0-A2", progressPct: 100 },
     ];
     expect(canPassMilestone("E0", items)).toEqual({ canPass: true, reasons: [] });
   });
 
-  it("allows passing with a non-blocking orange item", () => {
+  it("allows passing with a non-blocking partial (former 'orange') item, even a very small positive value", () => {
     const items: MilestoneChecklistItem[] = [
-      { itemId: "E0-A1", flag: "green" },
-      { itemId: "E0-A2", flag: "orange", actionPlan: { description: "Plan" } },
+      { itemId: "E0-A1", progressPct: 100 },
+      { itemId: "E0-A2", progressPct: 50, actionPlan: { description: "Plan" } },
     ];
     expect(canPassMilestone("E0", items).canPass).toBe(true);
+
+    // N'importe quelle valeur strictement positive passe, même infime (pas de seuil caché).
+    const barelyStarted: MilestoneChecklistItem[] = [{ itemId: "E0-A1", progressPct: 1 }];
+    expect(canPassMilestone("E0", barelyStarted)).toEqual({ canPass: true, reasons: [] });
   });
 
-  it("blocks when any item is red, with a reason", () => {
+  it("blocks when any item is at 0 (former red), with a reason", () => {
     const items: MilestoneChecklistItem[] = [
-      { itemId: "E0-A1", flag: "green" },
-      { itemId: "E0-A2", flag: "red" },
+      { itemId: "E0-A1", progressPct: 100 },
+      { itemId: "E0-A2", progressPct: 0 },
     ];
     const result = canPassMilestone("E0", items);
     expect(result.canPass).toBe(false);
@@ -895,7 +916,7 @@ describe("canPassMilestone", () => {
     expect(result.reasons[0]).toContain("E0-A2");
   });
 
-  it("blocks when a manual item has not been answered at all", () => {
+  it("blocks when a manual item has not been answered at all (progressPct undefined)", () => {
     const items: MilestoneChecklistItem[] = [{ itemId: "E0-A1" }];
     const result = canPassMilestone("E0", items);
     expect(result.canPass).toBe(false);
@@ -931,6 +952,62 @@ describe("milestoneProgressPct", () => {
         },
       })
     ).toBe(100);
+  });
+
+  // Round 12 : remplissage fin à l'intérieur du jalon courant, au lieu du calcul par paliers de 20.
+  it("blends full credit for passed milestones with partial credit from the current milestone's declared items", () => {
+    // E1 a 6 items (MILESTONE_CHECKLISTS.E1) : E1-A1 (auto), E1-B1/B2/B3 (manuels), E1-C-effort
+    // (auto), E1-C2 (manuel). Ici seuls B1/B2/B3 sont déclarés (100/50/0), les deux auto et C2
+    // restent non répondus → comptent pour 0 (pas d'`autoValues` fourni, mode dégradé documenté).
+    const entity = {
+      milestones: {
+        currentMilestone: "E1" as const,
+        passedMilestones: ["E0" as const],
+        checklists: {
+          E1: [
+            { itemId: "E1-B1", progressPct: 100 },
+            { itemId: "E1-B2", progressPct: 50 },
+            { itemId: "E1-B3", progressPct: 0 },
+          ],
+        },
+      },
+    };
+    // 20 (E0 passé) + 20 * ((100+50+0+0+0+0)/6) / 100 = 20 + 5 = 25.
+    expect(milestoneProgressPct(entity)).toBe(25);
+  });
+
+  it("uses the injected autoValues (resolveMilestoneAutoFlags-shaped) for the current milestone's auto items when provided", () => {
+    const entity = {
+      milestones: {
+        currentMilestone: "E1" as const,
+        passedMilestones: ["E0" as const],
+        checklists: {
+          E1: [
+            { itemId: "E1-B1", progressPct: 100 },
+            { itemId: "E1-B2", progressPct: 50 },
+            { itemId: "E1-B3", progressPct: 0 },
+          ],
+        },
+      },
+    };
+    // Mêmes items manuels que le test précédent, mais les deux auto (E1-A1, E1-C-effort) sont
+    // maintenant fournis à 100 : (100+50+0+0+100+100)/6 = 58.33 → 20 + 20*58.33/100 = 31.67 → 32.
+    expect(milestoneProgressPct(entity, { "E1-A1": 100, "E1-C-effort": 100 })).toBe(32);
+  });
+
+  it("lets a manually-declared progressPct on an auto item win over autoValues (residual/legacy case)", () => {
+    const entity = {
+      milestones: {
+        currentMilestone: "E1" as const,
+        passedMilestones: ["E0" as const],
+        checklists: {
+          E1: [{ itemId: "E1-A1", progressPct: 0 }],
+        },
+      },
+    };
+    // E1-A1 est marqué `auto` mais porte déjà une valeur manuelle (0) : elle prime sur
+    // autoValues["E1-A1"] = 100. Les 5 autres items de E1 restent à 0 (non répondus) → moyenne 0.
+    expect(milestoneProgressPct(entity, { "E1-A1": 100 })).toBe(20);
   });
 });
 
@@ -1232,5 +1309,89 @@ describe("numberIndicators", () => {
     expect(numbers.size).toBe(indicators.length);
     const assigned = Array.from(numbers.values()).sort((a, b) => a - b);
     expect(assigned).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+});
+
+// ─── Budget par levier (round 12) ──────────────────────────────────────────────────────────────
+
+describe("sumLevierBudgets", () => {
+  it("returns 0 for a chantier with no levier at all", () => {
+    expect(sumLevierBudgets("CH1", [])).toBe(0);
+  });
+
+  it("sums only the leviers of the requested chantier, treating a missing budget as 0", () => {
+    const actions: ChantierAction[] = [
+      { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"), budget: 1000 },
+      { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"), budget: 500 },
+      makeAction("CH1", "2026-01-01", "2026-01-31", "A3"), // pas de budget renseigné → compte 0
+      { ...makeAction("CH2", "2026-01-01", "2026-01-31", "A4"), budget: 999999 }, // autre chantier
+    ];
+    expect(sumLevierBudgets("CH1", actions)).toBe(1500);
+  });
+
+  it("returns 0 when the chantier has leviers but none of them has a budget declared", () => {
+    const actions: ChantierAction[] = [
+      makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
+      makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
+    ];
+    expect(sumLevierBudgets("CH1", actions)).toBe(0);
+  });
+});
+
+// ─── Responsable affiché d'un indicateur (round 12) ────────────────────────────────────────────
+
+describe("resolveIndicatorOwner", () => {
+  const FALLBACK = "Non assigné";
+
+  it("prefers the chantier's pilote when the indicator is chantier-level and pilote is set", () => {
+    const chantiers = [makeChantier("CH1", { pilote: "jean.dupont", sponsorName: "marie.martin" })];
+    const indicator = makeIndicator({ chantierId: "CH1" });
+    expect(resolveIndicatorOwner(indicator, [], chantiers, FALLBACK)).toBe("jean.dupont");
+  });
+
+  it("falls back to the chantier's sponsorName when pilote is unset", () => {
+    const chantiers = [makeChantier("CH1", { sponsorName: "marie.martin" })];
+    const indicator = makeIndicator({ chantierId: "CH1" });
+    expect(resolveIndicatorOwner(indicator, [], chantiers, FALLBACK)).toBe("marie.martin");
+  });
+
+  it("resolves the axis owner for a macro indicator (no chantierId)", () => {
+    const axes = [makeAxis("AX1", { owner: "paul.durand" })];
+    const indicator = makeIndicator({ axisId: "AX1", chantierId: undefined });
+    expect(resolveIndicatorOwner(indicator, axes, [], FALLBACK)).toBe("paul.durand");
+  });
+
+  it("returns the caller-supplied fallback when nothing is assigned, or the reference is orphaned", () => {
+    // Chantier existant mais sans pilote ni sponsor.
+    const chantiers = [makeChantier("CH1")];
+    expect(
+      resolveIndicatorOwner(makeIndicator({ chantierId: "CH1" }), [], chantiers, FALLBACK)
+    ).toBe(FALLBACK);
+
+    // Axe existant mais sans owner.
+    const axes = [makeAxis("AX1")];
+    expect(
+      resolveIndicatorOwner(
+        makeIndicator({ axisId: "AX1", chantierId: undefined }),
+        axes,
+        [],
+        FALLBACK
+      )
+    ).toBe(FALLBACK);
+
+    // Chantier référencé introuvable.
+    expect(resolveIndicatorOwner(makeIndicator({ chantierId: "GHOST" }), [], [], FALLBACK)).toBe(
+      FALLBACK
+    );
+
+    // Axe référencé introuvable.
+    expect(
+      resolveIndicatorOwner(
+        makeIndicator({ axisId: "GHOST", chantierId: undefined }),
+        [],
+        [],
+        FALLBACK
+      )
+    ).toBe(FALLBACK);
   });
 });

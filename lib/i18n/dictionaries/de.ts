@@ -590,6 +590,8 @@ const de: Record<string, string> = {
   "adminProgramsPanel.nameLabel": "Programmname",
   "adminProgramsPanel.namePlaceholder": "Name",
   "adminProgramsPanel.sponsor": "Sponsor",
+  "adminProgramsPanel.ambitionLabel": "Ambition",
+  "adminProgramsPanel.ambitionPlaceholder": "Z. B. Bis 2027 Marktführer werden",
   "adminProgramsPanel.count": "{n} Programm(e)",
   "adminProgramsPanel.colProgram": "Programm",
   "adminProgramsPanel.colActions": "Aktionen",
@@ -1173,6 +1175,11 @@ const de: Record<string, string> = {
   "strategicAxes.kanbanBadgePrefix": "Kanban",
   "strategicAxes.kanbanDrilldownTitle": "Hebel",
   "strategicAxes.kanbanDrilldownEmpty": "Kein Hebel auf dieser Stufe.",
+  // Budgetverteilungs-Donuts (Runde 12) — Ansicht "Karten" (Achsenbudget nach Baustelle) und
+  // Ansicht "Baustellenfortschritt" (Baustellenbudget nach Hebel).
+  "strategicAxes.budgetByChantierModalTitle": "Budgetverteilung nach Baustelle",
+  "strategicAxes.budgetByLevierModalTitle": "Budgetverteilung nach Hebel",
+  "strategicAxes.budgetUnallocated": "Nicht zugewiesen",
   "strategicAxes.filterOwner": "Verantwortlich",
   "strategicAxes.unassigned": "Nicht zugewiesen",
   "strategicAxes.loading": "Achsen werden geladen…",
@@ -1285,6 +1292,8 @@ const de: Record<string, string> = {
   "strategicChantierDetail.sponsor": "Sponsor",
   "strategicChantierDetail.pilote": "Leitung",
   "strategicChantierDetail.allocatedBudget": "Zugewiesenes Budget",
+  "strategicChantierDetail.allocatedBudgetBelowLeviers":
+    "Das Budget des Arbeitspakets darf nicht niedriger sein als die Summe der Budgets seiner Aktivitäten.",
   "strategicChantierDetail.confidentialityLevel": "Vertraulichkeitsstufe",
   "strategicChantierDetail.confidentialityLevelNone": "Keine (für alle sichtbar)",
 
@@ -1338,6 +1347,7 @@ const de: Record<string, string> = {
 
   // ─── Reiter der Detailansicht des Arbeitspakets (Runde 10, Punkt 2) ───────────────────────
   "strategicChantierDetail.tabs.overview": "Übersicht",
+  "strategicChantierDetail.tabs.progression": "Fortschritt",
   "strategicChantierDetail.tabs.staffing": "Personaleinsatz",
 
   // ─── An eine Aktivität geknüpfter KPI, auf ihrer Zeile angezeigt (Runde 10, Punkt 2) ──────
@@ -1346,6 +1356,9 @@ const de: Record<string, string> = {
 
   "strategicChantierDetail.actionFocused": "Über den Link geöffnete Aktivität",
   "strategicChantierDetail.actionForm.missingHint": "Name und Daten ausfüllen, um zu speichern.",
+  "strategicChantierDetail.actionForm.budgetLabel": "Budget der Aktivität",
+  "strategicChantierDetail.actionForm.budgetExceedsChantier":
+    "Die Summe der Budgets der Aktivitäten würde das zugewiesene Budget des Arbeitspakets überschreiten.",
   "strategicChantierDetail.successCriteria.placeholder": "Wir sind im [Jahr] zufrieden, wenn...",
 
   // ─── Strategieplan — Meilensteine E0-E4 (Runde 5) ───────────────────────────
@@ -1356,9 +1369,9 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Meilenstein erreicht",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Aktueller Meilenstein",
 
-  "strategicChantierDetail.milestones.flag.green": "Grün",
-  "strategicChantierDetail.milestones.flag.orange": "Orange",
-  "strategicChantierDetail.milestones.flag.red": "Rot",
+  // Runde 12: deklarierter Prozentsatz (0-100) statt einer Ampel mit 3 Stufen.
+  "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
+    "Deklarierter Fortschritt, in Prozent",
 
   "strategicChantierDetail.milestones.actionPlan.description": "Beschreibung des Aktionsplans",
   "strategicChantierDetail.milestones.actionPlan.owner": "Verantwortlicher",
@@ -1453,6 +1466,14 @@ const de: Record<string, string> = {
   "kpi.macroIndicators": "Indikatoren der Achse",
   "kpi.indicatorNumber": "KPI-Nummer",
   "kpi.chantier": "Arbeitspaket",
+  // ─── Filter Achse / Arbeitspaket / Verantwortlich (Runde 12, repliziert das Muster der Seite
+  // Strategische Achsen) ───
+  "kpi.filterAxis": "Achse",
+  "kpi.filterChantier": "Arbeitspaket",
+  "kpi.filterOwner": "Verantwortlich",
+  // Wert des Filters "Arbeitspaket" für einen Makro-Indikator (direkt an der Achse hängend, ohne
+  // Arbeitspaket) — unterscheidet sich von der Abschnittsüberschrift `kpi.macroIndicators` (Plural).
+  "kpi.macroIndicator": "Achsenindikator",
   "kpi.kind.quantitative": "Quantitativ",
   "kpi.kind.qualitative": "Qualitativ",
   "kpi.frequency.monthly": "Monatlich",
@@ -1523,7 +1544,7 @@ const de: Record<string, string> = {
   "staffing.actionNone": "Keine bestimmte Aktivität",
 
   // ─── Seite Personaleinsatz (/effectifs, Strategieplan) ────────────────────
-  "effectifs.title": "Personaleinsatz (VZÄ)",
+  "effectifs.title": "Eingesetztes Personal & Budget",
   "effectifs.subtitle":
     "In den Vorhaben des Programms eingesetzte VZÄ nach Fachfunktion. Klicken Sie auf eine Funktion, um ihre Verteilung über die Achsen zu sehen und mögliche Überbesetzung zu erkennen.",
   "effectifs.loading": "Personaleinsatz wird geladen…",
@@ -1544,6 +1565,11 @@ const de: Record<string, string> = {
   "effectifs.chantierUnknown": "Unbekanntes Vorhaben",
   "effectifs.noStaffingOnAxis": "Für diese Achse sind keine VZÄ erfasst.",
   "effectifs.noStaffingForFunction": "Keine VZÄ dieser Funktion auf den Achsen des Programms.",
+  "effectifs.moneyBudget.title": "Zugewiesenes Finanzbudget",
+  "effectifs.moneyBudget.totalLabel": "Insgesamt zugewiesenes Budget",
+  "effectifs.moneyBudget.totalSub": "Summe des zugewiesenen Budgets aller Vorhaben des Programms",
+  "effectifs.moneyBudget.byAxisTitle": "Verteilung nach Achse",
+  "effectifs.moneyBudget.empty": "Für dieses Programm ist kein Budget zugewiesen.",
   "effectifs.budget.title": "Verfügbare VZÄ je Funktion",
   "effectifs.budget.inputLabel": "VZÄ-Budget",
   "effectifs.budget.usedLabel": "% VZÄ genutzt / verfügbar",
@@ -1595,6 +1621,18 @@ const de: Record<string, string> = {
   "strategicDashboard.chantiersSuffix": "Arbeitspakete",
   "strategicDashboard.indicatorsSuffix": "Indikatoren",
   "strategicDashboard.allocatedBudget": "Zugewiesenes Budget",
+  // Runde 12: Banner "Ambition" (dauerhafte Erinnerung, einmal im Admin festgelegt) + Beschriftungen
+  // der Listen, die über die klickbaren Kopf-Chips geöffnet werden (Achsen/Arbeitspakete/
+  // Indikatoren/Budget).
+  "strategicDashboard.ambitionLabel": "Ambition",
+  "strategicDashboard.popover.axesTitle": "Strategische Achsen",
+  "strategicDashboard.popover.chantiersTitle": "Arbeitspakete",
+  "strategicDashboard.popover.indicatorsTitle": "Indikatoren",
+  "strategicDashboard.popover.budgetTitle": "Budget nach Achse",
+  "strategicDashboard.popover.emptyAxes": "Keine Achse",
+  "strategicDashboard.popover.emptyChantiers": "Kein Arbeitspaket",
+  "strategicDashboard.popover.emptyIndicators": "Kein Indikator",
+  "strategicDashboard.popover.emptyBudget": "Kein Budget zugewiesen",
   "strategicDashboard.tracked": "Verfolgte Indikatoren",
   "strategicDashboard.onTrack": "Im Plan",
   "strategicDashboard.atRisk": "Gefährdet",
@@ -1624,6 +1662,9 @@ const de: Record<string, string> = {
     "Abhängigkeits- und Voraussetzungswarnungen",
   // Runde 8: Platzhalter einer leeren E0-E4-Jalonspalte (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
+  // Runde 12: Durchschnitt der deklarierten `progressPct` der Leviers dieser Spalte (`{pct}` wird
+  // manuell ersetzt, siehe `LevierMilestoneBoard.tsx`).
+  "strategicDashboard.levierBoard.avgProgress": "{pct}% im Durchschnitt",
 
   // ─── Strategieplan — Konfigurationsseite eines Programms (Admin) ──────────
   "adminPrograms.manage": "Verwalten",

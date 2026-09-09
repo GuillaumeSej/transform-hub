@@ -7,6 +7,10 @@ import { Button } from "@/components/shared/Button";
 import { Card, CardBody } from "@/components/shared/Card";
 import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
+import {
+  BudgetDonutChart,
+  type BudgetDonutSlice,
+} from "@/components/shared/charts/BudgetDonutChart";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisKanban } from "@/components/strategic/AxisKanban";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
@@ -68,6 +72,12 @@ export function StrategicAxesView() {
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
   const [newAxisOpen, setNewAxisOpen] = useState(false);
 
+  /** Axe dont le donut de répartition budgétaire (round 12, vue "Cartes") est actuellement ouvert —
+   *  `null` = modale fermée. On ne stocke que l'id : les chantiers/le budget de l'axe sont
+   *  recalculés depuis `chantiersByAxis` (ci-dessous) plutôt que capturés au clic, pour rester à
+   *  jour si les données changent pendant que la modale est ouverte. */
+  const [budgetDonutAxisId, setBudgetDonutAxisId] = useState<string | null>(null);
+
   // Échelle de confidentialité de l'entreprise — pour le sélecteur du formulaire de création d'axe
   // (même pattern que `components/shared/LeverForm.tsx`, voir `AxisForm`).
   const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
@@ -117,6 +127,22 @@ export function StrategicAxesView() {
     });
     return map;
   }, [chantiersByAxis]);
+
+  /** Parts du donut budgétaire (round 12) de l'axe actuellement ouvert (`budgetDonutAxisId`) — un
+   *  slice par chantier de l'axe AYANT un budget alloué non nul (les chantiers sans budget sont
+   *  exclus du donut, ils n'apporteraient qu'une part nulle sans intérêt). `null` tant qu'aucune
+   *  modale n'est ouverte. */
+  const budgetDonutSlices: BudgetDonutSlice[] | null = useMemo(() => {
+    if (!budgetDonutAxisId) return null;
+    return (chantiersByAxis.get(budgetDonutAxisId) ?? [])
+      .filter((chantier) => (chantier.allocatedBudget ?? 0) > 0)
+      .map((chantier) => ({ name: chantier.name, value: chantier.allocatedBudget ?? 0 }));
+  }, [budgetDonutAxisId, chantiersByAxis]);
+
+  /** Résout le nom d'un chantier vers son id, dans l'axe ouvert — pour le `onSliceClick` du donut
+   *  (le donut ne connaît que les NOMS, voir `BudgetDonutChart`). */
+  const resolveChantierIdByName = (axisId: string, name: string): string | undefined =>
+    (chantiersByAxis.get(axisId) ?? []).find((c) => c.name === name)?.id;
 
   // Indicateurs regroupés par axe (macro ET de chantier confondus) — alimente les puces numérotées
   // de la vue « cartes » (round 6, point 3 ; numérotation globalisée round 10).
@@ -446,6 +472,8 @@ export function StrategicAxesView() {
             },
             drilldownTitlePrefix: t("strategicAxes.kanbanDrilldownTitle"),
             drilldownEmpty: t("strategicAxes.kanbanDrilldownEmpty"),
+            budgetByLevierModalTitle: t("strategicAxes.budgetByLevierModalTitle"),
+            budgetUnallocated: t("strategicAxes.budgetUnallocated"),
           }}
         />
       ) : (
@@ -456,6 +484,9 @@ export function StrategicAxesView() {
             const hiddenIndicatorsCount = axisIndicators.length - shownIndicators.length;
             const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
             const axisBudget = axisBudgetByAxis.get(axis.id) ?? 0;
+            // Le donut n'a d'intérêt que si au moins un chantier de l'axe a un budget alloué non
+            // nul — sinon le montant total reste un simple texte, non cliquable (round 12).
+            const axisHasBudgetSlices = axisChantiers.some((c) => (c.allocatedBudget ?? 0) > 0);
             // `div role="button"` plutôt qu'un vrai <button> : la carte imbrique d'autres <button>
             // (puces d'indicateur, lignes de chantier), qui ne peuvent pas être imbriqués dans un
             // <button> parent.
@@ -548,12 +579,27 @@ export function StrategicAxesView() {
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
                       {t("strategicAxes.chantiersCount")}
                     </span>
-                    {axisChantiers.length > 0 && (
-                      <span className="shrink-0 font-semibold text-secondary">
-                        {t("strategicChantierDetail.allocatedBudget")} :{" "}
-                        {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
-                      </span>
-                    )}
+                    {axisChantiers.length > 0 &&
+                      (axisHasBudgetSlices ? (
+                        // Round 12 : le montant devient cliquable → donut de répartition par
+                        // chantier (`budgetDonutSlices`, ouvert via `budgetDonutAxisId`).
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBudgetDonutAxisId(axis.id);
+                          }}
+                          className="shrink-0 font-semibold text-secondary underline-offset-2 hover:text-primary hover:underline"
+                        >
+                          {t("strategicChantierDetail.allocatedBudget")} :{" "}
+                          {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
+                        </button>
+                      ) : (
+                        <span className="shrink-0 font-semibold text-secondary">
+                          {t("strategicChantierDetail.allocatedBudget")} :{" "}
+                          {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
+                        </span>
+                      ))}
                   </div>
                   {axisChantiers.length === 0 ? (
                     <p className="text-tertiary">{t("strategicAxes.axisNoChantier")}</p>
@@ -583,6 +629,30 @@ export function StrategicAxesView() {
           })}
         </div>
       )}
+
+      {/* Donut de répartition budgétaire de l'axe par chantier (round 12, vue "Cartes") — un slice
+          par chantier de l'axe ayant un budget alloué non nul (`budgetDonutSlices`). Cliquer un
+          slice ferme cette modale et ouvre le panneau du chantier correspondant. */}
+      <Modal
+        open={!!budgetDonutAxisId}
+        onOpenChange={(open) => {
+          if (!open) setBudgetDonutAxisId(null);
+        }}
+        title={t("strategicAxes.budgetByChantierModalTitle")}
+        maxWidth="560px"
+      >
+        {budgetDonutAxisId && budgetDonutSlices && budgetDonutSlices.length > 0 && (
+          <BudgetDonutChart
+            data={budgetDonutSlices}
+            formatValue={(value) => `${value.toLocaleString()} ${activeProgram?.currency ?? ""}`}
+            onSliceClick={(name) => {
+              const chantierId = resolveChantierIdByName(budgetDonutAxisId, name);
+              setBudgetDonutAxisId(null);
+              if (chantierId) openChantierPanel(chantierId);
+            }}
+          />
+        )}
+      </Modal>
 
       {/* ── Panneau chantier (round 6, point 0) — remplace l'ancienne route dédiée, monté dans un
           Modal plus large que les modales de formulaire (1100px) pour porter tout le détail chantier

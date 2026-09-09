@@ -643,6 +643,11 @@ export type Program = {
    *  Scope PROGRAMME (pas entreprise), cohérent avec `ChantierStaffing.programId` déjà scopé
    *  programme. */
   staffingBudgets?: Partial<Record<StaffingFunction, number>>;
+  /** Vision/accroche courte du programme (round 12), affichée de façon persistante sur le
+   *  dashboard stratégique — texte libre, distinct de `name` (l'intitulé) : "ce qu'on cherche à
+   *  atteindre" plutôt que "comment le programme s'appelle". Optionnel, aucune valeur par défaut :
+   *  un programme sans ambition déclarée n'affiche simplement rien à cet endroit. */
+  ambition?: string;
 };
 
 // ─── Plan Stratégique (méthodologie 3-5-15 : Vision → Axes → Chantiers → Actions) ─────────────
@@ -722,11 +727,6 @@ export type ChantierEffort = {
  *  passage dans `MILESTONE_ORDER` (voir `lib/milestoneChecklist.ts`). */
 export type MilestoneId = "E0" | "E1" | "E2" | "E3" | "E4";
 
-/** Feu d'un item de check-list de jalon — même sémantique à 3 niveaux que la note PMO du PO,
- *  réutilisée telle quelle pour tous les jalons (y compris E3/E4 dont le libellé diffère mais pas
- *  le contrôle, simplification actée avec le PO). */
-export type ChecklistFlag = "green" | "orange" | "red";
-
 /** Réponse à UN item de check-list d'un jalon donné (le contenu de l'item — libellé, section,
  *  caractère automatique — est en dur dans `lib/milestoneChecklist.ts`, seule la réponse est
  *  persistée ici). Un item orange est non-bloquant pour le jalon COURANT mais doit être `resolved`
@@ -735,14 +735,24 @@ export type ChecklistFlag = "green" | "orange" | "red";
 export type MilestoneChecklistItem = {
   /** Référence un `ChecklistItemDef.itemId` de `lib/milestoneChecklist.ts` (ex. "E0-A1"). */
   itemId: string;
-  /** Absent = pas encore répondu (un item manuel sans `flag` bloque `canPassMilestone`, au même
-   *  titre qu'un item rouge). */
-  flag?: ChecklistFlag;
-  /** Pertinent seulement quand `flag === "orange"` — plan d'action daté et attribué (piège
-   *  `saveChantier` : omettre cette clé plutôt que d'y mettre `undefined` quand elle est vide). */
+  /** Avancement déclaré par le responsable du LEVIER, 0-100 (round 12) — remplace le feu discret
+   *  `ChecklistFlag` à trois niveaux. Pour un item manuel, saisi à la main sur la fiche chantier ;
+   *  pour un item `auto` (voir `ChecklistItemDef.auto`), calculé par `resolveMilestoneAutoFlags`
+   *  (100 ou 0, jamais de valeur intermédiaire) et jamais stocké tel quel — cette clé, sur un item
+   *  auto, ne reflète donc qu'une éventuelle valeur manuelle résiduelle antérieure. Absent = pas
+   *  encore déclaré (un item manuel sans `progressPct` bloque `canPassMilestone`, au même titre
+   *  qu'un item à 0 — voir son commentaire) ; distinct de `0`, qui signifie "déclaré, à l'arrêt".
+   *  Une valeur strictement entre 0 et 100 est l'équivalent de l'ancien feu orange : non-bloquante
+   *  pour le jalon COURANT mais doit être `resolved` avant que le jalon SUIVANT ne puisse lui-même
+   *  passer (voir l'item automatique `auto: "previousOranges"`). */
+  progressPct?: number;
+  /** Pertinent seulement quand `progressPct` est strictement entre 0 et 100 (équivalent de l'ancien
+   *  `flag === "orange"`) — plan d'action daté et attribué (piège `saveChantier` : omettre cette
+   *  clé plutôt que d'y mettre `undefined` quand elle est vide). */
   actionPlan?: { description: string; owner?: string; dueDate?: string };
-  /** Un item orange peut être soldé plus tard sans changer de feu — c'est ce booléen (et non le
-   *  feu lui-même) qui alimente le verrou automatique du jalon suivant. */
+  /** Un item à progression partielle (0 < progressPct < 100) peut être soldé plus tard sans changer
+   *  sa valeur — c'est ce booléen (et non la valeur elle-même) qui alimente le verrou automatique
+   *  du jalon suivant. */
   resolved?: boolean;
 };
 
@@ -876,6 +886,12 @@ export type ChantierAction = {
    *  affiché comme `"todo"` par défaut (pas de valeur forcée en base tant que l'utilisateur n'a pas
    *  interagi, même parti pris défensif que `milestones`). */
   kanbanStatus?: LevierKanbanStatus;
+  /** Budget alloué à ce LEVIER (round 12), affiché avec `Program.currency` du programme actif —
+   *  pendant de `Chantier.allocatedBudget` mais au niveau du levier plutôt que du chantier (les
+   *  deux coexistent : un budget de levier n'est pas déduit du budget du chantier, voir
+   *  `sumLevierBudgets` dans `lib/axisLogic.ts` pour l'agrégat). Optionnel : `undefined` tant
+   *  qu'aucun budget n'a été saisi (distinct de 0, qui signifie "budget nul mais renseigné"). */
+  budget?: number;
 };
 
 /** Statut à 3 états du "kanban classique" d'un levier sans KPI rattaché — round 8, voir

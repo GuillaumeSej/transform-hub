@@ -633,6 +633,8 @@ const fr: Record<string, string> = {
   "adminProgramsPanel.nameLabel": "Nom du programme",
   "adminProgramsPanel.namePlaceholder": "Nom",
   "adminProgramsPanel.sponsor": "Sponsor",
+  "adminProgramsPanel.ambitionLabel": "Ambition",
+  "adminProgramsPanel.ambitionPlaceholder": "Ex. Devenir leader du marché d'ici 2027",
   "adminProgramsPanel.count": "{n} programme(s)",
   "adminProgramsPanel.colProgram": "Programme",
   "adminProgramsPanel.colActions": "Actions",
@@ -1234,6 +1236,11 @@ const fr: Record<string, string> = {
   "strategicAxes.kanbanBadgePrefix": "Kanban",
   "strategicAxes.kanbanDrilldownTitle": "Leviers",
   "strategicAxes.kanbanDrilldownEmpty": "Aucun levier à ce stade.",
+  // Donuts de répartition budgétaire (round 12) — vue "Cartes" (budget d'axe par chantier) et vue
+  // "Avancement des chantiers" (budget de chantier par levier).
+  "strategicAxes.budgetByChantierModalTitle": "Répartition du budget par chantier",
+  "strategicAxes.budgetByLevierModalTitle": "Répartition du budget par levier",
+  "strategicAxes.budgetUnallocated": "Non affecté",
   "strategicAxes.filterOwner": "Responsable",
   "strategicAxes.unassigned": "Non assigné",
   "strategicAxes.loading": "Chargement des axes…",
@@ -1355,6 +1362,8 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.sponsor": "Sponsor",
   "strategicChantierDetail.pilote": "Pilote",
   "strategicChantierDetail.allocatedBudget": "Budget alloué",
+  "strategicChantierDetail.allocatedBudgetBelowLeviers":
+    "Le budget du chantier ne peut pas être inférieur à la somme des budgets de ses leviers.",
   "strategicChantierDetail.confidentialityLevel": "Niveau de confidentialité",
   "strategicChantierDetail.confidentialityLevelNone": "Aucun (visible par tous)",
 
@@ -1407,6 +1416,7 @@ const fr: Record<string, string> = {
 
   // ─── Onglets de la fiche chantier (round 10, point 2) ─────────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Vue d'ensemble",
+  "strategicChantierDetail.tabs.progression": "Progression",
   "strategicChantierDetail.tabs.staffing": "Effectifs",
 
   // ─── KPI rattaché à un levier, affiché sur sa ligne (round 10, point 2) ───────────────────
@@ -1416,6 +1426,9 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.actionFocused": "Levier ouvert depuis le lien",
   "strategicChantierDetail.actionForm.missingHint":
     "Renseignez le nom et les dates pour enregistrer.",
+  "strategicChantierDetail.actionForm.budgetLabel": "Budget du levier",
+  "strategicChantierDetail.actionForm.budgetExceedsChantier":
+    "Le total des budgets des leviers dépasserait le budget alloué du chantier.",
   "strategicChantierDetail.successCriteria.placeholder": "On sera content en [année] si...",
 
   // ─── Plan Stratégique — jalons E0→E4 (round 5) ─────────────────────────────────────────
@@ -1425,9 +1438,9 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Jalon franchi",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Jalon courant",
 
-  "strategicChantierDetail.milestones.flag.green": "Vert",
-  "strategicChantierDetail.milestones.flag.orange": "Orange",
-  "strategicChantierDetail.milestones.flag.red": "Rouge",
+  // Round 12 : saisie par pourcentage déclaré (0-100) plutôt que par feu à 3 niveaux.
+  "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
+    "Avancement déclaré, en pourcentage",
 
   "strategicChantierDetail.milestones.actionPlan.description": "Description du plan d'action",
   "strategicChantierDetail.milestones.actionPlan.owner": "Responsable",
@@ -1520,6 +1533,14 @@ const fr: Record<string, string> = {
   "kpi.macroIndicators": "Indicateurs de l'axe",
   "kpi.indicatorNumber": "KPI numéro",
   "kpi.chantier": "Chantier",
+  // ─── Filtres Axe / Chantier / Responsable (round 12, réplique le motif de la page Axes
+  // stratégiques) ───
+  "kpi.filterAxis": "Axe",
+  "kpi.filterChantier": "Chantier",
+  "kpi.filterOwner": "Responsable",
+  // Valeur du filtre "Chantier" pour un indicateur macro (porté directement par l'axe, sans
+  // chantier) — distinct du libellé de section `kpi.macroIndicators` (pluriel, en-tête de bloc).
+  "kpi.macroIndicator": "Indicateur d'axe",
   "kpi.kind.quantitative": "Quantitatif",
   "kpi.kind.qualitative": "Qualitatif",
   "kpi.frequency.monthly": "Mensuel",
@@ -1594,7 +1615,7 @@ const fr: Record<string, string> = {
   "staffing.actionNone": "Aucun levier en particulier",
 
   // ─── Page Effectifs mobilisés (/effectifs, Plan Stratégique) ──────────────
-  "effectifs.title": "Effectifs mobilisés",
+  "effectifs.title": "Effectifs & budget mobilisés",
   "effectifs.subtitle":
     "ETP mobilisés sur les chantiers du programme, par grande fonction. Cliquez une fonction pour voir sa répartition entre les axes et repérer un éventuel sur-staffage.",
   "effectifs.loading": "Chargement des effectifs…",
@@ -1615,6 +1636,11 @@ const fr: Record<string, string> = {
   "effectifs.chantierUnknown": "Chantier inconnu",
   "effectifs.noStaffingOnAxis": "Aucun ETP déclaré sur cet axe.",
   "effectifs.noStaffingForFunction": "Aucun ETP de cette fonction sur les axes du programme.",
+  "effectifs.moneyBudget.title": "Budget financier alloué",
+  "effectifs.moneyBudget.totalLabel": "Budget total alloué",
+  "effectifs.moneyBudget.totalSub": "Somme du budget alloué de tous les chantiers du programme",
+  "effectifs.moneyBudget.byAxisTitle": "Répartition par axe",
+  "effectifs.moneyBudget.empty": "Aucun budget alloué sur ce programme.",
   "effectifs.budget.title": "ETP disponibles par fonction",
   "effectifs.budget.inputLabel": "Budget ETP",
   "effectifs.budget.usedLabel": "% ETP utilisés / disponibles",
@@ -1667,6 +1693,17 @@ const fr: Record<string, string> = {
   "strategicDashboard.chantiersSuffix": "chantiers",
   "strategicDashboard.indicatorsSuffix": "indicateurs",
   "strategicDashboard.allocatedBudget": "Budget alloué",
+  // Round 12 : bandeau "ambition" (rappel permanent, réglé une fois en admin) + libellés des
+  // listes ouvertes par les puces d'en-tête cliquables (axes/chantiers/indicateurs/budget).
+  "strategicDashboard.ambitionLabel": "Ambition",
+  "strategicDashboard.popover.axesTitle": "Axes stratégiques",
+  "strategicDashboard.popover.chantiersTitle": "Chantiers",
+  "strategicDashboard.popover.indicatorsTitle": "Indicateurs",
+  "strategicDashboard.popover.budgetTitle": "Budget par axe",
+  "strategicDashboard.popover.emptyAxes": "Aucun axe",
+  "strategicDashboard.popover.emptyChantiers": "Aucun chantier",
+  "strategicDashboard.popover.emptyIndicators": "Aucun indicateur",
+  "strategicDashboard.popover.emptyBudget": "Aucun budget alloué",
   "strategicDashboard.tracked": "Indicateurs suivis",
   "strategicDashboard.onTrack": "Sur la trajectoire",
   "strategicDashboard.atRisk": "À risque",
@@ -1693,6 +1730,9 @@ const fr: Record<string, string> = {
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendances et prérequis",
   // Round 8 : placeholder d'une colonne de jalon E0-E4 sans levier (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
+  // Round 12 : moyenne des `progressPct` déclarés des leviers de la colonne (`{pct}` substitué
+  // manuellement, voir `LevierMilestoneBoard.tsx`).
+  "strategicDashboard.levierBoard.avgProgress": "{pct}% en moyenne",
 
   // ─── Plan Stratégique — fiche de configuration d'un programme (admin) ─────
   "adminPrograms.manage": "Gérer",

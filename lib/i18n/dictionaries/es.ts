@@ -589,6 +589,8 @@ const es: Record<string, string> = {
   "adminProgramsPanel.nameLabel": "Nombre del programa",
   "adminProgramsPanel.namePlaceholder": "Nombre",
   "adminProgramsPanel.sponsor": "Patrocinador",
+  "adminProgramsPanel.ambitionLabel": "Ambición",
+  "adminProgramsPanel.ambitionPlaceholder": "Ej. Ser líder del mercado antes de 2027",
   "adminProgramsPanel.count": "{n} programa(s)",
   "adminProgramsPanel.colProgram": "Programa",
   "adminProgramsPanel.colActions": "Acciones",
@@ -1174,6 +1176,11 @@ const es: Record<string, string> = {
   "strategicAxes.kanbanBadgePrefix": "Kanban",
   "strategicAxes.kanbanDrilldownTitle": "Palancas",
   "strategicAxes.kanbanDrilldownEmpty": "Ninguna palanca en esta etapa.",
+  // Donuts de reparto presupuestario (ronda 12) — vista "Tarjetas" (presupuesto del eje por
+  // obra) y vista "Avance de las obras" (presupuesto de la obra por palanca).
+  "strategicAxes.budgetByChantierModalTitle": "Reparto del presupuesto por obra",
+  "strategicAxes.budgetByLevierModalTitle": "Reparto del presupuesto por palanca",
+  "strategicAxes.budgetUnallocated": "No asignado",
   "strategicAxes.filterOwner": "Responsable",
   "strategicAxes.unassigned": "Sin asignar",
   "strategicAxes.loading": "Cargando los ejes…",
@@ -1284,6 +1291,8 @@ const es: Record<string, string> = {
   "strategicChantierDetail.sponsor": "Patrocinador",
   "strategicChantierDetail.pilote": "Responsable",
   "strategicChantierDetail.allocatedBudget": "Presupuesto asignado",
+  "strategicChantierDetail.allocatedBudgetBelowLeviers":
+    "El presupuesto del proyecto no puede ser inferior a la suma de los presupuestos de sus actividades.",
   "strategicChantierDetail.confidentialityLevel": "Nivel de confidencialidad",
   "strategicChantierDetail.confidentialityLevelNone": "Ninguno (visible para todos)",
 
@@ -1337,6 +1346,7 @@ const es: Record<string, string> = {
 
   // ─── Pestañas de la ficha de proyecto (ronda 10, punto 2) ─────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Resumen",
+  "strategicChantierDetail.tabs.progression": "Progreso",
   "strategicChantierDetail.tabs.staffing": "Personal",
 
   // ─── KPI vinculado a una actividad, mostrado en su fila (ronda 10, punto 2) ───────────────
@@ -1345,6 +1355,9 @@ const es: Record<string, string> = {
 
   "strategicChantierDetail.actionFocused": "Actividad abierta desde el enlace",
   "strategicChantierDetail.actionForm.missingHint": "Complete el nombre y las fechas para guardar.",
+  "strategicChantierDetail.actionForm.budgetLabel": "Presupuesto de la actividad",
+  "strategicChantierDetail.actionForm.budgetExceedsChantier":
+    "El total de los presupuestos de las actividades superaría el presupuesto asignado del proyecto.",
   "strategicChantierDetail.successCriteria.placeholder": "Estaremos satisfechos en [año] si...",
 
   // ─── Plan Estratégico — hitos E0-E4 (ronda 5) ────────────────────────────────
@@ -1354,9 +1367,9 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Hito superado",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Hito actual",
 
-  "strategicChantierDetail.milestones.flag.green": "Verde",
-  "strategicChantierDetail.milestones.flag.orange": "Naranja",
-  "strategicChantierDetail.milestones.flag.red": "Rojo",
+  // Ronda 12: porcentaje declarado (0-100) en lugar de un semáforo de 3 niveles.
+  "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
+    "Avance declarado, en porcentaje",
 
   "strategicChantierDetail.milestones.actionPlan.description": "Descripción del plan de acción",
   "strategicChantierDetail.milestones.actionPlan.owner": "Responsable",
@@ -1450,6 +1463,14 @@ const es: Record<string, string> = {
   "kpi.macroIndicators": "Indicadores del eje",
   "kpi.indicatorNumber": "KPI número",
   "kpi.chantier": "Frente de trabajo",
+  // ─── Filtros Eje / Frente de trabajo / Responsable (ronda 12, replica el patrón de la página
+  // Ejes estratégicos) ───
+  "kpi.filterAxis": "Eje",
+  "kpi.filterChantier": "Frente de trabajo",
+  "kpi.filterOwner": "Responsable",
+  // Valor del filtro "Frente de trabajo" para un indicador macro (asociado directamente al eje,
+  // sin frente de trabajo) — distinto del encabezado de sección `kpi.macroIndicators` (plural).
+  "kpi.macroIndicator": "Indicador de eje",
   "kpi.kind.quantitative": "Cuantitativo",
   "kpi.kind.qualitative": "Cualitativo",
   "kpi.frequency.monthly": "Mensual",
@@ -1520,7 +1541,7 @@ const es: Record<string, string> = {
   "staffing.actionNone": "Ninguna actividad en particular",
 
   // ─── Página Personal movilizado (/effectifs, Plan Estratégico) ────────────
-  "effectifs.title": "Personal movilizado (ETC)",
+  "effectifs.title": "Personal y presupuesto movilizados",
   "effectifs.subtitle":
     "ETC movilizados en los proyectos del programa, por gran función. Haga clic en una función para ver su reparto entre los ejes y detectar una posible sobredotación.",
   "effectifs.loading": "Cargando el personal movilizado…",
@@ -1540,6 +1561,12 @@ const es: Record<string, string> = {
   "effectifs.chantierUnknown": "Proyecto desconocido",
   "effectifs.noStaffingOnAxis": "No hay ETC declarados en este eje.",
   "effectifs.noStaffingForFunction": "No hay ETC de esta función en los ejes del programa.",
+  "effectifs.moneyBudget.title": "Presupuesto financiero asignado",
+  "effectifs.moneyBudget.totalLabel": "Presupuesto total asignado",
+  "effectifs.moneyBudget.totalSub":
+    "Suma del presupuesto asignado de todos los proyectos del programa",
+  "effectifs.moneyBudget.byAxisTitle": "Reparto por eje",
+  "effectifs.moneyBudget.empty": "No hay presupuesto asignado en este programa.",
   "effectifs.budget.title": "ETC disponibles por función",
   "effectifs.budget.inputLabel": "Presupuesto de ETC",
   "effectifs.budget.usedLabel": "% ETC utilizados / disponibles",
@@ -1592,6 +1619,18 @@ const es: Record<string, string> = {
   "strategicDashboard.chantiersSuffix": "frentes de trabajo",
   "strategicDashboard.indicatorsSuffix": "indicadores",
   "strategicDashboard.allocatedBudget": "Presupuesto asignado",
+  // Ronda 12: banner "ambición" (recordatorio permanente, configurado una vez en admin) +
+  // etiquetas de las listas abiertas por las chips de cabecera clicables (ejes/frentes de
+  // trabajo/indicadores/presupuesto).
+  "strategicDashboard.ambitionLabel": "Ambición",
+  "strategicDashboard.popover.axesTitle": "Ejes estratégicos",
+  "strategicDashboard.popover.chantiersTitle": "Frentes de trabajo",
+  "strategicDashboard.popover.indicatorsTitle": "Indicadores",
+  "strategicDashboard.popover.budgetTitle": "Presupuesto por eje",
+  "strategicDashboard.popover.emptyAxes": "Ningún eje",
+  "strategicDashboard.popover.emptyChantiers": "Ningún frente de trabajo",
+  "strategicDashboard.popover.emptyIndicators": "Ningún indicador",
+  "strategicDashboard.popover.emptyBudget": "Ningún presupuesto asignado",
   "strategicDashboard.tracked": "Indicadores seguidos",
   "strategicDashboard.onTrack": "En trayectoria",
   "strategicDashboard.atRisk": "En riesgo",
@@ -1619,6 +1658,9 @@ const es: Record<string, string> = {
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertas de dependencias y prerrequisitos",
   // Ronda 8: marcador de una columna de jalón E0-E4 vacía (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
+  // Ronda 12: media de los `progressPct` declarados de los leviers de la columna (`{pct}`
+  // sustituido manualmente, ver `LevierMilestoneBoard.tsx`).
+  "strategicDashboard.levierBoard.avgProgress": "{pct}% de media",
 
   // ─── Plan Estratégico — ficha de configuración de un programa (admin) ─────
   "adminPrograms.manage": "Gestionar",

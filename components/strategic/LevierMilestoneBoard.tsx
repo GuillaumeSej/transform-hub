@@ -1,7 +1,8 @@
 "use client";
 
 import { colorForChantier, milestoneWeightPct } from "@/lib/axisLogic";
-import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Chantier, ChantierAction, MilestoneId } from "@/types";
 
 /**
@@ -107,6 +108,31 @@ export function LevierCard({
   );
 }
 
+/**
+ * Moyenne (0-100) des `progressPct` déclarés des items du jalon COURANT d'un levier (round 12) —
+ * même logique interne que `milestoneProgressPct` (lib/axisLogic.ts) mais bornée au jalon courant
+ * seul (pas de crédit cumulé des jalons déjà franchis) : ce widget affiche une moyenne "de la
+ * colonne" à l'instant T, pas un avancement global du levier. Un item non répondu compte pour `0`,
+ * comme `milestoneProgressPct`.
+ *
+ * Simplification round 12 (notée dans le rapport de fin de tâche) : les items `auto` du jalon sont
+ * traités comme des items manuels non répondus (`0`) plutôt que recalculés via
+ * `resolveMilestoneAutoFlags` — ce composant ne reçoit pas `allChantiers`/`allActions` (nécessaires
+ * à ce calcul) et enfiler ces collections en props jusqu'ici pour ce seul usage serait
+ * disproportionné.
+ */
+function currentMilestoneAverage(action: ChantierAction, milestoneId: MilestoneId): number {
+  const defs = MILESTONE_CHECKLISTS[milestoneId];
+  if (defs.length === 0) return 0;
+  const stored = action.milestones?.checklists?.[milestoneId] ?? [];
+  let sum = 0;
+  for (const def of defs) {
+    const storedItem = stored.find((i) => i.itemId === def.itemId);
+    sum += storedItem?.progressPct ?? 0;
+  }
+  return sum / defs.length;
+}
+
 export function LevierMilestoneBoard({
   groups,
   labels,
@@ -118,6 +144,7 @@ export function LevierMilestoneBoard({
   labels: { emptyColumn: string };
   onLevierClick: (chantierId: string, focusActionId?: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-5">
       {groups.map((group) => (
@@ -161,6 +188,18 @@ export function LevierMilestoneBoard({
           <div className="grid grid-cols-1 gap-2 min-[640px]:grid-cols-5">
             {MILESTONE_ORDER.map((milestoneId) => {
               const cards = group.milestones[milestoneId] ?? [];
+              // Round 12 : moyenne des `progressPct` déclarés du jalon COURANT, affichée à côté du
+              // compte de leviers — voir `currentMilestoneAverage` ci-dessus pour la simplification
+              // (items auto comptés à 0, pas de `resolveMilestoneAutoFlags` ici).
+              const avgPct =
+                cards.length > 0
+                  ? Math.round(
+                      cards.reduce(
+                        (sum, card) => sum + currentMilestoneAverage(card.action, milestoneId),
+                        0
+                      ) / cards.length
+                    )
+                  : undefined;
               return (
                 <div
                   key={milestoneId}
@@ -174,6 +213,14 @@ export function LevierMilestoneBoard({
                       {cards.length}
                     </span>
                   </div>
+                  {avgPct !== undefined && (
+                    <div className="mb-1.5 px-0.5 text-[10px] text-tertiary">
+                      {t("strategicDashboard.levierBoard.avgProgress", "{pct}% en moyenne").replace(
+                        "{pct}",
+                        String(avgPct)
+                      )}
+                    </div>
+                  )}
                   {cards.length === 0 ? (
                     <p className="py-3 text-center text-[11px] text-tertiary">
                       {labels.emptyColumn}

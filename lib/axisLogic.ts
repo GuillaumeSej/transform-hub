@@ -8,7 +8,6 @@ import type {
   ChantierDependencyType,
   ChantierMilestoneState,
   ChantierStaffing,
-  ChecklistFlag,
   Indicator,
   IndicatorMeasurement,
   IndicatorRiskStatus,
@@ -595,10 +594,21 @@ export function canStartAction(
 // ─── Jalons E0→E4 (round 5) ─────────────────────────────────────────────────────────────────────
 
 /**
- * Calcule le feu des items AUTOMATIQUES d'un jalon donné (`ChecklistItemDef.auto`, contenu défini
- * dans `lib/milestoneChecklist.ts`) — les items manuels de ce même jalon n'apparaissent PAS dans le
- * résultat, c'est à l'appelant (l'UI) de fusionner cette map avec les feux manuels déjà enregistrés
- * sur le LEVIER (`action.milestones.checklists[milestoneId]`).
+ * Calcule la valeur DÉCLARATIVE (0-100, round 12) des items AUTOMATIQUES d'un jalon donné
+ * (`ChecklistItemDef.auto`, contenu défini dans `lib/milestoneChecklist.ts`) — les items manuels de
+ * ce même jalon n'apparaissent PAS dans le résultat, c'est à l'appelant (l'UI, ou
+ * `milestoneProgressPct` via son paramètre `autoValues`) de fusionner cette map avec les valeurs
+ * manuelles déjà enregistrées sur le LEVIER (`action.milestones.checklists[milestoneId]`).
+ *
+ * Round 12 : ENCODAGE de sortie changé de `ChecklistFlag` ("green"/"red", jamais "orange" pour un
+ * item auto) à un NOMBRE — `100` où l'ancien code renvoyait "green", `0` où il renvoyait "red" —
+ * pour s'aligner sur `MilestoneChecklistItem.progressPct`, qui remplace le feu discret. Les
+ * conditions sous-jacentes des trois règles sont INCHANGÉES, sauf `previousOranges` qui doit
+ * retraduire la notion d'"orange non soldé" : le feu discret ayant disparu du modèle, l'équivalent
+ * est désormais un item manuel dont le `progressPct` déclaré est STRICTEMENT compris entre 0 et
+ * 100 (ni "à l'arrêt", ni "fait") et qui n'est pas `resolved` — un item non répondu (`progressPct
+ * === undefined`) n'est PAS considéré ici (il bloque déjà `canPassMilestone` en amont, ce n'est
+ * pas à cet item auto de le re-signaler).
  *
  * Round 7 : retargetée du chantier vers le LEVIER (`ChantierAction`) — le suivi E0→E4 vit
  * désormais par levier (voir `ChantierAction.milestones`), un chantier regroupant plusieurs
@@ -611,22 +621,22 @@ export function canStartAction(
  * Les trois tags `auto` correspondent chacun à une règle de la note PMO du PO, rendue automatique
  * plutôt que posée comme une question (voir le commentaire de `ChecklistItemDef` pour le détail de
  * chaque règle) :
- *  - `previousOranges` : vert si tous les items orange du jalon PRÉCÉDENT du LEVIER sont soldés
- *    (`resolved === true`), vert aussi s'il n'y en avait aucun (vacuously) — rouge sinon. N'apparaît
- *    jamais sur E0 (pas de jalon précédent dans `MILESTONE_ORDER`).
- *  - `dependencyAlert` : rouge si le CHANTIER PARENT du levier est le côté BLOQUÉ (`sourceId`)
- *    d'au moins une alerte de `chantierDependencyAlerts` — vert sinon (y compris si le chantier
+ *  - `previousOranges` : `100` si tous les items à progression partielle du jalon PRÉCÉDENT du
+ *    LEVIER sont soldés (`resolved === true`), `100` aussi s'il n'y en avait aucun (vacuously) —
+ *    `0` sinon. N'apparaît jamais sur E0 (pas de jalon précédent dans `MILESTONE_ORDER`).
+ *  - `dependencyAlert` : `0` si le CHANTIER PARENT du levier est le côté BLOQUÉ (`sourceId`)
+ *    d'au moins une alerte de `chantierDependencyAlerts` — `100` sinon (y compris si le chantier
  *    parent est introuvable, ou si l'alerte existe mais bloque un AUTRE chantier).
- *  - `effortComplete` : vert si les 4 dimensions de `chantierParent.effort` sont toutes renseignées
- *    (`!== undefined`), rouge sinon (y compris si le chantier parent est introuvable).
+ *  - `effortComplete` : `100` si les 4 dimensions de `chantierParent.effort` sont toutes
+ *    renseignées (`!== undefined`), `0` sinon (y compris si le chantier parent est introuvable).
  */
 export function resolveMilestoneAutoFlags(
   milestoneId: MilestoneId,
   action: ChantierAction,
   allChantiers: Chantier[],
   allActions: ChantierAction[]
-): Record<string, ChecklistFlag> {
-  const flags: Record<string, ChecklistFlag> = {};
+): Record<string, number> {
+  const flags: Record<string, number> = {};
   const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
 
   for (const item of MILESTONE_CHECKLISTS[milestoneId]) {
@@ -639,8 +649,11 @@ export function resolveMilestoneAutoFlags(
         const previousItems = previousMilestone
           ? (action.milestones?.checklists?.[previousMilestone] ?? [])
           : [];
-        const hasUnresolvedOrange = previousItems.some((i) => i.flag === "orange" && !i.resolved);
-        flags[item.itemId] = hasUnresolvedOrange ? "red" : "green";
+        const hasUnresolvedPartial = previousItems.some(
+          (i) =>
+            i.progressPct !== undefined && i.progressPct > 0 && i.progressPct < 100 && !i.resolved
+        );
+        flags[item.itemId] = hasUnresolvedPartial ? 0 : 100;
         break;
       }
       case "dependencyAlert": {
@@ -648,7 +661,7 @@ export function resolveMilestoneAutoFlags(
         const isAffected = parentChantier
           ? alerts.some((a) => a.sourceId === parentChantier.id)
           : false;
-        flags[item.itemId] = isAffected ? "red" : "green";
+        flags[item.itemId] = isAffected ? 0 : 100;
         break;
       }
       case "effortComplete": {
@@ -658,7 +671,7 @@ export function resolveMilestoneAutoFlags(
           effort?.humanImpact !== undefined &&
           effort?.duration !== undefined &&
           effort?.changeManagement !== undefined;
-        flags[item.itemId] = isComplete ? "green" : "red";
+        flags[item.itemId] = isComplete ? 100 : 0;
         break;
       }
     }
@@ -673,10 +686,13 @@ export function resolveMilestoneAutoFlags(
  *
  * **Contrairement à `canStartAction` (round 4, purement informatif — rien n'empêche réellement une
  * action bloquée de démarrer), ce verrou est réel** : correspond à la règle explicite de la note
- * PMO du PO ("un rouge = pas de passage"). `canPass` est faux si un item quelconque est `red`, ou
- * si un item n'a encore aucun feu (pas répondu) — un item orange, en revanche, n'empêche PAS de
- * passer (c'est tout le sens du feu orange : non-bloquant, avec un plan d'action). Ne lève jamais
- * d'exception ; une check-list vide renvoie `canPass: true`.
+ * PMO du PO ("un rouge = pas de passage"), retraduite en round 12 pour le modèle déclaratif
+ * `progressPct` (0-100) : `canPass` est faux si un item quelconque a `progressPct === 0`
+ * (équivalent de l'ancien rouge), ou si un item n'a encore aucune valeur déclarée (`progressPct
+ * === undefined`, pas répondu) — toute valeur STRICTEMENT positive, aussi faible soit-elle,
+ * n'empêche PAS de passer (c'est l'équivalent de l'ancien vert ET de l'ancien orange, qui
+ * passaient déjà tous les deux : seul le rouge bloquait). Ne lève jamais d'exception ; une
+ * check-list vide renvoie `canPass: true`.
  */
 export function canPassMilestone(
   milestoneId: MilestoneId,
@@ -685,9 +701,9 @@ export function canPassMilestone(
   const reasons: string[] = [];
 
   for (const item of items) {
-    if (!item.flag) {
+    if (item.progressPct === undefined) {
       reasons.push(`Item non répondu (${milestoneId}, ${item.itemId})`);
-    } else if (item.flag === "red") {
+    } else if (item.progressPct === 0) {
       reasons.push(`Item bloquant en rouge (${milestoneId}, ${item.itemId})`);
     }
   }
@@ -696,17 +712,70 @@ export function canPassMilestone(
 }
 
 /**
- * Avancement en pourcentage, dérivé du nombre de jalons E0→E4 FRANCHIS (round 5) — remplace
- * `chantierProgress()` sur les affichages de progression. 5 jalons possibles × 20% chacun, donc
- * toujours un multiple de 20 entre 0 et 100. `chantierProgress()` reste dans le code (peut
- * resservir) mais n'est plus branché ici.
+ * Avancement en pourcentage (0-100) d'une entité portant un état de jalon E0→E4 — remplace
+ * `chantierProgress()` sur les affichages de progression, comme avant round 5.
+ *
+ * Round 12 : remplissage FIN à l'intérieur du jalon COURANT, au lieu du calcul par paliers de 20
+ * (`passedMilestones.length * 20`) qui traitait un jalon en cours comme s'il ne valait jamais rien
+ * tant qu'il n'était pas officiellement franchi. Nouveau calcul :
+ *  1. `passedMilestones.length * 20` — crédit plein pour chaque jalon déjà validé.
+ *  2. PLUS, si le jalon COURANT n'est PAS déjà dans `passedMilestones` (garde-fou anti double
+ *     comptage : seul cas de recoupement possible, une fois E4 validé, où le jalon courant reste
+ *     E4 faute de jalon suivant) : un crédit partiel `20 * moyenne / 100`, où `moyenne` porte sur
+ *     TOUS les items définis pour ce jalon dans `MILESTONE_CHECKLISTS` (pas seulement ceux déjà
+ *     répondus — un item absent de `checklists[currentMilestone]` compte pour `0`, comme un item
+ *     répondu à `0`).
+ *  3. Total plafonné à 100 et arrondi (`Math.round`) — les paliers de 20 restent exacts mais le
+ *     crédit partiel de l'étape 2 ne l'est en général pas.
+ *
+ * **Items automatiques** (`ChecklistItemDef.auto`) : cette fonction reste typée
+ * STRUCTURELLEMENT (`{ milestones? }` seulement, voir le paragraphe round 7 ci-dessous) et n'a
+ * donc PAS accès à `allChantiers`/`allActions`, nécessaires à `resolveMilestoneAutoFlags` pour
+ * calculer `dependencyAlert`/`effortComplete`. Le paramètre optionnel `autoValues` permet à un
+ * appelant QUI A ce contexte de lui injecter le résultat déjà calculé de
+ * `resolveMilestoneAutoFlags(milestones.currentMilestone, ...)` pour une moyenne exacte ; omis, un
+ * item auto est traité comme un item manuel non répondu (compte pour `0`) — dégradé mais jamais
+ * dans le sens d'une survalorisation. `chantierMilestoneProgressPct` (ci-dessous) n'a lui-même pas
+ * accès à la liste des chantiers et appelle donc systématiquement en mode dégradé. Un `progressPct`
+ * manuel déjà déclaré sur un item, même marqué `auto`, prime TOUJOURS sur `autoValues` (cas
+ * résiduel seulement : l'UI n'écrit normalement jamais de valeur manuelle sur un item auto).
  *
  * Round 7 : retypé STRUCTURELLEMENT (plutôt que `Pick<Chantier, "milestones">`) pour accepter
  * aussi bien un `Chantier` (usage historique, `@deprecated` — voir son commentaire) qu'un
  * `ChantierAction`/levier (nouvel usage round 7, un jalon par levier) sans duplication de fonction.
+ *
+ * Aucun `milestones` du tout : `0` (comportement inchangé depuis round 5).
  */
-export function milestoneProgressPct(entity: { milestones?: ChantierMilestoneState }): number {
-  return (entity.milestones?.passedMilestones.length ?? 0) * 20;
+export function milestoneProgressPct(
+  entity: { milestones?: ChantierMilestoneState },
+  /** Valeurs 0/100 des items `auto` du jalon COURANT, typiquement le résultat de
+   *  `resolveMilestoneAutoFlags(entity.milestones.currentMilestone, ...)` — voir le paragraphe
+   *  "Items automatiques" ci-dessus. Omis = items auto traités comme non répondus (0). */
+  autoValues?: Record<string, number>
+): number {
+  const milestones = entity.milestones;
+  if (!milestones) return 0;
+
+  let total = milestones.passedMilestones.length * 20;
+
+  if (!milestones.passedMilestones.includes(milestones.currentMilestone)) {
+    const defs = MILESTONE_CHECKLISTS[milestones.currentMilestone];
+    const stored = milestones.checklists[milestones.currentMilestone] ?? [];
+
+    let sum = 0;
+    for (const def of defs) {
+      const storedItem = stored.find((i) => i.itemId === def.itemId);
+      const value =
+        storedItem?.progressPct !== undefined
+          ? storedItem.progressPct
+          : ((def.auto ? autoValues?.[def.itemId] : undefined) ?? 0);
+      sum += value;
+    }
+    const average = defs.length > 0 ? sum / defs.length : 0;
+    total += (20 * average) / 100;
+  }
+
+  return Math.min(100, Math.round(total));
 }
 
 /**
@@ -959,4 +1028,63 @@ export function numberIndicators(
   }
 
   return numbers;
+}
+
+// ─── Budget par levier (round 12) ──────────────────────────────────────────────────────────────
+
+/**
+ * Somme des budgets LEVIER (`ChantierAction.budget`, round 12) d'un chantier donné — pendant de
+ * `Chantier.allocatedBudget` mais agrégé depuis les leviers plutôt que saisi directement sur le
+ * chantier ; les deux budgets COEXISTENT (l'un n'est pas déduit de l'autre, l'agrégat des leviers
+ * n'est PAS censé égaler `allocatedBudget`, c'est à l'appelant de les comparer si besoin).
+ *
+ * Un levier sans `budget` renseigné compte pour `0` (jamais exclu de la somme, contrairement à
+ * `chantierMilestoneProgressPct` où un levier sans KPI est exclu du DÉNOMINATEUR d'une moyenne :
+ * ici il n'y a pas de moyenne, seulement une somme, donc rien à exclure). Chantier sans aucun
+ * levier, ou uniquement des leviers sans budget : `0`.
+ */
+export function sumLevierBudgets(chantierId: string, actions: ChantierAction[]): number {
+  return actions
+    .filter((action) => action.chantierId === chantierId)
+    .reduce((sum, action) => sum + (action.budget ?? 0), 0);
+}
+
+// ─── Responsable affiché d'un indicateur (round 12) ────────────────────────────────────────────
+
+/**
+ * Libellé du "responsable" d'un indicateur pour l'AFFICHAGE (ex. colonne "Responsable" de la page
+ * KPI) — PAS une habilitation : voir `canFillIndicator` pour qui a le droit de saisir une mesure,
+ * une notion distincte et volontairement plus permissive (rôles/utilisateurs autorisés, pas une
+ * personne unique).
+ *
+ * Deux niveaux de résolution, selon que l'indicateur est rattaché à un chantier ou macro (porté
+ * directement par un axe) :
+ *  - `indicator.chantierId` défini : résout CE CHANTIER et retourne son pilote opérationnel
+ *    (`Chantier.pilote`) en priorité — c'est lui qui fait avancer le chantier au jour le jour,
+ *    information plus pertinente ici que le sponsor COMEX — à défaut son sponsor
+ *    (`Chantier.sponsorName`), à défaut des deux `unassignedLabel`. Chantier introuvable
+ *    (référence orpheline) : `unassignedLabel`, jamais d'exception.
+ *  - sinon (indicateur macro) : résout `indicator.axisId` et retourne `StrategicAxis.owner`, à
+ *    défaut (ou axe introuvable) `unassignedLabel`.
+ *
+ * **Choix de conception — libellé de repli** : `lib/axisLogic.ts` est un module PUR, sans accès à
+ * `t()` (i18n). Plutôt que de renvoyer un sentinel anglais en dur que chaque appelant devrait
+ * reconnaître et retraduire lui-même, le libellé de repli est un PARAMÈTRE (`unassignedLabel`)
+ * fourni par l'appelant — typiquement `t("strategicAxes.unassigned")`, la même clé déjà utilisée
+ * pour ce même concept par `StrategicAxesView.tsx` et `AxisDetailClient.tsx` (voir leur usage de
+ * `axis.owner ?? t("strategicAxes.unassigned")`). Un appelant sans `t()` sous la main peut passer
+ * une chaîne fixe ("Non assigné" ou équivalent) — la fonction ne préjuge d'aucune langue.
+ */
+export function resolveIndicatorOwner(
+  indicator: Pick<Indicator, "chantierId" | "axisId">,
+  axes: StrategicAxis[],
+  chantiers: Chantier[],
+  unassignedLabel: string
+): string {
+  if (indicator.chantierId) {
+    const chantier = chantiers.find((c) => c.id === indicator.chantierId);
+    return chantier?.pilote ?? chantier?.sponsorName ?? unassignedLabel;
+  }
+  const axis = axes.find((a) => a.id === indicator.axisId);
+  return axis?.owner ?? unassignedLabel;
 }

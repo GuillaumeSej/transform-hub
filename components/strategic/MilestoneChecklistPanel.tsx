@@ -1,12 +1,11 @@
 "use client";
 
-import { AlertTriangle, Check, X } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { UserPicker } from "@/components/strategic/UserPicker";
 import { canPassMilestone } from "@/lib/axisLogic";
 import { MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { AuthUser, ChecklistFlag, MilestoneChecklistItem, MilestoneId } from "@/types";
+import type { AuthUser, MilestoneChecklistItem, MilestoneId } from "@/types";
 
 /**
  * Panneau de check-list du jalon COURANT d'un chantier (round 5) — pièce centrale de la méthode
@@ -14,11 +13,17 @@ import type { AuthUser, ChecklistFlag, MilestoneChecklistItem, MilestoneId } fro
  * `MILESTONE_CHECKLISTS` (lib/milestoneChecklist.ts, en dur) ; seules les RÉPONSES manuelles sont
  * portées par `items` (le contenu stocké côté chantier, voir `Chantier.milestones`).
  *
- * Les items `auto` (voir `ChecklistItemDef.auto`) ne sont JAMAIS lus depuis `items` — leur feu est
- * TOUJOURS le calcul live fourni par l'appelant via `autoFlags` (résultat de
+ * Les items `auto` (voir `ChecklistItemDef.auto`) ne sont JAMAIS lus depuis `items` — leur valeur
+ * est TOUJOURS le calcul live fourni par l'appelant via `autoFlags` (résultat de
  * `resolveMilestoneAutoFlags`, qui a besoin de `allChantiers`/`allActions`, hors de portée ici) :
- * un feu automatique stocké serait de toute façon obsolète dès qu'une des données sous-jacentes
+ * une valeur automatique stockée serait de toute façon obsolète dès qu'une des données sous-jacentes
  * (dépendances, effort, oranges du jalon précédent) change.
+ *
+ * Round 12 : le feu discret à 3 niveaux (`ChecklistFlag`) est remplacé par un pourcentage déclaré
+ * `MilestoneChecklistItem.progressPct` (0-100, `undefined` = pas encore déclaré). L'indicateur
+ * visuel reste à 3 teintes (même esprit qu'avant, saisie plus fine) via le même bucketing partout :
+ * `undefined` → neutre, `0` → rouge, `100` → vert, toute valeur strictement entre les deux → un
+ * unique ton orange (jamais de dégradé).
  */
 
 const INPUT_CLASS =
@@ -26,27 +31,30 @@ const INPUT_CLASS =
 const SMALL_INPUT_CLASS =
   "mt-0.5 block rounded-md border border-border bg-white px-2 py-1 text-[12px] text-primary outline-none focus:border-bp-coral";
 
-const FLAGS: ChecklistFlag[] = ["green", "orange", "red"];
+/** Un des 3 buckets d'affichage d'un `progressPct` (voir le commentaire de tête) — jamais de
+ *  dégradé continu, seulement ces 3 teintes discrètes, même pour un item auto (toujours 0 ou 100,
+ *  jamais `partial`). */
+type ProgressBucket = "unanswered" | "red" | "partial" | "green";
 
-const FLAG_SELECTED_CLASS: Record<ChecklistFlag, string> = {
-  green: "border-rag-green bg-rag-green-light text-rag-green-dark",
-  orange: "border-rag-amber bg-rag-amber-light text-rag-amber",
-  red: "border-rag-red bg-rag-red-light text-rag-red",
-};
+function bucketForPct(pct: number | undefined): ProgressBucket {
+  if (pct === undefined) return "unanswered";
+  if (pct <= 0) return "red";
+  if (pct >= 100) return "green";
+  return "partial";
+}
 
-const FLAG_DOT_CLASS: Record<ChecklistFlag, string> = {
-  green: "bg-rag-green",
-  orange: "bg-rag-amber",
+const BUCKET_DOT_CLASS: Record<ProgressBucket, string> = {
+  unanswered: "bg-neutral-300",
   red: "bg-rag-red",
+  partial: "bg-rag-amber",
+  green: "bg-rag-green",
 };
 
-/** Icône distinctive par feu (round 9, point 2) — la teinte seule (vert quasi-noir vs orange
- *  taupe, cf. charte) est trop discrète pour distinguer les 3 états d'un coup d'œil ; la FORME
- *  vient en renfort de la couleur, jamais en remplacement. */
-const FLAG_ICON: Record<ChecklistFlag, typeof Check> = {
-  green: Check,
-  orange: AlertTriangle,
-  red: X,
+const BUCKET_INPUT_CLASS: Record<ProgressBucket, string> = {
+  unanswered: "border-border bg-white text-primary",
+  red: "border-rag-red bg-rag-red-light text-rag-red",
+  partial: "border-rag-amber bg-rag-amber-light text-rag-amber",
+  green: "border-rag-green bg-rag-green-light text-rag-green-dark",
 };
 
 const SECTIONS: Array<"A" | "B" | "C"> = ["A", "B", "C"];
@@ -54,14 +62,17 @@ const SECTIONS: Array<"A" | "B" | "C"> = ["A", "B", "C"];
 /**
  * Reconstruit un item PROPRE — jamais de clé à `undefined` (piège `saveChantier` : le document est
  * réécrit en entier via `setDoc`, voir `types/index.ts::MilestoneChecklistItem`). `actionPlan` et
- * `resolved` ne sont écrits que si `flag === "orange"`, et `actionPlan` seulement s'il porte un
- * contenu réel (description/owner/dueDate) — un item qu'on vient de passer en orange sans encore
- * rien saisir n'écrit aucun `actionPlan`.
+ * `resolved` ne sont écrits que si `progressPct` est strictement entre 0 et 100 (équivalent de
+ * l'ancien `flag === "orange"`), et `actionPlan` seulement s'il porte un contenu réel
+ * (description/owner/dueDate) — un item qu'on vient de passer en partiel sans encore rien saisir
+ * n'écrit aucun `actionPlan`.
  */
 function cleanChecklistItem(item: MilestoneChecklistItem): MilestoneChecklistItem {
   const cleaned: MilestoneChecklistItem = { itemId: item.itemId };
-  if (item.flag) cleaned.flag = item.flag;
-  if (item.flag === "orange") {
+  if (item.progressPct !== undefined) cleaned.progressPct = item.progressPct;
+  const isPartial =
+    item.progressPct !== undefined && item.progressPct > 0 && item.progressPct < 100;
+  if (isPartial) {
     const description = item.actionPlan?.description?.trim() ?? "";
     const owner = item.actionPlan?.owner;
     const dueDate = item.actionPlan?.dueDate;
@@ -88,8 +99,10 @@ export function MilestoneChecklistPanel({
   /** Réponses manuelles STOCKÉES du chantier pour ce jalon (les items `auto` n'y sont jamais lus,
    *  voir le commentaire de tête). */
   items: MilestoneChecklistItem[];
-  /** Feux des items automatiques, calculés LIVE par l'appelant (`resolveMilestoneAutoFlags`). */
-  autoFlags: Record<string, ChecklistFlag>;
+  /** Valeurs (0 ou 100, jamais entre les deux) des items automatiques, calculées LIVE par
+   *  l'appelant (`resolveMilestoneAutoFlags`, round 12 : renvoie un nombre plutôt qu'un
+   *  `ChecklistFlag`). */
+  autoFlags: Record<string, number>;
   users: AuthUser[];
   onChange: (nextItems: MilestoneChecklistItem[]) => void;
   onValidateMilestone: () => void;
@@ -110,12 +123,12 @@ export function MilestoneChecklistPanel({
     onChange(next);
   };
 
-  // Fusion défs + feux live (auto) / feux stockés (manuel) — c'est CE tableau qu'on passe à
+  // Fusion défs + valeurs live (auto) / valeurs stockées (manuel) — c'est CE tableau qu'on passe à
   // `canPassMilestone`, jamais `items` brut (qui ignore les items auto).
   const mergedItems: MilestoneChecklistItem[] = defs.map((def) =>
     def.auto
-      ? autoFlags[def.itemId]
-        ? { itemId: def.itemId, flag: autoFlags[def.itemId] }
+      ? autoFlags[def.itemId] !== undefined
+        ? { itemId: def.itemId, progressPct: autoFlags[def.itemId] }
         : { itemId: def.itemId }
       : (findStored(def.itemId) ?? { itemId: def.itemId })
   );
@@ -137,16 +150,15 @@ export function MilestoneChecklistPanel({
 
           {group.defs.map((def) => {
             if (def.auto) {
-              const flag = autoFlags[def.itemId];
+              const pct = autoFlags[def.itemId];
+              const bucket = bucketForPct(pct);
               return (
                 <div
                   key={def.itemId}
                   className="flex items-center gap-2 text-[12.5px] text-secondary"
                 >
                   <span
-                    className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${
-                      flag ? FLAG_DOT_CLASS[flag] : "bg-neutral-300"
-                    }`}
+                    className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${BUCKET_DOT_CLASS[bucket]}`}
                   />
                   <span className="flex-1">{t(def.i18nKey)}</span>
                   <span className="shrink-0 text-[10.5px] text-tertiary">
@@ -157,14 +169,14 @@ export function MilestoneChecklistPanel({
             }
 
             const stored = findStored(def.itemId);
-            const flag = stored?.flag;
-            const isOrange = flag === "orange";
+            const pct = stored?.progressPct;
+            const bucket = bucketForPct(pct);
+            const isPartial = bucket === "partial";
 
             const patchActionPlan = (
               fieldPatch: Partial<NonNullable<MilestoneChecklistItem["actionPlan"]>>
             ) =>
               patchManualItem(def.itemId, {
-                flag: "orange",
                 actionPlan: {
                   description: stored?.actionPlan?.description ?? "",
                   ...stored?.actionPlan,
@@ -172,37 +184,46 @@ export function MilestoneChecklistPanel({
                 },
               });
 
+            const handlePctChange = (raw: string) => {
+              if (raw.trim() === "") {
+                patchManualItem(def.itemId, { progressPct: undefined });
+                return;
+              }
+              const parsed = Number(raw);
+              if (Number.isNaN(parsed)) return;
+              patchManualItem(def.itemId, { progressPct: Math.max(0, Math.min(100, parsed)) });
+            };
+
             return (
               <div key={def.itemId} className="space-y-2">
                 <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
                   <span className="text-[12.5px] font-medium text-primary sm:flex-1">
                     {t(def.i18nKey)}
                   </span>
-                  <div className="flex overflow-hidden rounded-md border border-border sm:w-56 sm:shrink-0">
-                    {FLAGS.map((candidate) => {
-                      const isSelected = flag === candidate;
-                      const FlagIcon = FLAG_ICON[candidate];
-                      return (
-                        <button
-                          key={candidate}
-                          type="button"
-                          aria-pressed={isSelected}
-                          onClick={() => patchManualItem(def.itemId, { flag: candidate })}
-                          className={`flex flex-1 items-center justify-center gap-1 border-2 px-2 py-1.5 text-center text-[10.5px] font-semibold leading-tight transition ${
-                            isSelected
-                              ? FLAG_SELECTED_CLASS[candidate]
-                              : "border-transparent bg-white text-secondary hover:text-primary"
-                          }`}
-                        >
-                          <FlagIcon size={12} className="shrink-0" />
-                          {t(`strategicChantierDetail.milestones.flag.${candidate}`)}
-                        </button>
-                      );
-                    })}
+                  <div className="flex items-center gap-2 sm:w-56 sm:shrink-0">
+                    <span
+                      aria-hidden
+                      className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${BUCKET_DOT_CLASS[bucket]}`}
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={5}
+                      inputMode="numeric"
+                      value={pct ?? ""}
+                      onChange={(e) => handlePctChange(e.target.value)}
+                      placeholder="—"
+                      aria-label={t(
+                        "strategicChantierDetail.milestones.actionPlan.progressAriaLabel"
+                      )}
+                      className={`w-20 flex-1 rounded-md border-2 px-2 py-1.5 text-center text-[12.5px] font-semibold outline-none transition focus:border-bp-coral ${BUCKET_INPUT_CLASS[bucket]}`}
+                    />
+                    <span className="shrink-0 text-[11px] text-tertiary">%</span>
                   </div>
                 </div>
 
-                {isOrange && (
+                {isPartial && (
                   <div className="space-y-2 rounded-md border border-rag-amber-light bg-rag-amber-light/20 p-3">
                     <div>
                       <label className="text-xs font-medium text-text-secondary">
@@ -247,7 +268,6 @@ export function MilestoneChecklistPanel({
                         checked={stored?.resolved ?? false}
                         onChange={(e) =>
                           patchManualItem(def.itemId, {
-                            flag: "orange",
                             resolved: e.target.checked,
                           })
                         }

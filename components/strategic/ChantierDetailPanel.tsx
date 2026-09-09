@@ -33,6 +33,7 @@ import {
   milestoneProgressPct,
   numberIndicators,
   resolveMilestoneAutoFlags,
+  sumLevierBudgets,
 } from "@/lib/axisLogic";
 import { cn } from "@/lib/utils";
 import { addDays } from "@/lib/dateUtils";
@@ -92,6 +93,7 @@ type ChantierActionFormValues = Pick<
   | "deliverables"
   | "prerequisites"
   | "indicatorId"
+  | "budget"
 >;
 
 const INPUT_CLASS =
@@ -105,6 +107,52 @@ const SMALL_INPUT_CLASS =
 /** Couleur de repli de la timeline de livrables quand l'axe n'a pas de couleur choisie — même
  *  valeur que `ChantierGantt.FALLBACK_COLOR` (le taupe de la palette BearingPoint). */
 const FALLBACK_COLOR = "#a99e9a";
+
+/** Hex des tokens `--red`/`--amber`/`--green` (voir `app/globals.css`) — repris ici EN DUR, comme
+ *  `IndicatorDonut.tsx` (`FAVORABLE`/`UNFAVORABLE`) le fait déjà pour la même raison : `TimelineBar`
+ *  attend une couleur hexadécimale brute (`hexToRgb`/`withAlpha`), pas une classe Tailwind
+ *  `bg-rag-*`. Alimente l'onglet "Progression" (round 12) — 3 paliers, mêmes seuils que partout
+ *  ailleurs ce round : `<= 0` rouge, `>= 100` vert, sinon ambre. */
+const PROGRESSION_COLOR_RED = "#ff3c47";
+const PROGRESSION_COLOR_AMBER = "#806659";
+const PROGRESSION_COLOR_GREEN = "#1a1a1a";
+
+/** Couleur d'une barre de l'onglet "Progression" (round 12), à partir du pourcentage d'avancement
+ *  du levier — voir `PROGRESSION_COLOR_*` ci-dessus pour la provenance des valeurs. */
+function progressionColorFor(pct: number): string {
+  if (pct <= 0) return PROGRESSION_COLOR_RED;
+  if (pct >= 100) return PROGRESSION_COLOR_GREEN;
+  return PROGRESSION_COLOR_AMBER;
+}
+
+/** Pourcentage d'avancement AFFICHÉ d'un levier sur l'onglet "Progression" (round 12) — deux modes
+ *  selon `ChantierAction.indicatorId`, mêmes règles que le reste de la fiche :
+ *  - rattaché à un KPI (suivi jalons E0→E4) : `milestoneProgressPct`, avec les items auto résolus
+ *    via `resolveMilestoneAutoFlags` (même appel que la pastille de la carte levier, onglet
+ *    "Leviers") — `action.milestones` absent est géré par `milestoneProgressPct` lui-même (0 %).
+ *  - sinon (kanban classique) : simple mappage d'AFFICHAGE `kanbanStatus` → pourcentage, ne
+ *    modifie ni ne lit aucune nouvelle donnée — todo=0, in_progress=50, done=100, absent=0. */
+function progressionPctFor(
+  action: ChantierAction,
+  allChantiers: Chantier[],
+  allActions: ChantierAction[]
+): number {
+  if (action.indicatorId) {
+    const milestoneId = action.milestones?.currentMilestone ?? "E0";
+    return milestoneProgressPct(
+      action,
+      resolveMilestoneAutoFlags(milestoneId, action, allChantiers, allActions)
+    );
+  }
+  switch (action.kanbanStatus) {
+    case "in_progress":
+      return 50;
+    case "done":
+      return 100;
+    default:
+      return 0;
+  }
+}
 
 /** Largeur de la colonne d'identité des lignes de la timeline de livrables — légèrement plus
  *  étroite que celle du Gantt (`w-64`) : chaque ligne ne porte que le nom du livrable + celui de
@@ -165,6 +213,8 @@ type ChantierActionFormLabels = {
   stage: string;
   indicator: string;
   indicatorNone: string;
+  budget: string;
+  budgetExceedsChantier: string;
   description: string;
   deliverables: string;
   deliverablesHint: string;
@@ -408,6 +458,8 @@ function ChantierActionForm({
   users,
   otherActions,
   indicators,
+  currency,
+  chantierAllocatedBudget,
   onSubmit,
   onCancel,
   labels,
@@ -416,13 +468,22 @@ function ChantierActionForm({
   stages: MaturityStageConfig[];
   users: AuthUser[];
   /** Autres actions du MÊME chantier (l'action éditée exclue) — univers du sélecteur de prérequis
-   *  "action". Un prérequis ne référence jamais l'action qui le porte elle-même. */
+   *  "action". Un prérequis ne référence jamais l'action qui le porte elle-même. RÉUTILISÉ round 12
+   *  pour la validation du budget levier (voir `budgetExceeds` ci-dessous) : c'est déjà exactement
+   *  l'ensemble "les AUTRES leviers du chantier" dont on a besoin pour sommer leurs budgets. */
   otherActions: ChantierAction[];
   /** KPI proposables à ce levier — DÉJÀ FILTRÉS par l'appelant (`ChantierDetailPanel`) : indicateurs
    *  macro de l'axe du chantier + indicateurs déjà rattachés à ce chantier précis (voir
    *  `ChantierAction.indicatorId`). Ce composant ne refiltre rien, il ne fait qu'afficher la liste
    *  reçue. */
   indicators: Indicator[];
+  /** Devise du programme actif — suffixe du champ budget (round 12), même convention que le champ
+   *  `allocatedBudget` du CHANTIER sur la fiche appelante. */
+  currency?: string;
+  /** Budget alloué du CHANTIER parent (round 12) — nécessaire pour valider que la somme des
+   *  budgets leviers (`otherActions` + ce formulaire) ne le dépasse pas. `undefined` = pas de
+   *  plafond, aucune validation. */
+  chantierAllocatedBudget?: number;
   onSubmit: (values: ChantierActionFormValues) => void | Promise<void>;
   onCancel: () => void;
   labels: ChantierActionFormLabels;
@@ -436,6 +497,11 @@ function ChantierActionForm({
   const [status, setStatus] = useState(initial?.status ?? stages[0]?.id ?? "");
   // KPI optionnel du levier (round 8) — présence ⇒ suivi E0→E4, absence ⇒ kanban classique.
   const [indicatorId, setIndicatorId] = useState<string | undefined>(initial?.indicatorId);
+  // Budget optionnel du levier (round 12) — même discipline de saisie que `allocatedBudget` du
+  // chantier (texte libre local, ici bufferisé jusqu'au submit comme le reste de ce formulaire).
+  const [budgetInput, setBudgetInput] = useState(
+    initial?.budget !== undefined ? String(initial.budget) : ""
+  );
   const [description, setDescription] = useState(initial?.description ?? "");
   // Un champ de saisie PAR livrable (plus de convention « une ligne = un livrable »), chacun
   // portant ses propres sous-étapes temporelles.
@@ -447,7 +513,21 @@ function ChantierActionForm({
   );
   const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit = name.trim().length > 0 && start.length > 0 && end.length > 0 && !submitting;
+  const requiredFieldsMissing = name.trim().length === 0 || start.length === 0 || end.length === 0;
+
+  // Validation du budget levier (round 12) — voir le commentaire du prop `chantierAllocatedBudget`.
+  // Une saisie vide ou non numérique compte pour 0 dans la projection, même parti pris que
+  // `sumLevierBudgets` ("un levier sans budget renseigné compte pour 0, jamais exclu").
+  const trimmedBudget = budgetInput.trim();
+  const parsedBudget = trimmedBudget === "" ? undefined : Number(trimmedBudget);
+  const otherLeviersBudgetSum = otherActions.reduce((sum, a) => sum + (a.budget ?? 0), 0);
+  const projectedLeviersBudgetTotal =
+    otherLeviersBudgetSum +
+    (parsedBudget !== undefined && !Number.isNaN(parsedBudget) ? parsedBudget : 0);
+  const budgetExceeds =
+    chantierAllocatedBudget !== undefined && projectedLeviersBudgetTotal > chantierAllocatedBudget;
+
+  const canSubmit = !requiredFieldsMissing && !submitting && !budgetExceeds;
 
   const patchDeliverable = (id: string, patch: Partial<Deliverable>) =>
     setDeliverables((list) => list.map((d) => (d.id === id ? { ...d, ...patch } : d)));
@@ -526,6 +606,9 @@ function ChantierActionForm({
         end,
         status,
         ...(indicatorId ? { indicatorId } : {}),
+        ...(parsedBudget !== undefined && !Number.isNaN(parsedBudget)
+          ? { budget: parsedBudget }
+          : {}),
         ...(parsedDeliverables.length > 0 ? { deliverables: parsedDeliverables } : {}),
         ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
       });
@@ -625,6 +708,20 @@ function ChantierActionForm({
             type="date"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
+            className={INPUT_CLASS}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-secondary" htmlFor="ca-budget">
+            {labels.budget} {labels.optional}
+            {currency ? ` (${currency})` : ""}
+          </label>
+          <input
+            id="ca-budget"
+            type="number"
+            inputMode="decimal"
+            value={budgetInput}
+            onChange={(e) => setBudgetInput(e.target.value)}
             className={INPUT_CLASS}
           />
         </div>
@@ -755,7 +852,9 @@ function ChantierActionForm({
           </Button>
         </div>
         {!canSubmit && !submitting && (
-          <p className="mt-1.5 text-[11px] text-tertiary">{labels.missingHint}</p>
+          <p className="mt-1.5 text-[11px] text-tertiary">
+            {requiredFieldsMissing ? labels.missingHint : labels.budgetExceedsChantier}
+          </p>
         )}
       </div>
     </div>
@@ -937,26 +1036,72 @@ export function ChantierDetailPanel({
   );
   const timelinePctOfComputed = useMemo(() => timelinePctOf(minTime, maxTime), [minTime, maxTime]);
 
+  // ── Onglet "Progression" (round 12) — une barre par levier, sur son propre axe temporel
+  // `action.start` → `action.end` (pas celui des sous-étapes de livrable ci-dessus, domaine
+  // différent). État d'échelle INDÉPENDANT de `timelineScale` (onglet "Timeline") : même widget
+  // (`TimelineScaleToggle`) pour la cohérence visuelle demandée, mais bascule l'un ne doit pas
+  // changer l'échelle de l'autre onglet, portant une donnée différente.
+  const [progressionScale, setProgressionScale] = useState<TimelineScale>("quarter");
+  const { minTime: progressionMinTime, maxTime: progressionMaxTime } = useMemo(
+    () => timelineRange(chantierActions, progressionScale),
+    [chantierActions, progressionScale]
+  );
+  const progressionColumns = useMemo(
+    () =>
+      chantierActions.length === 0
+        ? []
+        : timelineColumns(progressionMinTime, progressionMaxTime, progressionScale),
+    [progressionMinTime, progressionMaxTime, progressionScale, chantierActions.length]
+  );
+  const progressionYearBands = useMemo(
+    () => timelineYearBands(progressionColumns),
+    [progressionColumns]
+  );
+  const progressionPctOfComputed = useMemo(
+    () => timelinePctOf(progressionMinTime, progressionMaxTime),
+    [progressionMinTime, progressionMaxTime]
+  );
+
   // ── Onglets (round 10, point 2) — réduisent le long défilement vertical de la fiche ─────────
   // Toujours initialisé sur "leviers" si le panneau s'ouvre déjà avec un `focusActionId` (sinon le
   // surlignage/défilement ci-dessous serait invisible, l'onglet "Leviers" n'étant pas affiché).
-  const [activeTab, setActiveTab] = useState<"overview" | "leviers" | "timeline" | "staffing">(
-    focusActionId ? "leviers" : "overview"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "progression" | "leviers" | "timeline" | "staffing"
+  >(focusActionId ? "leviers" : "overview");
+
+  // Ciblage interne d'un levier depuis l'onglet "Progression" (round 12) — pendant de
+  // `focusActionId` (prop externe, pilotée par l'appelant via l'URL) mais déclenché DEPUIS ce
+  // composant : cliquer une barre doit produire EXACTEMENT le même effet (bascule d'onglet +
+  // surlignage + défilement) qu'ouvrir la fiche avec `?action=…`, sans que l'appelant n'ait à
+  // connaître ce clic. Voir `effectiveFocusActionId` ci-dessous — priorité au ciblage interne le
+  // plus récent, la prop externe ne reprenant la main qu'à son propre changement (effet suivant).
+  const [clickedFocusActionId, setClickedFocusActionId] = useState("");
+  const effectiveFocusActionId = clickedFocusActionId || focusActionId;
+  const focusLevierFromProgression = (actionId: string) => {
+    setActiveTab("leviers");
+    setClickedFocusActionId(actionId);
+  };
+
   // Même déclencheur que l'effet de défilement ci-dessous (`focusActionId`) : si le panneau reste
   // monté et qu'un NOUVEAU levier est ciblé (ex. l'utilisateur avait changé d'onglet, puis reclique
   // un autre levier depuis le dashboard), on rebascule sur "Leviers" à chaque changement.
   useEffect(() => {
-    if (focusActionId) setActiveTab("leviers");
+    if (focusActionId) {
+      setActiveTab("leviers");
+      // Un `focusActionId` FRAIS (prop externe, ex. lien depuis le dashboard) prime toujours sur un
+      // ciblage interne resté en mémoire — sans quoi un clic précédent sur une barre de l'onglet
+      // "Progression" masquerait indéfiniment tout changement ultérieur de cette prop.
+      setClickedFocusActionId("");
+    }
   }, [focusActionId]);
 
-  // ── Ouverture ciblée sur une action (`focusActionId`) — défilement + mise en avant ─────────
+  // ── Ouverture ciblée sur une action (`effectiveFocusActionId`) — défilement + mise en avant ──
   const actionRefs = useRef<Record<string, HTMLLIElement | null>>({});
   useEffect(() => {
-    if (!focusActionId) return;
-    const el = actionRefs.current[focusActionId];
+    if (!effectiveFocusActionId) return;
+    const el = actionRefs.current[effectiveFocusActionId];
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusActionId, chantierActions.length]);
+  }, [effectiveFocusActionId, chantierActions.length]);
 
   if (data.loading) {
     return (
@@ -1100,6 +1245,8 @@ export function ChantierDetailPanel({
     prerequisiteNoOtherActions: t("strategicChantierDetail.prerequisites.noOtherActions"),
     optional: t("common.optional"),
     missingHint: t("strategicChantierDetail.actionForm.missingHint"),
+    budget: t("strategicChantierDetail.actionForm.budgetLabel"),
+    budgetExceedsChantier: t("strategicChantierDetail.actionForm.budgetExceedsChantier"),
     submit: t("common.save"),
     cancel: t("common.cancel"),
   };
@@ -1128,6 +1275,10 @@ export function ChantierDetailPanel({
         {(
           [
             { id: "overview", label: t("strategicChantierDetail.tabs.overview", "Vue d'ensemble") },
+            {
+              id: "progression",
+              label: t("strategicChantierDetail.tabs.progression", "Progression"),
+            },
             { id: "leviers", label: t("strategicAxes.chantierActions") },
             { id: "timeline", label: t("strategicChantierDetail.timeline.title") },
             { id: "staffing", label: t("strategicChantierDetail.tabs.staffing", "Effectifs") },
@@ -1220,6 +1371,26 @@ export function ChantierDetailPanel({
                     }
                     const parsed = Number(trimmed);
                     if (Number.isNaN(parsed) || parsed === chantier.allocatedBudget) return;
+                    // Round 12 : validation SYMÉTRIQUE de celle du formulaire de levier — le budget
+                    // du CHANTIER ne peut pas descendre sous la somme des budgets de ses leviers
+                    // ACTUELS (`chantierActions`, pas ce qui est en cours de saisie dans un
+                    // formulaire de levier éventuellement ouvert par ailleurs). Rejet : ni écriture,
+                    // ni tentative — l'input revient à la dernière valeur enregistrée, et un toast
+                    // explique pourquoi (même canal que `updateChantierField`/`clearChantierField`).
+                    const leviersBudgetSum = sumLevierBudgets(chantier.id, chantierActions);
+                    if (parsed < leviersBudgetSum) {
+                      setAllocatedBudgetInput(
+                        chantier.allocatedBudget !== undefined
+                          ? String(chantier.allocatedBudget)
+                          : ""
+                      );
+                      showToast(
+                        t("strategicAxes.chantierSaveErrorTitle"),
+                        t("strategicChantierDetail.allocatedBudgetBelowLeviers"),
+                        "error"
+                      );
+                      return;
+                    }
                     updateChantierField({ allocatedBudget: parsed });
                   }}
                   className={INPUT_CLASS}
@@ -1315,6 +1486,96 @@ export function ChantierDetailPanel({
         </Card>
       </div>
 
+      {/* ── Onglet "Progression" (round 12) : une barre par levier, façon Gantt, remplie/colorée
+          selon son avancement — jalons E0→E4 si rattaché à un KPI, sinon mappage d'affichage du
+          kanban classique (voir `progressionPctFor`/`progressionColorFor` en tête de fichier).
+          Réutilise les MÊMES primitives que l'onglet "Timeline" (`TimelineBar`/`TimelineScaleToggle`
+          etc., voir `TimelineBars.tsx`) pour rester visuellement cohérent, mais sur son propre axe
+          temporel (bornes des LEVIERS eux-mêmes, pas des sous-étapes de livrable). ────────────── */}
+      <div className={activeTab === "progression" ? undefined : "hidden"}>
+        <Card>
+          <CardHeader
+            title={t("strategicChantierDetail.tabs.progression", "Progression")}
+            actions={
+              chantierActions.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                    {t("strategicAxes.ganttScale")}
+                  </span>
+                  <TimelineScaleToggle
+                    value={progressionScale}
+                    onChange={setProgressionScale}
+                    options={[
+                      { value: "month", label: t("strategicAxes.ganttScaleMonth") },
+                      { value: "quarter", label: t("strategicAxes.ganttScaleQuarter") },
+                      { value: "semester", label: t("strategicAxes.ganttScaleSemester") },
+                    ]}
+                  />
+                </div>
+              )
+            }
+          />
+          <CardBody>
+            {chantierActions.length === 0 ? (
+              <p className="py-6 text-center text-[13px] text-tertiary">
+                {t("strategicAxes.noActions")}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="min-w-[560px]">
+                  <TimelineHeaderRow
+                    columns={progressionColumns}
+                    yearBands={progressionYearBands}
+                    labelWidthClassName={TIMELINE_LABEL_WIDTH}
+                  />
+                  {chantierActions.map((action) => {
+                    const pct = progressionPctFor(action, data.chantiers, data.chantierActions);
+                    const color = progressionColorFor(pct);
+                    const left = progressionPctOfComputed(action.start);
+                    const width = Math.max(1.5, progressionPctOfComputed(action.end) - left);
+                    return (
+                      <div
+                        key={action.id}
+                        className="flex items-stretch gap-2 border-b border-border py-1.5 last:border-b-0"
+                      >
+                        <div className={`${TIMELINE_LABEL_WIDTH} shrink-0`}>
+                          <div
+                            className="truncate text-[11.5px] font-semibold text-primary"
+                            title={action.name}
+                          >
+                            {action.name}
+                          </div>
+                        </div>
+                        <div
+                          className="relative flex-1"
+                          style={{ height: DELIVERABLE_LANE_HEIGHT }}
+                        >
+                          <TimelineGridColumns columns={progressionColumns} />
+                          <TimelineBar
+                            left={left}
+                            width={width}
+                            top={0}
+                            height={DELIVERABLE_BAR_HEIGHT}
+                            color={color}
+                            variant="outline"
+                            progressPct={pct}
+                            onClick={() => focusLevierFromProgression(action.id)}
+                            ariaLabel={action.name}
+                            tooltipText={`${action.name} · ${pct}%`}
+                            label={`${pct}%`}
+                            labelClassName="min-w-0 flex-1 truncate text-[10px] font-semibold text-primary"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+
       {/* ── Onglet "Leviers" : actions, prérequis, livrables ────────────────────────────────── */}
       <div className={activeTab === "leviers" ? undefined : "hidden"}>
         {/* ── Actions, prérequis, livrables ───────────────────────────────────────────────────── */}
@@ -1343,6 +1604,8 @@ export function ChantierDetailPanel({
                   users={data.users}
                   otherActions={chantierActions.filter((a) => a.id !== actionForm.actionId)}
                   indicators={chantierAvailableIndicators}
+                  currency={activeProgram?.currency}
+                  chantierAllocatedBudget={chantier.allocatedBudget}
                   labels={actionFormLabels}
                   onCancel={() => setActionForm(null)}
                   onSubmit={async (values) => {
@@ -1378,7 +1641,7 @@ export function ChantierDetailPanel({
             ) : (
               <ul className="space-y-2">
                 {chantierActions.map((action) => {
-                  const isFocused = action.id === focusActionId;
+                  const isFocused = action.id === effectiveFocusActionId;
                   const actionDeliverables = normalizeDeliverables(action.deliverables);
                   const startInfo = canStartAction(action, data.chantierActions, stages);
                   // Défaut défensif pour un levier créé avant l'introduction des jalons E0→E4 (round
@@ -1389,7 +1652,20 @@ export function ChantierDetailPanel({
                     passedMilestones: [],
                     checklists: {},
                   };
-                  const actionProgressPct = milestoneProgressPct(action);
+                  // Round 12 : `milestoneProgressPct` prend désormais un 2ᵃᵌ argument
+                  // (`autoValues`, voir son commentaire dans `lib/axisLogic.ts`) — sans lui les
+                  // items `auto` du jalon courant comptent tous pour 0, sous-évaluant cette pastille
+                  // dès qu'un item auto est réellement à 100. `actionMilestones.currentMilestone`
+                  // porte déjà le défaut "E0" ci-dessus, pas besoin de le re-dériver.
+                  const actionProgressPct = milestoneProgressPct(
+                    action,
+                    resolveMilestoneAutoFlags(
+                      actionMilestones.currentMilestone,
+                      action,
+                      data.chantiers,
+                      data.chantierActions
+                    )
+                  );
                   // KPI rattaché au levier (round 8 : `indicatorId` servait jusqu'ici uniquement de
                   // bascule jalons/kanban) — résolu ici pour affichage round 10 (nom + numéro global).
                   const linkedIndicator = action.indicatorId
