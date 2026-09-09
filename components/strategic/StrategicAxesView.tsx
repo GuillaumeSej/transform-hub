@@ -404,7 +404,7 @@ export function StrategicAxesView() {
         />
       </Modal>
 
-      <Card>
+      <Card className="overflow-visible">
         <CardBody flush>
           {/* Filtres "Responsable" + "Jalon" + "Statut kanban" réunis dans une même zone (round 10,
               point 3 ; migrés de `FilterBar` vers `Dropdown` round 14, voir doc-comments de
@@ -414,7 +414,14 @@ export function StrategicAxesView() {
               chantiers" — "Jalon"/"Statut kanban" n'ont pas de sens en vue "Cartes", où aucun
               composant ne les consomme). Libellé volontairement générique (round 11) depuis le
               retrait du filtre "Étape de maturité" : énumérer les filtres concrets n'a plus de sens
-              avec un seul type par vue. */}
+              avec un seul type par vue.
+              `overflow-visible` (round 14, correctif) : `Card` applique `overflow-hidden` par
+              défaut (pour clipper ses propres coins arrondis) — sans cette surcharge, le panneau
+              ouvert d'un `Dropdown` (positionné en `absolute`, plus haut que la carte elle-même)
+              se retrouvait rogné à quelques pixels par la carte parente, ne laissant apparaître que
+              la toute première option ("Tous") du menu déroulant. Sans risque visuel ici : le
+              contenu de cette carte (rangée de boutons) n'a pas besoin d'être clippé à son propre
+              rayon de bordure. */}
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
             {view === "kanban" && (
               <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
