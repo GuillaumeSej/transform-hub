@@ -4,8 +4,12 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Users, Wallet } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
-import { BudgetDonutChart } from "@/components/shared/charts/BudgetDonutChart";
+import {
+  BudgetDonutChart,
+  type BudgetDonutSlice,
+} from "@/components/shared/charts/BudgetDonutChart";
 import { KPICard } from "@/components/shared/KPICard";
+import { Modal } from "@/components/shared/Modal";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
@@ -117,6 +121,12 @@ export function EffectifsPageClient() {
   /** Équipe sélectionnée = filtre du bloc « par axe ». `null` = vue complète. */
   const [selectedFunction, setSelectedFunction] = useState<string | null>(null);
 
+  /** Axe dont le drill-down budgétaire PAR CHANTIER (round 13) est actuellement ouvert — `null` =
+   *  modale fermée. Le donut « Répartition par axe » de la section budget financier s'arrêtait au
+   *  niveau de l'axe (round 12), jugé "trop grossier" par le PO : cliquer une part ouvre désormais
+   *  un second donut, un slice par chantier de cet axe. */
+  const [budgetDrilldownAxisId, setBudgetDrilldownAxisId] = useState<string | null>(null);
+
   const globalTotals = useMemo(() => totalsByFunction(staffing), [staffing]);
   const totalFte = useMemo(() => staffing.reduce((sum, e) => sum + (e.fte || 0), 0), [staffing]);
 
@@ -169,6 +179,23 @@ export function EffectifsPageClient() {
     }
     return axes.map((axis) => ({ name: axis.name, value: totals.get(axis.id) ?? 0 }));
   }, [axes, chantiers]);
+
+  /** `BudgetDonutChart.onSliceClick` ne renvoie que le NOM de la part cliquée (contrat du
+   *  composant, inchangé) — ce lookup retrouve l'axe correspondant pour ouvrir son drill-down. */
+  const axisByName = useMemo(() => new Map(axes.map((a) => [a.name, a] as const)), [axes]);
+
+  /** Parts du donut de drill-down (round 13) : un slice par chantier de l'axe actuellement ouvert
+   *  (`budgetDrilldownAxisId`), en excluant les chantiers sans `allocatedBudget` renseigné — même
+   *  convention d'exclusion que le donut de répartition par levier de `AxisKanban` (round 12).
+   *  `null` tant qu'aucune modale n'est ouverte. */
+  const budgetDrilldownSlices: BudgetDonutSlice[] | null = useMemo(() => {
+    if (!budgetDrilldownAxisId) return null;
+    return chantiers
+      .filter((c) => c.axisId === budgetDrilldownAxisId && c.allocatedBudget !== undefined)
+      .map((c) => ({ name: c.name, value: c.allocatedBudget ?? 0 }));
+  }, [budgetDrilldownAxisId, chantiers]);
+
+  const budgetDrilldownAxis = axes.find((a) => a.id === budgetDrilldownAxisId) ?? null;
 
   /** Un groupe par axe du programme (y compris les axes SANS staffing : leur absence est une
    *  information — un axe sans aucun ETP déclaré n'est pas la même chose qu'un axe absent), plus
@@ -293,12 +320,49 @@ export function EffectifsPageClient() {
               <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-secondary">
                 {t("effectifs.moneyBudget.byAxisTitle")}
               </h3>
-              <BudgetDonutChart data={allocatedBudgetByAxis} formatValue={formatAllocatedBudget} />
+              <BudgetDonutChart
+                data={allocatedBudgetByAxis}
+                formatValue={formatAllocatedBudget}
+                centerLabel={t("effectifs.moneyBudget.centerLabel")}
+                onSliceClick={(name) => {
+                  const axis = axisByName.get(name);
+                  if (axis) setBudgetDrilldownAxisId(axis.id);
+                }}
+              />
             </div>
           </div>
         )}
       </CardBody>
     </Card>
+  );
+
+  // Drill-down (round 13) : budget de l'axe cliqué ci-dessus, ventilé PAR CHANTIER. Page de pure
+  // lecture — pas de `onSliceClick` sur ce second donut (contrairement à `AxisKanban`/
+  // `StrategicAxesView`, qui naviguent vers la fiche chantier depuis leur propre drill-down).
+  const budgetDrilldownModal = (
+    <Modal
+      open={!!budgetDrilldownAxisId}
+      onOpenChange={(open) => {
+        if (!open) setBudgetDrilldownAxisId(null);
+      }}
+      title={t("effectifs.moneyBudget.byChantierModalTitle")}
+      maxWidth="560px"
+    >
+      {budgetDrilldownAxis && (
+        <p className="mb-3 text-[12px] font-semibold text-primary">{budgetDrilldownAxis.name}</p>
+      )}
+      {budgetDrilldownSlices && budgetDrilldownSlices.length > 0 ? (
+        <BudgetDonutChart
+          data={budgetDrilldownSlices}
+          formatValue={formatAllocatedBudget}
+          centerLabel={t("effectifs.moneyBudget.centerLabel")}
+        />
+      ) : (
+        <p className="py-6 text-center text-[12px] text-tertiary">
+          {t("effectifs.moneyBudget.byChantierEmpty")}
+        </p>
+      )}
+    </Modal>
   );
 
   // Section besoin vs disponible : indépendante de la présence de lignes de staffing (une équipe
@@ -360,6 +424,7 @@ export function EffectifsPageClient() {
         {header}
         <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
         {moneyBudgetSection}
+        {budgetDrilldownModal}
         {needVsAvailableSection}
         <Card>
           <CardBody>
@@ -376,6 +441,7 @@ export function EffectifsPageClient() {
       {header}
       <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
       {moneyBudgetSection}
+      {budgetDrilldownModal}
       {needVsAvailableSection}
 
       <KPICard

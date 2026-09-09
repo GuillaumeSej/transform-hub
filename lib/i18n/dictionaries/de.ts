@@ -1467,14 +1467,16 @@ const de: Record<string, string> = {
   "kpi.macroIndicators": "Indikatoren der Achse",
   "kpi.indicatorNumber": "KPI-Nummer",
   "kpi.chantier": "Arbeitspaket",
-  // ─── Filter Achse / Arbeitspaket / Verantwortlich (Runde 12, repliziert das Muster der Seite
-  // Strategische Achsen) ───
+  // ─── Abschnitt "KPIs der Achsen" + Einzelauswahl-Dropdowns Achse / Arbeitspaket / Verantwortlich
+  // (Runde 13, ersetzt die Checkbox-Filterleiste aus Runde 12 — siehe
+  // `components/shared/Dropdown.tsx` und `KpiPageClient.tsx`) ───
+  "kpi.axesSectionTitle": "KPIs der Achsen",
   "kpi.filterAxis": "Achse",
   "kpi.filterChantier": "Arbeitspaket",
   "kpi.filterOwner": "Verantwortlich",
-  // Wert des Filters "Arbeitspaket" für einen Makro-Indikator (direkt an der Achse hängend, ohne
-  // Arbeitspaket) — unterscheidet sich von der Abschnittsüberschrift `kpi.macroIndicators` (Plural).
-  "kpi.macroIndicator": "Achsenindikator",
+  // Platzhalter des Dropdowns ohne Auswahl, auch als Beschriftung der "Zurücksetzen"-Zeile oben im
+  // Panel verwendet (siehe `allowClear` in `Dropdown.tsx`).
+  "kpi.filterAll": "Alle",
   "kpi.kind.quantitative": "Quantitativ",
   "kpi.kind.qualitative": "Qualitativ",
   "kpi.frequency.monthly": "Monatlich",
@@ -1572,6 +1574,10 @@ const de: Record<string, string> = {
   "effectifs.moneyBudget.totalSub": "Summe des zugewiesenen Budgets aller Vorhaben des Programms",
   "effectifs.moneyBudget.byAxisTitle": "Verteilung nach Achse",
   "effectifs.moneyBudget.empty": "Für dieses Programm ist kein Budget zugewiesen.",
+  "effectifs.moneyBudget.centerLabel": "Gesamt",
+  "effectifs.moneyBudget.byChantierModalTitle": "Budgetverteilung nach Vorhaben",
+  "effectifs.moneyBudget.byChantierEmpty":
+    "Kein Vorhaben mit zugewiesenem Budget auf dieser Achse.",
 
   // ─── VZÄ-Verteilung nach Periode (Runde 7 — StaffingPeriodBreakdown.tsx) ──────────────────
   "staffingPeriod.title": "VZÄ-Verteilung nach Periode",

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LineChart, Lock, Pencil, Plus, Target } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
-import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
+import { Dropdown, type DropdownGroup, type DropdownOption } from "@/components/shared/Dropdown";
 import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import {
@@ -512,78 +512,65 @@ export function KpiPageClient() {
     updateIndicator,
   } = useStrategicData(user?.companyId ?? null, activeProgramId, user);
 
-  // ─── Filtres Axe / Chantier / Responsable (round 12) — réplique le motif de
-  // `StrategicAxesView.tsx` (barre de filtres persistée dans l'URL sous le préfixe `f_`). Les
-  // maps nom-par-id alimentent uniquement `getValue` ci-dessous, aucun autre usage.
-  const axisNameById = useMemo(() => new Map(axes.map((a) => [a.id, a.name])), [axes]);
-  const chantierNameById = useMemo(
-    () => new Map(chantiers.map((c) => [c.id, c.name])),
-    [chantiers]
-  );
+  // ─── Filtres Axe / Chantier / Responsable (round 13) — 3 dropdowns à sélection UNIQUE
+  // (`components/shared/Dropdown.tsx`), persistés dans l'URL sous des paramètres dédiés
+  // (`axis` / `chantier` / `owner`) plutôt que le préfixe `f_` multi-valeurs du round précédent
+  // (`FilterBar`, abandonné sur cette page — une seule valeur par filtre se sérialise directement,
+  // pas besoin d'un `Array.join(",")`). Le contrat `?indicator=<id>` (plus bas) n'est jamais touché.
+  const selectedAxisId = searchParams.get("axis");
+  const selectedChantierId = searchParams.get("chantier");
+  const selectedOwner = searchParams.get("owner");
 
-  const filterDefs: FilterDef<Indicator>[] = useMemo(
-    () => [
-      {
-        key: "f_axis",
-        label: t("kpi.filterAxis"),
-        getValue: (i) => axisNameById.get(i.axisId) ?? "?",
-      },
-      {
-        key: "f_chantier",
-        label: t("kpi.filterChantier"),
-        getValue: (i) =>
-          i.chantierId ? (chantierNameById.get(i.chantierId) ?? "?") : t("kpi.macroIndicator"),
-      },
-      {
-        key: "f_owner",
-        label: t("kpi.filterOwner"),
-        getValue: (i) => resolveIndicatorOwner(i, axes, chantiers, t("strategicAxes.unassigned")),
-      },
-    ],
-    [t, axisNameById, chantierNameById, axes, chantiers]
-  );
-
-  /** Filtres OUVERTS mais encore sans valeur cochée — état purement local, même bug corrigé et
-   *  même raisonnement que `StrategicAxesView.tsx` (voir son propre `openFilterKeys`) : un filtre
-   *  ouvert-mais-vide n'a pas de représentation dans l'URL (seules les clés avec valeurs y sont
-   *  écrites, voir `setFilters` ci-dessous), donc son ouverture doit vivre en mémoire. */
-  const [openFilterKeys, setOpenFilterKeys] = useState<string[]>([]);
-
-  const activeFilters: ActiveFilters = useMemo(() => {
-    const result: ActiveFilters = {};
-    for (const key of openFilterKeys) {
-      if (filterDefs.some((def) => def.key === key)) result[key] = [];
-    }
-    searchParams.forEach((value, key) => {
-      if (filterDefs.some((def) => def.key === key)) result[key] = value.split(",").filter(Boolean);
-    });
-    return result;
-  }, [searchParams, filterDefs, openFilterKeys]);
-
-  // Ne touche qu'aux clés `f_*` de l'URL — le paramètre `indicator=` du contrat de navigation
-  // KPI (voir plus bas) est laissé intact, tout comme n'importe quel autre paramètre existant.
-  const setFilters = (next: ActiveFilters) => {
-    setOpenFilterKeys(Object.keys(next));
+  const setParam = (key: "axis" | "chantier" | "owner", value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
-    Array.from(params.keys())
-      .filter((k) => k.startsWith("f_"))
-      .forEach((k) => params.delete(k));
-    Object.entries(next).forEach(([k, v]) => {
-      if (v.length > 0) params.set(k, v.join(","));
-    });
+    if (value) params.set(key, value);
+    else params.delete(key);
     const qs = params.toString();
     router.replace(qs ? `/kpi?${qs}` : "/kpi");
   };
 
+  const axisOptions: DropdownOption[] = useMemo(
+    () => axes.map((a) => ({ value: a.id, label: a.name })),
+    [axes]
+  );
+
+  const chantierGroups: DropdownGroup[] = useMemo(
+    () =>
+      axes
+        .map((axis) => ({
+          groupLabel: axis.name,
+          options: chantiers
+            .filter((c) => c.axisId === axis.id)
+            .map((c) => ({ value: c.id, label: c.name })),
+        }))
+        .filter((group) => group.options.length > 0),
+    [axes, chantiers]
+  );
+
+  const ownerOptions: DropdownOption[] = useMemo(() => {
+    const names = new Set(
+      indicators.map((i) =>
+        resolveIndicatorOwner(i, axes, chantiers, t("strategicAxes.unassigned"))
+      )
+    );
+    return Array.from(names)
+      .sort()
+      .map((name) => ({ value: name, label: name }));
+  }, [indicators, axes, chantiers, t]);
+
   const filteredIndicators = useMemo(
     () =>
-      indicators.filter((i) =>
-        Object.entries(activeFilters).every(([key, values]) => {
-          const def = filterDefs.find((d) => d.key === key);
-          return !def || values.length === 0 || values.includes(def.getValue(i));
-        })
-      ),
-    [indicators, activeFilters, filterDefs]
+      indicators.filter((i) => {
+        if (selectedAxisId && i.axisId !== selectedAxisId) return false;
+        if (selectedChantierId && i.chantierId !== selectedChantierId) return false;
+        if (
+          selectedOwner &&
+          resolveIndicatorOwner(i, axes, chantiers, t("strategicAxes.unassigned")) !== selectedOwner
+        )
+          return false;
+        return true;
+      }),
+    [indicators, axes, chantiers, t, selectedAxisId, selectedChantierId, selectedOwner]
   );
 
   /** Regroupement d'affichage : par axe, puis par chantier. Les indicateurs "macro" (sans
@@ -731,21 +718,6 @@ export function KpiPageClient() {
       {header}
       <p className="max-w-3xl text-sm text-text-secondary">{t("kpi.subtitle")}</p>
 
-      {/* Filtres Axe / Chantier / Responsable (round 12) — même traitement visuel que la barre de
-          filtres de `StrategicAxesView.tsx` (Card + CardBody flush, toolbar bordée en bas). */}
-      <Card className="mb-0">
-        <CardBody flush>
-          <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-            <FilterBar
-              items={indicators}
-              defs={filterDefs}
-              active={activeFilters}
-              onChange={setFilters}
-            />
-          </div>
-        </CardBody>
-      </Card>
-
       {/* Pas de « cumul des indicateurs » ici : sommer des indicateurs hétérogènes n'a de sens que
           sur un Plan Performance (tout y est en euros économisés). Le haut de page porte donc le
           compteur on-track/à risque, puis les KPI business (indicateurs de niveau axe). */}
@@ -780,24 +752,59 @@ export function KpiPageClient() {
           </CardBody>
         </Card>
       ) : (
-        <div className="space-y-8">
-          {grouped.map(({ axis, macro, byChantier }) => (
-            <AxisSection
-              key={axis.id}
-              axis={axis}
-              macro={macro}
-              byChantier={byChantier}
-              renderCard={renderCard}
+        <div className="space-y-4">
+          <h2 className="text-base font-bold text-text-primary">{t("kpi.axesSectionTitle")}</h2>
+
+          {/* Filtres Axe / Chantier / Responsable (round 13) — dropdowns à sélection unique,
+              placés ICI (juste au-dessus des sections qu'ils affectent) plutôt qu'en haut de page :
+              le hero "sur la trajectoire" et les KPI business ci-dessus sont portfolio-wide et ne
+              changent jamais avec ces filtres, les y exposer laissait croire qu'ils étaient inertes. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Dropdown
+              label={t("kpi.filterAxis")}
+              placeholder={t("kpi.filterAll")}
+              value={selectedAxisId}
+              onChange={(v) => setParam("axis", v)}
+              options={axisOptions}
+              allowClear
             />
-          ))}
-          {orphans.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-text-primary">
-                {t("kpi.axisUnknown")}
-              </h2>
-              <div className="space-y-4">{orphans.map(renderCard)}</div>
-            </section>
-          )}
+            <Dropdown
+              label={t("kpi.filterChantier")}
+              placeholder={t("kpi.filterAll")}
+              value={selectedChantierId}
+              onChange={(v) => setParam("chantier", v)}
+              groups={chantierGroups}
+              allowClear
+            />
+            <Dropdown
+              label={t("kpi.filterOwner")}
+              placeholder={t("kpi.filterAll")}
+              value={selectedOwner}
+              onChange={(v) => setParam("owner", v)}
+              options={ownerOptions}
+              allowClear
+            />
+          </div>
+
+          <div className="space-y-8">
+            {grouped.map(({ axis, macro, byChantier }) => (
+              <AxisSection
+                key={axis.id}
+                axis={axis}
+                macro={macro}
+                byChantier={byChantier}
+                renderCard={renderCard}
+              />
+            ))}
+            {orphans.length > 0 && (
+              <section className="space-y-3">
+                <h2 className="text-sm font-bold uppercase tracking-wide text-text-primary">
+                  {t("kpi.axisUnknown")}
+                </h2>
+                <div className="space-y-4">{orphans.map(renderCard)}</div>
+              </section>
+            )}
+          </div>
         </div>
       )}
     </div>

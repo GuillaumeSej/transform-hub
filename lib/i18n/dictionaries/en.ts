@@ -1472,13 +1472,16 @@ const en: Record<string, string> = {
   "kpi.macroIndicators": "Axis indicators",
   "kpi.indicatorNumber": "KPI number",
   "kpi.chantier": "Work package",
-  // ─── Axis / Work package / Owner filters (round 12, replicates the Strategic Axes page pattern) ───
+  // ─── "Axis KPIs" section + single-select Axis / Work package / Owner dropdowns (round 13,
+  // replaces the round 12 checkbox filter bar — see `components/shared/Dropdown.tsx` and
+  // `KpiPageClient.tsx`) ───
+  "kpi.axesSectionTitle": "Axis KPIs",
   "kpi.filterAxis": "Axis",
   "kpi.filterChantier": "Work package",
   "kpi.filterOwner": "Owner",
-  // "Work package" filter value for a macro indicator (attached directly to the axis, no work
-  // package) — distinct from the `kpi.macroIndicators` section heading (plural).
-  "kpi.macroIndicator": "Axis indicator",
+  // Dropdown placeholder when no value is selected, also used as the "clear" row label at the top
+  // of the panel (see `allowClear` in `Dropdown.tsx`).
+  "kpi.filterAll": "All",
   "kpi.kind.quantitative": "Quantitative",
   "kpi.kind.qualitative": "Qualitative",
   "kpi.frequency.monthly": "Monthly",
@@ -1574,6 +1577,9 @@ const en: Record<string, string> = {
     "Sum of the allocated budget of every workstream in the programme",
   "effectifs.moneyBudget.byAxisTitle": "Split by axis",
   "effectifs.moneyBudget.empty": "No budget allocated on this programme.",
+  "effectifs.moneyBudget.centerLabel": "Total",
+  "effectifs.moneyBudget.byChantierModalTitle": "Budget breakdown by workstream",
+  "effectifs.moneyBudget.byChantierEmpty": "No workstream with a budget set on this axis.",
 
   // ─── FTE split by period (round 7 — StaffingPeriodBreakdown.tsx) ──────────────────────────
   "staffingPeriod.title": "FTE split by period",

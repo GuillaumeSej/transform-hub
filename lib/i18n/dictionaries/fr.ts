@@ -1534,14 +1534,16 @@ const fr: Record<string, string> = {
   "kpi.macroIndicators": "Indicateurs de l'axe",
   "kpi.indicatorNumber": "KPI numéro",
   "kpi.chantier": "Chantier",
-  // ─── Filtres Axe / Chantier / Responsable (round 12, réplique le motif de la page Axes
-  // stratégiques) ───
+  // ─── Section "KPI des axes" + dropdowns Axe / Chantier / Responsable à sélection unique
+  // (round 13, remplace la barre de filtres à cases à cocher du round 12 — voir
+  // `components/shared/Dropdown.tsx` et `KpiPageClient.tsx`) ───
+  "kpi.axesSectionTitle": "KPI des axes",
   "kpi.filterAxis": "Axe",
   "kpi.filterChantier": "Chantier",
   "kpi.filterOwner": "Responsable",
-  // Valeur du filtre "Chantier" pour un indicateur macro (porté directement par l'axe, sans
-  // chantier) — distinct du libellé de section `kpi.macroIndicators` (pluriel, en-tête de bloc).
-  "kpi.macroIndicator": "Indicateur d'axe",
+  // Placeholder du dropdown quand aucune valeur n'est sélectionnée, aussi utilisé comme libellé de
+  // la ligne "effacer" en tête de panneau (voir `allowClear` de `Dropdown.tsx`).
+  "kpi.filterAll": "Tous",
   "kpi.kind.quantitative": "Quantitatif",
   "kpi.kind.qualitative": "Qualitatif",
   "kpi.frequency.monthly": "Mensuel",
@@ -1643,6 +1645,10 @@ const fr: Record<string, string> = {
   "effectifs.moneyBudget.totalSub": "Somme du budget alloué de tous les chantiers du programme",
   "effectifs.moneyBudget.byAxisTitle": "Répartition par axe",
   "effectifs.moneyBudget.empty": "Aucun budget alloué sur ce programme.",
+  // Drill-down par chantier (round 13) — cliquer une part du donut "Répartition par axe" ci-dessus.
+  "effectifs.moneyBudget.centerLabel": "Total",
+  "effectifs.moneyBudget.byChantierModalTitle": "Répartition du budget par chantier",
+  "effectifs.moneyBudget.byChantierEmpty": "Aucun chantier avec budget renseigné sur cet axe.",
 
   // ─── Répartition des ETP par période (round 7 — StaffingPeriodBreakdown.tsx) ──────────────
   "staffingPeriod.title": "Répartition des ETP par période",
