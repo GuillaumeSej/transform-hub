@@ -256,3 +256,22 @@ export function upsertEmployee(
     ],
   };
 }
+
+/**
+ * Somme des ETP RÉELS (`Employee.fte`) par département, calculée EN LIVE depuis la base ETP —
+ * round 13, alimente la comparaison besoin/disponible du Plan Stratégique
+ * (`app/(app)/effectifs/EffectifsPageClient.tsx`, `components/strategic/ChantierStaffingEditor.tsx`).
+ *
+ * Volontairement DISTINCT de `Department.fte`/`fteTarget` (baseline saisie séparément, jamais
+ * recalculée depuis les employés — voir `types/index.ts`::Department) : ce total-ci est TOUJOURS
+ * le décompte réel et à jour des fiches employé, pas une cible éditée à la main qui peut dériver.
+ * Un employé sans `department` renseigné est ignoré (ne peut pas alimenter un agrégat par équipe).
+ */
+export function fteByDepartment(employees: Employee[]): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const e of employees) {
+    if (!e.department) continue;
+    map[e.department] = (map[e.department] ?? 0) + (e.fte || 0);
+  }
+  return map;
+}

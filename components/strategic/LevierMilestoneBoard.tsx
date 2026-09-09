@@ -170,18 +170,22 @@ export function LevierMilestoneBoard({
           {group.chantiers && group.chantiers.length > 0 && (
             <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
               {group.chantiers.map((chantier) => (
-                <span
+                <button
                   key={chantier.id}
-                  className="flex items-center gap-1.5 text-[10.5px] text-tertiary"
+                  type="button"
+                  onClick={() => onLevierClick(chantier.id)}
+                  title={chantier.name}
+                  className="flex items-center gap-1.5 rounded text-[10.5px] text-tertiary transition hover:text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-black"
                 >
                   <span
                     aria-hidden
                     className={`h-2 w-2 shrink-0 rounded-full ${colorForChantier(chantier.id)}`}
                   />
-                  <span className="max-w-[140px] truncate" title={chantier.name}>
-                    {chantier.name}
-                  </span>
-                </span>
+                  {/* Round 12 : nom en entier (plus de troncature `max-w-[140px] truncate`) et
+                      cliquable — demande PO explicite, ouvre le panneau du chantier comme les
+                      bulles de leviers ci-dessous (`onLevierClick` sans `focusActionId`). */}
+                  <span>{chantier.name}</span>
+                </button>
               ))}
             </div>
           )}

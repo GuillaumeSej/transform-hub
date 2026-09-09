@@ -1037,11 +1037,21 @@ const ACTIONS = [
 // étalées sur 2026-2027 pour peupler plusieurs buckets trimestre/semestre/année distincts
 // (`staffingPeriodBuckets`, lib/axisLogic.ts). Pas d'id/companyId/createdAt ici : générés à
 // l'écriture, comme les autres entités de ce script.
+//
+// Round 13 : `function` porte désormais le nom EXACT d'une équipe de la base ETP entreprise
+// (`Employee.department`, module RH — voir types/index.ts et lib/hooks/useCompanyDepartments.ts),
+// plus l'ancienne union fermée à 9 valeurs (rh/finance/it/...). Les 5 valeurs utilisées ci-dessous
+// ("Production", "Supply Chain", "R&D / Innovation", "Commercial & Marketing",
+// "Support (IT/Finance/HR)") sont les 5 départements RÉELS déjà présents dans la base ETP d'Acme
+// Corp (`leverMeta/c1__workforceEmployees`, 115 employés) — remapping fait à la main depuis
+// l'ancienne taxonomie, ligne par ligne, selon le contexte du chantier (ex. les leviers IT du
+// chantier CH-cyber/CH-data/CH-rpa, orientés innovation/digital, sont rattachés à
+// "R&D / Innovation" plutôt qu'au support IT générique de "Support (IT/Finance/HR)").
 const STAFFING = [
   {
     chantierId: "CH-lean",
     axisId: "AX-excop",
-    function: "operations",
+    function: "Production",
     fte: 2.0,
     startDate: "2026-02-01",
     endDate: "2026-08-31",
@@ -1049,7 +1059,7 @@ const STAFFING = [
   {
     chantierId: "CH-lean",
     axisId: "AX-excop",
-    function: "rh",
+    function: "Support (IT/Finance/HR)",
     fte: 0.5,
     startDate: "2026-06-01",
     endDate: "2027-01-31",
@@ -1059,7 +1069,7 @@ const STAFFING = [
   {
     chantierId: "CH-lean",
     axisId: "AX-excop",
-    function: "achats",
+    function: "Supply Chain",
     fte: 0.3,
     startDate: "2026-09-01",
     endDate: "2027-03-31",
@@ -1067,7 +1077,7 @@ const STAFFING = [
   {
     chantierId: "CH-supply",
     axisId: "AX-excop",
-    function: "operations",
+    function: "Supply Chain",
     fte: 1.5,
     startDate: "2026-01-15",
     endDate: "2026-09-30",
@@ -1076,7 +1086,7 @@ const STAFFING = [
   {
     chantierId: "CH-supply",
     axisId: "AX-excop",
-    function: "finance",
+    function: "Support (IT/Finance/HR)",
     fte: 0.4,
     startDate: "2026-10-01",
     endDate: "2027-03-31",
@@ -1084,7 +1094,7 @@ const STAFFING = [
   {
     chantierId: "CH-supply",
     axisId: "AX-excop",
-    function: "achats",
+    function: "Supply Chain",
     fte: 1.0,
     startDate: "2026-04-01",
     endDate: "2026-12-31",
@@ -1092,7 +1102,7 @@ const STAFFING = [
   {
     chantierId: "CH-supply",
     axisId: "AX-excop",
-    function: "autre",
+    function: "Supply Chain",
     fte: 0.3,
     startDate: "2026-01-15",
     endDate: "2026-09-30",
@@ -1101,7 +1111,7 @@ const STAFFING = [
   {
     chantierId: "CH-qualite",
     axisId: "AX-excop",
-    function: "operations",
+    function: "Production",
     fte: 0.8,
     startDate: "2026-03-01",
     endDate: "2026-06-30",
@@ -1109,7 +1119,7 @@ const STAFFING = [
   {
     chantierId: "CH-qualite",
     axisId: "AX-excop",
-    function: "rh",
+    function: "Support (IT/Finance/HR)",
     fte: 0.2,
     startDate: "2026-04-01",
     endDate: "2026-06-30",
@@ -1118,7 +1128,7 @@ const STAFFING = [
   {
     chantierId: "CH-data",
     axisId: "AX-digital",
-    function: "it",
+    function: "R&D / Innovation",
     fte: 3.0,
     startDate: "2026-06-01",
     endDate: "2027-06-30",
@@ -1127,7 +1137,7 @@ const STAFFING = [
   {
     chantierId: "CH-data",
     axisId: "AX-digital",
-    function: "it",
+    function: "R&D / Innovation",
     fte: 1.2,
     startDate: "2027-01-01",
     endDate: "2027-06-30",
@@ -1135,7 +1145,7 @@ const STAFFING = [
   {
     chantierId: "CH-data",
     axisId: "AX-digital",
-    function: "finance",
+    function: "Support (IT/Finance/HR)",
     fte: 0.5,
     startDate: "2026-06-01",
     endDate: "2026-12-31",
@@ -1143,7 +1153,7 @@ const STAFFING = [
   {
     chantierId: "CH-rpa",
     axisId: "AX-digital",
-    function: "it",
+    function: "R&D / Innovation",
     fte: 1.0,
     startDate: "2026-01-01",
     endDate: "2026-06-30",
@@ -1152,7 +1162,7 @@ const STAFFING = [
   {
     chantierId: "CH-rpa",
     axisId: "AX-digital",
-    function: "operations",
+    function: "Support (IT/Finance/HR)",
     fte: 0.3,
     startDate: "2026-01-01",
     endDate: "2026-06-30",
@@ -1161,7 +1171,7 @@ const STAFFING = [
   {
     chantierId: "CH-cyber",
     axisId: "AX-digital",
-    function: "it",
+    function: "R&D / Innovation",
     fte: 2.5,
     startDate: "2026-04-01",
     endDate: "2027-01-31",
@@ -1170,7 +1180,7 @@ const STAFFING = [
   {
     chantierId: "CH-cyber",
     axisId: "AX-digital",
-    function: "juridique",
+    function: "Support (IT/Finance/HR)",
     fte: 0.4,
     startDate: "2026-04-01",
     endDate: "2026-10-31",
@@ -1179,7 +1189,7 @@ const STAFFING = [
   {
     chantierId: "CH-omnicanal",
     axisId: "AX-expclient",
-    function: "it",
+    function: "R&D / Innovation",
     fte: 1.8,
     startDate: "2026-02-01",
     endDate: "2026-11-30",
@@ -1188,7 +1198,7 @@ const STAFFING = [
   {
     chantierId: "CH-omnicanal",
     axisId: "AX-expclient",
-    function: "marketing",
+    function: "Commercial & Marketing",
     fte: 1.0,
     startDate: "2026-02-01",
     endDate: "2026-11-30",
@@ -1196,7 +1206,7 @@ const STAFFING = [
   {
     chantierId: "CH-omnicanal",
     axisId: "AX-expclient",
-    function: "marketing",
+    function: "Commercial & Marketing",
     fte: 0.6,
     startDate: "2026-12-01",
     endDate: "2027-05-31",
@@ -1204,7 +1214,7 @@ const STAFFING = [
   {
     chantierId: "CH-fidelite",
     axisId: "AX-expclient",
-    function: "marketing",
+    function: "Commercial & Marketing",
     fte: 0.5,
     startDate: "2026-05-01",
     endDate: "2026-08-31",
@@ -1213,7 +1223,7 @@ const STAFFING = [
   {
     chantierId: "CH-fidelite",
     axisId: "AX-expclient",
-    function: "commercial",
+    function: "Commercial & Marketing",
     fte: 0.7,
     startDate: "2026-05-01",
     endDate: "2026-08-31",
@@ -1221,7 +1231,7 @@ const STAFFING = [
   {
     chantierId: "CH-scia",
     axisId: "AX-expclient",
-    function: "it",
+    function: "R&D / Innovation",
     fte: 0.4,
     startDate: "2027-01-01",
     endDate: "2027-09-30",
@@ -1230,7 +1240,7 @@ const STAFFING = [
   {
     chantierId: "CH-carbone",
     axisId: "AX-durable",
-    function: "operations",
+    function: "Production",
     fte: 1.2,
     startDate: "2026-01-01",
     endDate: "2026-06-30",
@@ -1239,7 +1249,7 @@ const STAFFING = [
   {
     chantierId: "CH-carbone",
     axisId: "AX-durable",
-    function: "achats",
+    function: "Supply Chain",
     fte: 0.6,
     startDate: "2026-07-01",
     endDate: "2027-12-31",
@@ -1247,7 +1257,7 @@ const STAFFING = [
   {
     chantierId: "CH-emballages",
     axisId: "AX-durable",
-    function: "operations",
+    function: "Production",
     fte: 0.4,
     startDate: "2026-04-01",
     endDate: "2026-07-31",
@@ -1255,7 +1265,7 @@ const STAFFING = [
   {
     chantierId: "CH-succession",
     axisId: "AX-talents",
-    function: "rh",
+    function: "Support (IT/Finance/HR)",
     fte: 1.5,
     startDate: "2026-01-01",
     endDate: "2026-12-31",
@@ -1264,7 +1274,7 @@ const STAFFING = [
   {
     chantierId: "CH-succession",
     axisId: "AX-talents",
-    function: "rh",
+    function: "Support (IT/Finance/HR)",
     fte: 0.3,
     startDate: "2027-01-01",
     endDate: "2027-06-30",
@@ -1273,7 +1283,7 @@ const STAFFING = [
   {
     chantierId: "CH-upskilling",
     axisId: "AX-talents",
-    function: "rh",
+    function: "Support (IT/Finance/HR)",
     fte: 0.8,
     startDate: "2026-03-01",
     endDate: "2026-06-30",
@@ -1281,7 +1291,7 @@ const STAFFING = [
   {
     chantierId: "CH-orga",
     axisId: "AX-talents",
-    function: "rh",
+    function: "Support (IT/Finance/HR)",
     fte: 0.5,
     startDate: "2026-02-01",
     endDate: "2026-05-31",
@@ -1290,7 +1300,7 @@ const STAFFING = [
   {
     chantierId: "CH-orga",
     axisId: "AX-talents",
-    function: "juridique",
+    function: "Support (IT/Finance/HR)",
     fte: 0.2,
     startDate: "2026-02-01",
     endDate: "2026-05-31",
@@ -1574,20 +1584,11 @@ async function main() {
     revenue: 892.0,
     createdAt: TODAY,
     type: "strategic",
-    // Budget/cible d'ETP par fonction (types/index.ts, Program.staffingBudgets) — calibré pour que
-    // les totaux STAFFING ci-dessous (voir plus bas) donnent un taux d'utilisation par fonction
-    // réaliste (~60-90%), ni ridicule ni à 300%, une fois affiché sur la page Effectifs.
-    staffingBudgets: {
-      rh: 5,
-      finance: 1.2,
-      it: 11,
-      marketing: 3,
-      commercial: 1,
-      juridique: 1,
-      operations: 7.5,
-      achats: 2.5,
-      autre: 0.5,
-    },
+    // Round 13 : `Program.staffingBudgets` (budget d'ETP par fonction, saisi à la main) est retiré
+    // — la comparaison besoin/disponible sur la page Effectifs se lit désormais contre la base ETP
+    // ENTREPRISE réelle (`leverMeta/c1__workforceEmployees`, module RH/Plan Performance, voir
+    // `lib/hooks/useCompanyDepartments.ts`), jamais un chiffre budgété séparément. Ce script ne la
+    // seed pas : elle est déjà en place pour Acme Corp (voir base ETP existante, /hr/etp).
   });
 
   console.log(`Utilisateurs de démo (${DEMO_USERS.length})...`);

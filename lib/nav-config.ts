@@ -17,11 +17,16 @@ import type { AuthUser, NavItem, Role, RoleDefinition } from "@/types";
  *   - `"levers"` sert les DEUX plans (même route `/levers`, routeur interne selon le type),
  *     simplement relabelé « Axes stratégiques » en mode stratégique ;
  *   - `"kpi"` (nouveau) n'existe que pour un Plan Stratégique ;
- *   - `"effectifs"` (ETP mobilisés par grande fonction sur les chantiers) n'existe que pour un
- *     Plan Stratégique lui aussi — à ne pas confondre avec `"hr"`/`"hr-etp"` ci-dessous, qui
- *     restent réservés au Plan Performance et portent une tout autre donnée ;
- *   - Finance / RH / Base ETP / Workstreams / Opérations n'ont pas de sens sans leviers et sont
- *     donc réservés au Plan Performance. */
+ *   - `"effectifs"` (besoin vs disponible par équipe sur les chantiers, round 13) n'existe que
+ *     pour un Plan Stratégique — à ne pas confondre avec `"hr"` (dashboard RH complet, mouvements
+ *     compris) ci-dessous, qui reste réservé au Plan Performance et porte une tout autre donnée ;
+ *   - `"hr-etp"` (base ETP nominative, `Employee[]`) fait exception depuis le round 13 : la base
+ *     est scopée ENTREPRISE (pas programme, voir `lib/hooks/useCompanyDepartments.ts`), donc SANS
+ *     `programTypes` sur cet item précis — visible pour les rôles `cto`/`hr`/`strategic_lead` et
+ *     les admins (voir `ADMIN_NAV_DEFINITIONS` plus bas), quel que soit le programme actif ; c'est
+ *     elle qui alimente désormais `"effectifs"` (comparaison besoin/disponible par équipe) ;
+ *   - Finance / RH (dashboard) / Workstreams / Opérations n'ont pas de sens sans leviers et
+ *     restent donc réservés au Plan Performance. */
 export const roles: Record<Role, RoleDefinition> = {
   cto: {
     label: "roles.cto.label",
@@ -43,7 +48,11 @@ export const roles: Record<Role, RoleDefinition> = {
         programTypes: ["performance"],
       },
       { id: "hr", icon: "Users", label: "nav.hrDashboard", programTypes: ["performance"] },
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", programTypes: ["performance"] },
+      // Round 13 : plus de `programTypes` sur "hr-etp" — la base ETP est scopée ENTREPRISE, pas
+      // programme (voir lib/hooks/useCompanyDepartments.ts), donc visible que le programme actif
+      // soit Performance ou Stratégique (contrairement à "hr" ci-dessus, le dashboard RH complet,
+      // qui reste lui réservé au Plan Performance).
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
     ],
   },
   sponsor: {
@@ -105,7 +114,8 @@ export const roles: Record<Role, RoleDefinition> = {
     short: "roles.hr.short",
     nav: [
       { id: "hr", icon: "PieChart", label: "nav.hrDashboard", programTypes: ["performance"] },
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", programTypes: ["performance"] },
+      // Round 13 : voir le commentaire identique sur le rôle `cto` ci-dessus.
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
       {
         id: "levers",
         icon: "Target",
@@ -162,6 +172,9 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      // Round 13 : le pilote du Plan Stratégique peut désormais consulter/compléter la base ETP
+      // entreprise (Plan Performance) — voir les commentaires identiques sur `cto`/`hr` ci-dessus.
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
     ],
   },
   axis_sponsor: {
@@ -245,7 +258,13 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
   global: {
     label: "roles.admin.label",
     short: "roles.admin.short",
-    nav: [{ id: "admin-companies", icon: "Building2", label: "nav.companies" }],
+    nav: [
+      { id: "admin-companies", icon: "Building2", label: "nav.companies" },
+      // Round 13 : un admin global n'a pas forcément de profil métier (Performance/Stratégique)
+      // qui lui donnerait "hr-etp" par ailleurs — voir la liste d'accès `cto`/`hr`/`strategic_lead`
+      // ci-dessus, à laquelle les admins s'ajoutent.
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
+    ],
   },
   company: {
     label: "roles.admin_entreprise.label",
@@ -254,6 +273,7 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
       { id: "admin-users", icon: "Users", label: "nav.users" },
       { id: "admin-data", icon: "BarChart3", label: "nav.data" },
       { id: "admin-history", icon: "History", label: "nav.history" },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
     ],
   },
 };
