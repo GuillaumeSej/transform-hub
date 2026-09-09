@@ -83,6 +83,37 @@ import { LevierKanbanBoard } from "@/components/strategic/LevierKanbanBoard";
  * le PO, elle ne doit pas se noyer dans la grille.
  */
 
+/** Teinte d'accent PUREMENT catégorielle (round 13, point 3) — distingue les 4 puces d'en-tête
+ *  entre elles ("ceci est cliquable, et ce n'est pas la même chose que sa voisine") sans jamais
+ *  toucher au vocabulaire RAG (`tone: "amber"` ci-dessous reste le seul signal de statut). Les 4
+ *  teintes sont piochées telles quelles dans `CHANTIER_COLOR_PALETTE` (lib/axisLogic.ts) — la
+ *  palette catégorielle déjà validée charte pour ce genre de distinction arbitraire — en évitant
+ *  volontairement `amber` (déjà réservé au risque) et `rose`/`pink`/`red` (trop proches de
+ *  `--red`). Fond de la puce et bordure restent neutres par défaut ; seuls l'icône, son halo et la
+ *  bordure au survol portent la teinte. */
+const CHIP_ACCENTS = {
+  blue: {
+    icon: "text-blue-500",
+    iconBg: "bg-blue-50",
+    hoverBorder: "hover:border-blue-300",
+  },
+  violet: {
+    icon: "text-violet-500",
+    iconBg: "bg-violet-50",
+    hoverBorder: "hover:border-violet-300",
+  },
+  teal: {
+    icon: "text-teal-500",
+    iconBg: "bg-teal-50",
+    hoverBorder: "hover:border-teal-300",
+  },
+  orange: {
+    icon: "text-orange-500",
+    iconBg: "bg-orange-50",
+    hoverBorder: "hover:border-orange-300",
+  },
+} as const;
+
 /** Puce de statistique d'en-tête (icône + valeur + libellé) — remplace l'ancienne ligne de texte
  *  brute « Programme X · N axes · M chantiers · K indicateurs » par des chips visuellement
  *  distinctes, dans le même esprit que le bandeau d'en-tête du Plan Performance (passe de polish
@@ -93,6 +124,7 @@ function DashboardStatChip({
   value,
   label,
   tone = "neutral",
+  accent,
 }: {
   icon: LucideIcon;
   /** Chaîne déjà formatée acceptée en plus d'un nombre brut — round 7, point 2 : la puce budget
@@ -102,20 +134,34 @@ function DashboardStatChip({
   /** "amber" réservé au signal "à risque" — même token que `IndicatorStatusBadge`, jamais un
    *  vert/rouge littéral (charte BearingPoint, voir skill dataviz). */
   tone?: "neutral" | "amber";
+  /** Teinte catégorielle (round 13, point 3, voir `CHIP_ACCENTS` ci-dessus) — ignorée si
+   *  `tone === "amber"` : le signal risque prime toujours sur la distinction catégorielle. */
+  accent?: keyof typeof CHIP_ACCENTS;
 }) {
+  const accentStyles = tone === "neutral" && accent ? CHIP_ACCENTS[accent] : null;
   return (
     <span
       className={
         tone === "amber"
           ? "inline-flex items-center gap-1.5 rounded-full bg-rag-amber-light px-2.5 py-1 text-[11px] font-semibold text-rag-amber"
-          : "inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-semibold text-secondary"
+          : `inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-semibold text-secondary transition-colors ${
+              accentStyles ? accentStyles.hoverBorder : ""
+            }`
       }
     >
-      <Icon
-        size={12}
-        className={tone === "amber" ? "text-rag-amber" : "text-tertiary"}
-        aria-hidden
-      />
+      <span
+        className={`flex h-4 w-4 items-center justify-center rounded-full ${
+          accentStyles ? accentStyles.iconBg : ""
+        }`}
+      >
+        <Icon
+          size={12}
+          className={
+            tone === "amber" ? "text-rag-amber" : accentStyles ? accentStyles.icon : "text-tertiary"
+          }
+          aria-hidden
+        />
+      </span>
       <span className={tone === "amber" ? "text-rag-amber" : "text-primary"}>{value}</span>
       {label}
     </span>
@@ -774,6 +820,7 @@ export function StrategicDashboardView() {
                   icon={Target}
                   value={axes.length}
                   label={t("strategicDashboard.axesSuffix")}
+                  accent="blue"
                 />
               }
               title={t("strategicDashboard.popover.axesTitle")}
@@ -790,6 +837,7 @@ export function StrategicDashboardView() {
                   icon={Layers}
                   value={chantiers.length}
                   label={t("strategicDashboard.chantiersSuffix")}
+                  accent="violet"
                 />
               }
               title={t("strategicDashboard.popover.chantiersTitle")}
@@ -806,15 +854,20 @@ export function StrategicDashboardView() {
                   icon={ListChecks}
                   value={counts.total}
                   label={t("strategicDashboard.indicatorsSuffix")}
+                  accent="teal"
                 />
               }
               title={t("strategicDashboard.popover.indicatorsTitle")}
               emptyLabel={t("strategicDashboard.popover.emptyIndicators")}
-              items={indicators.map((indicator) => ({
-                key: indicator.id,
-                label: `#${indicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`,
-                onClick: () => router.push(`/kpi?indicator=${indicator.id}`),
-              }))}
+              items={[...indicators]
+                .sort(
+                  (a, b) => (indicatorNumbers.get(a.id) ?? 0) - (indicatorNumbers.get(b.id) ?? 0)
+                )
+                .map((indicator) => ({
+                  key: indicator.id,
+                  label: `#${indicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`,
+                  onClick: () => router.push(`/kpi?indicator=${indicator.id}`),
+                }))}
             />
             <ChipPopover
               chip={
@@ -822,13 +875,24 @@ export function StrategicDashboardView() {
                   icon={Wallet}
                   value={`${allocatedBudgetTotal.toLocaleString()} ${activeProgram.currency}`}
                   label={t("strategicDashboard.allocatedBudget")}
+                  accent="orange"
                 />
               }
               title={t("strategicDashboard.popover.budgetTitle")}
               emptyLabel={t("strategicDashboard.popover.emptyBudget")}
               items={axisBudgets.map(({ axis, total }) => ({
                 key: axis.id,
-                label: `${axis.name} — ${total.toLocaleString()} ${activeProgram.currency}`,
+                // Round 13, point 2 : deux segments (nom d'axe / montant) en JSX plutôt qu'une
+                // seule chaîne interpolée — le montant reste sur la même ligne, aligné à droite,
+                // quelle que soit la longueur du nom d'axe (qui tronque plutôt que de wrapper).
+                label: (
+                  <span className="flex w-full items-center justify-between gap-2">
+                    <span className="truncate">{axis.name}</span>
+                    <span className="shrink-0 whitespace-nowrap font-semibold text-primary">
+                      {total.toLocaleString()} {activeProgram.currency}
+                    </span>
+                  </span>
+                ),
                 onClick: () => router.push("/levers"),
               }))}
             />

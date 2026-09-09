@@ -1464,14 +1464,16 @@ const es: Record<string, string> = {
   "kpi.macroIndicators": "Indicadores del eje",
   "kpi.indicatorNumber": "KPI número",
   "kpi.chantier": "Frente de trabajo",
-  // ─── Filtros Eje / Frente de trabajo / Responsable (ronda 12, replica el patrón de la página
-  // Ejes estratégicos) ───
+  // ─── Sección "KPI de los ejes" + desplegables de selección única Eje / Frente de trabajo /
+  // Responsable (ronda 13, sustituye la barra de filtros con casillas de la ronda 12 — ver
+  // `components/shared/Dropdown.tsx` y `KpiPageClient.tsx`) ───
+  "kpi.axesSectionTitle": "KPI de los ejes",
   "kpi.filterAxis": "Eje",
   "kpi.filterChantier": "Frente de trabajo",
   "kpi.filterOwner": "Responsable",
-  // Valor del filtro "Frente de trabajo" para un indicador macro (asociado directamente al eje,
-  // sin frente de trabajo) — distinto del encabezado de sección `kpi.macroIndicators` (plural).
-  "kpi.macroIndicator": "Indicador de eje",
+  // Placeholder del desplegable sin valor seleccionado, también usado como etiqueta de la fila
+  // "borrar" en la parte superior del panel (ver `allowClear` en `Dropdown.tsx`).
+  "kpi.filterAll": "Todos",
   "kpi.kind.quantitative": "Cuantitativo",
   "kpi.kind.qualitative": "Cualitativo",
   "kpi.frequency.monthly": "Mensual",
@@ -1569,6 +1571,9 @@ const es: Record<string, string> = {
     "Suma del presupuesto asignado de todos los proyectos del programa",
   "effectifs.moneyBudget.byAxisTitle": "Reparto por eje",
   "effectifs.moneyBudget.empty": "No hay presupuesto asignado en este programa.",
+  "effectifs.moneyBudget.centerLabel": "Total",
+  "effectifs.moneyBudget.byChantierModalTitle": "Reparto del presupuesto por proyecto",
+  "effectifs.moneyBudget.byChantierEmpty": "Ningún proyecto con presupuesto asignado en este eje.",
 
   // ─── Reparto de ETC por periodo (ronda 7 — StaffingPeriodBreakdown.tsx) ───────────────────
   "staffingPeriod.title": "Reparto de ETC por periodo",

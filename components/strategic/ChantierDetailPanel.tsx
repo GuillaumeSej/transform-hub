@@ -1699,8 +1699,10 @@ export function ChantierDetailPanel({
                             )}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">
-                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-secondary">
-                              {formatRange(action.start, action.end)}
+                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-secondary">
+                              {formatTimelineDay(action.start)}
+                              <span className="mx-1 font-bold text-tertiary">→</span>
+                              {formatTimelineDay(action.end)}
                             </span>
                             {action.owner && (
                               <span>· {resolveUserLabel(action.owner, data.users)}</span>
