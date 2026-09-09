@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Users } from "lucide-react";
+import { ArrowUpRight, Users, Wallet } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
+import { BudgetDonutChart } from "@/components/shared/charts/BudgetDonutChart";
 import { KPICard } from "@/components/shared/KPICard";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
@@ -151,6 +152,24 @@ export function EffectifsPageClient() {
 
   const chantierNames = useMemo(() => new Map(chantiers.map((c) => [c.id, c.name])), [chantiers]);
 
+  // ── Budget FINANCIER alloué (round 12) ─────────────────────────────────────────────────────
+  // Nouvelle section monétaire, distincte du besoin/disponible ETP ci-dessus (une question de €,
+  // pas d'ETP) : total du budget alloué (`Chantier.allocatedBudget`, round 7) sur tout le
+  // programme, même calcul que la puce du dashboard stratégique (`StrategicDashboardView`), et sa
+  // ventilation PAR AXE pour le donut générique `BudgetDonutChart` (fondation round 12).
+  const totalAllocatedBudget = useMemo(
+    () => chantiers.reduce((sum, c) => sum + (c.allocatedBudget ?? 0), 0),
+    [chantiers]
+  );
+
+  const allocatedBudgetByAxis = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const c of chantiers) {
+      totals.set(c.axisId, (totals.get(c.axisId) ?? 0) + (c.allocatedBudget ?? 0));
+    }
+    return axes.map((axis) => ({ name: axis.name, value: totals.get(axis.id) ?? 0 }));
+  }, [axes, chantiers]);
+
   /** Un groupe par axe du programme (y compris les axes SANS staffing : leur absence est une
    *  information — un axe sans aucun ETP déclaré n'est pas la même chose qu'un axe absent), plus
    *  un groupe de repli pour les lignes dont l'axe n'existe plus. */
@@ -251,6 +270,37 @@ export function EffectifsPageClient() {
     );
   }
 
+  // Section budget FINANCIER : même scope PROGRAMME que la section besoin/disponible ci-dessous,
+  // mais purement monétaire — rendue AVANT elle (demande PO : le lecteur voit d'abord l'argent,
+  // puis le détail ETP), dans les deux branches de retour (staffing vide ou non).
+  const formatAllocatedBudget = (value: number) =>
+    `${value.toLocaleString()} ${activeProgram.currency}`;
+  const moneyBudgetSection = (
+    <Card className="mb-0">
+      <CardHeader title={t("effectifs.moneyBudget.title")} />
+      <CardBody>
+        {totalAllocatedBudget === 0 ? (
+          <p className="text-sm text-text-secondary">{t("effectifs.moneyBudget.empty")}</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <KPICard
+              label={t("effectifs.moneyBudget.totalLabel")}
+              value={formatAllocatedBudget(totalAllocatedBudget)}
+              icon={Wallet}
+              sub={t("effectifs.moneyBudget.totalSub")}
+            />
+            <div>
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-secondary">
+                {t("effectifs.moneyBudget.byAxisTitle")}
+              </h3>
+              <BudgetDonutChart data={allocatedBudgetByAxis} formatValue={formatAllocatedBudget} />
+            </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+
   // Section besoin vs disponible : indépendante de la présence de lignes de staffing (une équipe
   // de la base ETP peut être 100% disponible et n'apparaître ici que pour ça) — construite une
   // seule fois et rendue dans les deux branches ci-dessous (staffing vide ou non).
@@ -309,6 +359,7 @@ export function EffectifsPageClient() {
       <div className="space-y-6">
         {header}
         <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
+        {moneyBudgetSection}
         {needVsAvailableSection}
         <Card>
           <CardBody>
@@ -324,6 +375,7 @@ export function EffectifsPageClient() {
     <div className="space-y-6">
       {header}
       <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
+      {moneyBudgetSection}
       {needVsAvailableSection}
 
       <KPICard

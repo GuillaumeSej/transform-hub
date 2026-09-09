@@ -162,7 +162,14 @@ export function ProgramsPanel({
     sponsor: string | undefined;
     type: ProgramType;
     actionPlanEnabled: boolean;
-  }>({ name: "", sponsor: undefined, type: "performance", actionPlanEnabled: true });
+    ambition: string | undefined;
+  }>({
+    name: "",
+    sponsor: undefined,
+    type: "performance",
+    actionPlanEnabled: true,
+    ambition: undefined,
+  });
   const [showForm, setShowForm] = useState(false);
   /** Programme (Stratégique ou Performance) dont on affiche la fiche de configuration (null =
    *  liste). */
@@ -192,7 +199,13 @@ export function ProgramsPanel({
 
   const startCreate = () => {
     setEditId(null);
-    setForm({ name: "", sponsor: undefined, type: "performance", actionPlanEnabled: true });
+    setForm({
+      name: "",
+      sponsor: undefined,
+      type: "performance",
+      actionPlanEnabled: true,
+      ambition: undefined,
+    });
     setShowForm(true);
   };
 
@@ -204,6 +217,7 @@ export function ProgramsPanel({
       sponsor: p.sponsor,
       type: resolveProgramType(p),
       actionPlanEnabled: p.actionPlanEnabled ?? true,
+      ambition: p.ambition,
     });
     setShowForm(true);
   };
@@ -219,6 +233,7 @@ export function ProgramsPanel({
           ...existing,
           name: form.name,
           sponsor: form.sponsor,
+          ambition: form.ambition,
           ...(resolveProgramType(existing) === "performance"
             ? { actionPlanEnabled: form.actionPlanEnabled }
             : {}),
@@ -231,6 +246,7 @@ export function ProgramsPanel({
         companyId,
         name: form.name,
         sponsor: form.sponsor,
+        ambition: form.ambition,
         currency: "€M",
         fyStart: "2026-01",
         fyEnd: "2026-12",
@@ -386,6 +402,21 @@ export function ProgramsPanel({
               onChange={(sponsor) => setForm((f) => ({ ...f, sponsor }))}
               label={t("adminProgramsPanel.sponsor", "Sponsor")}
               id="program-sponsor"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-text-secondary">
+              {t("adminProgramsPanel.ambitionLabel", "Ambition")}
+            </label>
+            <input
+              value={form.ambition ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, ambition: e.target.value || undefined }))}
+              className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+              placeholder={t(
+                "adminProgramsPanel.ambitionPlaceholder",
+                "Ex. Devenir leader du marché d'ici 2027"
+              )}
             />
           </div>
 

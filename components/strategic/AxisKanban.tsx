@@ -3,7 +3,11 @@
 import { useMemo, useState } from "react";
 import { LevierCard } from "@/components/strategic/LevierMilestoneBoard";
 import { Modal } from "@/components/shared/Modal";
-import { colorForChantier } from "@/lib/axisLogic";
+import {
+  BudgetDonutChart,
+  type BudgetDonutSlice,
+} from "@/components/shared/charts/BudgetDonutChart";
+import { colorForChantier, sumLevierBudgets } from "@/lib/axisLogic";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import type {
   Chantier,
@@ -119,6 +123,11 @@ export function AxisKanban({
     kanbanStatusLabels?: Record<LevierKanbanStatus, string>;
     drilldownTitlePrefix?: string;
     drilldownEmpty?: string;
+    /** Titre de la modale donut de répartition budgétaire par levier (round 12). */
+    budgetByLevierModalTitle?: string;
+    /** Libellé du slice représentant la part du budget chantier non affectée à un levier
+     *  (round 12) — `chantier.allocatedBudget - sumLevierBudgets(...)`, quand positif. */
+    budgetUnallocated?: string;
   };
 }) {
   const l = {
@@ -135,9 +144,59 @@ export function AxisKanban({
     },
     drilldownTitlePrefix: labels?.drilldownTitlePrefix ?? "Leviers",
     drilldownEmpty: labels?.drilldownEmpty ?? "Aucun levier à ce stade.",
+    budgetByLevierModalTitle:
+      labels?.budgetByLevierModalTitle ?? "Répartition du budget par levier",
+    budgetUnallocated: labels?.budgetUnallocated ?? "Non affecté",
   };
 
   const [drilldown, setDrilldown] = useState<Drilldown | null>(null);
+
+  /** Chantier dont le donut de répartition budgétaire PAR LEVIER (round 12) est actuellement
+   *  ouvert — `null` = modale fermée. */
+  const [budgetDonutChantierId, setBudgetDonutChantierId] = useState<string | null>(null);
+
+  /** Tous les chantiers de tous les axes, à plat, indexés par id — `chantiersByAxis` est groupé
+   *  par axe, mais le donut budgétaire n'a besoin que de retrouver UN chantier par son id (pour
+   *  son `allocatedBudget`), quel que soit son axe. */
+  const chantierById = useMemo(() => {
+    const map = new Map<string, Chantier>();
+    chantiersByAxis.forEach((chantiers) => {
+      chantiers.forEach((c) => map.set(c.id, c));
+    });
+    return map;
+  }, [chantiersByAxis]);
+
+  /** Ids de chantier ayant AU MOINS un levier avec `budget` renseigné — détermine si le budget
+   *  chantier affiché plus bas (round 10) devient cliquable (round 12) ou reste un simple texte. */
+  const chantierIdsWithLevierBudget = useMemo(() => {
+    const set = new Set<string>();
+    for (const action of chantierActions) {
+      if (action.budget !== undefined) set.add(action.chantierId);
+    }
+    return set;
+  }, [chantierActions]);
+
+  /** Parts du donut budgétaire du chantier actuellement ouvert (`budgetDonutChantierId`) — un
+   *  slice par levier du chantier AYANT `budget` renseigné (les leviers sans budget sont exclus,
+   *  contrairement à `sumLevierBudgets` qui les compte pour 0 dans la somme ci-dessous), plus un
+   *  slice "non affecté" si la somme des budgets leviers n'épuise pas le budget alloué du
+   *  chantier. `null` tant qu'aucune modale n'est ouverte. */
+  const budgetDonutSlices: BudgetDonutSlice[] | null = useMemo(() => {
+    if (!budgetDonutChantierId) return null;
+    const leviersWithBudget = chantierActions.filter(
+      (a) => a.chantierId === budgetDonutChantierId && a.budget !== undefined
+    );
+    const slices: BudgetDonutSlice[] = leviersWithBudget.map((a) => ({
+      name: a.name,
+      value: a.budget ?? 0,
+    }));
+    const allocated = chantierById.get(budgetDonutChantierId)?.allocatedBudget ?? 0;
+    const allocatedToLeviers = sumLevierBudgets(budgetDonutChantierId, chantierActions);
+    if (allocatedToLeviers < allocated) {
+      slices.push({ name: l.budgetUnallocated, value: allocated - allocatedToLeviers });
+    }
+    return slices;
+  }, [budgetDonutChantierId, chantierActions, chantierById, l.budgetUnallocated]);
 
   /** Compteurs par chantier — un seul passage sur `chantierActions`, dérive à la fois les compteurs
    *  de jalon (leviers avec `indicatorId`) et de statut kanban (leviers sans), voir doc-comment de
@@ -276,12 +335,24 @@ export function AxisKanban({
                           >
                             {chantier.name}
                           </button>
-                          {chantier.allocatedBudget !== undefined && (
-                            <span className="shrink-0 text-[10px] font-semibold text-secondary">
-                              {chantier.allocatedBudget.toLocaleString()}
-                              {currency ? ` ${currency}` : ""}
-                            </span>
-                          )}
+                          {chantier.allocatedBudget !== undefined &&
+                            (chantierIdsWithLevierBudget.has(chantier.id) ? (
+                              // Round 12 : au moins un levier a un budget renseigné → le montant
+                              // devient cliquable, ouvre le donut de répartition par levier.
+                              <button
+                                type="button"
+                                onClick={() => setBudgetDonutChantierId(chantier.id)}
+                                className="shrink-0 text-[10px] font-semibold text-secondary underline-offset-2 hover:text-primary hover:underline"
+                              >
+                                {chantier.allocatedBudget.toLocaleString()}
+                                {currency ? ` ${currency}` : ""}
+                              </button>
+                            ) : (
+                              <span className="shrink-0 text-[10px] font-semibold text-secondary">
+                                {chantier.allocatedBudget.toLocaleString()}
+                                {currency ? ` ${currency}` : ""}
+                              </span>
+                            ))}
                         </div>
                         {!hasAnyLevier ? (
                           <p className="mt-1 text-[10.5px] text-tertiary">{l.noLeviers}</p>
@@ -363,6 +434,39 @@ export function AxisKanban({
               />
             ))}
           </div>
+        )}
+      </Modal>
+
+      {/* Donut de répartition budgétaire du chantier par levier (round 12) — un slice par levier
+          avec `budget` renseigné, plus un slice "non affecté" si `sumLevierBudgets` n'épuise pas
+          le budget alloué du chantier (`budgetDonutSlices`). Cliquer un slice ferme cette modale
+          et ouvre le panneau chantier, focalisé sur le levier cliqué (sauf pour le slice "non
+          affecté", qui n'a pas de levier associé). */}
+      <Modal
+        open={!!budgetDonutChantierId}
+        onOpenChange={(open) => {
+          if (!open) setBudgetDonutChantierId(null);
+        }}
+        title={l.budgetByLevierModalTitle}
+        maxWidth="560px"
+      >
+        {budgetDonutChantierId && budgetDonutSlices && budgetDonutSlices.length > 0 && (
+          <BudgetDonutChart
+            data={budgetDonutSlices}
+            formatValue={(value) => `${value.toLocaleString()}${currency ? ` ${currency}` : ""}`}
+            onSliceClick={(name) => {
+              const chantierId = budgetDonutChantierId;
+              const action =
+                name === l.budgetUnallocated
+                  ? undefined
+                  : chantierActions.find(
+                      (a) =>
+                        a.chantierId === chantierId && a.name === name && a.budget !== undefined
+                    );
+              setBudgetDonutChantierId(null);
+              onOpenChantier(chantierId, action?.id);
+            }}
+          />
         )}
       </Modal>
     </>

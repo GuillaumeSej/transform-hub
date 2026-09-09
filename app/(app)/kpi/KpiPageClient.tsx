@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LineChart, Lock, Pencil, Plus, Target } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
+import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
 import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import {
@@ -16,6 +17,7 @@ import {
   computeIndicatorDelta,
   latestMeasurement,
   numberIndicators,
+  resolveIndicatorOwner,
 } from "@/lib/axisLogic";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
@@ -491,6 +493,7 @@ function IndicatorCard({
 
 export function KpiPageClient() {
   const { t } = useTranslation();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: roleLoading } = useRole();
   const {
@@ -509,6 +512,80 @@ export function KpiPageClient() {
     updateIndicator,
   } = useStrategicData(user?.companyId ?? null, activeProgramId, user);
 
+  // ─── Filtres Axe / Chantier / Responsable (round 12) — réplique le motif de
+  // `StrategicAxesView.tsx` (barre de filtres persistée dans l'URL sous le préfixe `f_`). Les
+  // maps nom-par-id alimentent uniquement `getValue` ci-dessous, aucun autre usage.
+  const axisNameById = useMemo(() => new Map(axes.map((a) => [a.id, a.name])), [axes]);
+  const chantierNameById = useMemo(
+    () => new Map(chantiers.map((c) => [c.id, c.name])),
+    [chantiers]
+  );
+
+  const filterDefs: FilterDef<Indicator>[] = useMemo(
+    () => [
+      {
+        key: "f_axis",
+        label: t("kpi.filterAxis"),
+        getValue: (i) => axisNameById.get(i.axisId) ?? "?",
+      },
+      {
+        key: "f_chantier",
+        label: t("kpi.filterChantier"),
+        getValue: (i) =>
+          i.chantierId ? (chantierNameById.get(i.chantierId) ?? "?") : t("kpi.macroIndicator"),
+      },
+      {
+        key: "f_owner",
+        label: t("kpi.filterOwner"),
+        getValue: (i) => resolveIndicatorOwner(i, axes, chantiers, t("strategicAxes.unassigned")),
+      },
+    ],
+    [t, axisNameById, chantierNameById, axes, chantiers]
+  );
+
+  /** Filtres OUVERTS mais encore sans valeur cochée — état purement local, même bug corrigé et
+   *  même raisonnement que `StrategicAxesView.tsx` (voir son propre `openFilterKeys`) : un filtre
+   *  ouvert-mais-vide n'a pas de représentation dans l'URL (seules les clés avec valeurs y sont
+   *  écrites, voir `setFilters` ci-dessous), donc son ouverture doit vivre en mémoire. */
+  const [openFilterKeys, setOpenFilterKeys] = useState<string[]>([]);
+
+  const activeFilters: ActiveFilters = useMemo(() => {
+    const result: ActiveFilters = {};
+    for (const key of openFilterKeys) {
+      if (filterDefs.some((def) => def.key === key)) result[key] = [];
+    }
+    searchParams.forEach((value, key) => {
+      if (filterDefs.some((def) => def.key === key)) result[key] = value.split(",").filter(Boolean);
+    });
+    return result;
+  }, [searchParams, filterDefs, openFilterKeys]);
+
+  // Ne touche qu'aux clés `f_*` de l'URL — le paramètre `indicator=` du contrat de navigation
+  // KPI (voir plus bas) est laissé intact, tout comme n'importe quel autre paramètre existant.
+  const setFilters = (next: ActiveFilters) => {
+    setOpenFilterKeys(Object.keys(next));
+    const params = new URLSearchParams(searchParams.toString());
+    Array.from(params.keys())
+      .filter((k) => k.startsWith("f_"))
+      .forEach((k) => params.delete(k));
+    Object.entries(next).forEach(([k, v]) => {
+      if (v.length > 0) params.set(k, v.join(","));
+    });
+    const qs = params.toString();
+    router.replace(qs ? `/kpi?${qs}` : "/kpi");
+  };
+
+  const filteredIndicators = useMemo(
+    () =>
+      indicators.filter((i) =>
+        Object.entries(activeFilters).every(([key, values]) => {
+          const def = filterDefs.find((d) => d.key === key);
+          return !def || values.length === 0 || values.includes(def.getValue(i));
+        })
+      ),
+    [indicators, activeFilters, filterDefs]
+  );
+
   /** Regroupement d'affichage : par axe, puis par chantier. Les indicateurs "macro" (sans
    *  `chantierId`) ouvrent la section de leur axe ; un indicateur pointant un chantier disparu est
    *  rabattu sur le bloc macro plutôt que d'être silencieusement masqué. */
@@ -516,7 +593,7 @@ export function KpiPageClient() {
     const knownChantierIds = new Set(chantiers.map((c) => c.id));
     return axes
       .map((axis) => {
-        const axisIndicators = indicators.filter((i) => i.axisId === axis.id);
+        const axisIndicators = filteredIndicators.filter((i) => i.axisId === axis.id);
         const macro = axisIndicators.filter(
           (i) => !i.chantierId || !knownChantierIds.has(i.chantierId)
         );
@@ -530,14 +607,14 @@ export function KpiPageClient() {
         return { axis, macro, byChantier };
       })
       .filter((group) => group.macro.length > 0 || group.byChantier.length > 0);
-  }, [axes, chantiers, indicators]);
+  }, [axes, chantiers, filteredIndicators]);
 
   /** Indicateurs dont l'axe n'existe plus (ou n'est pas encore chargé) — affichés à part plutôt
    *  que perdus : ce sont des indicateurs à renseigner comme les autres. */
   const orphans = useMemo(() => {
     const knownAxisIds = new Set(axes.map((a) => a.id));
-    return indicators.filter((i) => !knownAxisIds.has(i.axisId));
-  }, [axes, indicators]);
+    return filteredIndicators.filter((i) => !knownAxisIds.has(i.axisId));
+  }, [axes, filteredIndicators]);
 
   const measurementsByIndicator = useMemo(() => {
     const map = new Map<string, IndicatorMeasurement[]>();
@@ -653,6 +730,21 @@ export function KpiPageClient() {
     <div className="space-y-6">
       {header}
       <p className="max-w-3xl text-sm text-text-secondary">{t("kpi.subtitle")}</p>
+
+      {/* Filtres Axe / Chantier / Responsable (round 12) — même traitement visuel que la barre de
+          filtres de `StrategicAxesView.tsx` (Card + CardBody flush, toolbar bordée en bas). */}
+      <Card className="mb-0">
+        <CardBody flush>
+          <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+            <FilterBar
+              items={indicators}
+              defs={filterDefs}
+              active={activeFilters}
+              onChange={setFilters}
+            />
+          </div>
+        </CardBody>
+      </Card>
 
       {/* Pas de « cumul des indicateurs » ici : sommer des indicateurs hétérogènes n'a de sens que
           sur un Plan Performance (tout y est en euros économisés). Le haut de page porte donc le
