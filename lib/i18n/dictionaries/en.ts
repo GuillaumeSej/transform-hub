@@ -32,7 +32,7 @@ const en: Record<string, string> = {
   // Strategic-Plan-only item — see lib/nav-config.ts.
   "nav.axes": "Strategic Axes",
   "nav.kpi": "KPIs",
-  "nav.effectifs": "Staffing (FTE)",
+  "nav.effectifs": "Budget & mobilized staffing",
   "nav.indicators": "Indicators",
   "nav.companies": "Companies",
   "nav.users": "Users",
@@ -1196,6 +1196,7 @@ const en: Record<string, string> = {
   "strategicAxes.budgetByLevierModalTitle": "Budget breakdown by lever",
   "strategicAxes.budgetUnallocated": "Unallocated",
   "strategicAxes.filterOwner": "Owner",
+  "strategicAxes.noIndicatorsShort": "No indicator",
   "strategicAxes.unassigned": "Unassigned",
   "strategicAxes.loading": "Loading axes…",
   "strategicAxes.empty": "No strategic axis in this program.",
@@ -1572,9 +1573,6 @@ const en: Record<string, string> = {
   "effectifs.needVsAvailable.overAllocated":
     "Declared need exceeds this team's actual availability.",
   "effectifs.moneyBudget.title": "Allocated financial budget",
-  "effectifs.moneyBudget.totalLabel": "Total allocated budget",
-  "effectifs.moneyBudget.totalSub":
-    "Sum of the allocated budget of every workstream in the programme",
   "effectifs.moneyBudget.byAxisTitle": "Split by axis",
   "effectifs.moneyBudget.empty": "No budget allocated on this programme.",
   "effectifs.moneyBudget.centerLabel": "Total",

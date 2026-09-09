@@ -29,7 +29,7 @@ const de: Record<string, string> = {
   // gibt es nur im Strategieplan — siehe lib/nav-config.ts.
   "nav.axes": "Strategische Achsen",
   "nav.kpi": "KPIs",
-  "nav.effectifs": "Personaleinsatz (VZÄ)",
+  "nav.effectifs": "Budget & eingesetztes Personal",
   "nav.indicators": "Indikatoren",
   "nav.companies": "Unternehmen",
   "nav.users": "Benutzer",
@@ -1182,6 +1182,7 @@ const de: Record<string, string> = {
   "strategicAxes.budgetByLevierModalTitle": "Budgetverteilung nach Hebel",
   "strategicAxes.budgetUnallocated": "Nicht zugewiesen",
   "strategicAxes.filterOwner": "Verantwortlich",
+  "strategicAxes.noIndicatorsShort": "Kein Indikator",
   "strategicAxes.unassigned": "Nicht zugewiesen",
   "strategicAxes.loading": "Achsen werden geladen…",
   "strategicAxes.empty": "Keine strategische Achse in diesem Programm.",
@@ -1570,8 +1571,6 @@ const de: Record<string, string> = {
   "effectifs.needVsAvailable.overAllocated":
     "Der gemeldete Bedarf übersteigt die tatsächliche Verfügbarkeit dieses Teams.",
   "effectifs.moneyBudget.title": "Zugewiesenes Finanzbudget",
-  "effectifs.moneyBudget.totalLabel": "Insgesamt zugewiesenes Budget",
-  "effectifs.moneyBudget.totalSub": "Summe des zugewiesenen Budgets aller Vorhaben des Programms",
   "effectifs.moneyBudget.byAxisTitle": "Verteilung nach Achse",
   "effectifs.moneyBudget.empty": "Für dieses Programm ist kein Budget zugewiesen.",
   "effectifs.moneyBudget.centerLabel": "Gesamt",

@@ -753,7 +753,9 @@ export function KpiPageClient() {
         </Card>
       ) : (
         <div className="space-y-4">
-          <h2 className="text-base font-bold text-text-primary">{t("kpi.axesSectionTitle")}</h2>
+          <h2 className="relative w-fit pb-1.5 text-lg font-bold tracking-tight text-text-primary after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-7 after:bg-bp-coral">
+            {t("kpi.axesSectionTitle")}
+          </h2>
 
           {/* Filtres Axe / Chantier / Responsable (round 13) — dropdowns à sélection unique,
               placés ICI (juste au-dessus des sections qu'ils affectent) plutôt qu'en haut de page :

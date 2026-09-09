@@ -710,6 +710,22 @@ export function canPassMilestone(
   return { canPass: reasons.length === 0, reasons };
 }
 
+/** Un des 3 buckets d'affichage discrets d'un `progressPct` (0-100, voir
+ *  `MilestoneChecklistItem.progressPct`) — jamais de dégradé continu. Seul point de vérité pour ce
+ *  bucketing (round 14) : anciennement dupliqué localement dans `MilestoneChecklistPanel.tsx`
+ *  (`bucketForPct`), extrait ici car d'autres écrans du même round en ont besoin. */
+export type ProgressBucket = "empty" | "red" | "amber" | "green";
+
+/** Bucket d'affichage d'un `progressPct` : `undefined` (pas encore déclaré) → `"empty"`, `0` →
+ *  `"red"`, `100` → `"green"`, toute valeur strictement entre les deux → `"amber"` (jamais de
+ *  dégradé). Même logique que l'ancien `bucketForPct` local de `MilestoneChecklistPanel.tsx`. */
+export function progressBucket(pct: number | undefined): ProgressBucket {
+  if (pct === undefined) return "empty";
+  if (pct <= 0) return "red";
+  if (pct >= 100) return "green";
+  return "amber";
+}
+
 /**
  * Avancement en pourcentage (0-100) d'une entité portant un état de jalon E0→E4 — remplace
  * `chantierProgress()` sur les affichages de progression, comme avant round 5.

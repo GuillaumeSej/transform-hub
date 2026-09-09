@@ -8,15 +8,22 @@ export type DropdownGroup = { groupLabel: string; options: DropdownOption[] };
 
 /**
  * Dropdown générique à sélection UNIQUE — même motif d'interaction que
- * `components/shared/ProgramSwitcher.tsx` (bouton arrondi + panneau positionné en absolu,
- * fermeture au `onBlur` du conteneur quand le focus quitte le composant). Primitive UI pure :
- * contrairement à `FilterBar.tsx` (multi-select, choix par cases à cocher), celui-ci ne gère
- * qu'une seule valeur sélectionnée à la fois — le libellé et le placeholder sont fournis par
- * l'appelant en chaînes déjà traduites, aucun appel à `t()` ici (round 13, page KPI).
+ * `components/shared/ProgramSwitcher.tsx` (bouton + panneau positionné en absolu, fermeture au
+ * `onBlur` du conteneur quand le focus quitte le composant). Primitive UI pure : contrairement à
+ * `FilterBar.tsx` (multi-select, choix par cases à cocher), celui-ci ne gère qu'une seule valeur
+ * sélectionnée à la fois — le libellé et le placeholder sont fournis par l'appelant en chaînes déjà
+ * traduites, aucun appel à `t()` ici (round 13, page KPI).
  *
  * `options` (liste plate) et `groups` (options regroupées sous un en-tête de groupe non cliquable,
  * ex. chantiers regroupés par axe parent) sont mutuellement exclusifs — l'appelant ne fournit que
  * l'un des deux selon le filtre représenté.
+ *
+ * Round 14 : redesign visuel uniquement — API de props INCHANGÉE (5 agents parallèles consomment
+ * ce composant, dont `KpiPageClient.tsx`, non touché). Bouton "carte" bordée (`rounded-md`, jamais
+ * une pilule) plutôt qu'arrondi complet, avec le `label` en petite légende MAJUSCULE au-dessus de
+ * la valeur courante (au lieu d'un préfixe inline "Label : valeur") — même esprit que les légendes
+ * de `KPICard.tsx`/`Card.tsx`. Rayon/bordure/ombre réutilisent les mêmes tokens que ces deux
+ * composants (`border-border`, `shadow-sm`/`shadow-lg`) plutôt que d'en inventer de nouveaux.
  */
 export function Dropdown({
   label,
@@ -59,21 +66,23 @@ export function Dropdown({
         aria-label={label}
         aria-expanded={open}
         title={`${label} · ${buttonText}`}
-        className="flex h-[34px] max-w-[200px] items-center gap-1.5 rounded-full border border-border bg-white px-2.5 text-xs font-semibold text-secondary transition hover:border-black sm:max-w-[240px]"
+        className="flex h-[50px] max-w-[200px] items-center justify-between gap-2 rounded-md border border-border bg-white px-3 text-left transition hover:border-border-strong sm:max-w-[240px]"
       >
-        <span className="truncate">
-          {label}
-          {value !== null ? ` · ${buttonText}` : placeholder ? ` : ${placeholder}` : ""}
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+            {label}
+          </span>
+          <span className="truncate text-xs font-semibold text-primary">{buttonText}</span>
         </span>
-        <ChevronDown size={12} className="flex-shrink-0" />
+        <ChevronDown size={14} className="flex-shrink-0 text-tertiary" />
       </button>
       {open && (
-        <div className="absolute left-0 top-[38px] z-30 max-h-[320px] min-w-[240px] overflow-y-auto rounded-md border border-border bg-white py-1 shadow-md">
+        <div className="absolute left-0 top-full z-30 mt-1.5 max-h-[320px] min-w-[240px] overflow-y-auto rounded-md border border-border bg-white py-1.5 shadow-lg">
           {allowClear && (
             <button
               type="button"
               onClick={() => select(null)}
-              className={`flex w-full items-center px-3 py-1.5 text-left text-xs font-medium transition hover:bg-neutral-50 ${
+              className={`flex w-full items-center px-3 py-2 text-left text-xs font-medium transition hover:bg-neutral-50 ${
                 value === null ? "font-semibold text-primary" : "text-secondary"
               }`}
             >
@@ -88,7 +97,7 @@ export function Dropdown({
                   key={opt.value}
                   type="button"
                   onClick={() => select(opt.value)}
-                  className={`flex w-full items-center px-3 py-1.5 text-left text-xs font-medium transition hover:bg-neutral-50 ${
+                  className={`flex w-full items-center px-3 py-2 text-left text-xs font-medium transition hover:bg-neutral-50 ${
                     active ? "font-semibold text-primary" : "text-secondary"
                   }`}
                 >
@@ -99,7 +108,7 @@ export function Dropdown({
           {groups &&
             groups.map((group) => (
               <div key={group.groupLabel}>
-                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-tertiary">
+                <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-tertiary">
                   {group.groupLabel}
                 </div>
                 {group.options.map((opt) => {
@@ -109,7 +118,7 @@ export function Dropdown({
                       key={opt.value}
                       type="button"
                       onClick={() => select(opt.value)}
-                      className={`flex w-full items-center px-3 py-1.5 text-left text-xs font-medium transition hover:bg-neutral-50 ${
+                      className={`flex w-full items-center px-3 py-2 text-left text-xs font-medium transition hover:bg-neutral-50 ${
                         active ? "font-semibold text-primary" : "text-secondary"
                       }`}
                     >

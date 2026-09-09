@@ -28,7 +28,7 @@ const es: Record<string, string> = {
   // solo existe en el Plan Estratégico — ver lib/nav-config.ts.
   "nav.axes": "Ejes estratégicos",
   "nav.kpi": "KPIs",
-  "nav.effectifs": "Personal movilizado (ETC)",
+  "nav.effectifs": "Presupuesto y personal movilizado",
   "nav.indicators": "Indicadores",
   "nav.companies": "Empresas",
   "nav.users": "Usuarios",
@@ -1183,6 +1183,7 @@ const es: Record<string, string> = {
   "strategicAxes.budgetByLevierModalTitle": "Reparto del presupuesto por palanca",
   "strategicAxes.budgetUnallocated": "No asignado",
   "strategicAxes.filterOwner": "Responsable",
+  "strategicAxes.noIndicatorsShort": "Ningún indicador",
   "strategicAxes.unassigned": "Sin asignar",
   "strategicAxes.loading": "Cargando los ejes…",
   "strategicAxes.empty": "Ningún eje estratégico en este programa.",
@@ -1566,9 +1567,6 @@ const es: Record<string, string> = {
   "effectifs.needVsAvailable.overAllocated":
     "La necesidad declarada supera la disponibilidad real de este equipo.",
   "effectifs.moneyBudget.title": "Presupuesto financiero asignado",
-  "effectifs.moneyBudget.totalLabel": "Presupuesto total asignado",
-  "effectifs.moneyBudget.totalSub":
-    "Suma del presupuesto asignado de todos los proyectos del programa",
   "effectifs.moneyBudget.byAxisTitle": "Reparto por eje",
   "effectifs.moneyBudget.empty": "No hay presupuesto asignado en este programa.",
   "effectifs.moneyBudget.centerLabel": "Total",

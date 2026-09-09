@@ -139,14 +139,26 @@ export function BudgetDonutChart({
         </ResponsiveContainer>
         {/* Total au centre de l'anneau (round 13) — dans la zone vide laissée par `innerRadius`.
             `pointer-events-none` pour ne jamais intercepter les clics/hover destinés aux parts du
-            donut en dessous. */}
+            donut en dessous.
+            Round 14 (PO) : rien ne contraignait jusqu'ici la largeur de ce total — un `formatValue`
+            long (ex. "17 350 000 EUR") pouvait dépasser visuellement du cercle intérieur, surtout si
+            l'anneau grossit un jour. `innerRadius={55}` ci-dessus ⇒ diamètre intérieur 110px ; le
+            conteneur ci-dessous est plafonné à 90px (110px moins une marge de sécurité pour ne
+            jamais toucher l'anneau) et `text-base` (au lieu de `text-lg`) réduit encore le risque de
+            dépassement à cette taille pour une valeur longue — l'emballe/tronque proprement
+            (`break-words`) plutôt que de déborder si elle est malgré tout trop longue. À ajuster de
+            concert si `innerRadius` change. */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-lg font-bold leading-tight text-primary">{formatValue(total)}</span>
-          {centerLabel && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-              {centerLabel}
+          <div className="max-w-[90px] px-1 text-center leading-tight">
+            <span className="break-words text-base font-bold text-primary">
+              {formatValue(total)}
             </span>
-          )}
+            {centerLabel && (
+              <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                {centerLabel}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

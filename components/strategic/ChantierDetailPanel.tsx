@@ -32,8 +32,10 @@ import {
   chantierMilestoneProgressPct,
   milestoneProgressPct,
   numberIndicators,
+  progressBucket,
   resolveMilestoneAutoFlags,
   sumLevierBudgets,
+  type ProgressBucket,
 } from "@/lib/axisLogic";
 import { cn } from "@/lib/utils";
 import { addDays } from "@/lib/dateUtils";
@@ -45,7 +47,7 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import type {
   ActionPrerequisite,
   ActionPrerequisiteKind,
@@ -107,6 +109,17 @@ const SMALL_INPUT_CLASS =
 /** Couleur de repli de la timeline de livrables quand l'axe n'a pas de couleur choisie — même
  *  valeur que `ChantierGantt.FALLBACK_COLOR` (le taupe de la palette BearingPoint). */
 const FALLBACK_COLOR = "#a99e9a";
+
+/** Couleur de la pastille de la pastille "{pct}%" du levier (round 14) — même convention que
+ *  `MilestoneChecklistPanel.tsx`'s `BUCKET_DOT_CLASS` (dupliquée ici plutôt qu'importée : ce
+ *  fichier n'est pas dans le périmètre modifiable de ce round). Repose sur le même bucketing
+ *  partagé `progressBucket` (`lib/axisLogic.ts`), donc les deux pastilles restent en accord. */
+const BUCKET_DOT_CLASS: Record<ProgressBucket, string> = {
+  empty: "bg-neutral-300",
+  red: "bg-rag-red",
+  amber: "bg-rag-amber",
+  green: "bg-rag-green",
+};
 
 /** Hex des tokens `--red`/`--amber`/`--green` (voir `app/globals.css`) — repris ici EN DUR, comme
  *  `IndicatorDonut.tsx` (`FAVORABLE`/`UNFAVORABLE`) le fait déjà pour la même raison : `TimelineBar`
@@ -1666,6 +1679,40 @@ export function ChantierDetailPanel({
                       data.chantierActions
                     )
                   );
+                  // Moyenne déclarée du jalon COURANT SEUL (round 14) — pendant `MilestoneStepper`
+                  // de la "tranche jalon courant" de `milestoneProgressPct` (lib/axisLogic.ts,
+                  // étape 2 de son commentaire), répliquée ici plutôt que déplacée dans ce module
+                  // partagé : contrairement à `actionProgressPct` ci-dessus (qui crédite aussi les
+                  // jalons déjà franchis, `* 20`), le stepper ne veut QUE le remplissage du jalon
+                  // actif, jamais le cumul. Un item auto sans valeur stockée reprend la même valeur
+                  // live que la pastille auto de `MilestoneChecklistPanel` (`autoFlags`) ; un item
+                  // manuel absent ou non répondu compte pour 0, comme partout ailleurs ce round.
+                  const currentMilestoneAutoFlags = resolveMilestoneAutoFlags(
+                    actionMilestones.currentMilestone,
+                    action,
+                    data.chantiers,
+                    data.chantierActions
+                  );
+                  const currentMilestoneDefs =
+                    MILESTONE_CHECKLISTS[actionMilestones.currentMilestone];
+                  const currentMilestoneStoredItems =
+                    actionMilestones.checklists[actionMilestones.currentMilestone] ?? [];
+                  const currentMilestoneProgressPct =
+                    currentMilestoneDefs.length > 0
+                      ? Math.round(
+                          currentMilestoneDefs.reduce((sum, def) => {
+                            const stored = currentMilestoneStoredItems.find(
+                              (i) => i.itemId === def.itemId
+                            );
+                            const value =
+                              stored?.progressPct !== undefined
+                                ? stored.progressPct
+                                : ((def.auto ? currentMilestoneAutoFlags[def.itemId] : undefined) ??
+                                  0);
+                            return sum + value;
+                          }, 0) / currentMilestoneDefs.length
+                        )
+                      : 0;
                   // KPI rattaché au levier (round 8 : `indicatorId` servait jusqu'ici uniquement de
                   // bascule jalons/kanban) — résolu ici pour affichage round 10 (nom + numéro global).
                   const linkedIndicator = action.indicatorId
@@ -1803,7 +1850,11 @@ export function ChantierDetailPanel({
                             <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
                               {t("strategicChantierDetail.milestones.title")}
                             </span>
-                            <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                            <span className="flex shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                              <span
+                                aria-hidden
+                                className={`h-1.5 w-1.5 rounded-full ${BUCKET_DOT_CLASS[progressBucket(actionProgressPct)]}`}
+                              />
                               {actionProgressPct}%
                             </span>
                           </div>
@@ -1833,6 +1884,7 @@ export function ChantierDetailPanel({
                             <MilestoneStepper
                               currentMilestone={actionMilestones.currentMilestone}
                               passedMilestones={actionMilestones.passedMilestones}
+                              currentMilestoneProgressPct={currentMilestoneProgressPct}
                             />
                           </div>
                           <div className="mt-3">

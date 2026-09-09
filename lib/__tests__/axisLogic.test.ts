@@ -18,6 +18,7 @@ import {
   milestoneWeightPct,
   numberIndicators,
   programBlockedActions,
+  progressBucket,
   resolveIndicatorOwner,
   resolveIndicatorStatus,
   resolveMilestoneAutoFlags,
@@ -881,6 +882,26 @@ describe("resolveMilestoneAutoFlags", () => {
     expect(resolveMilestoneAutoFlags("E1", action3, [noneChantier], [action3])["E1-C-effort"]).toBe(
       0
     );
+  });
+});
+
+describe("progressBucket", () => {
+  it("returns 'empty' when not yet declared", () => {
+    expect(progressBucket(undefined)).toBe("empty");
+  });
+
+  it("returns 'red' at 0", () => {
+    expect(progressBucket(0)).toBe("red");
+  });
+
+  it("returns 'green' at 100", () => {
+    expect(progressBucket(100)).toBe("green");
+  });
+
+  it("returns 'amber' for any value strictly between 0 and 100", () => {
+    expect(progressBucket(1)).toBe("amber");
+    expect(progressBucket(50)).toBe("amber");
+    expect(progressBucket(99)).toBe("amber");
   });
 });
 
