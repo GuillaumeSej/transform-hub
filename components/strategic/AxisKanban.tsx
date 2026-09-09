@@ -26,10 +26,12 @@ import type {
  * kanban classique (à faire/en cours/terminé) — jamais de nom de levier à ce niveau, uniquement des
  * comptes (demande PO explicite "synthétique, court").
  *
- * Chaque compteur est cliquable et ouvre un drill-down (`Modal`) listant TOUS les leviers DE L'AXE
- * (pas seulement ceux du chantier cliqué — comportement explicitement demandé) actuellement à ce
- * jalon/statut, réutilisant `LevierCard` (`LevierMilestoneBoard.tsx`, round 8) pour le même langage
- * visuel que le dashboard. Cliquer un levier dans le drill-down ferme la modale et appelle
+ * Chaque compteur est cliquable et ouvre un drill-down (`Modal`) listant les leviers DU CHANTIER
+ * cliqué (round 14 : corrige un bug — le drill-down listait auparavant TOUS les leviers de l'AXE
+ * entier, toutes lignes de chantier confondues, alors que le compteur cliqué appartient à UNE
+ * ligne de chantier précise) actuellement à ce jalon/statut, réutilisant `LevierCard`
+ * (`LevierMilestoneBoard.tsx`, round 8) pour le même langage visuel que le dashboard. Cliquer un
+ * levier dans le drill-down ferme la modale et appelle
  * `onOpenChantier(chantierId, focusActionId)` — même mécanisme `focusActionId` déjà utilisé par
  * `AxisDetailClient`/`ChantierGantt` (URLSearchParams `chantier=`/`action=` → `ChantierDetailPanel`
  * défile et surligne la bonne `<li>`), câblé tel quel par `StrategicAxesView.openChantierPanel`.
@@ -69,8 +71,8 @@ function emptyCounts(): ChantierCounts {
 }
 
 type Drilldown =
-  | { axisId: string; kind: "milestone"; milestoneId: MilestoneId }
-  | { axisId: string; kind: "kanban"; status: LevierKanbanStatus };
+  | { axisId: string; chantierId: string; kind: "milestone"; milestoneId: MilestoneId }
+  | { axisId: string; chantierId: string; kind: "kanban"; status: LevierKanbanStatus };
 
 export function AxisKanban({
   axes,
@@ -231,26 +233,32 @@ export function AxisKanban({
     return kanbanFilter.some((status) => counts.kanbanCounts[status] > 0);
   };
 
-  /** Leviers de l'axe du drill-down ouvert, filtrés par jalon OU statut kanban selon `drilldown.kind` —
-   *  recalculé à chaque ouverture plutôt que pré-bucketé pour tous les axes/jalons à l'avance (pas
-   *  besoin, un seul drill-down ouvert à la fois). */
+  /** Leviers DU CHANTIER cliqué (round 14 — `drilldown.chantierId`, pas de tout l'axe, voir
+   *  doc-comment de tête), filtrés par jalon OU statut kanban selon `drilldown.kind` — recalculé à
+   *  chaque ouverture plutôt que pré-bucketé pour tous les chantiers/jalons à l'avance (pas besoin,
+   *  un seul drill-down ouvert à la fois). */
   const drilldownItems = useMemo(() => {
     if (!drilldown) return [] as { action: ChantierAction; chantier: Chantier }[];
-    const axisChantiers = chantiersByAxis.get(drilldown.axisId) ?? [];
-    const chantierById = new Map(axisChantiers.map((c) => [c.id, c] as const));
+    const chantier = chantierById.get(drilldown.chantierId);
+    if (!chantier) return [] as { action: ChantierAction; chantier: Chantier }[];
     return chantierActions
-      .filter((a) => chantierById.has(a.chantierId))
+      .filter((a) => a.chantierId === drilldown.chantierId)
       .filter((a) =>
         drilldown.kind === "milestone"
           ? !!a.indicatorId && (a.milestones?.currentMilestone ?? "E0") === drilldown.milestoneId
           : !a.indicatorId && (a.kanbanStatus ?? "todo") === drilldown.status
       )
-      .map((a) => ({ action: a, chantier: chantierById.get(a.chantierId)! }));
-  }, [drilldown, chantierActions, chantiersByAxis]);
+      .map((a) => ({ action: a, chantier }));
+  }, [drilldown, chantierActions, chantierById]);
 
+  /** Round 14 : le titre inclut désormais le nom du chantier (ex. "Leviers · Plateforme Data
+   *  Unifiée · E2") — sans ça, rien dans la modale ne rappelait à quel chantier le drill-down est
+   *  maintenant scopé (voir le bug corrigé ci-dessus). Nom résolu via `chantierById` (déjà
+   *  disponible plus haut pour le donut budgétaire), pas de nouvelle clé i18n nécessaire : le nom
+   *  du chantier est une donnée, pas un libellé traduisible. */
   const drilldownTitle = !drilldown
     ? l.drilldownTitlePrefix
-    : `${l.drilldownTitlePrefix} · ${
+    : `${l.drilldownTitlePrefix} · ${chantierById.get(drilldown.chantierId)?.name ?? ""} · ${
         drilldown.kind === "milestone"
           ? drilldown.milestoneId
           : l.kanbanStatusLabels[drilldown.status]
@@ -368,6 +376,7 @@ export function AxisKanban({
                                     onClick={() =>
                                       setDrilldown({
                                         axisId: axis.id,
+                                        chantierId: chantier.id,
                                         kind: "milestone",
                                         milestoneId,
                                       })
@@ -387,7 +396,12 @@ export function AxisKanban({
                                 key={status}
                                 type="button"
                                 onClick={() =>
-                                  setDrilldown({ axisId: axis.id, kind: "kanban", status })
+                                  setDrilldown({
+                                    axisId: axis.id,
+                                    chantierId: chantier.id,
+                                    kind: "kanban",
+                                    status,
+                                  })
                                 }
                                 className="rounded-full border border-border bg-neutral-50 px-1.5 py-0.5 text-[10px] font-semibold text-secondary transition hover:border-black"
                               >
@@ -407,8 +421,9 @@ export function AxisKanban({
         })}
       </div>
 
-      {/* Drill-down (round 9, point 3) — leviers de l'AXE ENTIER au jalon/statut cliqué, jamais
-          limité au seul chantier dont le compteur a été cliqué (demande PO explicite). */}
+      {/* Drill-down (round 9, point 3) — leviers du SEUL chantier dont le compteur a été cliqué, au
+          jalon/statut cliqué (round 14 : corrige le bug qui listait les leviers de l'axe entier,
+          voir doc-comment de tête et `drilldownItems`). */}
       <Modal
         open={!!drilldown}
         onOpenChange={(open) => {

@@ -55,7 +55,7 @@ const fr: Record<string, string> = {
   // un item propre au Plan Stratégique — voir lib/nav-config.ts.
   "nav.axes": "Axes stratégiques",
   "nav.kpi": "Indicateurs (KPI)",
-  "nav.effectifs": "Effectifs mobilisés",
+  "nav.effectifs": "Budget & effectifs mobilisés",
   "nav.indicators": "Indicateurs",
   "nav.companies": "Entreprises",
   "nav.users": "Utilisateurs",
@@ -1243,6 +1243,11 @@ const fr: Record<string, string> = {
   "strategicAxes.budgetByLevierModalTitle": "Répartition du budget par levier",
   "strategicAxes.budgetUnallocated": "Non affecté",
   "strategicAxes.filterOwner": "Responsable",
+  // Round 14 : placeholder court affiché dans la carte "cartes" quand l'axe n'a aucun indicateur
+  // (bloc désormais toujours rendu pour un alignement constant du bloc "CHANTIERS", voir
+  // StrategicAxesView.tsx) — distinct de `strategicAxes.noIndicators`, phrase complète utilisée
+  // sur la fiche détail d'axe.
+  "strategicAxes.noIndicatorsShort": "Aucun indicateur",
   "strategicAxes.unassigned": "Non assigné",
   "strategicAxes.loading": "Chargement des axes…",
   "strategicAxes.empty": "Aucun axe stratégique dans ce programme.",
@@ -1641,8 +1646,6 @@ const fr: Record<string, string> = {
   "effectifs.needVsAvailable.overAllocated":
     "Besoin déclaré supérieur au disponible réel de cette équipe.",
   "effectifs.moneyBudget.title": "Budget financier alloué",
-  "effectifs.moneyBudget.totalLabel": "Budget total alloué",
-  "effectifs.moneyBudget.totalSub": "Somme du budget alloué de tous les chantiers du programme",
   "effectifs.moneyBudget.byAxisTitle": "Répartition par axe",
   "effectifs.moneyBudget.empty": "Aucun budget alloué sur ce programme.",
   // Drill-down par chantier (round 13) — cliquer une part du donut "Répartition par axe" ci-dessus.

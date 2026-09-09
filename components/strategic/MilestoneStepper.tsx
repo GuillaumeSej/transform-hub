@@ -24,10 +24,17 @@ export function MilestoneStepper({
   currentMilestone,
   passedMilestones,
   onSelectCurrent,
+  currentMilestoneProgressPct,
 }: {
   currentMilestone: MilestoneId;
   passedMilestones: MilestoneId[];
   onSelectCurrent?: () => void;
+  /** Moyenne (0-100) des `progressPct` déclarés des items du jalon COURANT (round 14) — alimente
+   *  une barre de remplissage fine au bas de la case du jalon courant, pour donner un signal de
+   *  progression À L'INTÉRIEUR du jalon actif (jusqu'ici "courant" ne disait que oui/non, jamais
+   *  "à quel point"). Optionnel et sans effet sur les jalons franchis/futurs : un appelant qui ne
+   *  le fournit pas retrouve exactement le rendu d'avant (aucune barre). */
+  currentMilestoneProgressPct?: number;
 }) {
   const { t } = useTranslation();
   const currentIndex = MILESTONE_ORDER.indexOf(currentMilestone);
@@ -59,7 +66,7 @@ export function MilestoneStepper({
                     ? `${t("strategicChantierDetail.milestones.stepper.currentLabel")} ${milestoneId}`
                     : `${milestoneId} — ${lockedTooltip}`
               }
-              className={`flex flex-1 items-center justify-center gap-1 rounded-md border px-3 py-2 text-[12px] font-bold transition ${
+              className={`relative flex flex-1 items-center justify-center gap-1 overflow-hidden rounded-md border px-3 py-2 text-[12px] font-bold transition ${
                 // `isPassed` a priorité sur `isCurrent` : un dernier jalon (E4) validé reste
                 // `currentMilestone` (pas de jalon suivant) tout en rejoignant `passedMilestones` —
                 // sans cette priorité il s'afficherait "courant" (noir) plutôt que "franchi" (vert),
@@ -74,6 +81,21 @@ export function MilestoneStepper({
               {isPassed && <Check size={10} className="shrink-0" />}
               {isFuture && <Lock size={10} className="shrink-0" />}
               {milestoneId}
+              {isCurrent && currentMilestoneProgressPct !== undefined && (
+                // Remplissage progressif du jalon COURANT uniquement (round 14) — barre fine
+                // ancrée en bas de la case, largeur proportionnelle à la moyenne déclarée du
+                // jalon (voir le commentaire du prop ci-dessus). Piste semi-transparente pour que
+                // la barre reste lisible même à 0 %, remplissage plein blanc pour contraster sur
+                // le fond noir du jalon actif.
+                <span aria-hidden className="absolute inset-x-0 bottom-0 h-[3px] bg-white/25">
+                  <span
+                    className="block h-full bg-white transition-[width]"
+                    style={{
+                      width: `${Math.max(0, Math.min(100, currentMilestoneProgressPct))}%`,
+                    }}
+                  />
+                </span>
+              )}
             </button>
           );
         })}

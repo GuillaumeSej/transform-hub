@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/shared/Button";
 import { UserPicker } from "@/components/strategic/UserPicker";
-import { canPassMilestone } from "@/lib/axisLogic";
+import { canPassMilestone, progressBucket, type ProgressBucket } from "@/lib/axisLogic";
 import { MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { AuthUser, MilestoneChecklistItem, MilestoneId } from "@/types";
@@ -31,29 +31,21 @@ const INPUT_CLASS =
 const SMALL_INPUT_CLASS =
   "mt-0.5 block rounded-md border border-border bg-white px-2 py-1 text-[12px] text-primary outline-none focus:border-bp-coral";
 
-/** Un des 3 buckets d'affichage d'un `progressPct` (voir le commentaire de tête) — jamais de
- *  dégradé continu, seulement ces 3 teintes discrètes, même pour un item auto (toujours 0 ou 100,
- *  jamais `partial`). */
-type ProgressBucket = "unanswered" | "red" | "partial" | "green";
-
-function bucketForPct(pct: number | undefined): ProgressBucket {
-  if (pct === undefined) return "unanswered";
-  if (pct <= 0) return "red";
-  if (pct >= 100) return "green";
-  return "partial";
-}
-
+/** Bucketing d'affichage d'un `progressPct` (voir le commentaire de tête) — jamais de dégradé
+ *  continu, seulement ces 3 teintes discrètes (+ le neutre `empty`), même pour un item auto
+ *  (toujours 0 ou 100, jamais `amber`). Logique extraite (round 14) dans `lib/axisLogic.ts`
+ *  (`progressBucket`) — seule source de vérité, partagée avec d'autres écrans. */
 const BUCKET_DOT_CLASS: Record<ProgressBucket, string> = {
-  unanswered: "bg-neutral-300",
+  empty: "bg-neutral-300",
   red: "bg-rag-red",
-  partial: "bg-rag-amber",
+  amber: "bg-rag-amber",
   green: "bg-rag-green",
 };
 
 const BUCKET_INPUT_CLASS: Record<ProgressBucket, string> = {
-  unanswered: "border-border bg-white text-primary",
+  empty: "border-border bg-white text-primary",
   red: "border-rag-red bg-rag-red-light text-rag-red",
-  partial: "border-rag-amber bg-rag-amber-light text-rag-amber",
+  amber: "border-rag-amber bg-rag-amber-light text-rag-amber",
   green: "border-rag-green bg-rag-green-light text-rag-green-dark",
 };
 
@@ -151,7 +143,7 @@ export function MilestoneChecklistPanel({
           {group.defs.map((def) => {
             if (def.auto) {
               const pct = autoFlags[def.itemId];
-              const bucket = bucketForPct(pct);
+              const bucket = progressBucket(pct);
               return (
                 <div
                   key={def.itemId}
@@ -170,8 +162,8 @@ export function MilestoneChecklistPanel({
 
             const stored = findStored(def.itemId);
             const pct = stored?.progressPct;
-            const bucket = bucketForPct(pct);
-            const isPartial = bucket === "partial";
+            const bucket = progressBucket(pct);
+            const isPartial = bucket === "amber";
 
             const patchActionPlan = (
               fieldPatch: Partial<NonNullable<MilestoneChecklistItem["actionPlan"]>>

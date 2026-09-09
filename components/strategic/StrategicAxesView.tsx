@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutGrid, Plus, Rows3 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody } from "@/components/shared/Card";
-import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
+import { Dropdown, type DropdownOption } from "@/components/shared/Dropdown";
 import { Modal } from "@/components/shared/Modal";
 import {
   BudgetDonutChart,
@@ -28,14 +28,7 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { StrategicImportPreview } from "@/lib/strategicExcelImport";
-import type {
-  Chantier,
-  ChantierAction,
-  Indicator,
-  LevierKanbanStatus,
-  MilestoneId,
-  StrategicAxis,
-} from "@/types";
+import type { Chantier, Indicator, LevierKanbanStatus, MilestoneId } from "@/types";
 
 /** Nombre de puces numérotées d'indicateur affichées sur une carte d'axe (vue "cartes", round 6,
  *  point 3) avant repli sur une puce "+N". */
@@ -185,32 +178,31 @@ export function StrategicAxesView() {
   );
 
   /**
-   * Filtre "Jalon" E0-E4 (round 9, points 3/9) — SCOPÉ à l'onglet "Avancement des chantiers"
-   * uniquement, TECHNIQUEMENT indépendant du filtre "Responsable" ci-dessous (entités et
-   * persistances différentes — voir `filterDefs`). État purement local (pas d'URL) : comme l'ancien
-   * filtre chantier qu'il remplace en partie, il ne s'applique qu'à un seul onglet et n'a pas besoin
-   * d'être partageable par lien pour ce round.
+   * Filtre "Jalon" E0-E4 (round 9, points 3/9 ; migré de `FilterBar` vers `Dropdown` round 14) —
+   * SCOPÉ à l'onglet "Avancement des chantiers" uniquement, TECHNIQUEMENT indépendant du filtre
+   * "Responsable" ci-dessous (entités et persistances différentes). État purement local (pas
+   * d'URL) : comme l'ancien filtre chantier qu'il remplace en partie, il ne s'applique qu'à un
+   * seul onglet et n'a pas besoin d'être partageable par lien.
    *
    * Filtre les CHANTIERS affichés dans `AxisKanban` : un chantier reste visible si au moins un de
-   * ses leviers rattachés à un KPI est actuellement à l'un des jalons cochés (logique implémentée
-   * dans `AxisKanban` lui-même via la prop `milestoneFilter`, ce composant ne fait que porter
-   * l'état + le `FilterBar`).
+   * ses leviers rattachés à un KPI est actuellement à ce jalon (logique implémentée dans
+   * `AxisKanban` lui-même via la prop `milestoneFilter`, ce composant ne fait que porter l'état +
+   * le `Dropdown`). `Dropdown` étant à sélection UNIQUE (contrairement à `FilterBar`), l'état est
+   * un simple `MilestoneId | null` plutôt qu'un tableau de valeurs cochées.
    */
-  const [milestoneFilters, setMilestoneFilters] = useState<ActiveFilters>({});
+  const [selectedMilestone, setSelectedMilestone] = useState<MilestoneId | null>(null);
 
   /**
-   * Filtre "Statut kanban" (round 12) — même mécanisme que `milestoneFilters` ci-dessus mais pour
-   * les leviers SANS KPI (`kanbanTrackedActions`). Filtre les CHANTIERS affichés dans `AxisKanban` :
-   * un chantier reste visible si au moins un de ses leviers sans KPI est au statut coché (logique
-   * dans `AxisKanban` via la prop `kanbanFilter`).
+   * Filtre "Statut kanban" (round 12 ; migré vers `Dropdown` round 14) — même mécanisme que
+   * `selectedMilestone` ci-dessus mais pour les leviers SANS KPI (`kanbanTrackedActions`). Filtre
+   * les CHANTIERS affichés dans `AxisKanban` : un chantier reste visible si au moins un de ses
+   * leviers sans KPI est à ce statut (logique dans `AxisKanban` via la prop `kanbanFilter`).
    */
-  const [kanbanFilters, setKanbanFilters] = useState<ActiveFilters>({});
+  const [selectedKanbanStatus, setSelectedKanbanStatus] = useState<LevierKanbanStatus | null>(null);
 
-  /** Nombre de leviers rattachés à un KPI par jalon E0-E4 (round 10, point 3) — précalculé pour que
-   *  `milestoneFilterDefs.getValue` (ci-dessous) puisse renvoyer une valeur DÉJÀ suffixée du compte
-   *  (ex. "E0 (6)") : `FilterBar` (non modifiable, voir contrainte du round) déduit ses options
-   *  directement des chaînes renvoyées par `getValue`, sans notion de libellé séparé — le compte
-   *  doit donc faire partie de la valeur elle-même. */
+  /** Nombre de leviers rattachés à un KPI par jalon E0-E4 (round 10, point 3) — précalculé pour
+   *  suffixer les options du `Dropdown` "Jalon" du compte (ex. "E0 (6)"), convention déjà en place
+   *  avant la migration `FilterBar` → `Dropdown` (round 14). */
   const milestoneCounts = useMemo(() => {
     const map = new Map<MilestoneId, number>();
     for (const action of milestoneTrackedActions) {
@@ -220,29 +212,22 @@ export function StrategicAxesView() {
     return map;
   }, [milestoneTrackedActions]);
 
-  const milestoneFilterDefs: FilterDef<ChantierAction>[] = useMemo(
-    () => [
-      {
-        key: "jalon",
-        label: t("strategicAxes.filterMilestone"),
-        getValue: (a) => {
-          const milestoneId = a.milestones?.currentMilestone ?? "E0";
-          return `${milestoneId} (${milestoneCounts.get(milestoneId) ?? 0})`;
-        },
-      },
-    ],
-    [t, milestoneCounts]
+  /** Options du `Dropdown` "Jalon" — un jalon par `MilestoneId` (E0→E4, ordre fixe), libellé
+   *  suffixé du compte comme avant round 14. La `value` est directement le `MilestoneId` (plus
+   *  besoin de le retrouver par découpage de chaîne, contrairement à l'ancien `FilterBar`). */
+  const milestoneOptions: DropdownOption[] = useMemo(
+    () =>
+      (["E0", "E1", "E2", "E3", "E4"] as MilestoneId[]).map((id) => ({
+        value: id,
+        label: `${id} (${milestoneCounts.get(id) ?? 0})`,
+      })),
+    [milestoneCounts]
   );
 
-  // Les valeurs cochées par `FilterBar` sont les chaînes suffixées renvoyées par `getValue`
-  // ci-dessus (ex. "E0 (6)") — on ne garde que le jalon lui-même (premier token, avant l'espace)
-  // pour retrouver un vrai `MilestoneId` exploitable par `AxisKanban`.
-  const activeMilestones = (milestoneFilters["jalon"] ?? []).map(
-    (value) => value.split(" ")[0]
-  ) as MilestoneId[];
+  const activeMilestones = selectedMilestone ? [selectedMilestone] : [];
 
   /** Nombre de leviers SANS KPI par statut kanban (round 12) — même rôle que `milestoneCounts`,
-   *  précalculé pour suffixer les options du filtre "Statut kanban" (ex. "En cours (3)"). */
+   *  précalculé pour suffixer les options du `Dropdown` "Statut kanban" (ex. "En cours (3)"). */
   const kanbanCounts = useMemo(() => {
     const map = new Map<LevierKanbanStatus, number>();
     for (const action of kanbanTrackedActions) {
@@ -263,100 +248,50 @@ export function StrategicAxesView() {
     [t]
   );
 
-  const kanbanFilterDefs: FilterDef<ChantierAction>[] = useMemo(
-    () => [
-      {
-        key: "statut",
-        label: t("strategicAxes.filterKanban"),
-        getValue: (a) => {
-          const status = a.kanbanStatus ?? "todo";
-          return `${kanbanStatusLabel[status]} (${kanbanCounts.get(status) ?? 0})`;
-        },
-      },
-    ],
-    [t, kanbanCounts, kanbanStatusLabel]
-  );
-
-  // Contrairement au jalon (id lui-même affiché, `activeMilestones` ci-dessus), le libellé
-  // affiché ici est traduit ("En cours") — on retrouve le `LevierKanbanStatus` via une table
-  // inverse libellé → statut plutôt qu'un découpage de chaîne, plus robuste qu'un `split(" ")`
-  // face à des libellés à plusieurs mots.
-  const kanbanLabelToStatus = useMemo(
+  /** Options du `Dropdown` "Statut kanban" — la `value` est directement le `LevierKanbanStatus`
+   *  (todo/in_progress/done), le libellé traduit + suffixé du compte comme avant round 14. */
+  const kanbanOptions: DropdownOption[] = useMemo(
     () =>
-      new Map<string, LevierKanbanStatus>(
-        (Object.entries(kanbanStatusLabel) as [LevierKanbanStatus, string][]).map(
-          ([status, label]) => [label, status]
-        )
-      ),
-    [kanbanStatusLabel]
+      (["todo", "in_progress", "done"] as LevierKanbanStatus[]).map((status) => ({
+        value: status,
+        label: `${kanbanStatusLabel[status]} (${kanbanCounts.get(status) ?? 0})`,
+      })),
+    [kanbanCounts, kanbanStatusLabel]
   );
-  const activeKanbanStatuses = (kanbanFilters["statut"] ?? [])
-    .map((value) => kanbanLabelToStatus.get(value.replace(/\s*\(\d+\)$/, "")))
-    .filter((s): s is LevierKanbanStatus => Boolean(s));
 
-  // Filtres persistés dans l'URL sous le préfixe `f_`, exactement comme la page leviers — un lien
-  // vers une vue filtrée reste partageable et survit à un rafraîchissement.
-  const filterDefs: FilterDef<StrategicAxis>[] = useMemo(
-    () => [
-      {
-        key: "f_owner",
-        label: t("strategicAxes.filterOwner"),
-        getValue: (a) => a.owner ?? t("strategicAxes.unassigned"),
-      },
-    ],
-    [t]
-  );
+  const activeKanbanStatuses = selectedKanbanStatus ? [selectedKanbanStatus] : [];
 
   /**
-   * Filtres OUVERTS mais encore sans valeur cochée — état purement local, indispensable au
-   * fonctionnement du bouton « Responsable » (seul filtre restant depuis le retrait round 11 de
-   * « Étape de maturité »).
-   *
-   * Bug corrigé : `FilterBar` signale l'ouverture d'un filtre en remontant `{ f_owner: [] }`, or
-   * `setFilters` n'écrit dans l'URL que les clés AYANT des valeurs (`v.length > 0`) et
-   * `activeFilters` était dérivé EXCLUSIVEMENT de l'URL. Un filtre ouvert-mais-vide n'avait donc
-   * aucune représentation persistante : le clic était annulé au rendu suivant et le panneau de
-   * valeurs ne s'affichait jamais — d'où l'impression que le bouton ne faisait rien.
-   *
-   * Les valeurs cochées, elles, restent dans l'URL (lien partageable, survit au rafraîchissement) :
-   * seule l'ouverture — qui n'a pas à être partagée — vit en mémoire.
+   * Filtre "Responsable" (migré de `FilterBar` vers `Dropdown` round 14) — persisté dans l'URL sous
+   * le paramètre `owner`, même convention que `KpiPageClient.tsx` (round 13) : un lien vers une vue
+   * filtrée reste partageable et survit à un rafraîchissement. `Dropdown` étant à sélection UNIQUE,
+   * une simple valeur `string | null` suffit — plus besoin du méli-mélo `openFilterKeys`/
+   * `activeFilters` qu'imposait `FilterBar` (multi-select, préfixe `f_`) pour ce même filtre.
    */
-  const [openFilterKeys, setOpenFilterKeys] = useState<string[]>([]);
+  const selectedOwner = searchParams.get("owner");
 
-  const activeFilters: ActiveFilters = useMemo(() => {
-    const result: ActiveFilters = {};
-    for (const key of openFilterKeys) {
-      if (filterDefs.some((def) => def.key === key)) result[key] = [];
-    }
-    // L'URL prime : un filtre porté par l'URL est ouvert ET pré-coché, même après un partage de lien.
-    searchParams.forEach((value, key) => {
-      if (filterDefs.some((def) => def.key === key)) result[key] = value.split(",").filter(Boolean);
-    });
-    return result;
-  }, [searchParams, filterDefs, openFilterKeys]);
+  const ownerOptions: DropdownOption[] = useMemo(() => {
+    const names = new Set(data.axes.map((a) => a.owner ?? t("strategicAxes.unassigned")));
+    return Array.from(names)
+      .sort()
+      .map((name) => ({ value: name, label: name }));
+  }, [data.axes, t]);
 
-  const setFilters = (next: ActiveFilters) => {
-    setOpenFilterKeys(Object.keys(next));
+  const setOwnerFilter = (value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
-    Array.from(params.keys())
-      .filter((k) => k.startsWith("f_"))
-      .forEach((k) => params.delete(k));
-    Object.entries(next).forEach(([k, v]) => {
-      if (v.length > 0) params.set(k, v.join(","));
-    });
+    if (value) params.set("owner", value);
+    else params.delete("owner");
     const qs = params.toString();
     router.replace(qs ? `/levers?${qs}` : "/levers");
   };
 
   const filteredAxes = useMemo(
     () =>
-      data.axes.filter((axis) =>
-        Object.entries(activeFilters).every(([key, values]) => {
-          const def = filterDefs.find((d) => d.key === key);
-          return !def || values.length === 0 || values.includes(def.getValue(axis));
-        })
-      ),
-    [data.axes, activeFilters, filterDefs]
+      data.axes.filter((axis) => {
+        if (!selectedOwner) return true;
+        return (axis.owner ?? t("strategicAxes.unassigned")) === selectedOwner;
+      }),
+    [data.axes, selectedOwner, t]
   );
 
   const openAxis = (axisId: string) => router.push(`/levers/detail?id=${axisId}`);
@@ -471,39 +406,47 @@ export function StrategicAxesView() {
 
       <Card>
         <CardBody flush>
-          {/* Filtres "Responsable" + "Jalon" réunis dans une même zone (round 10, point 3) — restent
-              deux mécanismes TECHNIQUEMENT distincts (entités et persistances différentes, voir
-              doc-comment de `milestoneFilters`), regroupés visuellement sous un libellé générique
-              uniquement quand les deux sont pertinents (vue "Avancement des chantiers" — le filtre
-              "Jalon" n'a pas de sens en vue "Cartes", où aucun composant ne le consomme). Libellé
-              volontairement générique (round 11) depuis le retrait du filtre "Étape de maturité" :
-              énumérer les filtres concrets n'a plus de sens avec un seul type par vue. */}
+          {/* Filtres "Responsable" + "Jalon" + "Statut kanban" réunis dans une même zone (round 10,
+              point 3 ; migrés de `FilterBar` vers `Dropdown` round 14, voir doc-comments de
+              `selectedOwner`/`selectedMilestone`/`selectedKanbanStatus`) — restent des mécanismes
+              TECHNIQUEMENT distincts (entités et persistances différentes), regroupés visuellement
+              sous un libellé générique uniquement quand les 3 sont pertinents (vue "Avancement des
+              chantiers" — "Jalon"/"Statut kanban" n'ont pas de sens en vue "Cartes", où aucun
+              composant ne les consomme). Libellé volontairement générique (round 11) depuis le
+              retrait du filtre "Étape de maturité" : énumérer les filtres concrets n'a plus de sens
+              avec un seul type par vue. */}
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
             {view === "kanban" && (
               <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
                 {t("strategicAxes.filterStageAndMilestone")}
               </span>
             )}
-            <FilterBar
-              items={data.axes}
-              defs={filterDefs}
-              active={activeFilters}
-              onChange={setFilters}
+            <Dropdown
+              label={t("strategicAxes.filterOwner")}
+              placeholder={t("kpi.filterAll")}
+              value={selectedOwner}
+              onChange={setOwnerFilter}
+              options={ownerOptions}
+              allowClear
             />
             {view === "kanban" && (
-              <FilterBar
-                items={milestoneTrackedActions}
-                defs={milestoneFilterDefs}
-                active={milestoneFilters}
-                onChange={setMilestoneFilters}
+              <Dropdown
+                label={t("strategicAxes.filterMilestone")}
+                placeholder={t("kpi.filterAll")}
+                value={selectedMilestone}
+                onChange={(v) => setSelectedMilestone(v as MilestoneId | null)}
+                options={milestoneOptions}
+                allowClear
               />
             )}
             {view === "kanban" && (
-              <FilterBar
-                items={kanbanTrackedActions}
-                defs={kanbanFilterDefs}
-                active={kanbanFilters}
-                onChange={setKanbanFilters}
+              <Dropdown
+                label={t("strategicAxes.filterKanban")}
+                placeholder={t("kpi.filterAll")}
+                value={selectedKanbanStatus}
+                onChange={(v) => setSelectedKanbanStatus(v as LevierKanbanStatus | null)}
+                options={kanbanOptions}
+                allowClear
               />
             )}
             <div className="ml-auto flex overflow-hidden rounded-md border border-border">
@@ -606,63 +549,87 @@ export function StrategicAxesView() {
                   </span>
                 </div>
 
-                {axis.description && (
-                  <p className="mt-2.5 line-clamp-2 text-[12.5px] leading-snug text-secondary">
-                    {axis.description}
-                  </p>
-                )}
+                {/* Round 14 : bloc TOUJOURS rendu (même sans description) — une hauteur minimale
+                    constante (`min-h-[34px]`, deux lignes à `text-[12.5px] leading-snug`) occupe le
+                    même emplacement structurel que l'axe ait une description ou non. Avant round 14,
+                    ce bloc disparaissait entièrement (`{axis.description && (...)}`) : la marge
+                    devant le bloc "indicateurs" puis "CHANTIERS" se retrouvait donc à des hauteurs
+                    différentes d'une carte à l'autre de la même ligne de grille — c'est cette
+                    variation qui rendait l'alignement "CHANTIERS" imprévisible, pas `mt-auto` en soi
+                    (voir doc-comment du bloc CHANTIERS plus bas). */}
+                <p className="mt-2.5 line-clamp-2 min-h-[34px] text-[12.5px] leading-snug text-secondary">
+                  {axis.description ?? ""}
+                </p>
 
                 {/* Puces numérotées d'indicateur (round 10, point 3) — numéro GLOBAL sur toute la
                     plateforme (`numberIndicators`, fondation `lib/axisLogic.ts`), coloré si le
                     statut EFFECTIF de l'indicateur est "à risque". Le clic navigue désormais vers la
                     vraie page KPI (`/kpi?indicator=<id>`) — remplace l'ancien aperçu en modale locale
                     (`IndicatorChart`), changement de comportement délibéré (round 10 : le PO veut
-                    atterrir sur la page KPI, pas un aperçu). */}
-                {axisIndicators.length > 0 && (
-                  <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
-                    <span className="mr-0.5 text-xs text-tertiary">
-                      {t("strategicAxes.indicatorsCount")}
+                    atterrir sur la page KPI, pas un aperçu).
+                    Round 14 : bloc TOUJOURS rendu (même compte à zéro), même raison que le bloc
+                    description ci-dessus — sinon la marge `mt-3.5` de ce bloc disparaissait avec lui
+                    et décalait tout ce qui suit (dont "CHANTIERS"). Sans indicateur, un texte discret
+                    remplace les puces plutôt que de vider la ligne. */}
+                <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
+                  <span className="mr-0.5 text-xs text-tertiary">
+                    {t("strategicAxes.indicatorsCount")}
+                  </span>
+                  {axisIndicators.length === 0 ? (
+                    <span className="text-[11px] italic text-tertiary">
+                      {t("strategicAxes.noIndicatorsShort")}
                     </span>
-                    {shownIndicators.map((indicator) => {
-                      const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
-                      return (
-                        <button
-                          key={indicator.id}
-                          type="button"
-                          title={
-                            atRisk
-                              ? `${indicator.name} — ${t("indicatorStatus.atRisk")}`
-                              : indicator.name
-                          }
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/kpi?indicator=${indicator.id}`);
-                          }}
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition hover:bg-black hover:text-white ${
-                            atRisk
-                              ? "bg-rag-amber-light text-rag-amber"
-                              : "bg-neutral-100 text-secondary"
-                          }`}
+                  ) : (
+                    <>
+                      {shownIndicators.map((indicator) => {
+                        const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
+                        return (
+                          <button
+                            key={indicator.id}
+                            type="button"
+                            title={
+                              atRisk
+                                ? `${indicator.name} — ${t("indicatorStatus.atRisk")}`
+                                : indicator.name
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/kpi?indicator=${indicator.id}`);
+                            }}
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition hover:bg-black hover:text-white ${
+                              atRisk
+                                ? "bg-rag-amber-light text-rag-amber"
+                                : "bg-neutral-100 text-secondary"
+                            }`}
+                          >
+                            {globalIndicatorNumbers.get(indicator.id) ?? "?"}
+                          </button>
+                        );
+                      })}
+                      {hiddenIndicatorsCount > 0 && (
+                        <span
+                          className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
+                          title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
                         >
-                          {globalIndicatorNumbers.get(indicator.id) ?? "?"}
-                        </button>
-                      );
-                    })}
-                    {hiddenIndicatorsCount > 0 && (
-                      <span
-                        className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
-                        title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
-                      >
-                        +{hiddenIndicatorsCount}
-                      </span>
-                    )}
-                  </div>
-                )}
+                          +{hiddenIndicatorsCount}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
 
                 {/* Chantiers de l'axe — nom + sponsor, chacun cliquable (round 10, point 3) —
                     remplace l'ancienne pastille de comptage brut "N chantiers". Complétés par le
-                    budget total alloué de l'axe (somme de `Chantier.allocatedBudget`). */}
-                <div className="mt-auto flex flex-col gap-1 border-t border-border pt-2.5 text-[10.5px]">
+                    budget total alloué de l'axe (somme de `Chantier.allocatedBudget`).
+                    Round 14 : marge CONSTANTE (`mt-3.5`, même valeur que le bloc indicateurs
+                    au-dessus) au lieu de `mt-auto`. `mt-auto` plaquait ce bloc en BAS de la carte
+                    (hauteur égalisée par la grille, `h-full` sur le conteneur racine) — mais sa
+                    propre hauteur varie selon le nombre de chantiers de l'axe, donc son bord HAUT
+                    (là où "CHANTIERS" s'affiche) se déplaçait quand même d'une carte à l'autre.
+                    Avec les blocs description/indicateurs ci-dessus désormais à hauteur constante
+                    (voir leurs doc-comments), une marge fixe suffit à faire démarrer "CHANTIERS" au
+                    même point vertical sur toutes les cartes d'une même ligne. */}
+                <div className="mt-3.5 flex flex-col gap-1 border-t border-border pt-2.5 text-[10.5px]">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
                       {t("strategicAxes.chantiersCount")}

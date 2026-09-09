@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Users, Wallet } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowUpRight, Users } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import {
   BudgetDonutChart,
@@ -102,6 +103,7 @@ function Bar({ pct, fn, highlighted = false }: { pct: number; fn: string; highli
 
 export function EffectifsPageClient() {
   const { t } = useTranslation();
+  const router = useRouter();
   const { user, loading: roleLoading } = useRole();
   const {
     activeProgram,
@@ -193,6 +195,18 @@ export function EffectifsPageClient() {
     return chantiers
       .filter((c) => c.axisId === budgetDrilldownAxisId && c.allocatedBudget !== undefined)
       .map((c) => ({ name: c.name, value: c.allocatedBudget ?? 0 }));
+  }, [budgetDrilldownAxisId, chantiers]);
+
+  /** `BudgetDonutChart.onSliceClick` du second donut (par chantier) ne renvoie lui aussi que le
+   *  NOM de la part cliquée — ce lookup, restreint aux chantiers de l'axe actuellement ouvert dans
+   *  la modale, retrouve l'`id` du chantier pour naviguer vers sa fiche (round 14). */
+  const drilldownChantierByName = useMemo(() => {
+    if (!budgetDrilldownAxisId) return new Map<string, string>();
+    return new Map(
+      chantiers
+        .filter((c) => c.axisId === budgetDrilldownAxisId)
+        .map((c) => [c.name, c.id] as const)
+    );
   }, [budgetDrilldownAxisId, chantiers]);
 
   const budgetDrilldownAxis = axes.find((a) => a.id === budgetDrilldownAxisId) ?? null;
@@ -302,6 +316,9 @@ export function EffectifsPageClient() {
   // puis le détail ETP), dans les deux branches de retour (staffing vide ou non).
   const formatAllocatedBudget = (value: number) =>
     `${value.toLocaleString()} ${activeProgram.currency}`;
+  // Round 14 (PO) : la tuile `KPICard` "Budget total alloué" (simple somme) était redondante avec
+  // le total désormais affiché au centre du donut lui-même (round 13) — retirée, le donut seul
+  // porte maintenant à la fois la répartition ET le total.
   const moneyBudgetSection = (
     <Card className="mb-0">
       <CardHeader title={t("effectifs.moneyBudget.title")} />
@@ -309,36 +326,31 @@ export function EffectifsPageClient() {
         {totalAllocatedBudget === 0 ? (
           <p className="text-sm text-text-secondary">{t("effectifs.moneyBudget.empty")}</p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <KPICard
-              label={t("effectifs.moneyBudget.totalLabel")}
-              value={formatAllocatedBudget(totalAllocatedBudget)}
-              icon={Wallet}
-              sub={t("effectifs.moneyBudget.totalSub")}
+          <div>
+            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-secondary">
+              {t("effectifs.moneyBudget.byAxisTitle")}
+            </h3>
+            <BudgetDonutChart
+              data={allocatedBudgetByAxis}
+              formatValue={formatAllocatedBudget}
+              centerLabel={t("effectifs.moneyBudget.centerLabel")}
+              onSliceClick={(name) => {
+                const axis = axisByName.get(name);
+                if (axis) setBudgetDrilldownAxisId(axis.id);
+              }}
             />
-            <div>
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-secondary">
-                {t("effectifs.moneyBudget.byAxisTitle")}
-              </h3>
-              <BudgetDonutChart
-                data={allocatedBudgetByAxis}
-                formatValue={formatAllocatedBudget}
-                centerLabel={t("effectifs.moneyBudget.centerLabel")}
-                onSliceClick={(name) => {
-                  const axis = axisByName.get(name);
-                  if (axis) setBudgetDrilldownAxisId(axis.id);
-                }}
-              />
-            </div>
           </div>
         )}
       </CardBody>
     </Card>
   );
 
-  // Drill-down (round 13) : budget de l'axe cliqué ci-dessus, ventilé PAR CHANTIER. Page de pure
-  // lecture — pas de `onSliceClick` sur ce second donut (contrairement à `AxisKanban`/
-  // `StrategicAxesView`, qui naviguent vers la fiche chantier depuis leur propre drill-down).
+  // Drill-down (round 13) : budget de l'axe cliqué ci-dessus, ventilé PAR CHANTIER. Round 14 (PO) :
+  // ce second donut gagne à son tour un `onSliceClick` — la page Effectifs n'a pas de panneau
+  // chantier propre, donc un clic ici navigue vers `/levers?chantier=<id>` (même contrat que
+  // `StrategicAxesView.openChantierPanel`/`StrategicDashboardView`) pour ouvrir la fiche chantier
+  // sur la page Axes stratégiques. Le donut de PREMIER niveau (par axe, ci-dessus) garde lui son
+  // comportement actuel (ouvrir cette modale) — inchangé.
   const budgetDrilldownModal = (
     <Modal
       open={!!budgetDrilldownAxisId}
@@ -356,6 +368,10 @@ export function EffectifsPageClient() {
           data={budgetDrilldownSlices}
           formatValue={formatAllocatedBudget}
           centerLabel={t("effectifs.moneyBudget.centerLabel")}
+          onSliceClick={(name) => {
+            const chantierId = drilldownChantierByName.get(name);
+            if (chantierId) router.push(`/levers?chantier=${chantierId}`);
+          }}
         />
       ) : (
         <p className="py-6 text-center text-[12px] text-tertiary">

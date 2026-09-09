@@ -1,6 +1,11 @@
 "use client";
 
-import { colorForChantier, milestoneWeightPct } from "@/lib/axisLogic";
+import {
+  colorForChantier,
+  milestoneWeightPct,
+  progressBucket,
+  type ProgressBucket,
+} from "@/lib/axisLogic";
 import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Chantier, ChantierAction, MilestoneId } from "@/types";
@@ -52,6 +57,17 @@ export type LevierBoardGroup = {
  *  l'exécution n'y apparaît jamais et ne serait donc jamais générée. Exporté pour que
  *  `LevierKanbanBoard.tsx` (même palette, même besoin) réutilise la même table plutôt que d'en
  *  dupliquer une copie qui pourrait diverger si la palette d'axisLogic.ts change un jour. */
+/** Pastille de couleur d'un `progressBucket` (lib/axisLogic.ts) — même convention visuelle que
+ *  `BUCKET_DOT_CLASS` de `MilestoneChecklistPanel.tsx` (round 14, cohérence entre écrans) :
+ *  déclarée ici séparément plutôt que réimportée, ce fichier n'ayant pas accès à cette constante
+ *  non exportée. */
+const AVG_PROGRESS_DOT_CLASS: Record<ProgressBucket, string> = {
+  empty: "bg-neutral-300",
+  red: "bg-rag-red",
+  amber: "bg-rag-amber",
+  green: "bg-rag-green",
+};
+
 export const CHANTIER_BORDER_CLASS: Record<string, string> = {
   "bg-blue-500": "border-blue-500",
   "bg-emerald-500": "border-emerald-500",
@@ -194,7 +210,10 @@ export function LevierMilestoneBoard({
               const cards = group.milestones[milestoneId] ?? [];
               // Round 12 : moyenne des `progressPct` déclarés du jalon COURANT, affichée à côté du
               // compte de leviers — voir `currentMilestoneAverage` ci-dessus pour la simplification
-              // (items auto comptés à 0, pas de `resolveMilestoneAutoFlags` ici).
+              // (items auto comptés à 0, pas de `resolveMilestoneAutoFlags` ici). Round 14 : une
+              // pastille `progressBucket(avgPct)` accompagne ce texte (même convention que
+              // `MilestoneChecklistPanel.tsx`) — seulement rendue quand `avgPct` est défini, donc
+              // jamais pour une colonne vide (voir juste au-dessus, `cards.length > 0`).
               const avgPct =
                 cards.length > 0
                   ? Math.round(
@@ -218,11 +237,17 @@ export function LevierMilestoneBoard({
                     </span>
                   </div>
                   {avgPct !== undefined && (
-                    <div className="mb-1.5 px-0.5 text-[10px] text-tertiary">
-                      {t("strategicDashboard.levierBoard.avgProgress", "{pct}% en moyenne").replace(
-                        "{pct}",
-                        String(avgPct)
-                      )}
+                    <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[10px] text-tertiary">
+                      <span
+                        aria-hidden
+                        className={`inline-block h-2 w-2 shrink-0 rounded-full ${AVG_PROGRESS_DOT_CLASS[progressBucket(avgPct)]}`}
+                      />
+                      <span>
+                        {t(
+                          "strategicDashboard.levierBoard.avgProgress",
+                          "{pct}% en moyenne"
+                        ).replace("{pct}", String(avgPct))}
+                      </span>
                     </div>
                   )}
                   {cards.length === 0 ? (
