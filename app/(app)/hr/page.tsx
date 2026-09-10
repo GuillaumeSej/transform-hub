@@ -52,7 +52,8 @@ import {
   NetEconomyChart,
   SavingsPeriodCumulChart,
 } from "@/components/shared/charts/HrGooduelleCharts";
-import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
+import { FilterBar, type FilterDef } from "@/components/shared/FilterBar";
+import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { generateFiscalYears } from "@/lib/fiscalYear";
@@ -190,8 +191,7 @@ export default function HrDashboardPage() {
     setDateToISO(movementDateRange.to);
   }, [movementDateRange.from, movementDateRange.to]);
 
-  // ─── Filtres RH (même pattern que le dashboard exécutif) ────────────────────────────────────
-  const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
+  // ─── Filtres RH ──────────────────────────────────────────────────────────────────────────────
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const filterDefs: FilterDef<WorkforceMovement>[] = useMemo(
@@ -214,6 +214,10 @@ export default function HrDashboardPage() {
     ],
     [t]
   );
+  // Round <n> : hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts), remplace un
+  // `useState<ActiveFilters>({})` local — même contrat pour `activeFilters`/`onChange`, mais
+  // synchronisé dans l'URL (comme les autres pages à `FilterBar`, voir ce hook pour le détail).
+  const { activeFilters, setFilters: setActiveFilters } = useFilterBarState(filterDefs);
 
   const wf = data.workforce;
 

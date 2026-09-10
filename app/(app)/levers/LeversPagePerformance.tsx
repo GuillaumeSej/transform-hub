@@ -30,9 +30,10 @@ import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
 import { Kanban } from "@/components/shared/Kanban";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
+import { FilterBar, type FilterDef } from "@/components/shared/FilterBar";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
+import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
 import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
 
 type LeverRow = Lever & {
@@ -343,24 +344,10 @@ export function LeversPagePerformance() {
     ]
   );
 
-  const activeFilters: ActiveFilters = useMemo(() => {
-    const result: ActiveFilters = {};
-    searchParams.forEach((value, key) => {
-      if (filterDefs.some((def) => def.key === key)) result[key] = value.split(",").filter(Boolean);
-    });
-    return result;
-  }, [searchParams, filterDefs]);
-
-  const setFilters = (next: ActiveFilters) => {
-    const params = new URLSearchParams(searchParams.toString());
-    Array.from(params.keys())
-      .filter((k) => k.startsWith("f_"))
-      .forEach((k) => params.delete(k));
-    Object.entries(next).forEach(([k, v]) => {
-      if (v.length > 0) params.set(k, v.join(","));
-    });
-    router.replace(`/levers?${params.toString()}`);
-  };
+  // Round <n> : passe par le hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts) —
+  // remplace une implémentation ad hoc qui avait un bug (le premier clic sur un bouton de filtre
+  // ne produisait aucun effet visible, voir le commentaire du hook pour le détail).
+  const { activeFilters, setFilters } = useFilterBarState(filterDefs);
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams.toString());
