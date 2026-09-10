@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useGlobalFilters, matchesGlobalFilters } from "@/lib/hooks/useGlobalFilters";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
-import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
+import { FilterBar, type FilterDef } from "@/components/shared/FilterBar";
 import {
   Banknote,
   ChevronDown,
@@ -112,8 +112,9 @@ function describeCustomView(view: CustomViewConfig, hierarchyLevels: HierarchyLe
   return `${metricLabel} par ${dimLabels}`;
 }
 
-/** Correspondance dimension → paramètre de filtre global existant (voir `useGlobalFilters`), pour
- * le clic de drill-down depuis un graphique du builder générique vers la liste des leviers.
+/** Correspondance dimension → paramètre de filtre de `/levers` (`f_xxx`, voir
+ * `LeversPagePerformance.tsx`), pour le clic de drill-down depuis un graphique du builder
+ * générique vers la liste des leviers.
  * Uniquement les dimensions qui ont un équivalent dans la barre de filtres du dashboard — les
  * autres dimensions (ex. sponsor, risque, projet) naviguent simplement sans filtre additionnel
  * plutôt que d'échouer. */
@@ -142,7 +143,6 @@ export function DashboardPagePerformance() {
   // `?program=` pour alimenter `useLifecycleLabels` avec le bon scope.
   const selectedProgramId = searchParams.get("program") ?? "";
   const lifecycle = useLifecycleLabels(selectedProgramId || undefined);
-  const { filters, setFilter, resetFilters } = useGlobalFilters();
   // Contexte global "programme actif" — synchronisé dans les deux sens avec le `?program=` de
   // cette page (voir plus bas).
   const { activeProgramId, setActiveProgramId } = useActiveProgram();
@@ -361,68 +361,31 @@ export function DashboardPagePerformance() {
     [data.workstreams, lifecycle, geographyFilterDefs, hierarchyFilterDefs, t]
   );
 
-  // Clés de filtre "activées" indépendamment d'une valeur choisie (voir FilterBar : activer une
-  // dimension démarre à ZÉRO valeur sélectionnée, style Excel). Sans cet état local, un filtre
-  // activé mais encore vide redeviendrait immédiatement "inactif" au prochain rendu puisque
-  // `activeForBar` ne serait dérivé que de `filters.f_X` (qui ne porte aucune valeur tant que rien
-  // n'est coché).
-  const [openFilterKeys, setOpenFilterKeys] = useState<string[]>([]);
+  // Round <n> : hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts) — remplace
+  // l'ancien `useGlobalFilters()` (Context à forme FIXE, 6 clés seulement), qui avait un bug
+  // silencieux : les dimensions dynamiques `geo_*`/`hierarchy_*` (arborescences géographie/finance
+  // configurées par l'entreprise, voir `geographyFilterDefs`/`hierarchyFilterDefs` ci-dessus)
+  // n'avaient pas d'entrée dans la table de correspondance de l'ancien `handleFilterChange` —
+  // sélectionner une valeur sur l'un de ces filtres ne filtrait donc RIEN, silencieusement. Le
+  // hook partagé gère n'importe quelle clé dynamique de `filterDefs` sans table de correspondance.
+  const { activeFilters, setFilters } = useFilterBarState(filterDefs);
 
-  const activeForBar: ActiveFilters = useMemo(() => {
-    const result: ActiveFilters = {};
-    const openSet = new Set(openFilterKeys);
-    if (filters.f_status || openSet.has("status"))
-      result.status = filters.f_status ? filters.f_status.split(",").filter(Boolean) : [];
-    if (filters.f_ws || openSet.has("ws"))
-      result.ws = filters.f_ws ? filters.f_ws.split(",").filter(Boolean) : [];
-    if (filters.f_owner || openSet.has("owner"))
-      result.owner = filters.f_owner ? filters.f_owner.split(",").filter(Boolean) : [];
-    if (filters.f_geography || openSet.has("geography"))
-      result.geography = filters.f_geography ? filters.f_geography.split(",").filter(Boolean) : [];
-    if (filters.f_function || openSet.has("function"))
-      result.function = filters.f_function ? filters.f_function.split(",").filter(Boolean) : [];
-    if (filters.f_type || openSet.has("type"))
-      result.type = filters.f_type ? filters.f_type.split(",").filter(Boolean) : [];
-    return result;
-  }, [filters, openFilterKeys]);
+  const hasActiveFilters = Object.keys(activeFilters).length > 0;
 
-  const hasActiveFilters = Object.keys(activeForBar).length > 0;
-
-  const handleFilterChange = (next: ActiveFilters) => {
-    resetFilters();
-    setOpenFilterKeys(Object.keys(next));
-    const map: Record<string, keyof typeof filters> = {
-      status: "f_status",
-      ws: "f_ws",
-      owner: "f_owner",
-      geography: "f_geography",
-      function: "f_function",
-      type: "f_type",
-    };
-    Object.entries(next).forEach(([key, values]) => {
-      const globalKey = map[key];
-      if (globalKey && values.length > 0) setFilter(globalKey, values.join(","));
-    });
-  };
-
+  // Filtrage générique par `filterDefs` — même patron que `LeversPagePerformance.tsx`/
+  // `app/(app)/hr/etp/page.tsx`/`app/(app)/hr/page.tsx` (voir `useFilterBarState`, même base
+  // partagée). Remplace `matchesGlobalFilters`, dont la forme fixe ne couvrait pas les dimensions
+  // dynamiques ci-dessus (et dont les champs `country`/`risk`/`endMonth`/`endQuarter` n'étaient de
+  // toute façon jamais alimentés par cette page — seul `goToLevers`, plus bas, les utilise pour un
+  // drill-down VERS `/levers`, indépendamment du filtrage local ici).
   const filteredLevers = useMemo(() => {
     return programScopedLevers.filter((l) =>
-      matchesGlobalFilters(
-        {
-          status: lifecycle.label(l.status),
-          ws: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
-          function: l.function,
-          geography: l.geography,
-          country: l.country,
-          owner: l.owner,
-          type: l.type,
-          risk: l.risk,
-          end: l.end,
-        },
-        filters
-      )
+      Object.entries(activeFilters).every(([key, values]) => {
+        const def = filterDefs.find((d) => d.key === key);
+        return !def || values.length === 0 || values.includes(def.getValue(l));
+      })
     );
-  }, [programScopedLevers, data.workstreams, filters, lifecycle]);
+  }, [programScopedLevers, activeFilters, filterDefs]);
 
   const filteredData = useMemo(() => {
     return {
@@ -463,7 +426,7 @@ export function DashboardPagePerformance() {
   useEffect(() => {
     setUnderPage(0);
     setDependencyPage(0);
-  }, [selectedProgramId, filters]);
+  }, [selectedProgramId, activeFilters]);
 
   useEffect(() => {
     setUnderPage(0);
@@ -606,10 +569,14 @@ export function DashboardPagePerformance() {
   const sankeyChrono = engine.sankeyChronology(filteredData);
   const bridge = engine.financialBridge(filteredData, bridgeGranularity);
 
+  // Reporte les filtres actuellement actifs sur CE dashboard vers `/levers` (Bibliothèque de
+  // leviers) — dont les `FilterDef.key` sont toujours préfixés `f_` (`f_status`, `f_geo_xxx`,
+  // `f_hierarchy_xxx`…, voir `LeversPagePerformance.tsx`), alors que les clés de `filterDefs`
+  // ci-dessus ne le sont pas (`status`, `geo_xxx`, `hierarchy_xxx`…) — d'où le préfixage ici.
   const goToLevers = (params: Record<string, string>) => {
     const globalParams: Record<string, string> = {};
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value) globalParams[key] = value;
+    Object.entries(activeFilters).forEach(([key, values]) => {
+      if (values.length > 0) globalParams[`f_${key}`] = values.join(",");
     });
     const merged = { ...globalParams, ...params };
     const qs = new URLSearchParams(merged).toString();
@@ -2088,7 +2055,7 @@ export function DashboardPagePerformance() {
           {t("dashboard.filters")}
           {hasActiveFilters && (
             <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-bold">
-              {Object.keys(activeForBar).length}
+              {Object.keys(activeFilters).length}
             </span>
           )}
         </button>
@@ -2097,8 +2064,8 @@ export function DashboardPagePerformance() {
             <FilterBar
               items={programScopedLevers}
               defs={filterDefs}
-              active={activeForBar}
-              onChange={handleFilterChange}
+              active={activeFilters}
+              onChange={setFilters}
             />
           </div>
         )}
@@ -2107,8 +2074,8 @@ export function DashboardPagePerformance() {
         <FilterBar
           items={programScopedLevers}
           defs={filterDefs}
-          active={activeForBar}
-          onChange={handleFilterChange}
+          active={activeFilters}
+          onChange={setFilters}
         />
       </div>
 

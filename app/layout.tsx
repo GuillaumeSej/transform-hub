@@ -3,7 +3,6 @@ import { Hanken_Grotesk, Spline_Sans_Mono } from "next/font/google";
 import "./globals.css";
 import { RoleProvider } from "@/lib/hooks/useRole";
 import { ToastProvider } from "@/lib/hooks/useToast";
-import { FilterProvider } from "@/lib/hooks/useGlobalFilters";
 import { I18nProvider } from "@/lib/i18n/useTranslation";
 import { assetPath } from "@/lib/utils";
 
@@ -41,17 +40,18 @@ export const viewport: Viewport = {
   themeColor: "#000000",
 };
 
-// RoleProvider/ToastProvider/FilterProvider vivent ici (racine) plutôt que dans AppShell :
-// /login en a besoin aussi, et AppShell n'enrobe désormais que les routes protégées.
+// RoleProvider/ToastProvider vivent ici (racine) plutôt que dans AppShell : /login en a besoin
+// aussi, et AppShell n'enrobe désormais que les routes protégées. (L'ancien `FilterProvider`,
+// Context à forme fixe pour le seul filtrage du dashboard exécutif, a été retiré round <n> — ce
+// dashboard passe désormais par le hook partagé `useFilterBarState`, comme les autres pages à
+// `FilterBar`.)
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr">
       <body className={`${hanken.variable} ${splineMono.variable} font-sans antialiased`}>
         <I18nProvider>
           <RoleProvider>
-            <ToastProvider>
-              <FilterProvider>{children}</FilterProvider>
-            </ToastProvider>
+            <ToastProvider>{children}</ToastProvider>
           </RoleProvider>
         </I18nProvider>
       </body>
