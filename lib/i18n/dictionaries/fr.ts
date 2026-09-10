@@ -1417,12 +1417,24 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.prerequisites.none": "Aucun prérequis.",
   "strategicChantierDetail.prerequisites.noOtherActions": "Aucun autre levier sur ce chantier.",
 
-  "strategicChantierDetail.timeline.title": "Timeline des livrables",
-  "strategicChantierDetail.timeline.empty": "Aucun livrable phasé pour l'instant.",
+  // ─── Bandeaux accordéon des leviers (round <n>) ───────────────────────────────────────────
+  "strategicChantierDetail.leviers.expand": "Déplier",
+  "strategicChantierDetail.leviers.collapse": "Replier",
+
+  // ─── Modale de détail d'un livrable + formulaire de création (round <n>, onglet "Timeline"
+  // fusionné — remplace l'ancien onglet dédié aux phases de livrables) ──────────────────────
+  "strategicChantierDetail.deliverableModal.dueDate": "Échéance",
+  "strategicChantierDetail.deliverableModal.comments": "Commentaires",
+  "strategicChantierDetail.deliverableModal.commentPlaceholder": "Ajouter un commentaire…",
+  "strategicChantierDetail.deliverableModal.noComments": "Aucun commentaire.",
+  "strategicChantierDetail.deliverableForm.leverSelect": "Levier rattaché",
 
   // ─── Onglets de la fiche chantier (round 10, point 2) ─────────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Vue d'ensemble",
-  "strategicChantierDetail.tabs.progression": "Progression",
+  // Round <n> : onglet renommé "Timeline" (fusion avec l'ex-onglet dédié aux phases de
+  // livrables) — clé conservée telle quelle (référencée à 2 endroits dans le composant), seule
+  // la VALEUR change.
+  "strategicChantierDetail.tabs.progression": "Timeline",
   "strategicChantierDetail.tabs.staffing": "Effectifs",
 
   // ─── KPI rattaché à un levier, affiché sur sa ligne (round 10, point 2) ───────────────────

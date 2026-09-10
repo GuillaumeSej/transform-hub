@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
+import { Modal } from "@/components/shared/Modal";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { ChantierStaffingEditor } from "@/components/strategic/ChantierStaffingEditor";
 import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
@@ -13,7 +14,6 @@ import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
 import { SuccessKpiList } from "@/components/strategic/SuccessKpiList";
 import {
   formatTimelineDay,
-  packTimelineLanes,
   timelineColumns,
   timelinePctOf,
   timelineRange,
@@ -21,6 +21,7 @@ import {
   TimelineBar,
   TimelineGridColumns,
   TimelineHeaderRow,
+  TimelineMarker,
   TimelineScaleToggle,
   type TimelineScale,
 } from "@/components/strategic/TimelineBars";
@@ -106,10 +107,6 @@ const INPUT_CLASS =
 const SMALL_INPUT_CLASS =
   "mt-0.5 rounded-md border border-border bg-white px-2 py-1 text-[12px] text-primary outline-none focus:border-bp-coral";
 
-/** Couleur de repli de la timeline de livrables quand l'axe n'a pas de couleur choisie — même
- *  valeur que `ChantierGantt.FALLBACK_COLOR` (le taupe de la palette BearingPoint). */
-const FALLBACK_COLOR = "#a99e9a";
-
 /** Couleur de la pastille de la pastille "{pct}%" du levier (round 14) — même convention que
  *  `MilestoneChecklistPanel.tsx`'s `BUCKET_DOT_CLASS` (dupliquée ici plutôt qu'importée : ce
  *  fichier n'est pas dans le périmètre modifiable de ce round). Repose sur le même bucketing
@@ -136,6 +133,21 @@ function progressionColorFor(pct: number): string {
   if (pct <= 0) return PROGRESSION_COLOR_RED;
   if (pct >= 100) return PROGRESSION_COLOR_GREEN;
   return PROGRESSION_COLOR_AMBER;
+}
+
+/** Couleur du losange d'un livrable sur l'onglet "Timeline" fusionné, à partir de son
+ *  `Deliverable.status` — mêmes 3 couleurs que `progressionColorFor` ci-dessus (todo/rouge,
+ *  in_progress/ambre, done/vert), `undefined` traité comme "todo" (même convention que
+ *  `LevierKanbanStatusControl`). */
+function deliverableStatusColor(status: LevierKanbanStatus | undefined): string {
+  switch (status) {
+    case "done":
+      return PROGRESSION_COLOR_GREEN;
+    case "in_progress":
+      return PROGRESSION_COLOR_AMBER;
+    default:
+      return PROGRESSION_COLOR_RED;
+  }
 }
 
 /** Pourcentage d'avancement AFFICHÉ d'un levier sur l'onglet "Progression" (round 12) — deux modes
@@ -173,10 +185,31 @@ function progressionPctFor(
 const TIMELINE_LABEL_WIDTH = "w-56";
 const DELIVERABLE_LANE_HEIGHT = 28;
 const DELIVERABLE_BAR_HEIGHT = 20;
+/** Hauteur de la sous-piste compacte portant les losanges de livrables sous la barre d'un levier,
+ *  sur l'onglet "Timeline" fusionné (round <n>) — seulement ajoutée si le levier a au moins un
+ *  livrable avec `dueDate` déclarée (voir son calcul dans le rendu de l'onglet). */
+const DELIVERABLE_MARKER_LANE_HEIGHT = 18;
 
 /** « 3 sept. 2026 → 31 déc. 2027 ». */
 function formatRange(start: string, end: string): string {
   return `${formatTimelineDay(start)} → ${formatTimelineDay(end)}`;
+}
+
+/** « 10/09/2026 10:33 » — horodatage d'un commentaire de livrable (round <n>), à partir d'un ISO
+ *  datetime COMPLET (`Deliverable.comments[].createdAt`). Distinct de `formatTimelineDay` : celui-
+ *  ci attend une date ISO simple ("2026-09-03") et ajoute `T00:00:00`, ce qui produit une chaîne
+ *  invalide sur un datetime déjà complet (avec heure/millisecondes/`Z`). Même patron que
+ *  `formatTimestamp` (app/(app)/admin/history/page.tsx). */
+function formatCommentTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /** Ids générés côté client pour les livrables, leurs sous-étapes et les prérequis, sur le modèle de
@@ -195,6 +228,10 @@ function makePhaseId(): string {
 function makePrerequisiteId(): string {
   idSeq += 1;
   return `prereq-${Date.now()}-${idSeq}`;
+}
+function makeCommentId(): string {
+  idSeq += 1;
+  return `comment-${Date.now()}-${idSeq}`;
 }
 
 /** Normalise `ChantierAction.deliverables` en `Deliverable[]`. Défensif à l'égard des actions
@@ -451,6 +488,219 @@ function LevierKanbanStatusControl({
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Modale de détail d'UN livrable (round <n>, onglet "Timeline" fusionné) — ouverte au clic sur son
+ * losange. Statut réutilise `LevierKanbanStatusControl` tel quel (aucune nouvelle logique), date
+ * d'échéance et fil de commentaires en écriture directe (`onPatch`, auto-sauvegarde immédiate comme
+ * `updateActionPrerequisites`/`updateActionKanbanStatus`). Rendu via `Modal` (portal Radix) plutôt
+ * qu'un `Popover` : le contenu est trop riche pour un panneau ancré, et un losange proche du bord
+ * droit du Gantt scrollable couperait un popover non-porté.
+ */
+function DeliverableDetailModal({
+  deliverable,
+  kanbanLabels,
+  labels,
+  users,
+  currentUsername,
+  onClose,
+  onPatch,
+}: {
+  deliverable: Deliverable;
+  kanbanLabels: { title: string; todo: string; inProgress: string; done: string };
+  labels: {
+    dueDate: string;
+    comments: string;
+    commentPlaceholder: string;
+    noComments: string;
+    add: string;
+    close: string;
+  };
+  users: AuthUser[];
+  currentUsername?: string;
+  onClose: () => void;
+  onPatch: (patch: Partial<Deliverable>) => void;
+}) {
+  const [commentText, setCommentText] = useState("");
+  const comments = [...(deliverable.comments ?? [])].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt)
+  );
+  return (
+    <Modal
+      open
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+      title={deliverable.label}
+      footer={
+        <Button variant="outline" size="sm" onClick={onClose}>
+          {labels.close}
+        </Button>
+      }
+    >
+      <label className="block text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+        {labels.dueDate}
+        <input
+          type="date"
+          className={INPUT_CLASS}
+          value={deliverable.dueDate ?? ""}
+          onChange={(e) => onPatch({ dueDate: e.target.value || undefined })}
+        />
+      </label>
+
+      <div className="mt-4">
+        <LevierKanbanStatusControl
+          status={deliverable.status}
+          labels={kanbanLabels}
+          onChange={(status) => onPatch({ status })}
+        />
+      </div>
+
+      <div className="mt-4">
+        <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+          {labels.comments}
+        </span>
+        {comments.length === 0 ? (
+          <p className="mt-1 text-[12px] text-tertiary">{labels.noComments}</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {comments.map((c) => (
+              <li key={c.id} className="rounded-md border border-border bg-neutral-50 p-2">
+                <p className="text-[12px] text-primary">{c.text}</p>
+                <p className="mt-1 text-[10.5px] text-tertiary">
+                  {c.author ? `${resolveUserLabel(c.author, users)} · ` : ""}
+                  {formatCommentTimestamp(c.createdAt)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mt-2 flex gap-2">
+          <input
+            className={`${SMALL_INPUT_CLASS} mt-0 flex-1`}
+            placeholder={labels.commentPlaceholder}
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!commentText.trim()}
+            onClick={() => {
+              onPatch({
+                comments: [
+                  ...(deliverable.comments ?? []),
+                  {
+                    id: makeCommentId(),
+                    text: commentText.trim(),
+                    author: currentUsername,
+                    createdAt: new Date().toISOString(),
+                  },
+                ],
+              });
+              setCommentText("");
+            }}
+          >
+            {labels.add}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Modale de création d'un livrable (round <n>) — déclenchée par le bouton "Ajouter un livrable" de
+ * l'onglet "Timeline" fusionné. Un livrable est embarqué dans UN levier (`ChantierAction.deliverables`)
+ * : sélecteur de levier obligatoire, présélectionné s'il n'y en a qu'un seul.
+ */
+function AddDeliverableForm({
+  actions,
+  kanbanLabels,
+  labels,
+  onCancel,
+  onSubmit,
+}: {
+  actions: ChantierAction[];
+  kanbanLabels: { title: string; todo: string; inProgress: string; done: string };
+  labels: {
+    title: string;
+    leverSelect: string;
+    deliverableLabel: string;
+    dueDate: string;
+    save: string;
+    cancel: string;
+  };
+  onCancel: () => void;
+  onSubmit: (
+    actionId: string,
+    values: { label: string; dueDate: string; status: LevierKanbanStatus }
+  ) => void;
+}) {
+  const [actionId, setActionId] = useState(actions.length === 1 ? actions[0].id : "");
+  const [label, setLabel] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [status, setStatus] = useState<LevierKanbanStatus>("todo");
+  const canSubmit = actionId.trim() !== "" && label.trim() !== "" && dueDate.trim() !== "";
+  return (
+    <Modal
+      open
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onCancel();
+      }}
+      title={labels.title}
+      footer={
+        <>
+          <Button variant="outline" size="sm" onClick={onCancel}>
+            {labels.cancel}
+          </Button>
+          <Button
+            size="sm"
+            disabled={!canSubmit}
+            onClick={() => onSubmit(actionId, { label: label.trim(), dueDate, status })}
+          >
+            {labels.save}
+          </Button>
+        </>
+      }
+    >
+      <label className="block text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+        {labels.leverSelect}
+        <select
+          className={INPUT_CLASS}
+          value={actionId}
+          onChange={(e) => setActionId(e.target.value)}
+        >
+          <option value="">—</option>
+          {actions.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="mt-3 block text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+        {labels.deliverableLabel}
+        <input className={INPUT_CLASS} value={label} onChange={(e) => setLabel(e.target.value)} />
+      </label>
+
+      <label className="mt-3 block text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+        {labels.dueDate}
+        <input
+          type="date"
+          className={INPUT_CLASS}
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
+        />
+      </label>
+
+      <div className="mt-3">
+        <LevierKanbanStatusControl status={status} labels={kanbanLabels} onChange={setStatus} />
+      </div>
+    </Modal>
   );
 }
 
@@ -1011,49 +1261,19 @@ export function ChantierDetailPanel({
   const [pendingDeleteAction, setPendingDeleteAction] = useState<string | null>(null);
   const [pendingDeleteChantier, setPendingDeleteChantier] = useState(false);
 
-  // ── Timeline colorée par livrable (round 4, point 9 — format PERIAL) ────────────────────────
-  // Une ligne par LIVRABLE (toutes actions du chantier confondues), barres = `Deliverable.phases`.
-  // Les livrables sans aucune phase n'ont rien à tracer, ils sont exclus de la timeline (pas de
-  // ligne vide) mais restent visibles dans la liste d'actions ci-dessus.
-  const [timelineScale, setTimelineScale] = useState<TimelineScale>("quarter");
-  const deliverablesWithPhases = useMemo(
-    () =>
-      chantierActions.flatMap((action) =>
-        normalizeDeliverables(action.deliverables)
-          .filter((d) => d.phases.length > 0)
-          // `packTimelineLanes` requiert des items triés par date de début (voir sa doc) — les
-          // phases sont saisies dans l'ordre du formulaire, pas garanties chronologiques.
-          .map((d) => ({
-            ...d,
-            actionName: action.name,
-            phases: [...d.phases].sort((a, b) => a.start.localeCompare(b.start)),
-          }))
-      ),
-    [chantierActions]
-  );
-  const timelineBoundsList = useMemo(
-    () => deliverablesWithPhases.flatMap((d) => d.phases),
-    [deliverablesWithPhases]
-  );
-  const { minTime, maxTime } = useMemo(
-    () => timelineRange(timelineBoundsList, timelineScale),
-    [timelineBoundsList, timelineScale]
-  );
-  const timelineColumnsComputed = useMemo(
-    () => (timelineBoundsList.length === 0 ? [] : timelineColumns(minTime, maxTime, timelineScale)),
-    [minTime, maxTime, timelineScale, timelineBoundsList.length]
-  );
-  const timelineYearBandsComputed = useMemo(
-    () => timelineYearBands(timelineColumnsComputed),
-    [timelineColumnsComputed]
-  );
-  const timelinePctOfComputed = useMemo(() => timelinePctOf(minTime, maxTime), [minTime, maxTime]);
+  // ── Losanges de livrables sur l'onglet "Timeline" (round <n>) — modale de détail (clic sur un
+  // losange) et modale de création (bouton "Ajouter un livrable" du `CardHeader`). État de session
+  // pur, comme `actionForm`/`pendingDeleteAction` ci-dessus.
+  const [openDeliverable, setOpenDeliverable] = useState<{
+    actionId: string;
+    deliverableId: string;
+  } | null>(null);
+  const [addDeliverableOpen, setAddDeliverableOpen] = useState(false);
 
-  // ── Onglet "Progression" (round 12) — une barre par levier, sur son propre axe temporel
-  // `action.start` → `action.end` (pas celui des sous-étapes de livrable ci-dessus, domaine
-  // différent). État d'échelle INDÉPENDANT de `timelineScale` (onglet "Timeline") : même widget
-  // (`TimelineScaleToggle`) pour la cohérence visuelle demandée, mais bascule l'un ne doit pas
-  // changer l'échelle de l'autre onglet, portant une donnée différente.
+  // ── Onglet "Timeline" (ex-"Progression", fusionné avec l'ex-onglet "Timeline" dédié aux phases
+  // de livrables — round <n>, deux vues calendaires disjointes jugées peu lisibles) — une barre par
+  // levier, sur son propre axe temporel `action.start` → `action.end`, complétée par un losange par
+  // livrable ayant une `dueDate` déclarée (voir `deliverableStatusColor`, le rendu plus bas).
   const [progressionScale, setProgressionScale] = useState<TimelineScale>("quarter");
   const { minTime: progressionMinTime, maxTime: progressionMaxTime } = useMemo(
     () => timelineRange(chantierActions, progressionScale),
@@ -1078,11 +1298,11 @@ export function ChantierDetailPanel({
   // ── Onglets (round 10, point 2) — réduisent le long défilement vertical de la fiche ─────────
   // Toujours initialisé sur "leviers" si le panneau s'ouvre déjà avec un `focusActionId` (sinon le
   // surlignage/défilement ci-dessous serait invisible, l'onglet "Leviers" n'étant pas affiché).
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "progression" | "leviers" | "timeline" | "staffing"
-  >(focusActionId ? "leviers" : "overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "progression" | "leviers" | "staffing">(
+    focusActionId ? "leviers" : "overview"
+  );
 
-  // Ciblage interne d'un levier depuis l'onglet "Progression" (round 12) — pendant de
+  // Ciblage interne d'un levier depuis l'onglet "Timeline" (round 12) — pendant de
   // `focusActionId` (prop externe, pilotée par l'appelant via l'URL) mais déclenché DEPUIS ce
   // composant : cliquer une barre doit produire EXACTEMENT le même effet (bascule d'onglet +
   // surlignage + défilement) qu'ouvrir la fiche avec `?action=…`, sans que l'appelant n'ait à
@@ -1090,9 +1310,31 @@ export function ChantierDetailPanel({
   // plus récent, la prop externe ne reprenant la main qu'à son propre changement (effet suivant).
   const [clickedFocusActionId, setClickedFocusActionId] = useState("");
   const effectiveFocusActionId = clickedFocusActionId || focusActionId;
+
+  // ── Bandeaux accordéon des leviers (round <n>) — état de SESSION pur (pas de persistance
+  // Firestore, comme `pendingDeleteAction`) : tous fermés au chargement, un `Set` d'ids ouverts.
+  // Forcé à s'ouvrir depuis 3 endroits : ciblage depuis l'onglet "Timeline"
+  // (`focusLevierFromProgression`/l'effet sur `focusActionId` ci-dessous), et l'édition inline
+  // d'un levier (`setActionForm({mode:"edit",...})`) — sans quoi le contenu vers lequel on
+  // scrolle/édite resterait invisible, replié.
+  const [openLeviers, setOpenLeviers] = useState<Set<string>>(new Set());
+  const openLevier = (actionId: string) =>
+    setOpenLeviers((s) => (s.has(actionId) ? s : new Set(s).add(actionId)));
+  const toggleLevier = (actionId: string) =>
+    setOpenLeviers((s) => {
+      const next = new Set(s);
+      if (next.has(actionId)) {
+        next.delete(actionId);
+      } else {
+        next.add(actionId);
+      }
+      return next;
+    });
+
   const focusLevierFromProgression = (actionId: string) => {
     setActiveTab("leviers");
     setClickedFocusActionId(actionId);
+    openLevier(actionId);
   };
 
   // Même déclencheur que l'effet de défilement ci-dessous (`focusActionId`) : si le panneau reste
@@ -1101,6 +1343,7 @@ export function ChantierDetailPanel({
   useEffect(() => {
     if (focusActionId) {
       setActiveTab("leviers");
+      openLevier(focusActionId);
       // Un `focusActionId` FRAIS (prop externe, ex. lien depuis le dashboard) prime toujours sur un
       // ciblage interne resté en mémoire — sans quoi un clic précédent sur une barre de l'onglet
       // "Progression" masquerait indéfiniment tout changement ultérieur de cette prop.
@@ -1224,6 +1467,62 @@ export function ChantierDetailPanel({
     }
   };
 
+  /** Patch UN livrable d'UN levier (statut, date d'échéance, ajout de commentaire — round <n>) —
+   *  même discipline d'auto-sauvegarde immédiate que `updateActionPrerequisites`/
+   *  `updateActionKanbanStatus` ci-dessus : réécrit le tableau `deliverables` COMPLET du levier
+   *  (`updateChantierAction` fusionne un patch sur le document existant, pas de merge profond sur
+   *  un tableau). */
+  const updateDeliverable = async (
+    actionId: string,
+    deliverableId: string,
+    patch: Partial<Deliverable>
+  ) => {
+    const action = chantierActions.find((a) => a.id === actionId);
+    if (!action) return;
+    const next = normalizeDeliverables(action.deliverables).map((d) =>
+      d.id === deliverableId ? { ...d, ...patch } : d
+    );
+    try {
+      await data.updateChantierAction(actionId, { deliverables: next });
+    } catch (error) {
+      console.error("[betrack] échec d'enregistrement du livrable :", error);
+      showToast(
+        t("strategicAxes.actionSaveErrorTitle"),
+        t("strategicAxes.actionSaveError"),
+        "error"
+      );
+    }
+  };
+
+  /** Crée un NOUVEAU livrable sur un levier existant, depuis le formulaire "Ajouter un livrable"
+   *  de l'onglet "Timeline" (round <n>) — même discipline que `updateDeliverable` ci-dessus. */
+  const addDeliverable = async (
+    actionId: string,
+    values: { label: string; dueDate: string; status: LevierKanbanStatus }
+  ) => {
+    const action = chantierActions.find((a) => a.id === actionId);
+    if (!action) return;
+    const newDeliverable: Deliverable = {
+      id: makeDeliverableId(),
+      label: values.label,
+      phases: [],
+      dueDate: values.dueDate,
+      status: values.status,
+    };
+    const next = [...normalizeDeliverables(action.deliverables), newDeliverable];
+    try {
+      await data.updateChantierAction(actionId, { deliverables: next });
+      showToast(t("strategicAxes.actionUpdated"), values.label, "success");
+    } catch (error) {
+      console.error("[betrack] échec de création du livrable :", error);
+      showToast(
+        t("strategicAxes.actionSaveErrorTitle"),
+        t("strategicAxes.actionSaveError"),
+        "error"
+      );
+    }
+  };
+
   const actionFormLabels: ChantierActionFormLabels = {
     name: t("strategicAxes.actionName"),
     owner: t("strategicAxes.actionOwner"),
@@ -1269,7 +1568,21 @@ export function ChantierDetailPanel({
       ? chantierActions.find((a) => a.id === actionForm.actionId)
       : undefined;
 
-  const timelineHasData = deliverablesWithPhases.length > 0;
+  // ── Livrables (round <n>) — labels partagés par les 2 modales (détail + création) ────────────
+  const deliverableKanbanLabels = {
+    title: t("strategicChantierDetail.kanban.title"),
+    todo: t("strategicChantierDetail.kanban.todo"),
+    inProgress: t("strategicChantierDetail.kanban.inProgress"),
+    done: t("strategicChantierDetail.kanban.done"),
+  };
+  const openDeliverableAction = openDeliverable
+    ? chantierActions.find((a) => a.id === openDeliverable.actionId)
+    : undefined;
+  const openDeliverableItem = openDeliverableAction
+    ? normalizeDeliverables(openDeliverableAction.deliverables).find(
+        (d) => d.id === openDeliverable?.deliverableId
+      )
+    : undefined;
 
   return (
     <div>
@@ -1289,11 +1602,14 @@ export function ChantierDetailPanel({
           [
             { id: "overview", label: t("strategicChantierDetail.tabs.overview", "Vue d'ensemble") },
             {
+              // Round <n> : onglet renommé "Timeline" (fusion avec l'ex-onglet dédié aux phases de
+              // livrables) — clé `tabs.progression` conservée telle quelle pour ne pas casser les
+              // autres traductions qui la référencent (voir aussi le `CardHeader` plus bas), seule
+              // sa VALEUR change dans les 4 dictionnaires.
               id: "progression",
-              label: t("strategicChantierDetail.tabs.progression", "Progression"),
+              label: t("strategicChantierDetail.tabs.progression", "Timeline"),
             },
             { id: "leviers", label: t("strategicAxes.chantierActions") },
-            { id: "timeline", label: t("strategicChantierDetail.timeline.title") },
             { id: "staffing", label: t("strategicChantierDetail.tabs.staffing", "Effectifs") },
           ] as const
         ).map((tab) => (
@@ -1499,33 +1815,41 @@ export function ChantierDetailPanel({
         </Card>
       </div>
 
-      {/* ── Onglet "Progression" (round 12) : une barre par levier, façon Gantt, remplie/colorée
-          selon son avancement — jalons E0→E4 si rattaché à un KPI, sinon mappage d'affichage du
-          kanban classique (voir `progressionPctFor`/`progressionColorFor` en tête de fichier).
-          Réutilise les MÊMES primitives que l'onglet "Timeline" (`TimelineBar`/`TimelineScaleToggle`
-          etc., voir `TimelineBars.tsx`) pour rester visuellement cohérent, mais sur son propre axe
-          temporel (bornes des LEVIERS eux-mêmes, pas des sous-étapes de livrable). ────────────── */}
+      {/* ── Onglet "Timeline" (ex-"Progression", round 12 ; fusionné round <n> avec l'ex-onglet
+          dédié aux phases de livrables) : une barre par levier, façon Gantt, remplie/colorée selon
+          son avancement — jalons E0→E4 si rattaché à un KPI, sinon mappage d'affichage du kanban
+          classique (voir `progressionPctFor`/`progressionColorFor` en tête de fichier) — complétée
+          d'un losange par livrable ayant une `dueDate` déclarée (`TimelineMarker`, couleur via
+          `deliverableStatusColor`), sur le MÊME axe temporel que la barre de son levier parent (pas
+          un axe séparé — c'est justement ce qui manquait à l'ancien onglet dédié). ─────────────── */}
       <div className={activeTab === "progression" ? undefined : "hidden"}>
         <Card>
           <CardHeader
-            title={t("strategicChantierDetail.tabs.progression", "Progression")}
+            title={t("strategicChantierDetail.tabs.progression", "Timeline")}
             actions={
-              chantierActions.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                    {t("strategicAxes.ganttScale")}
-                  </span>
-                  <TimelineScaleToggle
-                    value={progressionScale}
-                    onChange={setProgressionScale}
-                    options={[
-                      { value: "month", label: t("strategicAxes.ganttScaleMonth") },
-                      { value: "quarter", label: t("strategicAxes.ganttScaleQuarter") },
-                      { value: "semester", label: t("strategicAxes.ganttScaleSemester") },
-                    ]}
-                  />
-                </div>
-              )
+              <div className="flex items-center gap-2">
+                {chantierActions.length > 0 && (
+                  <>
+                    <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                      {t("strategicAxes.ganttScale")}
+                    </span>
+                    <TimelineScaleToggle
+                      value={progressionScale}
+                      onChange={setProgressionScale}
+                      options={[
+                        { value: "month", label: t("strategicAxes.ganttScaleMonth") },
+                        { value: "quarter", label: t("strategicAxes.ganttScaleQuarter") },
+                        { value: "semester", label: t("strategicAxes.ganttScaleSemester") },
+                      ]}
+                    />
+                  </>
+                )}
+                {chantierActions.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={() => setAddDeliverableOpen(true)}>
+                    <Plus size={12} /> {t("strategicAxes.addDeliverable")}
+                  </Button>
+                )}
+              </div>
             }
           />
           <CardBody>
@@ -1546,6 +1870,13 @@ export function ChantierDetailPanel({
                     const color = progressionColorFor(pct);
                     const left = progressionPctOfComputed(action.start);
                     const width = Math.max(1.5, progressionPctOfComputed(action.end) - left);
+                    const dueDeliverables = normalizeDeliverables(action.deliverables).filter(
+                      (d) => d.dueDate
+                    );
+                    const laneHeight =
+                      dueDeliverables.length > 0
+                        ? DELIVERABLE_LANE_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT
+                        : DELIVERABLE_LANE_HEIGHT;
                     return (
                       <div
                         key={action.id}
@@ -1559,10 +1890,7 @@ export function ChantierDetailPanel({
                             {action.name}
                           </div>
                         </div>
-                        <div
-                          className="relative flex-1"
-                          style={{ height: DELIVERABLE_LANE_HEIGHT }}
-                        >
+                        <div className="relative flex-1" style={{ height: laneHeight }}>
                           <TimelineGridColumns columns={progressionColumns} />
                           <TimelineBar
                             left={left}
@@ -1578,6 +1906,19 @@ export function ChantierDetailPanel({
                             label={`${pct}%`}
                             labelClassName="min-w-0 flex-1 truncate text-[10px] font-semibold text-primary"
                           />
+                          {dueDeliverables.map((d) => (
+                            <TimelineMarker
+                              key={d.id}
+                              leftPct={progressionPctOfComputed(d.dueDate!)}
+                              top={DELIVERABLE_LANE_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT / 2}
+                              color={deliverableStatusColor(d.status)}
+                              onClick={() =>
+                                setOpenDeliverable({ actionId: action.id, deliverableId: d.id })
+                              }
+                              ariaLabel={d.label}
+                              tooltipText={`${d.label} · ${formatTimelineDay(d.dueDate!)}`}
+                            />
+                          ))}
                         </div>
                       </div>
                     );
@@ -1655,6 +1996,7 @@ export function ChantierDetailPanel({
               <ul className="space-y-2">
                 {chantierActions.map((action) => {
                   const isFocused = action.id === effectiveFocusActionId;
+                  const isOpen = openLeviers.has(action.id);
                   const actionDeliverables = normalizeDeliverables(action.deliverables);
                   const startInfo = canStartAction(action, data.chantierActions, stages);
                   // Défaut défensif pour un levier créé avant l'introduction des jalons E0→E4 (round
@@ -1734,49 +2076,83 @@ export function ChantierDetailPanel({
                       }`}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[13px] font-semibold text-primary">
-                              {action.name}
-                            </span>
-                            {isFocused && (
-                              <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold text-bp-coral">
-                                {t("strategicChantierDetail.actionFocused")}
+                        <button
+                          type="button"
+                          aria-expanded={isOpen}
+                          onClick={() => toggleLevier(action.id)}
+                          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                        >
+                          <ChevronDown
+                            size={16}
+                            aria-hidden
+                            className={`mt-0.5 shrink-0 text-tertiary transition-transform ${isOpen ? "rotate-180" : ""}`}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[13px] font-semibold text-primary">
+                                {action.name}
                               </span>
-                            )}
-                          </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">
-                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-secondary">
-                              {formatTimelineDay(action.start)}
-                              <span className="mx-1 font-bold text-tertiary">→</span>
-                              {formatTimelineDay(action.end)}
-                            </span>
-                            {action.owner && (
-                              <span>· {resolveUserLabel(action.owner, data.users)}</span>
-                            )}
-                            {action.sponsor && (
-                              <span>
-                                · {t("strategicChantierDetail.sponsor")} :{" "}
-                                {resolveUserLabel(action.sponsor, data.users)}
-                              </span>
-                            )}
-                            {!action.indicatorId && (
-                              <AxisStageBadge stageId={action.status} stages={stages} />
-                            )}
-                          </div>
-                          {startInfo.blocked && (
-                            <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber">
-                              <Lock size={10} />{" "}
-                              {t("strategicChantierDetail.prerequisites.blockedBy")}{" "}
-                              {startInfo.reasons.join(", ")}
+                              {isFocused && (
+                                <span className="rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10px] font-semibold text-bp-coral">
+                                  {t("strategicChantierDetail.actionFocused")}
+                                </span>
+                              )}
+                              {/* ── Résumé de statut sur le bandeau fermé (round <n>) : jalon
+                                courant + pastille % si rattaché à un KPI, sinon statut kanban ─── */}
+                              {action.indicatorId ? (
+                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                                  <span
+                                    aria-hidden
+                                    className={`h-1.5 w-1.5 rounded-full ${BUCKET_DOT_CLASS[progressBucket(actionProgressPct)]}`}
+                                  />
+                                  {actionMilestones.currentMilestone} · {actionProgressPct}%
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                                  {action.kanbanStatus === "done"
+                                    ? t("strategicChantierDetail.kanban.done")
+                                    : action.kanbanStatus === "in_progress"
+                                      ? t("strategicChantierDetail.kanban.inProgress")
+                                      : t("strategicChantierDetail.kanban.todo")}
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">
+                              <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-secondary">
+                                {formatTimelineDay(action.start)}
+                                <span className="mx-1 font-bold text-tertiary">→</span>
+                                {formatTimelineDay(action.end)}
+                              </span>
+                              {action.owner && (
+                                <span>· {resolveUserLabel(action.owner, data.users)}</span>
+                              )}
+                              {action.sponsor && (
+                                <span>
+                                  · {t("strategicChantierDetail.sponsor")} :{" "}
+                                  {resolveUserLabel(action.sponsor, data.users)}
+                                </span>
+                              )}
+                              {!action.indicatorId && (
+                                <AxisStageBadge stageId={action.status} stages={stages} />
+                              )}
+                            </div>
+                            {startInfo.blocked && (
+                              <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber">
+                                <Lock size={10} />{" "}
+                                {t("strategicChantierDetail.prerequisites.blockedBy")}{" "}
+                                {startInfo.reasons.join(", ")}
+                              </div>
+                            )}
+                          </div>
+                        </button>
                         <div className="flex shrink-0 items-center gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setActionForm({ mode: "edit", actionId: action.id })}
+                            onClick={() => {
+                              setActionForm({ mode: "edit", actionId: action.id });
+                              openLevier(action.id);
+                            }}
                           >
                             <Pencil size={12} /> {t("strategicAxes.editAction")}
                           </Button>
@@ -1801,284 +2177,201 @@ export function ChantierDetailPanel({
                         </div>
                       </div>
 
-                      {action.description && (
-                        <p className="mt-1.5 text-[12px] text-secondary">{action.description}</p>
-                      )}
+                      {isOpen && (
+                        <>
+                          {action.description && (
+                            <p className="mt-1.5 text-[12px] text-secondary">
+                              {action.description}
+                            </p>
+                          )}
 
-                      <div className="mt-2">
-                        <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                          {t("strategicAxes.deliverables")}
-                        </div>
-                        {actionDeliverables.length === 0 ? (
-                          <p className="text-[12px] text-tertiary">
-                            {t("strategicAxes.noDeliverables")}
-                          </p>
-                        ) : (
-                          <ul className="mt-1 space-y-2">
-                            {actionDeliverables.map((d) => (
-                              <li
-                                key={d.id}
-                                className="rounded-md border border-border bg-neutral-50 p-2"
-                              >
-                                <div className="text-[12px] font-medium text-primary">
-                                  {d.label}
-                                </div>
-                                {d.phases.length > 0 && (
-                                  <div className="mt-1 flex flex-wrap gap-1">
-                                    {d.phases.map((p) => (
-                                      <span
-                                        key={p.id}
-                                        className="rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] text-secondary"
-                                      >
-                                        {formatRange(p.start, p.end)}
-                                        {p.note ? ` · ${p.note}` : ""}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-
-                      {/* ── Suivi du LEVIER : jalons E0→E4 si rattaché à un KPI, sinon kanban
-                        classique (round 8, conditionné à `action.indicatorId`) ─────────────── */}
-                      {action.indicatorId ? (
-                        <div className="mt-3 border-t border-border pt-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
-                              {t("strategicChantierDetail.milestones.title")}
-                            </span>
-                            <span className="flex shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
-                              <span
-                                aria-hidden
-                                className={`h-1.5 w-1.5 rounded-full ${BUCKET_DOT_CLASS[progressBucket(actionProgressPct)]}`}
-                              />
-                              {actionProgressPct}%
-                            </span>
-                          </div>
-                          <div className="mt-1">
-                            {linkedIndicator ? (
-                              <button
-                                onClick={() => navigateAway(`/kpi?indicator=${action.indicatorId}`)}
-                                className="text-[11px] font-medium text-bp-coral hover:underline"
-                              >
-                                {t(
-                                  "strategicChantierDetail.indicatorLink.label",
-                                  "KPI n°{n} · {name}"
-                                )
-                                  .replace("{n}", String(linkedIndicatorNumber ?? "?"))
-                                  .replace("{name}", linkedIndicator.name)}
-                              </button>
+                          <div className="mt-2">
+                            <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                              {t("strategicAxes.deliverables")}
+                            </div>
+                            {actionDeliverables.length === 0 ? (
+                              <p className="text-[12px] text-tertiary">
+                                {t("strategicAxes.noDeliverables")}
+                              </p>
                             ) : (
-                              <span className="text-[11px] text-tertiary">
-                                {t(
-                                  "strategicChantierDetail.indicatorLink.notFound",
-                                  "KPI introuvable"
-                                )}
-                              </span>
+                              <ul className="mt-1 space-y-2">
+                                {actionDeliverables.map((d) => (
+                                  <li
+                                    key={d.id}
+                                    className="rounded-md border border-border bg-neutral-50 p-2"
+                                  >
+                                    <div className="text-[12px] font-medium text-primary">
+                                      {d.label}
+                                    </div>
+                                    {d.phases.length > 0 && (
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {d.phases.map((p) => (
+                                          <span
+                                            key={p.id}
+                                            className="rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] text-secondary"
+                                          >
+                                            {formatRange(p.start, p.end)}
+                                            {p.note ? ` · ${p.note}` : ""}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
                             )}
                           </div>
-                          <div className="mt-2">
-                            <MilestoneStepper
-                              currentMilestone={actionMilestones.currentMilestone}
-                              passedMilestones={actionMilestones.passedMilestones}
-                              currentMilestoneProgressPct={currentMilestoneProgressPct}
-                            />
-                          </div>
-                          <div className="mt-3">
-                            <MilestoneChecklistPanel
-                              milestoneId={actionMilestones.currentMilestone}
-                              items={
-                                actionMilestones.checklists[actionMilestones.currentMilestone] ?? []
-                              }
-                              autoFlags={resolveMilestoneAutoFlags(
-                                actionMilestones.currentMilestone,
-                                action,
-                                data.chantiers,
-                                data.chantierActions
-                              )}
-                              users={data.users}
-                              onChange={(nextItems) => {
-                                updateActionMilestones(action.id, {
-                                  currentMilestone: actionMilestones.currentMilestone,
-                                  passedMilestones: actionMilestones.passedMilestones,
-                                  checklists: {
-                                    ...actionMilestones.checklists,
-                                    [actionMilestones.currentMilestone]: nextItems,
-                                  },
-                                });
-                              }}
-                              onValidateMilestone={() => {
-                                // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
-                                // le dernier), on le laisse tel quel — voir même commentaire historique
-                                // sur l'ancien callback chantier-level, mécanique identique ici.
-                                const currentIndex = MILESTONE_ORDER.indexOf(
-                                  actionMilestones.currentMilestone
-                                );
-                                const nextMilestone =
-                                  MILESTONE_ORDER[currentIndex + 1] ??
-                                  actionMilestones.currentMilestone;
-                                const passedMilestones = actionMilestones.passedMilestones.includes(
-                                  actionMilestones.currentMilestone
-                                )
-                                  ? actionMilestones.passedMilestones
-                                  : [
-                                      ...actionMilestones.passedMilestones,
-                                      actionMilestones.currentMilestone,
-                                    ];
-                                updateActionMilestones(action.id, {
-                                  currentMilestone: nextMilestone,
-                                  passedMilestones,
-                                  checklists: actionMilestones.checklists,
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="mt-3 border-t border-border pt-3">
-                          <LevierKanbanStatusControl
-                            status={action.kanbanStatus}
-                            labels={{
-                              title: t("strategicChantierDetail.kanban.title"),
-                              todo: t("strategicChantierDetail.kanban.todo"),
-                              inProgress: t("strategicChantierDetail.kanban.inProgress"),
-                              done: t("strategicChantierDetail.kanban.done"),
-                            }}
-                            onChange={(kanbanStatus) =>
-                              updateActionKanbanStatus(action.id, kanbanStatus)
-                            }
-                          />
-                        </div>
-                      )}
 
-                      {/* ── Dépendances / Prérequis du LEVIER (round 7 — fusion) ──────────────────
+                          {/* ── Suivi du LEVIER : jalons E0→E4 si rattaché à un KPI, sinon kanban
+                        classique (round 8, conditionné à `action.indicatorId`) ─────────────── */}
+                          {action.indicatorId ? (
+                            <div className="mt-3 border-t border-border pt-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+                                  {t("strategicChantierDetail.milestones.title")}
+                                </span>
+                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                                  <span
+                                    aria-hidden
+                                    className={`h-1.5 w-1.5 rounded-full ${BUCKET_DOT_CLASS[progressBucket(actionProgressPct)]}`}
+                                  />
+                                  {actionProgressPct}%
+                                </span>
+                              </div>
+                              <div className="mt-1">
+                                {linkedIndicator ? (
+                                  <button
+                                    onClick={() =>
+                                      navigateAway(`/kpi?indicator=${action.indicatorId}`)
+                                    }
+                                    className="text-[11px] font-medium text-bp-coral hover:underline"
+                                  >
+                                    {t(
+                                      "strategicChantierDetail.indicatorLink.label",
+                                      "KPI n°{n} · {name}"
+                                    )
+                                      .replace("{n}", String(linkedIndicatorNumber ?? "?"))
+                                      .replace("{name}", linkedIndicator.name)}
+                                  </button>
+                                ) : (
+                                  <span className="text-[11px] text-tertiary">
+                                    {t(
+                                      "strategicChantierDetail.indicatorLink.notFound",
+                                      "KPI introuvable"
+                                    )}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-2">
+                                <MilestoneStepper
+                                  currentMilestone={actionMilestones.currentMilestone}
+                                  passedMilestones={actionMilestones.passedMilestones}
+                                  currentMilestoneProgressPct={currentMilestoneProgressPct}
+                                />
+                              </div>
+                              <div className="mt-3">
+                                <MilestoneChecklistPanel
+                                  milestoneId={actionMilestones.currentMilestone}
+                                  items={
+                                    actionMilestones.checklists[
+                                      actionMilestones.currentMilestone
+                                    ] ?? []
+                                  }
+                                  autoFlags={resolveMilestoneAutoFlags(
+                                    actionMilestones.currentMilestone,
+                                    action,
+                                    data.chantiers,
+                                    data.chantierActions
+                                  )}
+                                  users={data.users}
+                                  onChange={(nextItems) => {
+                                    updateActionMilestones(action.id, {
+                                      currentMilestone: actionMilestones.currentMilestone,
+                                      passedMilestones: actionMilestones.passedMilestones,
+                                      checklists: {
+                                        ...actionMilestones.checklists,
+                                        [actionMilestones.currentMilestone]: nextItems,
+                                      },
+                                    });
+                                  }}
+                                  onValidateMilestone={() => {
+                                    // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
+                                    // le dernier), on le laisse tel quel — voir même commentaire historique
+                                    // sur l'ancien callback chantier-level, mécanique identique ici.
+                                    const currentIndex = MILESTONE_ORDER.indexOf(
+                                      actionMilestones.currentMilestone
+                                    );
+                                    const nextMilestone =
+                                      MILESTONE_ORDER[currentIndex + 1] ??
+                                      actionMilestones.currentMilestone;
+                                    const passedMilestones =
+                                      actionMilestones.passedMilestones.includes(
+                                        actionMilestones.currentMilestone
+                                      )
+                                        ? actionMilestones.passedMilestones
+                                        : [
+                                            ...actionMilestones.passedMilestones,
+                                            actionMilestones.currentMilestone,
+                                          ];
+                                    updateActionMilestones(action.id, {
+                                      currentMilestone: nextMilestone,
+                                      passedMilestones,
+                                      checklists: actionMilestones.checklists,
+                                    });
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-3 border-t border-border pt-3">
+                              <LevierKanbanStatusControl
+                                status={action.kanbanStatus}
+                                labels={{
+                                  title: t("strategicChantierDetail.kanban.title"),
+                                  todo: t("strategicChantierDetail.kanban.todo"),
+                                  inProgress: t("strategicChantierDetail.kanban.inProgress"),
+                                  done: t("strategicChantierDetail.kanban.done"),
+                                }}
+                                onChange={(kanbanStatus) =>
+                                  updateActionKanbanStatus(action.id, kanbanStatus)
+                                }
+                              />
+                            </div>
+                          )}
+
+                          {/* ── Dépendances / Prérequis du LEVIER (round 7 — fusion) ──────────────────
                         titre à changer en "Dépendances / Prérequis" par un round i18n suivant
                         (workstream C, renommage "action" → "levier") — key `prerequisites.title`
                         inchangée volontairement, hors scope ici.
                         Round 9, point 2 : `border-t-2` (plus marqué que le `border-t` du bloc
                         jalons/kanban ci-dessus) pour que les deux sous-sections internes du levier
                         se distinguent d'un coup d'œil. */}
-                      <div className="mt-3 border-t-2 border-border pt-3">
-                        {chantierBlockingAlerts.length > 0 && (
-                          <div className="mb-2 space-y-1">
-                            {chantierBlockingAlerts.map((alert) => (
-                              <div
-                                key={`${alert.targetId}-${alert.type}`}
-                                className="inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber"
-                              >
-                                <Lock size={10} /> {alert.message}
+                          <div className="mt-3 border-t-2 border-border pt-3">
+                            {chantierBlockingAlerts.length > 0 && (
+                              <div className="mb-2 space-y-1">
+                                {chantierBlockingAlerts.map((alert) => (
+                                  <div
+                                    key={`${alert.targetId}-${alert.type}`}
+                                    className="inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber"
+                                  >
+                                    <Lock size={10} /> {alert.message}
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            )}
+                            <PrerequisitesEditor
+                              value={action.prerequisites ?? []}
+                              otherActions={chantierActions.filter((a) => a.id !== action.id)}
+                              labels={actionFormLabels}
+                              onChange={(next) => updateActionPrerequisites(action.id, next)}
+                            />
                           </div>
-                        )}
-                        <PrerequisitesEditor
-                          value={action.prerequisites ?? []}
-                          otherActions={chantierActions.filter((a) => a.id !== action.id)}
-                          labels={actionFormLabels}
-                          onChange={(next) => updateActionPrerequisites(action.id, next)}
-                        />
-                      </div>
+                        </>
+                      )}
                     </li>
                   );
                 })}
               </ul>
-            )}
-          </CardBody>
-        </Card>
-      </div>
-
-      {/* ── Onglet "Timeline" ────────────────────────────────────────────────────────────────── */}
-      <div className={activeTab === "timeline" ? undefined : "hidden"}>
-        {/* ── Timeline colorée par livrable, façon PERIAL ────────────────────────────────────── */}
-        <Card>
-          <CardHeader
-            title={t("strategicChantierDetail.timeline.title")}
-            actions={
-              timelineHasData && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                    {t("strategicAxes.ganttScale")}
-                  </span>
-                  <TimelineScaleToggle
-                    value={timelineScale}
-                    onChange={setTimelineScale}
-                    options={[
-                      { value: "month", label: t("strategicAxes.ganttScaleMonth") },
-                      { value: "quarter", label: t("strategicAxes.ganttScaleQuarter") },
-                      { value: "semester", label: t("strategicAxes.ganttScaleSemester") },
-                    ]}
-                  />
-                </div>
-              )
-            }
-          />
-          <CardBody>
-            {!timelineHasData ? (
-              <p className="py-6 text-center text-[13px] text-tertiary">
-                {t("strategicChantierDetail.timeline.empty")}
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <div className="min-w-[560px]">
-                  <TimelineHeaderRow
-                    columns={timelineColumnsComputed}
-                    yearBands={timelineYearBandsComputed}
-                    labelWidthClassName={TIMELINE_LABEL_WIDTH}
-                  />
-                  {deliverablesWithPhases.map((d) => {
-                    const lanes = packTimelineLanes(d.phases);
-                    const trackHeight = Math.max(1, lanes.length) * DELIVERABLE_LANE_HEIGHT;
-                    const color = axis?.color ?? FALLBACK_COLOR;
-                    return (
-                      <div
-                        key={d.id}
-                        className="flex items-stretch gap-2 border-b border-border py-1.5 last:border-b-0"
-                      >
-                        <div className={`${TIMELINE_LABEL_WIDTH} shrink-0`}>
-                          <div
-                            className="truncate text-[11.5px] font-semibold text-primary"
-                            title={d.label}
-                          >
-                            {d.label}
-                          </div>
-                          <div className="truncate text-[10px] text-tertiary">{d.actionName}</div>
-                        </div>
-                        <div className="relative flex-1" style={{ height: trackHeight }}>
-                          <TimelineGridColumns columns={timelineColumnsComputed} />
-                          {lanes.map((lane, laneIndex) =>
-                            lane.map((phase) => {
-                              const left = timelinePctOfComputed(phase.start);
-                              const width = Math.max(1.5, timelinePctOfComputed(phase.end) - left);
-                              return (
-                                <TimelineBar
-                                  key={phase.id}
-                                  left={left}
-                                  width={width}
-                                  top={laneIndex * DELIVERABLE_LANE_HEIGHT}
-                                  height={DELIVERABLE_BAR_HEIGHT}
-                                  color={color}
-                                  variant="solid"
-                                  roundedClassName="rounded-sm"
-                                  ariaLabel={d.label}
-                                  tooltipText={`${d.label} · ${formatTimelineDay(phase.start)} → ${formatTimelineDay(phase.end)}${
-                                    phase.note ? ` · ${phase.note}` : ""
-                                  }`}
-                                  label={phase.note || formatRange(phase.start, phase.end)}
-                                  labelClassName="min-w-0 flex-1 truncate text-[10px] font-medium"
-                                  inlineMinWidthPct={10}
-                                />
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
             )}
           </CardBody>
         </Card>
@@ -2124,6 +2417,47 @@ export function ChantierDetailPanel({
             : t("strategicAxes.deleteChantier")}
         </Button>
       </div>
+
+      {/* ── Modales livrables (round <n>) — détail (clic losange) et création ────────────────── */}
+      {openDeliverableItem && openDeliverable && (
+        <DeliverableDetailModal
+          deliverable={openDeliverableItem}
+          kanbanLabels={deliverableKanbanLabels}
+          labels={{
+            dueDate: t("strategicChantierDetail.deliverableModal.dueDate"),
+            comments: t("strategicChantierDetail.deliverableModal.comments"),
+            commentPlaceholder: t("strategicChantierDetail.deliverableModal.commentPlaceholder"),
+            noComments: t("strategicChantierDetail.deliverableModal.noComments"),
+            add: t("common.add"),
+            close: t("common.close"),
+          }}
+          users={data.users}
+          currentUsername={user?.username}
+          onClose={() => setOpenDeliverable(null)}
+          onPatch={(patch) =>
+            updateDeliverable(openDeliverable.actionId, openDeliverable.deliverableId, patch)
+          }
+        />
+      )}
+      {addDeliverableOpen && (
+        <AddDeliverableForm
+          actions={chantierActions}
+          kanbanLabels={deliverableKanbanLabels}
+          labels={{
+            title: t("strategicAxes.addDeliverable"),
+            leverSelect: t("strategicChantierDetail.deliverableForm.leverSelect"),
+            deliverableLabel: t("strategicAxes.deliverableLabel"),
+            dueDate: t("strategicChantierDetail.deliverableModal.dueDate"),
+            save: t("common.save"),
+            cancel: t("common.cancel"),
+          }}
+          onCancel={() => setAddDeliverableOpen(false)}
+          onSubmit={async (actionId, values) => {
+            await addDeliverable(actionId, values);
+            setAddDeliverableOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -829,6 +829,26 @@ export type Deliverable = {
   id: string;
   label: string;
   phases: DeliverablePhase[];
+  /** Date d'échéance ISO du livrable, INDÉPENDANTE des `phases` ci-dessus — positionne le losange
+   *  du livrable sur l'onglet "Timeline" fusionné de la fiche chantier (round <n>, remplace
+   *  l'ancien onglet dédié aux phases). Les `phases` restent éditables comme sous-étapes internes
+   *  mais ne sont plus dessinées en Gantt dans cette timeline. Absent = livrable sans échéance
+   *  déclarée, invisible sur la timeline (mais toujours listé dans l'onglet "Leviers"). */
+  dueDate?: string;
+  /** Statut à 3 états du livrable — RÉUTILISE `LevierKanbanStatus` (pas de nouvel enum), même
+   *  convention que `ChantierAction.kanbanStatus` : `undefined` traité comme "todo". Colore le
+   *  losange sur la timeline (todo → rouge, in_progress → ambre, done → vert). */
+  status?: LevierKanbanStatus;
+  /** Mini fil de commentaires embarqué directement dans le document (round <n>) — distinct du
+   *  système de commentaires leviers/sub-levers du module Plan Performance (collection Firestore
+   *  séparée) ; ici un simple tableau, pas de sous-collection. */
+  comments?: {
+    id: string;
+    text: string;
+    /** Username de l'auteur si connu (voir `resolveUserLabel`) — absent si non renseigné. */
+    author?: string;
+    createdAt: string; // ISO datetime
+  }[];
 };
 
 export type ChantierAction = {

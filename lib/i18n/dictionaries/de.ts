@@ -1344,12 +1344,25 @@ const de: Record<string, string> = {
   "strategicChantierDetail.prerequisites.noOtherActions":
     "Keine weitere Aktivität in diesem Workstream.",
 
-  "strategicChantierDetail.timeline.title": "Zeitleiste der Liefergegenstände",
-  "strategicChantierDetail.timeline.empty": "Noch kein phasierter Liefergegenstand.",
+  // ─── Aufklappbare Aktivitätsbanner (Runde <n>) ────────────────────────────────────────────
+  "strategicChantierDetail.leviers.expand": "Aufklappen",
+  "strategicChantierDetail.leviers.collapse": "Einklappen",
+
+  // ─── Detailmodal eines Liefergegenstands + Erstellungsformular (Runde <n>, fusionierter
+  // Reiter "Zeitleiste" — ersetzt den alten, den Phasen der Liefergegenstände gewidmeten
+  // Reiter) ───────────────────────────────────────────────────────────────────────────────
+  "strategicChantierDetail.deliverableModal.dueDate": "Fälligkeitsdatum",
+  "strategicChantierDetail.deliverableModal.comments": "Kommentare",
+  "strategicChantierDetail.deliverableModal.commentPlaceholder": "Kommentar hinzufügen…",
+  "strategicChantierDetail.deliverableModal.noComments": "Keine Kommentare.",
+  "strategicChantierDetail.deliverableForm.leverSelect": "Zugehörige Aktivität",
 
   // ─── Reiter der Detailansicht des Arbeitspakets (Runde 10, Punkt 2) ───────────────────────
   "strategicChantierDetail.tabs.overview": "Übersicht",
-  "strategicChantierDetail.tabs.progression": "Fortschritt",
+  // Runde <n>: Reiter umbenannt in "Zeitleiste" (fusioniert mit dem alten, den Phasen der
+  // Liefergegenstände gewidmeten Reiter) — Schlüssel unverändert (an 2 Stellen referenziert),
+  // nur der WERT ändert sich.
+  "strategicChantierDetail.tabs.progression": "Zeitleiste",
   "strategicChantierDetail.tabs.staffing": "Personaleinsatz",
 
   // ─── An eine Aktivität geknüpfter KPI, auf ihrer Zeile angezeigt (Runde 10, Punkt 2) ──────
