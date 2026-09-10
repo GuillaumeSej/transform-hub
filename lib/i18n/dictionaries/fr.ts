@@ -507,6 +507,8 @@ const fr: Record<string, string> = {
   "hr.column.comment": "Commentaire",
   "hr.column.salaryImpact": "Impact salarial",
   "hr.column.socialCost": "Coût social",
+  "hr.column.socialCostBudget": "Coût social budgété",
+  "hr.column.socialCostActual": "Coût social réel",
   "hr.granularity.month": "Mois",
   "hr.granularity.quarter": "Trim.",
   "hr.granularity.year": "Année",
@@ -524,6 +526,14 @@ const fr: Record<string, string> = {
   "hr.widget.socialCostEnr": "Coûts sociaux exceptionnels et cumul",
   "hr.widget.socialCostEnrHint":
     "Réalisé + prévision vs plan initial · la colonne Coût social est comptabilisée une seule fois",
+  "hr.widget.socialCostBudgetVsActual": "Coût social — budgété vs réel",
+  "hr.widget.socialCostBudgetVsActualHint":
+    "Coût social réactualisé (réel) vs plan initial figé (budgété) · dépassement en corail",
+  "hr.socialGauge.budget": "Budgété",
+  "hr.socialGauge.actual": "Réel (réactualisé)",
+  "hr.socialGauge.budgetMarker": "Repère budget",
+  "hr.socialGauge.overrun": "Dépassement du budget",
+  "hr.socialGauge.onTrack": "Dans les clous",
   "hr.widget.netEconomy": "Économie nette (savings récurrentes − ENR)",
   "hr.widget.netEconomyHint":
     "Réalisé + prévision : économies staff costs récurrentes − coûts sociaux one-off, par période et en cumul",

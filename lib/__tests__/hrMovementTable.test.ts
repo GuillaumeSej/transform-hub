@@ -47,6 +47,23 @@ describe("buildMovementTableRows", () => {
     expect(row.socialScheme).toBe("PSE");
   });
 
+  it("falls back social cost budget/actual to the raw cost when no snapshot exists", () => {
+    const [row] = buildMovementTableRows([movement], [lever], programs);
+    expect(row.socialCostBudget).toBe(20000);
+    expect(row.socialCostActual).toBe(20000);
+  });
+
+  it("derives social cost budget from lockedPlan and actual from reforecast", () => {
+    const withSnapshots: WorkforceMovement = {
+      ...movement,
+      lockedPlan: { fte: 1, salaryImpact: -80000, savings: 80000, cost: 20000 },
+      reforecast: { fte: 1, salaryImpact: -80000, savings: 80000, cost: 24000 },
+    };
+    const [row] = buildMovementTableRows([withSnapshots], [lever], programs);
+    expect(row.socialCostBudget).toBe(20000);
+    expect(row.socialCostActual).toBe(24000);
+  });
+
   it("returns placeholders when no lever/program is found", () => {
     const [row] = buildMovementTableRows(
       [{ ...movement, leverId: "UNKNOWN", inPSE: false }],

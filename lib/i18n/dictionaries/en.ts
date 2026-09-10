@@ -482,6 +482,8 @@ const en: Record<string, string> = {
   "hr.column.comment": "Comment",
   "hr.column.salaryImpact": "Salary impact",
   "hr.column.socialCost": "Social cost",
+  "hr.column.socialCostBudget": "Budgeted social cost",
+  "hr.column.socialCostActual": "Actual social cost",
   "hr.granularity.month": "Month",
   "hr.granularity.quarter": "Qtr",
   "hr.granularity.year": "Year",
@@ -499,6 +501,14 @@ const en: Record<string, string> = {
   "hr.widget.socialCostEnr": "Exceptional social costs and cumulative",
   "hr.widget.socialCostEnrHint":
     "Realized + forecast vs initial plan · the Social cost column is counted only once",
+  "hr.widget.socialCostBudgetVsActual": "Social cost — budgeted vs actual",
+  "hr.widget.socialCostBudgetVsActualHint":
+    "Reforecast (actual) social cost vs frozen initial plan (budgeted) · overrun in coral",
+  "hr.socialGauge.budget": "Budgeted",
+  "hr.socialGauge.actual": "Actual (reforecast)",
+  "hr.socialGauge.budgetMarker": "Budget marker",
+  "hr.socialGauge.overrun": "Over budget",
+  "hr.socialGauge.onTrack": "On track",
   "hr.widget.netEconomy": "Net economy (recurring savings − social costs)",
   "hr.widget.netEconomyHint":
     "Realized + forecast: recurring staff cost savings − one-off social costs, by period and cumulative",

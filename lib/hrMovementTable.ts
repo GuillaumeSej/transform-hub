@@ -26,6 +26,13 @@ export type HrMovementTableRow = {
   comment: string;
   salaryImpact: number;
   cost: number;
+  /** Coût social BUDGÉTÉ (€) — snapshot figé `lockedPlan.cost` (repli sur `cost` brut si le
+   *  mouvement n'a pas encore été validé/figé). C'est la référence "plan initial". */
+  socialCostBudget: number;
+  /** Coût social RÉEL / réactualisé (€) — `reforecast.cost` (repli `lockedPlan.cost` → `cost`).
+   *  Reflète la dérive constatée (indemnités renégociées, coûts sociaux révisés). Comparé au
+   *  budgété pour lire "dans les clous ou pas". */
+  socialCostActual: number;
   movement: WorkforceMovement;
 };
 
@@ -60,6 +67,8 @@ export function buildMovementTableRows(
       comment: movement.comment ?? "",
       salaryImpact: movement.salaryImpact,
       cost: movement.cost,
+      socialCostBudget: movement.lockedPlan?.cost ?? movement.cost,
+      socialCostActual: movement.reforecast?.cost ?? movement.lockedPlan?.cost ?? movement.cost,
       movement,
     };
   });

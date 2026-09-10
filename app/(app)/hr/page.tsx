@@ -45,6 +45,7 @@ import { ExecutionStatusChart } from "@/components/shared/charts/HrExecutionChar
 import { MovementStatusMatrix } from "@/components/shared/charts/MovementStatusMatrix";
 import { ForcedDepartureStatusChart } from "@/components/shared/charts/ForcedDepartureStatusChart";
 import { MovementStatusByTypeChart } from "@/components/shared/charts/MovementStatusByTypeChart";
+import { SocialCostBudgetGauge } from "@/components/shared/charts/SocialCostBudgetGauge";
 import { HrOwnerActionTable } from "@/components/shared/HrOwnerActionTable";
 import {
   EnrPeriodCumulChart,
@@ -384,10 +385,23 @@ export default function HrDashboardPage() {
       render: (row) => fmtCurr(row.salaryImpact / 1_000_000),
     },
     {
-      key: "cost",
-      label: t("hr.column.socialCost", "Coût social"),
+      key: "socialCostBudget",
+      label: t("hr.column.socialCostBudget", "Coût social budgété"),
       align: "right",
-      render: (row) => fmtCurr(row.cost / 1_000_000),
+      render: (row) => fmtCurr(row.socialCostBudget / 1_000_000),
+    },
+    {
+      key: "socialCostActual",
+      label: t("hr.column.socialCostActual", "Coût social réel"),
+      align: "right",
+      render: (row) => {
+        const over = row.socialCostActual > row.socialCostBudget;
+        return (
+          <span className={over ? "font-semibold text-bp-coral" : undefined}>
+            {fmtCurr(row.socialCostActual / 1_000_000)}
+          </span>
+        );
+      },
     },
   ];
 
@@ -860,6 +874,27 @@ export default function HrDashboardPage() {
                 {t(
                   "hr.widget.socialCostEnrHint",
                   "Réalisé + prévision vs plan initial · la colonne Coût social est comptabilisée une seule fois"
+                )}
+              </p>
+            </CardBody>
+          </Card>
+        );
+      case "social-cost-budget-vs-actual":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title={t("hr.widget.socialCostBudgetVsActual", "Coût social — budgété vs réel")}
+            />
+            <CardBody>
+              <SocialCostBudgetGauge
+                budget={summary.socialCost.target}
+                actual={summary.socialCost.reforecast}
+              />
+              <p className="mt-3 text-[11px] text-tertiary">
+                {t(
+                  "hr.widget.socialCostBudgetVsActualHint",
+                  "Coût social réactualisé (réel) vs plan initial figé (budgété) · dépassement en corail"
                 )}
               </p>
             </CardBody>

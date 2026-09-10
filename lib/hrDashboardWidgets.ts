@@ -44,6 +44,7 @@ export type HrWidgetType =
   | "staff-cost-waterfall"
   | "savings-period-cumul"
   | "social-cost-enr"
+  | "social-cost-budget-vs-actual"
   | "net-economy"
   | "movement-rhythm"
   | "movement-status-by-type"
@@ -142,6 +143,14 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     // Nouveau — ENR (coûts sociaux exceptionnels) par période + courbe cumul.
     label: "Coûts sociaux exceptionnels et cumul",
     icon: "TrendingDown",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+  },
+  {
+    type: "social-cost-budget-vs-actual",
+    // Synthèse budgété vs réel du coût social — jauge + % d'écart ("dans les clous ou pas").
+    label: "Coût social — budgété vs réel",
+    icon: "Gauge",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
   },
@@ -360,6 +369,11 @@ const HR_LAYOUT_KEY = "betrack_hr_dashboard_layout_v5";
  *  antérieurs, une seule fois, en respectant les suppressions ultérieures de l'utilisateur. */
 const HR_GOODUELLE_MIGRATION_KEY = "betrack_hr_dashboard_gooduelle_migration_v1";
 
+/** Clé de migration one-shot pour l'ajout du widget « Coût social — budgété vs réel » aux layouts
+ *  persistés antérieurs (même mécanique additive que la migration Gooduelle : ajouté une seule
+ *  fois, ne réapparaît pas si l'utilisateur le supprime ensuite). */
+const HR_SOCIAL_BUDGET_MIGRATION_KEY = "betrack_hr_dashboard_social_budget_migration_v1";
+
 const NEW_GOODUELLE_WIDGET_TYPES: HrWidgetType[] = [
   "staff-cost-waterfall",
   "savings-period-cumul",
@@ -395,6 +409,27 @@ export function migrateHrGooduelleWidgets(
   // Retire aussi l'ancien fte-trajectory (remplacé par les nouveaux graphiques Gooduelle).
   const filtered = layout.filter((w) => w.type !== ("fte-trajectory" as HrWidgetType));
   return [...filtered, ...toAdd];
+}
+
+/** Ajoute une seule fois le widget « Coût social — budgété vs réel » aux layouts persistés
+ *  antérieurs (placé juste après le widget ENR s'il est présent, sinon en fin de layout).
+ *  Respecte une suppression ultérieure par l'utilisateur (grâce au drapeau one-shot). */
+export function migrateHrSocialBudgetWidget(
+  layout: HrWidgetInstance[],
+  migrationAlreadyApplied: boolean
+): HrWidgetInstance[] {
+  if (migrationAlreadyApplied) return layout;
+  if (layout.some((w) => w.type === "social-cost-budget-vs-actual")) return layout;
+  const def = getHrWidgetDef("social-cost-budget-vs-actual");
+  if (!def) return layout;
+  const instance: HrWidgetInstance = {
+    instanceId: "social-cost-budget-vs-actual",
+    type: "social-cost-budget-vs-actual",
+    span: def.defaultSpan,
+  };
+  const enrIndex = layout.findIndex((w) => w.type === "social-cost-enr");
+  if (enrIndex === -1) return [...layout, instance];
+  return [...layout.slice(0, enrIndex + 1), instance, ...layout.slice(enrIndex + 1)];
 }
 
 const isBrowser = () => typeof window !== "undefined";
@@ -446,21 +481,30 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
   try {
     const raw = window.localStorage.getItem(HR_LAYOUT_KEY);
     if (!raw) {
+      // Layout par défaut : contient déjà tous les widgets du registre — on marque les migrations
+      // one-shot comme appliquées pour ne pas ré-injecter au prochain chargement.
       window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+      window.localStorage.setItem(HR_SOCIAL_BUDGET_MIGRATION_KEY, "1");
       return buildHrDefaultLayout();
     }
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidHrInstance)) {
       window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+      window.localStorage.setItem(HR_SOCIAL_BUDGET_MIGRATION_KEY, "1");
       return buildHrDefaultLayout();
     }
     const migrationAlreadyApplied = window.localStorage.getItem(HR_GOODUELLE_MIGRATION_KEY) === "1";
+    const socialBudgetApplied = window.localStorage.getItem(HR_SOCIAL_BUDGET_MIGRATION_KEY) === "1";
     const sanitized = (parsed as HrWidgetInstance[]).map(sanitizeHrInstance);
-    const migrated = migrateHrGooduelleWidgets(sanitized, migrationAlreadyApplied);
-    if (!migrationAlreadyApplied) {
+    const migrated = migrateHrSocialBudgetWidget(
+      migrateHrGooduelleWidgets(sanitized, migrationAlreadyApplied),
+      socialBudgetApplied
+    );
+    if (!migrationAlreadyApplied || !socialBudgetApplied) {
       window.localStorage.setItem(HR_LAYOUT_KEY, JSON.stringify(migrated));
     }
     window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+    window.localStorage.setItem(HR_SOCIAL_BUDGET_MIGRATION_KEY, "1");
     return migrated;
   } catch {
     return buildHrDefaultLayout();
@@ -472,6 +516,7 @@ export function saveHrDashboardLayout(layout: HrWidgetInstance[]): void {
   try {
     window.localStorage.setItem(HR_LAYOUT_KEY, JSON.stringify(layout));
     window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+    window.localStorage.setItem(HR_SOCIAL_BUDGET_MIGRATION_KEY, "1");
   } catch (err) {
     console.error(
       "[betrack storage] échec d'écriture localStorage pour le layout dashboard RH :",
