@@ -1370,6 +1370,10 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.allocatedBudget": "Budget alloué",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
     "Le budget du chantier ne peut pas être inférieur à la somme des budgets de ses leviers.",
+  // ─── Consommé déclaratif du chantier (round <n>) — pendants de `allocatedBudget` ci-dessus pour
+  // `Chantier.consumedBudget`/`consumedFte` ────────────────────────────────────────────────────
+  "strategicChantierDetail.consumedBudget": "Budget consommé",
+  "strategicChantierDetail.consumedFte": "ETP consommés",
   "strategicChantierDetail.confidentialityLevel": "Niveau de confidentialité",
   "strategicChantierDetail.confidentialityLevelNone": "Aucun (visible par tous)",
 
@@ -1447,6 +1451,8 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.actionForm.budgetLabel": "Budget du levier",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
     "Le total des budgets des leviers dépasserait le budget alloué du chantier.",
+  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Budget consommé du levier",
+  "strategicChantierDetail.actionForm.consumedFteLabel": "ETP consommés du levier",
   "strategicChantierDetail.successCriteria.placeholder": "On sera content en [année] si...",
 
   // ─── Plan Stratégique — jalons E0→E4 (round 5) ─────────────────────────────────────────
@@ -1664,6 +1670,9 @@ const fr: Record<string, string> = {
   "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierModalTitle": "Répartition du budget par chantier",
   "effectifs.moneyBudget.byChantierEmpty": "Aucun chantier avec budget renseigné sur cet axe.",
+  // Consommé vs alloué (round 15) — mirroir déclaratif de la section ci-dessus, `Chantier.consumedBudget`.
+  "effectifs.moneyBudget.consumedTitle": "Consommé vs budget alloué",
+  "effectifs.moneyBudget.consumedByAxisTitle": "Consommé vs budget par axe",
 
   // ─── Répartition des ETP par période (round 7 — StaffingPeriodBreakdown.tsx) ──────────────
   "staffingPeriod.title": "Répartition des ETP par période",
@@ -1753,6 +1762,16 @@ const fr: Record<string, string> = {
   // Round 12 : moyenne des `progressPct` déclarés des leviers de la colonne (`{pct}` substitué
   // manuellement, voir `LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.avgProgress": "{pct}% en moyenne",
+  // Round 15 : feuille de route programme (`ProgramRoadmap.tsx`) — vue globale, pleine largeur, en
+  // bas du dashboard (une ligne par levier, tous axes/chantiers confondus).
+  "strategicDashboard.roadmap.title": "Feuille de route du plan",
+  "strategicDashboard.roadmap.empty": "Aucun levier daté sur le programme.",
+  "strategicDashboard.roadmap.scale": "Échelle",
+  "strategicDashboard.roadmap.scaleQuarter": "Trimestre",
+  "strategicDashboard.roadmap.scaleSemester": "Semestre",
+  "strategicDashboard.roadmap.scaleYear": "Année",
+  "strategicDashboard.roadmap.progress": "Avancement",
+  "strategicDashboard.roadmap.leviersSuffix": "leviers",
 
   // ─── Plan Stratégique — fiche de configuration d'un programme (admin) ─────
   "adminPrograms.manage": "Gérer",

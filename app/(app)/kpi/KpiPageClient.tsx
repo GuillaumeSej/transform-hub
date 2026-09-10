@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LineChart, Lock, Pencil, Plus, Target } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -521,22 +521,35 @@ export function KpiPageClient() {
   const selectedChantierId = searchParams.get("chantier");
   const selectedOwner = searchParams.get("owner");
 
-  const setParam = (key: "axis" | "chantier" | "owner", value: string | null) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set(key, value);
-    else params.delete(key);
-    const qs = params.toString();
-    router.replace(qs ? `/kpi?${qs}` : "/kpi");
-  };
+  // `{ scroll: false }` est OBLIGATOIRE ici : le comportement par défaut du router App Router
+  // (`router.push`/`replace`) est de ramener le scroll en haut de page à CHAQUE navigation, y
+  // compris une simple mise à jour de query string sur la page courante — un changement de filtre
+  // faisait donc perdre sa position à l'utilisateur en pleine liste d'indicateurs. Le contrat
+  // `?indicator=<id>` (plus bas) n'est pas concerné : il défile lui-même explicitement via
+  // `scrollIntoView` une fois la page prête, indépendamment de ce réglage.
+  const setParam = useCallback(
+    (key: "axis" | "chantier" | "owner", value: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) params.set(key, value);
+      else params.delete(key);
+      const qs = params.toString();
+      router.replace(qs ? `/kpi?${qs}` : "/kpi", { scroll: false });
+    },
+    [router, searchParams]
+  );
 
   const axisOptions: DropdownOption[] = useMemo(
     () => axes.map((a) => ({ value: a.id, label: a.name })),
     [axes]
   );
 
+  // Portée par `selectedAxisId` (round 15) : quand un axe est sélectionné, ne proposer que SES
+  // chantiers plutôt que tous les chantiers de tous les axes — même logique de scoping que
+  // `filteredIndicators` plus bas, appliquée ici à la liste d'options plutôt qu'aux indicateurs.
   const chantierGroups: DropdownGroup[] = useMemo(
     () =>
       axes
+        .filter((axis) => !selectedAxisId || axis.id === selectedAxisId)
         .map((axis) => ({
           groupLabel: axis.name,
           options: chantiers
@@ -544,19 +557,66 @@ export function KpiPageClient() {
             .map((c) => ({ value: c.id, label: c.name })),
         }))
         .filter((group) => group.options.length > 0),
-    [axes, chantiers]
+    [axes, chantiers, selectedAxisId]
   );
 
+  // Portée par `selectedAxisId`/`selectedChantierId` (round 15) : ne proposer que les responsables
+  // d'indicateurs cohérents avec les filtres Axe/Chantier déjà actifs — mêmes deux conditions que
+  // `filteredIndicators` plus bas (le filtre `owner` lui-même n'est volontairement pas appliqué
+  // ici, sous peine de ne plus jamais pouvoir changer de responsable une fois un premier choisi).
   const ownerOptions: DropdownOption[] = useMemo(() => {
+    const scoped = indicators.filter((i) => {
+      if (selectedAxisId && i.axisId !== selectedAxisId) return false;
+      if (selectedChantierId && i.chantierId !== selectedChantierId) return false;
+      return true;
+    });
     const names = new Set(
-      indicators.map((i) =>
-        resolveIndicatorOwner(i, axes, chantiers, t("strategicAxes.unassigned"))
-      )
+      scoped.map((i) => resolveIndicatorOwner(i, axes, chantiers, t("strategicAxes.unassigned")))
     );
     return Array.from(names)
       .sort()
       .map((name) => ({ value: name, label: name }));
-  }, [indicators, axes, chantiers, t]);
+  }, [indicators, axes, chantiers, t, selectedAxisId, selectedChantierId]);
+
+  // Garde-fou de cohérence (round 15) : si le changement d'axe rend le chantier ou le responsable
+  // actuellement sélectionné invalide (option qui a disparu de `chantierGroups`/`ownerOptions`
+  // ci-dessus), on le réinitialise plutôt que de laisser une sélection périmée filtrer
+  // silencieusement `filteredIndicators` vers un résultat vide. Les deux clés sont retirées en UN
+  // seul `router.replace` (plutôt que deux effets séparés appelant chacun `setParam`) : deux appels
+  // successifs construiraient chacun leurs `URLSearchParams` à partir du même `searchParams` de ce
+  // rendu, le second écrasant alors la suppression faite par le premier.
+  useEffect(() => {
+    // Tant que `useStrategicData` charge encore, `axes`/`chantiers`/`indicators` sont des tableaux
+    // vides temporaires (voir `useStrategicData.ts`) — évaluer la validité maintenant prendrait
+    // n'importe quel `chantier`/`owner` déjà présent dans l'URL (ex. lien profond partagé) pour
+    // invalide et l'effacerait avant même que les données réelles n'arrivent.
+    if (dataLoading) return;
+
+    const chantier = selectedChantierId ? chantiers.find((c) => c.id === selectedChantierId) : null;
+    const chantierInvalid =
+      !!selectedChantierId &&
+      (!chantier || (!!selectedAxisId && chantier.axisId !== selectedAxisId));
+
+    const validOwners = new Set(ownerOptions.map((o) => o.value));
+    const ownerInvalid = !!selectedOwner && !validOwners.has(selectedOwner);
+
+    if (!chantierInvalid && !ownerInvalid) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (chantierInvalid) params.delete("chantier");
+    if (ownerInvalid) params.delete("owner");
+    const qs = params.toString();
+    router.replace(qs ? `/kpi?${qs}` : "/kpi", { scroll: false });
+  }, [
+    selectedAxisId,
+    selectedChantierId,
+    selectedOwner,
+    chantiers,
+    ownerOptions,
+    searchParams,
+    router,
+    dataLoading,
+  ]);
 
   const filteredIndicators = useMemo(
     () =>

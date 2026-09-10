@@ -1308,6 +1308,8 @@ const en: Record<string, string> = {
   "strategicChantierDetail.allocatedBudget": "Allocated budget",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
     "The workstream's budget cannot be lower than the sum of its levers' budgets.",
+  "strategicChantierDetail.consumedBudget": "Consumed budget",
+  "strategicChantierDetail.consumedFte": "Consumed FTEs",
   "strategicChantierDetail.confidentialityLevel": "Confidentiality level",
   "strategicChantierDetail.confidentialityLevelNone": "None (visible to everyone)",
 
@@ -1383,6 +1385,8 @@ const en: Record<string, string> = {
   "strategicChantierDetail.actionForm.budgetLabel": "Lever budget",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
     "The total of the lever budgets would exceed the workstream's allocated budget.",
+  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Consumed lever budget",
+  "strategicChantierDetail.actionForm.consumedFteLabel": "Consumed lever FTEs",
   "strategicChantierDetail.successCriteria.placeholder": "We'll be happy in [year] if...",
 
   // ─── Strategic Plan — E0-E4 milestones (round 5) ────────────────────────────
@@ -1589,6 +1593,8 @@ const en: Record<string, string> = {
   "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierModalTitle": "Budget breakdown by workstream",
   "effectifs.moneyBudget.byChantierEmpty": "No workstream with a budget set on this axis.",
+  "effectifs.moneyBudget.consumedTitle": "Consumed vs allocated budget",
+  "effectifs.moneyBudget.consumedByAxisTitle": "Consumed vs budget by axis",
 
   // ─── FTE split by period (round 7 — StaffingPeriodBreakdown.tsx) ──────────────────────────
   "staffingPeriod.title": "FTE split by period",
@@ -1675,6 +1681,16 @@ const en: Record<string, string> = {
   // Round 12: average of the declared `progressPct` of the column's leviers (`{pct}` substituted
   // manually, see `LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.avgProgress": "{pct}% average",
+  // Round 15: program-wide roadmap (`ProgramRoadmap.tsx`) — full-width, whole-program view at the
+  // bottom of the dashboard (one row per levier, across all axes/chantiers).
+  "strategicDashboard.roadmap.title": "Program roadmap",
+  "strategicDashboard.roadmap.empty": "No dated lever on this program.",
+  "strategicDashboard.roadmap.scale": "Scale",
+  "strategicDashboard.roadmap.scaleQuarter": "Quarter",
+  "strategicDashboard.roadmap.scaleSemester": "Half-year",
+  "strategicDashboard.roadmap.scaleYear": "Year",
+  "strategicDashboard.roadmap.progress": "Progress",
+  "strategicDashboard.roadmap.leviersSuffix": "levers",
 
   // ─── Strategic Plan — program configuration screen (admin) ────────────────
   "adminPrograms.manage": "Manage",

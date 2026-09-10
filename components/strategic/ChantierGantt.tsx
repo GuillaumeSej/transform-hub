@@ -25,7 +25,6 @@ import {
   chantierMilestoneProgressPct,
   type ChantierDependencyAlert,
 } from "@/lib/axisLogic";
-import { resolveMaturityStageLabel } from "@/lib/hooks/useMaturityStages";
 import type { Chantier, ChantierAction, MaturityStageConfig } from "@/types";
 
 /**
@@ -285,8 +284,7 @@ export function ChantierGantt({
                         {chantier.name}
                       </div>
                       <div className="truncate text-[10px] text-tertiary">
-                        {resolveMaturityStageLabel(chantier.stage, stages)} · {items.length}{" "}
-                        {l.actionsSuffix}
+                        {items.length} {l.actionsSuffix}
                       </div>
                       <div className="mt-1 flex items-center gap-1.5">
                         <div className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-100">
@@ -374,9 +372,7 @@ export function ChantierGantt({
                               ariaLabel={action.name}
                               tooltipText={`${action.name} · ${formatTimelineDay(action.start)} → ${formatTimelineDay(
                                 action.end
-                              )} · ${resolveMaturityStageLabel(action.status, stages)}${
-                                action.owner ? ` · ${action.owner}` : ""
-                              }${
+                              )}${action.owner ? ` · ${action.owner}` : ""}${
                                 startInfo.blocked
                                   ? ` · ${l.blockedBy} ${startInfo.reasons.join(", ")}`
                                   : ""

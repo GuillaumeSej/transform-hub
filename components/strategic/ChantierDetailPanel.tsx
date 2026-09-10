@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Modal } from "@/components/shared/Modal";
 import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
-import { ChantierStaffingEditor } from "@/components/strategic/ChantierStaffingEditor";
+import { ChantierStaffingEditor, formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
 import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
 import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
@@ -97,6 +98,8 @@ type ChantierActionFormValues = Pick<
   | "prerequisites"
   | "indicatorId"
   | "budget"
+  | "consumedBudget"
+  | "consumedFte"
 >;
 
 const INPUT_CLASS =
@@ -116,6 +119,33 @@ const BUCKET_DOT_CLASS: Record<ProgressBucket, string> = {
   red: "bg-rag-red",
   amber: "bg-rag-amber",
   green: "bg-rag-green",
+};
+
+/** Fond teinté + texte de la pastille "{jalon} · {pct}%" du levier (round <n>) — même convention
+ *  que `MilestoneChecklistPanel.tsx`'s `BUCKET_INPUT_CLASS` (fond `-light` + texte de la couleur du
+ *  bucket, `green` utilisant `text-rag-green-dark` pour le contraste, mêmes tokens qu'elle). Avant
+ *  ce round la pastille avait un fond neutre fixe (`bg-neutral-100`) quel que soit le statut — trop
+ *  discret au retour PO ("le pourcentage est à peine visible"). */
+const BUCKET_PILL_CLASS: Record<ProgressBucket, string> = {
+  empty: "bg-neutral-100 text-primary",
+  red: "bg-rag-red-light text-rag-red",
+  amber: "bg-rag-amber-light text-rag-amber",
+  green: "bg-rag-green-light text-rag-green-dark",
+};
+
+/** Accent de bordure gauche de la ligne de levier (round <n>) — retour PO : la liste des leviers
+ *  "fait très blanc, très texte", sans signal de statut visible sans déplier chaque ligne. Dérivé
+ *  de la même palette que `BUCKET_DOT_CLASS`/`BUCKET_PILL_CLASS` ci-dessus (mêmes tokens `rag-*`),
+ *  jamais une nouvelle palette. Combiné à `border-border`/`border-bp-coral` (existant) via
+ *  `border-l-4` : Tailwind émet les utilitaires `border-l-{couleur}` après l'utilitaire générique
+ *  `border-{couleur}` (toutes faces), donc l'accent gauche l'emporte sur la couleur de bordure
+ *  générale sans qu'aucune spécificité CSS ne soit forcée à la main — même mécanique que le motif
+ *  "carte à liseré coloré" déjà répandu en Tailwind. */
+const BUCKET_BORDER_CLASS: Record<ProgressBucket, string> = {
+  empty: "border-l-neutral-300",
+  red: "border-l-rag-red",
+  amber: "border-l-rag-amber",
+  green: "border-l-rag-green",
 };
 
 /** Hex des tokens `--red`/`--amber`/`--green` (voir `app/globals.css`) — repris ici EN DUR, comme
@@ -195,6 +225,18 @@ function formatRange(start: string, end: string): string {
   return `${formatTimelineDay(start)} → ${formatTimelineDay(end)}`;
 }
 
+/** Formatage d'un montant budgétaire pour `BudgetVsActualBar` (round <n>, blocs "consommé"
+ *  chantier/levier) — jusqu'ici aucun montant `allocatedBudget`/`budget` de cette fiche n'était
+ *  formaté au-delà du champ de saisie brut (`<input type="number">`), donc pas de convention
+ *  d'affichage existante à reprendre à l'identique ; séparateurs de milliers (`Intl.NumberFormat`,
+ *  même bibliothèque que `formatFte` de `ChantierStaffingEditor.tsx`) pour rester lisible dans une
+ *  barre compacte, devise du programme actif en suffixe (même convention que le libellé du champ
+ *  `allocatedBudget` : `{label} ({currency})`). */
+function formatBudgetAmount(value: number, currency?: string): string {
+  const formatted = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
+  return currency ? `${formatted} ${currency}` : formatted;
+}
+
 /** « 10/09/2026 10:33 » — horodatage d'un commentaire de livrable (round <n>), à partir d'un ISO
  *  datetime COMPLET (`Deliverable.comments[].createdAt`). Distinct de `formatTimelineDay` : celui-
  *  ci attend une date ISO simple ("2026-09-03") et ajoute `T00:00:00`, ce qui produit une chaîne
@@ -265,6 +307,12 @@ type ChantierActionFormLabels = {
   indicatorNone: string;
   budget: string;
   budgetExceedsChantier: string;
+  consumedBudget: string;
+  consumedFte: string;
+  /** Unité ETP affichée dans la `BudgetVsActualBar` du champ `consumedFte` ci-dessous — même clé
+   *  que `staffing.fteUnit` (`ChantierStaffingEditor.tsx`), ce formulaire n'appelant pas `t()`
+   *  lui-même (tous ses libellés lui arrivent déjà traduits via `labels`). */
+  fteUnit: string;
   description: string;
   deliverables: string;
   deliverablesHint: string;
@@ -540,7 +588,7 @@ function DeliverableDetailModal({
         </Button>
       }
     >
-      <label className="block text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+      <label className="block text-xs font-bold uppercase tracking-wide text-secondary">
         {labels.dueDate}
         <input
           type="date"
@@ -723,6 +771,7 @@ function ChantierActionForm({
   indicators,
   currency,
   chantierAllocatedBudget,
+  plannedFte,
   onSubmit,
   onCancel,
   labels,
@@ -747,6 +796,12 @@ function ChantierActionForm({
    *  budgets leviers (`otherActions` + ce formulaire) ne le dépasse pas. `undefined` = pas de
    *  plafond, aucune validation. */
   chantierAllocatedBudget?: number;
+  /** ETP PLANIFIÉS de CE LEVIER (round <n>) — somme des lignes `ChantierStaffing` rattachées à son
+   *  `actionId`, déjà calculée par l'appelant (`plannedFteByAction`, voir son commentaire) : ce
+   *  formulaire n'a pas accès à `data.staffing`, seulement à ce total. Sert de "planned" à la
+   *  `BudgetVsActualBar` ETP ci-dessous, pendant de `chantierAllocatedBudget` pour l'ETP. `undefined`
+   *  (nouveau levier pas encore créé, donc sans `actionId` à interroger) traité comme `0`. */
+  plannedFte?: number;
   onSubmit: (values: ChantierActionFormValues) => void | Promise<void>;
   onCancel: () => void;
   labels: ChantierActionFormLabels;
@@ -764,6 +819,15 @@ function ChantierActionForm({
   // chantier (texte libre local, ici bufferisé jusqu'au submit comme le reste de ce formulaire).
   const [budgetInput, setBudgetInput] = useState(
     initial?.budget !== undefined ? String(initial.budget) : ""
+  );
+  // Consommé optionnel du levier (round <n>) — pendants déclaratifs de `budget` ci-dessus pour
+  // `ChantierAction.consumedBudget`/`consumedFte` : EXACTE même discipline de saisie (texte libre
+  // local, bufferisé jusqu'au submit).
+  const [consumedBudgetInput, setConsumedBudgetInput] = useState(
+    initial?.consumedBudget !== undefined ? String(initial.consumedBudget) : ""
+  );
+  const [consumedFteInput, setConsumedFteInput] = useState(
+    initial?.consumedFte !== undefined ? String(initial.consumedFte) : ""
   );
   const [description, setDescription] = useState(initial?.description ?? "");
   // Un champ de saisie PAR livrable (plus de convention « une ligne = un livrable »), chacun
@@ -789,6 +853,15 @@ function ChantierActionForm({
     (parsedBudget !== undefined && !Number.isNaN(parsedBudget) ? parsedBudget : 0);
   const budgetExceeds =
     chantierAllocatedBudget !== undefined && projectedLeviersBudgetTotal > chantierAllocatedBudget;
+
+  // Consommé (round <n>) — même parti pris de parsing que `parsedBudget` ci-dessus, pas de
+  // validation de plafond (le dépassement est une information, pas une erreur bloquante : voir
+  // `BudgetVsActualBar` qui le signale déjà visuellement en rouge).
+  const trimmedConsumedBudget = consumedBudgetInput.trim();
+  const parsedConsumedBudget =
+    trimmedConsumedBudget === "" ? undefined : Number(trimmedConsumedBudget);
+  const trimmedConsumedFte = consumedFteInput.trim();
+  const parsedConsumedFte = trimmedConsumedFte === "" ? undefined : Number(trimmedConsumedFte);
 
   const canSubmit = !requiredFieldsMissing && !submitting && !budgetExceeds;
 
@@ -871,6 +944,12 @@ function ChantierActionForm({
         ...(indicatorId ? { indicatorId } : {}),
         ...(parsedBudget !== undefined && !Number.isNaN(parsedBudget)
           ? { budget: parsedBudget }
+          : {}),
+        ...(parsedConsumedBudget !== undefined && !Number.isNaN(parsedConsumedBudget)
+          ? { consumedBudget: parsedConsumedBudget }
+          : {}),
+        ...(parsedConsumedFte !== undefined && !Number.isNaN(parsedConsumedFte)
+          ? { consumedFte: parsedConsumedFte }
           : {}),
         ...(parsedDeliverables.length > 0 ? { deliverables: parsedDeliverables } : {}),
         ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
@@ -986,6 +1065,56 @@ function ChantierActionForm({
             value={budgetInput}
             onChange={(e) => setBudgetInput(e.target.value)}
             className={INPUT_CLASS}
+          />
+        </div>
+        {/* ── Consommé du levier (round <n>) — pendants déclaratifs de "budget" ci-dessus pour
+          `ChantierAction.consumedBudget`/`consumedFte`, EXACTE même discipline de saisie
+          (bufferisé jusqu'au submit, comme le reste de ce formulaire). ─────────────────────── */}
+        <div>
+          <label className="text-xs font-medium text-secondary" htmlFor="ca-consumed-budget">
+            {labels.consumedBudget} {labels.optional}
+            {currency ? ` (${currency})` : ""}
+          </label>
+          <input
+            id="ca-consumed-budget"
+            type="number"
+            inputMode="decimal"
+            value={consumedBudgetInput}
+            onChange={(e) => setConsumedBudgetInput(e.target.value)}
+            className={INPUT_CLASS}
+          />
+          <BudgetVsActualBar
+            className="mt-2"
+            planned={parsedBudget !== undefined && !Number.isNaN(parsedBudget) ? parsedBudget : 0}
+            consumed={
+              parsedConsumedBudget !== undefined && !Number.isNaN(parsedConsumedBudget)
+                ? parsedConsumedBudget
+                : 0
+            }
+            formatValue={(n) => formatBudgetAmount(n, currency)}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-secondary" htmlFor="ca-consumed-fte">
+            {labels.consumedFte} {labels.optional}
+          </label>
+          <input
+            id="ca-consumed-fte"
+            type="number"
+            inputMode="decimal"
+            value={consumedFteInput}
+            onChange={(e) => setConsumedFteInput(e.target.value)}
+            className={INPUT_CLASS}
+          />
+          <BudgetVsActualBar
+            className="mt-2"
+            planned={plannedFte ?? 0}
+            consumed={
+              parsedConsumedFte !== undefined && !Number.isNaN(parsedConsumedFte)
+                ? parsedConsumedFte
+                : 0
+            }
+            formatValue={(n) => `${formatFte(n)} ${labels.fteUnit}`}
           />
         </div>
       </div>
@@ -1186,6 +1315,27 @@ export function ChantierDetailPanel({
     [data.chantierActions, chantier]
   );
 
+  // ETP PLANIFIÉS (round <n>) — pendant de `sumLevierBudgets`/`allocatedBudget` pour l'ETP : il
+  // n'existe pas de champ "ETP cible" déclaratif sur `Chantier`/`ChantierAction` (contrairement au
+  // budget), le seul planifié disponible est la somme des lignes de staffing (`ChantierStaffing`,
+  // même collection que `ChantierStaffingEditor.tsx`, déjà abonnée via `data.staffing`). Sert de
+  // "planned" à la `BudgetVsActualBar` ETP ci-dessous, chantier ET par levier (une ligne de staffing
+  // SANS `actionId` compte dans le total chantier mais dans AUCUN total levier — staffing transverse,
+  // même lecture que `ChantierStaffingEditor`).
+  const chantierStaffing = useMemo(
+    () => (chantier ? data.staffing.filter((s) => s.chantierId === chantier.id) : []),
+    [data.staffing, chantier]
+  );
+  const plannedFteTotal = chantierStaffing.reduce((sum, s) => sum + (s.fte || 0), 0);
+  const plannedFteByAction = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of chantierStaffing) {
+      if (!s.actionId) continue;
+      map.set(s.actionId, (map.get(s.actionId) ?? 0) + (s.fte || 0));
+    }
+    return map;
+  }, [chantierStaffing]);
+
   // KPI proposables au sélecteur optionnel d'un levier (round 8) — même filtre que `KpiPageClient.tsx`
   // (`grouped` useMemo, `macro`/`byChantier`) : indicateurs macro de l'AXE du chantier (pas de
   // `chantierId`) + indicateurs déjà rattachés à CE chantier précis. Jamais un indicateur d'un autre
@@ -1251,6 +1401,26 @@ export function ChantierDetailPanel({
       chantier?.allocatedBudget !== undefined ? String(chantier.allocatedBudget) : ""
     );
   }, [chantier?.id, chantier?.allocatedBudget]);
+
+  // Blocs "consommé" (round <n>) — pendants déclaratifs de "budget alloué" ci-dessus pour
+  // `Chantier.consumedBudget`/`consumedFte` (voir leur commentaire dans `types/index.ts`) : EXACTE
+  // même discipline de saisie (texte libre local, sauvegarde au blur, clé RETIRÉE via
+  // `clearChantierField` si vidée plutôt que valoir `undefined`).
+  const [consumedBudgetInput, setConsumedBudgetInput] = useState(
+    chantier?.consumedBudget !== undefined ? String(chantier.consumedBudget) : ""
+  );
+  useEffect(() => {
+    setConsumedBudgetInput(
+      chantier?.consumedBudget !== undefined ? String(chantier.consumedBudget) : ""
+    );
+  }, [chantier?.id, chantier?.consumedBudget]);
+
+  const [consumedFteInput, setConsumedFteInput] = useState(
+    chantier?.consumedFte !== undefined ? String(chantier.consumedFte) : ""
+  );
+  useEffect(() => {
+    setConsumedFteInput(chantier?.consumedFte !== undefined ? String(chantier.consumedFte) : "");
+  }, [chantier?.id, chantier?.consumedFte]);
 
   const [actionForm, setActionForm] = useState<{
     mode: "create" | "edit";
@@ -1402,7 +1572,9 @@ export function ChantierDetailPanel({
    *  la clé simplement ABSENTE de l'objet. Restreint aux deux champs réellement effacables depuis
    *  cette fiche (pas un `keyof Chantier` générique : les autres champs de `Chantier` sont
    *  obligatoires, les en retirer casserait le type). */
-  const clearChantierField = async (field: "confidentialityLevel" | "allocatedBudget") => {
+  const clearChantierField = async (
+    field: "confidentialityLevel" | "allocatedBudget" | "consumedBudget" | "consumedFte"
+  ) => {
     try {
       const rest = { ...chantier };
       delete rest[field];
@@ -1559,6 +1731,9 @@ export function ChantierDetailPanel({
     missingHint: t("strategicChantierDetail.actionForm.missingHint"),
     budget: t("strategicChantierDetail.actionForm.budgetLabel"),
     budgetExceedsChantier: t("strategicChantierDetail.actionForm.budgetExceedsChantier"),
+    consumedBudget: t("strategicChantierDetail.actionForm.consumedBudgetLabel"),
+    consumedFte: t("strategicChantierDetail.actionForm.consumedFteLabel"),
+    fteUnit: t("staffing.fteUnit"),
     submit: t("common.save"),
     cancel: t("common.cancel"),
   };
@@ -1723,6 +1898,78 @@ export function ChantierDetailPanel({
                     updateChantierField({ allocatedBudget: parsed });
                   }}
                   className={INPUT_CLASS}
+                />
+              </div>
+              {/* ── Budget consommé du chantier (round <n>) — pendant déclaratif de "budget alloué"
+                ci-dessus pour `Chantier.consumedBudget` : EXACTE même discipline de saisie (texte
+                libre local, sauvegarde au blur, clé retirée si vidée), voir `clearChantierField`. */}
+              <div>
+                <label
+                  className="text-xs font-medium text-text-secondary"
+                  htmlFor="chantier-consumed-budget"
+                >
+                  {t("strategicChantierDetail.consumedBudget")}
+                  {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
+                </label>
+                <input
+                  id="chantier-consumed-budget"
+                  type="number"
+                  inputMode="decimal"
+                  value={consumedBudgetInput}
+                  onChange={(e) => setConsumedBudgetInput(e.target.value)}
+                  onBlur={() => {
+                    const trimmed = consumedBudgetInput.trim();
+                    if (trimmed === "") {
+                      if (chantier.consumedBudget !== undefined)
+                        clearChantierField("consumedBudget");
+                      return;
+                    }
+                    const parsed = Number(trimmed);
+                    if (Number.isNaN(parsed) || parsed === chantier.consumedBudget) return;
+                    updateChantierField({ consumedBudget: parsed });
+                  }}
+                  className={INPUT_CLASS}
+                />
+                <BudgetVsActualBar
+                  className="mt-2"
+                  planned={chantier.allocatedBudget ?? 0}
+                  consumed={chantier.consumedBudget ?? 0}
+                  formatValue={(n) => formatBudgetAmount(n, activeProgram?.currency)}
+                />
+              </div>
+              {/* ── ETP consommés du chantier (round <n>) — même pendant pour `Chantier.consumedFte`,
+                comparé aux ETP PLANIFIÉS (`plannedFteTotal`, somme des lignes `ChantierStaffing` du
+                chantier — voir son commentaire ci-dessus, pas de champ "ETP cible" déclaratif). */}
+              <div>
+                <label
+                  className="text-xs font-medium text-text-secondary"
+                  htmlFor="chantier-consumed-fte"
+                >
+                  {t("strategicChantierDetail.consumedFte")} ({t("staffing.fteUnit")})
+                </label>
+                <input
+                  id="chantier-consumed-fte"
+                  type="number"
+                  inputMode="decimal"
+                  value={consumedFteInput}
+                  onChange={(e) => setConsumedFteInput(e.target.value)}
+                  onBlur={() => {
+                    const trimmed = consumedFteInput.trim();
+                    if (trimmed === "") {
+                      if (chantier.consumedFte !== undefined) clearChantierField("consumedFte");
+                      return;
+                    }
+                    const parsed = Number(trimmed);
+                    if (Number.isNaN(parsed) || parsed === chantier.consumedFte) return;
+                    updateChantierField({ consumedFte: parsed });
+                  }}
+                  className={INPUT_CLASS}
+                />
+                <BudgetVsActualBar
+                  className="mt-2"
+                  planned={plannedFteTotal}
+                  consumed={chantier.consumedFte ?? 0}
+                  formatValue={(n) => `${formatFte(n)} ${t("staffing.fteUnit")}`}
                 />
               </div>
               <div>
@@ -1960,6 +2207,9 @@ export function ChantierDetailPanel({
                   indicators={chantierAvailableIndicators}
                   currency={activeProgram?.currency}
                   chantierAllocatedBudget={chantier.allocatedBudget}
+                  plannedFte={
+                    actionForm.actionId ? plannedFteByAction.get(actionForm.actionId) : undefined
+                  }
                   labels={actionFormLabels}
                   onCancel={() => setActionForm(null)}
                   onSubmit={async (values) => {
@@ -2021,6 +2271,11 @@ export function ChantierDetailPanel({
                       data.chantierActions
                     )
                   );
+                  // Bucket d'affichage du levier (round <n>) — calculé UNE fois par ligne, réutilisé
+                  // par la pastille de statut ET l'accent de bordure gauche ci-dessous, pour que les
+                  // deux restent forcément en accord (jamais deux appels distincts à `progressBucket`
+                  // qui pourraient diverger si l'un des deux oublie de suivre un futur changement).
+                  const actionBucket = progressBucket(actionProgressPct);
                   // Moyenne déclarée du jalon COURANT SEUL (round 14) — pendant `MilestoneStepper`
                   // de la "tranche jalon courant" de `milestoneProgressPct` (lib/axisLogic.ts,
                   // étape 2 de son commentaire), répliquée ici plutôt que déplacée dans ce module
@@ -2069,16 +2324,21 @@ export function ChantierDetailPanel({
                       ref={(el) => {
                         actionRefs.current[action.id] = el;
                       }}
-                      className={`rounded-md border p-3 ${
+                      className={`rounded-md border p-3 border-l-4 ${
                         isFocused
                           ? "border-bp-coral ring-1 ring-bp-coral/40"
-                          : "border-border bg-neutral-50 shadow-sm"
+                          : `border-border bg-neutral-50 shadow-sm ${BUCKET_BORDER_CLASS[actionBucket]}`
                       }`}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <button
                           type="button"
                           aria-expanded={isOpen}
+                          aria-label={
+                            isOpen
+                              ? t("strategicChantierDetail.leviers.collapse")
+                              : t("strategicChantierDetail.leviers.expand")
+                          }
                           onClick={() => toggleLevier(action.id)}
                           className="flex min-w-0 flex-1 items-start gap-2 text-left"
                         >
@@ -2100,10 +2360,12 @@ export function ChantierDetailPanel({
                               {/* ── Résumé de statut sur le bandeau fermé (round <n>) : jalon
                                 courant + pastille % si rattaché à un KPI, sinon statut kanban ─── */}
                               {action.indicatorId ? (
-                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                                <span
+                                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-bold ${BUCKET_PILL_CLASS[actionBucket]}`}
+                                >
                                   <span
                                     aria-hidden
-                                    className={`h-1.5 w-1.5 rounded-full ${BUCKET_DOT_CLASS[progressBucket(actionProgressPct)]}`}
+                                    className={`h-2 w-2 rounded-full ${BUCKET_DOT_CLASS[actionBucket]}`}
                                   />
                                   {actionMilestones.currentMilestone} · {actionProgressPct}%
                                 </span>
@@ -2200,7 +2462,7 @@ export function ChantierDetailPanel({
                                     key={d.id}
                                     className="rounded-md border border-border bg-neutral-50 p-2"
                                   >
-                                    <div className="text-[12px] font-medium text-primary">
+                                    <div className="text-sm font-medium text-primary">
                                       {d.label}
                                     </div>
                                     {d.phases.length > 0 && (
@@ -2208,7 +2470,7 @@ export function ChantierDetailPanel({
                                         {d.phases.map((p) => (
                                           <span
                                             key={p.id}
-                                            className="rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] text-secondary"
+                                            className="rounded-full border border-border bg-white px-2 py-0.5 text-xs text-secondary"
                                           >
                                             {formatRange(p.start, p.end)}
                                             {p.note ? ` · ${p.note}` : ""}
@@ -2230,10 +2492,12 @@ export function ChantierDetailPanel({
                                 <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
                                   {t("strategicChantierDetail.milestones.title")}
                                 </span>
-                                <span className="flex shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
+                                <span
+                                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-bold ${BUCKET_PILL_CLASS[actionBucket]}`}
+                                >
                                   <span
                                     aria-hidden
-                                    className={`h-1.5 w-1.5 rounded-full ${BUCKET_DOT_CLASS[progressBucket(actionProgressPct)]}`}
+                                    className={`h-2 w-2 rounded-full ${BUCKET_DOT_CLASS[actionBucket]}`}
                                   />
                                   {actionProgressPct}%
                                 </span>

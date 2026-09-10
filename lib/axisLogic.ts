@@ -8,6 +8,7 @@ import type {
   ChantierDependencyType,
   ChantierMilestoneState,
   ChantierStaffing,
+  Deliverable,
   Indicator,
   IndicatorMeasurement,
   IndicatorRiskStatus,
@@ -1075,6 +1076,21 @@ export function sumLevierBudgets(chantierId: string, actions: ChantierAction[]):
     .reduce((sum, action) => sum + (action.budget ?? 0), 0);
 }
 
+/**
+ * Somme des montants CONSOMMÉS levier (`ChantierAction.consumedBudget`) d'un chantier donné —
+ * pendant de `sumLevierBudgets` ci-dessus mais pour le consommé plutôt que le planifié ; même
+ * remarque : ne pas comparer directement à `Chantier.consumedBudget`, les deux coexistent sans
+ * qu'un des deux soit déduit de l'autre.
+ *
+ * Un levier sans `consumedBudget` renseigné compte pour `0` (jamais exclu de la somme). Chantier
+ * sans aucun levier, ou uniquement des leviers sans consommé : `0`.
+ */
+export function sumConsumedBudget(chantierId: string, actions: ChantierAction[]): number {
+  return actions
+    .filter((action) => action.chantierId === chantierId)
+    .reduce((sum, action) => sum + (action.consumedBudget ?? 0), 0);
+}
+
 // ─── Responsable affiché d'un indicateur (round 12) ────────────────────────────────────────────
 
 /**
@@ -1113,4 +1129,136 @@ export function resolveIndicatorOwner(
   }
   const axis = axes.find((a) => a.id === indicator.axisId);
   return axis?.owner ?? unassignedLabel;
+}
+
+// ─── Feuille de route programme (round 15) ─────────────────────────────────────────────────────
+
+/** Un livrable de levier, réduit aux seuls champs utiles à la feuille de route programme (marqueur
+ *  de date + couleur de statut) — même sous-ensemble que celui déjà lu par l'onglet "Timeline" de
+ *  `ChantierDetailPanel.tsx` (`dueDeliverables`), mais TYPÉ explicitement ici plutôt que de
+ *  transporter le `Deliverable` complet (ses `phases`/`comments` ne servent à rien à ce niveau
+ *  agrégé programme). */
+export type ProgramRoadmapDeliverable = Pick<Deliverable, "id" | "label" | "dueDate" | "status">;
+
+/**
+ * UNE ligne de la feuille de route programme = UN LEVIER (`ChantierAction`), avec son axe et son
+ * chantier parents déjà résolus — évite à l'appelant de refaire les deux `.find()` pour chaque
+ * ligne. Voir `programRoadmap` ci-dessous.
+ */
+export type ProgramRoadmapRow = {
+  axis: StrategicAxis;
+  chantier: Chantier;
+  action: ChantierAction;
+  /** Bornes temporelles de CE LEVIER — `action.start`/`action.end` directement (mêmes champs que
+   *  `chantierBounds` agrège PAR CHANTIER ; ici la maille est le LEVIER — une ligne par action —
+   *  donc rien à agréger). */
+  start: string;
+  end: string;
+  /** Avancement déclaratif 0-100 de CE levier — MÊME calcul que `progressionPctFor` (fonction
+   *  privée de l'onglet "Timeline" de `ChantierDetailPanel.tsx`, hors périmètre de ce lot) : jalons
+   *  E0→E4 (`milestoneProgressPct` + `resolveMilestoneAutoFlags`) si le levier est rattaché à un KPI
+   *  (`action.indicatorId`), sinon mappage d'affichage du kanban classique (`kanbanStatus`) —
+   *  todo=0, in_progress=50, done=100, absent=0. Volontairement RECALCULÉ ici plutôt qu'importé (la
+   *  fonction source n'est pas exportée) mais compose les MÊMES primitives exportées, donc les deux
+   *  ne peuvent pas diverger. */
+  progressPct: number;
+  /** Livrables de ce levier portant une `dueDate` déclarée, uniquement (un livrable sans échéance
+   *  n'a rien à positionner sur la feuille de route) — même filtre que `dueDeliverables` dans
+   *  `ChantierDetailPanel.tsx`. */
+  deliverables: ProgramRoadmapDeliverable[];
+};
+
+/** Normalise `ChantierAction.deliverables` en `ProgramRoadmapDeliverable[]` — même défensif que
+ *  `normalizeDeliverables` (fonction privée de `ChantierDetailPanel.tsx`, dupliquée ici plutôt
+ *  qu'importée : elle n'est pas exportée et ce fichier n'est pas dans le périmètre modifiable de ce
+ *  lot) : un livrable écrit AVANT l'introduction du modèle riche est une simple chaîne (`string[]`),
+ *  traitée comme un livrable sans échéance ni statut plutôt que de faire planter la lecture. */
+function normalizeRoadmapDeliverables(
+  raw: ChantierAction["deliverables"]
+): ProgramRoadmapDeliverable[] {
+  return (raw ?? []).map((d, i) =>
+    typeof d === "string"
+      ? { id: `legacy-${i}`, label: d }
+      : { id: d.id, label: d.label, dueDate: d.dueDate, status: d.status }
+  );
+}
+
+/**
+ * Feuille de route PROGRAMME (round 15) — UNE LIGNE PAR LEVIER sur TOUT le programme actif (tous
+ * les axes, tous les chantiers), à la différence de `ChantierGantt.tsx` qui ne couvre qu'UN axe à
+ * la fois (`chantiers`/`actions` déjà filtrés par l'appelant avant l'appel). Alimente
+ * `ProgramRoadmap.tsx` (dashboard, section "Feuille de route du plan").
+ *
+ * Ordre de sortie — REPREND la même convention que `numberIndicators` ci-dessus (jamais de tri
+ * caché) : les axes dans leur ordre d'apparition dans `axes`, puis pour chaque axe ses chantiers
+ * dans l'ordre de `chantiers`, puis pour chaque chantier ses leviers triés par date de début (même
+ * tri que `ChantierGantt.tsx`). Un chantier dont l'`axisId` ne référence aucun axe de `axes`, ou un
+ * levier dont le `chantierId` ne référence aucun chantier de `chantiers`, n'apparaît dans AUCUNE
+ * ligne (référence orpheline — même parti pris défensif que `numberIndicators`/`chantierBounds` :
+ * pas de ligne inventée avec un axe/chantier `undefined`).
+ */
+export function programRoadmap(
+  axes: StrategicAxis[],
+  chantiers: Chantier[],
+  actions: ChantierAction[]
+): ProgramRoadmapRow[] {
+  const rows: ProgramRoadmapRow[] = [];
+
+  for (const axis of axes) {
+    const axisChantiers = chantiers.filter((c) => c.axisId === axis.id);
+    for (const chantier of axisChantiers) {
+      const chantierActions = actions
+        .filter((a) => a.chantierId === chantier.id)
+        .sort((a, b) => a.start.localeCompare(b.start));
+
+      for (const action of chantierActions) {
+        const progressPct = action.indicatorId
+          ? milestoneProgressPct(
+              action,
+              resolveMilestoneAutoFlags(
+                action.milestones?.currentMilestone ?? "E0",
+                action,
+                chantiers,
+                actions
+              )
+            )
+          : action.kanbanStatus === "in_progress"
+            ? 50
+            : action.kanbanStatus === "done"
+              ? 100
+              : 0;
+
+        rows.push({
+          axis,
+          chantier,
+          action,
+          start: action.start,
+          end: action.end,
+          progressPct,
+          deliverables: normalizeRoadmapDeliverables(action.deliverables).filter(
+            (d) => d.dueDate !== undefined
+          ),
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
+/** Bornes temporelles [min, max] de TOUTES les lignes d'une feuille de route programme
+ *  (`programRoadmap` ci-dessus) — pendant de `chantierBounds` mais agrégé sur l'ensemble du
+ *  programme plutôt qu'un seul chantier, pour que l'appelant règle l'échelle de `TimelineBars.tsx`
+ *  (`timelineRange`) sur la largeur RÉELLE du plan plutôt que sur une plage arbitraire. `undefined`
+ *  si `rows` est vide (aucune borne exploitable), même convention que `chantierBounds`. */
+export function programRoadmapBounds(
+  rows: Pick<ProgramRoadmapRow, "start" | "end">[]
+): { start: string; end: string } | undefined {
+  let start: string | undefined;
+  let end: string | undefined;
+  for (const row of rows) {
+    if (!start || row.start < start) start = row.start;
+    if (!end || row.end > end) end = row.end;
+  }
+  return start && end ? { start, end } : undefined;
 }

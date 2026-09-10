@@ -19,20 +19,30 @@ import { parseISO } from "@/lib/dateUtils";
 
 // ─── Échelle temporelle ─────────────────────────────────────────────────────────────────────────
 
-export type TimelineScale = "month" | "quarter" | "semester";
+/** Round 15 : `"year"` ajouté — maille ANNUELLE, demandée par la feuille de route programme
+ *  (`ProgramRoadmap.tsx`) pour sa vue "globale"/multi-année. Ajout STRICTEMENT ADDITIF : les trois
+ *  mailles existantes (mois/trimestre/semestre) et tous leurs appelants (`ChantierGantt.tsx`,
+ *  l'onglet "Timeline" de `ChantierDetailPanel.tsx`) sont inchangés — ils listent leurs options
+ *  explicitement (`{ value: "month", ... }`, etc.) plutôt que d'énumérer `TimelineScale`, donc
+ *  n'exposent pas "Année" tant qu'on ne le leur ajoute pas explicitement. */
+export type TimelineScale = "month" | "quarter" | "semester" | "year";
 
 export const TIMELINE_SCALE_MONTHS: Record<TimelineScale, number> = {
   month: 1,
   quarter: 3,
   semester: 6,
+  year: 12,
 };
 
 /** Libellé d'une colonne de l'axe temporel, selon la maille choisie. Formatage `fr-FR` comme
- *  partout ailleurs dans l'app (cf. `formatTimestamp`, app/(app)/admin/history/page.tsx). */
+ *  partout ailleurs dans l'app (cf. `formatTimestamp`, app/(app)/admin/history/page.tsx).
+ *  `"year"` : chaîne vide — le bandeau des années (`TimelineYearBand`, déjà affiché au-dessus de la
+ *  grille) porte déjà l'information, un sous-libellé de colonne redirait la même valeur en double. */
 export function timelineColumnLabel(date: Date, scale: TimelineScale): string {
   if (scale === "month") return date.toLocaleDateString("fr-FR", { month: "short" });
   if (scale === "quarter") return `T${Math.floor(date.getMonth() / 3) + 1}`;
-  return `S${Math.floor(date.getMonth() / 6) + 1}`;
+  if (scale === "semester") return `S${Math.floor(date.getMonth() / 6) + 1}`;
+  return "";
 }
 
 /** Date ISO ("2026-09-03") → « 3 sept. 2026 », utilisé dans les infobulles des barres. */

@@ -807,6 +807,17 @@ export type Chantier = {
    *  actif. Optionnel : `undefined` tant qu'aucun budget n'a été saisi (distinct de 0, qui signifie
    *  "budget nul mais renseigné"). */
   allocatedBudget?: number;
+  /** Montant réellement consommé/dépensé sur ce chantier, déclaré manuellement — distinct
+   *  d'`allocatedBudget` qui est le montant planifié/cible. Affiché avec `Program.currency` du
+   *  programme actif, même convention : `undefined` tant qu'aucun montant n'a été saisi (distinct de
+   *  0, qui signifie "consommé nul mais renseigné"). */
+  consumedBudget?: number;
+  /** ETP réellement consommés sur ce chantier, déclarés manuellement — pendant de `consumedBudget`
+   *  mais pour l'effort humain plutôt que le montant financier. Distinct des lignes de besoin
+   *  planifié `ChantierStaffing.fte` (voir plus bas dans ce fichier) : pas de ventilation par équipe
+   *  ici, une simple valeur globale déclarative. Optionnel : `undefined` tant qu'aucune valeur n'a
+   *  été saisie (distinct de 0, qui signifie "ETP consommés nul mais renseigné"). */
+  consumedFte?: number;
   createdAt: string;
   lastUpdate: string;
 };
@@ -903,6 +914,15 @@ export type ChantierAction = {
    *  `sumLevierBudgets` dans `lib/axisLogic.ts` pour l'agrégat). Optionnel : `undefined` tant
    *  qu'aucun budget n'a été saisi (distinct de 0, qui signifie "budget nul mais renseigné"). */
   budget?: number;
+  /** Montant réellement consommé/dépensé sur ce LEVIER, déclaré manuellement — distinct de `budget`
+   *  qui est le montant planifié/cible, même logique que `Chantier.consumedBudget` mais au niveau du
+   *  levier plutôt que du chantier. Optionnel : `undefined` tant qu'aucun montant n'a été saisi
+   *  (distinct de 0, qui signifie "consommé nul mais renseigné"). */
+  consumedBudget?: number;
+  /** ETP réellement consommés sur ce LEVIER, déclarés manuellement — pendant de `Chantier.consumedFte`
+   *  mais au niveau du levier plutôt que du chantier. Optionnel : `undefined` tant qu'aucune valeur
+   *  n'a été saisie (distinct de 0, qui signifie "ETP consommés nul mais renseigné"). */
+  consumedFte?: number;
 };
 
 /** Statut à 3 états du "kanban classique" d'un levier sans KPI rattaché — round 8, voir
