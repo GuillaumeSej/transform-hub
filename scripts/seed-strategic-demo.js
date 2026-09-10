@@ -333,30 +333,30 @@ const ACTIONS = [
       passedMilestones: ["E0", "E1", "E2", "E3"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
-          { itemId: "E1-B3", flag: "green" },
-          { itemId: "E1-C2", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
         ],
         E2: [
-          { itemId: "E2-B1", flag: "green" },
-          { itemId: "E2-B2", flag: "green" },
-          { itemId: "E2-B3", flag: "green" },
+          { itemId: "E2-B1", progressPct: 100 },
+          { itemId: "E2-B2", progressPct: 100 },
+          { itemId: "E2-B3", progressPct: 100 },
         ],
         E3: [
-          { itemId: "E3-B1", flag: "green" },
-          { itemId: "E3-B2", flag: "green" },
-          { itemId: "E3-B3", flag: "green" },
+          { itemId: "E3-B1", progressPct: 100 },
+          { itemId: "E3-B2", progressPct: 100 },
+          { itemId: "E3-B3", progressPct: 100 },
         ],
         E4: [
-          { itemId: "E4-B1", flag: "green" },
-          { itemId: "E4-B2", flag: "green" },
+          { itemId: "E4-B1", progressPct: 100 },
+          { itemId: "E4-B2", progressPct: 100 },
         ],
       },
     },
@@ -375,17 +375,17 @@ const ACTIONS = [
       passedMilestones: ["E0"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
           {
             itemId: "E1-B3",
-            flag: "orange",
+            progressPct: 20,
             resolved: false,
             actionPlan: {
               description:
@@ -432,16 +432,16 @@ const ACTIONS = [
       passedMilestones: ["E0", "E1", "E2"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
           {
             itemId: "E1-B2",
-            flag: "orange",
+            progressPct: 35,
             resolved: true,
             actionPlan: {
               description:
@@ -450,15 +450,15 @@ const ACTIONS = [
               dueDate: "2026-04-05",
             },
           },
-          { itemId: "E1-B3", flag: "green" },
-          { itemId: "E1-C2", flag: "green" },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
         ],
         E2: [
-          { itemId: "E2-B1", flag: "green" },
-          { itemId: "E2-B2", flag: "green" },
-          { itemId: "E2-B3", flag: "green" },
+          { itemId: "E2-B1", progressPct: 100 },
+          { itemId: "E2-B2", progressPct: 100 },
+          { itemId: "E2-B3", progressPct: 100 },
         ],
-        E3: [{ itemId: "E3-B1", flag: "green" }],
+        E3: [{ itemId: "E3-B1", progressPct: 100 }],
       },
     },
   },
@@ -476,22 +476,22 @@ const ACTIONS = [
       passedMilestones: ["E0", "E1"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
-          { itemId: "E1-B3", flag: "green" },
-          { itemId: "E1-C2", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
         ],
         E2: [
-          { itemId: "E2-B1", flag: "green" },
+          { itemId: "E2-B1", progressPct: 100 },
           {
             itemId: "E2-B2",
-            flag: "orange",
+            progressPct: 50,
             resolved: false,
             actionPlan: {
               description:
@@ -518,11 +518,11 @@ const ACTIONS = [
       passedMilestones: ["E0"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
           {
             itemId: "E0-B2",
-            flag: "orange",
+            progressPct: 65,
             resolved: true,
             actionPlan: {
               description:
@@ -531,13 +531,13 @@ const ACTIONS = [
               dueDate: "2026-04-20",
             },
           },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
           {
             itemId: "E1-B2",
-            flag: "orange",
+            progressPct: 80,
             resolved: false,
             actionPlan: {
               description:
@@ -565,18 +565,18 @@ const ACTIONS = [
       passedMilestones: ["E0", "E1"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
-          { itemId: "E1-B3", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
           {
             itemId: "E1-C2",
-            flag: "orange",
+            progressPct: 25,
             resolved: true,
             actionPlan: {
               description:
@@ -586,10 +586,7 @@ const ACTIONS = [
             },
           },
         ],
-        E2: [
-          { itemId: "E2-B1", flag: "red" },
-          { itemId: "E2-B2", flag: "green" },
-        ],
+        E2: [{ itemId: "E2-B1", progressPct: 0 }, { itemId: "E2-B2" }],
       },
     },
     deliverables: [
@@ -622,16 +619,16 @@ const ACTIONS = [
       passedMilestones: ["E0"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
-          { itemId: "E1-B3", flag: "green" },
-          { itemId: "E1-C2", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
         ],
       },
     },
@@ -650,23 +647,23 @@ const ACTIONS = [
       passedMilestones: ["E0", "E1"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
-          { itemId: "E1-B3", flag: "green" },
-          { itemId: "E1-C2", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
         ],
         E2: [
-          { itemId: "E2-B1", flag: "green" },
-          { itemId: "E2-B2", flag: "green" },
+          { itemId: "E2-B1", progressPct: 100 },
+          { itemId: "E2-B2" },
           {
             itemId: "E2-B3",
-            flag: "orange",
+            progressPct: 45,
             resolved: false,
             actionPlan: {
               description:
@@ -708,11 +705,11 @@ const ACTIONS = [
       passedMilestones: ["E0", "E1"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
           {
             itemId: "E0-B2",
-            flag: "orange",
+            progressPct: 60,
             resolved: true,
             actionPlan: {
               description:
@@ -721,14 +718,14 @@ const ACTIONS = [
               dueDate: "2026-03-10",
             },
           },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
           {
             itemId: "E1-B3",
-            flag: "orange",
+            progressPct: 75,
             resolved: true,
             actionPlan: {
               description:
@@ -737,13 +734,13 @@ const ACTIONS = [
               dueDate: "2026-05-15",
             },
           },
-          { itemId: "E1-C2", flag: "green" },
+          { itemId: "E1-C2", progressPct: 100 },
         ],
         E2: [
-          { itemId: "E2-B1", flag: "green" },
+          { itemId: "E2-B1", progressPct: 100 },
           {
             itemId: "E2-B2",
-            flag: "orange",
+            progressPct: 30,
             resolved: false,
             actionPlan: {
               description:
@@ -771,10 +768,10 @@ const ACTIONS = [
       passedMilestones: ["E0"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
           {
             itemId: "E0-B1",
-            flag: "orange",
+            progressPct: 55,
             resolved: true,
             actionPlan: {
               description:
@@ -783,15 +780,15 @@ const ACTIONS = [
               dueDate: "2026-03-01",
             },
           },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
           {
             itemId: "E1-B3",
-            flag: "red",
+            progressPct: 0,
             resolved: false,
             actionPlan: {
               description:
@@ -818,20 +815,20 @@ const ACTIONS = [
       passedMilestones: ["E0", "E1"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
-          { itemId: "E1-B3", flag: "green" },
-          { itemId: "E1-C2", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
         ],
         E2: [
-          { itemId: "E2-B1", flag: "green" },
-          { itemId: "E2-B2", flag: "green" },
+          { itemId: "E2-B1", progressPct: 100 },
+          { itemId: "E2-B2", progressPct: 100 },
         ],
       },
     },
@@ -860,8 +857,8 @@ const ACTIONS = [
       passedMilestones: [],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-C1", flag: "red" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 0 },
         ],
       },
     },
@@ -881,18 +878,18 @@ const ACTIONS = [
       passedMilestones: ["E0", "E1"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
-          { itemId: "E1-B3", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
           {
             itemId: "E1-C2",
-            flag: "orange",
+            progressPct: 70,
             resolved: true,
             actionPlan: {
               description:
@@ -902,7 +899,7 @@ const ACTIONS = [
             },
           },
         ],
-        E2: [{ itemId: "E2-B1", flag: "green" }],
+        E2: [{ itemId: "E2-B1", progressPct: 100 }],
       },
     },
   },
@@ -920,16 +917,16 @@ const ACTIONS = [
       passedMilestones: ["E0"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
+          { itemId: "E1-B1" },
           {
             itemId: "E1-B2",
-            flag: "orange",
+            progressPct: 40,
             resolved: false,
             actionPlan: {
               description:
@@ -967,28 +964,28 @@ const ACTIONS = [
       passedMilestones: ["E0", "E1", "E2", "E3"],
       checklists: {
         E0: [
-          { itemId: "E0-A2", flag: "green" },
-          { itemId: "E0-B1", flag: "green" },
-          { itemId: "E0-B2", flag: "green" },
-          { itemId: "E0-C1", flag: "green" },
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
         ],
         E1: [
-          { itemId: "E1-B1", flag: "green" },
-          { itemId: "E1-B2", flag: "green" },
-          { itemId: "E1-B3", flag: "green" },
-          { itemId: "E1-C2", flag: "green" },
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
         ],
         E2: [
-          { itemId: "E2-B1", flag: "green" },
-          { itemId: "E2-B2", flag: "green" },
-          { itemId: "E2-B3", flag: "green" },
+          { itemId: "E2-B1", progressPct: 100 },
+          { itemId: "E2-B2", progressPct: 100 },
+          { itemId: "E2-B3", progressPct: 100 },
         ],
         E3: [
-          { itemId: "E3-B1", flag: "green" },
-          { itemId: "E3-B2", flag: "green" },
+          { itemId: "E3-B1", progressPct: 100 },
+          { itemId: "E3-B2", progressPct: 100 },
           {
             itemId: "E3-B3",
-            flag: "orange",
+            progressPct: 65,
             resolved: true,
             actionPlan: {
               description:
@@ -998,7 +995,7 @@ const ACTIONS = [
             },
           },
         ],
-        E4: [{ itemId: "E4-B1", flag: "green" }],
+        E4: [{ itemId: "E4-B1", progressPct: 100 }],
       },
     },
     deliverables: [
