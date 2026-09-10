@@ -15,7 +15,8 @@ import { Modal } from "@/components/shared/Modal";
 import { MovementForm, type MovementFormValues } from "@/components/shared/MovementForm";
 import { HrExcelButtons } from "@/components/shared/HrExcelButtons";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import { FilterBar, type ActiveFilters, type FilterDef } from "@/components/shared/FilterBar";
+import { FilterBar, type FilterDef } from "@/components/shared/FilterBar";
+import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
 import type { Employee, WorkforceMovement } from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -302,34 +303,18 @@ export default function BaseEtpPage() {
     [t, ALERT_LABELS]
   );
 
-  const etpActiveFilters: ActiveFilters = useMemo(() => {
-    const result: ActiveFilters = {};
-    searchParams.forEach((value, key) => {
-      if (etpFilterDefs.some((def) => def.key === key))
-        result[key] = value.split(",").filter(Boolean);
-    });
-    return result;
-  }, [searchParams, etpFilterDefs]);
-
-  const setFilters = (next: ActiveFilters) => {
-    const params = new URLSearchParams(searchParams.toString());
-    Array.from(params.keys())
-      .filter((k) => k.startsWith("f_"))
-      .forEach((k) => params.delete(k));
-    Object.entries(next).forEach(([k, v]) => {
-      if (v.length > 0) params.set(k, v.join(","));
-    });
-    router.replace(`/hr/etp?${params.toString()}`);
-  };
-
-  const movementActiveFilters: ActiveFilters = useMemo(() => {
-    const result: ActiveFilters = {};
-    searchParams.forEach((value, key) => {
-      if (movementFilterDefs.some((def) => def.key === key))
-        result[key] = value.split(",").filter(Boolean);
-    });
-    return result;
-  }, [searchParams, movementFilterDefs]);
+  // Round <n> : passe par le hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts) —
+  // remplace une implémentation ad hoc qui avait 2 bugs : (1) le premier clic sur un bouton de
+  // filtre ne produisait aucun effet visible (voir le commentaire du hook), et (2) les DEUX
+  // `FilterBar` de cette page (employés / mouvements) partageaient le même `setFilters`, donc des
+  // `FilterDef` de même `key` (ex. "department") s'activaient/se désactivaient l'un l'autre à
+  // tort — `namespace` isole chacun dans son propre paramètre d'URL.
+  const { activeFilters: etpActiveFilters, setFilters: setEtpFilters } = useFilterBarState(
+    etpFilterDefs,
+    { namespace: "emp" }
+  );
+  const { activeFilters: movementActiveFilters, setFilters: setMovementFilters } =
+    useFilterBarState(movementFilterDefs, { namespace: "mov" });
 
   const filteredEmployees = useMemo(
     () =>
@@ -691,7 +676,7 @@ export default function BaseEtpPage() {
               items={employeeRows}
               defs={etpFilterDefs}
               active={etpActiveFilters}
-              onChange={setFilters}
+              onChange={setEtpFilters}
             />
           </div>
           <EditableTable
@@ -714,7 +699,7 @@ export default function BaseEtpPage() {
               items={movementRows}
               defs={movementFilterDefs}
               active={movementActiveFilters}
-              onChange={setFilters}
+              onChange={setMovementFilters}
             />
           </div>
           <EditableTable
