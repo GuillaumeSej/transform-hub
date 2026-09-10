@@ -1296,6 +1296,8 @@ const de: Record<string, string> = {
   "strategicChantierDetail.allocatedBudget": "Zugewiesenes Budget",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
     "Das Budget des Arbeitspakets darf nicht niedriger sein als die Summe der Budgets seiner Aktivitäten.",
+  "strategicChantierDetail.consumedBudget": "Verbrauchtes Budget",
+  "strategicChantierDetail.consumedFte": "Verbrauchte VZÄ",
   "strategicChantierDetail.confidentialityLevel": "Vertraulichkeitsstufe",
   "strategicChantierDetail.confidentialityLevelNone": "Keine (für alle sichtbar)",
 
@@ -1374,6 +1376,8 @@ const de: Record<string, string> = {
   "strategicChantierDetail.actionForm.budgetLabel": "Budget der Aktivität",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
     "Die Summe der Budgets der Aktivitäten würde das zugewiesene Budget des Arbeitspakets überschreiten.",
+  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Verbrauchtes Budget der Aktivität",
+  "strategicChantierDetail.actionForm.consumedFteLabel": "Verbrauchte VZÄ der Aktivität",
   "strategicChantierDetail.successCriteria.placeholder": "Wir sind im [Jahr] zufrieden, wenn...",
 
   // ─── Strategieplan — Meilensteine E0-E4 (Runde 5) ───────────────────────────
@@ -1590,6 +1594,8 @@ const de: Record<string, string> = {
   "effectifs.moneyBudget.byChantierModalTitle": "Budgetverteilung nach Vorhaben",
   "effectifs.moneyBudget.byChantierEmpty":
     "Kein Vorhaben mit zugewiesenem Budget auf dieser Achse.",
+  "effectifs.moneyBudget.consumedTitle": "Verbraucht vs. zugewiesenes Budget",
+  "effectifs.moneyBudget.consumedByAxisTitle": "Verbraucht vs. Budget nach Achse",
 
   // ─── VZÄ-Verteilung nach Periode (Runde 7 — StaffingPeriodBreakdown.tsx) ──────────────────
   "staffingPeriod.title": "VZÄ-Verteilung nach Periode",
@@ -1682,6 +1688,17 @@ const de: Record<string, string> = {
   // Runde 12: Durchschnitt der deklarierten `progressPct` der Leviers dieser Spalte (`{pct}` wird
   // manuell ersetzt, siehe `LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.avgProgress": "{pct}% im Durchschnitt",
+  // Runde 15: programmweite Roadmap (`ProgramRoadmap.tsx`) — Vollbreiten-Ansicht des GESAMTEN
+  // Programms am unteren Rand des Dashboards (eine Zeile pro Aktivität, über alle Achsen/
+  // Arbeitspakete hinweg).
+  "strategicDashboard.roadmap.title": "Roadmap des Plans",
+  "strategicDashboard.roadmap.empty": "Keine terminierte Aktivität in diesem Programm.",
+  "strategicDashboard.roadmap.scale": "Maßstab",
+  "strategicDashboard.roadmap.scaleQuarter": "Quartal",
+  "strategicDashboard.roadmap.scaleSemester": "Halbjahr",
+  "strategicDashboard.roadmap.scaleYear": "Jahr",
+  "strategicDashboard.roadmap.progress": "Fortschritt",
+  "strategicDashboard.roadmap.leviersSuffix": "Aktivitäten",
 
   // ─── Strategieplan — Konfigurationsseite eines Programms (Admin) ──────────
   "adminPrograms.manage": "Verwalten",

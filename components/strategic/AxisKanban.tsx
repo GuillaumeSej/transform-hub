@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { LevierCard } from "@/components/strategic/LevierMilestoneBoard";
+import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
 import { Modal } from "@/components/shared/Modal";
 import {
   BudgetDonutChart,
@@ -362,6 +363,22 @@ export function AxisKanban({
                               </span>
                             ))}
                         </div>
+                        {/* Consommé vs alloué (round 15) — figure planifiée MÊME source que le
+                            montant affiché ci-dessus (`chantier.allocatedBudget`, pas la somme
+                            levier `sumLevierBudgets` : la figure planifiée existante ne l'inclut
+                            pas), donc consommé = `chantier.consumedBudget` directement, pour
+                            rester apples-to-apples. Pas de `label` : le montant "N €" juste
+                            au-dessus joue déjà ce rôle. */}
+                        {chantier.allocatedBudget !== undefined && (
+                          <BudgetVsActualBar
+                            planned={chantier.allocatedBudget}
+                            consumed={chantier.consumedBudget ?? 0}
+                            formatValue={(value) =>
+                              `${value.toLocaleString()}${currency ? ` ${currency}` : ""}`
+                            }
+                            className="mt-1.5"
+                          />
+                        )}
                         {!hasAnyLevier ? (
                           <p className="mt-1 text-[10.5px] text-tertiary">{l.noLeviers}</p>
                         ) : (

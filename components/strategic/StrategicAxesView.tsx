@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutGrid, Plus, Rows3 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
+import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Dropdown, type DropdownOption } from "@/components/shared/Dropdown";
 import { Modal } from "@/components/shared/Modal";
@@ -123,6 +124,21 @@ export function StrategicAxesView() {
       map.set(
         axisId,
         chantiers.reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0)
+      );
+    });
+    return map;
+  }, [chantiersByAxis]);
+
+  /** Budget CONSOMMÉ total d'un axe — pendant de `axisBudgetByAxis` ci-dessus mais sommant
+   *  `Chantier.consumedBudget` (déclaratif, saisi manuellement) plutôt que `allocatedBudget`, sur
+   *  le MÊME ensemble de chantiers (`chantiersByAxis`), pour alimenter `BudgetVsActualBar` sur la
+   *  carte d'axe. */
+  const axisConsumedByAxis = useMemo(() => {
+    const map = new Map<string, number>();
+    chantiersByAxis.forEach((chantiers, axisId) => {
+      map.set(
+        axisId,
+        chantiers.reduce((sum, chantier) => sum + (chantier.consumedBudget ?? 0), 0)
       );
     });
     return map;
@@ -517,11 +533,21 @@ export function StrategicAxesView() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filteredAxes.map((axis) => {
-            const axisIndicators = indicatorsByAxis.get(axis.id) ?? [];
+            // Triés par numéro global ascendant (`globalIndicatorNumbers`) AVANT le slice — sans
+            // ce tri, les puces s'affichaient dans l'ordre Firestore brut (non trié) des
+            // indicateurs, sans rapport avec le numéro global qui leur est effectivement attribué
+            // (ex. "3 2" ou "10 9 11" au lieu de "2 3"/"9 10 11").
+            const axisIndicators = (indicatorsByAxis.get(axis.id) ?? [])
+              .slice()
+              .sort(
+                (a, b) =>
+                  (globalIndicatorNumbers.get(a.id) ?? 0) - (globalIndicatorNumbers.get(b.id) ?? 0)
+              );
             const shownIndicators = axisIndicators.slice(0, MAX_CARD_INDICATOR_CHIPS);
             const hiddenIndicatorsCount = axisIndicators.length - shownIndicators.length;
             const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
             const axisBudget = axisBudgetByAxis.get(axis.id) ?? 0;
+            const axisConsumed = axisConsumedByAxis.get(axis.id) ?? 0;
             // Le donut n'a d'intérêt que si au moins un chantier de l'axe a un budget alloué non
             // nul — sinon le montant total reste un simple texte, non cliquable (round 12).
             const axisHasBudgetSlices = axisChantiers.some((c) => (c.allocatedBudget ?? 0) > 0);
@@ -663,6 +689,20 @@ export function StrategicAxesView() {
                         </span>
                       ))}
                   </div>
+                  {/* Consommé vs alloué (round 15) — même ensemble de chantiers que le montant
+                      alloué ci-dessus (`axisBudgetByAxis`/`axisConsumedByAxis`), affiché seulement
+                      quand l'axe a des chantiers : sans ça la barre n'aurait rien à comparer. Pas
+                      de `label` : le montant "Budget alloué : X" juste au-dessus joue déjà ce
+                      rôle, la barre n'a besoin que d'afficher consommé/alloué. */}
+                  {axisChantiers.length > 0 && (
+                    <BudgetVsActualBar
+                      planned={axisBudget}
+                      consumed={axisConsumed}
+                      formatValue={(value) =>
+                        `${value.toLocaleString()} ${activeProgram?.currency ?? ""}`
+                      }
+                    />
+                  )}
                   {axisChantiers.length === 0 ? (
                     <p className="text-tertiary">{t("strategicAxes.axisNoChantier")}</p>
                   ) : (

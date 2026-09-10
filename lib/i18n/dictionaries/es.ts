@@ -1295,6 +1295,8 @@ const es: Record<string, string> = {
   "strategicChantierDetail.allocatedBudget": "Presupuesto asignado",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
     "El presupuesto del proyecto no puede ser inferior a la suma de los presupuestos de sus actividades.",
+  "strategicChantierDetail.consumedBudget": "Presupuesto consumido",
+  "strategicChantierDetail.consumedFte": "ETC consumidos",
   "strategicChantierDetail.confidentialityLevel": "Nivel de confidencialidad",
   "strategicChantierDetail.confidentialityLevelNone": "Ninguno (visible para todos)",
 
@@ -1373,6 +1375,8 @@ const es: Record<string, string> = {
   "strategicChantierDetail.actionForm.budgetLabel": "Presupuesto de la actividad",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
     "El total de los presupuestos de las actividades superaría el presupuesto asignado del proyecto.",
+  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Presupuesto consumido de la actividad",
+  "strategicChantierDetail.actionForm.consumedFteLabel": "ETC consumidos de la actividad",
   "strategicChantierDetail.successCriteria.placeholder": "Estaremos satisfechos en [año] si...",
 
   // ─── Plan Estratégico — hitos E0-E4 (ronda 5) ────────────────────────────────
@@ -1585,6 +1589,8 @@ const es: Record<string, string> = {
   "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierModalTitle": "Reparto del presupuesto por proyecto",
   "effectifs.moneyBudget.byChantierEmpty": "Ningún proyecto con presupuesto asignado en este eje.",
+  "effectifs.moneyBudget.consumedTitle": "Consumido vs presupuesto asignado",
+  "effectifs.moneyBudget.consumedByAxisTitle": "Consumido vs presupuesto por eje",
 
   // ─── Reparto de ETC por periodo (ronda 7 — StaffingPeriodBreakdown.tsx) ───────────────────
   "staffingPeriod.title": "Reparto de ETC por periodo",
@@ -1676,6 +1682,16 @@ const es: Record<string, string> = {
   // Ronda 12: media de los `progressPct` declarados de los leviers de la columna (`{pct}`
   // sustituido manualmente, ver `LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.avgProgress": "{pct}% de media",
+  // Ronda 15: hoja de ruta de todo el programa (`ProgramRoadmap.tsx`) — vista de ancho completo, al
+  // final del panel (una fila por actividad, en todos los ejes/proyectos).
+  "strategicDashboard.roadmap.title": "Hoja de ruta del plan",
+  "strategicDashboard.roadmap.empty": "Ninguna actividad con fecha en este programa.",
+  "strategicDashboard.roadmap.scale": "Escala",
+  "strategicDashboard.roadmap.scaleQuarter": "Trimestre",
+  "strategicDashboard.roadmap.scaleSemester": "Semestre",
+  "strategicDashboard.roadmap.scaleYear": "Año",
+  "strategicDashboard.roadmap.progress": "Avance",
+  "strategicDashboard.roadmap.leviersSuffix": "actividades",
 
   // ─── Plan Estratégico — ficha de configuración de un programa (admin) ─────
   "adminPrograms.manage": "Gestionar",

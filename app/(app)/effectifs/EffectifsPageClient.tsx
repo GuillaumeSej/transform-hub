@@ -9,6 +9,7 @@ import {
   BudgetDonutChart,
   type BudgetDonutSlice,
 } from "@/components/shared/charts/BudgetDonutChart";
+import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
@@ -182,6 +183,41 @@ export function EffectifsPageClient() {
     return axes.map((axis) => ({ name: axis.name, value: totals.get(axis.id) ?? 0 }));
   }, [axes, chantiers]);
 
+  // ── Budget FINANCIER consommé (round 15) ───────────────────────────────────────────────────
+  // Pendant déclaratif de `totalAllocatedBudget`/`allocatedBudgetByAxis` ci-dessus, MÊME périmètre
+  // (tous les chantiers du programme actif, `Chantier.consumedBudget` directement — les budgets de
+  // LEVIER (`sumLevierBudgets`/`sumConsumedBudget`, `lib/axisLogic.ts`) ne sont pas repliés ici,
+  // cohérent avec `totalAllocatedBudget` qui ne les replie pas non plus). Affiché juste à côté des
+  // figures planifiées correspondantes plutôt que dans une section séparée (demande PO).
+  //
+  // PAS d'équivalent ETP (`Chantier.consumedFte`) ajouté sur cette page : le seul total ETP déjà
+  // affiché ici (`totalFte`, tuile "ETP mobilisés au total") somme le BESOIN déclaré par équipe
+  // (`ChantierStaffing.fte`), pas un objectif d'ETP par chantier — `Chantier.consumedFte` est
+  // explicitement documenté (`types/index.ts`) comme une valeur globale déclarative DISTINCTE de ce
+  // besoin, sans compteur "planifié" comparable sur `Chantier`. Les comparer produirait un
+  // rapprochement trompeur (deux notions différentes), donc volontairement omis ici.
+  const totalConsumedBudget = useMemo(
+    () => chantiers.reduce((sum, c) => sum + (c.consumedBudget ?? 0), 0),
+    [chantiers]
+  );
+
+  /** Alloué ET consommé, par axe — même découpage (`axes.map` + filtre par `axisId`) que
+   *  `allocatedBudgetByAxis`, mais regroupés ensemble pour alimenter une `BudgetVsActualBar` par
+   *  axe plutôt qu'un donut (round 12) : ici on compare deux valeurs, pas une répartition. */
+  const budgetByAxisWithConsumed = useMemo(
+    () =>
+      axes.map((axis) => {
+        const own = chantiers.filter((c) => c.axisId === axis.id);
+        return {
+          id: axis.id,
+          name: axis.name,
+          allocated: own.reduce((sum, c) => sum + (c.allocatedBudget ?? 0), 0),
+          consumed: own.reduce((sum, c) => sum + (c.consumedBudget ?? 0), 0),
+        };
+      }),
+    [axes, chantiers]
+  );
+
   /** `BudgetDonutChart.onSliceClick` ne renvoie que le NOM de la part cliquée (contrat du
    *  composant, inchangé) — ce lookup retrouve l'axe correspondant pour ouvrir son drill-down. */
   const axisByName = useMemo(() => new Map(axes.map((a) => [a.name, a] as const)), [axes]);
@@ -328,6 +364,15 @@ export function EffectifsPageClient() {
         ) : (
           <div>
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-secondary">
+              {t("effectifs.moneyBudget.consumedTitle")}
+            </h3>
+            <BudgetVsActualBar
+              planned={totalAllocatedBudget}
+              consumed={totalConsumedBudget}
+              formatValue={formatAllocatedBudget}
+            />
+
+            <h3 className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-secondary">
               {t("effectifs.moneyBudget.byAxisTitle")}
             </h3>
             <BudgetDonutChart
@@ -339,6 +384,22 @@ export function EffectifsPageClient() {
                 if (axis) setBudgetDrilldownAxisId(axis.id);
               }}
             />
+
+            <h3 className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-secondary">
+              {t("effectifs.moneyBudget.consumedByAxisTitle")}
+            </h3>
+            <ul className="space-y-3">
+              {budgetByAxisWithConsumed.map((row) => (
+                <li key={row.id}>
+                  <BudgetVsActualBar
+                    planned={row.allocated}
+                    consumed={row.consumed}
+                    formatValue={formatAllocatedBudget}
+                    label={row.name}
+                  />
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </CardBody>

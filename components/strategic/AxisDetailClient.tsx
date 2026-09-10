@@ -2,13 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, Pencil, Plus, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Modal } from "@/components/shared/Modal";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
-import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
 import { ChantierForm, type ChantierFormValues } from "@/components/strategic/ChantierForm";
 import { ChantierGantt } from "@/components/strategic/ChantierGantt";
@@ -21,7 +20,7 @@ import {
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
-import { resolveMaturityStageLabel, useMaturityStages } from "@/lib/hooks/useMaturityStages";
+import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
@@ -47,8 +46,7 @@ import type { Indicator } from "@/types";
  * actions/timeline/effectifs) vivait jusque-là sur sa propre route (`/levers/chantier?id=…`,
  * round 4) ; il vit désormais dans `components/strategic/ChantierDetailPanel.tsx`, monté ici dans
  * un `Modal` — décision PO explicite : "tout apparaisse dans le kanban, sur une seule page". Cette
- * fiche d'axe ne garde que ce qui reste au niveau AXE (pas chantier) : en-tête, stepper d'étape,
- * indicateurs, Gantt.
+ * fiche d'axe ne garde que ce qui reste au niveau AXE (pas chantier) : en-tête, indicateurs, Gantt.
  *
  * La lecture seule des indicateurs est une décision de conception explicite (voir plan, section
  * « Page KPI ») : la saisie d'une mesure et la ré-édition de l'objectif/seuil vivent à UN SEUL
@@ -142,29 +140,12 @@ export function AxisDetailClient() {
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
         {t("strategicAxes.notFound")}{" "}
-        <button
-          onClick={() => router.push("/levers")}
-          className="font-medium text-bp-coral hover:underline"
-        >
+        <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
           {t("strategicAxes.back")}
         </button>
       </div>
     );
   }
-
-  const cycle = stages.filter((s) => !s.isTerminal);
-  const terminals = stages.filter((s) => s.isTerminal);
-  const currentIndex = cycle.findIndex((s) => s.id === axis.stage);
-
-  const setStage = async (stageId: string) => {
-    if (stageId === axis.stage) return;
-    await data.updateAxis(axis.id, { stage: stageId });
-    showToast(
-      t("strategicAxes.stageUpdated"),
-      `${axis.name} : ${resolveMaturityStageLabel(stageId, stages)}`,
-      "success"
-    );
-  };
 
   /** Carte d'un indicateur — LECTURE SEULE (voir en-tête de fichier) : graphique, dernière valeur,
    *  badge de statut effectif. Aucun contrôle de saisie ni d'édition d'objectif. */
@@ -232,7 +213,7 @@ export function AxisDetailClient() {
   return (
     <div className="animate-fade-up">
       <button
-        onClick={() => router.push("/levers")}
+        onClick={() => router.back()}
         className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:text-primary hover:underline"
       >
         <ArrowLeft size={13} /> {t("strategicAxes.back")}
@@ -248,7 +229,6 @@ export function AxisDetailClient() {
               style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
             />
             <h1 className="text-xl font-bold text-primary">{axis.name}</h1>
-            <AxisStageBadge stageId={axis.stage} stages={stages} />
           </div>
           {axis.description && (
             <p className="mt-1.5 max-w-2xl text-[13px] text-secondary">{axis.description}</p>
@@ -282,69 +262,6 @@ export function AxisDetailClient() {
         />
       </Modal>
 
-      {/* ── Stepper d'étape de maturité ────────────────────────────────────────────────────── */}
-      <div className="mb-4 rounded-lg border border-border bg-white px-4 py-3">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-tertiary">
-          {t("axisStage.label")}
-        </div>
-        {stages.length === 0 ? (
-          <p className="text-xs text-tertiary">{t("axisStage.none")}</p>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-1 sm:flex-nowrap">
-              {cycle.map((s, i) => {
-                const isCurrent = axis.stage === s.id;
-                const isPast = currentIndex > -1 && i < currentIndex;
-                return (
-                  <div
-                    key={s.id}
-                    className="flex min-w-0 flex-1 basis-[30%] items-center gap-1 sm:basis-auto"
-                  >
-                    <button
-                      onClick={() => setStage(s.id)}
-                      title={s.label}
-                      className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 transition hover:border-black ${
-                        isCurrent
-                          ? "border-bp-coral bg-black text-white"
-                          : isPast
-                            ? "border-rag-green bg-rag-green-light text-rag-green-dark"
-                            : "border-border bg-neutral-50 text-secondary"
-                      }`}
-                    >
-                      <span className="text-[13px] font-bold">{i + 1}</span>
-                      <span className="w-full text-center text-[10px] font-semibold uppercase tracking-wide">
-                        {s.label}
-                      </span>
-                    </button>
-                    {i < cycle.length - 1 && (
-                      <ArrowRight size={12} className="hidden shrink-0 text-tertiary sm:block" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {terminals.length > 0 && (
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <span className="text-[11px] text-tertiary">{t("axisStage.terminal")} :</span>
-                {terminals.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setStage(s.id)}
-                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition hover:border-black ${
-                      axis.stage === s.id
-                        ? "border-black bg-black text-white"
-                        : "border-border bg-white text-secondary"
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
       {/* ── Compteur d'ensemble des indicateurs de l'axe ───────────────────────────────────── */}
       <IndicatorStatusSummary
         indicators={axisIndicators}
@@ -356,7 +273,7 @@ export function AxisDetailClient() {
           atRisk: t("indicatorStatus.atRisk"),
           indicatorsSuffix: t("strategicAxes.indicatorsCount"),
         }}
-        className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2"
+        className="mb-4 grid grid-cols-1 gap-3"
       />
 
       {/* ── Alertes de cascade de dépendance entre chantiers ───────────────────────────────── */}

@@ -18,6 +18,8 @@ import {
   milestoneWeightPct,
   numberIndicators,
   programBlockedActions,
+  programRoadmap,
+  programRoadmapBounds,
   progressBucket,
   resolveIndicatorOwner,
   resolveIndicatorStatus,
@@ -25,6 +27,7 @@ import {
   resolveProgramType,
   staffingPeriodBuckets,
   sumLatestQuantitativeValues,
+  sumConsumedBudget,
   sumLevierBudgets,
 } from "@/lib/axisLogic";
 import type {
@@ -32,6 +35,7 @@ import type {
   Chantier,
   ChantierAction,
   ChantierStaffing,
+  Deliverable,
   Indicator,
   IndicatorMeasurement,
   MaturityStageConfig,
@@ -1359,6 +1363,30 @@ describe("sumLevierBudgets", () => {
   });
 });
 
+describe("sumConsumedBudget", () => {
+  it("returns 0 for a chantier with no levier at all", () => {
+    expect(sumConsumedBudget("CH1", [])).toBe(0);
+  });
+
+  it("sums only the leviers of the requested chantier, treating a missing consumedBudget as 0", () => {
+    const actions: ChantierAction[] = [
+      { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"), consumedBudget: 800 },
+      { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"), consumedBudget: 300 },
+      makeAction("CH1", "2026-01-01", "2026-01-31", "A3"), // pas de consommé renseigné → compte 0
+      { ...makeAction("CH2", "2026-01-01", "2026-01-31", "A4"), consumedBudget: 999999 }, // autre chantier
+    ];
+    expect(sumConsumedBudget("CH1", actions)).toBe(1100);
+  });
+
+  it("returns 0 when the chantier has leviers but none of them has a consumedBudget declared", () => {
+    const actions: ChantierAction[] = [
+      makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
+      makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
+    ];
+    expect(sumConsumedBudget("CH1", actions)).toBe(0);
+  });
+});
+
 // ─── Responsable affiché d'un indicateur (round 12) ────────────────────────────────────────────
 
 describe("resolveIndicatorOwner", () => {
@@ -1414,5 +1442,148 @@ describe("resolveIndicatorOwner", () => {
         FALLBACK
       )
     ).toBe(FALLBACK);
+  });
+});
+
+// ─── Feuille de route programme (round 15) ─────────────────────────────────────────────────────
+
+describe("programRoadmap", () => {
+  it("returns an empty array for an empty program", () => {
+    expect(programRoadmap([], [], [])).toEqual([]);
+  });
+
+  it("builds one row per levier for a single axis / single chantier, sorted by start date", () => {
+    const axes = [makeAxis("AX1")];
+    const chantiers = [makeChantier("CH1", { axisId: "AX1", name: "Refonte SI" })];
+    const actions: ChantierAction[] = [
+      // Volontairement hors ordre dans le tableau d'entrée : la sortie doit être triée par début.
+      { ...makeAction("CH1", "2027-06-01", "2027-08-31", "A2"), kanbanStatus: "in_progress" },
+      { ...makeAction("CH1", "2027-01-01", "2027-03-31", "A1"), kanbanStatus: "done" },
+    ];
+
+    const rows = programRoadmap(axes, chantiers, actions);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.action.id)).toEqual(["A1", "A2"]);
+    expect(rows[0].axis.id).toBe("AX1");
+    expect(rows[0].chantier.id).toBe("CH1");
+    expect(rows[0].chantier.name).toBe("Refonte SI");
+    expect(rows[0].start).toBe("2027-01-01");
+    expect(rows[0].end).toBe("2027-03-31");
+    // Sans indicatorId : mappage kanban classique (done → 100, in_progress → 50).
+    expect(rows[0].progressPct).toBe(100);
+    expect(rows[1].progressPct).toBe(50);
+  });
+
+  it("associates each row with its OWN axis/chantier across a multi-axis, multi-chantier program", () => {
+    const axes = [makeAxis("AX1"), makeAxis("AX2")];
+    const chantiers = [
+      makeChantier("CH1", { axisId: "AX1" }),
+      makeChantier("CH2", { axisId: "AX2" }),
+      makeChantier("CH3", { axisId: "AX2" }),
+    ];
+    const actions = [
+      makeAction("CH2", "2027-02-01", "2027-04-30", "A-CH2"),
+      makeAction("CH1", "2026-01-01", "2026-06-30", "A-CH1"),
+      makeAction("CH3", "2028-01-01", "2028-02-28", "A-CH3"),
+    ];
+
+    const rows = programRoadmap(axes, chantiers, actions);
+
+    expect(rows).toHaveLength(3);
+    const byActionId = new Map(rows.map((r) => [r.action.id, r]));
+    expect(byActionId.get("A-CH1")?.axis.id).toBe("AX1");
+    expect(byActionId.get("A-CH1")?.chantier.id).toBe("CH1");
+    expect(byActionId.get("A-CH2")?.axis.id).toBe("AX2");
+    expect(byActionId.get("A-CH2")?.chantier.id).toBe("CH2");
+    expect(byActionId.get("A-CH3")?.axis.id).toBe("AX2");
+    expect(byActionId.get("A-CH3")?.chantier.id).toBe("CH3");
+
+    // Ordre : axe AX1 (son unique chantier/levier) avant axe AX2 (ses deux chantiers), jamais retrié.
+    expect(rows.map((r) => r.action.id)).toEqual(["A-CH1", "A-CH2", "A-CH3"]);
+
+    // Bornes globales calculées sur l'ensemble des lignes de TOUS les axes/chantiers.
+    expect(programRoadmapBounds(rows)).toEqual({ start: "2026-01-01", end: "2028-02-28" });
+  });
+
+  it("excludes a chantier whose axisId references no known axis, and a levier whose chantierId references no known chantier", () => {
+    const axes = [makeAxis("AX1")];
+    const chantiers = [
+      makeChantier("CH1", { axisId: "AX1" }),
+      makeChantier("CH-ORPHAN", { axisId: "GHOST-AXIS" }),
+    ];
+    const actions = [
+      makeAction("CH1", "2027-01-01", "2027-02-28", "A1"),
+      makeAction("CH-ORPHAN", "2027-01-01", "2027-02-28", "A-ORPHAN-CHANTIER"),
+      makeAction("GHOST-CHANTIER", "2027-01-01", "2027-02-28", "A-ORPHAN-ACTION"),
+    ];
+
+    const rows = programRoadmap(axes, chantiers, actions);
+
+    expect(rows.map((r) => r.action.id)).toEqual(["A1"]);
+  });
+
+  it("computes progressPct via the milestone/E0-E4 path for a levier attached to a KPI, ignoring kanbanStatus", () => {
+    const axes = [makeAxis("AX1")];
+    const chantiers = [makeChantier("CH1", { axisId: "AX1" })];
+    const action: ChantierAction = {
+      ...makeAction("CH1", "2027-01-01", "2027-02-28", "A1"),
+      indicatorId: "IND001",
+      kanbanStatus: "todo", // Doit être ignoré : un levier avec KPI suit le chemin jalons.
+      milestones: {
+        currentMilestone: "E2",
+        passedMilestones: ["E0", "E1"],
+        checklists: {},
+      },
+    };
+
+    const rows = programRoadmap(axes, chantiers, [action]);
+
+    // Même calcul que `milestoneProgressPct` (+ `resolveMilestoneAutoFlags` pour les items auto du
+    // jalon courant E2) : 2 jalons validés (E0, E1) = 40, plus le crédit partiel du jalon courant.
+    // Valeur de référence tirée du calcul réel plutôt que reconstituée à la main (la check-list E2
+    // exacte, avec ses items auto/manuels, est définie dans `lib/milestoneChecklist.ts`).
+    expect(rows[0].progressPct).toBe(45);
+  });
+
+  it("keeps only deliverables with a declared dueDate, and normalizes legacy string deliverables defensively", () => {
+    const axes = [makeAxis("AX1")];
+    const chantiers = [makeChantier("CH1", { axisId: "AX1" })];
+    const action: ChantierAction = {
+      ...makeAction("CH1", "2027-01-01", "2027-02-28", "A1"),
+      deliverables: [
+        {
+          id: "D1",
+          label: "Livrable daté",
+          phases: [],
+          dueDate: "2027-02-15",
+          status: "in_progress",
+        },
+        { id: "D2", label: "Livrable sans échéance", phases: [] },
+        // Format legacy (avant le modèle riche) : une simple chaîne.
+        "Livrable legacy" as unknown as Deliverable,
+      ],
+    };
+
+    const rows = programRoadmap(axes, chantiers, [action]);
+
+    expect(rows[0].deliverables).toEqual([
+      { id: "D1", label: "Livrable daté", dueDate: "2027-02-15", status: "in_progress" },
+    ]);
+  });
+});
+
+describe("programRoadmapBounds", () => {
+  it("returns undefined for an empty list of rows", () => {
+    expect(programRoadmapBounds([])).toBeUndefined();
+  });
+
+  it("spans from the earliest start to the latest end across all rows", () => {
+    const rows = [
+      { start: "2027-03-01", end: "2027-05-31" },
+      { start: "2026-11-01", end: "2027-01-31" },
+      { start: "2027-01-01", end: "2028-06-30" },
+    ];
+    expect(programRoadmapBounds(rows)).toEqual({ start: "2026-11-01", end: "2028-06-30" });
   });
 });
