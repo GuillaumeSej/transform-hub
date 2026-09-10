@@ -1176,8 +1176,8 @@ const en: Record<string, string> = {
   "strategicAxes.createAxis": "Create axis",
   "strategicAxes.axisCreated": "Axis created",
   "strategicAxes.axisUpdated": "Axis updated",
-  "strategicAxes.cards": "Cards",
-  "strategicAxes.kanban": "Workstream progress",
+  "strategicAxes.roadmapTab": "Roadmap",
+  "strategicAxes.cardsTab": "Cards",
   "strategicAxes.chantiersView": "Workstreams",
   "strategicAxes.axisNoChantier": "No workstream",
   "strategicAxes.chantierAlerted": "Dependency alert",
@@ -1227,6 +1227,16 @@ const en: Record<string, string> = {
   "strategicAxes.ganttScaleSemester": "Half-year",
   "strategicAxes.progress": "Progress",
   "strategicAxes.ganttToday": "Today",
+  // "Roadmap" tab (round 16) — program roadmap, migrated from the former `strategicDashboard.roadmap.*`
+  // group (removed, the roadmap is now a tab of this page rather than a dashboard section). `today`
+  // reuses `strategicAxes.ganttToday` above instead of a duplicate key.
+  "strategicAxes.roadmap.empty": "No dated lever on this program.",
+  "strategicAxes.roadmap.scale": "Scale",
+  "strategicAxes.roadmap.scaleQuarter": "Quarter",
+  "strategicAxes.roadmap.scaleSemester": "Half-year",
+  "strategicAxes.roadmap.scaleYear": "Year",
+  "strategicAxes.roadmap.progress": "Progress",
+  "strategicAxes.roadmap.leviersSuffix": "levers",
   "strategicAxes.actionsCompleted": "levers completed",
   "strategicAxes.moreActionsSuffix": "more",
   "strategicAxes.cardNoActions": "No levers",
@@ -1593,8 +1603,8 @@ const en: Record<string, string> = {
   "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierModalTitle": "Budget breakdown by workstream",
   "effectifs.moneyBudget.byChantierEmpty": "No workstream with a budget set on this axis.",
-  "effectifs.moneyBudget.consumedTitle": "Consumed vs allocated budget",
-  "effectifs.moneyBudget.consumedByAxisTitle": "Consumed vs budget by axis",
+  "effectifs.moneyBudget.centerLabelConsumed": "Consumed / allocated",
+  "effectifs.moneyBudget.consumedTooltipSuffix": "consumed",
 
   // ─── FTE split by period (round 7 — StaffingPeriodBreakdown.tsx) ──────────────────────────
   "staffingPeriod.title": "FTE split by period",
@@ -1683,14 +1693,6 @@ const en: Record<string, string> = {
   "strategicDashboard.levierBoard.avgProgress": "{pct}% average",
   // Round 15: program-wide roadmap (`ProgramRoadmap.tsx`) — full-width, whole-program view at the
   // bottom of the dashboard (one row per levier, across all axes/chantiers).
-  "strategicDashboard.roadmap.title": "Program roadmap",
-  "strategicDashboard.roadmap.empty": "No dated lever on this program.",
-  "strategicDashboard.roadmap.scale": "Scale",
-  "strategicDashboard.roadmap.scaleQuarter": "Quarter",
-  "strategicDashboard.roadmap.scaleSemester": "Half-year",
-  "strategicDashboard.roadmap.scaleYear": "Year",
-  "strategicDashboard.roadmap.progress": "Progress",
-  "strategicDashboard.roadmap.leviersSuffix": "levers",
 
   // ─── Strategic Plan — program configuration screen (admin) ────────────────
   "adminPrograms.manage": "Manage",

@@ -9,7 +9,6 @@ import {
   BudgetDonutChart,
   type BudgetDonutSlice,
 } from "@/components/shared/charts/BudgetDonutChart";
-import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
@@ -168,27 +167,19 @@ export function EffectifsPageClient() {
   // ── Budget FINANCIER alloué (round 12) ─────────────────────────────────────────────────────
   // Nouvelle section monétaire, distincte du besoin/disponible ETP ci-dessus (une question de €,
   // pas d'ETP) : total du budget alloué (`Chantier.allocatedBudget`, round 7) sur tout le
-  // programme, même calcul que la puce du dashboard stratégique (`StrategicDashboardView`), et sa
-  // ventilation PAR AXE pour le donut générique `BudgetDonutChart` (fondation round 12).
+  // programme, même calcul que la puce du dashboard stratégique (`StrategicDashboardView`).
+  // Round 16 : la ventilation PAR AXE (ex-`allocatedBudgetByAxis`) est désormais construite plus
+  // bas, fusionnée avec le consommé — voir `unifiedBudgetSlices`.
   const totalAllocatedBudget = useMemo(
     () => chantiers.reduce((sum, c) => sum + (c.allocatedBudget ?? 0), 0),
     [chantiers]
   );
 
-  const allocatedBudgetByAxis = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const c of chantiers) {
-      totals.set(c.axisId, (totals.get(c.axisId) ?? 0) + (c.allocatedBudget ?? 0));
-    }
-    return axes.map((axis) => ({ name: axis.name, value: totals.get(axis.id) ?? 0 }));
-  }, [axes, chantiers]);
-
-  // ── Budget FINANCIER consommé (round 15) ───────────────────────────────────────────────────
-  // Pendant déclaratif de `totalAllocatedBudget`/`allocatedBudgetByAxis` ci-dessus, MÊME périmètre
-  // (tous les chantiers du programme actif, `Chantier.consumedBudget` directement — les budgets de
-  // LEVIER (`sumLevierBudgets`/`sumConsumedBudget`, `lib/axisLogic.ts`) ne sont pas repliés ici,
-  // cohérent avec `totalAllocatedBudget` qui ne les replie pas non plus). Affiché juste à côté des
-  // figures planifiées correspondantes plutôt que dans une section séparée (demande PO).
+  // ── Budget FINANCIER consommé (round 15, fusionné round 16) ────────────────────────────────
+  // Le total consommé programme n'est plus recalculé séparément ici : depuis round 16, `data[].consumed`
+  // par axe (`budgetByAxisWithConsumed` ci-dessous, réinjecté dans `unifiedBudgetSlices`) alimente
+  // directement l'anneau "consommé" du donut unifié, qui somme lui-même son propre total affiché au
+  // centre — plus besoin d'un `totalConsumedBudget` séparé au niveau de cette page.
   //
   // PAS d'équivalent ETP (`Chantier.consumedFte`) ajouté sur cette page : le seul total ETP déjà
   // affiché ici (`totalFte`, tuile "ETP mobilisés au total") somme le BESOIN déclaré par équipe
@@ -196,14 +187,11 @@ export function EffectifsPageClient() {
   // explicitement documenté (`types/index.ts`) comme une valeur globale déclarative DISTINCTE de ce
   // besoin, sans compteur "planifié" comparable sur `Chantier`. Les comparer produirait un
   // rapprochement trompeur (deux notions différentes), donc volontairement omis ici.
-  const totalConsumedBudget = useMemo(
-    () => chantiers.reduce((sum, c) => sum + (c.consumedBudget ?? 0), 0),
-    [chantiers]
-  );
 
   /** Alloué ET consommé, par axe — même découpage (`axes.map` + filtre par `axisId`) que
-   *  `allocatedBudgetByAxis`, mais regroupés ensemble pour alimenter une `BudgetVsActualBar` par
-   *  axe plutôt qu'un donut (round 12) : ici on compare deux valeurs, pas une répartition. */
+   *  l'ex-`allocatedBudgetByAxis` (round 12, retiré round 16), mais regroupés ensemble : round 12
+   *  s'en servait pour une `BudgetVsActualBar` par axe séparée, round 16 le réutilise directement
+   *  ci-dessous pour alimenter l'anneau "consommé" du donut unifié. */
   const budgetByAxisWithConsumed = useMemo(
     () =>
       axes.map((axis) => {
@@ -216,6 +204,20 @@ export function EffectifsPageClient() {
         };
       }),
     [axes, chantiers]
+  );
+
+  /** Round 16 (PO : fusion de la carte "Budget financier alloué" en un seul graphique) — parts du
+   *  donut UNIFIÉ par axe, alimentant à la fois l'anneau extérieur (répartition, `value`) et
+   *  l'anneau intérieur "consommé" (`showConsumedRing`) de `BudgetDonutChart`. Même découpage/ordre
+   *  d'axes que `budgetByAxisWithConsumed` ci-dessus, dont ce memo est une simple projection. */
+  const unifiedBudgetSlices: BudgetDonutSlice[] = useMemo(
+    () =>
+      budgetByAxisWithConsumed.map((row) => ({
+        name: row.name,
+        value: row.allocated,
+        consumed: row.consumed,
+      })),
+    [budgetByAxisWithConsumed]
   );
 
   /** `BudgetDonutChart.onSliceClick` ne renvoie que le NOM de la part cliquée (contrat du
@@ -355,6 +357,12 @@ export function EffectifsPageClient() {
   // Round 14 (PO) : la tuile `KPICard` "Budget total alloué" (simple somme) était redondante avec
   // le total désormais affiché au centre du donut lui-même (round 13) — retirée, le donut seul
   // porte maintenant à la fois la répartition ET le total.
+  //
+  // Round 16 (PO : "trois éléments visuels séparés pour la même info, c'est répétitif") : la barre
+  // `BudgetVsActualBar` programme (consommé vs alloué total) et la liste d'une `BudgetVsActualBar`
+  // par axe ont été retirées — le SEUL `BudgetDonutChart` ci-dessous porte maintenant la
+  // répartition par axe ET le consommé (anneau intérieur `showConsumedRing`, alimenté par
+  // `unifiedBudgetSlices`), avec le même comportement de clic (`onSliceClick`) qu'avant.
   const moneyBudgetSection = (
     <Card className="mb-0">
       <CardHeader title={t("effectifs.moneyBudget.title")} />
@@ -364,42 +372,19 @@ export function EffectifsPageClient() {
         ) : (
           <div>
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-secondary">
-              {t("effectifs.moneyBudget.consumedTitle")}
-            </h3>
-            <BudgetVsActualBar
-              planned={totalAllocatedBudget}
-              consumed={totalConsumedBudget}
-              formatValue={formatAllocatedBudget}
-            />
-
-            <h3 className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-secondary">
               {t("effectifs.moneyBudget.byAxisTitle")}
             </h3>
             <BudgetDonutChart
-              data={allocatedBudgetByAxis}
+              data={unifiedBudgetSlices}
               formatValue={formatAllocatedBudget}
-              centerLabel={t("effectifs.moneyBudget.centerLabel")}
+              centerLabel={t("effectifs.moneyBudget.centerLabelConsumed")}
+              showConsumedRing
+              consumedLabel={t("effectifs.moneyBudget.consumedTooltipSuffix")}
               onSliceClick={(name) => {
                 const axis = axisByName.get(name);
                 if (axis) setBudgetDrilldownAxisId(axis.id);
               }}
             />
-
-            <h3 className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-secondary">
-              {t("effectifs.moneyBudget.consumedByAxisTitle")}
-            </h3>
-            <ul className="space-y-3">
-              {budgetByAxisWithConsumed.map((row) => (
-                <li key={row.id}>
-                  <BudgetVsActualBar
-                    planned={row.allocated}
-                    consumed={row.consumed}
-                    formatValue={formatAllocatedBudget}
-                    label={row.name}
-                  />
-                </li>
-              ))}
-            </ul>
           </div>
         )}
       </CardBody>

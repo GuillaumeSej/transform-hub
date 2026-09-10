@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutGrid, Plus, Rows3 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
 import { Card, CardBody } from "@/components/shared/Card";
-import { Dropdown, type DropdownOption } from "@/components/shared/Dropdown";
+import { Dropdown, type DropdownGroup, type DropdownOption } from "@/components/shared/Dropdown";
 import { Modal } from "@/components/shared/Modal";
 import {
   BudgetDonutChart,
@@ -15,8 +15,9 @@ import {
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { AxisKanban } from "@/components/strategic/AxisKanban";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
+import { ProgramRoadmap } from "@/components/strategic/ProgramRoadmap";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
-import { numberIndicators, resolveIndicatorStatus } from "@/lib/axisLogic";
+import { numberIndicators, resolveChantierOwner, resolveIndicatorStatus } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantierAction } from "@/lib/firestore/chantierActions";
 import { saveChantier } from "@/lib/firestore/chantiers";
@@ -29,7 +30,7 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { StrategicImportPreview } from "@/lib/strategicExcelImport";
-import type { Chantier, Indicator, LevierKanbanStatus, MilestoneId } from "@/types";
+import type { Chantier, Indicator, LevierKanbanStatus, MilestoneId, StrategicAxis } from "@/types";
 
 /** Nombre de puces numérotées d'indicateur affichées sur une carte d'axe (vue "cartes", round 6,
  *  point 3) avant repli sur une puce "+N". */
@@ -89,7 +90,7 @@ export function StrategicAxesView() {
     }, user?.companyId ?? null);
     return unsub;
   }, [user?.companyId]);
-  const [view, setView] = useState<"cards" | "kanban">("cards");
+  const [view, setView] = useState<"roadmap" | "kanban">("roadmap");
 
   /**
    * Numéro global unique par indicateur (round 10, fondation `lib/axisLogic.ts`) — SEUL point de
@@ -310,6 +311,118 @@ export function StrategicAxesView() {
     [data.axes, selectedOwner, t]
   );
 
+  /**
+   * Filtres "Axe" / "Chantier" / "Responsable" de l'onglet "Feuille de route" (round 16) — même
+   * patron que les 3 dropdowns équivalents de `KpiPageClient.tsx` (URL-persistés, portée en
+   * cascade, garde-fou de cohérence après chargement des données), mais SCOPÉS à cet onglet et
+   * namespacés `rmAxis`/`rmChantier`/`rmOwner` : cette page utilise déjà `?owner=` pour le filtre
+   * Responsable de l'onglet "Cartes" (ci-dessus) et `?chantier=`/`&action=` pour l'état d'ouverture
+   * du panneau chantier (`openChantierPanel` plus bas) — réutiliser ces noms corromprait l'un des
+   * deux mécanismes en modifiant l'autre.
+   */
+  const rmAxis = searchParams.get("rmAxis");
+  const rmChantier = searchParams.get("rmChantier");
+  const rmOwner = searchParams.get("rmOwner");
+
+  const setRoadmapParam = useCallback(
+    (key: "rmAxis" | "rmChantier" | "rmOwner", value: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) params.set(key, value);
+      else params.delete(key);
+      const qs = params.toString();
+      router.replace(qs ? `/levers?${qs}` : "/levers", { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  const roadmapAxisOptions: DropdownOption[] = useMemo(
+    () => data.axes.map((axis) => ({ value: axis.id, label: axis.name })),
+    [data.axes]
+  );
+
+  // Portée par `rmAxis` — même logique de scoping que `chantierGroups` de `KpiPageClient.tsx` :
+  // quand un axe est sélectionné, ne proposer que SES chantiers.
+  const roadmapChantierGroups: DropdownGroup[] = useMemo(
+    () =>
+      data.axes
+        .filter((axis) => !rmAxis || axis.id === rmAxis)
+        .map((axis) => ({
+          groupLabel: axis.name,
+          options: data.chantiers
+            .filter((c) => c.axisId === axis.id)
+            .map((c) => ({ value: c.id, label: c.name })),
+        }))
+        .filter((group) => group.options.length > 0),
+    [data.axes, data.chantiers, rmAxis]
+  );
+
+  // Portée par `rmAxis`/`rmChantier` — même logique que `ownerOptions` de `KpiPageClient.tsx`, mais
+  // résolue par CHANTIER (`resolveChantierOwner`) plutôt que par indicateur : ce filtre alimente une
+  // vue par levier, sans indicateur à résoudre.
+  const roadmapOwnerOptions: DropdownOption[] = useMemo(() => {
+    const scoped = data.chantiers.filter((c) => {
+      if (rmAxis && c.axisId !== rmAxis) return false;
+      if (rmChantier && c.id !== rmChantier) return false;
+      return true;
+    });
+    const names = new Set(
+      scoped.map((c) => resolveChantierOwner(c, data.axes, t("strategicAxes.unassigned")))
+    );
+    return Array.from(names)
+      .sort()
+      .map((name) => ({ value: name, label: name }));
+  }, [data.chantiers, data.axes, t, rmAxis, rmChantier]);
+
+  // Garde-fou de cohérence (même patron que `KpiPageClient.tsx`) : si le changement d'axe rend le
+  // chantier ou le responsable actuellement sélectionné invalide, on le réinitialise — UN seul
+  // `router.replace` pour les deux, pour ne pas laisser un effet écraser la suppression de l'autre.
+  useEffect(() => {
+    if (data.loading) return;
+
+    const chantier = rmChantier ? data.chantiers.find((c) => c.id === rmChantier) : null;
+    const chantierInvalid = !!rmChantier && (!chantier || (!!rmAxis && chantier.axisId !== rmAxis));
+
+    const validOwners = new Set(roadmapOwnerOptions.map((o) => o.value));
+    const ownerInvalid = !!rmOwner && !validOwners.has(rmOwner);
+
+    if (!chantierInvalid && !ownerInvalid) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (chantierInvalid) params.delete("rmChantier");
+    if (ownerInvalid) params.delete("rmOwner");
+    const qs = params.toString();
+    router.replace(qs ? `/levers?${qs}` : "/levers", { scroll: false });
+  }, [
+    rmAxis,
+    rmChantier,
+    rmOwner,
+    data.chantiers,
+    data.loading,
+    roadmapOwnerOptions,
+    searchParams,
+    router,
+  ]);
+
+  const roadmapChantiers = useMemo(
+    () =>
+      data.chantiers.filter((chantier) => {
+        if (rmAxis && chantier.axisId !== rmAxis) return false;
+        if (rmChantier && chantier.id !== rmChantier) return false;
+        if (
+          rmOwner &&
+          resolveChantierOwner(chantier, data.axes, t("strategicAxes.unassigned")) !== rmOwner
+        )
+          return false;
+        return true;
+      }),
+    [data.chantiers, data.axes, t, rmAxis, rmChantier, rmOwner]
+  );
+
+  const roadmapActions = useMemo(() => {
+    const survivingIds = new Set(roadmapChantiers.map((c) => c.id));
+    return data.chantierActions.filter((action) => survivingIds.has(action.chantierId));
+  }, [data.chantierActions, roadmapChantiers]);
+
   const openAxis = (axisId: string) => router.push(`/levers/detail?id=${axisId}`);
 
   /** Panneau chantier (round 6, point 0 — remplace l'ancienne route `/levers/chantier?id=…`) : ouvre
@@ -339,6 +452,132 @@ export function StrategicAxesView() {
   const openChantierEntity = openChantierId
     ? data.chantiers.find((c) => c.id === openChantierId)
     : undefined;
+
+  /**
+   * En-tête riche d'axe de l'onglet "Feuille de route" (round 16) — reprend TEL QUEL le contenu
+   * informatif de l'ancienne carte d'axe de la vue "Cartes" (pastille couleur + nom + responsable,
+   * description, puces d'indicateur numérotées, budget alloué + `BudgetVsActualBar`), SANS la liste
+   * plate de chantiers qui suivait : `ProgramRoadmap` liste déjà les chantiers de l'axe lui-même
+   * (désormais cliquables via sa prop `onChantierClick`), la dupliquer ici serait redondant.
+   *
+   * Passé à `ProgramRoadmap` via sa prop `renderAxisHeader` — appelé par `ProgramRoadmap` une fois
+   * par axe affiché, jamais directement par ce composant.
+   *
+   * Le nom de l'axe reste cliquable (`openAxis`) : c'était auparavant le rôle de la carte entière
+   * (`role="button"`, retirée avec la liste de chantiers) — sans ce bouton, le point d'entrée "clic
+   * sur un axe → sa fiche détail" disparaîtrait silencieusement de cet onglet. Les gestionnaires de
+   * clic des puces d'indicateur et du montant de budget n'ont plus besoin de `e.stopPropagation()` :
+   * il n'y a plus de wrapper cliquable englobant dont il faudrait bloquer la remontée d'événement.
+   */
+  const renderAxisRoadmapHeader = (axis: StrategicAxis): ReactNode => {
+    // Triés par numéro global ascendant (`globalIndicatorNumbers`) AVANT le slice — même tri que
+    // l'ancienne carte, voir son doc-comment historique.
+    const axisIndicators = (indicatorsByAxis.get(axis.id) ?? [])
+      .slice()
+      .sort(
+        (a, b) => (globalIndicatorNumbers.get(a.id) ?? 0) - (globalIndicatorNumbers.get(b.id) ?? 0)
+      );
+    const shownIndicators = axisIndicators.slice(0, MAX_CARD_INDICATOR_CHIPS);
+    const hiddenIndicatorsCount = axisIndicators.length - shownIndicators.length;
+    const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
+    const axisBudget = axisBudgetByAxis.get(axis.id) ?? 0;
+    const axisConsumed = axisConsumedByAxis.get(axis.id) ?? 0;
+    const axisHasBudgetSlices = axisChantiers.some((c) => (c.allocatedBudget ?? 0) > 0);
+
+    return (
+      <div className="rounded-lg border border-border-strong bg-neutral-50 p-3">
+        <div className="flex items-start gap-2.5">
+          <span
+            aria-hidden
+            className="mt-1 h-3 w-3 shrink-0 rounded-full"
+            style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
+          />
+          <span className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => openAxis(axis.id)}
+              className="block truncate text-left text-sm font-bold text-primary transition hover:text-bp-coral hover:underline"
+            >
+              {axis.name}
+            </button>
+            <span className="mt-0.5 block text-[11px] text-tertiary">
+              {axis.owner ?? t("strategicAxes.unassigned")}
+            </span>
+          </span>
+        </div>
+
+        <p className="mt-2 line-clamp-2 min-h-[34px] text-[12.5px] leading-snug text-secondary">
+          {axis.description ?? ""}
+        </p>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 text-xs text-tertiary">{t("strategicAxes.indicatorsCount")}</span>
+          {axisIndicators.length === 0 ? (
+            <span className="text-[11px] italic text-tertiary">
+              {t("strategicAxes.noIndicatorsShort")}
+            </span>
+          ) : (
+            <>
+              {shownIndicators.map((indicator) => {
+                const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
+                return (
+                  <button
+                    key={indicator.id}
+                    type="button"
+                    title={
+                      atRisk ? `${indicator.name} — ${t("indicatorStatus.atRisk")}` : indicator.name
+                    }
+                    onClick={() => router.push(`/kpi?indicator=${indicator.id}`)}
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition hover:bg-black hover:text-white ${
+                      atRisk ? "bg-rag-amber-light text-rag-amber" : "bg-neutral-100 text-secondary"
+                    }`}
+                  >
+                    {globalIndicatorNumbers.get(indicator.id) ?? "?"}
+                  </button>
+                );
+              })}
+              {hiddenIndicatorsCount > 0 && (
+                <span
+                  className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
+                  title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
+                >
+                  +{hiddenIndicatorsCount}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+
+        {axisChantiers.length > 0 && (
+          <div className="mt-2.5 flex flex-col gap-1 border-t border-border pt-2 text-[10.5px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                {t("strategicChantierDetail.allocatedBudget")}
+              </span>
+              {axisHasBudgetSlices ? (
+                <button
+                  type="button"
+                  onClick={() => setBudgetDonutAxisId(axis.id)}
+                  className="shrink-0 font-semibold text-secondary underline-offset-2 hover:text-primary hover:underline"
+                >
+                  {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
+                </button>
+              ) : (
+                <span className="shrink-0 font-semibold text-secondary">
+                  {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
+                </span>
+              )}
+            </div>
+            <BudgetVsActualBar
+              planned={axisBudget}
+              consumed={axisConsumed}
+              formatValue={(value) => `${value.toLocaleString()} ${activeProgram?.currency ?? ""}`}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   /**
    * Écrit les entités validées par `StrategicImportButton` (round 4, point 3) — la librairie
@@ -422,15 +661,13 @@ export function StrategicAxesView() {
 
       <Card className="overflow-visible">
         <CardBody flush>
-          {/* Filtres "Responsable" + "Jalon" + "Statut kanban" réunis dans une même zone (round 10,
-              point 3 ; migrés de `FilterBar` vers `Dropdown` round 14, voir doc-comments de
-              `selectedOwner`/`selectedMilestone`/`selectedKanbanStatus`) — restent des mécanismes
-              TECHNIQUEMENT distincts (entités et persistances différentes), regroupés visuellement
-              sous un libellé générique uniquement quand les 3 sont pertinents (vue "Avancement des
-              chantiers" — "Jalon"/"Statut kanban" n'ont pas de sens en vue "Cartes", où aucun
-              composant ne les consomme). Libellé volontairement générique (round 11) depuis le
-              retrait du filtre "Étape de maturité" : énumérer les filtres concrets n'a plus de sens
-              avec un seul type par vue.
+          {/* Filtres — DEUX jeux mutuellement exclusifs, jamais affichés ensemble (round 16) :
+              "Responsable" + "Jalon" + "Statut kanban" pour l'onglet "Cartes" (ex-"Avancement des
+              chantiers", voir doc-comments de `selectedOwner`/`selectedMilestone`/
+              `selectedKanbanStatus`) ; "Axe" + "Chantier" + "Responsable" (namespacés `rm*`, voir
+              doc-comment de `rmAxis` plus haut) pour l'onglet "Feuille de route". Montrer les deux
+              en même temps laisserait deux dropdowns "Responsable" différemment scopés visibles à la
+              fois — source de confusion.
               `overflow-visible` (round 14, correctif) : `Card` applique `overflow-hidden` par
               défaut (pour clipper ses propres coins arrondis) — sans cette surcharge, le panneau
               ouvert d'un `Dropdown` (positionné en `absolute`, plus haut que la carte elle-même)
@@ -440,46 +677,72 @@ export function StrategicAxesView() {
               rayon de bordure. */}
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
             {view === "kanban" && (
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
-                {t("strategicAxes.filterStageAndMilestone")}
-              </span>
+              <>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+                  {t("strategicAxes.filterStageAndMilestone")}
+                </span>
+                <Dropdown
+                  label={t("strategicAxes.filterOwner")}
+                  placeholder={t("kpi.filterAll")}
+                  value={selectedOwner}
+                  onChange={setOwnerFilter}
+                  options={ownerOptions}
+                  allowClear
+                />
+                <Dropdown
+                  label={t("strategicAxes.filterMilestone")}
+                  placeholder={t("kpi.filterAll")}
+                  value={selectedMilestone}
+                  onChange={(v) => setSelectedMilestone(v as MilestoneId | null)}
+                  options={milestoneOptions}
+                  allowClear
+                />
+                <Dropdown
+                  label={t("strategicAxes.filterKanban")}
+                  placeholder={t("kpi.filterAll")}
+                  value={selectedKanbanStatus}
+                  onChange={(v) => setSelectedKanbanStatus(v as LevierKanbanStatus | null)}
+                  options={kanbanOptions}
+                  allowClear
+                />
+              </>
             )}
-            <Dropdown
-              label={t("strategicAxes.filterOwner")}
-              placeholder={t("kpi.filterAll")}
-              value={selectedOwner}
-              onChange={setOwnerFilter}
-              options={ownerOptions}
-              allowClear
-            />
-            {view === "kanban" && (
-              <Dropdown
-                label={t("strategicAxes.filterMilestone")}
-                placeholder={t("kpi.filterAll")}
-                value={selectedMilestone}
-                onChange={(v) => setSelectedMilestone(v as MilestoneId | null)}
-                options={milestoneOptions}
-                allowClear
-              />
-            )}
-            {view === "kanban" && (
-              <Dropdown
-                label={t("strategicAxes.filterKanban")}
-                placeholder={t("kpi.filterAll")}
-                value={selectedKanbanStatus}
-                onChange={(v) => setSelectedKanbanStatus(v as LevierKanbanStatus | null)}
-                options={kanbanOptions}
-                allowClear
-              />
+            {view === "roadmap" && (
+              <>
+                <Dropdown
+                  label={t("kpi.filterAxis")}
+                  placeholder={t("kpi.filterAll")}
+                  value={rmAxis}
+                  onChange={(v) => setRoadmapParam("rmAxis", v)}
+                  options={roadmapAxisOptions}
+                  allowClear
+                />
+                <Dropdown
+                  label={t("kpi.filterChantier")}
+                  placeholder={t("kpi.filterAll")}
+                  value={rmChantier}
+                  onChange={(v) => setRoadmapParam("rmChantier", v)}
+                  groups={roadmapChantierGroups}
+                  allowClear
+                />
+                <Dropdown
+                  label={t("kpi.filterOwner")}
+                  placeholder={t("kpi.filterAll")}
+                  value={rmOwner}
+                  onChange={(v) => setRoadmapParam("rmOwner", v)}
+                  options={roadmapOwnerOptions}
+                  allowClear
+                />
+              </>
             )}
             <div className="ml-auto flex overflow-hidden rounded-md border border-border">
               <button
-                onClick={() => setView("cards")}
+                onClick={() => setView("roadmap")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${
-                  view === "cards" ? "bg-black text-white" : "bg-white text-secondary"
+                  view === "roadmap" ? "bg-black text-white" : "bg-white text-secondary"
                 }`}
               >
-                <Rows3 size={13} /> {t("strategicAxes.cards")}
+                <Rows3 size={13} /> {t("strategicAxes.roadmapTab")}
               </button>
               <button
                 onClick={() => setView("kanban")}
@@ -487,7 +750,7 @@ export function StrategicAxesView() {
                   view === "kanban" ? "bg-black text-white" : "bg-white text-secondary"
                 }`}
               >
-                <LayoutGrid size={13} /> {t("strategicAxes.kanban")}
+                <LayoutGrid size={13} /> {t("strategicAxes.cardsTab")}
               </button>
             </div>
           </div>
@@ -531,205 +794,28 @@ export function StrategicAxesView() {
           }}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredAxes.map((axis) => {
-            // Triés par numéro global ascendant (`globalIndicatorNumbers`) AVANT le slice — sans
-            // ce tri, les puces s'affichaient dans l'ordre Firestore brut (non trié) des
-            // indicateurs, sans rapport avec le numéro global qui leur est effectivement attribué
-            // (ex. "3 2" ou "10 9 11" au lieu de "2 3"/"9 10 11").
-            const axisIndicators = (indicatorsByAxis.get(axis.id) ?? [])
-              .slice()
-              .sort(
-                (a, b) =>
-                  (globalIndicatorNumbers.get(a.id) ?? 0) - (globalIndicatorNumbers.get(b.id) ?? 0)
-              );
-            const shownIndicators = axisIndicators.slice(0, MAX_CARD_INDICATOR_CHIPS);
-            const hiddenIndicatorsCount = axisIndicators.length - shownIndicators.length;
-            const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
-            const axisBudget = axisBudgetByAxis.get(axis.id) ?? 0;
-            const axisConsumed = axisConsumedByAxis.get(axis.id) ?? 0;
-            // Le donut n'a d'intérêt que si au moins un chantier de l'axe a un budget alloué non
-            // nul — sinon le montant total reste un simple texte, non cliquable (round 12).
-            const axisHasBudgetSlices = axisChantiers.some((c) => (c.allocatedBudget ?? 0) > 0);
-            // `div role="button"` plutôt qu'un vrai <button> : la carte imbrique d'autres <button>
-            // (puces d'indicateur, lignes de chantier), qui ne peuvent pas être imbriqués dans un
-            // <button> parent.
-            return (
-              <div
-                key={axis.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => openAxis(axis.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openAxis(axis.id);
-                  }
-                }}
-                className="flex h-full cursor-pointer flex-col rounded-lg border border-border bg-white p-4 text-left shadow-sm transition hover:-translate-y-px hover:border-black hover:shadow-md"
-              >
-                <div className="flex items-start gap-2.5">
-                  <span
-                    aria-hidden
-                    className="mt-1 h-3 w-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-primary">{axis.name}</span>
-                    <span className="mt-0.5 block text-[11px] text-tertiary">
-                      {axis.owner ?? t("strategicAxes.unassigned")}
-                    </span>
-                  </span>
-                </div>
-
-                {/* Round 14 : bloc TOUJOURS rendu (même sans description) — une hauteur minimale
-                    constante (`min-h-[34px]`, deux lignes à `text-[12.5px] leading-snug`) occupe le
-                    même emplacement structurel que l'axe ait une description ou non. Avant round 14,
-                    ce bloc disparaissait entièrement (`{axis.description && (...)}`) : la marge
-                    devant le bloc "indicateurs" puis "CHANTIERS" se retrouvait donc à des hauteurs
-                    différentes d'une carte à l'autre de la même ligne de grille — c'est cette
-                    variation qui rendait l'alignement "CHANTIERS" imprévisible, pas `mt-auto` en soi
-                    (voir doc-comment du bloc CHANTIERS plus bas). */}
-                <p className="mt-2.5 line-clamp-2 min-h-[34px] text-[12.5px] leading-snug text-secondary">
-                  {axis.description ?? ""}
-                </p>
-
-                {/* Puces numérotées d'indicateur (round 10, point 3) — numéro GLOBAL sur toute la
-                    plateforme (`numberIndicators`, fondation `lib/axisLogic.ts`), coloré si le
-                    statut EFFECTIF de l'indicateur est "à risque". Le clic navigue désormais vers la
-                    vraie page KPI (`/kpi?indicator=<id>`) — remplace l'ancien aperçu en modale locale
-                    (`IndicatorChart`), changement de comportement délibéré (round 10 : le PO veut
-                    atterrir sur la page KPI, pas un aperçu).
-                    Round 14 : bloc TOUJOURS rendu (même compte à zéro), même raison que le bloc
-                    description ci-dessus — sinon la marge `mt-3.5` de ce bloc disparaissait avec lui
-                    et décalait tout ce qui suit (dont "CHANTIERS"). Sans indicateur, un texte discret
-                    remplace les puces plutôt que de vider la ligne. */}
-                <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
-                  <span className="mr-0.5 text-xs text-tertiary">
-                    {t("strategicAxes.indicatorsCount")}
-                  </span>
-                  {axisIndicators.length === 0 ? (
-                    <span className="text-[11px] italic text-tertiary">
-                      {t("strategicAxes.noIndicatorsShort")}
-                    </span>
-                  ) : (
-                    <>
-                      {shownIndicators.map((indicator) => {
-                        const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
-                        return (
-                          <button
-                            key={indicator.id}
-                            type="button"
-                            title={
-                              atRisk
-                                ? `${indicator.name} — ${t("indicatorStatus.atRisk")}`
-                                : indicator.name
-                            }
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/kpi?indicator=${indicator.id}`);
-                            }}
-                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition hover:bg-black hover:text-white ${
-                              atRisk
-                                ? "bg-rag-amber-light text-rag-amber"
-                                : "bg-neutral-100 text-secondary"
-                            }`}
-                          >
-                            {globalIndicatorNumbers.get(indicator.id) ?? "?"}
-                          </button>
-                        );
-                      })}
-                      {hiddenIndicatorsCount > 0 && (
-                        <span
-                          className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
-                          title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
-                        >
-                          +{hiddenIndicatorsCount}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Chantiers de l'axe — nom + sponsor, chacun cliquable (round 10, point 3) —
-                    remplace l'ancienne pastille de comptage brut "N chantiers". Complétés par le
-                    budget total alloué de l'axe (somme de `Chantier.allocatedBudget`).
-                    Round 14 : marge CONSTANTE (`mt-3.5`, même valeur que le bloc indicateurs
-                    au-dessus) au lieu de `mt-auto`. `mt-auto` plaquait ce bloc en BAS de la carte
-                    (hauteur égalisée par la grille, `h-full` sur le conteneur racine) — mais sa
-                    propre hauteur varie selon le nombre de chantiers de l'axe, donc son bord HAUT
-                    (là où "CHANTIERS" s'affiche) se déplaçait quand même d'une carte à l'autre.
-                    Avec les blocs description/indicateurs ci-dessus désormais à hauteur constante
-                    (voir leurs doc-comments), une marge fixe suffit à faire démarrer "CHANTIERS" au
-                    même point vertical sur toutes les cartes d'une même ligne. */}
-                <div className="mt-3.5 flex flex-col gap-1 border-t border-border pt-2.5 text-[10.5px]">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                      {t("strategicAxes.chantiersCount")}
-                    </span>
-                    {axisChantiers.length > 0 &&
-                      (axisHasBudgetSlices ? (
-                        // Round 12 : le montant devient cliquable → donut de répartition par
-                        // chantier (`budgetDonutSlices`, ouvert via `budgetDonutAxisId`).
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setBudgetDonutAxisId(axis.id);
-                          }}
-                          className="shrink-0 font-semibold text-secondary underline-offset-2 hover:text-primary hover:underline"
-                        >
-                          {t("strategicChantierDetail.allocatedBudget")} :{" "}
-                          {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
-                        </button>
-                      ) : (
-                        <span className="shrink-0 font-semibold text-secondary">
-                          {t("strategicChantierDetail.allocatedBudget")} :{" "}
-                          {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
-                        </span>
-                      ))}
-                  </div>
-                  {/* Consommé vs alloué (round 15) — même ensemble de chantiers que le montant
-                      alloué ci-dessus (`axisBudgetByAxis`/`axisConsumedByAxis`), affiché seulement
-                      quand l'axe a des chantiers : sans ça la barre n'aurait rien à comparer. Pas
-                      de `label` : le montant "Budget alloué : X" juste au-dessus joue déjà ce
-                      rôle, la barre n'a besoin que d'afficher consommé/alloué. */}
-                  {axisChantiers.length > 0 && (
-                    <BudgetVsActualBar
-                      planned={axisBudget}
-                      consumed={axisConsumed}
-                      formatValue={(value) =>
-                        `${value.toLocaleString()} ${activeProgram?.currency ?? ""}`
-                      }
-                    />
-                  )}
-                  {axisChantiers.length === 0 ? (
-                    <p className="text-tertiary">{t("strategicAxes.axisNoChantier")}</p>
-                  ) : (
-                    axisChantiers.map((chantier) => (
-                      <button
-                        key={chantier.id}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openChantierPanel(chantier.id);
-                        }}
-                        className="flex items-baseline justify-between gap-2 rounded px-1 py-0.5 text-left transition hover:bg-neutral-50"
-                      >
-                        <span className="truncate font-medium text-primary" title={chantier.name}>
-                          {chantier.name}
-                        </span>
-                        <span className="shrink-0 truncate text-tertiary">
-                          {chantier.sponsorName ?? t("strategicAxes.sponsorUnassigned")}
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        // Onglet "Feuille de route" (round 16) — remplace l'ancienne grille de cartes par axe :
+        // `ProgramRoadmap` groupe déjà lui-même ses lignes par axe puis par chantier, l'en-tête
+        // riche de chaque axe (dot/nom/owner/description/indicateurs/budget) lui est réinjecté via
+        // `renderAxisHeader`, le clic sur un chantier/levier/livrable rouvre le panneau chantier.
+        <ProgramRoadmap
+          axes={data.axes}
+          chantiers={roadmapChantiers}
+          actions={roadmapActions}
+          onLevierClick={openChantierPanel}
+          onChantierClick={(chantierId) => openChantierPanel(chantierId)}
+          renderAxisHeader={(axis) => renderAxisRoadmapHeader(axis)}
+          labels={{
+            empty: t("strategicAxes.roadmap.empty"),
+            scale: t("strategicAxes.roadmap.scale"),
+            scaleQuarter: t("strategicAxes.roadmap.scaleQuarter"),
+            scaleSemester: t("strategicAxes.roadmap.scaleSemester"),
+            scaleYear: t("strategicAxes.roadmap.scaleYear"),
+            progress: t("strategicAxes.roadmap.progress"),
+            today: t("strategicAxes.ganttToday"),
+            leviersSuffix: t("strategicAxes.roadmap.leviersSuffix"),
+          }}
+        />
       )}
 
       {/* Donut de répartition budgétaire de l'axe par chantier (round 12, vue "Cartes") — un slice

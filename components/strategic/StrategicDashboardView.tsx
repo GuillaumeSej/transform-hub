@@ -63,7 +63,6 @@ import {
   type LevierBoardGroup,
 } from "@/components/strategic/LevierMilestoneBoard";
 import { LevierKanbanBoard } from "@/components/strategic/LevierKanbanBoard";
-import { ProgramRoadmap } from "@/components/strategic/ProgramRoadmap";
 
 /**
  * Dashboard du PLAN STRATÉGIQUE — pendant de `DashboardPagePerformance.tsx` pour un programme de
@@ -446,18 +445,6 @@ export function StrategicDashboardView() {
     todo: t("strategicChantierDetail.kanban.todo"),
     in_progress: t("strategicChantierDetail.kanban.inProgress"),
     done: t("strategicChantierDetail.kanban.done"),
-  };
-
-  /** Libellés de la feuille de route programme (round 15) — voir `ProgramRoadmap.tsx`. */
-  const programRoadmapLabels = {
-    empty: t("strategicDashboard.roadmap.empty"),
-    scale: t("strategicDashboard.roadmap.scale"),
-    scaleQuarter: t("strategicDashboard.roadmap.scaleQuarter"),
-    scaleSemester: t("strategicDashboard.roadmap.scaleSemester"),
-    scaleYear: t("strategicDashboard.roadmap.scaleYear"),
-    progress: t("strategicDashboard.roadmap.progress"),
-    today: t("strategicAxes.ganttToday"),
-    leviersSuffix: t("strategicDashboard.roadmap.leviersSuffix"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────
@@ -1008,23 +995,6 @@ export function StrategicDashboardView() {
       >
         {layout.map((instance) => renderWidget(instance))}
       </div>
-
-      {/* ── Feuille de route programme (round 15) — vue globale, pleine largeur, EN DEHORS de la
-          grille de widgets personnalisable ci-dessus (comme le bandeau "ambition") : c'est la seule
-          vue qui couvre TOUT le programme (tous axes/chantiers confondus, une ligne par levier),
-          contrairement aux widgets existants qui restent scopés par axe ou par chantier. ────────── */}
-      <Card className="mt-4">
-        <CardHeader title={t("strategicDashboard.roadmap.title")} />
-        <CardBody>
-          <ProgramRoadmap
-            axes={axes}
-            chantiers={chantiers}
-            actions={chantierActions}
-            onLevierClick={openChantierPanel}
-            labels={programRoadmapLabels}
-          />
-        </CardBody>
-      </Card>
 
       {/* ── Panneau chantier inline (round 10, point 1) — même Modal que `StrategicAxesView.tsx`
           (1100px), pour rester sur le dashboard au lieu de naviguer vers `/levers`. ─────────── */}
