@@ -1094,6 +1094,30 @@ export function sumConsumedBudget(chantierId: string, actions: ChantierAction[])
 // ─── Responsable affiché d'un indicateur (round 12) ────────────────────────────────────────────
 
 /**
+ * Responsable affiché d'UN CHANTIER (round 16) — pendant granulaire/levier de `resolveIndicatorOwner`
+ * ci-dessous, extrait pour les écrans dont la maille est le CHANTIER (ou le LEVIER, qui en hérite),
+ * pas l'indicateur — ex. le filtre "Responsable" de la feuille de route programme
+ * (`ProgramRoadmap.tsx`, `StrategicAxesView.tsx`), dont les lignes sont par levier et n'ont donc pas
+ * d'`Indicator` à résoudre.
+ *
+ * Même chaîne de repli que la branche chantier de `resolveIndicatorOwner` : pilote opérationnel
+ * (`Chantier.pilote`) en priorité, à défaut son sponsor (`Chantier.sponsorName`), à défaut le
+ * `owner` de l'axe parent (`StrategicAxis.owner`, axe introuvable inclus), à défaut
+ * `unassignedLabel`. Voir le doc-comment de `resolveIndicatorOwner` pour le choix de conception du
+ * paramètre `unassignedLabel` (module pur, sans accès à `t()`).
+ */
+export function resolveChantierOwner(
+  chantier: Pick<Chantier, "pilote" | "sponsorName" | "axisId">,
+  axes: StrategicAxis[],
+  unassignedLabel: string
+): string {
+  if (chantier.pilote) return chantier.pilote;
+  if (chantier.sponsorName) return chantier.sponsorName;
+  const axis = axes.find((a) => a.id === chantier.axisId);
+  return axis?.owner ?? unassignedLabel;
+}
+
+/**
  * Libellé du "responsable" d'un indicateur pour l'AFFICHAGE (ex. colonne "Responsable" de la page
  * KPI) — PAS une habilitation : voir `canFillIndicator` pour qui a le droit de saisir une mesure,
  * une notion distincte et volontairement plus permissive (rôles/utilisateurs autorisés, pas une
@@ -1101,11 +1125,10 @@ export function sumConsumedBudget(chantierId: string, actions: ChantierAction[])
  *
  * Deux niveaux de résolution, selon que l'indicateur est rattaché à un chantier ou macro (porté
  * directement par un axe) :
- *  - `indicator.chantierId` défini : résout CE CHANTIER et retourne son pilote opérationnel
- *    (`Chantier.pilote`) en priorité — c'est lui qui fait avancer le chantier au jour le jour,
- *    information plus pertinente ici que le sponsor COMEX — à défaut son sponsor
- *    (`Chantier.sponsorName`), à défaut des deux `unassignedLabel`. Chantier introuvable
- *    (référence orpheline) : `unassignedLabel`, jamais d'exception.
+ *  - `indicator.chantierId` défini : résout CE CHANTIER et délègue à `resolveChantierOwner`
+ *    ci-dessus (pilote opérationnel en priorité — information plus pertinente ici que le sponsor
+ *    COMEX —, à défaut son sponsor, à défaut l'owner de l'axe parent, à défaut `unassignedLabel`).
+ *    Chantier introuvable (référence orpheline) : `unassignedLabel`, jamais d'exception.
  *  - sinon (indicateur macro) : résout `indicator.axisId` et retourne `StrategicAxis.owner`, à
  *    défaut (ou axe introuvable) `unassignedLabel`.
  *
@@ -1125,7 +1148,8 @@ export function resolveIndicatorOwner(
 ): string {
   if (indicator.chantierId) {
     const chantier = chantiers.find((c) => c.id === indicator.chantierId);
-    return chantier?.pilote ?? chantier?.sponsorName ?? unassignedLabel;
+    if (!chantier) return unassignedLabel;
+    return resolveChantierOwner(chantier, axes, unassignedLabel);
   }
   const axis = axes.find((a) => a.id === indicator.axisId);
   return axis?.owner ?? unassignedLabel;

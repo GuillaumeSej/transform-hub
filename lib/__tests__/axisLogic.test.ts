@@ -21,6 +21,7 @@ import {
   programRoadmap,
   programRoadmapBounds,
   progressBucket,
+  resolveChantierOwner,
   resolveIndicatorOwner,
   resolveIndicatorStatus,
   resolveMilestoneAutoFlags,
@@ -1384,6 +1385,43 @@ describe("sumConsumedBudget", () => {
       makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
     ];
     expect(sumConsumedBudget("CH1", actions)).toBe(0);
+  });
+});
+
+// ─── Responsable affiché d'un chantier (round 16) ──────────────────────────────────────────────
+
+describe("resolveChantierOwner", () => {
+  const FALLBACK = "Non assigné";
+
+  it("prefers the chantier's pilote over its sponsor", () => {
+    const chantier = makeChantier("CH1", { pilote: "jean.dupont", sponsorName: "marie.martin" });
+    expect(resolveChantierOwner(chantier, [], FALLBACK)).toBe("jean.dupont");
+  });
+
+  it("falls back to the chantier's sponsorName when pilote is unset", () => {
+    const chantier = makeChantier("CH1", { sponsorName: "marie.martin" });
+    expect(resolveChantierOwner(chantier, [], FALLBACK)).toBe("marie.martin");
+  });
+
+  it("falls back to the parent axis owner when both pilote and sponsorName are unset", () => {
+    const chantier = makeChantier("CH1", { axisId: "AX1" });
+    const axes = [makeAxis("AX1", { owner: "paul.durand" })];
+    expect(resolveChantierOwner(chantier, axes, FALLBACK)).toBe("paul.durand");
+  });
+
+  it("returns the caller-supplied fallback when nothing is assigned, or the axis is not found", () => {
+    // Ni pilote, ni sponsor, ni axe fourni.
+    const chantier = makeChantier("CH1");
+    expect(resolveChantierOwner(chantier, [], FALLBACK)).toBe(FALLBACK);
+
+    // Axe référencé introuvable.
+    const orphanChantier = makeChantier("CH2", { axisId: "GHOST" });
+    expect(resolveChantierOwner(orphanChantier, [], FALLBACK)).toBe(FALLBACK);
+
+    // Axe existant mais sans owner.
+    const chantierWithBareAxis = makeChantier("CH3", { axisId: "AX1" });
+    const axes = [makeAxis("AX1")];
+    expect(resolveChantierOwner(chantierWithBareAxis, axes, FALLBACK)).toBe(FALLBACK);
   });
 });
 

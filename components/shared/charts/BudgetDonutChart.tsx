@@ -8,7 +8,14 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Sector, Tooltip, type PieProp
  *  toujours la même palette (redesign visuel uniquement, aucune nouvelle couleur). */
 const COLORS = ["#FF3C47", "#991D1F", "#FF797B", "#806659", "#A99E9A", "#320300"];
 
-export type BudgetDonutSlice = { name: string; value: number };
+/** Round 16 : mêmes tokens couleur EXACTS que `BudgetVsActualBar` (`components/shared/BudgetVsActualBar.tsx`)
+ *  pour l'anneau intérieur "consommé" — `--red`/`bg-rag-red` (dépassement), `--n-900`/`bg-neutral-900`
+ *  (consommé, cas normal) et `--n-100`/`bg-neutral-100` (piste/restant), pas de nouvelle couleur inventée. */
+const CONSUMED_OVER_COLOR = "#FF3C47";
+const CONSUMED_COLOR = "#0A0A0A";
+const REMAINING_COLOR = "#F0F0F0";
+
+export type BudgetDonutSlice = { name: string; value: number; consumed?: number };
 
 /** Rendu de la part active (survolée) — légèrement plus grande que les autres, même patron que les
  *  exemples recharts officiels d'`activeShape`. Reste sobre : pas d'ombre ni de couleur différente,
@@ -44,20 +51,34 @@ function renderTooltip(
   props: { active?: boolean; payload?: unknown } & {
     total: number;
     formatValue: (value: number) => string;
+    consumedLabel?: string;
   }
 ): JSX.Element | null {
-  const { active, total, formatValue } = props;
-  const payload = props.payload as { name?: string; value?: number }[] | undefined;
+  const { active, total, formatValue, consumedLabel } = props;
+  // Round 16 : le datum d'origine (dont `consumed`, éventuel) est nesté par recharts sous
+  // `payload[0].payload` — vérifié via les typings recharts (`Payload<...>.payload?: any`), PAS à
+  // plat sur `payload[0]` (qui ne porte que `name`/`value`, les clés du `Pie`).
+  const payload = props.payload as
+    { name?: string; value?: number; payload?: { consumed?: number } }[] | undefined;
   if (!active || !payload || payload.length === 0) return null;
   const entry = payload[0];
   const value = Number(entry.value ?? 0);
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+  const consumed = entry.payload?.consumed;
+  const sliceOverBudget = consumed !== undefined && consumed > value;
+  const consumedPct =
+    consumed !== undefined && value > 0 ? Math.round((consumed / value) * 100) : 0;
   return (
     <div className="rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
       <p className="text-[12px] font-semibold text-primary">{entry.name}</p>
       <p className="mt-0.5 text-[12px] text-secondary">
         {formatValue(value)} <span className="text-tertiary">· {pct}%</span>
       </p>
+      {consumed !== undefined && (
+        <p className={`mt-0.5 text-[12px] ${sliceOverBudget ? "text-rag-red" : "text-tertiary"}`}>
+          {formatValue(consumed)} {consumedLabel ?? ""} <span>({consumedPct}%)</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -90,12 +111,20 @@ function renderTooltip(
  * du `Pie` — même patron que `HrDonutChart` dans `HrBreakdownCharts.tsx`) et les entrées de la
  * légende cliquables, les deux appelant `onSliceClick(name)` avec le NOM de la part cliquée (pas
  * son index ni sa valeur).
+ *
+ * Round 16 (PO : fusion de la carte "Budget financier alloué" d'`EffectifsPageClient` en un seul
+ * graphique) — extension purement ADDITIVE : `data[].consumed`, `showConsumedRing` et
+ * `consumedLabel`, tous optionnels, contrat inchangé pour les 3 appelants existants qui ne les
+ * fournissent pas. Voir plus bas pour le détail (second anneau, overlay central à deux lignes,
+ * légende et tooltip enrichis).
  */
 export function BudgetDonutChart({
   data,
   formatValue,
   onSliceClick,
   centerLabel,
+  showConsumedRing,
+  consumedLabel,
 }: {
   data: BudgetDonutSlice[];
   formatValue: (value: number) => string;
@@ -103,9 +132,33 @@ export function BudgetDonutChart({
   /** Libellé secondaire optionnel affiché sous le total, au centre de l'anneau (ex. "Total") —
    *  round 13. Omis par défaut : les 3 appelants existants n'ont pas besoin de le fournir. */
   centerLabel?: string;
+  /** Round 16 : affiche un second anneau, plus petit, à l'intérieur du trou de l'anneau existant,
+   *  résumant `consommé` vs `restant` (ou `consommé` seul en rouge si dépassement) sur l'ensemble
+   *  de `data`. Omis par défaut (`false`/`undefined`) : les 3 appelants existants n'ont pas à le
+   *  fournir et gardent le rendu à anneau unique inchangé. */
+  showConsumedRing?: boolean;
+  /** Round 16 : mot "consommé"/"consumed" fourni par l'appelant (ce composant reste
+   *  volontairement agnostique de la langue/du domaine) — utilisé dans la légende et le tooltip
+   *  partout où ce mot serait sinon nécessaire. Sans effet si `showConsumedRing` n'est pas activé
+   *  et qu'aucune part de `data` ne porte de `consumed`. */
+  consumedLabel?: string;
 }): JSX.Element {
   const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   const total = data.reduce((sum, d) => sum + (d.value || 0), 0);
+
+  // Round 16 : anneau intérieur "consommé vs restant" — même périmètre que `total` ci-dessus
+  // (somme de `data[].consumed`, absent traité comme 0). Dépassement global : un seul segment
+  // rouge plein (rien à montrer comme "restant"), sinon deux segments (consommé foncé / restant
+  // clair, mêmes tokens que `BudgetVsActualBar`).
+  const consumedTotal = data.reduce((sum, d) => sum + (d.consumed || 0), 0);
+  const overBudget = consumedTotal > total;
+  const remaining = Math.max(0, total - consumedTotal);
+  const innerRingData = overBudget
+    ? [{ name: "consumed", value: consumedTotal, fill: CONSUMED_OVER_COLOR }]
+    : [
+        { name: "consumed", value: consumedTotal, fill: CONSUMED_COLOR },
+        { name: "remaining", value: remaining, fill: REMAINING_COLOR },
+      ];
 
   return (
     <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-center">
@@ -134,7 +187,28 @@ export function BudgetDonutChart({
                 <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip content={(props) => renderTooltip({ ...props, total, formatValue })} />
+            {/* Round 16 : second `Pie` NESTÉ dans le MÊME `PieChart`/`ResponsiveContainer` que
+                l'anneau existant, à un rayon plus petit qui tient DANS le trou de celui-ci
+                (`innerRadius=55` ci-dessus ⇒ un rayon extérieur de 46 laisse un espace visible
+                entre les deux anneaux). Pas d'animation (`isAnimationActive={false}`) pour éviter
+                une ré-animation disgracieuse à chaque re-render du parent. */}
+            {showConsumedRing && (
+              <Pie
+                data={innerRingData}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={28}
+                outerRadius={46}
+                isAnimationActive={false}
+              >
+                {innerRingData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.fill} />
+                ))}
+              </Pie>
+            )}
+            <Tooltip
+              content={(props) => renderTooltip({ ...props, total, formatValue, consumedLabel })}
+            />
           </PieChart>
         </ResponsiveContainer>
         {/* Total au centre de l'anneau (round 13) — dans la zone vide laissée par `innerRadius`.
@@ -150,9 +224,29 @@ export function BudgetDonutChart({
             concert si `innerRadius` change. */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <div className="max-w-[90px] px-1 text-center leading-tight">
-            <span className="break-words text-base font-bold text-primary">
-              {formatValue(total)}
-            </span>
+            {/* Round 16 : quand `showConsumedRing` est actif, la ligne unique ci-dessous cède la
+                place à un affichage compact à deux lignes (consommé en gras, puis "/ total" en
+                plus petit et atténué) — `text-sm` (au lieu de `text-base`) pour que les DEUX
+                lignes tiennent confortablement dans la même largeur `max-w-[90px]`. Sans
+                `showConsumedRing`, comportement à ligne unique strictement inchangé (round 13/14). */}
+            {showConsumedRing ? (
+              <>
+                <span
+                  className={`block break-words text-sm font-bold ${
+                    overBudget ? "text-rag-red" : "text-primary"
+                  }`}
+                >
+                  {formatValue(consumedTotal)}
+                </span>
+                <span className="block break-words text-[10px] text-tertiary">
+                  / {formatValue(total)}
+                </span>
+              </>
+            ) : (
+              <span className="break-words text-base font-bold text-primary">
+                {formatValue(total)}
+              </span>
+            )}
             {centerLabel && (
               <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-tertiary">
                 {centerLabel}
@@ -201,8 +295,23 @@ export function BudgetDonutChart({
                   {entry.name}
                 </span>
               </span>
-              <span className="shrink-0 font-semibold text-primary">
-                {formatValue(entry.value)} <span className="text-tertiary">({pct}%)</span>
+              <span className="flex shrink-0 flex-col items-end text-right">
+                <span className="font-semibold text-primary">
+                  {formatValue(entry.value)} <span className="text-tertiary">({pct}%)</span>
+                </span>
+                {/* Round 16 : ligne "consommé" additionnelle, uniquement quand cette part la
+                    fournit (`consumed !== undefined`) — rendu conditionnel, pas un espace vide
+                    pour les entrées qui n'en ont pas, afin de ne pas casser l'alignement de la
+                    légende pour les 3 appelants existants qui n'ont jamais `consumed`. */}
+                {entry.consumed !== undefined && (
+                  <span
+                    className={`text-[10px] font-normal ${
+                      entry.consumed > entry.value ? "text-rag-red" : "text-tertiary"
+                    }`}
+                  >
+                    {formatValue(entry.consumed)} {consumedLabel ?? ""}
+                  </span>
+                )}
               </span>
             </li>
           );

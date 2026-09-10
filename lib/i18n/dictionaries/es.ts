@@ -1163,8 +1163,8 @@ const es: Record<string, string> = {
   "strategicAxes.createAxis": "Crear el eje",
   "strategicAxes.axisCreated": "Eje creado",
   "strategicAxes.axisUpdated": "Eje actualizado",
-  "strategicAxes.cards": "Tarjetas",
-  "strategicAxes.kanban": "Avance de los proyectos",
+  "strategicAxes.roadmapTab": "Hoja de ruta",
+  "strategicAxes.cardsTab": "Tarjetas",
   "strategicAxes.chantiersView": "Proyectos",
   "strategicAxes.axisNoChantier": "Ningún proyecto",
   "strategicAxes.chantierAlerted": "Alerta de dependencia",
@@ -1214,6 +1214,17 @@ const es: Record<string, string> = {
   "strategicAxes.ganttScaleSemester": "Semestre",
   "strategicAxes.progress": "Avance",
   "strategicAxes.ganttToday": "Hoy",
+  // Pestaña "Hoja de ruta" (ronda 16) — hoja de ruta del programa, migrada del antiguo grupo
+  // `strategicDashboard.roadmap.*` (eliminado, la hoja de ruta ahora es una pestaña de esta página
+  // en lugar de una sección del panel). `today` reutiliza `strategicAxes.ganttToday` en vez de
+  // duplicar la clave.
+  "strategicAxes.roadmap.empty": "Ninguna actividad con fecha en este programa.",
+  "strategicAxes.roadmap.scale": "Escala",
+  "strategicAxes.roadmap.scaleQuarter": "Trimestre",
+  "strategicAxes.roadmap.scaleSemester": "Semestre",
+  "strategicAxes.roadmap.scaleYear": "Año",
+  "strategicAxes.roadmap.progress": "Avance",
+  "strategicAxes.roadmap.leviersSuffix": "actividades",
   "strategicAxes.actionsCompleted": "actividades finalizadas",
   "strategicAxes.moreActionsSuffix": "más",
   "strategicAxes.cardNoActions": "Sin actividades",
@@ -1589,8 +1600,8 @@ const es: Record<string, string> = {
   "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierModalTitle": "Reparto del presupuesto por proyecto",
   "effectifs.moneyBudget.byChantierEmpty": "Ningún proyecto con presupuesto asignado en este eje.",
-  "effectifs.moneyBudget.consumedTitle": "Consumido vs presupuesto asignado",
-  "effectifs.moneyBudget.consumedByAxisTitle": "Consumido vs presupuesto por eje",
+  "effectifs.moneyBudget.centerLabelConsumed": "Consumido / asignado",
+  "effectifs.moneyBudget.consumedTooltipSuffix": "consumido",
 
   // ─── Reparto de ETC por periodo (ronda 7 — StaffingPeriodBreakdown.tsx) ───────────────────
   "staffingPeriod.title": "Reparto de ETC por periodo",
@@ -1684,14 +1695,6 @@ const es: Record<string, string> = {
   "strategicDashboard.levierBoard.avgProgress": "{pct}% de media",
   // Ronda 15: hoja de ruta de todo el programa (`ProgramRoadmap.tsx`) — vista de ancho completo, al
   // final del panel (una fila por actividad, en todos los ejes/proyectos).
-  "strategicDashboard.roadmap.title": "Hoja de ruta del plan",
-  "strategicDashboard.roadmap.empty": "Ninguna actividad con fecha en este programa.",
-  "strategicDashboard.roadmap.scale": "Escala",
-  "strategicDashboard.roadmap.scaleQuarter": "Trimestre",
-  "strategicDashboard.roadmap.scaleSemester": "Semestre",
-  "strategicDashboard.roadmap.scaleYear": "Año",
-  "strategicDashboard.roadmap.progress": "Avance",
-  "strategicDashboard.roadmap.leviersSuffix": "actividades",
 
   // ─── Plan Estratégico — ficha de configuración de un programa (admin) ─────
   "adminPrograms.manage": "Gestionar",

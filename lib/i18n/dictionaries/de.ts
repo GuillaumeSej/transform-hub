@@ -1162,8 +1162,8 @@ const de: Record<string, string> = {
   "strategicAxes.createAxis": "Achse anlegen",
   "strategicAxes.axisCreated": "Achse angelegt",
   "strategicAxes.axisUpdated": "Achse aktualisiert",
-  "strategicAxes.cards": "Karten",
-  "strategicAxes.kanban": "Fortschritt der Arbeitspakete",
+  "strategicAxes.roadmapTab": "Roadmap",
+  "strategicAxes.cardsTab": "Karten",
   "strategicAxes.chantiersView": "Arbeitspakete",
   "strategicAxes.axisNoChantier": "Kein Arbeitspaket",
   "strategicAxes.chantierAlerted": "Abhängigkeitswarnung",
@@ -1214,6 +1214,16 @@ const de: Record<string, string> = {
   "strategicAxes.ganttScaleSemester": "Halbjahr",
   "strategicAxes.progress": "Fortschritt",
   "strategicAxes.ganttToday": "Heute",
+  // Tab "Roadmap" (Runde 16) — Programm-Roadmap, migriert aus der ehemaligen Gruppe
+  // `strategicDashboard.roadmap.*` (entfernt, die Roadmap ist jetzt ein Tab dieser Seite statt eines
+  // Dashboard-Abschnitts). `today` verwendet oben `strategicAxes.ganttToday` statt eines Duplikats.
+  "strategicAxes.roadmap.empty": "Keine terminierte Aktivität in diesem Programm.",
+  "strategicAxes.roadmap.scale": "Maßstab",
+  "strategicAxes.roadmap.scaleQuarter": "Quartal",
+  "strategicAxes.roadmap.scaleSemester": "Halbjahr",
+  "strategicAxes.roadmap.scaleYear": "Jahr",
+  "strategicAxes.roadmap.progress": "Fortschritt",
+  "strategicAxes.roadmap.leviersSuffix": "Aktivitäten",
   "strategicAxes.actionsCompleted": "Aktivitäten abgeschlossen",
   "strategicAxes.moreActionsSuffix": "weitere",
   "strategicAxes.cardNoActions": "Keine Aktivität",
@@ -1594,8 +1604,8 @@ const de: Record<string, string> = {
   "effectifs.moneyBudget.byChantierModalTitle": "Budgetverteilung nach Vorhaben",
   "effectifs.moneyBudget.byChantierEmpty":
     "Kein Vorhaben mit zugewiesenem Budget auf dieser Achse.",
-  "effectifs.moneyBudget.consumedTitle": "Verbraucht vs. zugewiesenes Budget",
-  "effectifs.moneyBudget.consumedByAxisTitle": "Verbraucht vs. Budget nach Achse",
+  "effectifs.moneyBudget.centerLabelConsumed": "Verbraucht / zugewiesen",
+  "effectifs.moneyBudget.consumedTooltipSuffix": "verbraucht",
 
   // ─── VZÄ-Verteilung nach Periode (Runde 7 — StaffingPeriodBreakdown.tsx) ──────────────────
   "staffingPeriod.title": "VZÄ-Verteilung nach Periode",
@@ -1691,14 +1701,6 @@ const de: Record<string, string> = {
   // Runde 15: programmweite Roadmap (`ProgramRoadmap.tsx`) — Vollbreiten-Ansicht des GESAMTEN
   // Programms am unteren Rand des Dashboards (eine Zeile pro Aktivität, über alle Achsen/
   // Arbeitspakete hinweg).
-  "strategicDashboard.roadmap.title": "Roadmap des Plans",
-  "strategicDashboard.roadmap.empty": "Keine terminierte Aktivität in diesem Programm.",
-  "strategicDashboard.roadmap.scale": "Maßstab",
-  "strategicDashboard.roadmap.scaleQuarter": "Quartal",
-  "strategicDashboard.roadmap.scaleSemester": "Halbjahr",
-  "strategicDashboard.roadmap.scaleYear": "Jahr",
-  "strategicDashboard.roadmap.progress": "Fortschritt",
-  "strategicDashboard.roadmap.leviersSuffix": "Aktivitäten",
 
   // ─── Strategieplan — Konfigurationsseite eines Programms (Admin) ──────────
   "adminPrograms.manage": "Verwalten",

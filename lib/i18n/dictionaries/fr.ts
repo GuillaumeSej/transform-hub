@@ -1219,8 +1219,8 @@ const fr: Record<string, string> = {
   "strategicAxes.createAxis": "Créer l'axe",
   "strategicAxes.axisCreated": "Axe créé",
   "strategicAxes.axisUpdated": "Axe mis à jour",
-  "strategicAxes.cards": "Cartes",
-  "strategicAxes.kanban": "Avancement des chantiers",
+  "strategicAxes.roadmapTab": "Feuille de route",
+  "strategicAxes.cardsTab": "Cartes",
   "strategicAxes.chantiersView": "Chantiers",
   "strategicAxes.axisNoChantier": "Aucun chantier",
   "strategicAxes.chantierAlerted": "Dépendance en alerte",
@@ -1278,6 +1278,17 @@ const fr: Record<string, string> = {
   "strategicAxes.ganttScaleSemester": "Semestre",
   "strategicAxes.progress": "Avancement",
   "strategicAxes.ganttToday": "Aujourd'hui",
+  // Onglet "Feuille de route" (round 16) — feuille de route programme, migrée depuis l'ex-groupe
+  // `strategicDashboard.roadmap.*` (retiré, la feuille de route est désormais un onglet de cette
+  // page, plus une section du dashboard exécutif). `today` réutilise `strategicAxes.ganttToday`
+  // ci-dessus plutôt qu'une clé dupliquée.
+  "strategicAxes.roadmap.empty": "Aucun levier daté sur le programme.",
+  "strategicAxes.roadmap.scale": "Échelle",
+  "strategicAxes.roadmap.scaleQuarter": "Trimestre",
+  "strategicAxes.roadmap.scaleSemester": "Semestre",
+  "strategicAxes.roadmap.scaleYear": "Année",
+  "strategicAxes.roadmap.progress": "Avancement",
+  "strategicAxes.roadmap.leviersSuffix": "leviers",
   "strategicAxes.actionsCompleted": "leviers terminés",
   "strategicAxes.moreActionsSuffix": "autres",
   "strategicAxes.cardNoActions": "Aucun levier",
@@ -1670,9 +1681,11 @@ const fr: Record<string, string> = {
   "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierModalTitle": "Répartition du budget par chantier",
   "effectifs.moneyBudget.byChantierEmpty": "Aucun chantier avec budget renseigné sur cet axe.",
-  // Consommé vs alloué (round 15) — mirroir déclaratif de la section ci-dessus, `Chantier.consumedBudget`.
-  "effectifs.moneyBudget.consumedTitle": "Consommé vs budget alloué",
-  "effectifs.moneyBudget.consumedByAxisTitle": "Consommé vs budget par axe",
+  // Round 16 (PO : fusion en un seul donut) — libellé central du donut unifié (distinct de
+  // `centerLabel` ci-dessus, toujours utilisé tel quel par la modale de drill-down par chantier) et
+  // mot "consommé" injecté dans la légende/le tooltip de l'anneau intérieur.
+  "effectifs.moneyBudget.centerLabelConsumed": "Consommé / alloué",
+  "effectifs.moneyBudget.consumedTooltipSuffix": "consommé",
 
   // ─── Répartition des ETP par période (round 7 — StaffingPeriodBreakdown.tsx) ──────────────
   "staffingPeriod.title": "Répartition des ETP par période",
@@ -1764,14 +1777,6 @@ const fr: Record<string, string> = {
   "strategicDashboard.levierBoard.avgProgress": "{pct}% en moyenne",
   // Round 15 : feuille de route programme (`ProgramRoadmap.tsx`) — vue globale, pleine largeur, en
   // bas du dashboard (une ligne par levier, tous axes/chantiers confondus).
-  "strategicDashboard.roadmap.title": "Feuille de route du plan",
-  "strategicDashboard.roadmap.empty": "Aucun levier daté sur le programme.",
-  "strategicDashboard.roadmap.scale": "Échelle",
-  "strategicDashboard.roadmap.scaleQuarter": "Trimestre",
-  "strategicDashboard.roadmap.scaleSemester": "Semestre",
-  "strategicDashboard.roadmap.scaleYear": "Année",
-  "strategicDashboard.roadmap.progress": "Avancement",
-  "strategicDashboard.roadmap.leviersSuffix": "leviers",
 
   // ─── Plan Stratégique — fiche de configuration d'un programme (admin) ─────
   "adminPrograms.manage": "Gérer",

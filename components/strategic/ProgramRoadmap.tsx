@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   formatTimelineDay,
   timelineColumns,
@@ -130,6 +130,8 @@ export function ProgramRoadmap({
   chantiers,
   actions,
   onLevierClick,
+  onChantierClick,
+  renderAxisHeader,
   labels,
 }: {
   axes: StrategicAxis[];
@@ -141,6 +143,16 @@ export function ProgramRoadmap({
    *  CHANTIER parent, focalisé sur ce levier (même contrat que `openChantierPanel` de
    *  `StrategicDashboardView.tsx`). */
   onLevierClick?: (chantierId: string, actionId: string) => void;
+  /** Clic sur l'en-tête de chantier (round 16) — même contrat que `onLevierClick` mais sans levier
+   *  ciblé : l'appelant ouvre le panneau du chantier sans le focaliser sur une action précise.
+   *  Omis = l'en-tête de chantier reste un texte non interactif (comportement historique). */
+  onChantierClick?: (chantierId: string) => void;
+  /** Rendu personnalisé de l'en-tête d'axe (round 16) — remplace l'en-tête par défaut (pastille de
+   *  couleur + nom en majuscules) par le contenu fourni par l'appelant (ex. `StrategicAxesView.tsx`
+   *  y réinjecte l'en-tête riche de l'ancienne vue "cartes" : owner, description, puces
+   *  d'indicateur, budget). Omis = en-tête par défaut inchangé, pour que tout autre appelant futur
+   *  sans ce prop continue de fonctionner à l'identique. */
+  renderAxisHeader?: (axis: StrategicAxis) => ReactNode;
   labels?: ProgramRoadmapLabels;
 }) {
   const l = {
@@ -222,31 +234,46 @@ export function ProgramRoadmap({
                       qu'il précède, l'empiler proprement sous l'en-tête de colonnes demanderait de
                       recalculer un offset dynamique par section, pour un bénéfice de lisibilité
                       marginal une fois l'en-tête de colonnes déjà fixe. */}
-                  <div
-                    className="flex items-center gap-1.5 border-b border-border-strong bg-neutral-50 py-1 pl-1"
-                    style={{ borderLeft: `3px solid ${axisColor}` }}
-                  >
-                    <span
-                      aria-hidden
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: axisColor }}
-                    />
-                    <span className="truncate text-[11.5px] font-bold uppercase tracking-wide text-primary">
-                      {axisGroup.axis.name}
-                    </span>
-                  </div>
+                  {renderAxisHeader ? (
+                    renderAxisHeader(axisGroup.axis)
+                  ) : (
+                    <div
+                      className="flex items-center gap-1.5 border-b border-border-strong bg-neutral-50 py-1 pl-1"
+                      style={{ borderLeft: `3px solid ${axisColor}` }}
+                    >
+                      <span
+                        aria-hidden
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: axisColor }}
+                      />
+                      <span className="truncate text-[11.5px] font-bold uppercase tracking-wide text-primary">
+                        {axisGroup.axis.name}
+                      </span>
+                    </div>
+                  )}
 
                   {axisGroup.chantierGroups.map((chantierGroup) => (
                     <div key={chantierGroup.chantier.id}>
-                      {/* En-tête de chantier */}
-                      <div
-                        className={`${ROW_LABEL_WIDTH} truncate pl-2.5 pt-1.5 text-[10.5px] font-semibold text-secondary`}
+                      {/* En-tête de chantier — bouton (round 16) cliquable si `onChantierClick` est
+                          fourni, sinon reste un simple texte non interactif (comportement
+                          historique). */}
+                      <button
+                        type="button"
+                        disabled={!onChantierClick}
+                        onClick={
+                          onChantierClick
+                            ? () => onChantierClick(chantierGroup.chantier.id)
+                            : undefined
+                        }
+                        className={`${ROW_LABEL_WIDTH} truncate pl-2.5 pt-1.5 text-left text-[10.5px] font-semibold text-secondary transition ${
+                          onChantierClick ? "hover:bg-neutral-50 hover:text-primary" : ""
+                        }`}
                       >
                         {chantierGroup.chantier.name}
                         <span className="ml-1 font-normal text-tertiary">
                           · {chantierGroup.rows.length} {l.leviersSuffix}
                         </span>
-                      </div>
+                      </button>
 
                       {chantierGroup.rows.map((row) => {
                         const startPct = pctOf(row.start);
