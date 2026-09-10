@@ -1355,12 +1355,23 @@ const en: Record<string, string> = {
   "strategicChantierDetail.prerequisites.none": "No prerequisites.",
   "strategicChantierDetail.prerequisites.noOtherActions": "No other levers on this workstream.",
 
-  "strategicChantierDetail.timeline.title": "Deliverables timeline",
-  "strategicChantierDetail.timeline.empty": "No phased deliverable yet.",
+  // ─── Lever accordion banners (round <n>) ──────────────────────────────────────────────────
+  "strategicChantierDetail.leviers.expand": "Expand",
+  "strategicChantierDetail.leviers.collapse": "Collapse",
+
+  // ─── Deliverable detail modal + creation form (round <n>, merged "Timeline" tab — replaces
+  // the old tab dedicated to deliverable phases) ────────────────────────────────────────────
+  "strategicChantierDetail.deliverableModal.dueDate": "Due date",
+  "strategicChantierDetail.deliverableModal.comments": "Comments",
+  "strategicChantierDetail.deliverableModal.commentPlaceholder": "Add a comment…",
+  "strategicChantierDetail.deliverableModal.noComments": "No comments.",
+  "strategicChantierDetail.deliverableForm.leverSelect": "Linked lever",
 
   // ─── Workstream detail tabs (round 10, point 2) ────────────────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Overview",
-  "strategicChantierDetail.tabs.progression": "Progress",
+  // Round <n>: tab renamed "Timeline" (merged with the old tab dedicated to deliverable
+  // phases) — key kept as-is (referenced in 2 places in the component), only the VALUE changes.
+  "strategicChantierDetail.tabs.progression": "Timeline",
   "strategicChantierDetail.tabs.staffing": "Staffing",
 
   // ─── KPI linked to a lever, shown on its row (round 10, point 2) ──────────────────────────

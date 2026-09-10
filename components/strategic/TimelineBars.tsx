@@ -430,3 +430,59 @@ export function TimelineBar({
     </Tooltip>
   );
 }
+
+/**
+ * UN repère ponctuel (losange), positionné en pourcentage sur la piste temporelle — pendant de
+ * `TimelineBar` pour un événement DATÉ mais SANS durée (ex. l'échéance d'un livrable), là où
+ * `TimelineBar` suppose toujours une plage `left`→`left+width`. Primitive pure : ne connaît que le
+ * positionnement/la couleur, l'appelant décide de la sémantique (couleur par statut, etc.).
+ */
+export function TimelineMarker({
+  leftPct,
+  top,
+  size = 12,
+  color,
+  onClick,
+  ariaLabel,
+  tooltipText,
+}: {
+  leftPct: number;
+  top: number;
+  size?: number;
+  color: string;
+  onClick?: () => void;
+  ariaLabel: string;
+  tooltipText: string;
+}) {
+  return (
+    <Tooltip text={tooltipText} className="absolute z-[1]" style={{ left: `${leftPct}%`, top }}>
+      <div
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        aria-label={ariaLabel}
+        onClick={onClick}
+        onKeyDown={
+          onClick
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onClick();
+                }
+              }
+            : undefined
+        }
+        className={`rounded-[2px] border border-white shadow-sm ${
+          onClick
+            ? "cursor-pointer transition hover:brightness-110 hover:ring-2 hover:ring-bp-coral/40"
+            : ""
+        }`}
+        style={{
+          width: size,
+          height: size,
+          backgroundColor: color,
+          transform: "translate(-50%, -50%) rotate(45deg)",
+        }}
+      />
+    </Tooltip>
+  );
+}

@@ -1343,12 +1343,25 @@ const es: Record<string, string> = {
   "strategicChantierDetail.prerequisites.noOtherActions":
     "Ninguna otra actividad en este workstream.",
 
-  "strategicChantierDetail.timeline.title": "Cronología de entregables",
-  "strategicChantierDetail.timeline.empty": "Ningún entregable con fases todavía.",
+  // ─── Bandas acordeón de las actividades (ronda <n>) ───────────────────────────────────────
+  "strategicChantierDetail.leviers.expand": "Desplegar",
+  "strategicChantierDetail.leviers.collapse": "Contraer",
+
+  // ─── Modal de detalle de un entregable + formulario de creación (ronda <n>, pestaña
+  // "Cronología" fusionada — sustituye la antigua pestaña dedicada a las fases de los
+  // entregables) ──────────────────────────────────────────────────────────────────────────
+  "strategicChantierDetail.deliverableModal.dueDate": "Fecha de vencimiento",
+  "strategicChantierDetail.deliverableModal.comments": "Comentarios",
+  "strategicChantierDetail.deliverableModal.commentPlaceholder": "Añadir un comentario…",
+  "strategicChantierDetail.deliverableModal.noComments": "Sin comentarios.",
+  "strategicChantierDetail.deliverableForm.leverSelect": "Actividad vinculada",
 
   // ─── Pestañas de la ficha de proyecto (ronda 10, punto 2) ─────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Resumen",
-  "strategicChantierDetail.tabs.progression": "Progreso",
+  // Ronda <n>: pestaña renombrada "Cronología" (fusionada con la antigua pestaña dedicada a las
+  // fases de los entregables) — clave sin cambios (referenciada en 2 lugares del componente),
+  // solo cambia el VALOR.
+  "strategicChantierDetail.tabs.progression": "Cronología",
   "strategicChantierDetail.tabs.staffing": "Personal",
 
   // ─── KPI vinculado a una actividad, mostrado en su fila (ronda 10, punto 2) ───────────────
