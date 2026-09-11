@@ -44,10 +44,6 @@ export type StrategicDashboardWidgetType =
   | "business-kpis"
   /** Compteur "X sur la trajectoire · Y à risque". */
   | "indicator-status"
-  /** Matrice de santé par chantier (colonnes = axes) — round 6, point 5, remplace
-   *  "axis-maturity" (avancement par étape de maturité, retiré : le PO voulait un signal de
-   *  RISQUE par chantier, pas une photo de répartition par étape déjà lisible ailleurs). */
-  | "chantier-health"
   /** Alertes de cascade de retard entre chantiers (sans montant financier). */
   | "chantier-dependency-alerts";
 
@@ -76,7 +72,7 @@ export const STRATEGIC_DASHBOARD_WIDGET_REGISTRY: StrategicDashboardWidgetDef[] 
     type: "indicator-status",
     label: "strategicDashboard.widget.indicatorStatus",
     icon: "Gauge",
-    // Round 6, point 1 : XL par défaut (comme `chantier-health` ci-dessous) — le
+    // Round 6, point 1 : XL par défaut — le
     // widget ne s'étirait pas dans une coquille plus large qu'un `M` sans que sa grille interne
     // (voir `IndicatorStatusSummary` dans `StrategicDashboardView.tsx`) suive, d'où l'effet
     // "coupé en deux" remonté par le PO.
@@ -91,17 +87,10 @@ export const STRATEGIC_DASHBOARD_WIDGET_REGISTRY: StrategicDashboardWidgetDef[] 
     allowedSpans: ["M", "L", "XL"],
   },
   {
-    type: "chantier-health",
-    label: "strategicDashboard.widget.chantierHealth",
-    icon: "ShieldCheck",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-  },
-  {
     type: "chantier-dependency-alerts",
     label: "strategicDashboard.widget.chantierDependencyAlerts",
     icon: "Unlink",
-    // Round 9, point 1 : XL par défaut (comme les 3 autres widgets ci-dessus) — le widget gagne
+    // Round 9, point 1 : XL par défaut (comme les autres widgets ci-dessus) — le widget gagne
     // une deuxième sous-section "Prérequis en attente" qui manquait de place dans une coquille M.
     defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],

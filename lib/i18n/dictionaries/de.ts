@@ -1162,26 +1162,21 @@ const de: Record<string, string> = {
   "strategicAxes.createAxis": "Achse anlegen",
   "strategicAxes.axisCreated": "Achse angelegt",
   "strategicAxes.axisUpdated": "Achse aktualisiert",
-  "strategicAxes.roadmapTab": "Roadmap",
-  "strategicAxes.cardsTab": "Karten",
   "strategicAxes.chantiersView": "Arbeitspakete",
+  // Runde 17 (Tausch): Titel des festen Abschnitts "Fortschrittsstatus der Hebel" dieser Seite
+  // (E0→E4-Ansicht nach Hebel + klassisches Kanban für Hebel ohne KPI) — migriert vom ehemaligen
+  // Schlüssel `strategicDashboard.widget.chantierHealth` (dieses Dashboard-Widget ist weg, dieser
+  // Inhalt lebt jetzt HIER, ohne Tab-Umschalter), gleiche Art von Namensraum-Migration wie
+  // `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` in Runde 16 (siehe unten), aus dem
+  // symmetrisch umgekehrten Grund.
+  "strategicAxes.levierAdvancementTitle": "Fortschrittsstatus der Aktivitäten",
   "strategicAxes.axisNoChantier": "Kein Arbeitspaket",
   "strategicAxes.chantierAlerted": "Abhängigkeitswarnung",
   "strategicAxes.kanbanEmptyColumn": "Keine Achse",
-  "strategicAxes.filterMilestone": "Meilenstein",
-  "strategicAxes.filterKanban": "Kanban-Status",
-  "strategicAxes.filterStageAndMilestone": "Filter",
-  "strategicAxes.kanbanFilteredEmpty": "Kein Arbeitspaket für diesen Filter",
-  "strategicAxes.kanbanNoLeviers": "Kein Hebel",
-  "strategicAxes.kanbanBadgePrefix": "Kanban",
-  "strategicAxes.kanbanDrilldownTitle": "Hebel",
-  "strategicAxes.kanbanDrilldownEmpty": "Kein Hebel auf dieser Stufe.",
-  // Budgetverteilungs-Donuts (Runde 12) — Ansicht "Karten" (Achsenbudget nach Baustelle) und
-  // Ansicht "Baustellenfortschritt" (Baustellenbudget nach Hebel).
+  // Budgetverteilungs-Donut (Runde 12) — reicher Achsen-Header der Roadmap (`ProgramRoadmap`,
+  // Runde 17: jetzt auf dem strategischen Executive-Dashboard statt auf dieser Seite montiert) —
+  // dieser Schlüssel bleibt unverändert nützlich, von diesem neuen Aufrufer wiederverwendet.
   "strategicAxes.budgetByChantierModalTitle": "Budgetverteilung nach Baustelle",
-  "strategicAxes.budgetByLevierModalTitle": "Budgetverteilung nach Hebel",
-  "strategicAxes.budgetUnallocated": "Nicht zugewiesen",
-  "strategicAxes.filterOwner": "Verantwortlich",
   "strategicAxes.noIndicatorsShort": "Kein Indikator",
   "strategicAxes.unassigned": "Nicht zugewiesen",
   "strategicAxes.loading": "Achsen werden geladen…",
@@ -1687,10 +1682,6 @@ const de: Record<string, string> = {
   // Beschriftungen aus dem Widget-Register (lib/strategicDashboardWidgets.ts, Feld `label`).
   "strategicDashboard.widget.indicatorStatus": "Indikatoren · im Plan",
   "strategicDashboard.widget.businessKpis": "Business-KPIs — Marktbeobachtung",
-  // Runde 8: "Verteilung nach Achse" entfällt (ersetzt durch die E0-E4-Ansicht unten), und die
-  // Beschriftung von "chantier-health" wird umbenannt — der Blickwinkel wechselt vom
-  // Arbeitspaket zur Aktivität (Hebel).
-  "strategicDashboard.widget.chantierHealth": "Fortschrittsstatus der Aktivitäten",
   "strategicDashboard.widget.chantierDependencyAlerts":
     "Abhängigkeits- und Voraussetzungswarnungen",
   // Runde 8: Platzhalter einer leeren E0-E4-Jalonspalte (`LevierMilestoneBoard.tsx`).

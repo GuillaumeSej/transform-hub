@@ -15,6 +15,7 @@ import {
   TimelineScaleToggle,
   TimelineTodayMarker,
   hexToRgb,
+  withAlpha,
   type TimelineScale,
 } from "@/components/strategic/TimelineBars";
 import { programRoadmap, type ProgramRoadmapRow } from "@/lib/axisLogic";
@@ -94,11 +95,12 @@ function deliverableMarkerColor(status: LevierKanbanStatus | undefined): string 
   }
 }
 
-// Hauteurs de ligne compactes (round 15) : le programme complet peut compter plusieurs dizaines de
-// leviers, contrairement au Gantt d'un seul chantier — des blocs plus généreux (comme
-// `ChantierGantt.tsx`/`ChantierDetailPanel.tsx`) produiraient un mur de barres impraticable.
-const LEVIER_BAR_HEIGHT = 18;
-const DELIVERABLE_MARKER_LANE_HEIGHT = 14;
+// Hauteurs de ligne (round 17) : agrandies par rapport au round 15 (le PO trouvait la vue trop
+// plate/compacte) tout en restant plus resserrées que `ChantierGantt.tsx`/`ChantierDetailPanel.tsx`
+// — ce composant affiche l'ensemble du programme (potentiellement plusieurs dizaines de leviers)
+// alors que ceux-là se bornent à un seul axe/chantier.
+const LEVIER_BAR_HEIGHT = 30;
+const DELIVERABLE_MARKER_LANE_HEIGHT = 18;
 
 type ChantierGroup = { chantier: Chantier; rows: ProgramRoadmapRow[] };
 type AxisGroup = { axis: StrategicAxis; chantierGroups: ChantierGroup[] };
@@ -228,22 +230,30 @@ export function ProgramRoadmap({
                   : FALLBACK_COLOR;
 
               return (
-                <div key={axisGroup.axis.id} className="mb-2">
+                <div
+                  key={axisGroup.axis.id}
+                  className="mb-4 overflow-hidden rounded-lg border border-border"
+                  style={{
+                    borderLeft: `4px solid ${axisColor}`,
+                    backgroundColor: withAlpha(axisColor, 0.05),
+                  }}
+                >
                   {/* En-tête d'axe — volontairement PAS collant (contrairement à l'en-tête de
                       colonnes ci-dessus) : sa hauteur variant avec le nombre de chantiers/leviers
                       qu'il précède, l'empiler proprement sous l'en-tête de colonnes demanderait de
                       recalculer un offset dynamique par section, pour un bénéfice de lisibilité
-                      marginal une fois l'en-tête de colonnes déjà fixe. */}
+                      marginal une fois l'en-tête de colonnes déjà fixe.
+                      Round 17 : le fond/bordure "carte" de la section vient désormais du conteneur
+                      englobant ci-dessus (`axisColor` en wash + bordure gauche 4px), plus seulement
+                      d'un liséré sur cette seule ligne d'en-tête — pastille + trait de séparation
+                      conservés pour que l'en-tête reste identifiable même sans `renderAxisHeader`. */}
                   {renderAxisHeader ? (
                     renderAxisHeader(axisGroup.axis)
                   ) : (
-                    <div
-                      className="flex items-center gap-1.5 border-b border-border-strong bg-neutral-50 py-1 pl-1"
-                      style={{ borderLeft: `3px solid ${axisColor}` }}
-                    >
+                    <div className="flex items-center gap-1.5 border-b border-border-strong px-2.5 py-2">
                       <span
                         aria-hidden
-                        className="h-2 w-2 shrink-0 rounded-full"
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
                         style={{ backgroundColor: axisColor }}
                       />
                       <span className="truncate text-[11.5px] font-bold uppercase tracking-wide text-primary">
@@ -265,8 +275,8 @@ export function ProgramRoadmap({
                             ? () => onChantierClick(chantierGroup.chantier.id)
                             : undefined
                         }
-                        className={`${ROW_LABEL_WIDTH} truncate pl-2.5 pt-1.5 text-left text-[10.5px] font-semibold text-secondary transition ${
-                          onChantierClick ? "hover:bg-neutral-50 hover:text-primary" : ""
+                        className={`${ROW_LABEL_WIDTH} truncate pl-2.5 pt-2 text-left text-[11.5px] font-semibold text-secondary transition ${
+                          onChantierClick ? "hover:bg-white/60 hover:text-primary" : ""
                         }`}
                       >
                         {chantierGroup.chantier.name}
@@ -286,14 +296,26 @@ export function ProgramRoadmap({
                         return (
                           <div
                             key={row.action.id}
-                            className="flex items-stretch gap-2 border-b border-border/60 py-1 pl-2.5 last:border-b-0"
+                            className="flex items-stretch gap-2 border-b border-border/60 py-1.5 pl-2.5 last:border-b-0"
                           >
-                            <div className={`${ROW_LABEL_WIDTH} shrink-0`}>
+                            <div
+                              className={`${ROW_LABEL_WIDTH} shrink-0 border-l-[3px] pl-2`}
+                              style={{ borderColor: axisColor }}
+                            >
                               <div
                                 className="truncate text-[10.5px] font-medium text-primary"
                                 title={row.action.name}
                               >
                                 {row.action.name}
+                              </div>
+                              <div className="mt-1 h-1 overflow-hidden rounded-full bg-neutral-100">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{
+                                    width: `${row.progressPct}%`,
+                                    backgroundColor: axisColor,
+                                  }}
+                                />
                               </div>
                             </div>
 
@@ -307,7 +329,7 @@ export function ProgramRoadmap({
                                 top={0}
                                 height={LEVIER_BAR_HEIGHT}
                                 color={axisColor}
-                                variant="outline"
+                                variant="solid"
                                 progressPct={row.progressPct}
                                 onClick={
                                   onLevierClick
@@ -319,10 +341,10 @@ export function ProgramRoadmap({
                                   row.end
                                 )} · ${l.progress} ${row.progressPct}%`}
                                 label={row.action.name}
-                                labelClassName="min-w-0 flex-1 truncate text-[9.5px] font-semibold text-primary"
+                                labelClassName="min-w-0 flex-1 truncate text-[9.5px] font-semibold"
                                 inlineMinWidthPct={10}
                                 trailing={
-                                  <span className="shrink-0 text-[9.5px] font-bold text-primary">
+                                  <span className="shrink-0 text-[9.5px] font-bold">
                                     {row.progressPct}%
                                   </span>
                                 }
@@ -333,7 +355,7 @@ export function ProgramRoadmap({
                                   key={deliverable.id}
                                   leftPct={pctOf(deliverable.dueDate!)}
                                   top={LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT / 2}
-                                  size={9}
+                                  size={11}
                                   color={deliverableMarkerColor(deliverable.status)}
                                   onClick={
                                     onLevierClick

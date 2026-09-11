@@ -1163,26 +1163,21 @@ const es: Record<string, string> = {
   "strategicAxes.createAxis": "Crear el eje",
   "strategicAxes.axisCreated": "Eje creado",
   "strategicAxes.axisUpdated": "Eje actualizado",
-  "strategicAxes.roadmapTab": "Hoja de ruta",
-  "strategicAxes.cardsTab": "Tarjetas",
   "strategicAxes.chantiersView": "Proyectos",
+  // Ronda 17 (intercambio): título de la sección fija "Estado de avance de las actividades" de
+  // esta página (vista E0→E4 por palanca + kanban clásico de las palancas sin KPI) — migrado
+  // desde la antigua clave `strategicDashboard.widget.chantierHealth` (ese widget del panel
+  // desaparece, este contenido vive ahora AQUÍ, sin pestañas), mismo tipo de migración de espacio
+  // de nombres que `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` en la ronda 16 (ver
+  // más abajo), por la razón simétrica inversa.
+  "strategicAxes.levierAdvancementTitle": "Estado de avance de las actividades",
   "strategicAxes.axisNoChantier": "Ningún proyecto",
   "strategicAxes.chantierAlerted": "Alerta de dependencia",
   "strategicAxes.kanbanEmptyColumn": "Ningún eje",
-  "strategicAxes.filterMilestone": "Hito",
-  "strategicAxes.filterKanban": "Estado kanban",
-  "strategicAxes.filterStageAndMilestone": "Filtros",
-  "strategicAxes.kanbanFilteredEmpty": "Ningún proyecto para este filtro",
-  "strategicAxes.kanbanNoLeviers": "Ninguna palanca",
-  "strategicAxes.kanbanBadgePrefix": "Kanban",
-  "strategicAxes.kanbanDrilldownTitle": "Palancas",
-  "strategicAxes.kanbanDrilldownEmpty": "Ninguna palanca en esta etapa.",
-  // Donuts de reparto presupuestario (ronda 12) — vista "Tarjetas" (presupuesto del eje por
-  // obra) y vista "Avance de las obras" (presupuesto de la obra por palanca).
+  // Donut de reparto presupuestario (ronda 12) — encabezado de eje enriquecido de la hoja de ruta
+  // (`ProgramRoadmap`, ronda 17: ahora montada en el panel ejecutivo estratégico en lugar de esta
+  // página) — esta clave sigue siendo útil tal cual, reutilizada desde este nuevo llamador.
   "strategicAxes.budgetByChantierModalTitle": "Reparto del presupuesto por obra",
-  "strategicAxes.budgetByLevierModalTitle": "Reparto del presupuesto por palanca",
-  "strategicAxes.budgetUnallocated": "No asignado",
-  "strategicAxes.filterOwner": "Responsable",
   "strategicAxes.noIndicatorsShort": "Ningún indicador",
   "strategicAxes.unassigned": "Sin asignar",
   "strategicAxes.loading": "Cargando los ejes…",
@@ -1683,10 +1678,6 @@ const es: Record<string, string> = {
   // Etiquetas del registro de widgets (lib/strategicDashboardWidgets.ts, campo `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicadores · trayectoria",
   "strategicDashboard.widget.businessKpis": "KPI de negocio — Seguimiento del mercado",
-  // Ronda 8: "Distribución por eje" desaparece (sustituida por la vista E0-E4 de abajo), y la
-  // etiqueta de "chantier-health" se retitula — el grano de lectura pasa del frente de trabajo
-  // a la actividad (levier).
-  "strategicDashboard.widget.chantierHealth": "Estado de avance de las actividades",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertas de dependencias y prerrequisitos",
   // Ronda 8: marcador de una columna de jalón E0-E4 vacía (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
