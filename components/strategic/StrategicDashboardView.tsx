@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronDown,
@@ -25,13 +25,12 @@ import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   chantierDependencyAlerts,
-  colorForChantier,
   countOnTrackAtRisk,
   numberIndicators,
   programBlockedActions,
+  resolveChantierOwner,
+  resolveIndicatorStatus,
 } from "@/lib/axisLogic";
-import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
-import type { LevierKanbanStatus, MilestoneId } from "@/types";
 import {
   STRATEGIC_DASHBOARD_WIDGET_REGISTRY,
   SPAN_COL_CLASS,
@@ -49,6 +48,12 @@ import {
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
+import { Dropdown, type DropdownGroup, type DropdownOption } from "@/components/shared/Dropdown";
+import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
+import {
+  BudgetDonutChart,
+  type BudgetDonutSlice,
+} from "@/components/shared/charts/BudgetDonutChart";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Modal } from "@/components/shared/Modal";
 import { Popover } from "@/components/shared/Popover";
@@ -57,12 +62,8 @@ import {
   BusinessKpiCards,
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
-import {
-  LevierMilestoneBoard,
-  type LevierBoardCard,
-  type LevierBoardGroup,
-} from "@/components/strategic/LevierMilestoneBoard";
-import { LevierKanbanBoard } from "@/components/strategic/LevierKanbanBoard";
+import { ProgramRoadmap } from "@/components/strategic/ProgramRoadmap";
+import type { StrategicAxis } from "@/types";
 
 /**
  * Dashboard du PLAN STRATÉGIQUE — pendant de `DashboardPagePerformance.tsx` pour un programme de
@@ -81,6 +82,13 @@ import { LevierKanbanBoard } from "@/components/strategic/LevierKanbanBoard";
  * Les alertes de cascade de retard entre chantiers sont mises en évidence (bordure d'accent + tri
  * par retard décroissant) : c'est la fonctionnalité explicitement jugée « super importante » par
  * le PO, elle ne doit pas se noyer dans la grille.
+ *
+ * Round 17 (permutation) : la feuille de route programme (`ProgramRoadmap`, ex-onglet "Feuille de
+ * route" de `StrategicAxesView.tsx`) est montée ICI en section FIXE, sous la grille de widgets
+ * personnalisable (elle a besoin d'une vue globale du programme entier, pas d'une coquille
+ * redimensionnable/retirable) — en échange, l'ancien widget "chantier-health" (vue E0→E4 par
+ * levier) quitte ce dashboard pour devenir le contenu fixe de `/levers`, qui perd en retour ses
+ * anciens onglets "Feuille de route"/"Cartes".
  */
 
 /** Teinte d'accent PUREMENT catégorielle (round 13, point 3) — distingue les 4 puces d'en-tête
@@ -231,6 +239,11 @@ function ChipPopover({
   );
 }
 
+/** Nombre de puces numérotées d'indicateur affichées dans l'en-tête riche d'axe de la feuille de
+ *  route (round 17, porté depuis `StrategicAxesView.tsx` — voir `renderAxisRoadmapHeader`
+ *  ci-dessous) avant repli sur une puce "+N". */
+const MAX_CARD_INDICATOR_CHIPS = 5;
+
 export function StrategicDashboardView() {
   const { user } = useRole();
   const { activeProgram, activeProgramId, programs, loading: programsLoading } = useActiveProgram();
@@ -249,10 +262,10 @@ export function StrategicDashboardView() {
    *  `/levers?chantier=…`, qui faisait quitter le dashboard) : même mécanisme que
    *  `StrategicAxesView.tsx`.openChantierPanel — pose `?chantier=`/`&action=` sur CETTE MÊME page
    *  (`router.push`, garde l'historique — le bouton "retour" referme le panneau), monté juste en
-   *  dessous via `<ChantierDetailPanel>`. Réutilisé par la vue E0→E4 par axe
-   *  (`LevierMilestoneBoard`/`LevierKanbanBoard`, round 8) et la ligne "Prérequis en attente" — un
-   *  levier n'a pas de panneau propre, cliquer dessus ouvre toujours le panneau de son CHANTIER
-   *  parent, désormais focalisé sur ce levier précis. */
+   *  dessous via `<ChantierDetailPanel>`. Réutilisé par la feuille de route programme
+   *  (`ProgramRoadmap`, round 17) et la ligne "Prérequis en attente" — un levier n'a pas de panneau
+   *  propre, cliquer dessus ouvre toujours le panneau de son CHANTIER parent, désormais focalisé
+   *  sur ce levier précis. */
   const openChantierPanel = (chantierId: string, focusActionId?: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("chantier", chantierId);
@@ -276,6 +289,10 @@ export function StrategicDashboardView() {
   const openChantierEntity = openChantierId
     ? chantiers.find((c) => c.id === openChantierId)
     : undefined;
+
+  /** Navigation vers la fiche détail d'un axe — porté depuis `StrategicAxesView.tsx`, réutilisé par
+   *  `renderAxisRoadmapHeader` (nom de l'axe cliquable, feuille de route ci-dessous). */
+  const openAxis = (axisId: string) => router.push(`/levers/detail?id=${axisId}`);
 
   // ─── Agrégats (toute la logique de calcul vient de lib/axisLogic.ts) ──────────────────────
   const counts = useMemo(() => countOnTrackAtRisk(indicators), [indicators]);
@@ -310,30 +327,6 @@ export function StrategicDashboardView() {
     [axes, chantiers]
   );
 
-  /** Une ligne par axe : volumétrie (chantiers/indicateurs), part d'indicateurs sur la trajectoire
-   *  ET la liste de SES chantiers (round 6, point 3-4 : imbriqués via `ChantierProgressRow`, même
-   *  composant que le Kanban et l'onglet "Chantiers" — une seule lecture de l'avancement). */
-  const axisBreakdown = useMemo(
-    () =>
-      axes
-        .map((axis) => {
-          const axisIndicators = indicators.filter((i) => i.axisId === axis.id);
-          const { total, onTrack, atRisk } = countOnTrackAtRisk(axisIndicators);
-          const axisChantiers = chantiers.filter((c) => c.axisId === axis.id);
-          return {
-            axis,
-            chantiers: axisChantiers,
-            chantierCount: axisChantiers.length,
-            total,
-            onTrack,
-            atRisk,
-            onTrackPct: total > 0 ? Math.round((onTrack / total) * 100) : 0,
-          };
-        })
-        .sort((a, b) => b.atRisk - a.atRisk || b.total - a.total),
-    [axes, chantiers, indicators]
-  );
-
   const dependencyAlerts = useMemo(
     () =>
       chantierDependencyAlerts(chantiers, chantierActions).sort(
@@ -359,59 +352,319 @@ export function StrategicDashboardView() {
     [chantiers]
   );
 
-  /** Groupes (un par axe) de la vue E0→E4 par levier (round 8, remplace l'ancienne matrice de
-   *  santé PAR CHANTIER) — alimente `LevierMilestoneBoard`/`LevierKanbanBoard`. Un axe sans aucun
-   *  chantier n'ouvre pas de section vide (même filtre que `axisBreakdown` ci-dessus, dont ce calcul
-   *  dérive). Pour chaque axe :
-   *   - `milestones` : leviers RATTACHÉS À UN KPI (`action.indicatorId` défini) de tous les
-   *     chantiers de l'axe, groupés par `action.milestones?.currentMilestone ?? "E0"` (5 colonnes) ;
-   *   - `withoutKpi` : leviers SANS KPI, à plat — c'est `LevierKanbanBoard` qui les reboucle par
-   *     `kanbanStatus` (mêmes 3 colonnes que le kanban classique du Plan Performance).
-   *  Chaque entrée porte `chantierColor` (`colorForChantier`, lib/axisLogic.ts) pour que le même
-   *  chantier affiche systématiquement la même couleur dans les deux blocs (E0-E4 et kanban). */
-  const levierBoardGroups = useMemo<(LevierBoardGroup & { withoutKpi: LevierBoardCard[] })[]>(
-    () =>
-      axisBreakdown
-        .filter((row) => row.chantiers.length > 0)
-        .map((row) => {
-          const chantierById = new Map(row.chantiers.map((chantier) => [chantier.id, chantier]));
+  // ─── Feuille de route programme (round 17, permutation) — porté verbatim depuis
+  // `StrategicAxesView.tsx` (ex-onglet "Feuille de route", désormais remplacé sur `/levers` par le
+  // contenu fixe de l'ex-widget "chantier-health") : `ProgramRoadmap` a besoin d'une vue GLOBALE
+  // programme, c'est pourquoi elle rejoint le dashboard exécutif plutôt que le portefeuille d'axes.
+  // ────────────────────────────────────────────────────────────────────────────────────────────
 
-          const milestones = MILESTONE_ORDER.reduce(
-            (acc, milestoneId) => ({ ...acc, [milestoneId]: [] as LevierBoardCard[] }),
-            {} as Record<MilestoneId, LevierBoardCard[]>
-          );
-          const withoutKpi: LevierBoardCard[] = [];
+  /**
+   * Filtres "Axe" / "Chantier" / "Responsable" de la feuille de route — même patron que les 3
+   * dropdowns équivalents de `KpiPageClient.tsx` (URL-persistés, portée en cascade, garde-fou de
+   * cohérence après chargement des données). Namespacés `rmAxis`/`rmChantier`/`rmOwner` (inchangé
+   * depuis `StrategicAxesView.tsx`) : ce dashboard utilise déjà `?chantier=`/`&action=` pour l'état
+   * d'ouverture du panneau chantier (`openChantierPanel` plus haut) — réutiliser ce nom
+   * corromprait ce mécanisme.
+   */
+  const rmAxis = searchParams.get("rmAxis");
+  const rmChantier = searchParams.get("rmChantier");
+  const rmOwner = searchParams.get("rmOwner");
 
-          for (const action of chantierActions) {
-            const chantier = chantierById.get(action.chantierId);
-            if (!chantier) continue; // Levier d'un chantier hors de cet axe.
-            const card: LevierBoardCard = {
-              action,
-              chantier,
-              chantierColor: colorForChantier(chantier.id),
-            };
-            if (action.indicatorId) {
-              const milestoneId = action.milestones?.currentMilestone ?? "E0";
-              milestones[milestoneId].push(card);
-            } else {
-              withoutKpi.push(card);
-            }
-          }
-
-          return {
-            key: row.axis.id,
-            label: row.axis.name,
-            color: row.axis.color,
-            milestones,
-            // Round 10, point 1 : reporté vers `LevierMilestoneBoard` pour la légende de couleur
-            // des chantiers sous l'en-tête d'axe (déjà disponible dans cette closure via
-            // `axisBreakdown`, juste pas transmis jusqu'ici avant ce round).
-            chantiers: row.chantiers,
-            withoutKpi,
-          };
-        }),
-    [axisBreakdown, chantierActions]
+  const setRoadmapParam = useCallback(
+    (key: "rmAxis" | "rmChantier" | "rmOwner", value: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) params.set(key, value);
+      else params.delete(key);
+      const qs = params.toString();
+      router.replace(qs ? `/dashboard?${qs}` : "/dashboard", { scroll: false });
+    },
+    [router, searchParams]
   );
+
+  const roadmapAxisOptions: DropdownOption[] = useMemo(
+    () => axes.map((axis) => ({ value: axis.id, label: axis.name })),
+    [axes]
+  );
+
+  // Portée par `rmAxis` — même logique de scoping que `chantierGroups` de `KpiPageClient.tsx` :
+  // quand un axe est sélectionné, ne proposer que SES chantiers.
+  const roadmapChantierGroups: DropdownGroup[] = useMemo(
+    () =>
+      axes
+        .filter((axis) => !rmAxis || axis.id === rmAxis)
+        .map((axis) => ({
+          groupLabel: axis.name,
+          options: chantiers
+            .filter((c) => c.axisId === axis.id)
+            .map((c) => ({ value: c.id, label: c.name })),
+        }))
+        .filter((group) => group.options.length > 0),
+    [axes, chantiers, rmAxis]
+  );
+
+  // Portée par `rmAxis`/`rmChantier` — même logique que `ownerOptions` de `KpiPageClient.tsx`, mais
+  // résolue par CHANTIER (`resolveChantierOwner`) plutôt que par indicateur : ce filtre alimente une
+  // vue par levier, sans indicateur à résoudre.
+  const roadmapOwnerOptions: DropdownOption[] = useMemo(() => {
+    const scoped = chantiers.filter((c) => {
+      if (rmAxis && c.axisId !== rmAxis) return false;
+      if (rmChantier && c.id !== rmChantier) return false;
+      return true;
+    });
+    const names = new Set(
+      scoped.map((c) => resolveChantierOwner(c, axes, t("strategicAxes.unassigned")))
+    );
+    return Array.from(names)
+      .sort()
+      .map((name) => ({ value: name, label: name }));
+  }, [chantiers, axes, t, rmAxis, rmChantier]);
+
+  // Garde-fou de cohérence (même patron que `KpiPageClient.tsx`) : si le changement d'axe rend le
+  // chantier ou le responsable actuellement sélectionné invalide, on le réinitialise — UN seul
+  // `router.replace` pour les deux, pour ne pas laisser un effet écraser la suppression de l'autre.
+  useEffect(() => {
+    if (strategic.loading) return;
+
+    const chantier = rmChantier ? chantiers.find((c) => c.id === rmChantier) : null;
+    const chantierInvalid = !!rmChantier && (!chantier || (!!rmAxis && chantier.axisId !== rmAxis));
+
+    const validOwners = new Set(roadmapOwnerOptions.map((o) => o.value));
+    const ownerInvalid = !!rmOwner && !validOwners.has(rmOwner);
+
+    if (!chantierInvalid && !ownerInvalid) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (chantierInvalid) params.delete("rmChantier");
+    if (ownerInvalid) params.delete("rmOwner");
+    const qs = params.toString();
+    router.replace(qs ? `/dashboard?${qs}` : "/dashboard", { scroll: false });
+  }, [
+    rmAxis,
+    rmChantier,
+    rmOwner,
+    chantiers,
+    strategic.loading,
+    roadmapOwnerOptions,
+    searchParams,
+    router,
+  ]);
+
+  const roadmapChantiers = useMemo(
+    () =>
+      chantiers.filter((chantier) => {
+        if (rmAxis && chantier.axisId !== rmAxis) return false;
+        if (rmChantier && chantier.id !== rmChantier) return false;
+        if (
+          rmOwner &&
+          resolveChantierOwner(chantier, axes, t("strategicAxes.unassigned")) !== rmOwner
+        )
+          return false;
+        return true;
+      }),
+    [chantiers, axes, t, rmAxis, rmChantier, rmOwner]
+  );
+
+  const roadmapActions = useMemo(() => {
+    const survivingIds = new Set(roadmapChantiers.map((c) => c.id));
+    return chantierActions.filter((action) => survivingIds.has(action.chantierId));
+  }, [chantierActions, roadmapChantiers]);
+
+  /** Axe dont le donut de répartition budgétaire (en-tête riche de la feuille de route) est
+   *  actuellement ouvert — `null` = modale fermée. Porté depuis `StrategicAxesView.tsx`, même
+   *  convention : on ne stocke que l'id, les chantiers/le budget de l'axe sont recalculés depuis
+   *  `chantiersByAxis` (ci-dessous) plutôt que capturés au clic. */
+  const [budgetDonutAxisId, setBudgetDonutAxisId] = useState<string | null>(null);
+
+  /**
+   * Numéro global unique par indicateur — porté depuis `StrategicAxesView.tsx`, alimente
+   * exclusivement les puces d'indicateur de `renderAxisRoadmapHeader` ci-dessous.
+   */
+  const globalIndicatorNumbers = useMemo(
+    () => numberIndicators(axes, chantiers, indicators),
+    [axes, chantiers, indicators]
+  );
+
+  // Chantiers regroupés par axe — porté depuis `StrategicAxesView.tsx`, alimente
+  // `renderAxisRoadmapHeader` (légende/liste de chantiers de l'en-tête riche d'axe).
+  const chantiersByAxis = useMemo(() => {
+    const map = new Map<string, typeof chantiers>();
+    for (const chantier of chantiers) {
+      const list = map.get(chantier.axisId);
+      if (list) list.push(chantier);
+      else map.set(chantier.axisId, [chantier]);
+    }
+    return map;
+  }, [chantiers]);
+
+  /** Budget alloué total d'un axe — porté depuis `StrategicAxesView.tsx`, affiché dans l'en-tête
+   *  riche d'axe de la feuille de route. */
+  const axisBudgetByAxis = useMemo(() => {
+    const map = new Map<string, number>();
+    chantiersByAxis.forEach((axisChantiers, axisId) => {
+      map.set(
+        axisId,
+        axisChantiers.reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0)
+      );
+    });
+    return map;
+  }, [chantiersByAxis]);
+
+  /** Budget CONSOMMÉ total d'un axe — pendant de `axisBudgetByAxis` ci-dessus mais sommant
+   *  `Chantier.consumedBudget`, sur le MÊME ensemble de chantiers, pour alimenter
+   *  `BudgetVsActualBar` dans l'en-tête riche d'axe. */
+  const axisConsumedByAxis = useMemo(() => {
+    const map = new Map<string, number>();
+    chantiersByAxis.forEach((axisChantiers, axisId) => {
+      map.set(
+        axisId,
+        axisChantiers.reduce((sum, chantier) => sum + (chantier.consumedBudget ?? 0), 0)
+      );
+    });
+    return map;
+  }, [chantiersByAxis]);
+
+  /** Indicateurs regroupés par axe — porté depuis `StrategicAxesView.tsx`, alimente les puces
+   *  numérotées de l'en-tête riche d'axe. */
+  const indicatorsByAxis = useMemo(() => {
+    const map = new Map<string, typeof indicators>();
+    for (const indicator of indicators) {
+      const list = map.get(indicator.axisId);
+      if (list) list.push(indicator);
+      else map.set(indicator.axisId, [indicator]);
+    }
+    return map;
+  }, [indicators]);
+
+  /** Parts du donut budgétaire de l'axe actuellement ouvert (`budgetDonutAxisId`) — porté depuis
+   *  `StrategicAxesView.tsx`. */
+  const budgetDonutSlices: BudgetDonutSlice[] | null = useMemo(() => {
+    if (!budgetDonutAxisId) return null;
+    return (chantiersByAxis.get(budgetDonutAxisId) ?? [])
+      .filter((chantier) => (chantier.allocatedBudget ?? 0) > 0)
+      .map((chantier) => ({ name: chantier.name, value: chantier.allocatedBudget ?? 0 }));
+  }, [budgetDonutAxisId, chantiersByAxis]);
+
+  /** Résout le nom d'un chantier vers son id, dans l'axe ouvert — pour le `onSliceClick` du donut
+   *  (le donut ne connaît que les NOMS, voir `BudgetDonutChart`). */
+  const resolveChantierIdByName = (axisId: string, name: string): string | undefined =>
+    (chantiersByAxis.get(axisId) ?? []).find((c) => c.name === name)?.id;
+
+  /**
+   * En-tête riche d'axe de la feuille de route — porté verbatim depuis `StrategicAxesView.tsx`
+   * (round 16, puis round 17 pour ce déplacement) : pastille couleur + nom + responsable,
+   * description, puces d'indicateur numérotées, budget alloué + `BudgetVsActualBar`. Passé à
+   * `ProgramRoadmap` via sa prop `renderAxisHeader` — appelé par `ProgramRoadmap` une fois par axe
+   * affiché, jamais directement par ce composant.
+   */
+  const renderAxisRoadmapHeader = (axis: StrategicAxis): ReactNode => {
+    // Triés par numéro global ascendant (`globalIndicatorNumbers`) AVANT le slice — même tri que
+    // l'ancienne carte, voir son doc-comment historique dans `StrategicAxesView.tsx`.
+    const axisIndicators = (indicatorsByAxis.get(axis.id) ?? [])
+      .slice()
+      .sort(
+        (a, b) => (globalIndicatorNumbers.get(a.id) ?? 0) - (globalIndicatorNumbers.get(b.id) ?? 0)
+      );
+    const shownIndicators = axisIndicators.slice(0, MAX_CARD_INDICATOR_CHIPS);
+    const hiddenIndicatorsCount = axisIndicators.length - shownIndicators.length;
+    const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
+    const axisBudget = axisBudgetByAxis.get(axis.id) ?? 0;
+    const axisConsumed = axisConsumedByAxis.get(axis.id) ?? 0;
+    const axisHasBudgetSlices = axisChantiers.some((c) => (c.allocatedBudget ?? 0) > 0);
+
+    return (
+      <div className="rounded-lg border border-border-strong bg-neutral-50 p-3">
+        <div className="flex items-start gap-2.5">
+          <span
+            aria-hidden
+            className="mt-1 h-3 w-3 shrink-0 rounded-full"
+            style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
+          />
+          <span className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => openAxis(axis.id)}
+              className="block truncate text-left text-sm font-bold text-primary transition hover:text-bp-coral hover:underline"
+            >
+              {axis.name}
+            </button>
+            <span className="mt-0.5 block text-[11px] text-tertiary">
+              {axis.owner ?? t("strategicAxes.unassigned")}
+            </span>
+          </span>
+        </div>
+
+        <p className="mt-2 line-clamp-2 min-h-[34px] text-[12.5px] leading-snug text-secondary">
+          {axis.description ?? ""}
+        </p>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 text-xs text-tertiary">{t("strategicAxes.indicatorsCount")}</span>
+          {axisIndicators.length === 0 ? (
+            <span className="text-[11px] italic text-tertiary">
+              {t("strategicAxes.noIndicatorsShort")}
+            </span>
+          ) : (
+            <>
+              {shownIndicators.map((indicator) => {
+                const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
+                return (
+                  <button
+                    key={indicator.id}
+                    type="button"
+                    title={
+                      atRisk ? `${indicator.name} — ${t("indicatorStatus.atRisk")}` : indicator.name
+                    }
+                    onClick={() => router.push(`/kpi?indicator=${indicator.id}`)}
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition hover:bg-black hover:text-white ${
+                      atRisk ? "bg-rag-amber-light text-rag-amber" : "bg-neutral-100 text-secondary"
+                    }`}
+                  >
+                    {globalIndicatorNumbers.get(indicator.id) ?? "?"}
+                  </button>
+                );
+              })}
+              {hiddenIndicatorsCount > 0 && (
+                <span
+                  className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
+                  title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
+                >
+                  +{hiddenIndicatorsCount}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+
+        {axisChantiers.length > 0 && (
+          <div className="mt-2.5 flex flex-col gap-1 border-t border-border pt-2 text-[10.5px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                {t("strategicChantierDetail.allocatedBudget")}
+              </span>
+              {axisHasBudgetSlices ? (
+                <button
+                  type="button"
+                  onClick={() => setBudgetDonutAxisId(axis.id)}
+                  className="shrink-0 font-semibold text-secondary underline-offset-2 hover:text-primary hover:underline"
+                >
+                  {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
+                </button>
+              ) : (
+                <span className="shrink-0 font-semibold text-secondary">
+                  {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
+                </span>
+              )}
+            </div>
+            <BudgetVsActualBar
+              planned={axisBudget}
+              consumed={axisConsumed}
+              formatValue={(value) => `${value.toLocaleString()} ${activeProgram?.currency ?? ""}`}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const summaryLabels = {
     tracked: t("strategicDashboard.tracked"),
@@ -431,20 +684,19 @@ export function StrategicDashboardView() {
     progressToTarget: t("kpi.chart.progressToTarget"),
   };
 
-  /** Placeholder d'une colonne de jalon E0-E4 sans levier (round 8) — un texte discret plutôt que
-   *  rien du tout, pour que la structure à 5 colonnes reste lisible même quand une colonne est
-   *  vide. */
-  const levierMilestoneLabels = {
-    emptyColumn: t("strategicDashboard.levierBoard.emptyColumn"),
-  };
-
-  /** En-têtes des 3 colonnes du kanban classique des leviers sans KPI — MÊMES clés que le kanban
-   *  de la fiche chantier (`ChantierDetailPanel.tsx`, fondation round 8) : deux lectures du même
-   *  statut ne doivent jamais diverger sur leur vocabulaire. */
-  const levierKanbanLabels: Record<LevierKanbanStatus, string> = {
-    todo: t("strategicChantierDetail.kanban.todo"),
-    in_progress: t("strategicChantierDetail.kanban.inProgress"),
-    done: t("strategicChantierDetail.kanban.done"),
+  // Libellés de `ProgramRoadmap` — porté depuis `StrategicAxesView.tsx` (mêmes clés i18n
+  // `strategicAxes.roadmap.*`/`strategicAxes.ganttToday`, réutilisées telles quelles : ce
+  // vocabulaire reste conceptuellement "celui de la feuille de route", seul le fichier qui le
+  // consomme change avec ce déplacement round 17).
+  const roadmapLabels = {
+    empty: t("strategicAxes.roadmap.empty"),
+    scale: t("strategicAxes.roadmap.scale"),
+    scaleQuarter: t("strategicAxes.roadmap.scaleQuarter"),
+    scaleSemester: t("strategicAxes.roadmap.scaleSemester"),
+    scaleYear: t("strategicAxes.roadmap.scaleYear"),
+    progress: t("strategicAxes.roadmap.progress"),
+    today: t("strategicAxes.ganttToday"),
+    leviersSuffix: t("strategicAxes.roadmap.leviersSuffix"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────
@@ -626,43 +878,6 @@ export function StrategicDashboardView() {
                 // cartes par ligne (elles restent lisibles, sparkline comprise).
                 className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
               />
-            </CardBody>
-          </Card>
-        );
-
-      // ── Vue E0→E4 par levier, une section par axe + kanban classique pour les leviers sans
-      //    KPI (round 8, remplace l'ancienne matrice de santé PAR CHANTIER — le grain de lecture
-      //    passe du chantier au levier, voir `levierBoardGroups` ci-dessus) ────────────────────
-      case "chantier-health":
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader title={t("strategicDashboard.widget.chantierHealth")} />
-            <CardBody>
-              {levierBoardGroups.length === 0 ? (
-                emptyLine(t("strategicAxes.axisNoChantier"))
-              ) : (
-                <div className="space-y-6">
-                  {levierBoardGroups.map((group) => (
-                    <div key={group.key}>
-                      <LevierMilestoneBoard
-                        groups={[group]}
-                        labels={levierMilestoneLabels}
-                        onLevierClick={openChantierPanel}
-                      />
-                      {/* Ligne kanban classique — seulement si cet axe a au moins un levier sans
-                          KPI (pas de ligne vide, demande PO explicite). */}
-                      {group.withoutKpi.length > 0 && (
-                        <LevierKanbanBoard
-                          items={group.withoutKpi}
-                          labels={levierKanbanLabels}
-                          onLevierClick={openChantierPanel}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
             </CardBody>
           </Card>
         );
@@ -995,6 +1210,85 @@ export function StrategicDashboardView() {
       >
         {layout.map((instance) => renderWidget(instance))}
       </div>
+
+      {/* ── Feuille de route programme (round 17, permutation) — section FIXE, hors grille de
+          widgets personnalisable : `ProgramRoadmap` a besoin d'une vue globale du programme entier,
+          elle ne se prête pas à une coquille redimensionnable/retirable comme les autres widgets
+          ci-dessus. Porté depuis l'ex-onglet "Feuille de route" de `StrategicAxesView.tsx`. ───── */}
+      <div className="mt-4">
+        <Card className="overflow-visible">
+          <CardBody flush>
+            {/* `overflow-visible` (voir doc-comment historique de `StrategicAxesView.tsx`) :
+                `Card` applique `overflow-hidden` par défaut (pour clipper ses propres coins
+                arrondis) — sans cette surcharge, le panneau ouvert d'un `Dropdown` (positionné en
+                `absolute`, plus haut que la carte elle-même) se retrouverait rogné par la carte
+                parente. */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+              <Dropdown
+                label={t("kpi.filterAxis")}
+                placeholder={t("kpi.filterAll")}
+                value={rmAxis}
+                onChange={(v) => setRoadmapParam("rmAxis", v)}
+                options={roadmapAxisOptions}
+                allowClear
+              />
+              <Dropdown
+                label={t("kpi.filterChantier")}
+                placeholder={t("kpi.filterAll")}
+                value={rmChantier}
+                onChange={(v) => setRoadmapParam("rmChantier", v)}
+                groups={roadmapChantierGroups}
+                allowClear
+              />
+              <Dropdown
+                label={t("kpi.filterOwner")}
+                placeholder={t("kpi.filterAll")}
+                value={rmOwner}
+                onChange={(v) => setRoadmapParam("rmOwner", v)}
+                options={roadmapOwnerOptions}
+                allowClear
+              />
+            </div>
+          </CardBody>
+        </Card>
+
+        <div className="mt-4">
+          <ProgramRoadmap
+            axes={axes}
+            chantiers={roadmapChantiers}
+            actions={roadmapActions}
+            onLevierClick={openChantierPanel}
+            onChantierClick={(chantierId) => openChantierPanel(chantierId)}
+            renderAxisHeader={(axis) => renderAxisRoadmapHeader(axis)}
+            labels={roadmapLabels}
+          />
+        </div>
+      </div>
+
+      {/* Donut de répartition budgétaire de l'axe par chantier (en-tête riche de la feuille de
+          route) — un slice par chantier de l'axe ayant un budget alloué non nul
+          (`budgetDonutSlices`). Cliquer un slice ferme cette modale et ouvre le panneau du
+          chantier correspondant. */}
+      <Modal
+        open={!!budgetDonutAxisId}
+        onOpenChange={(open) => {
+          if (!open) setBudgetDonutAxisId(null);
+        }}
+        title={t("strategicAxes.budgetByChantierModalTitle")}
+        maxWidth="560px"
+      >
+        {budgetDonutAxisId && budgetDonutSlices && budgetDonutSlices.length > 0 && (
+          <BudgetDonutChart
+            data={budgetDonutSlices}
+            formatValue={(value) => `${value.toLocaleString()} ${activeProgram?.currency ?? ""}`}
+            onSliceClick={(name) => {
+              const chantierId = resolveChantierIdByName(budgetDonutAxisId, name);
+              setBudgetDonutAxisId(null);
+              if (chantierId) openChantierPanel(chantierId);
+            }}
+          />
+        )}
+      </Modal>
 
       {/* ── Panneau chantier inline (round 10, point 1) — même Modal que `StrategicAxesView.tsx`
           (1100px), pour rester sur le dashboard au lieu de naviguer vers `/levers`. ─────────── */}

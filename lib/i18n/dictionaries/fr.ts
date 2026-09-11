@@ -1219,30 +1219,22 @@ const fr: Record<string, string> = {
   "strategicAxes.createAxis": "Créer l'axe",
   "strategicAxes.axisCreated": "Axe créé",
   "strategicAxes.axisUpdated": "Axe mis à jour",
-  "strategicAxes.roadmapTab": "Feuille de route",
-  "strategicAxes.cardsTab": "Cartes",
   "strategicAxes.chantiersView": "Chantiers",
+  // Round 17 (permutation) : titre de la section fixe "État des lieux d'avancement des leviers" de
+  // cette page (vue E0→E4 par levier + kanban classique des leviers sans KPI) — migré depuis
+  // l'ex-clé `strategicDashboard.widget.chantierHealth` (widget dashboard retiré, ce contenu vit
+  // maintenant ICI, sans bascule d'onglet), même migration de namespace que
+  // `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` au round 16 (voir plus bas), pour la
+  // raison symétrique inverse.
+  "strategicAxes.levierAdvancementTitle": "État des lieux d'avancement des leviers",
   "strategicAxes.axisNoChantier": "Aucun chantier",
   "strategicAxes.chantierAlerted": "Dépendance en alerte",
   "strategicAxes.kanbanEmptyColumn": "Aucun axe",
-  // Onglet "Avancement des chantiers" (round 9, points 3/9) — compteurs E0-E4 + kanban par chantier,
-  // drill-down par jalon/statut, filtre "Jalon" dédié.
-  "strategicAxes.filterMilestone": "Jalon",
-  "strategicAxes.filterKanban": "Statut kanban",
-  // Round 10, point 3 : libellé combiné affiché quand les filtres "Étape de maturité" et "Jalon"
-  // sont regroupés visuellement (vue "Avancement des chantiers", seule où les deux coexistent).
-  "strategicAxes.filterStageAndMilestone": "Filtres",
-  "strategicAxes.kanbanFilteredEmpty": "Aucun chantier pour ce filtre",
-  "strategicAxes.kanbanNoLeviers": "Aucun levier",
-  "strategicAxes.kanbanBadgePrefix": "Kanban",
-  "strategicAxes.kanbanDrilldownTitle": "Leviers",
-  "strategicAxes.kanbanDrilldownEmpty": "Aucun levier à ce stade.",
-  // Donuts de répartition budgétaire (round 12) — vue "Cartes" (budget d'axe par chantier) et vue
-  // "Avancement des chantiers" (budget de chantier par levier).
+  // Donut de répartition budgétaire (round 12) — en-tête riche d'axe de la feuille de route
+  // (`ProgramRoadmap`, round 17 : désormais montée sur le dashboard exécutif stratégique plutôt
+  // que sur cette page, mais cette clé reste utile telle quelle, réutilisée depuis ce nouvel
+  // appelant).
   "strategicAxes.budgetByChantierModalTitle": "Répartition du budget par chantier",
-  "strategicAxes.budgetByLevierModalTitle": "Répartition du budget par levier",
-  "strategicAxes.budgetUnallocated": "Non affecté",
-  "strategicAxes.filterOwner": "Responsable",
   // Round 14 : placeholder court affiché dans la carte "cartes" quand l'axe n'a aucun indicateur
   // (bloc désormais toujours rendu pour un alignement constant du bloc "CHANTIERS", voir
   // StrategicAxesView.tsx) — distinct de `strategicAxes.noIndicators`, phrase complète utilisée
@@ -1766,9 +1758,6 @@ const fr: Record<string, string> = {
   // Libellés du registre de widgets (lib/strategicDashboardWidgets.ts, champ `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
   "strategicDashboard.widget.businessKpis": "KPI business — Suivi du marché",
-  // Round 8 : "Répartition par axe" a disparu (remplacé par la vue E0→E4 ci-dessous), et le
-  // libellé de "chantier-health" est retitré — le grain de lecture passe du chantier au levier.
-  "strategicDashboard.widget.chantierHealth": "État des lieux d'avancement des leviers",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendances et prérequis",
   // Round 8 : placeholder d'une colonne de jalon E0-E4 sans levier (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",

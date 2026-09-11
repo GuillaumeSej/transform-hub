@@ -1176,26 +1176,21 @@ const en: Record<string, string> = {
   "strategicAxes.createAxis": "Create axis",
   "strategicAxes.axisCreated": "Axis created",
   "strategicAxes.axisUpdated": "Axis updated",
-  "strategicAxes.roadmapTab": "Roadmap",
-  "strategicAxes.cardsTab": "Cards",
   "strategicAxes.chantiersView": "Workstreams",
+  // Round 17 (swap) : title of this page's fixed "Lever progress status" section (E0→E4 lever
+  // view + classic kanban for levers without a KPI) — migrated from the former
+  // `strategicDashboard.widget.chantierHealth` key (that dashboard widget is gone, this content
+  // now lives HERE, with no tab toggle), same kind of namespace migration as
+  // `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` in round 16 (see below), for the
+  // symmetric reverse reason.
+  "strategicAxes.levierAdvancementTitle": "Lever progress status",
   "strategicAxes.axisNoChantier": "No workstream",
   "strategicAxes.chantierAlerted": "Dependency alert",
   "strategicAxes.kanbanEmptyColumn": "No axis",
-  "strategicAxes.filterMilestone": "Milestone",
-  "strategicAxes.filterKanban": "Kanban status",
-  "strategicAxes.filterStageAndMilestone": "Filters",
-  "strategicAxes.kanbanFilteredEmpty": "No workstream for this filter",
-  "strategicAxes.kanbanNoLeviers": "No lever",
-  "strategicAxes.kanbanBadgePrefix": "Kanban",
-  "strategicAxes.kanbanDrilldownTitle": "Levers",
-  "strategicAxes.kanbanDrilldownEmpty": "No lever at this stage.",
-  // Budget breakdown donuts (round 12) — "Cards" view (axis budget by chantier) and "Chantier
-  // progress" view (chantier budget by lever).
+  // Budget breakdown donut (round 12) — roadmap's (`ProgramRoadmap`, round 17: now mounted on the
+  // executive strategic dashboard rather than this page) rich axis header — this key stays useful
+  // as-is, reused from that new caller.
   "strategicAxes.budgetByChantierModalTitle": "Budget breakdown by chantier",
-  "strategicAxes.budgetByLevierModalTitle": "Budget breakdown by lever",
-  "strategicAxes.budgetUnallocated": "Unallocated",
-  "strategicAxes.filterOwner": "Owner",
   "strategicAxes.noIndicatorsShort": "No indicator",
   "strategicAxes.unassigned": "Unassigned",
   "strategicAxes.loading": "Loading axes…",
@@ -1682,9 +1677,6 @@ const en: Record<string, string> = {
   // Widget registry labels (lib/strategicDashboardWidgets.ts, `label` field).
   "strategicDashboard.widget.indicatorStatus": "Indicators · on track",
   "strategicDashboard.widget.businessKpis": "Business KPIs — Market tracking",
-  // Round 8: "Breakdown by axis" is gone (replaced by the E0-E4 view below), and the
-  // "chantier-health" label is retitled — the reading grain moves from work package to lever.
-  "strategicDashboard.widget.chantierHealth": "Lever progress status",
   "strategicDashboard.widget.chantierDependencyAlerts": "Dependency and prerequisite alerts",
   // Round 8: placeholder for an empty E0-E4 milestone column (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
