@@ -882,101 +882,6 @@ export function StrategicDashboardView() {
           </Card>
         );
 
-      // ── Alertes de cascade de retard entre chantiers (mise en évidence) ───────────────────
-      case "chantier-dependency-alerts":
-        return renderWidgetShell(
-          instance,
-          <Card
-            className={`mb-0 h-full ${
-              dependencyAlerts.length > 0 ? "border-bp-coral/60 shadow-md" : ""
-            }`}
-          >
-            <CardHeader
-              title={
-                <>
-                  {dependencyAlerts.length > 0 && (
-                    <TriangleAlert size={14} className="flex-shrink-0 text-bp-coral" />
-                  )}
-                  {t("strategicDashboard.widget.chantierDependencyAlerts")}
-                </>
-              }
-              actions={
-                dependencyAlerts.length > 0 ? (
-                  <span className="rounded-full bg-bp-coral px-2 py-0.5 text-[10.5px] font-bold text-white">
-                    {dependencyAlerts.length}
-                  </span>
-                ) : undefined
-              }
-            />
-            <CardBody>
-              {/* Sous-section 1 : dépendances entre chantiers (inchangée, round 6). */}
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
-                  {t("strategicDashboard.dependencyAlertsHeading")}
-                </span>
-              </div>
-              {dependencyAlerts.length === 0
-                ? emptyLine(t("strategicDashboard.noDependencyAlerts"))
-                : dependencyAlerts.map((alert) => (
-                    <div
-                      key={`${alert.sourceId}-${alert.targetId}-${alert.type}`}
-                      className="border-b border-border py-2.5 last:border-0 first:pt-0"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <DependencyTypeBadge type={alert.type} />
-                        <span className="text-[11px] font-semibold text-bp-coral">
-                          {alert.delayDays} {t("strategicDashboard.delayDays")}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[12px] leading-snug text-secondary">
-                        {alert.message}
-                      </p>
-                    </div>
-                  ))}
-
-              {/* Sous-section 2 (round 9, point 1) : prérequis non satisfaits (`programBlockedActions`,
-                  lib/axisLogic.ts) — même carte que les alertes de dépendance pour rester un seul
-                  repère visuel "alertes" sur le dashboard, mais visuellement DISTINCTE (séparateur
-                  renforcé + teinte amber plutôt que corail) pour ne pas fusionner deux types
-                  d'alerte différents en une liste indifférenciée. */}
-              <div className="mt-4 border-t-2 border-border pt-3">
-                <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
-                    {t("strategicDashboard.pendingPrerequisitesHeading")}
-                  </span>
-                  {blockedActions.length > 0 && (
-                    <span className="rounded-full bg-rag-amber px-2 py-0.5 text-[10.5px] font-bold text-white">
-                      {blockedActions.length}
-                    </span>
-                  )}
-                </div>
-                {blockedActions.length === 0
-                  ? emptyLine(t("strategicDashboard.noPrerequisiteAlerts"))
-                  : blockedActions.map(({ action, reasons }) => (
-                      <button
-                        key={action.id}
-                        type="button"
-                        onClick={() => openChantierPanel(action.chantierId, action.id)}
-                        className="block w-full border-b border-border py-2.5 text-left transition last:border-0 first:pt-0 hover:bg-neutral-50"
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] font-semibold text-rag-amber">
-                            {action.name}
-                          </span>
-                          <span className="text-[10.5px] text-tertiary">
-                            {chantierNameById.get(action.chantierId) ?? action.chantierId}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[12px] leading-snug text-secondary">
-                          {reasons.join(", ")}
-                        </p>
-                      </button>
-                    ))}
-              </div>
-            </CardBody>
-          </Card>
-        );
-
       default:
         return null;
     }
@@ -1216,13 +1121,16 @@ export function StrategicDashboardView() {
           elle ne se prête pas à une coquille redimensionnable/retirable comme les autres widgets
           ci-dessus. Porté depuis l'ex-onglet "Feuille de route" de `StrategicAxesView.tsx`. ───── */}
       <div className="mt-4">
+        {/* Round 18 (polish) : filtres + Gantt fusionnés dans UNE SEULE `Card` (au lieu de deux
+            boîtes empilées avec `mb-4`/`mt-4` cumulés qui laissaient un blanc mort entre elles) —
+            même patron "bandeau de filtres avec `border-b` puis contenu" que `KpiPageClient.tsx`
+            (filtres Axe/Chantier/Responsable identiques). `overflow-visible` (voir doc-comment
+            historique de `StrategicAxesView.tsx`) reste nécessaire : `Card` applique
+            `overflow-hidden` par défaut (pour clipper ses propres coins arrondis) — sans cette
+            surcharge, le panneau ouvert d'un `Dropdown` (positionné en `absolute`, plus haut que la
+            carte elle-même) se retrouverait rogné par la carte parente. */}
         <Card className="overflow-visible">
           <CardBody flush>
-            {/* `overflow-visible` (voir doc-comment historique de `StrategicAxesView.tsx`) :
-                `Card` applique `overflow-hidden` par défaut (pour clipper ses propres coins
-                arrondis) — sans cette surcharge, le panneau ouvert d'un `Dropdown` (positionné en
-                `absolute`, plus haut que la carte elle-même) se retrouverait rogné par la carte
-                parente. */}
             <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
               <Dropdown
                 label={t("kpi.filterAxis")}
@@ -1249,21 +1157,112 @@ export function StrategicDashboardView() {
                 allowClear
               />
             </div>
+
+            <div className="p-3">
+              <ProgramRoadmap
+                axes={axes}
+                chantiers={roadmapChantiers}
+                actions={roadmapActions}
+                onLevierClick={openChantierPanel}
+                onChantierClick={(chantierId) => openChantierPanel(chantierId)}
+                renderAxisHeader={(axis) => renderAxisRoadmapHeader(axis)}
+                labels={roadmapLabels}
+              />
+            </div>
           </CardBody>
         </Card>
-
-        <div className="mt-4">
-          <ProgramRoadmap
-            axes={axes}
-            chantiers={roadmapChantiers}
-            actions={roadmapActions}
-            onLevierClick={openChantierPanel}
-            onChantierClick={(chantierId) => openChantierPanel(chantierId)}
-            renderAxisHeader={(axis) => renderAxisRoadmapHeader(axis)}
-            labels={roadmapLabels}
-          />
-        </div>
       </div>
+
+      {/* ── Alertes de dépendances et prérequis (round 18) — section FIXE, comme la feuille de
+          route ci-dessus : sortie de la grille de widgets personnalisable (elle n'était pas
+          redimensionnable/retirable en pratique côté PO, qui la veut toujours visible, en dernière
+          position) et de `STRATEGIC_DASHBOARD_WIDGET_REGISTRY`/`renderWidget` (voir
+          `lib/strategicDashboardWidgets.ts`). Même contenu qu'avant (sous-sections "alertes de
+          dépendance" + "Prérequis en attente"), rendu directement sans la coquille
+          `renderWidgetShell` (drag/resize/retrait) puisqu'elle ne fait plus partie de la grille. ── */}
+      <Card className={dependencyAlerts.length > 0 ? "border-bp-coral/60 shadow-md" : ""}>
+        <CardHeader
+          title={
+            <>
+              {dependencyAlerts.length > 0 && (
+                <TriangleAlert size={14} className="flex-shrink-0 text-bp-coral" />
+              )}
+              {t("strategicDashboard.widget.chantierDependencyAlerts")}
+            </>
+          }
+          actions={
+            dependencyAlerts.length > 0 ? (
+              <span className="rounded-full bg-bp-coral px-2 py-0.5 text-[10.5px] font-bold text-white">
+                {dependencyAlerts.length}
+              </span>
+            ) : undefined
+          }
+        />
+        <CardBody>
+          {/* Sous-section 1 : dépendances entre chantiers (inchangée, round 6). */}
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
+              {t("strategicDashboard.dependencyAlertsHeading")}
+            </span>
+          </div>
+          {dependencyAlerts.length === 0
+            ? emptyLine(t("strategicDashboard.noDependencyAlerts"))
+            : dependencyAlerts.map((alert) => (
+                <div
+                  key={`${alert.sourceId}-${alert.targetId}-${alert.type}`}
+                  className="border-b border-border py-2.5 last:border-0 first:pt-0"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DependencyTypeBadge type={alert.type} />
+                    <span className="text-[11px] font-semibold text-bp-coral">
+                      {alert.delayDays} {t("strategicDashboard.delayDays")}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[12px] leading-snug text-secondary">{alert.message}</p>
+                </div>
+              ))}
+
+          {/* Sous-section 2 (round 9, point 1) : prérequis non satisfaits (`programBlockedActions`,
+              lib/axisLogic.ts) — même carte que les alertes de dépendance pour rester un seul
+              repère visuel "alertes" sur le dashboard, mais visuellement DISTINCTE (séparateur
+              renforcé + teinte amber plutôt que corail) pour ne pas fusionner deux types
+              d'alerte différents en une liste indifférenciée. */}
+          <div className="mt-4 border-t-2 border-border pt-3">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
+                {t("strategicDashboard.pendingPrerequisitesHeading")}
+              </span>
+              {blockedActions.length > 0 && (
+                <span className="rounded-full bg-rag-amber px-2 py-0.5 text-[10.5px] font-bold text-white">
+                  {blockedActions.length}
+                </span>
+              )}
+            </div>
+            {blockedActions.length === 0
+              ? emptyLine(t("strategicDashboard.noPrerequisiteAlerts"))
+              : blockedActions.map(({ action, reasons }) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={() => openChantierPanel(action.chantierId, action.id)}
+                    className="block w-full border-b border-border py-2.5 text-left transition last:border-0 first:pt-0 hover:bg-neutral-50"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-semibold text-rag-amber">
+                        {action.name}
+                      </span>
+                      <span className="text-[10.5px] text-tertiary">
+                        {chantierNameById.get(action.chantierId) ?? action.chantierId}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[12px] leading-snug text-secondary">
+                      {reasons.join(", ")}
+                    </p>
+                  </button>
+                ))}
+          </div>
+        </CardBody>
+      </Card>
 
       {/* Donut de répartition budgétaire de l'axe par chantier (en-tête riche de la feuille de
           route) — un slice par chantier de l'axe ayant un budget alloué non nul

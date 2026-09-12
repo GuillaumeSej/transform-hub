@@ -43,9 +43,7 @@ export type StrategicDashboardWidgetType =
    *  défaut si un type n'existe plus au registre). */
   | "business-kpis"
   /** Compteur "X sur la trajectoire · Y à risque". */
-  | "indicator-status"
-  /** Alertes de cascade de retard entre chantiers (sans montant financier). */
-  | "chantier-dependency-alerts";
+  | "indicator-status";
 
 export interface StrategicDashboardWidgetDef {
   type: StrategicDashboardWidgetType;
@@ -83,15 +81,6 @@ export const STRATEGIC_DASHBOARD_WIDGET_REGISTRY: StrategicDashboardWidgetDef[] 
     type: "business-kpis",
     label: "strategicDashboard.widget.businessKpis",
     icon: "Target",
-    defaultSpan: "XL",
-    allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "chantier-dependency-alerts",
-    label: "strategicDashboard.widget.chantierDependencyAlerts",
-    icon: "Unlink",
-    // Round 9, point 1 : XL par défaut (comme les autres widgets ci-dessus) — le widget gagne
-    // une deuxième sous-section "Prérequis en attente" qui manquait de place dans une coquille M.
     defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
   },

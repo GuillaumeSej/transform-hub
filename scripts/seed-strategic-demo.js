@@ -841,7 +841,24 @@ const ACTIONS = [
     start: "2026-05-01",
     end: "2026-08-31",
     status: "defined",
-    kanbanStatus: "in_progress",
+    // Round 18 : plus de KPI rattaché ET plus de kanban à part — ce levier progresse comme tout
+    // autre dans le système E0→E4 (ici partiellement, jalon E1 en cours).
+    milestones: {
+      currentMilestone: "E1",
+      passedMilestones: ["E0"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
+        ],
+        E1: [
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 30 },
+        ],
+      },
+    },
   },
   {
     id: "ACT-scia-1",
@@ -947,7 +964,40 @@ const ACTIONS = [
     start: "2026-04-01",
     end: "2026-07-31",
     status: "defined",
-    kanbanStatus: "done",
+    // Round 18 : plus de KPI rattaché ET plus de kanban à part — ce levier progresse comme tout
+    // autre dans le système E0→E4 (ici jalon E4 franchi, terminé).
+    milestones: {
+      currentMilestone: "E4",
+      passedMilestones: ["E0", "E1", "E2", "E3"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
+        ],
+        E1: [
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
+        ],
+        E2: [
+          { itemId: "E2-B1", progressPct: 100 },
+          { itemId: "E2-B2", progressPct: 100 },
+          { itemId: "E2-B3", progressPct: 100 },
+        ],
+        E3: [
+          { itemId: "E3-B1", progressPct: 100 },
+          { itemId: "E3-B2", progressPct: 100 },
+          { itemId: "E3-B3", progressPct: 100 },
+        ],
+        E4: [
+          { itemId: "E4-B1", progressPct: 100 },
+          { itemId: "E4-B2", progressPct: 100 },
+        ],
+      },
+    },
   },
 
   {
@@ -1014,7 +1064,40 @@ const ACTIONS = [
     start: "2026-03-01",
     end: "2026-06-30",
     status: "planned",
-    kanbanStatus: "done",
+    // Round 18 : plus de KPI rattaché ET plus de kanban à part — ce levier progresse comme tout
+    // autre dans le système E0→E4 (ici jalon E4 franchi, terminé).
+    milestones: {
+      currentMilestone: "E4",
+      passedMilestones: ["E0", "E1", "E2", "E3"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
+        ],
+        E1: [
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
+        ],
+        E2: [
+          { itemId: "E2-B1", progressPct: 100 },
+          { itemId: "E2-B2", progressPct: 100 },
+          { itemId: "E2-B3", progressPct: 100 },
+        ],
+        E3: [
+          { itemId: "E3-B1", progressPct: 100 },
+          { itemId: "E3-B2", progressPct: 100 },
+          { itemId: "E3-B3", progressPct: 100 },
+        ],
+        E4: [
+          { itemId: "E4-B1", progressPct: 100 },
+          { itemId: "E4-B2", progressPct: 100 },
+        ],
+      },
+    },
   },
   {
     id: "ACT-orga-1",
@@ -1024,7 +1107,40 @@ const ACTIONS = [
     start: "2026-02-01",
     end: "2026-05-31",
     status: "defined",
-    kanbanStatus: "done",
+    // Round 18 : plus de KPI rattaché ET plus de kanban à part — ce levier progresse comme tout
+    // autre dans le système E0→E4 (ici jalon E4 franchi, terminé).
+    milestones: {
+      currentMilestone: "E4",
+      passedMilestones: ["E0", "E1", "E2", "E3"],
+      checklists: {
+        E0: [
+          { itemId: "E0-A2", progressPct: 100 },
+          { itemId: "E0-B1", progressPct: 100 },
+          { itemId: "E0-B2", progressPct: 100 },
+          { itemId: "E0-C1", progressPct: 100 },
+        ],
+        E1: [
+          { itemId: "E1-B1", progressPct: 100 },
+          { itemId: "E1-B2", progressPct: 100 },
+          { itemId: "E1-B3", progressPct: 100 },
+          { itemId: "E1-C2", progressPct: 100 },
+        ],
+        E2: [
+          { itemId: "E2-B1", progressPct: 100 },
+          { itemId: "E2-B2", progressPct: 100 },
+          { itemId: "E2-B3", progressPct: 100 },
+        ],
+        E3: [
+          { itemId: "E3-B1", progressPct: 100 },
+          { itemId: "E3-B2", progressPct: 100 },
+          { itemId: "E3-B3", progressPct: 100 },
+        ],
+        E4: [
+          { itemId: "E4-B1", progressPct: 100 },
+          { itemId: "E4-B2", progressPct: 100 },
+        ],
+      },
+    },
   },
 ];
 
@@ -1665,7 +1781,6 @@ async function main() {
     if (action.deliverables) payload.deliverables = action.deliverables;
     if (action.indicatorId) payload.indicatorId = action.indicatorId;
     if (action.milestones) payload.milestones = action.milestones;
-    if (action.kanbanStatus) payload.kanbanStatus = action.kanbanStatus;
     await setDoc(doc(db, "chantierActions", action.id), payload);
   }
 

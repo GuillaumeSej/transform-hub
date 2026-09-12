@@ -13,16 +13,17 @@ import type { Chantier, ChantierAction, MilestoneId } from "@/types";
 /**
  * Vue E0→E4 par axe — widget dashboard "chantier-health" (round 8, remplace `ChantierHealthMatrix`,
  * qui affichait un état de santé à 3 niveaux PAR CHANTIER). Le grain de lecture passe du chantier au
- * LEVIER : chaque section d'axe montre 5 colonnes (jalons E0…E4), chaque levier RATTACHÉ À UN KPI
- * (`ChantierAction.indicatorId` défini) apparaissant en bulle dans la colonne de son
- * `milestones.currentMilestone` courant. Les leviers SANS KPI ne figurent jamais ici — voir
- * `LevierKanbanBoard.tsx`, rendu séparément par l'appelant juste en dessous de chaque section d'axe.
+ * LEVIER : chaque section d'axe montre 5 colonnes (jalons E0…E4), chaque levier apparaissant en
+ * bulle dans la colonne de son `milestones.currentMilestone` courant. Round 18 : TOUS les leviers de
+ * l'axe figurent ici, avec ou sans KPI rattaché — le PO a unifié le suivi de tous les leviers sur ces
+ * jalons E0→E4 et supprimé l'ancien kanban classique (`LevierKanbanBoard.tsx`, supprimé) qui couvrait
+ * jusqu'ici les leviers sans KPI séparément.
  *
  * La bulle affiche le nom du levier ET le nom de son CHANTIER PARENT en texte visible (jamais
  * seulement en infobulle — demande PO explicite : on doit voir de quel chantier relève un levier
  * sans avoir à survoler chaque bulle), colorée/bordée par `colorForChantier(chantier.id)`
  * (lib/axisLogic.ts, round 8) pour qu'un même chantier se reconnaisse d'un coup d'œil entre les
- * colonnes E0-E4 ET la ligne kanban classique en dessous.
+ * colonnes E0-E4.
  *
  * Clic sur une bulle → même destination que l'ancienne matrice (`onLevierClick`, ouverture du
  * panneau du CHANTIER parent — un levier n'a pas de panneau propre).
@@ -42,7 +43,8 @@ export type LevierBoardGroup = {
   label: string;
   /** `StrategicAxis.color` — même convention d'accent que l'ancien widget "Répartition par axe". */
   color?: string;
-  /** Leviers RATTACHÉS À UN KPI de l'axe, groupés par jalon courant (E0…E4). */
+  /** TOUS les leviers de l'axe (avec ou sans KPI rattaché, round 18), groupés par jalon courant
+   *  (E0…E4). */
   milestones: Record<MilestoneId, LevierBoardCard[]>;
   /** Chantiers de l'axe (round 10, point 1) — alimente la légende de couleur affichée sous
    *  l'en-tête de section, juste avant les colonnes E0→E4. Optionnel : un appelant qui ne l'a pas
@@ -54,9 +56,10 @@ export type LevierBoardGroup = {
  *  (`CHANTIER_COLOR_PALETTE`, lib/axisLogic.ts) — mapping VOLONTAIREMENT littéral (jamais de
  *  substitution de chaîne `chantierColor.replace("bg-", "border-")` à l'exécution) : Tailwind JIT
  *  scanne le CODE SOURCE pour les classes utilisées, une classe construite dynamiquement à
- *  l'exécution n'y apparaît jamais et ne serait donc jamais générée. Exporté pour que
- *  `LevierKanbanBoard.tsx` (même palette, même besoin) réutilise la même table plutôt que d'en
- *  dupliquer une copie qui pourrait diverger si la palette d'axisLogic.ts change un jour. */
+ *  l'exécution n'y apparaît jamais et ne serait donc jamais générée. Exporté pour rester réutilisable
+ *  par un futur composant ayant le même besoin plutôt que d'en dupliquer une copie qui pourrait
+ *  diverger si la palette d'axisLogic.ts change un jour (round 18 : son unique autre consommateur,
+ *  `LevierKanbanBoard.tsx`, a été supprimé). */
 /** Pastille de couleur d'un `progressBucket` (lib/axisLogic.ts) — même convention visuelle que
  *  `BUCKET_DOT_CLASS` de `MilestoneChecklistPanel.tsx` (round 14, cohérence entre écrans) :
  *  déclarée ici séparément plutôt que réimportée, ce fichier n'ayant pas accès à cette constante
@@ -81,8 +84,9 @@ export const CHANTIER_BORDER_CLASS: Record<string, string> = {
   "bg-cyan-500": "border-cyan-500",
 };
 
-/** Carte/bulle d'un levier, colorée par son chantier parent — réutilisée telle quelle par
- *  `LevierKanbanBoard.tsx` (même langage visuel entre la vue E0-E4 et le kanban classique). */
+/** Carte/bulle d'un levier, colorée par son chantier parent (round 18 : jusqu'ici réutilisée telle
+ *  quelle par `LevierKanbanBoard.tsx`, supprimé — reste exportée pour un futur consommateur ayant le
+ *  même besoin). */
 export function LevierCard({
   action,
   chantier,
