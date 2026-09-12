@@ -1082,8 +1082,9 @@ describe("chantierMilestoneProgressPct", () => {
     expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(100);
   });
 
-  // Round 8 : le suivi E0→E4 est conditionné au rattachement KPI d'un levier (`indicatorId`).
-  it("excludes leviers without a KPI link from the average (not counted as 0%, excluded from the denominator)", () => {
+  // Round 18 : le suivi E0→E4 s'applique désormais UNIVERSELLEMENT, avec ou sans KPI rattaché —
+  // l'ancienne exclusion des leviers sans `indicatorId` du dénominateur a été supprimée.
+  it("includes leviers without a KPI link in the average, using their own milestone progress", () => {
     const actions: ChantierAction[] = [
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
@@ -1091,21 +1092,29 @@ describe("chantierMilestoneProgressPct", () => {
         milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 40%
       },
       {
-        // Sans KPI : garde un `kanbanStatus` plutôt qu'un `indicatorId`, exclu du calcul.
+        // Sans KPI, mais avec ses propres jalons — compte désormais comme n'importe quel autre
+        // levier, `indicatorId` n'étant plus qu'un lien informatif.
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
-        kanbanStatus: "done",
+        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 20%
       },
     ];
-    // Seul A1 (KPI-lié) compte : 40 / 1 = 40, pas (40 + 0) / 2 = 20.
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(40);
+    // (40 + 20) / 2 = 30.
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(30);
   });
 
-  it("returns 0 when the chantier has leviers but none is KPI-linked (same as no levier at all)", () => {
+  it("counts a levier without any milestones data yet as 0% rather than excluding it", () => {
     const actions: ChantierAction[] = [
-      { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"), kanbanStatus: "in_progress" },
-      { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"), kanbanStatus: "todo" },
+      {
+        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
+        indicatorId: "IND-A1",
+        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 40%
+      },
+      // Sans KPI ni `.milestones` renseigné : encore à E0/0% via le repli de `milestoneProgressPct`,
+      // mais bien compté dans la moyenne (dénominateur = 2, pas 1).
+      makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
     ];
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(0);
+    // (40 + 0) / 2 = 20.
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(20);
   });
 });
 
@@ -1495,8 +1504,17 @@ describe("programRoadmap", () => {
     const chantiers = [makeChantier("CH1", { axisId: "AX1", name: "Refonte SI" })];
     const actions: ChantierAction[] = [
       // Volontairement hors ordre dans le tableau d'entrée : la sortie doit être triée par début.
-      { ...makeAction("CH1", "2027-06-01", "2027-08-31", "A2"), kanbanStatus: "in_progress" },
-      { ...makeAction("CH1", "2027-01-01", "2027-03-31", "A1"), kanbanStatus: "done" },
+      // Round 18 : plus de `kanbanStatus`, jalons E0→E4 pour tout levier — A2 n'a pas encore de
+      // `.milestones` déclaré (repli 0%), A1 est entièrement passé (100%).
+      makeAction("CH1", "2027-06-01", "2027-08-31", "A2"),
+      {
+        ...makeAction("CH1", "2027-01-01", "2027-03-31", "A1"),
+        milestones: {
+          currentMilestone: "E4",
+          passedMilestones: ["E0", "E1", "E2", "E3", "E4"],
+          checklists: {},
+        },
+      },
     ];
 
     const rows = programRoadmap(axes, chantiers, actions);
@@ -1508,9 +1526,8 @@ describe("programRoadmap", () => {
     expect(rows[0].chantier.name).toBe("Refonte SI");
     expect(rows[0].start).toBe("2027-01-01");
     expect(rows[0].end).toBe("2027-03-31");
-    // Sans indicatorId : mappage kanban classique (done → 100, in_progress → 50).
     expect(rows[0].progressPct).toBe(100);
-    expect(rows[1].progressPct).toBe(50);
+    expect(rows[1].progressPct).toBe(0);
   });
 
   it("associates each row with its OWN axis/chantier across a multi-axis, multi-chantier program", () => {
@@ -1561,13 +1578,22 @@ describe("programRoadmap", () => {
     expect(rows.map((r) => r.action.id)).toEqual(["A1"]);
   });
 
-  it("computes progressPct via the milestone/E0-E4 path for a levier attached to a KPI, ignoring kanbanStatus", () => {
+  it("computes progressPct via the milestone/E0-E4 path identically whether or not a KPI is linked", () => {
     const axes = [makeAxis("AX1")];
     const chantiers = [makeChantier("CH1", { axisId: "AX1" })];
-    const action: ChantierAction = {
+    const actionWithKpi: ChantierAction = {
       ...makeAction("CH1", "2027-01-01", "2027-02-28", "A1"),
       indicatorId: "IND001",
-      kanbanStatus: "todo", // Doit être ignoré : un levier avec KPI suit le chemin jalons.
+      milestones: {
+        currentMilestone: "E2",
+        passedMilestones: ["E0", "E1"],
+        checklists: {},
+      },
+    };
+    // Round 18 : même levier, mêmes jalons, mais SANS `indicatorId` — doit produire exactement le
+    // même `progressPct` (l'ancien aiguillage vers un mappage kanban a été supprimé).
+    const actionWithoutKpi: ChantierAction = {
+      ...makeAction("CH1", "2027-01-01", "2027-02-28", "A2"),
       milestones: {
         currentMilestone: "E2",
         passedMilestones: ["E0", "E1"],
@@ -1575,13 +1601,14 @@ describe("programRoadmap", () => {
       },
     };
 
-    const rows = programRoadmap(axes, chantiers, [action]);
+    const rows = programRoadmap(axes, chantiers, [actionWithKpi, actionWithoutKpi]);
 
     // Même calcul que `milestoneProgressPct` (+ `resolveMilestoneAutoFlags` pour les items auto du
     // jalon courant E2) : 2 jalons validés (E0, E1) = 40, plus le crédit partiel du jalon courant.
     // Valeur de référence tirée du calcul réel plutôt que reconstituée à la main (la check-list E2
     // exacte, avec ses items auto/manuels, est définie dans `lib/milestoneChecklist.ts`).
     expect(rows[0].progressPct).toBe(45);
+    expect(rows[1].progressPct).toBe(45);
   });
 
   it("keeps only deliverables with a declared dueDate, and normalizes legacy string deliverables defensively", () => {

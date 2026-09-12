@@ -13,7 +13,6 @@ import {
   type LevierBoardCard,
   type LevierBoardGroup,
 } from "@/components/strategic/LevierMilestoneBoard";
-import { LevierKanbanBoard } from "@/components/strategic/LevierKanbanBoard";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
 import { colorForChantier } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
@@ -29,7 +28,7 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import type { StrategicImportPreview } from "@/lib/strategicExcelImport";
-import type { Chantier, LevierKanbanStatus, MilestoneId } from "@/types";
+import type { Chantier, MilestoneId } from "@/types";
 
 /**
  * Page « Axes stratégiques » — portefeuille des axes du programme actif, servie sur la MÊME route
@@ -43,9 +42,13 @@ import type { Chantier, LevierKanbanStatus, MilestoneId } from "@/types";
  * supprimé — ses fonctionnalités propres, donut budgétaire par chantier et drill-down par
  * compteur, sont délibérément abandonnées, décision PO). Cette page affiche désormais, à demeure et
  * sans bascule, le contenu qui vivait auparavant sur le dashboard sous le widget "chantier-health" :
- * la vue E0→E4 par levier (`LevierMilestoneBoard`) plus le kanban classique des leviers sans KPI
- * (`LevierKanbanBoard`), une section par axe. Le grain "portefeuille d'axes" de cette page (import,
- * création, panneau chantier) reste inchangé — seul le corps de la page change de contenu.
+ * la vue E0→E4 par levier (`LevierMilestoneBoard`), une section par axe. Le grain "portefeuille
+ * d'axes" de cette page (import, création, panneau chantier) reste inchangé — seul le corps de la
+ * page change de contenu.
+ *
+ * Round 18 : le kanban classique des leviers sans KPI (`LevierKanbanBoard`) a été supprimé — le PO a
+ * unifié tous les leviers sur le suivi E0→E4, avec ou sans KPI rattaché. `LevierMilestoneBoard`
+ * couvre désormais TOUS les leviers de l'axe.
  *
  * Le clic sur un chantier ouvre le panneau chantier (`ChantierDetailPanel`) SUR CETTE MÊME page via
  * `?chantier=<chantierId>` (et `&action=` si ciblé) — inchangé depuis les rounds précédents.
@@ -88,16 +91,14 @@ export function StrategicAxesView() {
   /** Groupes (un par axe) de la vue E0→E4 par levier — round 17 : porté depuis l'ancien widget
    *  dashboard "chantier-health" (`StrategicDashboardView.tsx`, `levierBoardGroups`), même calcul
    *  adapté à la forme de données de cette page (`chantiersByAxis` ci-dessus plutôt que
-   *  `axisBreakdown`, qui n'existe pas ici). Alimente `LevierMilestoneBoard`/`LevierKanbanBoard`. Un
-   *  axe sans aucun chantier n'ouvre pas de section vide. Pour chaque axe :
-   *   - `milestones` : leviers RATTACHÉS À UN KPI (`action.indicatorId` défini) de tous les
-   *     chantiers de l'axe, groupés par `action.milestones?.currentMilestone ?? "E0"` (5 colonnes) ;
-   *   - `withoutKpi` : leviers SANS KPI, à plat — c'est `LevierKanbanBoard` qui les reboucle par
-   *     `kanbanStatus` (mêmes 3 colonnes que le kanban classique du Plan Performance).
-   *  Chaque entrée porte `chantierColor` (`colorForChantier`, lib/axisLogic.ts) pour que le même
-   *  chantier affiche systématiquement la même couleur dans les deux blocs (E0-E4 et kanban).
+   *  `axisBreakdown`, qui n'existe pas ici). Alimente `LevierMilestoneBoard`. Un axe sans aucun
+   *  chantier n'ouvre pas de section vide. Round 18 : TOUS les leviers de l'axe (avec ou sans KPI
+   *  rattaché) sont groupés par `action.milestones?.currentMilestone ?? "E0"` (5 colonnes) — l'ancien
+   *  bucket séparé des leviers sans KPI (`withoutKpi`, consommé par le kanban classique supprimé) a
+   *  disparu. Chaque entrée porte `chantierColor` (`colorForChantier`, lib/axisLogic.ts) pour que le
+   *  même chantier affiche systématiquement la même couleur.
    */
-  const levierBoardGroups = useMemo<(LevierBoardGroup & { withoutKpi: LevierBoardCard[] })[]>(
+  const levierBoardGroups = useMemo<LevierBoardGroup[]>(
     () =>
       data.axes
         .map((axis) => ({ axis, chantiers: chantiersByAxis.get(axis.id) ?? [] }))
@@ -109,7 +110,6 @@ export function StrategicAxesView() {
             (acc, milestoneId) => ({ ...acc, [milestoneId]: [] as LevierBoardCard[] }),
             {} as Record<MilestoneId, LevierBoardCard[]>
           );
-          const withoutKpi: LevierBoardCard[] = [];
 
           for (const action of data.chantierActions) {
             const chantier = chantierById.get(action.chantierId);
@@ -119,12 +119,8 @@ export function StrategicAxesView() {
               chantier,
               chantierColor: colorForChantier(chantier.id),
             };
-            if (action.indicatorId) {
-              const milestoneId = action.milestones?.currentMilestone ?? "E0";
-              milestones[milestoneId].push(card);
-            } else {
-              withoutKpi.push(card);
-            }
+            const milestoneId = action.milestones?.currentMilestone ?? "E0";
+            milestones[milestoneId].push(card);
           }
 
           return {
@@ -133,7 +129,6 @@ export function StrategicAxesView() {
             color: row.axis.color,
             milestones,
             chantiers: row.chantiers,
-            withoutKpi,
           };
         }),
     [data.axes, data.chantierActions, chantiersByAxis]
@@ -144,15 +139,6 @@ export function StrategicAxesView() {
    *  ce lot — non renommée : ce vocabulaire appartient au COMPOSANT, pas à la page qui le monte). */
   const levierMilestoneLabels = {
     emptyColumn: t("strategicDashboard.levierBoard.emptyColumn"),
-  };
-
-  /** En-têtes des 3 colonnes du kanban classique des leviers sans KPI — MÊMES clés que le kanban de
-   *  la fiche chantier (`ChantierDetailPanel.tsx`) : deux lectures du même statut ne doivent jamais
-   *  diverger sur leur vocabulaire. */
-  const levierKanbanLabels: Record<LevierKanbanStatus, string> = {
-    todo: t("strategicChantierDetail.kanban.todo"),
-    in_progress: t("strategicChantierDetail.kanban.inProgress"),
-    done: t("strategicChantierDetail.kanban.done"),
   };
 
   const emptyLine = (label: string) => (
@@ -295,15 +281,6 @@ export function StrategicAxesView() {
                       labels={levierMilestoneLabels}
                       onLevierClick={openChantierPanel}
                     />
-                    {/* Ligne kanban classique — seulement si cet axe a au moins un levier sans KPI
-                        (pas de ligne vide, demande PO explicite). */}
-                    {group.withoutKpi.length > 0 && (
-                      <LevierKanbanBoard
-                        items={group.withoutKpi}
-                        labels={levierKanbanLabels}
-                        onLevierClick={openChantierPanel}
-                      />
-                    )}
                   </div>
                 ))}
               </div>

@@ -7,7 +7,6 @@ import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Modal } from "@/components/shared/Modal";
-import { AxisStageBadge } from "@/components/strategic/AxisStageBadge";
 import { ChantierStaffingEditor, formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
 import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
@@ -180,33 +179,22 @@ function deliverableStatusColor(status: LevierKanbanStatus | undefined): string 
   }
 }
 
-/** Pourcentage d'avancement AFFICHÉ d'un levier sur l'onglet "Progression" (round 12) — deux modes
- *  selon `ChantierAction.indicatorId`, mêmes règles que le reste de la fiche :
- *  - rattaché à un KPI (suivi jalons E0→E4) : `milestoneProgressPct`, avec les items auto résolus
- *    via `resolveMilestoneAutoFlags` (même appel que la pastille de la carte levier, onglet
- *    "Leviers") — `action.milestones` absent est géré par `milestoneProgressPct` lui-même (0 %).
- *  - sinon (kanban classique) : simple mappage d'AFFICHAGE `kanbanStatus` → pourcentage, ne
- *    modifie ni ne lit aucune nouvelle donnée — todo=0, in_progress=50, done=100, absent=0. */
+/** Pourcentage d'avancement AFFICHÉ d'un levier sur l'onglet "Progression" (round 12) — jalons
+ *  E0→E4 (`milestoneProgressPct`), UNIVERSELLEMENT pour tout levier qu'il soit rattaché à un KPI ou
+ *  non (round 18, ancien aiguillage vers un mappage d'affichage `kanbanStatus` supprimé). Items
+ *  auto résolus via `resolveMilestoneAutoFlags` (même appel que la pastille de la carte levier,
+ *  onglet "Leviers") — `action.milestones` absent est géré par `milestoneProgressPct` lui-même
+ *  (0 %). */
 function progressionPctFor(
   action: ChantierAction,
   allChantiers: Chantier[],
   allActions: ChantierAction[]
 ): number {
-  if (action.indicatorId) {
-    const milestoneId = action.milestones?.currentMilestone ?? "E0";
-    return milestoneProgressPct(
-      action,
-      resolveMilestoneAutoFlags(milestoneId, action, allChantiers, allActions)
-    );
-  }
-  switch (action.kanbanStatus) {
-    case "in_progress":
-      return 50;
-    case "done":
-      return 100;
-    default:
-      return 0;
-  }
+  const milestoneId = action.milestones?.currentMilestone ?? "E0";
+  return milestoneProgressPct(
+    action,
+    resolveMilestoneAutoFlags(milestoneId, action, allChantiers, allActions)
+  );
 }
 
 /** Largeur de la colonne d'identité des lignes de la timeline de livrables — légèrement plus
@@ -488,12 +476,14 @@ function PrerequisitesEditor({
 }
 
 /**
- * Kanban classique 3 états d'UN LEVIER SANS KPI rattaché (round 8) — remplace le bloc jalons
- * E0→E4 pour ce mode de levier (voir `ChantierAction.indicatorId`). Même esprit visuel que
+ * Contrôle kanban classique 3 états (round 8 : introduit pour le suivi d'UN LEVIER SANS KPI
+ * rattaché ; round 18 : ce mode de suivi levier a été supprimé — le PO a unifié tous les leviers
+ * sur les jalons E0→E4 — mais ce composant SURVIT car il pilote désormais uniquement
+ * `Deliverable.status` (voir `DeliverableDetailModal`/`AddDeliverableForm` ci-dessous), un concept
+ * totalement différent et hors scope de ce round. Même esprit visuel que
  * `components/shared/ActionKanban.tsx` du Plan Performance (bouton actif rempli en noir, inactifs
  * en contour) mais écrit ici en JSX Strategic-only, purement contrôlé (`status`/`onChange`,
- * auto-sauvegarde immédiate à chaque clic — même discipline que `PrerequisitesEditor` sur la ligne
- * de levier, pas de formulaire bufferisé). N'importe jamais `ActionKanban.tsx` ni son type
+ * auto-sauvegarde immédiate à chaque clic). N'importe jamais `ActionKanban.tsx` ni son type
  * `ActionStatus`, domaines strictement séparés.
  */
 function LevierKanbanStatusControl({
@@ -502,7 +492,7 @@ function LevierKanbanStatusControl({
   labels,
 }: {
   /** `undefined` traité comme "todo" pour la mise en avant du bouton actif — voir
-   *  `ChantierAction.kanbanStatus`, jamais forcé en base tant que l'utilisateur n'a pas cliqué. */
+   *  `Deliverable.status`, jamais forcé en base tant que l'utilisateur n'a pas cliqué. */
   status: LevierKanbanStatus | undefined;
   onChange: (next: LevierKanbanStatus) => void;
   labels: { title: string; todo: string; inProgress: string; done: string };
@@ -759,8 +749,8 @@ function AddDeliverableForm({
  * vraie personne), éditeur de prérequis go/no-go (point 5), et marquage obligatoire/optionnel +
  * message d'aide sous le bouton désactivé (point 4).
  *
- * Round 8 : gagne le sélecteur optionnel de KPI (`indicatorId`) qui conditionne le mode de suivi du
- * levier (jalons E0→E4 vs kanban classique) — voir `ChantierAction.indicatorId`. RACI par livrable
+ * Round 8 : gagne le sélecteur optionnel de KPI (`indicatorId`) — round 18 : purement informatif,
+ * n'aiguille plus aucun système de suivi (voir `ChantierAction.indicatorId`). RACI par livrable
  * retiré (jugé peu pertinent par le PO, voir `RaciEditor`/`RaciChips`, supprimés).
  */
 function ChantierActionForm({
@@ -813,7 +803,8 @@ function ChantierActionForm({
   const [start, setStart] = useState(initial?.start ?? today);
   const [end, setEnd] = useState(initial?.end ?? addDays(today, 30));
   const [status, setStatus] = useState(initial?.status ?? stages[0]?.id ?? "");
-  // KPI optionnel du levier (round 8) — présence ⇒ suivi E0→E4, absence ⇒ kanban classique.
+  // KPI optionnel du levier (round 8) — round 18 : purement informatif, n'aiguille plus aucun
+  // système de suivi (tout levier progresse via les jalons E0→E4, avec ou sans KPI rattaché).
   const [indicatorId, setIndicatorId] = useState<string | undefined>(initial?.indicatorId);
   // Budget optionnel du levier (round 12) — même discipline de saisie que `allocatedBudget` du
   // chantier (texte libre local, ici bufferisé jusqu'au submit comme le reste de ce formulaire).
@@ -1623,25 +1614,9 @@ export function ChantierDetailPanel({
     }
   };
 
-  /** Écrit le statut kanban classique d'UN LEVIER SANS KPI (round 8) — même discipline
-   *  d'auto-sauvegarde immédiate que `updateActionPrerequisites`/`updateActionMilestones`
-   *  ci-dessus. */
-  const updateActionKanbanStatus = async (actionId: string, kanbanStatus: LevierKanbanStatus) => {
-    try {
-      await data.updateChantierAction(actionId, { kanbanStatus });
-    } catch (error) {
-      console.error("[betrack] échec d'enregistrement du statut kanban du levier :", error);
-      showToast(
-        t("strategicAxes.actionSaveErrorTitle"),
-        t("strategicAxes.actionSaveError"),
-        "error"
-      );
-    }
-  };
-
   /** Patch UN livrable d'UN levier (statut, date d'échéance, ajout de commentaire — round <n>) —
    *  même discipline d'auto-sauvegarde immédiate que `updateActionPrerequisites`/
-   *  `updateActionKanbanStatus` ci-dessus : réécrit le tableau `deliverables` COMPLET du levier
+   *  `updateActionMilestones` ci-dessus : réécrit le tableau `deliverables` COMPLET du levier
    *  (`updateChantierAction` fusionne un patch sur le document existant, pas de merge profond sur
    *  un tableau). */
   const updateDeliverable = async (
@@ -2064,9 +2039,9 @@ export function ChantierDetailPanel({
 
       {/* ── Onglet "Timeline" (ex-"Progression", round 12 ; fusionné round <n> avec l'ex-onglet
           dédié aux phases de livrables) : une barre par levier, façon Gantt, remplie/colorée selon
-          son avancement — jalons E0→E4 si rattaché à un KPI, sinon mappage d'affichage du kanban
-          classique (voir `progressionPctFor`/`progressionColorFor` en tête de fichier) — complétée
-          d'un losange par livrable ayant une `dueDate` déclarée (`TimelineMarker`, couleur via
+          son avancement — jalons E0→E4 pour tout levier, avec ou sans KPI rattaché (round 18, voir
+          `progressionPctFor`/`progressionColorFor` en tête de fichier) — complétée d'un losange par
+          livrable ayant une `dueDate` déclarée (`TimelineMarker`, couleur via
           `deliverableStatusColor`), sur le MÊME axe temporel que la barre de son levier parent (pas
           un axe séparé — c'est justement ce qui manquait à l'ancien onglet dédié). ─────────────── */}
       <div className={activeTab === "progression" ? undefined : "hidden"}>
@@ -2310,8 +2285,9 @@ export function ChantierDetailPanel({
                           }, 0) / currentMilestoneDefs.length
                         )
                       : 0;
-                  // KPI rattaché au levier (round 8 : `indicatorId` servait jusqu'ici uniquement de
-                  // bascule jalons/kanban) — résolu ici pour affichage round 10 (nom + numéro global).
+                  // KPI rattaché au levier (round 8, purement informatif depuis round 18 — voir
+                  // `ChantierAction.indicatorId`) — résolu ici pour affichage round 10 (nom + numéro
+                  // global).
                   const linkedIndicator = action.indicatorId
                     ? data.indicators.find((i) => i.id === action.indicatorId)
                     : undefined;
@@ -2358,26 +2334,16 @@ export function ChantierDetailPanel({
                                 </span>
                               )}
                               {/* ── Résumé de statut sur le bandeau fermé (round <n>) : jalon
-                                courant + pastille % si rattaché à un KPI, sinon statut kanban ─── */}
-                              {action.indicatorId ? (
+                                courant + pastille %, universellement pour tout levier (round 18) ── */}
+                              <span
+                                className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-bold ${BUCKET_PILL_CLASS[actionBucket]}`}
+                              >
                                 <span
-                                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-bold ${BUCKET_PILL_CLASS[actionBucket]}`}
-                                >
-                                  <span
-                                    aria-hidden
-                                    className={`h-2 w-2 rounded-full ${BUCKET_DOT_CLASS[actionBucket]}`}
-                                  />
-                                  {actionMilestones.currentMilestone} · {actionProgressPct}%
-                                </span>
-                              ) : (
-                                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-primary">
-                                  {action.kanbanStatus === "done"
-                                    ? t("strategicChantierDetail.kanban.done")
-                                    : action.kanbanStatus === "in_progress"
-                                      ? t("strategicChantierDetail.kanban.inProgress")
-                                      : t("strategicChantierDetail.kanban.todo")}
-                                </span>
-                              )}
+                                  aria-hidden
+                                  className={`h-2 w-2 rounded-full ${BUCKET_DOT_CLASS[actionBucket]}`}
+                                />
+                                {actionMilestones.currentMilestone} · {actionProgressPct}%
+                              </span>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">
                               <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-secondary">
@@ -2393,9 +2359,6 @@ export function ChantierDetailPanel({
                                   · {t("strategicChantierDetail.sponsor")} :{" "}
                                   {resolveUserLabel(action.sponsor, data.users)}
                                 </span>
-                              )}
-                              {!action.indicatorId && (
-                                <AxisStageBadge stageId={action.status} stages={stages} />
                               )}
                             </div>
                             {startInfo.blocked && (
@@ -2484,24 +2447,25 @@ export function ChantierDetailPanel({
                             )}
                           </div>
 
-                          {/* ── Suivi du LEVIER : jalons E0→E4 si rattaché à un KPI, sinon kanban
-                        classique (round 8, conditionné à `action.indicatorId`) ─────────────── */}
-                          {action.indicatorId ? (
-                            <div className="mt-3 border-t border-border pt-3">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
-                                  {t("strategicChantierDetail.milestones.title")}
-                                </span>
+                          {/* ── Suivi du LEVIER : jalons E0→E4, universellement pour tout levier
+                        avec ou sans KPI rattaché (round 18 — l'ancien aiguillage vers un kanban
+                        classique pour les leviers sans `indicatorId` a été supprimé) ─────────── */}
+                          <div className="mt-3 border-t border-border pt-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+                                {t("strategicChantierDetail.milestones.title")}
+                              </span>
+                              <span
+                                className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-bold ${BUCKET_PILL_CLASS[actionBucket]}`}
+                              >
                                 <span
-                                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-bold ${BUCKET_PILL_CLASS[actionBucket]}`}
-                                >
-                                  <span
-                                    aria-hidden
-                                    className={`h-2 w-2 rounded-full ${BUCKET_DOT_CLASS[actionBucket]}`}
-                                  />
-                                  {actionProgressPct}%
-                                </span>
-                              </div>
+                                  aria-hidden
+                                  className={`h-2 w-2 rounded-full ${BUCKET_DOT_CLASS[actionBucket]}`}
+                                />
+                                {actionProgressPct}%
+                              </span>
+                            </div>
+                            {action.indicatorId && (
                               <div className="mt-1">
                                 {linkedIndicator ? (
                                   <button
@@ -2526,82 +2490,66 @@ export function ChantierDetailPanel({
                                   </span>
                                 )}
                               </div>
-                              <div className="mt-2">
-                                <MilestoneStepper
-                                  currentMilestone={actionMilestones.currentMilestone}
-                                  passedMilestones={actionMilestones.passedMilestones}
-                                  currentMilestoneProgressPct={currentMilestoneProgressPct}
-                                />
-                              </div>
-                              <div className="mt-3">
-                                <MilestoneChecklistPanel
-                                  milestoneId={actionMilestones.currentMilestone}
-                                  items={
-                                    actionMilestones.checklists[
-                                      actionMilestones.currentMilestone
-                                    ] ?? []
-                                  }
-                                  autoFlags={resolveMilestoneAutoFlags(
-                                    actionMilestones.currentMilestone,
-                                    action,
-                                    data.chantiers,
-                                    data.chantierActions
-                                  )}
-                                  users={data.users}
-                                  onChange={(nextItems) => {
-                                    updateActionMilestones(action.id, {
-                                      currentMilestone: actionMilestones.currentMilestone,
-                                      passedMilestones: actionMilestones.passedMilestones,
-                                      checklists: {
-                                        ...actionMilestones.checklists,
-                                        [actionMilestones.currentMilestone]: nextItems,
-                                      },
-                                    });
-                                  }}
-                                  onValidateMilestone={() => {
-                                    // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
-                                    // le dernier), on le laisse tel quel — voir même commentaire historique
-                                    // sur l'ancien callback chantier-level, mécanique identique ici.
-                                    const currentIndex = MILESTONE_ORDER.indexOf(
-                                      actionMilestones.currentMilestone
-                                    );
-                                    const nextMilestone =
-                                      MILESTONE_ORDER[currentIndex + 1] ??
-                                      actionMilestones.currentMilestone;
-                                    const passedMilestones =
-                                      actionMilestones.passedMilestones.includes(
-                                        actionMilestones.currentMilestone
-                                      )
-                                        ? actionMilestones.passedMilestones
-                                        : [
-                                            ...actionMilestones.passedMilestones,
-                                            actionMilestones.currentMilestone,
-                                          ];
-                                    updateActionMilestones(action.id, {
-                                      currentMilestone: nextMilestone,
-                                      passedMilestones,
-                                      checklists: actionMilestones.checklists,
-                                    });
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="mt-3 border-t border-border pt-3">
-                              <LevierKanbanStatusControl
-                                status={action.kanbanStatus}
-                                labels={{
-                                  title: t("strategicChantierDetail.kanban.title"),
-                                  todo: t("strategicChantierDetail.kanban.todo"),
-                                  inProgress: t("strategicChantierDetail.kanban.inProgress"),
-                                  done: t("strategicChantierDetail.kanban.done"),
-                                }}
-                                onChange={(kanbanStatus) =>
-                                  updateActionKanbanStatus(action.id, kanbanStatus)
-                                }
+                            )}
+                            <div className="mt-2">
+                              <MilestoneStepper
+                                currentMilestone={actionMilestones.currentMilestone}
+                                passedMilestones={actionMilestones.passedMilestones}
+                                currentMilestoneProgressPct={currentMilestoneProgressPct}
                               />
                             </div>
-                          )}
+                            <div className="mt-3">
+                              <MilestoneChecklistPanel
+                                milestoneId={actionMilestones.currentMilestone}
+                                items={
+                                  actionMilestones.checklists[actionMilestones.currentMilestone] ??
+                                  []
+                                }
+                                autoFlags={resolveMilestoneAutoFlags(
+                                  actionMilestones.currentMilestone,
+                                  action,
+                                  data.chantiers,
+                                  data.chantierActions
+                                )}
+                                users={data.users}
+                                onChange={(nextItems) => {
+                                  updateActionMilestones(action.id, {
+                                    currentMilestone: actionMilestones.currentMilestone,
+                                    passedMilestones: actionMilestones.passedMilestones,
+                                    checklists: {
+                                      ...actionMilestones.checklists,
+                                      [actionMilestones.currentMilestone]: nextItems,
+                                    },
+                                  });
+                                }}
+                                onValidateMilestone={() => {
+                                  // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
+                                  // le dernier), on le laisse tel quel — voir même commentaire historique
+                                  // sur l'ancien callback chantier-level, mécanique identique ici.
+                                  const currentIndex = MILESTONE_ORDER.indexOf(
+                                    actionMilestones.currentMilestone
+                                  );
+                                  const nextMilestone =
+                                    MILESTONE_ORDER[currentIndex + 1] ??
+                                    actionMilestones.currentMilestone;
+                                  const passedMilestones =
+                                    actionMilestones.passedMilestones.includes(
+                                      actionMilestones.currentMilestone
+                                    )
+                                      ? actionMilestones.passedMilestones
+                                      : [
+                                          ...actionMilestones.passedMilestones,
+                                          actionMilestones.currentMilestone,
+                                        ];
+                                  updateActionMilestones(action.id, {
+                                    currentMilestone: nextMilestone,
+                                    passedMilestones,
+                                    checklists: actionMilestones.checklists,
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
 
                           {/* ── Dépendances / Prérequis du LEVIER (round 7 — fusion) ──────────────────
                         titre à changer en "Dépendances / Prérequis" par un round i18n suivant

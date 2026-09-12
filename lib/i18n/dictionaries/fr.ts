@@ -1221,11 +1221,11 @@ const fr: Record<string, string> = {
   "strategicAxes.axisUpdated": "Axe mis à jour",
   "strategicAxes.chantiersView": "Chantiers",
   // Round 17 (permutation) : titre de la section fixe "État des lieux d'avancement des leviers" de
-  // cette page (vue E0→E4 par levier + kanban classique des leviers sans KPI) — migré depuis
-  // l'ex-clé `strategicDashboard.widget.chantierHealth` (widget dashboard retiré, ce contenu vit
-  // maintenant ICI, sans bascule d'onglet), même migration de namespace que
-  // `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` au round 16 (voir plus bas), pour la
-  // raison symétrique inverse.
+  // cette page (vue E0→E4 par levier, tous leviers confondus depuis round 18 — voir son ancien
+  // kanban classique des leviers sans KPI, supprimé) — migré depuis l'ex-clé
+  // `strategicDashboard.widget.chantierHealth` (widget dashboard retiré, ce contenu vit maintenant
+  // ICI, sans bascule d'onglet), même migration de namespace que `strategicDashboard.roadmap.*` →
+  // `strategicAxes.roadmap.*` au round 16 (voir plus bas), pour la raison symétrique inverse.
   "strategicAxes.levierAdvancementTitle": "État des lieux d'avancement des leviers",
   "strategicAxes.axisNoChantier": "Aucun chantier",
   "strategicAxes.chantierAlerted": "Dépendance en alerte",
@@ -1402,9 +1402,13 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.effort.changeManagement.option3": "Changement important",
   "strategicChantierDetail.effort.changeManagement.option4": "Changement majeur",
 
-  // ─── Plan Stratégique — round 8 (KPI optionnel du levier + kanban classique sans KPI) ──
+  // ─── Plan Stratégique — round 8 (KPI optionnel du levier, purement informatif depuis round 18) ──
   "strategicChantierDetail.indicatorSelect.label": "KPI rattaché",
   "strategicChantierDetail.indicatorSelect.none": "Aucun KPI",
+  // Round 18 : ces 4 clés "kanban.*" ne pilotent plus le suivi du LEVIER (kanban classique supprimé,
+  // voir `ChantierAction.kanbanStatus`) — elles restent utilisées pour le statut à 3 états d'UN
+  // LIVRABLE (`Deliverable.status`, `DeliverableDetailModal`/`AddDeliverableForm` dans
+  // `ChantierDetailPanel.tsx`), un concept distinct et toujours actif. Ne pas supprimer.
   "strategicChantierDetail.kanban.title": "Statut",
   "strategicChantierDetail.kanban.todo": "À faire",
   "strategicChantierDetail.kanban.inProgress": "En cours",

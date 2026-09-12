@@ -846,9 +846,9 @@ export type Deliverable = {
    *  mais ne sont plus dessinées en Gantt dans cette timeline. Absent = livrable sans échéance
    *  déclarée, invisible sur la timeline (mais toujours listé dans l'onglet "Leviers"). */
   dueDate?: string;
-  /** Statut à 3 états du livrable — RÉUTILISE `LevierKanbanStatus` (pas de nouvel enum), même
-   *  convention que `ChantierAction.kanbanStatus` : `undefined` traité comme "todo". Colore le
-   *  losange sur la timeline (todo → rouge, in_progress → ambre, done → vert). */
+  /** Statut à 3 états du livrable — RÉUTILISE `LevierKanbanStatus` (pas de nouvel enum, voir son
+   *  commentaire) : `undefined` traité comme "todo". Colore le losange sur la timeline (todo →
+   *  rouge, in_progress → ambre, done → vert). */
   status?: LevierKanbanStatus;
   /** Mini fil de commentaires embarqué directement dans le document (round <n>) — distinct du
    *  système de commentaires leviers/sub-levers du module Plan Performance (collection Firestore
@@ -889,25 +889,18 @@ export type ChantierAction = {
    *  7 : traité comme "encore à E0, rien de répondu" par les lecteurs plutôt que de migrer les
    *  documents existants.
    *
-   *  Round 8 : la lecture de ce champ (stepper, `chantierMilestoneProgressPct`, checklist) n'est
-   *  pertinente QUE si `indicatorId` est défini — voir son commentaire. Un levier sans KPI continue
-   *  techniquement à pouvoir porter un `milestones` résiduel (ex. retiré de son KPI après avoir déjà
-   *  progressé) mais l'UI n'y lit plus rien tant que `indicatorId` est absent, au profit de
-   *  `kanbanStatus`. */
+   *  Round 18 : ce suivi E0→E4 s'applique désormais UNIVERSELLEMENT, que le levier ait ou non un
+   *  `indicatorId` — l'ancien aiguillage vers un kanban 3-états pour les leviers sans KPI a été
+   *  supprimé (le PO a tranché pour un système unique, plus simple à piloter). */
   milestones?: ChantierMilestoneState;
-  /** Lien optionnel vers un `Indicator` (KPI) de l'axe ou du chantier de ce levier — round 8.
-   *  Présent ⇒ le suivi E0→E4 (`milestones` ci-dessus) s'applique à ce levier ; absent ⇒ le levier
-   *  utilise à la place le statut simple `kanbanStatus` (kanban classique à faire/en cours/terminé).
-   *  Liste des KPI proposés à un levier donné (décision PO) : indicateurs "macro" de l'axe du
-   *  chantier (`Indicator.axisId === chantier.axisId && !Indicator.chantierId`) + indicateurs déjà
-   *  rattachés à CE chantier précis (`Indicator.chantierId === chantier.id`) — jamais un indicateur
-   *  d'un autre axe/chantier. */
+  /** Lien optionnel vers un `Indicator` (KPI) de l'axe ou du chantier de ce levier — round 8, statut
+   *  round 18 : purement informatif, n'aiguille plus aucun système de suivi (le suivi E0→E4 via
+   *  `milestones` ci-dessus s'applique à tous les leviers, avec ou sans KPI rattaché). Liste des KPI
+   *  proposés à un levier donné (décision PO) : indicateurs "macro" de l'axe du chantier
+   *  (`Indicator.axisId === chantier.axisId && !Indicator.chantierId`) + indicateurs déjà rattachés à
+   *  CE chantier précis (`Indicator.chantierId === chantier.id`) — jamais un indicateur d'un autre
+   *  axe/chantier. */
   indicatorId?: string;
-  /** Statut simple "kanban classique" d'un levier SANS `indicatorId` — round 8. N'a de sens que
-   *  lorsque `indicatorId` est absent (voir son commentaire) ; ignoré par l'UI sinon. Absent =
-   *  affiché comme `"todo"` par défaut (pas de valeur forcée en base tant que l'utilisateur n'a pas
-   *  interagi, même parti pris défensif que `milestones`). */
-  kanbanStatus?: LevierKanbanStatus;
   /** Budget alloué à ce LEVIER (round 12), affiché avec `Program.currency` du programme actif —
    *  pendant de `Chantier.allocatedBudget` mais au niveau du levier plutôt que du chantier (les
    *  deux coexistent : un budget de levier n'est pas déduit du budget du chantier, voir
@@ -925,14 +918,16 @@ export type ChantierAction = {
   consumedFte?: number;
 };
 
-/** Statut à 3 états du "kanban classique" d'un levier sans KPI rattaché — round 8, voir
- *  `ChantierAction.kanbanStatus`. Même FORME que `ActionStatus` du Plan Performance
- *  (`components/shared/ActionKanban.tsx`, gabarit visuel suivi pour le composant équivalent côté
- *  Plan Stratégique) mais type entièrement SÉPARÉ — ne jamais importer/réutiliser `ActionStatus`
- *  ici, les deux domaines restent strictement indépendants (voir le commentaire de tête de
- *  `lib/axisLogic.ts`). Pas de valeur "delayed" (contrairement à `ActionStatus`) : ce statut est un
- *  simple aiguillage de projet, la notion de retard n'a pas de sens ici (pas de calcul de date de
- *  fin dépassée pour un levier sans jalons). */
+/** Statut à 3 états — introduit round 8 pour le "kanban classique" d'un levier sans KPI rattaché
+ *  (`ChantierAction.kanbanStatus`), supprimé round 18 quand le PO a unifié tous les leviers sur le
+ *  suivi E0→E4. Le type SURVIT néanmoins : il reste utilisé par `Deliverable.status`, un concept
+ *  totalement différent (le statut d'UN livrable, pas le système de suivi global d'un levier) — ne
+ *  pas re-brancher ce type sur un quelconque aiguillage au niveau levier. Même FORME que
+ *  `ActionStatus` du Plan Performance (`components/shared/ActionKanban.tsx`, gabarit visuel suivi
+ *  pour le composant équivalent côté Plan Stratégique) mais type entièrement SÉPARÉ — ne jamais
+ *  importer/réutiliser `ActionStatus` ici, les deux domaines restent strictement indépendants (voir
+ *  le commentaire de tête de `lib/axisLogic.ts`). Pas de valeur "delayed" (contrairement à
+ *  `ActionStatus`) : ce statut est un simple aiguillage, la notion de retard n'a pas de sens ici. */
 export type LevierKanbanStatus = "todo" | "in_progress" | "done";
 
 /** Un prérequis peut cibler une autre action du plan ("action", satisfait quand son étape est

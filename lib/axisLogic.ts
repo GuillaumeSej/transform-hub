@@ -800,24 +800,21 @@ export function milestoneProgressPct(
  * = moyenne des leviers"). Remplace `milestoneProgressPct(chantier)` sur tous les points d'appel
  * historiques : le suivi E0→E4 vit désormais par levier, `Chantier.milestones` est `@deprecated`.
  *
- * Round 8 : le suivi E0→E4 devient CONDITIONNÉ au rattachement d'un levier à un KPI
- * (`ChantierAction.indicatorId` défini — voir son commentaire) ; un levier sans KPI utilise à la
- * place un kanban classique (`kanbanStatus`), hors de la notion de jalon. La moyenne ne porte donc
- * QUE sur les leviers du chantier RATTACHÉS À UN KPI (`a.chantierId === chantier.id && a.indicatorId`)
- * — un levier sans KPI est exclu du DÉNOMINATEUR (ni compté à 0 %, ni ignoré silencieusement dans un
- * dénominateur qui l'inclurait quand même).
+ * Round 18 : le suivi E0→E4 s'applique UNIVERSELLEMENT à tous les leviers d'un chantier, avec ou
+ * sans KPI rattaché (l'ancien aiguillage vers un kanban classique pour les leviers sans
+ * `indicatorId` a été supprimé). La moyenne porte donc sur TOUS les leviers du chantier
+ * (`a.chantierId === chantier.id`) — un levier sans `.milestones` encore renseigné contribue
+ * naturellement 0 % / E0 via le repli existant de `milestoneProgressPct`, pas besoin de le filtrer.
  *
- * 0 si le chantier n'a aucun levier RATTACHÉ À UN KPI (aucun levier du tout, ou uniquement des
- * leviers sans KPI) — même parti pris que `chantierProgress()`, pas de division par zéro déguisée ;
- * un chantier dont aucun levier n'est KPI-lié se comporte donc exactement comme un chantier sans
- * aucun levier. Arrondi (`Math.round`) car `milestoneProgressPct` ne retourne que des multiples de
- * 20 mais leur moyenne ne l'est en général pas.
+ * 0 si le chantier n'a aucun levier du tout — même parti pris que `chantierProgress()`, pas de
+ * division par zéro déguisée. Arrondi (`Math.round`) car `milestoneProgressPct` ne retourne que des
+ * multiples de 20 mais leur moyenne ne l'est en général pas.
  */
 export function chantierMilestoneProgressPct(
   chantier: Pick<Chantier, "id">,
   actions: ChantierAction[]
 ): number {
-  const own = actions.filter((a) => a.chantierId === chantier.id && a.indicatorId);
+  const own = actions.filter((a) => a.chantierId === chantier.id);
   if (own.length === 0) return 0;
   const total = own.reduce((sum, action) => sum + milestoneProgressPct(action), 0);
   return Math.round(total / own.length);
@@ -1180,11 +1177,10 @@ export type ProgramRoadmapRow = {
   end: string;
   /** Avancement déclaratif 0-100 de CE levier — MÊME calcul que `progressionPctFor` (fonction
    *  privée de l'onglet "Timeline" de `ChantierDetailPanel.tsx`, hors périmètre de ce lot) : jalons
-   *  E0→E4 (`milestoneProgressPct` + `resolveMilestoneAutoFlags`) si le levier est rattaché à un KPI
-   *  (`action.indicatorId`), sinon mappage d'affichage du kanban classique (`kanbanStatus`) —
-   *  todo=0, in_progress=50, done=100, absent=0. Volontairement RECALCULÉ ici plutôt qu'importé (la
-   *  fonction source n'est pas exportée) mais compose les MÊMES primitives exportées, donc les deux
-   *  ne peuvent pas diverger. */
+   *  E0→E4 (`milestoneProgressPct` + `resolveMilestoneAutoFlags`), UNIVERSELLEMENT pour tout levier
+   *  qu'il soit rattaché à un KPI ou non (round 18, ancien aiguillage vers un kanban classique
+   *  supprimé). Volontairement RECALCULÉ ici plutôt qu'importé (la fonction source n'est pas
+   *  exportée) mais compose les MÊMES primitives exportées, donc les deux ne peuvent pas diverger. */
   progressPct: number;
   /** Livrables de ce levier portant une `dueDate` déclarée, uniquement (un livrable sans échéance
    *  n'a rien à positionner sur la feuille de route) — même filtre que `dueDeliverables` dans
@@ -1236,21 +1232,15 @@ export function programRoadmap(
         .sort((a, b) => a.start.localeCompare(b.start));
 
       for (const action of chantierActions) {
-        const progressPct = action.indicatorId
-          ? milestoneProgressPct(
-              action,
-              resolveMilestoneAutoFlags(
-                action.milestones?.currentMilestone ?? "E0",
-                action,
-                chantiers,
-                actions
-              )
-            )
-          : action.kanbanStatus === "in_progress"
-            ? 50
-            : action.kanbanStatus === "done"
-              ? 100
-              : 0;
+        const progressPct = milestoneProgressPct(
+          action,
+          resolveMilestoneAutoFlags(
+            action.milestones?.currentMilestone ?? "E0",
+            action,
+            chantiers,
+            actions
+          )
+        );
 
         rows.push({
           axis,
