@@ -157,9 +157,21 @@ export default function HrDashboardPage() {
     return unsub;
   }, [user?.companyId]);
   const [selectedProgramId, setSelectedProgramId] = useState<string>("");
+  // Sélection par défaut : on privilégie le programme réellement référencé par les mouvements RH
+  // (le plus fréquent parmi `movement.programId`) plutôt que `programs[0]` au hasard — sinon, si
+  // le premier programme retourné par `subscribePrograms` ne porte aucun mouvement (programme créé
+  // après coup, ou mouvements liés à un autre programme), TOUT le dashboard reste vide alors que
+  // le tableau RH / Base ETP (qui ne filtrent pas par programme) affichent bien des données.
   useEffect(() => {
-    if (!selectedProgramId && programs.length > 0) setSelectedProgramId(programs[0].id);
-  }, [programs, selectedProgramId]);
+    if (selectedProgramId || programs.length === 0) return;
+    const counts = new Map<string, number>();
+    for (const m of data.workforce.movements) {
+      if (m.programId) counts.set(m.programId, (counts.get(m.programId) ?? 0) + 1);
+    }
+    const mostUsedId = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const match = mostUsedId ? programs.find((p) => p.id === mostUsedId) : undefined;
+    setSelectedProgramId((match ?? programs[0]).id);
+  }, [programs, selectedProgramId, data.workforce.movements]);
   const activeProgram = programs.find((p) => p.id === selectedProgramId) ?? programs[0] ?? null;
   // Dashboard RH scopé à UN programme (voir sélecteur ci-dessus) — le cycle de vie est désormais
   // une config par programme (lib/firestore/admin.ts).
@@ -224,11 +236,26 @@ export default function HrDashboardPage() {
   // Mouvements filtrés — alimente TOUS les calculs du dashboard quand un filtre ou le range
   // picker sont actifs. Le filtre par programme est appliqué en premier (scope), suivi du range
   // picker (dateFromISO/ToISO) puis des filtres FilterBar (types, workstream, fonction, pays, …).
+  // Filet de sécurité : si AUCUN mouvement ne porte `programId === selectedProgramId` (programme
+  // orphelin, ou mouvements dont le levier parent a changé de programme après coup), le filtre
+  // programme ci-dessous est désactivé plutôt que de masquer silencieusement tout le dashboard —
+  // même comportement que la Base ETP, qui ne filtre jamais par programme.
+  const programScopeHasMovements = useMemo(
+    () => !selectedProgramId || wf.movements.some((m) => m.programId === selectedProgramId),
+    [wf.movements, selectedProgramId]
+  );
+
   const filteredMovements = useMemo(() => {
     const keys = Object.keys(activeFilters);
     return wf.movements.filter((m) => {
       // Scope programme (aujourd'hui mono-programme mock, mais évolutif multi-programmes).
-      if (selectedProgramId && m.programId && m.programId !== selectedProgramId) return false;
+      if (
+        programScopeHasMovements &&
+        selectedProgramId &&
+        m.programId &&
+        m.programId !== selectedProgramId
+      )
+        return false;
       // Range picker temporel.
       if (m.plannedDate < dateFromISO || m.plannedDate > dateToISO) return false;
       // FilterBar (nominal).
@@ -240,7 +267,15 @@ export default function HrDashboardPage() {
       }
       return true;
     });
-  }, [wf.movements, activeFilters, filterDefs, selectedProgramId, dateFromISO, dateToISO]);
+  }, [
+    wf.movements,
+    activeFilters,
+    filterDefs,
+    selectedProgramId,
+    dateFromISO,
+    dateToISO,
+    programScopeHasMovements,
+  ]);
 
   const hasActiveFilters = Object.keys(activeFilters).length > 0;
 
@@ -1683,6 +1718,18 @@ export default function HrDashboardPage() {
           {t(
             "hr.noProgramBody",
             "pour cette entreprise. Les widgets restent en lecture sur toute la période de mouvements disponibles. Configurer un programme dans Admin → Programmes pour activer les presets FY et le scope programme."
+          )}
+        </div>
+      )}
+
+      {selectedProgramId && !programScopeHasMovements && wf.movements.length > 0 && (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-[12px] text-secondary">
+          <strong className="text-primary">
+            {t("hr.programScopeMismatchTitle", "Programme sélectionné sans mouvement associé")}
+          </strong>{" "}
+          {t(
+            "hr.programScopeMismatchBody",
+            "aucun mouvement RH ne référence ce programme : le scope programme est temporairement désactivé et tous les mouvements disponibles sont affichés."
           )}
         </div>
       )}
