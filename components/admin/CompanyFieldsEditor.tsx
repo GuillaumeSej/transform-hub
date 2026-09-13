@@ -40,11 +40,6 @@ export type CompanyFormState = {
   industry: string;
   fyStart: string;
   fyEnd: string;
-  /** Taux de charges sociales patronales, saisi en % (ex. "45") — converti en fraction (0.45)
-   *  côté sauvegarde. Vide = pas de surcharge, la valeur par défaut de lib/hrFinancials.ts
-   *  s'applique (voir Company.socialChargesRate). Ne sert QUE pour les calculs du module RH
-   *  (mouvements de personnel) — sans impact sur les plans de performance ou stratégiques. */
-  socialChargesRate: string;
   confidentialityLevels: string[];
   /** Directions/services métier de l'entreprise (round 4, filtres Plan Stratégique) — même
    *  pattern éditable que `confidentialityLevels` juste au-dessus, référencé par
@@ -52,9 +47,11 @@ export type CompanyFormState = {
   directions: string[];
   roleClearance: Partial<Record<Role, string[]>>;
   /** Seuils de risque par niveau, saisis en €K (voir Company.riskThresholds — stocké en € brut,
-   *  conversion à la charge de qui branche la sauvegarde). Non défini = valeurs par défaut
-   *  affichées (DEFAULT_RISK_THRESHOLDS_KEUR). */
-  riskThresholds?: { level: RiskLevel; minAmount: string }[];
+   *  conversion à la charge de qui branche la sauvegarde). `delayDays` : délai optionnel en jours
+   *  (ancienneté de la plus vieille alerte ouverte du scope) qui fait aussi basculer le niveau de
+   *  risque, en plus du montant. Non défini = valeurs par défaut affichées
+   *  (DEFAULT_RISK_THRESHOLDS_KEUR), pas de contrainte de délai. */
+  riskThresholds?: { level: RiskLevel; minAmount: string; delayDays: string }[];
 };
 
 export const DEFAULT_COMPANY_FORM: CompanyFormState = {
@@ -62,7 +59,6 @@ export const DEFAULT_COMPANY_FORM: CompanyFormState = {
   industry: "",
   fyStart: "2026-01-01",
   fyEnd: "2026-12-31",
-  socialChargesRate: "",
   confidentialityLevels: [],
   directions: [],
   roleClearance: {},
@@ -128,13 +124,21 @@ export function CompanyFieldsEditor({
     return found ? found.minAmount : DEFAULT_RISK_THRESHOLDS_KEUR[level];
   };
 
-  const setRiskThreshold = (level: RiskLevel, minAmount: string) => {
+  const riskDelayFor = (level: RiskLevel): string => {
+    return value.riskThresholds?.find((t) => t.level === level)?.delayDays ?? "";
+  };
+
+  const setRiskThreshold = (
+    level: RiskLevel,
+    patch: { minAmount?: string; delayDays?: string }
+  ) => {
     const base = RISK_LEVELS.map((r) => ({
       level: r.value,
       minAmount: riskThresholdFor(r.value),
+      delayDays: riskDelayFor(r.value),
     }));
     onChange({
-      riskThresholds: base.map((t) => (t.level === level ? { ...t, minAmount } : t)),
+      riskThresholds: base.map((t) => (t.level === level ? { ...t, ...patch } : t)),
     });
   };
 
@@ -191,36 +195,6 @@ export function CompanyFieldsEditor({
         <div className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
           {t("adminCompanyFields.advancedSettings", "Paramètres avancés")}
         </div>
-        <div className="rounded-lg border border-bp-coral/30 bg-bp-coral/5 p-3">
-          <div className="text-xs font-semibold text-bp-coral">
-            {t("adminCompanyFields.hrParameterBoxTitle", "Paramètre RH")}
-          </div>
-          <p className="mt-1 text-[11px] text-text-secondary">
-            {t(
-              "adminCompanyFields.hrParameterBoxHint",
-              "Ce taux ne sert que pour les calculs du module RH (mouvements de personnel — recrutement, départ, transfert — salaire chargé). Il n'affecte ni les plans de performance ni les plans stratégiques. Non renseigné = repli automatique sur 45% par défaut."
-            )}
-          </p>
-          <div className="mt-2 max-w-xs">
-            <label className="text-xs font-medium text-text-secondary">
-              {t(
-                "adminCompanyFields.socialChargesLabel",
-                "Taux de charges sociales patronales (%) — optionnel"
-              )}
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              max="200"
-              value={value.socialChargesRate}
-              onChange={(e) => onChange({ socialChargesRate: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              placeholder={t("adminCompanyFields.socialChargesPlaceholder", "Défaut : 45%")}
-            />
-          </div>
-        </div>
-
         <div>
           <label className="text-xs font-medium text-text-secondary">
             {t(
@@ -238,6 +212,9 @@ export function CompanyFieldsEditor({
                   <th className="px-3 py-2 text-left font-semibold text-text-secondary">
                     {t("adminCompanyFields.colThreshold", "Seuil (€K)")}
                   </th>
+                  <th className="px-3 py-2 text-left font-semibold text-text-secondary">
+                    {t("adminCompanyFields.colDelay", "Délai (jours) — optionnel")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -249,8 +226,21 @@ export function CompanyFieldsEditor({
                         type="number"
                         min="0"
                         value={riskThresholdFor(r.value)}
-                        onChange={(e) => setRiskThreshold(r.value, e.target.value)}
+                        onChange={(e) => setRiskThreshold(r.value, { minAmount: e.target.value })}
                         className="w-32 rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        value={riskDelayFor(r.value)}
+                        onChange={(e) => setRiskThreshold(r.value, { delayDays: e.target.value })}
+                        placeholder={t(
+                          "adminCompanyFields.colDelayPlaceholder",
+                          "Aucune contrainte"
+                        )}
+                        className="w-40 rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
                       />
                     </td>
                   </tr>

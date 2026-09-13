@@ -558,19 +558,14 @@ export type Company = {
   hierarchyLevels?: HierarchyLevelDef[];
   /** Arborescence géographique indépendante et de profondeur libre. */
   geographyHierarchyLevels?: HierarchyLevelDef[];
-  /** Paramètre RH — taux de charges sociales patronales appliqué au salaire brut pour obtenir le
-   *  "salaire chargé" utilisé dans le calcul EUR mécanisme-dépendant des mouvements RH (voir
-   *  lib/hrFinancials.ts). Varie fortement selon pays/statut/convention collective — ASSUMPTION :
-   *  non défini = valeur par défaut ~45% (ordre de grandeur France, cadre), à ajuster projet par
-   *  projet selon la politique RH réelle du client. Présenté dans un encadré "Paramètres RH"
-   *  dédié en admin entreprise (CompanyFieldsEditor) pour éviter la confusion avec les champs
-   *  financiers de la mission. */
-  socialChargesRate?: number;
   /** Seuils de segmentation du risque d'un levier en fonction du cumul des montants (€, valeur
    *  absolue de Alert.impactEur) des alertes ouvertes qui lui sont liées (voir
    *  engine.computeLeverRisk). Non défini = seuils par défaut (voir DEFAULT_RISK_THRESHOLDS dans
-   *  lib/engine.ts). */
-  riskThresholds?: { level: RiskLevel; minAmount: number }[];
+   *  lib/engine.ts). `delayDays` (optionnel) ajoute un second critère de bascule au niveau, sur
+   *  l'ancienneté (en jours) de la plus vieille alerte ouverte du scope — un levier peut ainsi
+   *  monter d'un niveau de risque soit par montant, soit par délai dépassé, le plus élevé des
+   *  deux étant retenu. Non défini = pas de contrainte de délai pour ce niveau. */
+  riskThresholds?: { level: RiskLevel; minAmount: number; delayDays?: number }[];
 };
 
 /** Un niveau de l'arborescence financière P&L → Cost Center, configuré par entreprise.

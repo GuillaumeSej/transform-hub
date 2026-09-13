@@ -45,14 +45,13 @@ export default function AdminCompaniesPage() {
       industry: c.industry,
       fyStart: c.fyStart,
       fyEnd: c.fyEnd,
-      socialChargesRate:
-        c.socialChargesRate != null ? String(Math.round(c.socialChargesRate * 100)) : "",
       confidentialityLevels: c.confidentialityLevels ?? [],
       directions: c.directions ?? [],
       roleClearance: c.roleClearance ?? {},
       riskThresholds: c.riskThresholds?.map((t) => ({
         level: t.level,
         minAmount: String(t.minAmount / 1000),
+        delayDays: t.delayDays != null ? String(t.delayDays) : "",
       })),
     });
     setShowForm(true);
@@ -60,17 +59,11 @@ export default function AdminCompaniesPage() {
 
   const save = async () => {
     if (!form.name.trim()) return;
-    // Ne jamais assigner `socialChargesRate` à `undefined` explicitement — Firestore `setDoc`
-    // rejette toute clé valant `undefined` (même bug corrigé sur
-    // AuthUser.confidentialityClearance dans UsersPanel.tsx) : on omet la clé plutôt que de la
-    // mettre à `undefined` quand le champ est vidé.
-    const trimmedCharges = form.socialChargesRate.trim();
     const common = {
       name: form.name,
       industry: form.industry,
       fyStart: form.fyStart,
       fyEnd: form.fyEnd,
-      ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
       confidentialityLevels: form.confidentialityLevels,
       directions: form.directions,
       roleClearance: form.roleClearance,
@@ -81,6 +74,7 @@ export default function AdminCompaniesPage() {
             riskThresholds: form.riskThresholds.map((t) => ({
               level: t.level,
               minAmount: Number(t.minAmount) * 1000,
+              ...(t.delayDays.trim() !== "" ? { delayDays: Number(t.delayDays) } : {}),
             })),
           }
         : {}),
@@ -89,9 +83,7 @@ export default function AdminCompaniesPage() {
       if (editId) {
         const existing = companies.find((c) => c.id === editId);
         if (existing) {
-          const rest = { ...existing };
-          delete rest.socialChargesRate;
-          await saveCompany({ ...rest, ...common });
+          await saveCompany({ ...existing, ...common });
         }
       } else {
         const id = `c${Date.now()}`;

@@ -152,16 +152,13 @@ export default function CompanyDetailClient() {
       industry: company.industry,
       fyStart: company.fyStart,
       fyEnd: company.fyEnd,
-      socialChargesRate:
-        company.socialChargesRate != null
-          ? String(Math.round(company.socialChargesRate * 100))
-          : "",
       confidentialityLevels: company.confidentialityLevels ?? [],
       directions: company.directions ?? [],
       roleClearance: company.roleClearance ?? {},
       riskThresholds: company.riskThresholds?.map((t) => ({
         level: t.level,
         minAmount: String(t.minAmount / 1000),
+        delayDays: t.delayDays != null ? String(t.delayDays) : "",
       })),
     };
   }, [company]);
@@ -177,16 +174,13 @@ export default function CompanyDetailClient() {
       industry: company.industry,
       fyStart: company.fyStart,
       fyEnd: company.fyEnd,
-      socialChargesRate:
-        company.socialChargesRate != null
-          ? String(Math.round(company.socialChargesRate * 100))
-          : "",
       confidentialityLevels: company.confidentialityLevels ?? [],
       directions: company.directions ?? [],
       roleClearance: company.roleClearance ?? {},
       riskThresholds: company.riskThresholds?.map((t) => ({
         level: t.level,
         minAmount: String(t.minAmount / 1000),
+        delayDays: t.delayDays != null ? String(t.delayDays) : "",
       })),
     });
   }, [company]);
@@ -203,22 +197,18 @@ export default function CompanyDetailClient() {
     if (!company || !form.name.trim()) return;
     setSaving(true);
     try {
-      // Ne jamais assigner `socialChargesRate` à `undefined` explicitement — Firestore `setDoc`
+      // Ne jamais assigner un champ optionnel à `undefined` explicitement — Firestore `setDoc`
       // rejette toute clé valant `undefined` (voir le bug identique corrigé sur
       // AuthUser.confidentialityClearance dans UsersPanel.tsx) : on omet la clé plutôt que de la
-      // mettre à `undefined` quand le champ est vidé, ce qui l'efface bien du document. Même
-      // précaution pour `riskThresholds` : on ne l'inclut que s'il a été chargé/renseigné dans le
-      // formulaire (voir baselineForm/useEffect ci-dessus, qui l'hydratent depuis `company`).
-      const trimmedCharges = form.socialChargesRate.trim();
-      const rest = { ...company };
-      delete rest.socialChargesRate;
+      // mettre à `undefined`. Pour `riskThresholds` : on ne l'inclut que s'il a été
+      // chargé/renseigné dans le formulaire (voir baselineForm/useEffect ci-dessus, qui
+      // l'hydratent depuis `company`), et `delayDays` par seuil n'est ajouté que s'il est saisi.
       await saveCompany({
-        ...rest,
+        ...company,
         name: form.name,
         industry: form.industry,
         fyStart: form.fyStart,
         fyEnd: form.fyEnd,
-        ...(trimmedCharges !== "" ? { socialChargesRate: Number(trimmedCharges) / 100 } : {}),
         confidentialityLevels: form.confidentialityLevels,
         directions: form.directions,
         roleClearance: form.roleClearance,
@@ -227,6 +217,7 @@ export default function CompanyDetailClient() {
               riskThresholds: form.riskThresholds.map((t) => ({
                 level: t.level,
                 minAmount: Number(t.minAmount) * 1000,
+                ...(t.delayDays.trim() !== "" ? { delayDays: Number(t.delayDays) } : {}),
               })),
             }
           : {}),

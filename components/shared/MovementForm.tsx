@@ -4,17 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { subscribeCompanies } from "@/lib/firestore/admin";
 import {
   computeMovementFinancials,
-  getSocialChargesRate,
   tenureYears,
   type MovementFinancials,
 } from "@/lib/hrFinancials";
 import { fmtCurr } from "@/lib/engine";
 import type {
   BeTrackData,
-  Company,
   MovementStatus,
   MovementType,
   SocialScheme,
@@ -59,16 +56,12 @@ const DEFAULT_RECRUITMENT_SALARY = 45_000;
  * imposée). */
 export function MovementForm({
   data,
-  companyId,
   initialValues,
   onSubmit,
   onCancel,
   submitLabel,
 }: {
   data: BeTrackData;
-  /** Entreprise courante — utilisée pour résoudre Company.socialChargesRate (taux de charges
-   *  patronales). Omis/absent = taux par défaut (voir DEFAULT_SOCIAL_CHARGES_RATE). */
-  companyId?: string | null;
   initialValues?: Partial<MovementFormValues>;
   onSubmit: (values: MovementFormValues) => void;
   onCancel: () => void;
@@ -82,18 +75,6 @@ export function MovementForm({
   const departments = data.workforce.departments;
   const firstEmployee = employees[0];
   const firstLever = data.levers[0];
-
-  const [company, setCompany] = useState<Company | null>(null);
-  useEffect(() => {
-    if (!companyId) {
-      setCompany(null);
-      return;
-    }
-    return subscribeCompanies((companies) => {
-      setCompany(companies.find((c) => c.id === companyId) ?? null);
-    }, companyId);
-  }, [companyId]);
-  const chargesRate = getSocialChargesRate(company);
 
   const [values, setValues] = useState<MovementFormValues>({
     empId: firstEmployee?.id ?? null,
@@ -120,12 +101,12 @@ export function MovementForm({
     ...initialValues,
   });
 
-  // Salaire brut annuel de référence pour un Recrutement (pas d'Employee existant) — s'il s'agit
-  // d'un mouvement existant déjà chiffré, on retrouve un salaire de référence approximatif en
-  // inversant le calcul du salaire chargé (salaryImpact = +loadedSalary pour un Recrutement).
+  // Salaire chargé annuel de référence pour un Recrutement (pas d'Employee existant) — s'il
+  // s'agit d'un mouvement existant déjà chiffré, salaryImpact = +loadedSalary pour un
+  // Recrutement, donc c'est directement le salaire de référence (plus de charges à retirer).
   const [manualGrossSalary, setManualGrossSalary] = useState<number>(() => {
     if (initialValues?.type === "Recrutement" && initialValues.salaryImpact) {
-      return Math.round(initialValues.salaryImpact / (1 + chargesRate));
+      return Math.round(initialValues.salaryImpact);
     }
     return DEFAULT_RECRUITMENT_SALARY;
   });
@@ -148,12 +129,11 @@ export function MovementForm({
       computeMovementFinancials({
         type: values.type,
         grossSalary,
-        chargesRate,
         tenure,
         inPSE: values.inPSE,
         requiresRetraining: values.requiresRetraining,
       }),
-    [values.type, grossSalary, chargesRate, tenure, values.inPSE, values.requiresRetraining]
+    [values.type, grossSalary, tenure, values.inPSE, values.requiresRetraining]
   );
 
   const applyFinancials = (fin: MovementFinancials) => {
@@ -165,25 +145,15 @@ export function MovementForm({
     }));
   };
 
-  // Préremplissage initial pour un NOUVEAU mouvement (pas de valeurs à éditer) : dès que le taux
-  // de charges de l'entreprise est résolu (abonnement Firestore asynchrone), on applique une
+  // Préremplissage initial pour un NOUVEAU mouvement (pas de valeurs à éditer) : applique une
   // première fois le calcul mécanisme-dépendant plutôt que de laisser salaryImpact/savings/cost
-  // à 0 tant que l'utilisateur n'a pas changé le type ou l'employé. Une seule fois — l'utilisateur
-  // reste ensuite libre de modifier ces champs.
+  // à 0 tant que l'utilisateur n'a pas changé le type ou l'employé. Une seule fois au montage —
+  // l'utilisateur reste ensuite libre de modifier ces champs.
   useEffect(() => {
     if (initialValues) return; // édition d'un mouvement existant : ne jamais écraser
-    applyFinancials(
-      computeMovementFinancials({
-        type: values.type,
-        grossSalary,
-        chargesRate,
-        tenure,
-        inPSE: values.inPSE,
-        requiresRetraining: values.requiresRetraining,
-      })
-    );
+    applyFinancials(financials);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargesRate]);
+  }, []);
 
   const applyEmployee = (empId: string) => {
     const emp = employees.find((e) => e.id === empId);
@@ -192,7 +162,6 @@ export function MovementForm({
     const fin = computeMovementFinancials({
       type: values.type,
       grossSalary: emp.salary,
-      chargesRate,
       tenure: nextTenure,
       inPSE: values.inPSE,
       requiresRetraining: values.requiresRetraining,
@@ -225,7 +194,6 @@ export function MovementForm({
     const fin = computeMovementFinancials({
       type,
       grossSalary: nextGrossSalary,
-      chargesRate,
       tenure: nextTenure,
       inPSE,
       requiresRetraining,
@@ -314,7 +282,7 @@ export function MovementForm({
             <Field
               label={translate(
                 "shared.movementForm.refGrossSalary",
-                "Salaire brut annuel de référence (€)"
+                "Salaire chargé annuel de référence (€)"
               )}
             >
               <input
@@ -330,7 +298,6 @@ export function MovementForm({
                     computeMovementFinancials({
                       type: values.type,
                       grossSalary: next,
-                      chargesRate,
                       tenure: 0,
                       inPSE: false,
                     })
@@ -479,7 +446,6 @@ export function MovementForm({
                   computeMovementFinancials({
                     type: values.type,
                     grossSalary,
-                    chargesRate,
                     tenure,
                     inPSE,
                     requiresRetraining: values.requiresRetraining,
@@ -509,7 +475,6 @@ export function MovementForm({
                   computeMovementFinancials({
                     type: values.type,
                     grossSalary,
-                    chargesRate,
                     tenure,
                     inPSE: values.inPSE,
                     requiresRetraining,
@@ -614,17 +579,15 @@ export function MovementForm({
             </div>
           </dl>
           <p className="mt-1.5 text-[10px] text-tertiary">
-            {translate(
-              "shared.movementForm.chargesRateAppliedPrefix",
-              "Taux de charges patronales appliqué : "
-            )}
-            {Math.round(chargesRate * 100)}%
             {isRecruitment
               ? translate(
                   "shared.movementForm.recruitmentGrossSalaryNote",
-                  " · salaire brut de référence saisi ci-dessus"
+                  "Salaire chargé de référence saisi ci-dessus"
                 )
-              : ""}{" "}
+              : translate(
+                  "shared.movementForm.loadedSalaryNote",
+                  "Salaire chargé de l'employé sélectionné"
+                )}{" "}
             {translate(
               "shared.movementForm.defaultValueNote",
               "— valeur par défaut estimée, les champs ci-dessus restent modifiables librement."

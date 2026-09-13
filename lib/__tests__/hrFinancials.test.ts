@@ -1,43 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
   ATTRITION_NOTICE_MONTHS,
-  DEFAULT_SOCIAL_CHARGES_RATE,
   FORCED_DEPARTURE_MULTIPLIER,
   NOTICE_PERIOD_MONTHS,
   RETRAINING_TRANSITION_RATE,
   TRANSFER_TRANSITION_RATE,
   computeMovementEuros,
   computeMovementFinancials,
-  getSocialChargesRate,
   loadedAnnualSalary,
   severanceEstimate,
   tenureYears,
 } from "@/lib/hrFinancials";
 
-describe("hrFinancials — getSocialChargesRate", () => {
-  it("returns the default rate when no company config", () => {
-    expect(getSocialChargesRate(null)).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
-    expect(getSocialChargesRate(undefined)).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
-    expect(getSocialChargesRate({})).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
-  });
-
-  it("uses the company-configured rate when present", () => {
-    expect(getSocialChargesRate({ socialChargesRate: 0.6 })).toBe(0.6);
-  });
-
-  it("falls back to default for invalid rates", () => {
-    expect(getSocialChargesRate({ socialChargesRate: -1 })).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
-    expect(getSocialChargesRate({ socialChargesRate: NaN })).toBe(DEFAULT_SOCIAL_CHARGES_RATE);
-  });
-});
-
 describe("hrFinancials — loadedAnnualSalary", () => {
-  it("applies the charges rate on top of the gross salary", () => {
-    expect(loadedAnnualSalary(100_000, 0.45)).toBe(145_000);
+  it("returns the gross salary as-is — plus de calcul de charges patronales", () => {
+    expect(loadedAnnualSalary(100_000)).toBe(100_000);
   });
 
   it("never goes negative for a negative gross salary", () => {
-    expect(loadedAnnualSalary(-5000, 0.45)).toBe(0);
+    expect(loadedAnnualSalary(-5000)).toBe(0);
   });
 });
 
@@ -72,17 +53,14 @@ describe("hrFinancials — severanceEstimate", () => {
 });
 
 describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () => {
-  const chargesRate = 0.45;
-
   it("Départ forcé: full salary savings, negative salaryImpact, severance + notice with ×1.2 multiplier", () => {
     const fin = computeMovementFinancials({
       type: "Départ forcé",
       grossSalary: 60_000,
-      chargesRate,
       tenure: 5,
       inPSE: false,
     });
-    const loadedSalary = Math.round(60_000 * 1.45);
+    const loadedSalary = 60_000;
     expect(fin.loadedSalary).toBe(loadedSalary);
     expect(fin.salarySavings).toBe(loadedSalary);
     expect(fin.salaryImpact).toBe(-loadedSalary);
@@ -93,7 +71,7 @@ describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () =>
   });
 
   it("Départ forcé: inPSE adds an overhead on top of the non-PSE cost", () => {
-    const base = { type: "Départ forcé" as const, grossSalary: 60_000, chargesRate, tenure: 8 };
+    const base = { type: "Départ forcé" as const, grossSalary: 60_000, tenure: 8 };
     const withoutPSE = computeMovementFinancials({ ...base, inPSE: false });
     const withPSE = computeMovementFinancials({ ...base, inPSE: true });
     expect(withPSE.socialCost).toBeGreaterThan(withoutPSE.socialCost);
@@ -104,13 +82,11 @@ describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () =>
     const short = computeMovementFinancials({
       type: "Départ forcé",
       grossSalary: 60_000,
-      chargesRate,
       tenure: 1,
     });
     const long = computeMovementFinancials({
       type: "Départ forcé",
       grossSalary: 60_000,
-      chargesRate,
       tenure: 12,
     });
     expect(long.socialCost).toBeGreaterThan(short.socialCost);
@@ -120,10 +96,9 @@ describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () =>
     const fin = computeMovementFinancials({
       type: "Attrition",
       grossSalary: 60_000,
-      chargesRate,
       tenure: 10,
     });
-    const loadedSalary = Math.round(60_000 * 1.45);
+    const loadedSalary = 60_000;
     expect(fin.salarySavings).toBe(loadedSalary);
     expect(fin.salaryImpact).toBe(-loadedSalary);
     expect(fin.socialCost).toBe(Math.round((ATTRITION_NOTICE_MONTHS / 12) * loadedSalary));
@@ -133,13 +108,11 @@ describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () =>
     const attrition = computeMovementFinancials({
       type: "Attrition",
       grossSalary: 60_000,
-      chargesRate,
       tenure: 8,
     });
     const forced = computeMovementFinancials({
       type: "Départ forcé",
       grossSalary: 60_000,
-      chargesRate,
       tenure: 8,
     });
     expect(attrition.socialCost).toBeLessThan(forced.socialCost);
@@ -150,9 +123,8 @@ describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () =>
     const fin = computeMovementFinancials({
       type: "Recrutement",
       grossSalary: 50_000,
-      chargesRate,
     });
-    const loadedSalary = Math.round(50_000 * 1.45);
+    const loadedSalary = 50_000;
     expect(fin.loadedSalary).toBe(loadedSalary);
     expect(fin.salarySavings).toBe(0);
     expect(fin.salaryImpact).toBe(loadedSalary);
@@ -163,19 +135,17 @@ describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () =>
     const inFin = computeMovementFinancials({
       type: "Transfert entrant",
       grossSalary: 55_000,
-      chargesRate,
     });
     const outFin = computeMovementFinancials({
       type: "Transfert sortant",
       grossSalary: 55_000,
-      chargesRate,
     });
     expect(inFin.salarySavings).toBe(0);
     expect(inFin.salaryImpact).toBe(0);
     expect(outFin.salarySavings).toBe(0);
     expect(outFin.salaryImpact).toBe(0);
     expect(inFin.socialCost).toBe(outFin.socialCost);
-    const loadedSalary = Math.round(55_000 * 1.45);
+    const loadedSalary = 55_000;
     expect(inFin.socialCost).toBe(Math.round(TRANSFER_TRANSITION_RATE * loadedSalary));
   });
 
@@ -183,16 +153,14 @@ describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () =>
     const light = computeMovementFinancials({
       type: "Transfert entrant",
       grossSalary: 55_000,
-      chargesRate,
       requiresRetraining: false,
     });
     const heavy = computeMovementFinancials({
       type: "Transfert entrant",
       grossSalary: 55_000,
-      chargesRate,
       requiresRetraining: true,
     });
-    const loadedSalary = Math.round(55_000 * 1.45);
+    const loadedSalary = 55_000;
     expect(heavy.socialCost).toBe(Math.round(RETRAINING_TRANSITION_RATE * loadedSalary));
     expect(heavy.socialCost).toBeGreaterThan(light.socialCost);
   });
@@ -200,16 +168,10 @@ describe("hrFinancials — computeMovementFinancials (5-types Gooduelle)", () =>
 
 describe("hrFinancials — computeMovementEuros", () => {
   it("maps computeMovementFinancials onto the persisted EUR fields", () => {
-    const result = computeMovementEuros(
-      "Départ forcé",
-      60_000,
-      { socialChargesRate: 0.45 },
-      { tenure: 5 }
-    );
+    const result = computeMovementEuros("Départ forcé", 60_000, { tenure: 5 });
     const fin = computeMovementFinancials({
       type: "Départ forcé",
       grossSalary: 60_000,
-      chargesRate: 0.45,
       tenure: 5,
       inPSE: false,
     });
@@ -220,17 +182,16 @@ describe("hrFinancials — computeMovementEuros", () => {
     });
   });
 
-  it("uses the default charges rate when no company is provided", () => {
-    const result = computeMovementEuros("Recrutement", 40_000, undefined);
-    const loadedSalary = Math.round(40_000 * (1 + DEFAULT_SOCIAL_CHARGES_RATE));
-    expect(result.salaryImpact).toBe(loadedSalary);
+  it("uses the gross salary as the loaded salary directly (no charges rate)", () => {
+    const result = computeMovementEuros("Recrutement", 40_000);
+    expect(result.salaryImpact).toBe(40_000);
   });
 
   it("passes requiresRetraining through for Transfert", () => {
-    const withRe = computeMovementEuros("Transfert entrant", 50_000, undefined, {
+    const withRe = computeMovementEuros("Transfert entrant", 50_000, {
       requiresRetraining: true,
     });
-    const withoutRe = computeMovementEuros("Transfert entrant", 50_000, undefined, {
+    const withoutRe = computeMovementEuros("Transfert entrant", 50_000, {
       requiresRetraining: false,
     });
     expect(withRe.cost).toBeGreaterThan(withoutRe.cost);

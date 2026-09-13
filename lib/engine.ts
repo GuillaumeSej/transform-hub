@@ -372,29 +372,63 @@ export function byProgram(data: BeTrackData, programs: Program[]): Record<string
 /** Seuils par défaut (€, cumul des montants d'alertes ouvertes liées au levier, valeur absolue de
  * Alert.impactEur) si l'entreprise n'a pas configuré Company.riskThresholds. Évalués du plus haut
  * seuil au plus bas. */
-export const DEFAULT_RISK_THRESHOLDS: { level: RiskLevel; minAmount: number }[] = [
+export const DEFAULT_RISK_THRESHOLDS: {
+  level: RiskLevel;
+  minAmount: number;
+  delayDays?: number;
+}[] = [
   { level: "critical", minAmount: 500_000 },
   { level: "high", minAmount: 200_000 },
   { level: "medium", minAmount: 50_000 },
   { level: "low", minAmount: 0 },
 ];
 
+/** Rang de sévérité d'un RiskLevel, du plus élevé au plus faible — sert à comparer/combiner deux
+ * critères de bascule indépendants (montant, délai) dans computeLeverRisk ci-dessous. */
+const RISK_SEVERITY: Record<RiskLevel, number> = { critical: 3, high: 2, medium: 1, low: 0 };
+
 /** Risque d'un levier dérivé des alertes qui lui sont liées (Alert.scope === leverId, non
  * résolues), segmenté par cumul de montant à risque (valeur absolue de Alert.impactEur) selon les
  * seuils de l'entreprise (ou les seuils par défaut). Un levier sans alerte chiffrée est "low".
  * Remplace la saisie manuelle de Lever.risk : c'est la nouvelle source de vérité, "vivante" — elle
- * évolue avec les alertes plutôt que d'être figée à la main. */
+ * évolue avec les alertes plutôt que d'être figée à la main.
+ *
+ * Second critère optionnel — `delayDays` par seuil : un levier bascule aussi à ce niveau si
+ * l'ancienneté (en jours, depuis `Alert.createdAt`/`ts` en repli) de sa plus vieille alerte
+ * ouverte dépasse ce délai, indépendamment du montant. Les deux critères sont évalués séparément,
+ * et c'est le niveau le plus sévère des deux qui est retenu — un délai dépassé peut donc faire
+ * monter le risque même si le montant cumulé reste sous le seuil, et inversement. */
 export function computeLeverRisk(
   leverId: string,
   alerts: Alert[],
-  thresholds: { level: RiskLevel; minAmount: number }[] = DEFAULT_RISK_THRESHOLDS
+  thresholds: {
+    level: RiskLevel;
+    minAmount: number;
+    delayDays?: number;
+  }[] = DEFAULT_RISK_THRESHOLDS,
+  today: Date = new Date()
 ): RiskLevel {
-  const total = alerts
-    .filter((a) => a.scope === leverId && !a.resolved && typeof a.impactEur === "number")
+  const scoped = alerts.filter((a) => a.scope === leverId && !a.resolved);
+  const total = scoped
+    .filter((a) => typeof a.impactEur === "number")
     .reduce((s, a) => s + Math.abs(a.impactEur ?? 0), 0);
-  const sorted = [...thresholds].sort((a, b) => b.minAmount - a.minAmount);
-  const hit = sorted.find((t) => total >= t.minAmount);
-  return hit?.level ?? "low";
+  const oldestOpenDays = scoped.reduce((max, a) => {
+    const raw = a.createdAt ?? a.ts;
+    if (!raw) return max;
+    const days = (today.getTime() - new Date(raw).getTime()) / 86_400_000;
+    return Number.isFinite(days) ? Math.max(max, days) : max;
+  }, 0);
+
+  const bySeverityDesc = [...thresholds].sort(
+    (a, b) => RISK_SEVERITY[b.level] - RISK_SEVERITY[a.level]
+  );
+  const byAmount = bySeverityDesc.find((t) => total >= t.minAmount)?.level ?? "low";
+  const byDelay = bySeverityDesc.find(
+    (t) => t.delayDays != null && oldestOpenDays >= t.delayDays
+  )?.level;
+
+  if (!byDelay) return byAmount;
+  return RISK_SEVERITY[byDelay] > RISK_SEVERITY[byAmount] ? byDelay : byAmount;
 }
 
 /**
