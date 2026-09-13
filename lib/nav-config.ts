@@ -1,4 +1,9 @@
-import { getPerformanceProfile, getStrategicProfile } from "@/lib/roleProfiles";
+import {
+  getPerformanceProfile,
+  getPerformanceProfiles,
+  getStrategicProfile,
+  getStrategicProfiles,
+} from "@/lib/roleProfiles";
 import type { AuthUser, NavItem, Role, RoleDefinition } from "@/types";
 
 /** Portage fidèle de `roles` (prototype HTML historique, depuis retiré du repo) — nav différente
@@ -279,18 +284,17 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
 };
 
 /** Union dédupliquée (par `NavItem.id`, première occurrence conservée) de la nav de TOUS les
- *  profils/habilitations de l'utilisateur : profil Plan Performance, profil Plan Stratégique,
- *  admin global, admin entreprise — dans cet ordre. Point de passage UNIQUE pour cette logique,
- *  consommé par AppShell (garde-fou de routes), Sidebar, Topbar et l'écran de login (page
- *  d'atterrissage post-connexion) : ne pas la dupliquer ailleurs. */
+ *  profils/habilitations de l'utilisateur : TOUS les profils Plan Performance (round multi-profils
+ *  multi-programmes — un utilisateur peut en avoir plusieurs, un par programme), TOUS les profils
+ *  Plan Stratégique, admin global, admin entreprise — dans cet ordre. Point de passage UNIQUE pour
+ *  cette logique, consommé par AppShell (garde-fou de routes), Sidebar, Topbar et l'écran de login
+ *  (page d'atterrissage post-connexion) : ne pas la dupliquer ailleurs. */
 export function resolveUserNav(
   user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
 ): NavItem[] {
   const navLists: NavItem[][] = [];
-  const performanceProfile = getPerformanceProfile(user);
-  const strategicProfile = getStrategicProfile(user);
-  if (performanceProfile) navLists.push(roles[performanceProfile.role].nav);
-  if (strategicProfile) navLists.push(roles[strategicProfile.role].nav);
+  for (const profile of getPerformanceProfiles(user)) navLists.push(roles[profile.role].nav);
+  for (const profile of getStrategicProfiles(user)) navLists.push(roles[profile.role].nav);
   if (user?.isGlobalAdmin) navLists.push(ADMIN_NAV_DEFINITIONS.global.nav);
   if (user?.isCompanyAdmin) navLists.push(ADMIN_NAV_DEFINITIONS.company.nav);
 

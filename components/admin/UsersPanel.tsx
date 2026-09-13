@@ -18,12 +18,7 @@ import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
-import {
-  isAnyAdmin,
-  getPerformanceProfile,
-  getStrategicProfile,
-  assertValidProfiles,
-} from "@/lib/roleProfiles";
+import { isAnyAdmin, isStrategicRole, assertValidProfiles } from "@/lib/roleProfiles";
 import { resolveProgramType } from "@/lib/axisLogic";
 
 /** Longueur minimale du mot de passe — DOIT rester alignée sur la politique de Firebase Auth
@@ -181,12 +176,12 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     firstName: "",
     lastName: "",
     name: "",
-    // Profils métier — round multi-profils : deux pickers indépendants ("" = aucun profil de ce
-    // type), au lieu de l'ancien `role: Role` unique.
-    performanceRole: "" as Role | "",
-    performanceProgramId: "",
-    strategicRole: "" as Role | "",
-    strategicProgramId: "",
+    // Profils métier — round multi-profils multi-programmes : liste répétable de {role,
+    // programId?}, au lieu de l'ancien `role: Role` unique puis des deux pickers fixes
+    // (performanceRole/strategicRole) du round précédent. Un utilisateur peut désormais cumuler
+    // plusieurs profils d'une même piste, chacun sur un programme distinct (voir
+    // lib/roleProfiles.ts::assertValidProfiles, filet de sécurité appelé dans save()).
+    profiles: [] as ProfileAssignment[],
     isGlobalAdmin: false,
     isCompanyAdmin: false,
     companyId: "",
@@ -272,10 +267,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       firstName: "",
       lastName: "",
       name: "",
-      performanceRole: "",
-      performanceProgramId: "",
-      strategicRole: "",
-      strategicProgramId: "",
+      profiles: [],
       isGlobalAdmin: false,
       isCompanyAdmin: false,
       companyId: fixedCompanyId ?? companies[0]?.id ?? "",
@@ -291,17 +283,12 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     setEditIdx(idx);
     setOriginalUsername(u.username);
     setPasswordTouched(false);
-    const perfProfile = getPerformanceProfile(u);
-    const stratProfile = getStrategicProfile(u);
     setForm({
       username: u.username,
       firstName: u.firstName ?? "",
       lastName: u.lastName ?? "",
       name: u.name,
-      performanceRole: perfProfile?.role ?? "",
-      performanceProgramId: perfProfile?.programId ?? "",
-      strategicRole: stratProfile?.role ?? "",
-      strategicProgramId: stratProfile?.programId ?? "",
+      profiles: u.profiles ?? [],
       isGlobalAdmin: !!u.isGlobalAdmin,
       isCompanyAdmin: !!u.isCompanyAdmin,
       companyId: u.companyId ?? companies[0]?.id ?? "",
@@ -342,23 +329,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       return;
     }
 
-    // Construction des profils métier à partir des deux pickers indépendants — structurellement
-    // au plus un profil Plan Performance + un profil Plan Stratégique (deux `<select>` séparés ne
-    // peuvent pas produire deux profils du même type). `assertValidProfiles` reste appelée comme
-    // filet de sécurité avant tout enregistrement (voir lib/roleProfiles.ts).
-    const profiles: ProfileAssignment[] = [];
-    if (form.performanceRole) {
-      profiles.push({
-        role: form.performanceRole,
-        ...(form.performanceProgramId ? { programId: form.performanceProgramId } : {}),
-      });
-    }
-    if (form.strategicRole) {
-      profiles.push({
-        role: form.strategicRole,
-        ...(form.strategicProgramId ? { programId: form.strategicProgramId } : {}),
-      });
-    }
+    // Profils métier saisis via la liste répétable ci-dessous — filtrer les lignes en cours de
+    // saisie sans rôle choisi (une ligne vide ajoutée par "+ Ajouter" mais pas encore remplie ne
+    // doit pas être enregistrée). `assertValidProfiles` reste appelée comme filet de sécurité
+    // avant tout enregistrement (voir lib/roleProfiles.ts).
+    const profiles: ProfileAssignment[] = form.profiles.filter((p) => p.role);
     try {
       assertValidProfiles(profiles);
     } catch (err) {
@@ -747,84 +722,112 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             )}
           </div>
 
-          {/* Profils métier — round multi-profils : deux pickers indépendants, chacun optionnel
-              ("Aucun" + les 6 rôles du type concerné). Structurellement au plus un profil par
-              type, donc pas de validation supplémentaire nécessaire côté UI (voir
-              assertValidProfiles, appelée comme filet de sécurité dans save()). */}
-          <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-bg-surface p-3">
-            <div>
-              <label className="text-xs font-medium text-text-secondary">
-                Profil Plan Performance
-              </label>
-              <select
-                value={form.performanceRole}
-                onChange={(e) =>
+          {/* Profils métier — round multi-profils multi-programmes : liste répétable, un
+              utilisateur peut désormais cumuler plusieurs profils d'une même piste (Plan
+              Performance ou Plan Stratégique) tant qu'ils portent sur des programmes distincts
+              (voir assertValidProfiles, appelée comme filet de sécurité dans save()). */}
+          <div className="rounded-lg border border-border bg-bg-surface p-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-text-secondary">Profils métier</label>
+              <button
+                type="button"
+                onClick={() =>
                   setForm((f) => ({
                     ...f,
-                    performanceRole: e.target.value as Role | "",
-                    performanceProgramId: "",
+                    profiles: [
+                      ...f.profiles,
+                      { role: "" as unknown as Role, programId: undefined },
+                    ],
                   }))
                 }
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                className="rounded-sm bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral transition hover:bg-bp-coral/20"
               >
-                <option value="">Aucun</option>
-                {PERFORMANCE_ROLE_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-              {form.performanceRole && performancePrograms.length > 0 && (
-                <select
-                  value={form.performanceProgramId}
-                  onChange={(e) => setForm((f) => ({ ...f, performanceProgramId: e.target.value }))}
-                  className="mt-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                >
-                  <option value="">Tous les programmes Performance</option>
-                  {performancePrograms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+                + Ajouter un profil
+              </button>
             </div>
-            <div>
-              <label className="text-xs font-medium text-text-secondary">
-                Profil Plan Stratégique
-              </label>
-              <select
-                value={form.strategicRole}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    strategicRole: e.target.value as Role | "",
-                    strategicProgramId: "",
-                  }))
-                }
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              >
-                <option value="">Aucun</option>
-                {STRATEGIC_ROLE_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-              {form.strategicRole && strategicPrograms.length > 0 && (
-                <select
-                  value={form.strategicProgramId}
-                  onChange={(e) => setForm((f) => ({ ...f, strategicProgramId: e.target.value }))}
-                  className="mt-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                >
-                  <option value="">Tous les programmes Stratégique</option>
-                  {strategicPrograms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+            {form.profiles.length === 0 && (
+              <p className="mt-2 text-xs text-text-secondary">
+                Aucun profil métier — utilisateur purement admin, ou compte de type picker (ex.
+                référence pour un champ owner/sponsor).
+              </p>
+            )}
+            <div className="mt-2 space-y-2">
+              {form.profiles.map((profile, idx) => {
+                const rolePrograms = isStrategicRole(profile.role)
+                  ? strategicPrograms
+                  : performancePrograms;
+                return (
+                  <div key={idx} className="flex items-center gap-2">
+                    <select
+                      value={profile.role}
+                      onChange={(e) => {
+                        const role = e.target.value as Role | "";
+                        setForm((f) => ({
+                          ...f,
+                          profiles: f.profiles.map((p, i) =>
+                            i === idx ? { role: role as Role, programId: undefined } : p
+                          ),
+                        }));
+                      }}
+                      className="w-56 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                    >
+                      <option value="">Choisir un rôle</option>
+                      <optgroup label="Plan Performance">
+                        {PERFORMANCE_ROLE_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Plan Stratégique">
+                        {STRATEGIC_ROLE_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    {profile.role && rolePrograms.length > 0 && (
+                      <select
+                        value={profile.programId ?? ""}
+                        onChange={(e) => {
+                          const programId = e.target.value || undefined;
+                          setForm((f) => ({
+                            ...f,
+                            profiles: f.profiles.map((p, i) =>
+                              i === idx ? { ...p, programId } : p
+                            ),
+                          }));
+                        }}
+                        className="flex-1 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                      >
+                        <option value="">
+                          Tous les programmes{" "}
+                          {isStrategicRole(profile.role) ? "Stratégique" : "Performance"}
+                        </option>
+                        {rolePrograms.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          profiles: f.profiles.filter((_, i) => i !== idx),
+                        }))
+                      }
+                      className="text-text-secondary hover:text-red-500"
+                      aria-label="Retirer ce profil"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

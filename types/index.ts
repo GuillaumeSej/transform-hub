@@ -62,18 +62,23 @@ export type ProfileAssignment = {
 /** Compte de test (voir lib/auth.ts) — login réel par identifiant/mot de passe, mais toujours
  * des comptes de démo (mot de passe unique "test" pour les comptes/rôles historiques).
  *
- * Un utilisateur peut cumuler PLUSIEURS profils métier via `profiles` (round multi-profils) : au
- * plus UN profil Plan Performance + UN profil Plan Stratégique (jamais deux du même type). Les
- * habilitations d'administration (`isGlobalAdmin`/`isCompanyAdmin`) sont ADDITIVES : elles
- * s'ajoutent aux profils métier plutôt que de les remplacer (ex. un utilisateur peut être à la
- * fois "responsable de levier" ET admin d'entreprise). Voir `lib/roleProfiles.ts` pour les
- * fonctions de lecture/validation de ce modèle (ne pas relire `profiles`/les flags admin à la
- * main ailleurs dans le code). */
+ * Un utilisateur peut cumuler PLUSIEURS profils métier via `profiles` (round multi-profils
+ * multi-programmes) : plusieurs profils d'une même piste (Plan Performance ou Plan Stratégique)
+ * sont désormais possibles, à condition qu'ils portent sur des programmes DISTINCTS (ex. rôle
+ * "lever" sur le programme A + rôle "finance" sur le programme B) — voir
+ * `lib/roleProfiles.ts::assertValidProfiles` pour la règle exacte. Les habilitations
+ * d'administration (`isGlobalAdmin`/`isCompanyAdmin`) sont ADDITIVES : elles s'ajoutent aux
+ * profils métier plutôt que de les remplacer (ex. un utilisateur peut être à la fois
+ * "responsable de levier" ET admin d'entreprise). Voir `lib/roleProfiles.ts` pour les fonctions
+ * de lecture/validation de ce modèle (ne pas relire `profiles`/les flags admin à la main ailleurs
+ * dans le code — en particulier, préférer `getPerformanceProfiles`/`getStrategicProfiles`
+ * (pluriel) à leurs variantes singulières dès qu'il s'agit d'une vérification de permission). */
 export type AuthUser = {
   username: string;
   password: string;
-  /** Profils métier de l'utilisateur (0 à 2 entrées — voir contrainte ci-dessus). Une entreprise
-   *  peut avoir des comptes sans aucun profil métier (ex. un compte purement admin_entreprise). */
+  /** Profils métier de l'utilisateur (0 à N entrées — voir contrainte ci-dessus, au plus un profil
+   *  par (piste, programme)). Une entreprise peut avoir des comptes sans aucun profil métier
+   *  (ex. un compte purement admin_entreprise). */
   profiles: ProfileAssignment[];
   /** Super-admin global (toutes entreprises) — remplace l'ancienne valeur de rôle "admin". */
   isGlobalAdmin?: boolean;

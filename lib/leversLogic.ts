@@ -12,7 +12,7 @@ import type {
   Role,
   Workstream,
 } from "@/types";
-import { getPerformanceProfile, getStrategicProfile, hasRole } from "@/lib/roleProfiles";
+import { getPerformanceProfiles, getStrategicProfiles, hasRole } from "@/lib/roleProfiles";
 
 /**
  * Résout la liste des niveaux de confidentialité auxquels un utilisateur non-admin a accès,
@@ -22,10 +22,15 @@ import { getPerformanceProfile, getStrategicProfile, hasRole } from "@/lib/roleP
  *  - user.confidentialityClearance === "all"  -> accès à tous les niveaux
  *  - user.confidentialityClearance: string[]  -> exactement cette liste (même vide = aucun accès)
  *  - user.confidentialityClearance === undefined -> repli sur roleClearance[profil] (ou [])
- * `planType` précise QUEL profil consulter pour ce repli (un utilisateur peut avoir un profil Plan
- * Performance et un profil Plan Stratégique distincts) — "performance" par défaut, pour les
- * appelants historiques (leviers du Plan de Performance).
- */
+ * `planType` précise QUELLE piste consulter pour ce repli (un utilisateur peut avoir un/des
+ * profil(s) Plan Performance et un/des profil(s) Plan Stratégique distincts) — "performance" par
+ * défaut, pour les appelants historiques (leviers du Plan de Performance).
+ *
+ * Round multi-profils multi-programmes : un utilisateur peut désormais avoir PLUSIEURS profils
+ * sur la piste concernée (un par programme, ex. "lever" sur programme A + "finance" sur programme
+ * B) — le repli unione les `roleClearance[role]` de TOUS ces profils (le plus permissif l'emporte)
+ * plutôt que de ne lire que le premier trouvé, pour ne pas amputer silencieusement l'accès d'un
+ * des rôles cumulés. */
 export function resolveConfidentialityClearance(
   user: Pick<AuthUser, "profiles" | "confidentialityClearance"> | null | undefined,
   roleClearance: Partial<Record<Role, string[]>> | undefined,
@@ -34,9 +39,14 @@ export function resolveConfidentialityClearance(
   if (!user) return [];
   if (user.confidentialityClearance === "all") return "all";
   if (Array.isArray(user.confidentialityClearance)) return user.confidentialityClearance;
-  const relevantRole =
-    planType === "strategic" ? getStrategicProfile(user)?.role : getPerformanceProfile(user)?.role;
-  return (relevantRole && roleClearance?.[relevantRole]) ?? [];
+  const profiles =
+    planType === "strategic" ? getStrategicProfiles(user) : getPerformanceProfiles(user);
+  const levels = new Set<string>();
+  for (const profile of profiles) {
+    const forRole = roleClearance?.[profile.role];
+    if (forRole) forRole.forEach((level) => levels.add(level));
+  }
+  return Array.from(levels);
 }
 
 /** Un levier confidentiel est-il visible pour cette habilitation (résolue via
