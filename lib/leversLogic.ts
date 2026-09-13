@@ -10,6 +10,7 @@ import type {
   Lever,
   LeverAction,
   Role,
+  Workstream,
 } from "@/types";
 import { getPerformanceProfile, getStrategicProfile, hasRole } from "@/lib/roleProfiles";
 
@@ -75,6 +76,21 @@ export function isLeverOwnedBy(
   return normalizeOwnerName(lever.owner) === normalizeOwnerName(user.name);
 }
 
+/** Même principe que `isLeverOwnedBy`, pour le scoping du rôle "sponsor" : un utilisateur sponsor
+ *  voit un levier soit parce qu'il sponsorise le workstream parent (`workstreamSponsorUsername`,
+ *  résolu par l'appelant depuis `Workstream.sponsorUsername`), soit parce qu'il est identifié
+ *  individuellement comme sponsor du levier (`lever.sponsorUsername`, priorité au lien id-based si
+ *  réconcilié, repli sur la comparaison de noms fragile sinon — mêmes règles que `owner`). */
+export function isLeverSponsoredBy(
+  lever: Pick<Lever, "sponsor" | "sponsorUsername">,
+  workstreamSponsorUsername: string | undefined,
+  user: Pick<AuthUser, "name" | "username">
+): boolean {
+  if (workstreamSponsorUsername && workstreamSponsorUsername === user.username) return true;
+  if (lever.sponsorUsername) return lever.sponsorUsername === user.username;
+  return normalizeOwnerName(lever.sponsor) === normalizeOwnerName(user.name);
+}
+
 export function canUserViewLever(
   user:
     | Pick<
@@ -89,14 +105,28 @@ export function canUserViewLever(
       >
     | null
     | undefined,
-  lever: Pick<Lever, "owner" | "ownerUsername" | "companyId" | "confidentialityLevel">,
-  roleClearance: Partial<Record<Role, string[]>> | undefined
+  lever: Pick<
+    Lever,
+    | "owner"
+    | "ownerUsername"
+    | "sponsor"
+    | "sponsorUsername"
+    | "ws"
+    | "companyId"
+    | "confidentialityLevel"
+  >,
+  roleClearance: Partial<Record<Role, string[]>> | undefined,
+  workstreams: Pick<Workstream, "id" | "sponsorUsername">[] = []
 ): boolean {
   if (!user) return false;
   if (user.isGlobalAdmin) return true;
   if (lever.companyId != null && user.companyId !== lever.companyId) return false;
   if (user.isCompanyAdmin) return true;
   if (hasRole(user, "lever") && !isLeverOwnedBy(lever, user)) return false;
+  if (hasRole(user, "sponsor")) {
+    const workstreamSponsorUsername = workstreams.find((w) => w.id === lever.ws)?.sponsorUsername;
+    if (!isLeverSponsoredBy(lever, workstreamSponsorUsername, user)) return false;
+  }
   return isLeverVisibleForClearance(
     lever.confidentialityLevel,
     resolveConfidentialityClearance(user, roleClearance)

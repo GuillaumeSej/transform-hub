@@ -21,8 +21,11 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 type Row = Lever & { realized: number; wsName: string; statusLabel: string };
 
 /**
- * Dashboard du Workstream Sponsor : mêmes leviers que la bibliothèque complète (pas de filtre
- * owner, contrairement au Lever Owner), avec un bandeau d'indicateurs de suivi au-dessus.
+ * Dashboard du Workstream Sponsor, avec un bandeau d'indicateurs de suivi au-dessus. Un
+ * utilisateur avec le rôle "sponsor" ne voit ici que les leviers de son/ses workstream(s) sponsors
+ * + ceux où il est identifié individuellement comme sponsor (voir `isLeverSponsoredBy`,
+ * lib/leversLogic.ts, appliqué via `canUserViewLever` ci-dessous) — les autres rôles voient la
+ * bibliothèque complète, comme avant.
  */
 export default function WorkstreamsPage() {
   const { t } = useTranslation();
@@ -63,7 +66,7 @@ export default function WorkstreamsPage() {
       (!lever.programId ||
         lever.programId === selectedProgramId ||
         !performanceProgramIds.has(lever.programId)) &&
-      canUserViewLever(user, lever, company?.roleClearance)
+      canUserViewLever(user, lever, company?.roleClearance, data.workstreams)
   );
   const summary = engine.programSummary({ ...data, levers: visibleLevers });
 

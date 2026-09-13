@@ -9,8 +9,10 @@ import {
   type ProgramSeed,
 } from "@/lib/firestore/programConfig";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
+import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { UserPicker } from "@/components/strategic/UserPicker";
 
 /** Formulaire local — tous les champs numériques sont saisis en texte pour permettre un champ
  *  vide temporaire pendant la frappe (converti en nombre à la sauvegarde, 0 par défaut si vide).
@@ -91,14 +93,20 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
   const [newWs, setNewWs] = useState<{
     name: string;
     sponsor: string;
+    sponsorUsername?: string;
     color: string;
     target: string;
   }>({
     name: "",
     sponsor: "",
+    sponsorUsername: undefined,
     color: "#e5484d",
     target: "",
   });
+  // Sert au sélecteur "Sponsor" ci-dessous (round "sponsor scoping" — voir doc-comment
+  // `Workstream.sponsorUsername`, types/index.ts) : un workstream ne peut plus être rattaché à du
+  // texte libre depuis ce formulaire, seulement à un compte réel de l'entreprise (ou "Aucun").
+  const companyUsers = useCompanyUsers(companyId);
 
   useEffect(() => {
     setLoaded(false);
@@ -132,11 +140,12 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
       id: newWorkstreamId(),
       name,
       sponsor: newWs.sponsor.trim(),
+      ...(newWs.sponsorUsername ? { sponsorUsername: newWs.sponsorUsername } : {}),
       color: newWs.color,
       target: num(newWs.target),
     };
     setForm((f) => ({ ...f, workstreams: [...f.workstreams, ws] }));
-    setNewWs({ name: "", sponsor: "", color: "#e5484d", target: "" });
+    setNewWs({ name: "", sponsor: "", sponsorUsername: undefined, color: "#e5484d", target: "" });
   };
 
   const save = async () => {
@@ -328,11 +337,17 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
                         className="w-36 rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
                       />
                     </td>
-                    <td className="px-3 py-2">
-                      <input
-                        value={w.sponsor}
-                        onChange={(e) => updateWorkstream(w.id, { sponsor: e.target.value })}
-                        className="w-32 rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
+                    <td className="w-32 px-3 py-2">
+                      <UserPicker
+                        users={companyUsers}
+                        value={w.sponsorUsername}
+                        onChange={(username) => {
+                          const selected = companyUsers.find((u) => u.username === username);
+                          updateWorkstream(w.id, {
+                            sponsorUsername: username,
+                            sponsor: selected?.name ?? "",
+                          });
+                        }}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -378,14 +393,19 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
               placeholder={t("adminProgramConfig.newWorkstreamPlaceholder", "Ex : Sourcing")}
             />
           </div>
-          <div>
-            <label className="text-xs font-medium text-text-secondary">
-              {t("adminProgramConfig.sponsor", "Sponsor")}
-            </label>
-            <input
-              value={newWs.sponsor}
-              onChange={(e) => setNewWs((f) => ({ ...f, sponsor: e.target.value }))}
-              className="mt-1 w-36 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+          <div className="w-36">
+            <UserPicker
+              label={t("adminProgramConfig.sponsor", "Sponsor")}
+              users={companyUsers}
+              value={newWs.sponsorUsername}
+              onChange={(username) => {
+                const selected = companyUsers.find((u) => u.username === username);
+                setNewWs((f) => ({
+                  ...f,
+                  sponsorUsername: username,
+                  sponsor: selected?.name ?? "",
+                }));
+              }}
             />
           </div>
           <div>

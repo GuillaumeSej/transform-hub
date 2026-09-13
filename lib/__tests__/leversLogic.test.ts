@@ -9,6 +9,7 @@ import {
   isLeverVisibleForClearance,
   canUserViewLever,
   isLeverOwnedBy,
+  isLeverSponsoredBy,
 } from "@/lib/leversLogic";
 import type { Lever, LeverStatus } from "@/types";
 
@@ -27,6 +28,87 @@ describe("canUserViewLever", () => {
   it("blocks a lever owner from a different owner's lever", () => {
     expect(
       canUserViewLever(user, { ...baseLever, owner: "Another Owner", companyId: "c1" }, {})
+    ).toBe(false);
+  });
+});
+
+describe("canUserViewLever — sponsor scoping", () => {
+  const sponsorUser = {
+    profiles: [{ role: "sponsor" as const }],
+    name: "Test Sponsor",
+    username: "test.sponsor",
+    companyId: "c1",
+  };
+  const workstreams = [
+    { id: "WS-01", sponsorUsername: "test.sponsor" },
+    { id: "WS-02", sponsorUsername: "someone.else" },
+  ];
+
+  it("allows a sponsor to view a lever of a workstream they sponsor", () => {
+    expect(
+      canUserViewLever(sponsorUser, { ...baseLever, ws: "WS-01", companyId: "c1" }, {}, workstreams)
+    ).toBe(true);
+  });
+
+  it("allows a sponsor to view a lever they individually sponsor, even in another workstream", () => {
+    expect(
+      canUserViewLever(
+        sponsorUser,
+        { ...baseLever, ws: "WS-02", sponsorUsername: "test.sponsor", companyId: "c1" },
+        {},
+        workstreams
+      )
+    ).toBe(true);
+  });
+
+  it("blocks a sponsor from a lever they neither sponsor nor whose workstream they sponsor", () => {
+    expect(
+      canUserViewLever(
+        sponsorUser,
+        { ...baseLever, ws: "WS-02", sponsorUsername: "someone.else", companyId: "c1" },
+        {},
+        workstreams
+      )
+    ).toBe(false);
+  });
+
+  it("without workstreams passed in, falls back to individual sponsor match only", () => {
+    expect(
+      canUserViewLever(
+        sponsorUser,
+        { ...baseLever, ws: "WS-01", sponsor: "Nobody", companyId: "c1" },
+        {}
+        // no workstreams arg
+      )
+    ).toBe(false);
+  });
+});
+
+describe("isLeverSponsoredBy", () => {
+  const user = { name: "Test Sponsor", username: "test.sponsor" };
+
+  it("matches via the workstream's sponsorUsername", () => {
+    expect(isLeverSponsoredBy({ sponsor: "Nobody" }, "test.sponsor", user)).toBe(true);
+  });
+
+  it("matches via the lever's own sponsorUsername, even without a workstream match", () => {
+    expect(
+      isLeverSponsoredBy({ sponsor: "Nobody", sponsorUsername: "test.sponsor" }, undefined, user)
+    ).toBe(true);
+  });
+
+  it("falls back to normalized name comparison for legacy (un-reconciled) levers", () => {
+    expect(isLeverSponsoredBy({ sponsor: "Test Sponsor" }, undefined, user)).toBe(true);
+    expect(isLeverSponsoredBy({ sponsor: "Someone Else" }, undefined, user)).toBe(false);
+  });
+
+  it("an id-based sponsorUsername mismatch denies access regardless of the name", () => {
+    expect(
+      isLeverSponsoredBy(
+        { sponsor: "Test Sponsor", sponsorUsername: "someone.else" },
+        undefined,
+        user
+      )
     ).toBe(false);
   });
 });

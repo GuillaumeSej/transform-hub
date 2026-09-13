@@ -136,6 +136,11 @@ export type Workstream = {
   id: string;
   name: string;
   sponsor: string;
+  /** `AuthUser.username` du sponsor, quand résolu vers un compte réel — même pattern que
+   *  `Lever.ownerUsername` : absent/`undefined` = `sponsor` reste du texte libre (jamais
+   *  réconcilié) et le scoping du rôle "sponsor" (voir `lib/leversLogic.ts::isLeverSponsoredBy`)
+   *  retombe sur la comparaison de noms fragile historique. Quand défini, c'est lui qui fait foi. */
+  sponsorUsername?: string;
   /** Thème fonctionnel dominant (informatif, pas contraignant). Un workstream peut impacter
    *  plusieurs fonctions — la fonction réelle est sur chaque levier (Lever.function). */
   function?: string;
@@ -192,6 +197,11 @@ export type Lever = {
    *  alors qu'un libellé d'affichage synchronisé une fois pour toutes à la réconciliation. */
   ownerUsername?: string;
   sponsor: string;
+  /** `AuthUser.username` du sponsor, quand résolu vers un compte réel — même pattern que
+   *  `ownerUsername` ci-dessus (voir son doc-comment pour le détail du repli legacy). Sert au
+   *  scoping du rôle "sponsor" (`lib/leversLogic.ts::isLeverSponsoredBy`), en plus du sponsor du
+   *  workstream parent (`Workstream.sponsorUsername`). */
+  sponsorUsername?: string;
   sponsorInit: string;
   geography: string;
   country: string;
