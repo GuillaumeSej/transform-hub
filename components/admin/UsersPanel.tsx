@@ -52,8 +52,7 @@ const STRATEGIC_ROLE_OPTIONS: { value: Role; label: string }[] = [
 ];
 
 /** Réunion des deux listes ci-dessus — sert uniquement à retrouver le libellé d'un `Role` donné
- *  (table des utilisateurs), jamais comme source d'options d'un unique `<select>` (round
- *  multi-profils : il y a désormais deux pickers indépendants, un par type). */
+ *  (table des utilisateurs). */
 const ALL_ROLE_OPTIONS = [...PERFORMANCE_ROLE_OPTIONS, ...STRATEGIC_ROLE_OPTIONS];
 
 /** Les 4 états sémantiques de AuthUser.confidentialityClearance (voir types/index.ts) : */
@@ -114,7 +113,7 @@ export type UserFormInput = {
  *    aucun `fixedCompanyId` imposé par le contexte (scope du hub `/admin/companies/detail`, ou
  *    admin_entreprise limité à sa propre entreprise sur la page globale).
  *  Les profils métier (Plan Performance / Plan Stratégique) n'apparaissent jamais dans le
- *  résultat : les deux pickers sont toujours optionnels (0 à 2 profils).
+ *  résultat : la liste de profils est toujours optionnelle (0 à N entrées).
  */
 export function missingRequiredFields(
   form: UserFormInput,
