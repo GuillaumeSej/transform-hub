@@ -23,17 +23,23 @@ export function deleteUserRouter(auth: Auth, db: Firestore): Router {
 
       const email = usernameToSyntheticEmail(username, companyId);
 
+      // Certains profils Firestore n'ont volontairement aucun compte Firebase Auth associé (ex.
+      // les "owners" créés par un script de seed — voir renameUser.ts pour le même cas) : dans ce
+      // cas il n'y a rien à supprimer côté Auth, on efface juste le document Firestore ci-dessous
+      // au lieu d'échouer avec "Aucun compte trouvé".
       let targetUser;
       try {
         targetUser = await auth.getUserByEmail(email);
       } catch {
-        throw Errors.notFound(`Aucun compte trouvé pour l'utilisateur "${username}".`);
+        targetUser = null;
       }
 
-      try {
-        await auth.deleteUser(targetUser.uid);
-      } catch {
-        throw Errors.internal("Échec de la suppression du compte Firebase Auth.");
+      if (targetUser) {
+        try {
+          await auth.deleteUser(targetUser.uid);
+        } catch {
+          throw Errors.internal("Échec de la suppression du compte Firebase Auth.");
+        }
       }
 
       const slug = accountSlug(username, companyId);

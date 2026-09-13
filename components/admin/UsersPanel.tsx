@@ -238,6 +238,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   const [renameConfirm, setRenameConfirm] = useState<{
     newUser: AuthUser;
     oldUsername: string;
+    isPasswordOnly?: boolean;
   } | null>(null);
   // Confirmation obligatoire avant une suppression (déclenchée par le bouton corbeille).
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -395,12 +396,23 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     const isEditingExisting = editIdx !== null && originalUsername !== null;
     const usernameChanged = isEditingExisting && normalizedUsername !== originalUsername;
 
-    // Renommer un utilisateur existant touche Firebase Auth (l'identifiant technique en dépend,
-    // voir usernameToSyntheticEmail) : ça ne peut pas être un simple setDoc Firestore, ça doit
-    // passer par le backend admin — et ça exige une confirmation explicite avant d'agir (voir
-    // renameConfirm plus bas, résolu par confirmRename()/l'annulation de la modale).
-    if (isEditingExisting && usernameChanged) {
-      setRenameConfirm({ newUser, oldUsername: originalUsername! });
+    // Renommer un utilisateur existant, OU changer son mot de passe, touche Firebase Auth
+    // (l'identifiant technique en dépend, voir usernameToSyntheticEmail ; le mot de passe est un
+    // attribut du compte Auth, jamais du document Firestore) : ça ne peut pas être un simple
+    // setDoc Firestore, ça doit passer par le backend admin — et ça exige une confirmation
+    // explicite avant d'agir (voir renameConfirm plus bas, résolu par
+    // confirmRename()/l'annulation de la modale). Router aussi un changement de mot de passe SEUL
+    // (username inchangé) par ce même chemin : avant, un tel changement passait par le simple
+    // saveUser() Firestore ci-dessous et ne touchait donc jamais le vrai mot de passe de connexion
+    // — ce backend tolère en plus les comptes sans compte Firebase Auth (ex. les "owners"
+    // créés par script, sélectionnables mais jamais connectés) en leur créant leur premier compte
+    // Auth au lieu d'échouer.
+    if (isEditingExisting && (usernameChanged || passwordTouched)) {
+      setRenameConfirm({
+        newUser,
+        oldUsername: originalUsername!,
+        isPasswordOnly: !usernameChanged,
+      });
       return;
     }
 
@@ -468,7 +480,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
 
   const confirmRename = async () => {
     if (!renameConfirm) return;
-    const { newUser, oldUsername } = renameConfirm;
+    const { newUser, oldUsername, isPasswordOnly } = renameConfirm;
     setRenameConfirm(null);
     try {
       const idToken = await getAdminIdToken();
@@ -482,12 +494,17 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       // (nouveau document, ancien supprimé) redéclenche l'abonnement tout seul — rien à refaire ici.
       setShowForm(false);
       showToast(
-        "Utilisateur renommé",
-        `Le compte « ${oldUsername} » a été renommé en « ${newUser.username} ».`,
+        isPasswordOnly ? "Mot de passe modifié" : "Utilisateur renommé",
+        isPasswordOnly
+          ? `Le mot de passe du compte « ${oldUsername} » a été mis à jour.`
+          : `Le compte « ${oldUsername} » a été renommé en « ${newUser.username} ».`,
         "success"
       );
     } catch (err) {
-      setErrorDialog({ title: "Échec du renommage", messages: [adminApiErrorMessage(err)] });
+      setErrorDialog({
+        title: isPasswordOnly ? "Échec du changement de mot de passe" : "Échec du renommage",
+        messages: [adminApiErrorMessage(err)],
+      });
     }
   };
 
@@ -595,11 +612,32 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         </button>
       </div>
 
-      {showForm && (
-        <div className="rounded-xl border border-border bg-bg-elevated p-4 space-y-3">
-          <div className="text-sm font-semibold text-text-primary">
-            {editIdx !== null ? "Modifier l'utilisateur" : "Nouvel utilisateur"}
-          </div>
+      <Modal
+        open={showForm}
+        onOpenChange={(open) => {
+          if (!open) setShowForm(false);
+        }}
+        title={editIdx !== null ? "Modifier l'utilisateur" : "Nouvel utilisateur"}
+        maxWidth="640px"
+        footer={
+          <>
+            <button
+              onClick={() => setShowForm(false)}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={save}
+              disabled={passwordError !== null}
+              className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Enregistrer
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-text-secondary">
@@ -882,24 +920,8 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               de cette entreprise pour activer ce contrôle.
             </p>
           )}
-
-          <div className="flex gap-2">
-            <button
-              onClick={save}
-              disabled={passwordError !== null}
-              className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Enregistrer
-            </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
-            >
-              Annuler
-            </button>
-          </div>
         </div>
-      )}
+      </Modal>
 
       {!fixedCompanyId && companies.length > 0 && (
         <div className="flex items-center gap-3">
@@ -1043,7 +1065,9 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         onOpenChange={(next) => {
           if (!next) setRenameConfirm(null);
         }}
-        title="Renommer l'utilisateur ?"
+        title={
+          renameConfirm?.isPasswordOnly ? "Changer le mot de passe ?" : "Renommer l'utilisateur ?"
+        }
         footer={
           <>
             <Button variant="ghost" onClick={() => setRenameConfirm(null)}>
@@ -1056,10 +1080,20 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         }
       >
         <p className="text-sm text-text-secondary">
-          Vous vous apprêtez à renommer le compte «&nbsp;{renameConfirm?.oldUsername}&nbsp;» en «
-          &nbsp;{renameConfirm?.newUser.username}&nbsp;». L&apos;ancien identifiant cessera de
-          fonctionner ; les profils, l&apos;entreprise et les droits associés sont conservés. Cette
-          action n&apos;est pas réversible depuis cet écran.
+          {renameConfirm?.isPasswordOnly ? (
+            <>
+              Vous vous apprêtez à changer le mot de passe du compte «&nbsp;
+              {renameConfirm?.oldUsername}&nbsp;». Si ce compte n&apos;avait encore jamais de mot de
+              passe (ex. owner créé sans compte de connexion), il en sera créé un.
+            </>
+          ) : (
+            <>
+              Vous vous apprêtez à renommer le compte «&nbsp;{renameConfirm?.oldUsername}&nbsp;» en
+              «&nbsp;{renameConfirm?.newUser.username}&nbsp;». L&apos;ancien identifiant cessera de
+              fonctionner ; les profils, l&apos;entreprise et les droits associés sont conservés.
+            </>
+          )}{" "}
+          Cette action n&apos;est pas réversible depuis cet écran.
         </p>
       </Modal>
 
