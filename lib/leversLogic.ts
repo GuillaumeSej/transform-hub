@@ -170,9 +170,9 @@ function makeAuditEntry(entry: Omit<AuditEntry, "ts">): AuditEntry {
 /** Recalcule le levier parent depuis son plan d'action : progression pondérée et agrégats
  * financiers/RH. Si le plan initial est déjà figé, les chiffres consolidés alimentent le
  * reforecast ; sinon ils alimentent directement les champs du levier. */
-function recomputeLeverProgress(lever: Lever): Lever | undefined {
+function recomputeLeverProgress(lever: Lever, fyEnd?: string): Lever | undefined {
   const newProgress = engine.recomputeLeverProgress(lever);
-  const consolidated = consolidateLeverFromActions(lever);
+  const consolidated = consolidateLeverFromActions(lever, fyEnd);
   const nextStatus =
     newProgress >= 100 && lever.status !== "cancelled" ? "delivered" : lever.status;
   const financialPatch: Partial<Lever> = consolidated
@@ -323,7 +323,8 @@ export type BulkLeverImportResult = {
 export function bulkUpsertLeversByCode(
   levers: Lever[],
   inputs: Omit<Lever, "id" | "createdAt" | "lastUpdate">[],
-  user: string
+  user: string,
+  fyEnd?: string
 ): BulkLeverImportResult {
   let curLevers = levers;
   const changedLevers: Lever[] = [];
@@ -354,7 +355,8 @@ export function bulkUpsertLeversByCode(
     const { levers: afterActions, changedLever } = writeActions(
       curLevers,
       { leverId: upsert.lever.id },
-      input.actions ?? []
+      input.actions ?? [],
+      fyEnd
     );
     curLevers = afterActions;
     changedLevers.push(changedLever ?? upsert.lever);
@@ -384,7 +386,8 @@ function readActions(levers: Lever[], scope: ActionScope): LeverAction[] {
 export function writeActions(
   levers: Lever[],
   scope: ActionScope,
-  actions: LeverAction[]
+  actions: LeverAction[],
+  fyEnd?: string
 ): { levers: Lever[]; changedLever?: Lever } {
   const idx = levers.findIndex((l) => l.id === scope.leverId);
   if (idx === -1) throw new Error(`Lever "${scope.leverId}" introuvable`);
@@ -392,7 +395,7 @@ export function writeActions(
   nextLevers[idx] = { ...levers[idx], actions };
 
   const lever = nextLevers[idx];
-  const recomputed = recomputeLeverProgress(lever);
+  const recomputed = recomputeLeverProgress(lever, fyEnd);
   const changedLever = recomputed ?? lever;
   if (recomputed) {
     nextLevers = nextLevers.map((l) => (l.id === recomputed.id ? recomputed : l));
@@ -405,7 +408,8 @@ export function createAction(
   levers: Lever[],
   scope: ActionScope,
   input: Omit<LeverAction, "id">,
-  user: string
+  user: string,
+  fyEnd?: string
 ): ActionMutationResult {
   const allIds = levers.flatMap((l) => l.actions?.map((a) => a.id) ?? []);
   const action: LeverAction = {
@@ -414,7 +418,7 @@ export function createAction(
     ...(input.status === "done" && !input.deliveredDate ? { deliveredDate: nowDate() } : {}),
   };
   const currentActions = readActions(levers, scope);
-  const result = writeActions(levers, scope, [...currentActions, action]);
+  const result = writeActions(levers, scope, [...currentActions, action], fyEnd);
 
   const auditEntries = [
     makeAuditEntry({
@@ -435,7 +439,8 @@ export function updateAction(
   scope: ActionScope,
   actionId: string,
   patch: Partial<LeverAction>,
-  user: string
+  user: string,
+  fyEnd?: string
 ): ActionMutationResult {
   const actions = readActions(levers, scope);
   const idx = actions.findIndex((a) => a.id === actionId);
@@ -450,7 +455,7 @@ export function updateAction(
   const after = { ...before, ...patch, ...deliveredDatePatch };
   const nextActions = [...actions];
   nextActions[idx] = after;
-  const result = writeActions(levers, scope, nextActions);
+  const result = writeActions(levers, scope, nextActions, fyEnd);
 
   const auditEntries = [
     makeAuditEntry({
@@ -469,10 +474,11 @@ export function updateAction(
 export function deleteAction(
   levers: Lever[],
   scope: ActionScope,
-  actionId: string
+  actionId: string,
+  fyEnd?: string
 ): { levers: Lever[]; changedLever?: Lever } {
   const actions = readActions(levers, scope).filter((a) => a.id !== actionId);
-  return writeActions(levers, scope, actions);
+  return writeActions(levers, scope, actions, fyEnd);
 }
 
 export function applyCascadeShift(
