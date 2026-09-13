@@ -72,6 +72,16 @@ export function MovementForm({
     submitLabel ?? translate("etp.form.createMovement", "Créer le mouvement");
   const today = new Date().toISOString().slice(0, 10);
   const employees = data.workforce.employees;
+  // Liste de pays dérivée des employés existants plutôt qu'une liste figée — sinon un pays hors de
+  // cette liste (entreprise opérant ailleurs qu'en France/Allemagne/Espagne/Italie/UK/USA) était
+  // impossible à sélectionner pour un Recrutement.
+  const countryOptions = useMemo(
+    () =>
+      Array.from(new Set(employees.map((e) => e.country)))
+        .filter((c): c is string => !!c)
+        .sort(),
+    [employees]
+  );
   const departments = data.workforce.departments;
   const firstEmployee = employees[0];
   const firstLever = data.levers[0];
@@ -87,7 +97,7 @@ export function MovementForm({
     fte: firstEmployee?.fte ?? 1,
     department: firstEmployee?.department ?? departments[0]?.name ?? "",
     toDepartment: undefined,
-    country: firstEmployee?.country ?? "France",
+    country: firstEmployee?.country ?? countryOptions[0] ?? "",
     hrOwner: firstEmployee?.hrOwner ?? "",
     plannedDate: today,
     actualDate: null,
@@ -369,7 +379,7 @@ export function MovementForm({
               value={values.country}
               onChange={(e) => set("country", e.target.value)}
             >
-              {["France", "Germany", "Spain", "Italy", "UK", "USA"].map((c) => (
+              {countryOptions.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>

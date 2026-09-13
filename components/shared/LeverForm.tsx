@@ -485,51 +485,83 @@ export function LeverForm({
             </Field>
           </div>
         )}
-        <Field label={t("leverForm.geography")}>
-          <select
-            className={inputClass}
-            value={values.geography}
-            onChange={(e) => set("geography", e.target.value)}
-          >
-            {data.geographies.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t("leverForm.country")}>
-          <select
-            className={inputClass}
-            value={values.country}
-            onChange={(e) => set("country", e.target.value)}
-          >
-            <option value="">{t("leverForm.selectPlaceholder")}</option>
-            {Array.from(new Set(data.levers.map((l) => l.country).filter((v): v is string => !!v)))
-              .sort()
-              .map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-          </select>
-        </Field>
-        <Field label={t("leverForm.entity")}>
-          <select
-            className={inputClass}
-            value={values.entity}
-            onChange={(e) => set("entity", e.target.value)}
-          >
-            <option value="">{t("leverForm.selectPlaceholder")}</option>
-            {Array.from(new Set(data.levers.map((l) => l.entity).filter((v): v is string => !!v)))
-              .sort()
-              .map((ent) => (
-                <option key={ent} value={ent}>
-                  {ent}
-                </option>
-              ))}
-          </select>
-        </Field>
+        {/* Une fois une maille géographique sélectionnée ci-dessus, ces 3 champs sont dérivés du
+         *  chemin résolu (voir selectGeographyLeaf) et passent en lecture seule — les laisser
+         *  éditables permettait de les faire diverger silencieusement de la maille choisie (ex.
+         *  maille "France > Paris" mais country="Germany" laissé tel quel). Restent des <select>
+         *  librement éditables tant qu'aucune hiérarchie géographique n'est configurée pour
+         *  l'entreprise, ou qu'aucune maille n'est encore sélectionnée. */}
+        {hasGeographyHierarchy && values.geographyLeafId ? (
+          <>
+            <Field label={t("leverForm.geography")}>
+              <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+                {values.geography || "—"}
+              </div>
+            </Field>
+            <Field label={t("leverForm.country")}>
+              <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+                {values.country || "—"}
+              </div>
+            </Field>
+            <Field label={t("leverForm.entity")}>
+              <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+                {values.entity || "—"}
+              </div>
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label={t("leverForm.geography")}>
+              <select
+                className={inputClass}
+                value={values.geography}
+                onChange={(e) => set("geography", e.target.value)}
+              >
+                {data.geographies.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t("leverForm.country")}>
+              <select
+                className={inputClass}
+                value={values.country}
+                onChange={(e) => set("country", e.target.value)}
+              >
+                <option value="">{t("leverForm.selectPlaceholder")}</option>
+                {Array.from(
+                  new Set(data.levers.map((l) => l.country).filter((v): v is string => !!v))
+                )
+                  .sort()
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+            <Field label={t("leverForm.entity")}>
+              <select
+                className={inputClass}
+                value={values.entity}
+                onChange={(e) => set("entity", e.target.value)}
+              >
+                <option value="">{t("leverForm.selectPlaceholder")}</option>
+                {Array.from(
+                  new Set(data.levers.map((l) => l.entity).filter((v): v is string => !!v))
+                )
+                  .sort()
+                  .map((ent) => (
+                    <option key={ent} value={ent}>
+                      {ent}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </>
+        )}
         <Field label={t("leverForm.function")}>
           <select
             className={inputClass}

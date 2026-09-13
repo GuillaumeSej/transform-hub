@@ -871,6 +871,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 normalement (ex. donner à un profil « Lever Owner » l&apos;accès à un niveau
                 confidentiel réservé au CTO).
               </p>
+              <p className="mt-1.5 text-xs font-medium text-text-secondary">
+                Ce réglage contrôle uniquement l&apos;accès aux niveaux confidentiels. Il ne modifie
+                pas le périmètre de base d&apos;un rôle (ex. un Lever Owner continuera à ne voir que
+                ses propres leviers, même avec « Tous les niveaux »).
+              </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {(
                   [
