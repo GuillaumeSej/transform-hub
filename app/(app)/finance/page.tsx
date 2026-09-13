@@ -4,14 +4,21 @@ import { useMemo } from "react";
 import { LineChart } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
+import {
+  CapexOpexBreakdownChart,
+  CostCommitmentTimelineChart,
+  CostEngagedVsUpcomingChart,
+  OpexRecurrentChart,
+} from "@/components/finance/FinanceCostCharts";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import * as engine from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
- * Module Finance — encore un STRETCH (baseline P&L éditable, reforecast, waterfall à venir).
- * Le budget CAPEX de référence a été retiré (voir historique) ; ce module n'affiche pour
- * l'instant que le compte de résultat configuré, consolidé depuis l'arborescence financière.
+ * Module Finance — le compte de résultat configuré (baseline P&L éditable, reforecast, waterfall)
+ * reste un STRETCH ; en revanche le suivi des coûts (engagés/à venir, CAPEX/OPEX, engagement dans
+ * le temps) est alimenté intégralement depuis `data.levers[].actions[].impacts[]` (voir
+ * lib/financeCosts.ts) — aucune donnée en dur.
  */
 export default function FinancePage() {
   const { t } = useTranslation();
@@ -26,6 +33,13 @@ export default function FinancePage() {
         <h1 className="text-xl font-bold text-text-primary">
           {t("nav.financeModule", "Finance Module")}
         </h1>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <CostEngagedVsUpcomingChart data={data} />
+        <CapexOpexBreakdownChart data={data} />
+        <CostCommitmentTimelineChart data={data} />
+        <OpexRecurrentChart data={data} />
       </div>
 
       <Card>
