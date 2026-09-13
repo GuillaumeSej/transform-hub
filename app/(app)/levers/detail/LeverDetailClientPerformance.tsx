@@ -585,10 +585,6 @@ export function LeverDetailClientPerformance() {
                   }
                 />
                 <BigStat
-                  label={t("leverDetail.netSavingsTarget", "Net savings visé")}
-                  value={engine.fmtCurr(lever.netSavings)}
-                />
-                <BigStat
                   label={t("levers.columnMaturity", "Maturité")}
                   value={<StageBadge status={lever.status} label={lifecycle.label(lever.status)} />}
                 />
@@ -1120,6 +1116,7 @@ function ActionImpactTable({
     actionName: string;
     label: string;
     type: string;
+    rawType: "cost" | "saving";
     nature: string;
     amount: number;
     fte: number;
@@ -1133,6 +1130,7 @@ function ActionImpactTable({
       actionName: action.name,
       label: impact.label,
       type: impact.type === "saving" ? t("action.saving", "Gain") : t("action.cost", "Coût"),
+      rawType: impact.type,
       nature:
         impact.type === "saving"
           ? impact.nature === "opex_rec"
@@ -1163,18 +1161,23 @@ function ActionImpactTable({
       key: "amount",
       label: t("leverDetail.impactTable.amount", "Montant €M"),
       align: "right",
-      render: (r) => r.amount.toFixed(2),
+      render: (r) => (r.rawType === "cost" ? `-${r.amount.toFixed(2)}` : r.amount.toFixed(2)),
     },
     { key: "fte", label: "ETP", align: "right" },
   ];
 
+  // Un coût est par définition négatif : le total net = gains - coûts, pas la somme des valeurs
+  // absolues (impact.amount est toujours stocké positif, seul `type` détermine le signe réel).
   return (
     <EditableTable
       data={rows}
       columns={columns}
       showTotalsRow
       totalsConfig={{
-        amount: (list) => list.reduce((sum, row) => sum + row.amount, 0).toFixed(2),
+        amount: (list) =>
+          list
+            .reduce((sum, row) => sum + (row.rawType === "cost" ? -row.amount : row.amount), 0)
+            .toFixed(2),
         fte: (list) => list.reduce((sum, row) => sum + row.fte, 0),
       }}
     />

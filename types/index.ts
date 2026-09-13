@@ -272,8 +272,13 @@ export type ActionImpact = {
   entity?: string; // entité légale (hérite du levier si absent)
   /** Nature du gain (uniquement pour type="saving") : baisse de coût / hausse de CA / impact BFR. */
   savingType?: SavingType;
+  /** Pour nature="capex" — mode de comptabilisation : en une fois ("one_shot", défaut) ou lissé sur
+   *  une période ("smoothed"). Ignoré si nature !== "capex". */
+  capexAllocationMode?: "one_shot" | "smoothed";
+  /** Pour nature="capex" avec capexAllocationMode="smoothed" — début de la période de lissage. */
+  capexStartDate?: string; // ISO date
   /** Pour nature="capex" — date à laquelle le CAPEX est supposé engagé à 100% (jusqu'ici confondue
-   *  avec les dates de l'action elle-même). */
+   *  avec les dates de l'action elle-même). En mode "smoothed", sert de date de fin de lissage. */
   capexDeploymentDate?: string; // ISO date
   /** Pour type="saving" — date/milestone d'encaissement réel du gain (peut être postérieure à la
    *  fin de l'action). */
