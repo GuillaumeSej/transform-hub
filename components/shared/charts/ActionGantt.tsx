@@ -50,7 +50,7 @@ export function ActionGantt({
     new Date(a.start).getTime(),
     new Date(a.end).getTime(),
     ...(a.impacts ?? []).flatMap((i) =>
-      [i.capexDeploymentDate, i.gainDate]
+      [i.capexDeploymentDate, i.capexStartDate, i.gainDate]
         .filter(Boolean)
         .map((d) => new Date(d as string).getTime())
     ),
@@ -188,14 +188,41 @@ export function ActionGantt({
               {/* Milestones CAPEX / gain par ligne d'impact */}
               {(action.impacts ?? []).map((impact) => (
                 <span key={impact.id}>
+                  {impact.capexDeploymentDate &&
+                    impact.capexAllocationMode === "smoothed" &&
+                    impact.capexStartDate && (
+                      <span
+                        className="absolute top-0 h-1.5 rounded-sm bg-info-blue/40"
+                        style={{
+                          left: `${pctOf(impact.capexStartDate)}%`,
+                          width: `${Math.max(0, pctOf(impact.capexDeploymentDate) - pctOf(impact.capexStartDate))}%`,
+                        }}
+                        title={t(
+                          "shared.actionGantt.capexSmoothedTitle",
+                          "CAPEX {amount}€M lissé du {start} au {end}"
+                        )
+                          .replace("{amount}", String(impact.amount))
+                          .replace("{start}", impact.capexStartDate)
+                          .replace("{end}", impact.capexDeploymentDate)}
+                      />
+                    )}
                   {impact.capexDeploymentDate && (
                     <Tooltip
-                      text={t(
-                        "shared.actionGantt.capexTooltip",
-                        "CAPEX {amount}€M engagé au {date}"
-                      )
-                        .replace("{amount}", String(impact.amount))
-                        .replace("{date}", impact.capexDeploymentDate)}
+                      text={
+                        impact.capexAllocationMode === "smoothed"
+                          ? t(
+                              "shared.actionGantt.capexSmoothedEndTooltip",
+                              "CAPEX {amount}€M lissé, fin au {date}"
+                            )
+                              .replace("{amount}", String(impact.amount))
+                              .replace("{date}", impact.capexDeploymentDate)
+                          : t(
+                              "shared.actionGantt.capexTooltip",
+                              "CAPEX {amount}€M engagé au {date}"
+                            )
+                              .replace("{amount}", String(impact.amount))
+                              .replace("{date}", impact.capexDeploymentDate)
+                      }
                       className="absolute"
                       style={{ left: `${pctOf(impact.capexDeploymentDate)}%`, top: "50%" }}
                     >

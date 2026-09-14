@@ -727,7 +727,6 @@ export default function BaseEtpPage() {
         {movementModal && (
           <MovementForm
             data={data}
-            companyId={user?.companyId}
             initialValues={movementModal.movement}
             submitLabel={
               movementModal.movement

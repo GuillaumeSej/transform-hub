@@ -18,12 +18,7 @@ import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
-import {
-  isAnyAdmin,
-  getPerformanceProfile,
-  getStrategicProfile,
-  assertValidProfiles,
-} from "@/lib/roleProfiles";
+import { isAnyAdmin, isStrategicRole, assertValidProfiles } from "@/lib/roleProfiles";
 import { resolveProgramType } from "@/lib/axisLogic";
 
 /** Longueur minimale du mot de passe — DOIT rester alignée sur la politique de Firebase Auth
@@ -57,8 +52,7 @@ const STRATEGIC_ROLE_OPTIONS: { value: Role; label: string }[] = [
 ];
 
 /** Réunion des deux listes ci-dessus — sert uniquement à retrouver le libellé d'un `Role` donné
- *  (table des utilisateurs), jamais comme source d'options d'un unique `<select>` (round
- *  multi-profils : il y a désormais deux pickers indépendants, un par type). */
+ *  (table des utilisateurs). */
 const ALL_ROLE_OPTIONS = [...PERFORMANCE_ROLE_OPTIONS, ...STRATEGIC_ROLE_OPTIONS];
 
 /** Les 4 états sémantiques de AuthUser.confidentialityClearance (voir types/index.ts) : */
@@ -119,7 +113,7 @@ export type UserFormInput = {
  *    aucun `fixedCompanyId` imposé par le contexte (scope du hub `/admin/companies/detail`, ou
  *    admin_entreprise limité à sa propre entreprise sur la page globale).
  *  Les profils métier (Plan Performance / Plan Stratégique) n'apparaissent jamais dans le
- *  résultat : les deux pickers sont toujours optionnels (0 à 2 profils).
+ *  résultat : la liste de profils est toujours optionnelle (0 à N entrées).
  */
 export function missingRequiredFields(
   form: UserFormInput,
@@ -181,12 +175,12 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     firstName: "",
     lastName: "",
     name: "",
-    // Profils métier — round multi-profils : deux pickers indépendants ("" = aucun profil de ce
-    // type), au lieu de l'ancien `role: Role` unique.
-    performanceRole: "" as Role | "",
-    performanceProgramId: "",
-    strategicRole: "" as Role | "",
-    strategicProgramId: "",
+    // Profils métier — round multi-profils multi-programmes : liste répétable de {role,
+    // programId?}, au lieu de l'ancien `role: Role` unique puis des deux pickers fixes
+    // (performanceRole/strategicRole) du round précédent. Un utilisateur peut désormais cumuler
+    // plusieurs profils d'une même piste, chacun sur un programme distinct (voir
+    // lib/roleProfiles.ts::assertValidProfiles, filet de sécurité appelé dans save()).
+    profiles: [] as ProfileAssignment[],
     isGlobalAdmin: false,
     isCompanyAdmin: false,
     companyId: "",
@@ -238,6 +232,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   const [renameConfirm, setRenameConfirm] = useState<{
     newUser: AuthUser;
     oldUsername: string;
+    isPasswordOnly?: boolean;
   } | null>(null);
   // Confirmation obligatoire avant une suppression (déclenchée par le bouton corbeille).
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -271,10 +266,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       firstName: "",
       lastName: "",
       name: "",
-      performanceRole: "",
-      performanceProgramId: "",
-      strategicRole: "",
-      strategicProgramId: "",
+      profiles: [],
       isGlobalAdmin: false,
       isCompanyAdmin: false,
       companyId: fixedCompanyId ?? companies[0]?.id ?? "",
@@ -290,17 +282,12 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     setEditIdx(idx);
     setOriginalUsername(u.username);
     setPasswordTouched(false);
-    const perfProfile = getPerformanceProfile(u);
-    const stratProfile = getStrategicProfile(u);
     setForm({
       username: u.username,
       firstName: u.firstName ?? "",
       lastName: u.lastName ?? "",
       name: u.name,
-      performanceRole: perfProfile?.role ?? "",
-      performanceProgramId: perfProfile?.programId ?? "",
-      strategicRole: stratProfile?.role ?? "",
-      strategicProgramId: stratProfile?.programId ?? "",
+      profiles: u.profiles ?? [],
       isGlobalAdmin: !!u.isGlobalAdmin,
       isCompanyAdmin: !!u.isCompanyAdmin,
       companyId: u.companyId ?? companies[0]?.id ?? "",
@@ -341,23 +328,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       return;
     }
 
-    // Construction des profils métier à partir des deux pickers indépendants — structurellement
-    // au plus un profil Plan Performance + un profil Plan Stratégique (deux `<select>` séparés ne
-    // peuvent pas produire deux profils du même type). `assertValidProfiles` reste appelée comme
-    // filet de sécurité avant tout enregistrement (voir lib/roleProfiles.ts).
-    const profiles: ProfileAssignment[] = [];
-    if (form.performanceRole) {
-      profiles.push({
-        role: form.performanceRole,
-        ...(form.performanceProgramId ? { programId: form.performanceProgramId } : {}),
-      });
-    }
-    if (form.strategicRole) {
-      profiles.push({
-        role: form.strategicRole,
-        ...(form.strategicProgramId ? { programId: form.strategicProgramId } : {}),
-      });
-    }
+    // Profils métier saisis via la liste répétable ci-dessous — filtrer les lignes en cours de
+    // saisie sans rôle choisi (une ligne vide ajoutée par "+ Ajouter" mais pas encore remplie ne
+    // doit pas être enregistrée). `assertValidProfiles` reste appelée comme filet de sécurité
+    // avant tout enregistrement (voir lib/roleProfiles.ts).
+    const profiles: ProfileAssignment[] = form.profiles.filter((p) => p.role);
     try {
       assertValidProfiles(profiles);
     } catch (err) {
@@ -395,12 +370,23 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     const isEditingExisting = editIdx !== null && originalUsername !== null;
     const usernameChanged = isEditingExisting && normalizedUsername !== originalUsername;
 
-    // Renommer un utilisateur existant touche Firebase Auth (l'identifiant technique en dépend,
-    // voir usernameToSyntheticEmail) : ça ne peut pas être un simple setDoc Firestore, ça doit
-    // passer par le backend admin — et ça exige une confirmation explicite avant d'agir (voir
-    // renameConfirm plus bas, résolu par confirmRename()/l'annulation de la modale).
-    if (isEditingExisting && usernameChanged) {
-      setRenameConfirm({ newUser, oldUsername: originalUsername! });
+    // Renommer un utilisateur existant, OU changer son mot de passe, touche Firebase Auth
+    // (l'identifiant technique en dépend, voir usernameToSyntheticEmail ; le mot de passe est un
+    // attribut du compte Auth, jamais du document Firestore) : ça ne peut pas être un simple
+    // setDoc Firestore, ça doit passer par le backend admin — et ça exige une confirmation
+    // explicite avant d'agir (voir renameConfirm plus bas, résolu par
+    // confirmRename()/l'annulation de la modale). Router aussi un changement de mot de passe SEUL
+    // (username inchangé) par ce même chemin : avant, un tel changement passait par le simple
+    // saveUser() Firestore ci-dessous et ne touchait donc jamais le vrai mot de passe de connexion
+    // — ce backend tolère en plus les comptes sans compte Firebase Auth (ex. les "owners"
+    // créés par script, sélectionnables mais jamais connectés) en leur créant leur premier compte
+    // Auth au lieu d'échouer.
+    if (isEditingExisting && (usernameChanged || passwordTouched)) {
+      setRenameConfirm({
+        newUser,
+        oldUsername: originalUsername!,
+        isPasswordOnly: !usernameChanged,
+      });
       return;
     }
 
@@ -468,7 +454,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
 
   const confirmRename = async () => {
     if (!renameConfirm) return;
-    const { newUser, oldUsername } = renameConfirm;
+    const { newUser, oldUsername, isPasswordOnly } = renameConfirm;
     setRenameConfirm(null);
     try {
       const idToken = await getAdminIdToken();
@@ -482,12 +468,17 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       // (nouveau document, ancien supprimé) redéclenche l'abonnement tout seul — rien à refaire ici.
       setShowForm(false);
       showToast(
-        "Utilisateur renommé",
-        `Le compte « ${oldUsername} » a été renommé en « ${newUser.username} ».`,
+        isPasswordOnly ? "Mot de passe modifié" : "Utilisateur renommé",
+        isPasswordOnly
+          ? `Le mot de passe du compte « ${oldUsername} » a été mis à jour.`
+          : `Le compte « ${oldUsername} » a été renommé en « ${newUser.username} ».`,
         "success"
       );
     } catch (err) {
-      setErrorDialog({ title: "Échec du renommage", messages: [adminApiErrorMessage(err)] });
+      setErrorDialog({
+        title: isPasswordOnly ? "Échec du changement de mot de passe" : "Échec du renommage",
+        messages: [adminApiErrorMessage(err)],
+      });
     }
   };
 
@@ -595,11 +586,32 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         </button>
       </div>
 
-      {showForm && (
-        <div className="rounded-xl border border-border bg-bg-elevated p-4 space-y-3">
-          <div className="text-sm font-semibold text-text-primary">
-            {editIdx !== null ? "Modifier l'utilisateur" : "Nouvel utilisateur"}
-          </div>
+      <Modal
+        open={showForm}
+        onOpenChange={(open) => {
+          if (!open) setShowForm(false);
+        }}
+        title={editIdx !== null ? "Modifier l'utilisateur" : "Nouvel utilisateur"}
+        maxWidth="640px"
+        footer={
+          <>
+            <button
+              onClick={() => setShowForm(false)}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={save}
+              disabled={passwordError !== null}
+              className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Enregistrer
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-text-secondary">
@@ -709,84 +721,112 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             )}
           </div>
 
-          {/* Profils métier — round multi-profils : deux pickers indépendants, chacun optionnel
-              ("Aucun" + les 6 rôles du type concerné). Structurellement au plus un profil par
-              type, donc pas de validation supplémentaire nécessaire côté UI (voir
-              assertValidProfiles, appelée comme filet de sécurité dans save()). */}
-          <div className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-bg-surface p-3">
-            <div>
-              <label className="text-xs font-medium text-text-secondary">
-                Profil Plan Performance
-              </label>
-              <select
-                value={form.performanceRole}
-                onChange={(e) =>
+          {/* Profils métier — round multi-profils multi-programmes : liste répétable, un
+              utilisateur peut désormais cumuler plusieurs profils d'une même piste (Plan
+              Performance ou Plan Stratégique) tant qu'ils portent sur des programmes distincts
+              (voir assertValidProfiles, appelée comme filet de sécurité dans save()). */}
+          <div className="rounded-lg border border-border bg-bg-surface p-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-text-secondary">Profils métier</label>
+              <button
+                type="button"
+                onClick={() =>
                   setForm((f) => ({
                     ...f,
-                    performanceRole: e.target.value as Role | "",
-                    performanceProgramId: "",
+                    profiles: [
+                      ...f.profiles,
+                      { role: "" as unknown as Role, programId: undefined },
+                    ],
                   }))
                 }
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                className="rounded-sm bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral transition hover:bg-bp-coral/20"
               >
-                <option value="">Aucun</option>
-                {PERFORMANCE_ROLE_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-              {form.performanceRole && performancePrograms.length > 0 && (
-                <select
-                  value={form.performanceProgramId}
-                  onChange={(e) => setForm((f) => ({ ...f, performanceProgramId: e.target.value }))}
-                  className="mt-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                >
-                  <option value="">Tous les programmes Performance</option>
-                  {performancePrograms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+                + Ajouter un profil
+              </button>
             </div>
-            <div>
-              <label className="text-xs font-medium text-text-secondary">
-                Profil Plan Stratégique
-              </label>
-              <select
-                value={form.strategicRole}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    strategicRole: e.target.value as Role | "",
-                    strategicProgramId: "",
-                  }))
-                }
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              >
-                <option value="">Aucun</option>
-                {STRATEGIC_ROLE_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-              {form.strategicRole && strategicPrograms.length > 0 && (
-                <select
-                  value={form.strategicProgramId}
-                  onChange={(e) => setForm((f) => ({ ...f, strategicProgramId: e.target.value }))}
-                  className="mt-2 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                >
-                  <option value="">Tous les programmes Stratégique</option>
-                  {strategicPrograms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+            {form.profiles.length === 0 && (
+              <p className="mt-2 text-xs text-text-secondary">
+                Aucun profil métier — utilisateur purement admin, ou compte de type picker (ex.
+                référence pour un champ owner/sponsor).
+              </p>
+            )}
+            <div className="mt-2 space-y-2">
+              {form.profiles.map((profile, idx) => {
+                const rolePrograms = isStrategicRole(profile.role)
+                  ? strategicPrograms
+                  : performancePrograms;
+                return (
+                  <div key={idx} className="flex items-center gap-2">
+                    <select
+                      value={profile.role}
+                      onChange={(e) => {
+                        const role = e.target.value as Role | "";
+                        setForm((f) => ({
+                          ...f,
+                          profiles: f.profiles.map((p, i) =>
+                            i === idx ? { role: role as Role, programId: undefined } : p
+                          ),
+                        }));
+                      }}
+                      className="w-56 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                    >
+                      <option value="">Choisir un rôle</option>
+                      <optgroup label="Plan Performance">
+                        {PERFORMANCE_ROLE_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Plan Stratégique">
+                        {STRATEGIC_ROLE_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    {profile.role && rolePrograms.length > 0 && (
+                      <select
+                        value={profile.programId ?? ""}
+                        onChange={(e) => {
+                          const programId = e.target.value || undefined;
+                          setForm((f) => ({
+                            ...f,
+                            profiles: f.profiles.map((p, i) =>
+                              i === idx ? { ...p, programId } : p
+                            ),
+                          }));
+                        }}
+                        className="flex-1 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                      >
+                        <option value="">
+                          Tous les programmes{" "}
+                          {isStrategicRole(profile.role) ? "Stratégique" : "Performance"}
+                        </option>
+                        {rolePrograms.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          profiles: f.profiles.filter((_, i) => i !== idx),
+                        }))
+                      }
+                      className="text-text-secondary hover:text-red-500"
+                      aria-label="Retirer ce profil"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -832,6 +872,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 restreindre qu&apos;étendre l&apos;accès au-delà de ce que son rôle donne
                 normalement (ex. donner à un profil « Lever Owner » l&apos;accès à un niveau
                 confidentiel réservé au CTO).
+              </p>
+              <p className="mt-1.5 text-xs font-medium text-text-secondary">
+                Ce réglage contrôle uniquement l&apos;accès aux niveaux confidentiels. Il ne modifie
+                pas le périmètre de base d&apos;un rôle (ex. un Lever Owner continuera à ne voir que
+                ses propres leviers, même avec « Tous les niveaux »).
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {(
@@ -882,24 +927,8 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               de cette entreprise pour activer ce contrôle.
             </p>
           )}
-
-          <div className="flex gap-2">
-            <button
-              onClick={save}
-              disabled={passwordError !== null}
-              className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Enregistrer
-            </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
-            >
-              Annuler
-            </button>
-          </div>
         </div>
-      )}
+      </Modal>
 
       {!fixedCompanyId && companies.length > 0 && (
         <div className="flex items-center gap-3">
@@ -1043,7 +1072,9 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         onOpenChange={(next) => {
           if (!next) setRenameConfirm(null);
         }}
-        title="Renommer l'utilisateur ?"
+        title={
+          renameConfirm?.isPasswordOnly ? "Changer le mot de passe ?" : "Renommer l'utilisateur ?"
+        }
         footer={
           <>
             <Button variant="ghost" onClick={() => setRenameConfirm(null)}>
@@ -1056,10 +1087,20 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         }
       >
         <p className="text-sm text-text-secondary">
-          Vous vous apprêtez à renommer le compte «&nbsp;{renameConfirm?.oldUsername}&nbsp;» en «
-          &nbsp;{renameConfirm?.newUser.username}&nbsp;». L&apos;ancien identifiant cessera de
-          fonctionner ; les profils, l&apos;entreprise et les droits associés sont conservés. Cette
-          action n&apos;est pas réversible depuis cet écran.
+          {renameConfirm?.isPasswordOnly ? (
+            <>
+              Vous vous apprêtez à changer le mot de passe du compte «&nbsp;
+              {renameConfirm?.oldUsername}&nbsp;». Si ce compte n&apos;avait encore jamais de mot de
+              passe (ex. owner créé sans compte de connexion), il en sera créé un.
+            </>
+          ) : (
+            <>
+              Vous vous apprêtez à renommer le compte «&nbsp;{renameConfirm?.oldUsername}&nbsp;» en
+              «&nbsp;{renameConfirm?.newUser.username}&nbsp;». L&apos;ancien identifiant cessera de
+              fonctionner ; les profils, l&apos;entreprise et les droits associés sont conservés.
+            </>
+          )}{" "}
+          Cette action n&apos;est pas réversible depuis cet écran.
         </p>
       </Modal>
 

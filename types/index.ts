@@ -62,18 +62,23 @@ export type ProfileAssignment = {
 /** Compte de test (voir lib/auth.ts) — login réel par identifiant/mot de passe, mais toujours
  * des comptes de démo (mot de passe unique "test" pour les comptes/rôles historiques).
  *
- * Un utilisateur peut cumuler PLUSIEURS profils métier via `profiles` (round multi-profils) : au
- * plus UN profil Plan Performance + UN profil Plan Stratégique (jamais deux du même type). Les
- * habilitations d'administration (`isGlobalAdmin`/`isCompanyAdmin`) sont ADDITIVES : elles
- * s'ajoutent aux profils métier plutôt que de les remplacer (ex. un utilisateur peut être à la
- * fois "responsable de levier" ET admin d'entreprise). Voir `lib/roleProfiles.ts` pour les
- * fonctions de lecture/validation de ce modèle (ne pas relire `profiles`/les flags admin à la
- * main ailleurs dans le code). */
+ * Un utilisateur peut cumuler PLUSIEURS profils métier via `profiles` (round multi-profils
+ * multi-programmes) : plusieurs profils d'une même piste (Plan Performance ou Plan Stratégique)
+ * sont désormais possibles, à condition qu'ils portent sur des programmes DISTINCTS (ex. rôle
+ * "lever" sur le programme A + rôle "finance" sur le programme B) — voir
+ * `lib/roleProfiles.ts::assertValidProfiles` pour la règle exacte. Les habilitations
+ * d'administration (`isGlobalAdmin`/`isCompanyAdmin`) sont ADDITIVES : elles s'ajoutent aux
+ * profils métier plutôt que de les remplacer (ex. un utilisateur peut être à la fois
+ * "responsable de levier" ET admin d'entreprise). Voir `lib/roleProfiles.ts` pour les fonctions
+ * de lecture/validation de ce modèle (ne pas relire `profiles`/les flags admin à la main ailleurs
+ * dans le code — en particulier, préférer `getPerformanceProfiles`/`getStrategicProfiles`
+ * (pluriel) à leurs variantes singulières dès qu'il s'agit d'une vérification de permission). */
 export type AuthUser = {
   username: string;
   password: string;
-  /** Profils métier de l'utilisateur (0 à 2 entrées — voir contrainte ci-dessus). Une entreprise
-   *  peut avoir des comptes sans aucun profil métier (ex. un compte purement admin_entreprise). */
+  /** Profils métier de l'utilisateur (0 à N entrées — voir contrainte ci-dessus, au plus un profil
+   *  par (piste, programme)). Une entreprise peut avoir des comptes sans aucun profil métier
+   *  (ex. un compte purement admin_entreprise). */
   profiles: ProfileAssignment[];
   /** Super-admin global (toutes entreprises) — remplace l'ancienne valeur de rôle "admin". */
   isGlobalAdmin?: boolean;
@@ -136,6 +141,11 @@ export type Workstream = {
   id: string;
   name: string;
   sponsor: string;
+  /** `AuthUser.username` du sponsor, quand résolu vers un compte réel — même pattern que
+   *  `Lever.ownerUsername` : absent/`undefined` = `sponsor` reste du texte libre (jamais
+   *  réconcilié) et le scoping du rôle "sponsor" (voir `lib/leversLogic.ts::isLeverSponsoredBy`)
+   *  retombe sur la comparaison de noms fragile historique. Quand défini, c'est lui qui fait foi. */
+  sponsorUsername?: string;
   /** Thème fonctionnel dominant (informatif, pas contraignant). Un workstream peut impacter
    *  plusieurs fonctions — la fonction réelle est sur chaque levier (Lever.function). */
   function?: string;
@@ -192,6 +202,11 @@ export type Lever = {
    *  alors qu'un libellé d'affichage synchronisé une fois pour toutes à la réconciliation. */
   ownerUsername?: string;
   sponsor: string;
+  /** `AuthUser.username` du sponsor, quand résolu vers un compte réel — même pattern que
+   *  `ownerUsername` ci-dessus (voir son doc-comment pour le détail du repli legacy). Sert au
+   *  scoping du rôle "sponsor" (`lib/leversLogic.ts::isLeverSponsoredBy`), en plus du sponsor du
+   *  workstream parent (`Workstream.sponsorUsername`). */
+  sponsorUsername?: string;
   sponsorInit: string;
   geography: string;
   country: string;
@@ -272,8 +287,13 @@ export type ActionImpact = {
   entity?: string; // entité légale (hérite du levier si absent)
   /** Nature du gain (uniquement pour type="saving") : baisse de coût / hausse de CA / impact BFR. */
   savingType?: SavingType;
+  /** Pour nature="capex" — mode de comptabilisation : en une fois ("one_shot", défaut) ou lissé sur
+   *  une période ("smoothed"). Ignoré si nature !== "capex". */
+  capexAllocationMode?: "one_shot" | "smoothed";
+  /** Pour nature="capex" avec capexAllocationMode="smoothed" — début de la période de lissage. */
+  capexStartDate?: string; // ISO date
   /** Pour nature="capex" — date à laquelle le CAPEX est supposé engagé à 100% (jusqu'ici confondue
-   *  avec les dates de l'action elle-même). */
+   *  avec les dates de l'action elle-même). En mode "smoothed", sert de date de fin de lissage. */
   capexDeploymentDate?: string; // ISO date
   /** Pour type="saving" — date/milestone d'encaissement réel du gain (peut être postérieure à la
    *  fin de l'action). */
@@ -553,19 +573,14 @@ export type Company = {
   hierarchyLevels?: HierarchyLevelDef[];
   /** Arborescence géographique indépendante et de profondeur libre. */
   geographyHierarchyLevels?: HierarchyLevelDef[];
-  /** Paramètre RH — taux de charges sociales patronales appliqué au salaire brut pour obtenir le
-   *  "salaire chargé" utilisé dans le calcul EUR mécanisme-dépendant des mouvements RH (voir
-   *  lib/hrFinancials.ts). Varie fortement selon pays/statut/convention collective — ASSUMPTION :
-   *  non défini = valeur par défaut ~45% (ordre de grandeur France, cadre), à ajuster projet par
-   *  projet selon la politique RH réelle du client. Présenté dans un encadré "Paramètres RH"
-   *  dédié en admin entreprise (CompanyFieldsEditor) pour éviter la confusion avec les champs
-   *  financiers de la mission. */
-  socialChargesRate?: number;
   /** Seuils de segmentation du risque d'un levier en fonction du cumul des montants (€, valeur
    *  absolue de Alert.impactEur) des alertes ouvertes qui lui sont liées (voir
    *  engine.computeLeverRisk). Non défini = seuils par défaut (voir DEFAULT_RISK_THRESHOLDS dans
-   *  lib/engine.ts). */
-  riskThresholds?: { level: RiskLevel; minAmount: number }[];
+   *  lib/engine.ts). `delayDays` (optionnel) ajoute un second critère de bascule au niveau, sur
+   *  l'ancienneté (en jours) de la plus vieille alerte ouverte du scope — un levier peut ainsi
+   *  monter d'un niveau de risque soit par montant, soit par délai dépassé, le plus élevé des
+   *  deux étant retenu. Non défini = pas de contrainte de délai pour ce niveau. */
+  riskThresholds?: { level: RiskLevel; minAmount: number; delayDays?: number }[];
 };
 
 /** Un niveau de l'arborescence financière P&L → Cost Center, configuré par entreprise.

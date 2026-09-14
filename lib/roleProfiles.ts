@@ -31,18 +31,41 @@ export function isStrategicRole(role: Role): boolean {
   return (STRATEGIC_ROLES as readonly string[]).includes(role);
 }
 
-/** Le profil Plan Performance de l'utilisateur, s'il en a un. */
+/** Le PREMIER profil Plan Performance de l'utilisateur, s'il en a un — round multi-profils
+ *  multi-programmes : un utilisateur peut désormais avoir PLUSIEURS profils Plan Performance
+ *  (un par programme, voir `assertValidProfiles`). Ce raccourci singulier reste utile pour un
+ *  badge/libellé simple qui n'a pas besoin de distinguer le programme, mais NE DOIT PLUS servir à
+ *  une vérification de permission ni à résoudre la nav/clearance — préférer `getPerformanceProfiles`
+ *  (pluriel) pour itérer tous les profils de la piste. */
 export function getPerformanceProfile(
   user: Pick<AuthUser, "profiles"> | null | undefined
 ): ProfileAssignment | undefined {
   return user?.profiles?.find((p) => isPerformanceRole(p.role));
 }
 
-/** Le profil Plan Stratégique de l'utilisateur, s'il en a un. */
+/** Le PREMIER profil Plan Stratégique de l'utilisateur, s'il en a un — même mise en garde que
+ *  `getPerformanceProfile` ci-dessus (la piste Stratégique reste plafonnée à un seul profil pour
+ *  l'instant, mais utiliser la variante plurielle reste le choix par défaut le plus sûr). */
 export function getStrategicProfile(
   user: Pick<AuthUser, "profiles"> | null | undefined
 ): ProfileAssignment | undefined {
   return user?.profiles?.find((p) => isStrategicRole(p.role));
+}
+
+/** TOUS les profils Plan Performance de l'utilisateur (0, 1 ou plusieurs — un par programme, voir
+ *  `assertValidProfiles`). Préférer cette variante à `getPerformanceProfile` (singulier) dès qu'il
+ *  s'agit de résoudre la nav, la clearance, ou tout ce qui doit refléter l'ensemble des profils. */
+export function getPerformanceProfiles(
+  user: Pick<AuthUser, "profiles"> | null | undefined
+): ProfileAssignment[] {
+  return user?.profiles?.filter((p) => isPerformanceRole(p.role)) ?? [];
+}
+
+/** TOUS les profils Plan Stratégique de l'utilisateur — voir `getPerformanceProfiles`. */
+export function getStrategicProfiles(
+  user: Pick<AuthUser, "profiles"> | null | undefined
+): ProfileAssignment[] {
+  return user?.profiles?.filter((p) => isStrategicRole(p.role)) ?? [];
 }
 
 /** L'utilisateur détient-il CE rôle précis, dans l'un de ses profils ? */
@@ -118,17 +141,35 @@ export function getAuthorizedPrograms(
 }
 
 /**
- * Valide la contrainte du round multi-profils : au plus UN profil Plan Performance et au plus UN
- * profil Plan Stratégique (jamais deux du même type). Utilisée par l'UI admin (UsersPanel) avant
- * d'enregistrer — lève une erreur avec un message FR directement affichable si violée.
+ * Valide la contrainte du round multi-profils MULTI-PROGRAMMES : un utilisateur peut désormais
+ * cumuler PLUSIEURS profils d'une même piste (Plan Performance ou Plan Stratégique), à condition
+ * qu'ils portent sur des programmes DISTINCTS (ex. "lever" sur le programme A + "finance" sur le
+ * programme B) — ce qui reste interdit, par piste :
+ *  - mélanger un profil "global" (sans `programId`, portée "tous les programmes") avec un ou
+ *    plusieurs profils scopés à un programme précis : ambigu, un profil global doit rester SEUL
+ *    dans sa piste ;
+ *  - deux profils de la même piste sur le MÊME programme (avec ou sans rôles différents) : lequel
+ *    ferait foi ? Un seul rôle par (piste, programme).
+ * Utilisée par l'UI admin (UsersPanel) avant d'enregistrer — lève une erreur avec un message FR
+ * directement affichable si violée.
  */
 export function assertValidProfiles(profiles: ProfileAssignment[]): void {
-  const perfCount = profiles.filter((p) => isPerformanceRole(p.role)).length;
-  const stratCount = profiles.filter((p) => isStrategicRole(p.role)).length;
-  if (perfCount > 1) {
-    throw new Error("Un utilisateur ne peut avoir qu'un seul profil Plan Performance à la fois.");
-  }
-  if (stratCount > 1) {
-    throw new Error("Un utilisateur ne peut avoir qu'un seul profil Plan Stratégique à la fois.");
+  for (const [trackLabel, isTrackRole] of [
+    ["Plan Performance", isPerformanceRole],
+    ["Plan Stratégique", isStrategicRole],
+  ] as const) {
+    const trackProfiles = profiles.filter((p) => isTrackRole(p.role));
+    if (trackProfiles.length <= 1) continue;
+    if (trackProfiles.some((p) => !p.programId)) {
+      throw new Error(
+        `Un profil ${trackLabel} portant sur "tous les programmes" ne peut pas être combiné avec un autre profil ${trackLabel} — retirez l'un des deux, ou limitez chacun à un programme précis.`
+      );
+    }
+    const programIds = trackProfiles.map((p) => p.programId);
+    if (new Set(programIds).size !== programIds.length) {
+      throw new Error(
+        `Un utilisateur ne peut avoir qu'un seul profil ${trackLabel} par programme.`
+      );
+    }
   }
 }

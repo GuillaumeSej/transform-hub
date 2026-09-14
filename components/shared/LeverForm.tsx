@@ -159,6 +159,29 @@ export function LeverForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyUsers]);
 
+  // Même convenance UX que ci-dessus, pour le sponsor legacy (texte libre) — `matchLeverOwner` est
+  // générique (comparaison nom normalisé), pas spécifique au propriétaire.
+  useEffect(() => {
+    if (values.sponsorUsername || !values.sponsor || companyUsers.length === 0) return;
+    const match = matchLeverOwner(
+      values.sponsor,
+      companyUsers.map((u) => ({ username: u.username, name: u.name }))
+    );
+    if (match.kind === "unique") {
+      setValues((current) =>
+        current.sponsorUsername
+          ? current
+          : {
+              ...current,
+              sponsorUsername: match.candidate.username,
+              sponsor: match.candidate.name,
+              sponsorInit: initialsFromName(match.candidate.name),
+            }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyUsers]);
+
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
   const [leafNodes, setLeafNodes] = useState<HierarchyNode[]>([]);
   const [geographyLevels, setGeographyLevels] = useState<HierarchyLevelDef[]>([]);
@@ -445,20 +468,49 @@ export function LeverForm({
         <div />
         <div className="col-span-1 sm:col-span-2">
           <Field label={t("leverForm.sponsor")}>
-            <input
+            {/* Même pattern que le sélecteur "Propriétaire" plus haut (round "ownership réel"
+             *  étendu au sponsor) : plus de texte libre, un compte réel de l'entreprise ou
+             *  "Aucun" — sert au scoping du rôle "sponsor" (voir Lever.sponsorUsername). */}
+            <select
               className={inputClass}
-              value={values.sponsor}
-              onChange={(e) => set("sponsor", e.target.value)}
-            />
+              value={values.sponsorUsername ?? ""}
+              onChange={(e) => {
+                const username = e.target.value;
+                if (!username) {
+                  setValues((current) => ({
+                    ...current,
+                    sponsorUsername: undefined,
+                    sponsor: "",
+                    sponsorInit: "",
+                  }));
+                  return;
+                }
+                const selected = companyUsers.find((u) => u.username === username);
+                if (!selected) return;
+                setValues((current) => ({
+                  ...current,
+                  sponsorUsername: selected.username,
+                  sponsor: selected.name,
+                  sponsorInit: initialsFromName(selected.name),
+                }));
+              }}
+            >
+              <option value="">{t("leverForm.ownerNone", "Aucun")}</option>
+              {companyUsers
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((u) => (
+                  <option key={u.username} value={u.username}>
+                    {u.name}
+                  </option>
+                ))}
+            </select>
           </Field>
         </div>
         <Field label={t("leverForm.initials")}>
-          <input
-            className={inputClass}
-            maxLength={3}
-            value={values.sponsorInit}
-            onChange={(e) => set("sponsorInit", e.target.value.toUpperCase())}
-          />
+          <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+            {values.sponsorInit || "—"}
+          </div>
         </Field>
       </div>
 
@@ -485,51 +537,83 @@ export function LeverForm({
             </Field>
           </div>
         )}
-        <Field label={t("leverForm.geography")}>
-          <select
-            className={inputClass}
-            value={values.geography}
-            onChange={(e) => set("geography", e.target.value)}
-          >
-            {data.geographies.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t("leverForm.country")}>
-          <select
-            className={inputClass}
-            value={values.country}
-            onChange={(e) => set("country", e.target.value)}
-          >
-            <option value="">{t("leverForm.selectPlaceholder")}</option>
-            {Array.from(new Set(data.levers.map((l) => l.country).filter((v): v is string => !!v)))
-              .sort()
-              .map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-          </select>
-        </Field>
-        <Field label={t("leverForm.entity")}>
-          <select
-            className={inputClass}
-            value={values.entity}
-            onChange={(e) => set("entity", e.target.value)}
-          >
-            <option value="">{t("leverForm.selectPlaceholder")}</option>
-            {Array.from(new Set(data.levers.map((l) => l.entity).filter((v): v is string => !!v)))
-              .sort()
-              .map((ent) => (
-                <option key={ent} value={ent}>
-                  {ent}
-                </option>
-              ))}
-          </select>
-        </Field>
+        {/* Une fois une maille géographique sélectionnée ci-dessus, ces 3 champs sont dérivés du
+         *  chemin résolu (voir selectGeographyLeaf) et passent en lecture seule — les laisser
+         *  éditables permettait de les faire diverger silencieusement de la maille choisie (ex.
+         *  maille "France > Paris" mais country="Germany" laissé tel quel). Restent des <select>
+         *  librement éditables tant qu'aucune hiérarchie géographique n'est configurée pour
+         *  l'entreprise, ou qu'aucune maille n'est encore sélectionnée. */}
+        {hasGeographyHierarchy && values.geographyLeafId ? (
+          <>
+            <Field label={t("leverForm.geography")}>
+              <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+                {values.geography || "—"}
+              </div>
+            </Field>
+            <Field label={t("leverForm.country")}>
+              <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+                {values.country || "—"}
+              </div>
+            </Field>
+            <Field label={t("leverForm.entity")}>
+              <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+                {values.entity || "—"}
+              </div>
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label={t("leverForm.geography")}>
+              <select
+                className={inputClass}
+                value={values.geography}
+                onChange={(e) => set("geography", e.target.value)}
+              >
+                {data.geographies.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t("leverForm.country")}>
+              <select
+                className={inputClass}
+                value={values.country}
+                onChange={(e) => set("country", e.target.value)}
+              >
+                <option value="">{t("leverForm.selectPlaceholder")}</option>
+                {Array.from(
+                  new Set(data.levers.map((l) => l.country).filter((v): v is string => !!v))
+                )
+                  .sort()
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+            <Field label={t("leverForm.entity")}>
+              <select
+                className={inputClass}
+                value={values.entity}
+                onChange={(e) => set("entity", e.target.value)}
+              >
+                <option value="">{t("leverForm.selectPlaceholder")}</option>
+                {Array.from(
+                  new Set(data.levers.map((l) => l.entity).filter((v): v is string => !!v))
+                )
+                  .sort()
+                  .map((ent) => (
+                    <option key={ent} value={ent}>
+                      {ent}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </>
+        )}
         <Field label={t("leverForm.function")}>
           <select
             className={inputClass}

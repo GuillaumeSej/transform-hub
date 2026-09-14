@@ -1,4 +1,4 @@
-import type { Company, MovementType } from "@/types";
+import type { MovementType } from "@/types";
 import { daysBetween } from "@/lib/dateUtils";
 
 /**
@@ -16,17 +16,16 @@ import { daysBetween } from "@/lib/dateUtils";
  *
  * ASSUMPTIONS BUSINESS À VALIDER AVEC LE CLIENT (documentées ici faute de politique RH réelle
  * fournie) :
- * - Taux de charges patronales par défaut (`DEFAULT_SOCIAL_CHARGES_RATE`) : ordre de grandeur
- *   France, statut cadre — configurable via `Company.socialChargesRate`.
+ * - Le salaire saisi dans les tableaux RH (`Employee.salary`, et le "salaire brut" saisi dans ce
+ *   formulaire) EST le salaire chargé — il n'y a plus de calcul de charges patronales appliqué
+ *   dessus (simplification round : le paramètre `Company.socialChargesRate` a été retiré, la
+ *   colonne "Salaire" des tableaux RH doit être renseignée directement en salaire chargé).
  * - Formules de coûts sociaux : ESTIMATIONS simplifiées, PAS des règles légales exactes.
  * - `FORCED_DEPARTURE_MULTIPLIER = 1.2` (rupture négociée en contexte contraint) — à ajuster.
  * - `ATTRITION_NOTICE_MONTHS = 0.5` (départ volontaire, préavis souvent réduit) — à ajuster.
  *
  * Toutes les fonctions sont pures — voir lib/__tests__/hrFinancials.test.ts.
  */
-
-/** Taux de charges sociales patronales par défaut si l'entreprise n'a rien configuré. */
-export const DEFAULT_SOCIAL_CHARGES_RATE = 0.45;
 
 /** Préavis moyen estimé (mois de salaire chargé) pour un Départ forcé. */
 export const NOTICE_PERIOD_MONTHS = 2;
@@ -62,18 +61,10 @@ export const REDEPLOIEMENT_TRANSITION_RATE = TRANSFER_TRANSITION_RATE;
 /** Alias historique pour rétrocompat — pointe sur `RETRAINING_TRANSITION_RATE`. */
 export const RECONVERSION_TRANSITION_RATE = RETRAINING_TRANSITION_RATE;
 
-/** Résout le taux de charges sociales patronales à utiliser : celui configuré sur l'entreprise,
- *  ou la valeur par défaut si absent/invalide. */
-export function getSocialChargesRate(company?: Pick<Company, "socialChargesRate"> | null): number {
-  const rate = company?.socialChargesRate;
-  return typeof rate === "number" && Number.isFinite(rate) && rate >= 0
-    ? rate
-    : DEFAULT_SOCIAL_CHARGES_RATE;
-}
-
-/** Salaire chargé annuel = salaire brut annuel × (1 + taux de charges patronales). */
-export function loadedAnnualSalary(grossSalary: number, chargesRate: number): number {
-  return Math.max(0, grossSalary) * (1 + Math.max(0, chargesRate));
+/** Salaire chargé annuel = le salaire saisi tel quel (plus de calcul de charges patronales — voir
+ *  la note en tête de fichier : le salaire saisi EST désormais le salaire chargé). */
+export function loadedAnnualSalary(grossSalary: number): number {
+  return Math.max(0, grossSalary);
 }
 
 /** Ancienneté en années pleines (décimales) entre la date d'embauche et une date de référence. */
@@ -94,8 +85,8 @@ export function severanceEstimate(loadedSalary: number, tenure: number): number 
 
 export type MovementFinancialsInput = {
   type: MovementType;
+  /** Salaire chargé annuel — saisi tel quel, aucun calcul de charges patronales appliqué. */
   grossSalary: number;
-  chargesRate: number;
   /** Ancienneté en années — utilisée pour les Départs forcés / Attrition. */
   tenure?: number;
   /** Mouvement inclus dans un PSE — majore le coût social d'un Départ forcé. */
@@ -118,15 +109,8 @@ export type MovementFinancials = {
 };
 
 export function computeMovementFinancials(input: MovementFinancialsInput): MovementFinancials {
-  const {
-    type,
-    grossSalary,
-    chargesRate,
-    tenure = 0,
-    inPSE = false,
-    requiresRetraining = false,
-  } = input;
-  const loadedSalary = Math.round(loadedAnnualSalary(grossSalary, chargesRate));
+  const { type, grossSalary, tenure = 0, inPSE = false, requiresRetraining = false } = input;
+  const loadedSalary = Math.round(loadedAnnualSalary(grossSalary));
 
   switch (type) {
     case "Départ forcé": {
@@ -186,14 +170,11 @@ export function computeMovementFinancials(input: MovementFinancialsInput): Movem
 export function computeMovementEuros(
   type: MovementType,
   grossSalary: number,
-  company: Pick<Company, "socialChargesRate"> | null | undefined,
   opts?: { tenure?: number; inPSE?: boolean; requiresRetraining?: boolean }
 ): { salaryImpact: number; savings: number; cost: number } {
-  const chargesRate = getSocialChargesRate(company);
   const fin = computeMovementFinancials({
     type,
     grossSalary,
-    chargesRate,
     tenure: opts?.tenure ?? 0,
     inPSE: opts?.inPSE ?? false,
     requiresRetraining: opts?.requiresRetraining ?? false,

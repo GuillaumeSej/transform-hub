@@ -1,0 +1,110 @@
+import { describe, it, expect } from "vitest";
+import {
+  assertValidProfiles,
+  getPerformanceProfiles,
+  getStrategicProfiles,
+  hasRole,
+} from "@/lib/roleProfiles";
+import { resolveConfidentialityClearance } from "@/lib/leversLogic";
+import type { ProfileAssignment } from "@/types";
+
+describe("assertValidProfiles — round multi-profils multi-programmes", () => {
+  it("allows zero or one profile per track", () => {
+    expect(() => assertValidProfiles([])).not.toThrow();
+    expect(() => assertValidProfiles([{ role: "lever" }])).not.toThrow();
+    expect(() =>
+      assertValidProfiles([{ role: "lever" }, { role: "strategic_lead" }])
+    ).not.toThrow();
+  });
+
+  it("allows two Performance-track profiles on two DIFFERENT programs", () => {
+    const profiles: ProfileAssignment[] = [
+      { role: "lever", programId: "p1" },
+      { role: "finance", programId: "p2" },
+    ];
+    expect(() => assertValidProfiles(profiles)).not.toThrow();
+  });
+
+  it("allows two Strategic-track profiles on two different programs", () => {
+    const profiles: ProfileAssignment[] = [
+      { role: "chantier_owner", programId: "p1" },
+      { role: "axis_sponsor", programId: "p2" },
+    ];
+    expect(() => assertValidProfiles(profiles)).not.toThrow();
+  });
+
+  it("rejects two Performance-track profiles on the SAME program", () => {
+    const profiles: ProfileAssignment[] = [
+      { role: "lever", programId: "p1" },
+      { role: "finance", programId: "p1" },
+    ];
+    expect(() => assertValidProfiles(profiles)).toThrow(/un seul profil/i);
+  });
+
+  it("rejects mixing a global (no programId) profile with a scoped one on the same track", () => {
+    const profiles: ProfileAssignment[] = [{ role: "lever" }, { role: "finance", programId: "p1" }];
+    expect(() => assertValidProfiles(profiles)).toThrow(/tous les programmes/i);
+  });
+
+  it("rejects two global profiles on the same track (both unscoped)", () => {
+    const profiles: ProfileAssignment[] = [{ role: "lever" }, { role: "finance" }];
+    expect(() => assertValidProfiles(profiles)).toThrow(/tous les programmes/i);
+  });
+});
+
+describe("getPerformanceProfiles / getStrategicProfiles", () => {
+  it("returns all matching profiles, not just the first", () => {
+    const user = {
+      profiles: [
+        { role: "lever" as const, programId: "p1" },
+        { role: "finance" as const, programId: "p2" },
+        { role: "chantier_owner" as const, programId: "p1" },
+      ],
+    };
+    expect(getPerformanceProfiles(user)).toHaveLength(2);
+    expect(getStrategicProfiles(user)).toHaveLength(1);
+  });
+
+  it("returns an empty array for a user with no matching profiles", () => {
+    expect(getPerformanceProfiles({ profiles: [] })).toEqual([]);
+    expect(getPerformanceProfiles(null)).toEqual([]);
+  });
+});
+
+describe("hasRole — multi-profile safe", () => {
+  it("finds a role anywhere among multiple profiles", () => {
+    const user = {
+      profiles: [
+        { role: "finance" as const, programId: "p1" },
+        { role: "lever" as const, programId: "p2" },
+      ],
+    };
+    expect(hasRole(user, "lever")).toBe(true);
+    expect(hasRole(user, "hr")).toBe(false);
+  });
+});
+
+describe("resolveConfidentialityClearance — unions across multiple profiles of the same track", () => {
+  it("unions roleClearance levels across all Performance-track profiles", () => {
+    const user = {
+      profiles: [
+        { role: "lever" as const, programId: "p1" },
+        { role: "finance" as const, programId: "p2" },
+      ],
+    };
+    const roleClearance = { lever: ["confidential"], finance: ["secret"] };
+    const result = resolveConfidentialityClearance(user, roleClearance, "performance");
+    expect(result).not.toBe("all");
+    expect((result as string[]).sort()).toEqual(["confidential", "secret"]);
+  });
+
+  it("an explicit individual override still takes priority over the union", () => {
+    const user = {
+      profiles: [{ role: "lever" as const, programId: "p1" }],
+      confidentialityClearance: "all" as const,
+    };
+    expect(resolveConfidentialityClearance(user, { lever: ["confidential"] }, "performance")).toBe(
+      "all"
+    );
+  });
+});

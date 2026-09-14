@@ -1,5 +1,6 @@
 import {
   isLeverOwnedBy,
+  isLeverSponsoredBy,
   isLeverVisibleForClearance,
   resolveConfidentialityClearance,
 } from "@/lib/leversLogic";
@@ -20,17 +21,28 @@ export function resolveAlertLever(alert: Alert, data: BeTrackData): Lever | unde
   return data.levers.find((lever) => lever.id === alert.scope);
 }
 
-export function canUserAccessLever(user: AuthUser, lever: Lever, company?: Company): boolean {
+export function canUserAccessLever(
+  user: AuthUser,
+  lever: Lever,
+  company?: Company,
+  workstreams: BeTrackData["workstreams"] = []
+): boolean {
   if (user.isGlobalAdmin) return true;
   if (user.companyId !== lever.companyId) return false;
   if (user.isCompanyAdmin) return true;
 
   const clearance = resolveConfidentialityClearance(user, company?.roleClearance);
   if (!isLeverVisibleForClearance(lever.confidentialityLevel, clearance)) return false;
-  // Comparaison via `isLeverOwnedBy` (voir lib/leversLogic.ts, seule implémentation partagée par
-  // les 3 call sites de cette question) : lien id-based `ownerUsername` en priorité si le levier a
-  // été réconcilié, repli sur la comparaison de noms normalisée sinon.
-  if (hasRole(user, "lever")) return isLeverOwnedBy(lever, user);
+  // Comparaison via `isLeverOwnedBy`/`isLeverSponsoredBy` (voir lib/leversLogic.ts, seules
+  // implémentations partagées par tous les call sites de cette question) : lien id-based en
+  // priorité si réconcilié, repli sur la comparaison de noms normalisée sinon. Les deux gates sont
+  // indépendantes (AND) : un utilisateur peut cumuler un rôle "lever" sur un programme et un rôle
+  // "sponsor" sur un autre (voir round multi-profils), les deux restrictions s'appliquent alors.
+  if (hasRole(user, "lever") && !isLeverOwnedBy(lever, user)) return false;
+  if (hasRole(user, "sponsor")) {
+    const workstreamSponsorUsername = workstreams.find((w) => w.id === lever.ws)?.sponsorUsername;
+    if (!isLeverSponsoredBy(lever, workstreamSponsorUsername, user)) return false;
+  }
   return true;
 }
 
@@ -51,9 +63,11 @@ export function deriveAlertRecipients(
       if (user.isGlobalAdmin) return true;
       if (!companyId || user.companyId !== companyId) return false;
       const company = companies.find((item) => item.id === user.companyId);
-      if (directLever) return canUserAccessLever(user, directLever, company);
+      if (directLever) return canUserAccessLever(user, directLever, company, data.workstreams);
       if (workstreamLevers.length > 0) {
-        return workstreamLevers.some((lever) => canUserAccessLever(user, lever, company));
+        return workstreamLevers.some((lever) =>
+          canUserAccessLever(user, lever, company, data.workstreams)
+        );
       }
       return user.isCompanyAdmin || hasRole(user, "cto");
     })

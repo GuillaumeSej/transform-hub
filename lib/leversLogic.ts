@@ -10,8 +10,9 @@ import type {
   Lever,
   LeverAction,
   Role,
+  Workstream,
 } from "@/types";
-import { getPerformanceProfile, getStrategicProfile, hasRole } from "@/lib/roleProfiles";
+import { getPerformanceProfiles, getStrategicProfiles, hasRole } from "@/lib/roleProfiles";
 
 /**
  * Résout la liste des niveaux de confidentialité auxquels un utilisateur non-admin a accès,
@@ -21,10 +22,15 @@ import { getPerformanceProfile, getStrategicProfile, hasRole } from "@/lib/roleP
  *  - user.confidentialityClearance === "all"  -> accès à tous les niveaux
  *  - user.confidentialityClearance: string[]  -> exactement cette liste (même vide = aucun accès)
  *  - user.confidentialityClearance === undefined -> repli sur roleClearance[profil] (ou [])
- * `planType` précise QUEL profil consulter pour ce repli (un utilisateur peut avoir un profil Plan
- * Performance et un profil Plan Stratégique distincts) — "performance" par défaut, pour les
- * appelants historiques (leviers du Plan de Performance).
- */
+ * `planType` précise QUELLE piste consulter pour ce repli (un utilisateur peut avoir un/des
+ * profil(s) Plan Performance et un/des profil(s) Plan Stratégique distincts) — "performance" par
+ * défaut, pour les appelants historiques (leviers du Plan de Performance).
+ *
+ * Round multi-profils multi-programmes : un utilisateur peut désormais avoir PLUSIEURS profils
+ * sur la piste concernée (un par programme, ex. "lever" sur programme A + "finance" sur programme
+ * B) — le repli unione les `roleClearance[role]` de TOUS ces profils (le plus permissif l'emporte)
+ * plutôt que de ne lire que le premier trouvé, pour ne pas amputer silencieusement l'accès d'un
+ * des rôles cumulés. */
 export function resolveConfidentialityClearance(
   user: Pick<AuthUser, "profiles" | "confidentialityClearance"> | null | undefined,
   roleClearance: Partial<Record<Role, string[]>> | undefined,
@@ -33,9 +39,14 @@ export function resolveConfidentialityClearance(
   if (!user) return [];
   if (user.confidentialityClearance === "all") return "all";
   if (Array.isArray(user.confidentialityClearance)) return user.confidentialityClearance;
-  const relevantRole =
-    planType === "strategic" ? getStrategicProfile(user)?.role : getPerformanceProfile(user)?.role;
-  return (relevantRole && roleClearance?.[relevantRole]) ?? [];
+  const profiles =
+    planType === "strategic" ? getStrategicProfiles(user) : getPerformanceProfiles(user);
+  const levels = new Set<string>();
+  for (const profile of profiles) {
+    const forRole = roleClearance?.[profile.role];
+    if (forRole) forRole.forEach((level) => levels.add(level));
+  }
+  return Array.from(levels);
 }
 
 /** Un levier confidentiel est-il visible pour cette habilitation (résolue via
@@ -75,6 +86,21 @@ export function isLeverOwnedBy(
   return normalizeOwnerName(lever.owner) === normalizeOwnerName(user.name);
 }
 
+/** Même principe que `isLeverOwnedBy`, pour le scoping du rôle "sponsor" : un utilisateur sponsor
+ *  voit un levier soit parce qu'il sponsorise le workstream parent (`workstreamSponsorUsername`,
+ *  résolu par l'appelant depuis `Workstream.sponsorUsername`), soit parce qu'il est identifié
+ *  individuellement comme sponsor du levier (`lever.sponsorUsername`, priorité au lien id-based si
+ *  réconcilié, repli sur la comparaison de noms fragile sinon — mêmes règles que `owner`). */
+export function isLeverSponsoredBy(
+  lever: Pick<Lever, "sponsor" | "sponsorUsername">,
+  workstreamSponsorUsername: string | undefined,
+  user: Pick<AuthUser, "name" | "username">
+): boolean {
+  if (workstreamSponsorUsername && workstreamSponsorUsername === user.username) return true;
+  if (lever.sponsorUsername) return lever.sponsorUsername === user.username;
+  return normalizeOwnerName(lever.sponsor) === normalizeOwnerName(user.name);
+}
+
 export function canUserViewLever(
   user:
     | Pick<
@@ -89,14 +115,28 @@ export function canUserViewLever(
       >
     | null
     | undefined,
-  lever: Pick<Lever, "owner" | "ownerUsername" | "companyId" | "confidentialityLevel">,
-  roleClearance: Partial<Record<Role, string[]>> | undefined
+  lever: Pick<
+    Lever,
+    | "owner"
+    | "ownerUsername"
+    | "sponsor"
+    | "sponsorUsername"
+    | "ws"
+    | "companyId"
+    | "confidentialityLevel"
+  >,
+  roleClearance: Partial<Record<Role, string[]>> | undefined,
+  workstreams: Pick<Workstream, "id" | "sponsorUsername">[] = []
 ): boolean {
   if (!user) return false;
   if (user.isGlobalAdmin) return true;
   if (lever.companyId != null && user.companyId !== lever.companyId) return false;
   if (user.isCompanyAdmin) return true;
   if (hasRole(user, "lever") && !isLeverOwnedBy(lever, user)) return false;
+  if (hasRole(user, "sponsor")) {
+    const workstreamSponsorUsername = workstreams.find((w) => w.id === lever.ws)?.sponsorUsername;
+    if (!isLeverSponsoredBy(lever, workstreamSponsorUsername, user)) return false;
+  }
   return isLeverVisibleForClearance(
     lever.confidentialityLevel,
     resolveConfidentialityClearance(user, roleClearance)
@@ -170,9 +210,9 @@ function makeAuditEntry(entry: Omit<AuditEntry, "ts">): AuditEntry {
 /** Recalcule le levier parent depuis son plan d'action : progression pondérée et agrégats
  * financiers/RH. Si le plan initial est déjà figé, les chiffres consolidés alimentent le
  * reforecast ; sinon ils alimentent directement les champs du levier. */
-function recomputeLeverProgress(lever: Lever): Lever | undefined {
+function recomputeLeverProgress(lever: Lever, fyEnd?: string): Lever | undefined {
   const newProgress = engine.recomputeLeverProgress(lever);
-  const consolidated = consolidateLeverFromActions(lever);
+  const consolidated = consolidateLeverFromActions(lever, fyEnd);
   const nextStatus =
     newProgress >= 100 && lever.status !== "cancelled" ? "delivered" : lever.status;
   const financialPatch: Partial<Lever> = consolidated
@@ -323,7 +363,8 @@ export type BulkLeverImportResult = {
 export function bulkUpsertLeversByCode(
   levers: Lever[],
   inputs: Omit<Lever, "id" | "createdAt" | "lastUpdate">[],
-  user: string
+  user: string,
+  fyEnd?: string
 ): BulkLeverImportResult {
   let curLevers = levers;
   const changedLevers: Lever[] = [];
@@ -354,7 +395,8 @@ export function bulkUpsertLeversByCode(
     const { levers: afterActions, changedLever } = writeActions(
       curLevers,
       { leverId: upsert.lever.id },
-      input.actions ?? []
+      input.actions ?? [],
+      fyEnd
     );
     curLevers = afterActions;
     changedLevers.push(changedLever ?? upsert.lever);
@@ -384,7 +426,8 @@ function readActions(levers: Lever[], scope: ActionScope): LeverAction[] {
 export function writeActions(
   levers: Lever[],
   scope: ActionScope,
-  actions: LeverAction[]
+  actions: LeverAction[],
+  fyEnd?: string
 ): { levers: Lever[]; changedLever?: Lever } {
   const idx = levers.findIndex((l) => l.id === scope.leverId);
   if (idx === -1) throw new Error(`Lever "${scope.leverId}" introuvable`);
@@ -392,7 +435,7 @@ export function writeActions(
   nextLevers[idx] = { ...levers[idx], actions };
 
   const lever = nextLevers[idx];
-  const recomputed = recomputeLeverProgress(lever);
+  const recomputed = recomputeLeverProgress(lever, fyEnd);
   const changedLever = recomputed ?? lever;
   if (recomputed) {
     nextLevers = nextLevers.map((l) => (l.id === recomputed.id ? recomputed : l));
@@ -405,7 +448,8 @@ export function createAction(
   levers: Lever[],
   scope: ActionScope,
   input: Omit<LeverAction, "id">,
-  user: string
+  user: string,
+  fyEnd?: string
 ): ActionMutationResult {
   const allIds = levers.flatMap((l) => l.actions?.map((a) => a.id) ?? []);
   const action: LeverAction = {
@@ -414,7 +458,7 @@ export function createAction(
     ...(input.status === "done" && !input.deliveredDate ? { deliveredDate: nowDate() } : {}),
   };
   const currentActions = readActions(levers, scope);
-  const result = writeActions(levers, scope, [...currentActions, action]);
+  const result = writeActions(levers, scope, [...currentActions, action], fyEnd);
 
   const auditEntries = [
     makeAuditEntry({
@@ -435,7 +479,8 @@ export function updateAction(
   scope: ActionScope,
   actionId: string,
   patch: Partial<LeverAction>,
-  user: string
+  user: string,
+  fyEnd?: string
 ): ActionMutationResult {
   const actions = readActions(levers, scope);
   const idx = actions.findIndex((a) => a.id === actionId);
@@ -450,7 +495,7 @@ export function updateAction(
   const after = { ...before, ...patch, ...deliveredDatePatch };
   const nextActions = [...actions];
   nextActions[idx] = after;
-  const result = writeActions(levers, scope, nextActions);
+  const result = writeActions(levers, scope, nextActions, fyEnd);
 
   const auditEntries = [
     makeAuditEntry({
@@ -469,10 +514,11 @@ export function updateAction(
 export function deleteAction(
   levers: Lever[],
   scope: ActionScope,
-  actionId: string
+  actionId: string,
+  fyEnd?: string
 ): { levers: Lever[]; changedLever?: Lever } {
   const actions = readActions(levers, scope).filter((a) => a.id !== actionId);
-  return writeActions(levers, scope, actions);
+  return writeActions(levers, scope, actions, fyEnd);
 }
 
 export function applyCascadeShift(

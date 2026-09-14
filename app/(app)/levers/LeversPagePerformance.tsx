@@ -14,10 +14,11 @@ import { generateAlerts } from "@/lib/alertEngine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import {
   isLeverOwnedBy,
+  isLeverSponsoredBy,
   isLeverVisibleForClearance,
   resolveConfidentialityClearance,
 } from "@/lib/leversLogic";
-import { isAnyAdmin } from "@/lib/roleProfiles";
+import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -46,7 +47,7 @@ type LeverRow = Lever & {
 };
 
 export function LeversPagePerformance() {
-  const { role, user } = useRole();
+  const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
   // Vue scopée à UN programme Performance sélectionnable (voir le sélecteur plus bas) : le cycle
   // de vie étant désormais configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un
@@ -134,16 +135,31 @@ export function LeversPagePerformance() {
 
   // Le Lever Owner ne voit que ses propres leviers — via `isLeverOwnedBy` (lib/leversLogic.ts) :
   // lien id-based `ownerUsername` si le levier a été réconcilié, repli sur la comparaison de noms
-  // sinon (levier legacy). Les autres rôles (CTO, Sponsor, ...) voient toute la bibliothèque. Les
-  // leviers confidentiels sont en plus masqués aux profils non habilités (voir
-  // Company.roleClearance) — admin/admin_entreprise voient toujours tout.
+  // sinon (levier legacy). Le Sponsor ne voit que les leviers de son/ses workstream(s) + ceux où
+  // il est identifié individuellement comme sponsor (`isLeverSponsoredBy`, même round). Les autres
+  // rôles (CTO, Finance, ...) voient toute la bibliothèque. Les leviers confidentiels sont en plus
+  // masqués aux profils non habilités (voir Company.roleClearance) — admin/admin_entreprise voient
+  // toujours tout. `hasRole` (pas `role`, qui n'est que le PREMIER profil de l'utilisateur — voir
+  // useRole.tsx) : un utilisateur peut cumuler plusieurs profils Performance sur des programmes
+  // différents (round multi-profils), `role` seul manquerait un rôle "lever"/"sponsor" au-delà du
+  // premier.
   const scopedLevers = useMemo(() => {
-    const ownerScoped =
-      role === "lever" && user ? data.levers.filter((l) => isLeverOwnedBy(l, user)) : data.levers;
-    return ownerScoped.filter(
+    let scoped = data.levers;
+    if (user && hasRole(user, "lever")) {
+      scoped = scoped.filter((l) => isLeverOwnedBy(l, user));
+    }
+    if (user && hasRole(user, "sponsor")) {
+      scoped = scoped.filter((l) => {
+        const workstreamSponsorUsername = data.workstreams.find(
+          (w) => w.id === l.ws
+        )?.sponsorUsername;
+        return isLeverSponsoredBy(l, workstreamSponsorUsername, user);
+      });
+    }
+    return scoped.filter(
       (l) => isAnyAdmin(user) || isLeverVisibleForClearance(l.confidentialityLevel, clearance)
     );
-  }, [data.levers, role, user, clearance]);
+  }, [data.levers, data.workstreams, user, clearance]);
 
   // Scope au programme Performance sélectionné (voir usePerformanceProgramSelector plus haut) —
   // appliqué AVANT les filtres de la barre (leurs options ne doivent refléter que les leviers du
@@ -612,7 +628,9 @@ export function LeversPagePerformance() {
       <div className="animate-fade-up">
         <div className="mb-5">
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            {role === "lever" ? t("levers.title.mine") : t("levers.title.library")}
+            {user && (hasRole(user, "lever") || hasRole(user, "sponsor"))
+              ? t("levers.title.mine")
+              : t("levers.title.library")}
           </h1>
         </div>
         <div className="rounded-lg border border-border bg-white p-10 text-center">
@@ -632,7 +650,9 @@ export function LeversPagePerformance() {
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
         <div>
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            {role === "lever" ? t("levers.title.mine") : t("levers.title.library")}
+            {user && (hasRole(user, "lever") || hasRole(user, "sponsor"))
+              ? t("levers.title.mine")
+              : t("levers.title.library")}
           </h1>
           <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
             {filteredLevers.length} {t("levers.count")} · {t("levers.netSavingsShown")} :{" "}

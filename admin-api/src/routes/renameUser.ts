@@ -35,43 +35,69 @@ export function renameUserRouter(auth: Auth, db: Firestore): Router {
       const oldEmail = usernameToSyntheticEmail(oldUsername, companyId);
       const newEmail = usernameToSyntheticEmail(newUsername, companyId);
 
-      // d. Resolve the target Auth user.
+      // d. Resolve the target Auth user. Certains profils Firestore n'ont volontairement AUCUN
+      // compte Firebase Auth associé (ex. les "owners" créés par un script de seed — pickers
+      // uniquement, jamais destinés à se connecter, voir scripts/seed-strategic-demo.js). Avant,
+      // ce cas faisait échouer tout renommage/changement de mot de passe avec une erreur "Aucun
+      // compte trouvé" ; on le traite maintenant comme la création du tout premier compte Auth de
+      // cet utilisateur, plutôt que d'échouer.
       let targetUser;
+      let authAccountExisted = true;
       try {
         targetUser = await auth.getUserByEmail(oldEmail);
       } catch {
-        throw Errors.notFound(`Aucun compte trouvé pour l'utilisateur "${oldUsername}".`);
+        authAccountExisted = false;
       }
-      const uid = targetUser.uid;
+      let uid = targetUser?.uid;
 
-      // e. Reject if newEmail already belongs to a DIFFERENT Firebase Auth user.
-      if (normalizeUsername(oldUsername) !== normalizeUsername(newUsername)) {
+      if (!authAccountExisted) {
+        if (!newPassword) {
+          // Rien à faire côté Auth : pas de compte existant, pas de mot de passe fourni pour en
+          // créer un — on se contente de la mise à jour Firestore ci-dessous (étape g).
+          uid = undefined;
+        } else {
+          try {
+            const created = await auth.createUser({ email: newEmail, password: newPassword });
+            uid = created.uid;
+          } catch (err) {
+            if (isFirebaseErrorCode(err, "auth/email-already-exists")) {
+              throw Errors.conflict(
+                `Le nom d'utilisateur "${newUsername}" est déjà utilisé par un autre compte.`
+              );
+            }
+            throw Errors.internal("Échec de la création du compte Firebase Auth.");
+          }
+        }
+      } else {
+        // e. Reject if newEmail already belongs to a DIFFERENT Firebase Auth user.
+        if (normalizeUsername(oldUsername) !== normalizeUsername(newUsername)) {
+          try {
+            const existing = await auth.getUserByEmail(newEmail);
+            if (existing.uid !== uid) {
+              throw Errors.conflict(
+                `Le nom d'utilisateur "${newUsername}" est déjà utilisé par un autre compte.`
+              );
+            }
+          } catch (err) {
+            if (err instanceof ApiError) throw err;
+            // getUserByEmail throws auth/user-not-found when free — that's the expected happy path.
+          }
+        }
+
+        // f. Update Firebase Auth email (and password if provided).
         try {
-          const existing = await auth.getUserByEmail(newEmail);
-          if (existing.uid !== uid) {
+          await auth.updateUser(uid as string, {
+            email: newEmail,
+            ...(newPassword ? { password: newPassword } : {}),
+          });
+        } catch (err) {
+          if (isFirebaseErrorCode(err, "auth/email-already-exists")) {
             throw Errors.conflict(
               `Le nom d'utilisateur "${newUsername}" est déjà utilisé par un autre compte.`
             );
           }
-        } catch (err) {
-          if (err instanceof ApiError) throw err;
-          // getUserByEmail throws auth/user-not-found when free — that's the expected happy path.
+          throw Errors.internal("Échec de la mise à jour du compte Firebase Auth.");
         }
-      }
-
-      // f. Update Firebase Auth email (and password if provided).
-      try {
-        await auth.updateUser(uid, {
-          email: newEmail,
-          ...(newPassword ? { password: newPassword } : {}),
-        });
-      } catch (err) {
-        if (isFirebaseErrorCode(err, "auth/email-already-exists")) {
-          throw Errors.conflict(
-            `Le nom d'utilisateur "${newUsername}" est déjà utilisé par un autre compte.`
-          );
-        }
-        throw Errors.internal("Échec de la mise à jour du compte Firebase Auth.");
       }
 
       // g. Move the Firestore adminUsers doc atomically (old -> new), only after (f) succeeded.
@@ -94,10 +120,18 @@ export function renameUserRouter(auth: Auth, db: Firestore): Router {
         }
         await batch.commit();
       } catch (err) {
-        // Auth succeeded but Firestore failed: roll back the Auth email change so we never leave
-        // Auth and Firestore inconsistent.
+        // Auth succeeded but Firestore failed: roll back so we never leave Auth and Firestore
+        // inconsistent. Two cases: an existing Auth account had its email changed (roll back the
+        // email), or a brand-new Auth account was just created for a previously Auth-less user
+        // (delete it — there was nothing to roll back to).
         try {
-          await auth.updateUser(uid, { email: oldEmail });
+          if (uid) {
+            if (authAccountExisted) {
+              await auth.updateUser(uid, { email: oldEmail });
+            } else {
+              await auth.deleteUser(uid);
+            }
+          }
         } catch (rollbackErr) {
           console.error(
             JSON.stringify({
