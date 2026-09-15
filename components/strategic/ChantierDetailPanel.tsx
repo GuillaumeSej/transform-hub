@@ -31,6 +31,7 @@ import {
   chantierBounds,
   chantierDependencyAlerts,
   chantierMilestoneProgressPct,
+  displayMilestoneId,
   milestoneProgressPct,
   numberIndicators,
   progressBucket,
@@ -2342,7 +2343,8 @@ export function ChantierDetailPanel({
                                   aria-hidden
                                   className={`h-2 w-2 rounded-full ${BUCKET_DOT_CLASS[actionBucket]}`}
                                 />
-                                {actionMilestones.currentMilestone} · {actionProgressPct}%
+                                {displayMilestoneId(actionMilestones.currentMilestone)} ·{" "}
+                                {actionProgressPct}%
                               </span>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">

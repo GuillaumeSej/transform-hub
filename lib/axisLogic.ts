@@ -594,6 +594,19 @@ export function canStartAction(
 // ─── Jalons E0→E4 (round 5) ─────────────────────────────────────────────────────────────────────
 
 /**
+ * Libellé AFFICHÉ d'un jalon (round 19) — "J0"…"J4" au lieu de "E0"…"E4". PUREMENT cosmétique :
+ * `MilestoneId` (le type), les valeurs Firestore, `MilestoneChecklistItem.itemId` (ex. "E0-A1") et
+ * tout `lib/milestoneChecklist.ts` restent inchangés, toujours "E0"…"E4" — des documents Firestore
+ * déjà seedés ont leur `checklists` keyée par ces littéraux exacts, les renommer casserait la
+ * lecture de données existantes pour un gain purement visuel. Seul point de vérité pour cette
+ * traduction d'affichage : tout rendu utilisateur d'un `MilestoneId` brut doit passer par cette
+ * fonction plutôt que d'interpoler l'id directement.
+ */
+export function displayMilestoneId(id: MilestoneId): string {
+  return id.replace("E", "J");
+}
+
+/**
  * Calcule la valeur DÉCLARATIVE (0-100, round 12) des items AUTOMATIQUES d'un jalon donné
  * (`ChecklistItemDef.auto`, contenu défini dans `lib/milestoneChecklist.ts`) — les items manuels de
  * ce même jalon n'apparaissent PAS dans le résultat, c'est à l'appelant (l'UI, ou
@@ -702,9 +715,9 @@ export function canPassMilestone(
 
   for (const item of items) {
     if (item.progressPct === undefined) {
-      reasons.push(`Item non répondu (${milestoneId}, ${item.itemId})`);
+      reasons.push(`Item non répondu (${displayMilestoneId(milestoneId)}, ${item.itemId})`);
     } else if (item.progressPct === 0) {
-      reasons.push(`Item bloquant en rouge (${milestoneId}, ${item.itemId})`);
+      reasons.push(`Item bloquant en rouge (${displayMilestoneId(milestoneId)}, ${item.itemId})`);
     }
   }
 
@@ -728,21 +741,40 @@ export function progressBucket(pct: number | undefined): ProgressBucket {
 }
 
 /**
+ * Poids (delta, PAS cumulatif) de chaque jalon dans `milestoneProgressPct` (round 19) — donné
+ * directement par le PO : J0/J1 (E0/E1) sont des étapes de cadrage très légères, J2 (E2) un peu
+ * plus engageant, J3 (E3) la vraie phase d'exécution (qui concentre la moitié du poids total), J4
+ * (E4) la clôture. Somme = 100. Les CLÉS restent les valeurs INTERNES `"E0"`–`"E4"` (voir
+ * `displayMilestoneId` ci-dessus) : seul l'AFFICHAGE change, jamais ce référentiel.
+ *
+ * Remplace l'ancien poids UNIFORME (20 partout) que `milestoneProgressPct` appliquait jusqu'ici.
+ */
+export const MILESTONE_WEIGHT_DELTA: Record<MilestoneId, number> = {
+  E0: 10,
+  E1: 10,
+  E2: 15,
+  E3: 50,
+  E4: 15,
+};
+
+/**
  * Avancement en pourcentage (0-100) d'une entité portant un état de jalon E0→E4 — remplace
  * `chantierProgress()` sur les affichages de progression, comme avant round 5.
  *
- * Round 12 : remplissage FIN à l'intérieur du jalon COURANT, au lieu du calcul par paliers de 20
- * (`passedMilestones.length * 20`) qui traitait un jalon en cours comme s'il ne valait jamais rien
- * tant qu'il n'était pas officiellement franchi. Nouveau calcul :
- *  1. `passedMilestones.length * 20` — crédit plein pour chaque jalon déjà validé.
+ * Round 19 : poids VARIABLE par jalon (`MILESTONE_WEIGHT_DELTA` ci-dessus), remplaçant l'ancien
+ * poids uniforme de 20 par jalon. Calcul :
+ *  1. Pour chaque jalon déjà validé (`passedMilestones`), crédit plein de SON PROPRE poids
+ *     (`MILESTONE_WEIGHT_DELTA[m]`) — plus seulement `20`.
  *  2. PLUS, si le jalon COURANT n'est PAS déjà dans `passedMilestones` (garde-fou anti double
  *     comptage : seul cas de recoupement possible, une fois E4 validé, où le jalon courant reste
- *     E4 faute de jalon suivant) : un crédit partiel `20 * moyenne / 100`, où `moyenne` porte sur
- *     TOUS les items définis pour ce jalon dans `MILESTONE_CHECKLISTS` (pas seulement ceux déjà
- *     répondus — un item absent de `checklists[currentMilestone]` compte pour `0`, comme un item
- *     répondu à `0`).
- *  3. Total plafonné à 100 et arrondi (`Math.round`) — les paliers de 20 restent exacts mais le
- *     crédit partiel de l'étape 2 ne l'est en général pas.
+ *     E4 faute de jalon suivant) : un crédit partiel `MILESTONE_WEIGHT_DELTA[currentMilestone] *
+ *     moyenne / 100`, où `moyenne` porte sur TOUS les items définis pour ce jalon dans
+ *     `MILESTONE_CHECKLISTS` (pas seulement ceux déjà répondus — un item absent de
+ *     `checklists[currentMilestone]` compte pour `0`, comme un item répondu à `0`) — même
+ *     mécanique de crédit partiel qu'avant round 19, simplement mise à l'échelle du poids variable
+ *     du jalon courant au lieu du `20` fixe.
+ *  3. Total plafonné à 100 et arrondi (`Math.round`) — la somme des poids validés est exacte mais
+ *     le crédit partiel de l'étape 2 ne l'est en général pas.
  *
  * **Items automatiques** (`ChecklistItemDef.auto`) : cette fonction reste typée
  * STRUCTURELLEMENT (`{ milestones? }` seulement, voir le paragraphe round 7 ci-dessous) et n'a
@@ -772,7 +804,7 @@ export function milestoneProgressPct(
   const milestones = entity.milestones;
   if (!milestones) return 0;
 
-  let total = milestones.passedMilestones.length * 20;
+  let total = milestones.passedMilestones.reduce((sum, m) => sum + MILESTONE_WEIGHT_DELTA[m], 0);
 
   if (!milestones.passedMilestones.includes(milestones.currentMilestone)) {
     const defs = MILESTONE_CHECKLISTS[milestones.currentMilestone];
@@ -788,7 +820,7 @@ export function milestoneProgressPct(
       sum += value;
     }
     const average = defs.length > 0 ? sum / defs.length : 0;
-    total += (20 * average) / 100;
+    total += (MILESTONE_WEIGHT_DELTA[milestones.currentMilestone] * average) / 100;
   }
 
   return Math.min(100, Math.round(total));
@@ -823,17 +855,21 @@ export function chantierMilestoneProgressPct(
 // ─── Poids illustratif par jalon (round 9) ─────────────────────────────────────────────────────
 
 /**
- * Poids illustratifs par jalon, donnés directement par le PO — E0/E1/E2 sont des étapes de cadrage
- * léger, E3 la vraie phase d'exécution (longue), E4 la clôture complète. Utilisés UNIQUEMENT pour
- * le remplissage visuel (fond proportionnel) des blocs de `LevierMilestoneBoard.tsx` — **ne
- * remplace ni `milestoneProgressPct` ni `chantierMilestoneProgressPct`**, qui restent la seule
- * source pour les barres de progression existantes (chantier, Gantt, etc.).
+ * Poids CUMULATIF par jalon (seuil atteint une fois ce jalon COURANT, pas un delta) — round 19 :
+ * recalculé comme la somme cumulée de `MILESTONE_WEIGHT_DELTA` ci-dessus (E0=10, E1=10+10=20,
+ * E2=20+15=35, E3=35+50=85, E4=85+15=100), pour que les deux référentiels ne puissent plus diverger
+ * (avant round 19 ils étaient indépendants et n'avaient jamais à concorder — desormais
+ * `MILESTONE_WEIGHT_DELTA` est la seule source de poids, ce tableau n'en est qu'une lecture
+ * cumulative). Utilisé UNIQUEMENT pour le remplissage visuel (fond proportionnel) des blocs de
+ * `LevierMilestoneBoard.tsx` — **ne remplace ni `milestoneProgressPct` ni
+ * `chantierMilestoneProgressPct`**, qui restent la seule source pour les barres de progression
+ * existantes (chantier, Gantt, etc.).
  */
 export const MILESTONE_WEIGHT: Record<MilestoneId, number> = {
   E0: 10,
-  E1: 15,
-  E2: 20,
-  E3: 60,
+  E1: 20,
+  E2: 35,
+  E3: 85,
   E4: 100,
 };
 
@@ -896,10 +932,18 @@ const CHANTIER_COLOR_PALETTE = [
  * couleur, à tout moment, sur tout composant) — voir le test associé dans
  * `lib/__tests__/axisLogic.test.ts`.
  */
-export function colorForChantier(chantierId: string): string {
+/** Index déterministe dans `CHANTIER_COLOR_PALETTE`/`CHANTIER_COLOR_HEX_PALETTE` (même hash pour
+ *  les deux, tableaux tenus dans le MÊME ordre) — extrait de `colorForChantier` pour que
+ *  `hexForChantier` retombe exactement sur la même couleur que sa classe Tailwind, sans dupliquer
+ *  le calcul de hash. */
+function chantierColorIndex(id: string): number {
   let sum = 0;
-  for (let i = 0; i < chantierId.length; i += 1) sum += chantierId.charCodeAt(i);
-  return CHANTIER_COLOR_PALETTE[sum % CHANTIER_COLOR_PALETTE.length];
+  for (let i = 0; i < id.length; i += 1) sum += id.charCodeAt(i);
+  return sum % CHANTIER_COLOR_PALETTE.length;
+}
+
+export function colorForChantier(chantierId: string): string {
+  return CHANTIER_COLOR_PALETTE[chantierColorIndex(chantierId)];
 }
 
 /** Même hash déterministe/même palette que `colorForChantier` ci-dessus, réutilisée telle quelle
@@ -910,6 +954,38 @@ export function colorForChantier(chantierId: string): string {
  *  usages restent lisibles séparément aux points d'appel. */
 export function colorForDepartment(departmentName: string): string {
   return colorForChantier(departmentName);
+}
+
+/** Équivalents hex des classes `bg-*-500` de `CHANTIER_COLOR_PALETTE` ci-dessus, DANS LE MÊME
+ *  ORDRE (valeurs figées de la palette Tailwind par défaut v3 — `blue-500` = `#3b82f6`, etc.) —
+ *  pour les API qui ont besoin d'une vraie couleur (ex. `fill`/`stroke` Recharts) plutôt que d'une
+ *  classe CSS (round 19, graphiques ETP par période/par axe). Ne JAMAIS réordonner indépendamment
+ *  de `CHANTIER_COLOR_PALETTE` : les deux tableaux doivent rester alignés index par index pour
+ *  qu'un même chantier/équipe affiche la MÊME couleur en CSS (barres plates existantes) et en
+ *  Recharts (nouveaux graphiques). */
+const CHANTIER_COLOR_HEX_PALETTE = [
+  "#3b82f6", // bg-blue-500
+  "#10b981", // bg-emerald-500
+  "#8b5cf6", // bg-violet-500
+  "#ec4899", // bg-pink-500
+  "#f59e0b", // bg-amber-500
+  "#6366f1", // bg-indigo-500
+  "#14b8a6", // bg-teal-500
+  "#f97316", // bg-orange-500
+  "#f43f5e", // bg-rose-500
+  "#06b6d4", // bg-cyan-500
+] as const;
+
+/** Équivalent hex de `colorForChantier` — même hash, même index, même ordre de palette — pour les
+ *  graphiques Recharts (ETP par période/par axe) qui ne peuvent pas consommer une classe
+ *  Tailwind. */
+export function hexForChantier(chantierId: string): string {
+  return CHANTIER_COLOR_HEX_PALETTE[chantierColorIndex(chantierId)];
+}
+
+/** Équivalent hex de `colorForDepartment` — voir `hexForChantier` ci-dessus. */
+export function hexForDepartment(departmentName: string): string {
+  return hexForChantier(departmentName);
 }
 
 // ─── Staffing par période (round 7) ────────────────────────────────────────────────────────────

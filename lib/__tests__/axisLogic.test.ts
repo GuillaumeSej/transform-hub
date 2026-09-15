@@ -960,12 +960,15 @@ describe("milestoneProgressPct", () => {
     ).toBe(0);
   });
 
-  it("returns 20 per passed milestone", () => {
+  // Round 19 : poids VARIABLE par jalon (MILESTONE_WEIGHT_DELTA : E0=10, E1=10, E2=15, E3=50,
+  // E4=15), remplaçant l'ancien poids uniforme de 20/jalon — voir les commentaires de
+  // `milestoneProgressPct` (lib/axisLogic.ts).
+  it("credits each passed milestone with its OWN weight (not a flat 20)", () => {
     expect(
       milestoneProgressPct({
         milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} },
       })
-    ).toBe(20);
+    ).toBe(10);
   });
 
   it("returns 100 once all 5 milestones are passed", () => {
@@ -980,7 +983,22 @@ describe("milestoneProgressPct", () => {
     ).toBe(100);
   });
 
-  // Round 12 : remplissage fin à l'intérieur du jalon courant, au lieu du calcul par paliers de 20.
+  // Nouveau test round 19 : vérifie explicitement les nouveaux poids sur un mélange de jalons
+  // franchis (E0/E1/E2) et du jalon courant (E3, aucun item répondu).
+  it("sums the variable weights of passed milestones plus zero partial credit for an unanswered current milestone", () => {
+    const entity = {
+      milestones: {
+        currentMilestone: "E3" as const,
+        passedMilestones: ["E0" as const, "E1" as const, "E2" as const],
+        checklists: {},
+      },
+    };
+    // 10 (E0) + 10 (E1) + 15 (E2) + 0 (E3, rien de répondu) = 35.
+    expect(milestoneProgressPct(entity)).toBe(35);
+  });
+
+  // Round 12 : remplissage fin à l'intérieur du jalon courant, au lieu du calcul par paliers de 20 ;
+  // round 19 : ce crédit partiel est désormais mis à l'échelle du poids VARIABLE du jalon courant.
   it("blends full credit for passed milestones with partial credit from the current milestone's declared items", () => {
     // E1 a 6 items (MILESTONE_CHECKLISTS.E1) : E1-A1 (auto), E1-B1/B2/B3 (manuels), E1-C-effort
     // (auto), E1-C2 (manuel). Ici seuls B1/B2/B3 sont déclarés (100/50/0), les deux auto et C2
@@ -998,8 +1016,8 @@ describe("milestoneProgressPct", () => {
         },
       },
     };
-    // 20 (E0 passé) + 20 * ((100+50+0+0+0+0)/6) / 100 = 20 + 5 = 25.
-    expect(milestoneProgressPct(entity)).toBe(25);
+    // 10 (E0 passé) + 10 (poids E1) * ((100+50+0+0+0+0)/6) / 100 = 10 + 2.5 = 12.5 → arrondi à 13.
+    expect(milestoneProgressPct(entity)).toBe(13);
   });
 
   it("uses the injected autoValues (resolveMilestoneAutoFlags-shaped) for the current milestone's auto items when provided", () => {
@@ -1017,8 +1035,8 @@ describe("milestoneProgressPct", () => {
       },
     };
     // Mêmes items manuels que le test précédent, mais les deux auto (E1-A1, E1-C-effort) sont
-    // maintenant fournis à 100 : (100+50+0+0+100+100)/6 = 58.33 → 20 + 20*58.33/100 = 31.67 → 32.
-    expect(milestoneProgressPct(entity, { "E1-A1": 100, "E1-C-effort": 100 })).toBe(32);
+    // maintenant fournis à 100 : (100+50+0+0+100+100)/6 = 58.33 → 10 + 10*58.33/100 = 15.83 → 16.
+    expect(milestoneProgressPct(entity, { "E1-A1": 100, "E1-C-effort": 100 })).toBe(16);
   });
 
   it("lets a manually-declared progressPct on an auto item win over autoValues (residual/legacy case)", () => {
@@ -1033,7 +1051,7 @@ describe("milestoneProgressPct", () => {
     };
     // E1-A1 est marqué `auto` mais porte déjà une valeur manuelle (0) : elle prime sur
     // autoValues["E1-A1"] = 100. Les 5 autres items de E1 restent à 0 (non répondus) → moyenne 0.
-    expect(milestoneProgressPct(entity, { "E1-A1": 100 })).toBe(20);
+    expect(milestoneProgressPct(entity, { "E1-A1": 100 })).toBe(10);
   });
 });
 
@@ -1044,26 +1062,29 @@ describe("chantierMilestoneProgressPct", () => {
     expect(chantierMilestoneProgressPct(makeChantier("CH1"), [])).toBe(0);
   });
 
+  // Round 19 : poids variable par jalon (E0=10, E1=10, E2=15, E3=50, E4=15) — les commentaires
+  // "// N%" ci-dessous ont été recalculés en conséquence (E2 avec E0+E1 passés = 10+10 = 20%, E1
+  // avec E0 passé = 10%).
   it("averages the progress of the chantier's own KPI-linked leviers, rounding sensibly", () => {
     const actions: ChantierAction[] = [
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
         indicatorId: "IND-A1",
-        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 40%
+        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 20%
       },
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
         indicatorId: "IND-A2",
-        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 20%
+        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 10%
       },
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A3"),
         indicatorId: "IND-A3",
-        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 20%
+        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 10%
       },
     ];
-    // (40 + 20 + 20) / 3 = 26.67 → arrondi à 27.
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(27);
+    // (20 + 10 + 10) / 3 = 13.33 → arrondi à 13.
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(13);
   });
 
   it("ignores leviers belonging to another chantier", () => {
@@ -1089,17 +1110,17 @@ describe("chantierMilestoneProgressPct", () => {
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
         indicatorId: "IND-A1",
-        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 40%
+        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 20%
       },
       {
         // Sans KPI, mais avec ses propres jalons — compte désormais comme n'importe quel autre
         // levier, `indicatorId` n'étant plus qu'un lien informatif.
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
-        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 20%
+        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 10%
       },
     ];
-    // (40 + 20) / 2 = 30.
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(30);
+    // (20 + 10) / 2 = 15.
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(15);
   });
 
   it("counts a levier without any milestones data yet as 0% rather than excluding it", () => {
@@ -1107,20 +1128,22 @@ describe("chantierMilestoneProgressPct", () => {
       {
         ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
         indicatorId: "IND-A1",
-        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 40%
+        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 20%
       },
       // Sans KPI ni `.milestones` renseigné : encore à E0/0% via le repli de `milestoneProgressPct`,
       // mais bien compté dans la moyenne (dénominateur = 2, pas 1).
       makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
     ];
-    // (40 + 0) / 2 = 20.
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(20);
+    // (20 + 0) / 2 = 10.
+    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(10);
   });
 });
 
 // ─── Poids illustratif par jalon (round 9) ─────────────────────────────────────────────────────
 
 describe("milestoneWeightPct", () => {
+  // Round 19 : MILESTONE_WEIGHT est désormais la somme cumulée de MILESTONE_WEIGHT_DELTA
+  // (E0=10, E1=20, E2=35, E3=85, E4=100) plutôt que des valeurs indépendantes.
   it("returns the weight of the CURRENT milestone (not a cumulative sum)", () => {
     expect(
       milestoneWeightPct({
@@ -1131,7 +1154,7 @@ describe("milestoneWeightPct", () => {
       milestoneWeightPct({
         milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} },
       })
-    ).toBe(20);
+    ).toBe(35);
     expect(
       milestoneWeightPct({
         milestones: {
@@ -1604,11 +1627,14 @@ describe("programRoadmap", () => {
     const rows = programRoadmap(axes, chantiers, [actionWithKpi, actionWithoutKpi]);
 
     // Même calcul que `milestoneProgressPct` (+ `resolveMilestoneAutoFlags` pour les items auto du
-    // jalon courant E2) : 2 jalons validés (E0, E1) = 40, plus le crédit partiel du jalon courant.
-    // Valeur de référence tirée du calcul réel plutôt que reconstituée à la main (la check-list E2
-    // exacte, avec ses items auto/manuels, est définie dans `lib/milestoneChecklist.ts`).
-    expect(rows[0].progressPct).toBe(45);
-    expect(rows[1].progressPct).toBe(45);
+    // jalon courant E2) : 2 jalons validés (E0=10, E1=10, round 19 poids variable) = 20, plus le
+    // crédit partiel du jalon courant (E2, poids 15 : son unique item auto "E2-A1" vaut 100 par
+    // vacuité — aucun item à progression partielle sur E1 — les 3 items manuels valent 0, moyenne
+    // 25 → 15*25/100 = 3.75). Valeur de référence tirée du calcul réel plutôt que reconstituée à la
+    // main (la check-list E2 exacte, avec ses items auto/manuels, est définie dans
+    // `lib/milestoneChecklist.ts`).
+    expect(rows[0].progressPct).toBe(24);
+    expect(rows[1].progressPct).toBe(24);
   });
 
   it("keeps only deliverables with a declared dueDate, and normalizes legacy string deliverables defensively", () => {

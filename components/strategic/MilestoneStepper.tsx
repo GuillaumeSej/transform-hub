@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Lock } from "lucide-react";
+import { displayMilestoneId } from "@/lib/axisLogic";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { MilestoneId } from "@/types";
@@ -61,10 +62,10 @@ export function MilestoneStepper({
               title={isFuture ? lockedTooltip : undefined}
               aria-label={
                 isPassed
-                  ? `${t("strategicChantierDetail.milestones.stepper.passedLabel")} ${milestoneId}`
+                  ? `${t("strategicChantierDetail.milestones.stepper.passedLabel")} ${displayMilestoneId(milestoneId)}`
                   : isCurrent
-                    ? `${t("strategicChantierDetail.milestones.stepper.currentLabel")} ${milestoneId}`
-                    : `${milestoneId} — ${lockedTooltip}`
+                    ? `${t("strategicChantierDetail.milestones.stepper.currentLabel")} ${displayMilestoneId(milestoneId)}`
+                    : `${displayMilestoneId(milestoneId)} — ${lockedTooltip}`
               }
               className={`relative flex flex-1 items-center justify-center gap-1 overflow-hidden rounded-md border px-3 py-2 text-[12px] font-bold transition ${
                 // `isPassed` a priorité sur `isCurrent` : un dernier jalon (E4) validé reste
@@ -80,7 +81,7 @@ export function MilestoneStepper({
             >
               {isPassed && <Check size={10} className="shrink-0" />}
               {isFuture && <Lock size={10} className="shrink-0" />}
-              {milestoneId}
+              {displayMilestoneId(milestoneId)}
               {isCurrent && currentMilestoneProgressPct !== undefined && (
                 // Remplissage progressif du jalon COURANT uniquement (round 14) — barre fine
                 // ancrée en bas de la case, largeur proportionnelle à la moyenne déclarée du

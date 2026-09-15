@@ -292,17 +292,30 @@ export function TimelineHeaderRow({
 }
 
 /**
- * Ligne verticale fine marquant "aujourd'hui" sur la piste temporelle — à placer comme
+ * Ligne verticale marquant "aujourd'hui" sur la piste temporelle — à placer comme
  * `TimelineGridColumns` (premier enfant d'un conteneur `relative` dont l'appelant fixe la
- * hauteur). Gris neutre en tirets, volontairement PAS `bp-coral` (l'accent de marque, déjà utilisé
- * pour les états de survol/sélection ailleurs dans ce composant) ni une couleur de statut/risque
- * existante — un repère de lecture, pas une donnée d'état.
+ * hauteur).
+ *
+ * Round 19 (retour PO) : repassée de gris neutre fin en tirets à `bp-coral` (l'accent de marque,
+ * déjà utilisé ailleurs dans ce fichier/cette app comme repère d'attention — survol/sélection des
+ * barres, cf. `hover:ring-bp-coral/40` de `TimelineBar`/`TimelineMarker` ci-dessous, et l'accent des
+ * titres de section de `StrategicDashboardView.tsx`) et épaissie (`border-l-2`) — répétée à
+ * l'identique sur CHAQUE ligne (ce n'est PAS un bug ni une annotation d'avancement PAR barre : les
+ * barres ayant chacune une plage de dates différente, la même ligne "aujourd'hui" semble
+ * "accrochée" à celles qui chevauchent la date du jour et absente ailleurs — c'est le comportement
+ * correct, mais ambigu au premier coup d'œil). Avec l'avancement désormais affiché DANS la barre
+ * (remplissage à deux tons, voir `TimelineBar` ci-dessus), ce repère doit se lire sans ambiguïté
+ * comme une ligne de référence TRANSVERSALE au graphique, d'une nature visuelle clairement
+ * distincte d'un remplissage de progression — d'où l'accent de marque plutôt qu'une nuance de gris
+ * proche des autres traits de grille. Reste `pointer-events-none` : un repère de lecture, jamais
+ * interactif. Le seul libellé texte "Aujourd'hui" reste celui du bandeau d'en-tête collant
+ * (`TimelineHeaderRow.todayLabel`) — pas de nouveau libellé par ligne ici.
  */
 export function TimelineTodayMarker({ leftPct }: { leftPct: number }) {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-y-0 z-[1] border-l border-dashed border-neutral-500/70"
+      className="pointer-events-none absolute inset-y-0 z-[1] border-l-2 border-bp-coral"
       style={{ left: `${leftPct}%` }}
     />
   );
@@ -332,6 +345,15 @@ export function TimelineGridColumns({ columns }: { columns: TimelineColumn[] }) 
  *  - `"solid"` (item fin type action/phase) : remplissage opaque, texte lisible calculé
  *    automatiquement (`readableTextColor`). Le contenu n'est affiché QUE si la barre est assez
  *    large (`inlineMinWidthPct`), sinon le libellé est rabattu juste à droite de la barre.
+ *    Round 19 : quand `progressPct` est fourni EN PLUS de `variant="solid"` (feuille de route
+ *    programme, `ProgramRoadmap.tsx`), le remplissage devient à DEUX TONS de la MÊME couleur — une
+ *    base claire (`withAlpha(color, 0.22)`) sur toute la largeur de la barre (la durée) PLUS une
+ *    surcouche soutenue (`withAlpha(color, 0.9)`, même opacité que l'ancien remplissage plein) sur
+ *    `progressPct`% à gauche (l'avancement) — plutôt qu'un remplissage plat. Volontairement PAS de
+ *    sémantique rouge/ambre/vert : juste deux teintes de la couleur de l'axe, façon jauge "avancement
+ *    dans une durée". STRICTEMENT additif/gated sur `progressPct !== undefined` : un
+ *    `variant="solid"` SANS `progressPct` (actions de `ChantierGantt.tsx`) garde son rendu plat
+ *    historique à l'identique.
  *
  * Aucune décoration spécifique (icône cadenas, triangle d'alerte…) n'est câblée ici : l'appelant les
  * fournit via `icon`/`trailing`, déjà stylées pour son contexte — cette primitive ne connaît que le
@@ -363,7 +385,9 @@ export function TimelineBar({
   height: number;
   color: string;
   variant?: "outline" | "solid";
-  /** 0-100, uniquement pertinent pour `variant="outline"` — surcouche d'avancement à gauche. */
+  /** 0-100 — surcouche d'avancement à gauche. Pertinent pour `variant="outline"` (surcouche sur fond
+   *  translucide) ET, round 19, pour `variant="solid"` (remplissage à deux tons — voir le
+   *  doc-comment de `TimelineBar` ci-dessus). Omis pour un `"solid"` : remplissage plat inchangé. */
   progressPct?: number;
   /** Anneau ambre (cascade de dépendance en alerte, etc.). */
   ringed?: boolean;
@@ -379,6 +403,10 @@ export function TimelineBar({
   besideLabelClassName?: string;
 }) {
   const inline = width >= inlineMinWidthPct;
+  // Round 19 : rendu à deux tons — voir doc-comment de `TimelineBar` ci-dessus. Gated sur les DEUX
+  // conditions : un `variant="solid"` sans `progressPct` (actions de `ChantierGantt.tsx`) doit
+  // rester inchangé.
+  const solidTwoTone = variant === "solid" && progressPct !== undefined;
   return (
     <Tooltip
       text={tooltipText}
@@ -407,9 +435,24 @@ export function TimelineBar({
         } ${ringed ? "ring-1 ring-rag-amber" : ""}`}
         style={{
           height,
-          backgroundColor: variant === "solid" ? withAlpha(color, 0.9) : withAlpha(color, 0.16),
+          backgroundColor:
+            variant === "solid"
+              ? withAlpha(color, solidTwoTone ? 0.22 : 0.9)
+              : withAlpha(color, 0.16),
           borderColor: variant === "outline" ? withAlpha(color, 0.65) : undefined,
           color: variant === "solid" ? readableTextColor(color) : undefined,
+          // Round 19 : sur la base claire du rendu à deux tons, un texte blanc câblé pour la teinte
+          // PLEINE (la majorité des couleurs d'axe réelles sont sombres/saturées — voir
+          // `COLOR_CHOICES` de `AxisForm.tsx` — donc reçoivent du texte blanc via `readableTextColor`)
+          // perdrait tout contraste : la base claire (0.22) d'une couleur sombre reste un ton PÂLE.
+          // Un halo sombre derrière les glyphes règle ça sans recalculer une couleur par zone (le
+          // libellé chevauche les deux tons selon `progressPct`) — gated au seul cas concerné (deux
+          // tons ET texte blanc), donc sans effet sur les couleurs d'axe claires (texte déjà sombre,
+          // lisible sur les deux tons sans aide) ni sur le remplissage plat historique.
+          textShadow:
+            solidTwoTone && readableTextColor(color) === "#ffffff"
+              ? "0 1px 2px rgba(0, 0, 0, 0.55)"
+              : undefined,
         }}
       >
         {variant === "outline" && progressPct !== undefined && (
@@ -417,6 +460,13 @@ export function TimelineBar({
             aria-hidden
             className="absolute inset-y-0 left-0"
             style={{ width: `${progressPct}%`, backgroundColor: withAlpha(color, 0.42) }}
+          />
+        )}
+        {solidTwoTone && (
+          <div
+            aria-hidden
+            className="absolute inset-y-0 left-0"
+            style={{ width: `${progressPct}%`, backgroundColor: withAlpha(color, 0.9) }}
           />
         )}
         {inline && (

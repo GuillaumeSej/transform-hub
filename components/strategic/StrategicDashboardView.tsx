@@ -239,9 +239,14 @@ function ChipPopover({
   );
 }
 
-/** Nombre de puces numérotées d'indicateur affichées dans l'en-tête riche d'axe de la feuille de
- *  route (round 17, porté depuis `StrategicAxesView.tsx` — voir `renderAxisRoadmapHeader`
- *  ci-dessous) avant repli sur une puce "+N". */
+/** Nombre de puces d'indicateur affichées dans l'en-tête riche d'axe de la feuille de route
+ *  (round 17, porté depuis `StrategicAxesView.tsx` — voir `renderAxisRoadmapHeader` ci-dessous)
+ *  avant repli sur une puce "+N". Round 19 (retour PO) : les puces affichent désormais `#N ·
+ *  <nom>` (plus seulement le numéro `N`, le nom restant caché dans le `title`) — donc plus larges
+ *  qu'avant, mais la ligne qui les contient est déjà `flex-wrap` (voir plus bas), ce nombre reste
+ *  donc pertinent tel quel : aucun axe des données de démonstration n'en approche même le compte
+ *  (3 indicateurs maximum par axe), et au-delà la ligne se contente de passer à plusieurs lignes
+ *  plutôt que de déborder. */
 const MAX_CARD_INDICATOR_CHIPS = 5;
 
 export function StrategicDashboardView() {
@@ -615,11 +620,11 @@ export function StrategicDashboardView() {
                       atRisk ? `${indicator.name} — ${t("indicatorStatus.atRisk")}` : indicator.name
                     }
                     onClick={() => router.push(`/kpi?indicator=${indicator.id}`)}
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition hover:bg-black hover:text-white ${
+                    className={`flex h-5 max-w-[180px] shrink-0 items-center truncate rounded-full px-2 text-[10px] font-bold transition hover:bg-black hover:text-white ${
                       atRisk ? "bg-rag-amber-light text-rag-amber" : "bg-neutral-100 text-secondary"
                     }`}
                   >
-                    {globalIndicatorNumbers.get(indicator.id) ?? "?"}
+                    {`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}
                   </button>
                 );
               })}
