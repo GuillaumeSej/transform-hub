@@ -177,6 +177,15 @@ async function main() {
   const auth = getAuth(app);
   const db = getFirestore(app);
 
+  const companySnap = await db.doc(`companies/${companyId}`).get();
+  if (!companySnap.exists) {
+    console.error(
+      `--company-id "${companyId}" ne correspond à aucun document Firestore 'companies/${companyId}' — vérifier l'id exact (pas le nom affiché) dans l'écran Admin > Entreprises.`
+    );
+    process.exit(1);
+  }
+  console.log(`Entreprise cible : ${companySnap.data().name} (companies/${companyId})`);
+
   const results = [];
   for (const o of owners) {
     const syntheticEmail = `${o.username}.${companyId}@betrack.local`;
