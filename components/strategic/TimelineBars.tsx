@@ -249,9 +249,10 @@ export function TimelineHeaderRow({
   columns: TimelineColumn[];
   yearBands: TimelineYearBand[];
   labelWidthClassName: string;
-  /** Position en % du marqueur "aujourd'hui" (`timelineTodayPct`), `null`/`undefined` si hors
-   *  plage — l'étiquette n'est alors pas affichée (la ligne elle-même est dessinée par
-   *  `TimelineTodayMarker` dans chaque ligne, pas ici). */
+  /** Position en % du repère "aujourd'hui" (`timelineTodayPct`), `null`/`undefined` si hors
+   *  plage — l'étiquette n'est alors pas affichée. Round 21 (retour PO) : la ligne verticale
+   *  "aujourd'hui" par ligne (`TimelineTodayMarker`, ex-export de ce fichier) a été supprimée
+   *  définitivement (jugée pas jolie) — seule cette étiquette du bandeau collant subsiste. */
   todayPct?: number | null;
   todayLabel?: string;
 }) {
@@ -288,36 +289,6 @@ export function TimelineHeaderRow({
         )}
       </div>
     </div>
-  );
-}
-
-/**
- * Ligne verticale marquant "aujourd'hui" sur la piste temporelle — à placer comme
- * `TimelineGridColumns` (premier enfant d'un conteneur `relative` dont l'appelant fixe la
- * hauteur).
- *
- * Round 19 (retour PO) : repassée de gris neutre fin en tirets à `bp-coral` (l'accent de marque,
- * déjà utilisé ailleurs dans ce fichier/cette app comme repère d'attention — survol/sélection des
- * barres, cf. `hover:ring-bp-coral/40` de `TimelineBar`/`TimelineMarker` ci-dessous, et l'accent des
- * titres de section de `StrategicDashboardView.tsx`) et épaissie (`border-l-2`) — répétée à
- * l'identique sur CHAQUE ligne (ce n'est PAS un bug ni une annotation d'avancement PAR barre : les
- * barres ayant chacune une plage de dates différente, la même ligne "aujourd'hui" semble
- * "accrochée" à celles qui chevauchent la date du jour et absente ailleurs — c'est le comportement
- * correct, mais ambigu au premier coup d'œil). Avec l'avancement désormais affiché DANS la barre
- * (remplissage à deux tons, voir `TimelineBar` ci-dessus), ce repère doit se lire sans ambiguïté
- * comme une ligne de référence TRANSVERSALE au graphique, d'une nature visuelle clairement
- * distincte d'un remplissage de progression — d'où l'accent de marque plutôt qu'une nuance de gris
- * proche des autres traits de grille. Reste `pointer-events-none` : un repère de lecture, jamais
- * interactif. Le seul libellé texte "Aujourd'hui" reste celui du bandeau d'en-tête collant
- * (`TimelineHeaderRow.todayLabel`) — pas de nouveau libellé par ligne ici.
- */
-export function TimelineTodayMarker({ leftPct }: { leftPct: number }) {
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-y-0 z-[1] border-l-2 border-bp-coral"
-      style={{ left: `${leftPct}%` }}
-    />
   );
 }
 

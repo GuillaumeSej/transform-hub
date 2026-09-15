@@ -14,7 +14,7 @@ import {
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
-import { hexForDepartment, staffingPeriodBuckets } from "@/lib/axisLogic";
+import { hexForDepartment, periodLabelForDate, staffingPeriodBuckets } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ChantierStaffing } from "@/types";
 
@@ -55,34 +55,27 @@ import type { ChantierStaffing } from "@/types";
  * désormais depuis la légende (clic sur un nom d'équipe) ET directement depuis un segment de barre
  * (clic sur un segment de la même équipe, dans n'importe quelle période) — les deux appellent le
  * même `onSelectFunction`, avec le même comportement toggle qu'avant.
+ *
+ * Round 21 (PO : cross-filtering entre les deux graphiques ETP de la page « Effectifs & budget ») :
+ * `granularity`/`onGranularityChange` deviennent des props contrôlées (state levé sur
+ * `EffectifsPageClient.tsx`) — trimestre/semestre/année est désormais PARTAGÉ avec la section
+ * « Répartition par axe » plus bas sur la page, les deux graphiques doivent découper le temps de
+ * la même façon. `selectedPeriod`/`onSelectPeriod` permettent en plus d'épingler UNE période
+ * (clic sur son libellé "{période} · {pct}%") pour filtrer « Répartition par axe » sur ce seul
+ * instantané au lieu du total programme — le graphique période reste la vue « tendance dans le
+ * temps », le graphique axe devient une vue « instantané », épinglable sur n'importe quelle
+ * période ou laissée sur le total quand rien n'est épinglé.
  */
-/** Réplique volontaire de `periodLabelForDate` (`lib/axisLogic.ts`, non exportée — ce fichier n'a
- *  pas la main sur `axisLogic.ts` pour ce chantier, round 20 : périmètre agent figé). Nécessaire
- *  pour retrouver, à partir d'une ligne `ChantierStaffing` brute, la même étiquette de période que
- *  celle produite par `staffingPeriodBuckets` pour `buckets` — sans quoi le détail par chantier du
- *  tooltip (round 20, point 3) pourrait diverger de l'agrégat affiché. */
-function periodLabelForDateLocal(
-  isoDate: string,
-  granularity: "quarterly" | "semiannual" | "annual"
-): string {
-  const year = isoDate.slice(0, 4);
-  const month = Number(isoDate.slice(5, 7)); // 1-12
-  switch (granularity) {
-    case "quarterly":
-      return `${year}-Q${Math.floor((month - 1) / 3) + 1}`;
-    case "semiannual":
-      return `${year}-S${month <= 6 ? 1 : 2}`;
-    case "annual":
-      return year;
-  }
-}
-
 export function StaffingPeriodBreakdown({
   staffing,
   fteByDept,
   chantierNamesById = {},
   selectedFunction = null,
   onSelectFunction,
+  granularity,
+  onGranularityChange,
+  selectedPeriod = null,
+  onSelectPeriod,
 }: {
   staffing: ChantierStaffing[];
   /** Disponible réel par équipe (base ETP entreprise, live) — voir doc-comment ci-dessus. */
@@ -93,11 +86,19 @@ export function StaffingPeriodBreakdown({
   chantierNamesById?: Record<string, string>;
   selectedFunction?: string | null;
   onSelectFunction?: (fn: string | null) => void;
+  /** Round 21 (cross-filtering « Effectifs & budget ») : la granularité est désormais pilotée par
+   *  `EffectifsPageClient.tsx` (state levé) plutôt qu'un `useState` local à ce composant, pour être
+   *  partagée avec la section « Répartition par axe » plus bas sur la page — les deux graphiques
+   *  doivent découper le temps de la même façon quand une période est épinglée. */
+  granularity: "quarterly" | "semiannual" | "annual";
+  onGranularityChange: (g: "quarterly" | "semiannual" | "annual") => void;
+  /** Période actuellement épinglée (clic sur le libellé "{période} · {pct}% d'utilisation" d'un
+   *  groupe de barres) — pilote le filtre de « Répartition par axe » sur `EffectifsPageClient.tsx`.
+   *  `null` = aucune période épinglée, la section par axe reste sur le total programme. */
+  selectedPeriod?: string | null;
+  onSelectPeriod?: (period: string | null) => void;
 }) {
   const { t } = useTranslation();
-  const [granularity, setGranularity] = useState<"quarterly" | "semiannual" | "annual">(
-    "quarterly"
-  );
   /** Équipe actuellement survolée (segment de barre OU entrée de légende) — round 20, point 3 :
    *  distinct de `selectedFunction` (le clic, qui pilote le filtre de la section "Répartition par
    *  axe" plus bas sur la page). Le tooltip privilégie le survol quand il existe, et retombe sur
@@ -130,13 +131,13 @@ export function StaffingPeriodBreakdown({
   /** Détail par chantier, par (période, équipe) — round 20, point 3 : reconstruit depuis les
    *  lignes `ChantierStaffing` brutes (jamais depuis `buckets`, qui n'agrège que par équipe, sans
    *  granularité chantier) en réutilisant EXACTEMENT le même découpage de période que
-   *  `staffingPeriodBuckets` (voir `periodLabelForDateLocal` ci-dessus). Structure :
+   *  `staffingPeriodBuckets` (voir `periodLabelForDate`, importée de `lib/axisLogic.ts`). Structure :
    *  période → équipe → chantierId → ETP. */
   const chantierBreakdownByPeriodFn = useMemo(() => {
     const map = new Map<string, Map<string, Map<string, number>>>();
     for (const entry of staffing) {
       if (!entry.startDate) continue;
-      const period = periodLabelForDateLocal(entry.startDate, granularity);
+      const period = periodLabelForDate(entry.startDate, granularity);
       let byFn = map.get(period);
       if (!byFn) {
         byFn = new Map();
@@ -195,7 +196,7 @@ export function StaffingPeriodBreakdown({
                   key={g}
                   type="button"
                   aria-pressed={granularity === g}
-                  onClick={() => setGranularity(g)}
+                  onClick={() => onGranularityChange(g)}
                   className={`px-2.5 py-1 text-[11px] font-semibold transition ${
                     granularity === g
                       ? "bg-black text-white"
@@ -218,21 +219,34 @@ export function StaffingPeriodBreakdown({
             {/* % d'utilisation visible sans survol (round 20, point 2) — une ligne de libellés au-
                 dessus du graphique, une entrée par période, dans le même ordre que l'abscisse.
                 Réutilise `pctUtilizedFor`, exactement le même calcul que celui du tooltip
-                ci-dessous, pour que les deux ne puissent jamais diverger. */}
+                ci-dessous, pour que les deux ne puissent jamais diverger.
+                Round 21 (cross-filtering) : chaque libellé devient cliquable pour épingler sa
+                période — même convention visuelle active/inactive que le toggle de granularité
+                ci-dessus (pill `bg-black text-white` quand épinglée, sinon fond neutre avec
+                affordance hover), pour que les deux mécanismes de sélection se lisent comme un
+                seul système. */}
             <div className="mb-2 flex flex-wrap gap-2">
               {buckets.map((bucket) => {
                 const pct = pctUtilizedFor(bucket.totalFte);
+                const isSelected = selectedPeriod === bucket.period;
                 return (
-                  <span
+                  <button
                     key={bucket.period}
-                    className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold text-secondary"
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => onSelectPeriod?.(isSelected ? null : bucket.period)}
+                    className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-semibold transition ${
+                      isSelected
+                        ? "bg-black text-white"
+                        : "bg-neutral-100 text-secondary hover:text-primary"
+                    }`}
                   >
                     {bucket.period}
                     {" · "}
                     {pct !== null
                       ? t("staffingPeriod.utilization").replace("{pct}", String(pct))
                       : "—"}
-                  </span>
+                  </button>
                 );
               })}
             </div>

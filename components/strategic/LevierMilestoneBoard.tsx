@@ -136,31 +136,33 @@ export function LevierCard({
       type="button"
       onClick={() => onLevierClick(chantier.id, action.id)}
       title={`${action.name} · ${chantier.name} · ${displayedStage} · ${progressPct}%`}
-      className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 bg-white p-2 pb-2.5 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass} ${
-        late ? "ring-1 ring-inset ring-rag-red" : ""
+      className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 p-2 pb-2.5 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass} ${
+        late ? "bg-rag-red-light/40 ring-2 ring-inset ring-rag-red" : "bg-white"
       }`}
     >
-      <span className="flex w-full items-center gap-1.5">
-        <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${chantierColor}`} />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-primary">
-          {action.name}
+      <span className="flex w-full flex-col gap-1">
+        <span className="flex w-full items-center gap-1.5">
+          <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${chantierColor}`} />
+          <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-primary">
+            {action.name}
+          </span>
+          {/* Pourcentage d'avancement PROPRE à cette carte (round 19, point 3) — additif à la
+              pastille de moyenne PAR COLONNE (`avgPct` plus bas), qui reste inchangée. */}
+          <span
+            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${progressPillClass}`}
+          >
+            {progressPct}%
+          </span>
         </span>
         {late && (
           <span
-            className="flex shrink-0 items-center gap-0.5 rounded-full bg-rag-red px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
+            className="flex w-fit shrink-0 items-center gap-0.5 rounded-full bg-rag-red px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
             title={t("strategicDashboard.levierBoard.late", "En retard")}
           >
             <TriangleAlert size={10} aria-hidden />
             {t("strategicDashboard.levierBoard.late", "En retard")}
           </span>
         )}
-        {/* Pourcentage d'avancement PROPRE à cette carte (round 19, point 3) — additif à la
-            pastille de moyenne PAR COLONNE (`avgPct` plus bas), qui reste inchangée. */}
-        <span
-          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${progressPillClass}`}
-        >
-          {progressPct}%
-        </span>
       </span>
       <span className="w-full truncate pl-3.5 text-[10.5px] text-tertiary" title={chantier.name}>
         {chantier.name}
