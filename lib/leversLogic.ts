@@ -251,11 +251,21 @@ export function createLever(
   input: Omit<Lever, "id" | "createdAt" | "lastUpdate">,
   user: string
 ): LeverMutationResult {
+  // `levers` (la liste passée par l'appelant) n'est déjà scopée qu'à l'entreprise courante, MAIS
+  // le document Firestore "levers/{id}" n'a lui aucune notion de tenant dans son chemin : deux
+  // entreprises dont chacune démarre avec 0 levier génèrent alors indépendamment le même "L001",
+  // "L002"... et la seconde à écrire se voit refuser l'écriture par firestore.rules (l'id existe
+  // déjà pour l'AUTRE entreprise, dont le `companyId` ne correspond pas). Préfixer par companyId
+  // (quand il existe — legacy : un levier historique sans companyId garde le format nu "L001")
+  // rend l'id globalement unique sans changer le format "lisible" `L\d+` que l'UI/les exports/les
+  // tests s'attendent à trouver à la FIN de l'id (voir la regex ci-dessous, ancrée en fin de
+  // chaîne plutôt qu'en début, pour rester compatible avec un id déjà préfixé).
   const maxNum = levers.reduce((max, l) => {
-    const m = /^L(\d+)$/.exec(l.id);
+    const m = /L(\d+)$/.exec(l.id);
     return m ? Math.max(max, Number(m[1])) : max;
   }, 0);
-  const id = `L${String(maxNum + 1).padStart(3, "0")}`;
+  const seq = `L${String(maxNum + 1).padStart(3, "0")}`;
+  const id = input.companyId ? `${input.companyId}-${seq}` : seq;
   const now = nowDate();
   const lever: Lever = applyPlanLock({ ...input, id, createdAt: now, lastUpdate: now });
   return {
