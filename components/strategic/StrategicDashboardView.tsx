@@ -733,6 +733,7 @@ export function StrategicDashboardView() {
     today: t("strategicAxes.ganttToday"),
     leviersSuffix: t("strategicAxes.roadmap.leviersSuffix"),
     late: t("strategicAxes.roadmap.late"),
+    lateCount: t("strategicAxes.roadmap.lateCount"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────

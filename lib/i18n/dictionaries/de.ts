@@ -1220,6 +1220,7 @@ const de: Record<string, string> = {
   "strategicAxes.roadmap.progress": "Fortschritt",
   "strategicAxes.roadmap.leviersSuffix": "Aktivitäten",
   "strategicAxes.roadmap.late": "Verzögert",
+  "strategicAxes.roadmap.lateCount": "{n} von {total} Aktivität(en) verzögert",
   "strategicAxes.actionsCompleted": "Aktivitäten abgeschlossen",
   "strategicAxes.moreActionsSuffix": "weitere",
   "strategicAxes.cardNoActions": "Keine Aktivität",
@@ -1582,6 +1583,8 @@ const de: Record<string, string> = {
   "effectifs.allFunctions": "Alle Teams",
   "effectifs.clickHint": "Klicken Sie auf ein Team, um seine Verteilung nach Achse zu sehen.",
   "effectifs.filteredOn": "Gefiltert nach: {fn}",
+  "effectifs.filteredOnPeriod": "Zeitraum: {period}",
+  "effectifs.byChantierLabel": "Vorhaben",
   "effectifs.percentOfFunction": "% des Teams",
   "effectifs.axisUnknown": "Unbekannte Achse",
   "effectifs.chantierUnknown": "Unbekanntes Vorhaben",
@@ -1685,8 +1688,7 @@ const de: Record<string, string> = {
   // Beschriftungen aus dem Widget-Register (lib/strategicDashboardWidgets.ts, Feld `label`).
   "strategicDashboard.widget.indicatorStatus": "Indikatoren · im Plan",
   "strategicDashboard.widget.businessKpis": "Business-KPIs — Marktbeobachtung",
-  "strategicDashboard.widget.chantierDependencyAlerts":
-    "Abhängigkeits- und Voraussetzungswarnungen",
+  "strategicDashboard.widget.chantierDependencyAlerts": "Warnungen",
   // Runde 8: Platzhalter einer leeren E0-E4-Jalonspalte (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
   // Runde 12: Durchschnitt der deklarierten `progressPct` der Leviers dieser Spalte (`{pct}` wird

@@ -1221,6 +1221,7 @@ const es: Record<string, string> = {
   "strategicAxes.roadmap.progress": "Avance",
   "strategicAxes.roadmap.leviersSuffix": "actividades",
   "strategicAxes.roadmap.late": "Retrasado",
+  "strategicAxes.roadmap.lateCount": "{n} actividad(es) retrasada(s) de {total}",
   "strategicAxes.actionsCompleted": "actividades finalizadas",
   "strategicAxes.moreActionsSuffix": "más",
   "strategicAxes.cardNoActions": "Sin actividades",
@@ -1579,6 +1580,8 @@ const es: Record<string, string> = {
   "effectifs.allFunctions": "Todos los equipos",
   "effectifs.clickHint": "Haga clic en un equipo para ver su reparto por eje.",
   "effectifs.filteredOn": "Filtrado por: {fn}",
+  "effectifs.filteredOnPeriod": "Periodo: {period}",
+  "effectifs.byChantierLabel": "Proyectos",
   "effectifs.percentOfFunction": "% del equipo",
   "effectifs.axisUnknown": "Eje desconocido",
   "effectifs.chantierUnknown": "Proyecto desconocido",
@@ -1681,7 +1684,7 @@ const es: Record<string, string> = {
   // Etiquetas del registro de widgets (lib/strategicDashboardWidgets.ts, campo `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicadores · trayectoria",
   "strategicDashboard.widget.businessKpis": "KPI de negocio — Seguimiento del mercado",
-  "strategicDashboard.widget.chantierDependencyAlerts": "Alertas de dependencias y prerrequisitos",
+  "strategicDashboard.widget.chantierDependencyAlerts": "Alertas",
   // Ronda 8: marcador de una columna de jalón E0-E4 vacía (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
   // Ronda 12: media de los `progressPct` declarados de los leviers de la columna (`{pct}`

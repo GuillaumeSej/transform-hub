@@ -1284,6 +1284,9 @@ const fr: Record<string, string> = {
   // Round 20, point 3 : icône d'alerte discrète sur un levier/chantier en retard (`isLevierLate`,
   // lib/axisLogic.ts) — titre/tooltip de l'icône, `ProgramRoadmap.tsx`.
   "strategicAxes.roadmap.late": "En retard",
+  // Round 21 (retour PO) : tooltip de la pastille de comptage "N/total en retard" au niveau
+  // chantier — remplace l'icône seule, ambiguë sur un chantier à plusieurs leviers.
+  "strategicAxes.roadmap.lateCount": "{n} levier(s) en retard sur {total}",
   "strategicAxes.actionsCompleted": "leviers terminés",
   "strategicAxes.moreActionsSuffix": "autres",
   "strategicAxes.cardNoActions": "Aucun levier",
@@ -1662,6 +1665,8 @@ const fr: Record<string, string> = {
   "effectifs.allFunctions": "Toutes les équipes",
   "effectifs.clickHint": "Cliquez une équipe pour voir sa répartition par axe.",
   "effectifs.filteredOn": "Filtré sur : {fn}",
+  "effectifs.filteredOnPeriod": "Période : {period}",
+  "effectifs.byChantierLabel": "Chantiers",
   "effectifs.percentOfFunction": "% de l'équipe",
   "effectifs.axisUnknown": "Axe inconnu",
   "effectifs.chantierUnknown": "Chantier inconnu",
@@ -1767,7 +1772,7 @@ const fr: Record<string, string> = {
   // Libellés du registre de widgets (lib/strategicDashboardWidgets.ts, champ `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
   "strategicDashboard.widget.businessKpis": "KPI business — Suivi du marché",
-  "strategicDashboard.widget.chantierDependencyAlerts": "Alertes de dépendances et prérequis",
+  "strategicDashboard.widget.chantierDependencyAlerts": "Alertes",
   // Round 8 : placeholder d'une colonne de jalon E0-E4 sans levier (`LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.emptyColumn": "—",
   // Round 12 : moyenne des `progressPct` déclarés des leviers de la colonne (`{pct}` substitué

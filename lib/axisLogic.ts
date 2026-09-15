@@ -1013,9 +1013,11 @@ export type StaffingPeriodBucket = {
 };
 
 /** Calcule le libellé de période (voir `StaffingPeriodBucket.period`) d'une date ISO pour une
- *  granularité donnée. Fonction interne, pas exportée : `staffingPeriodBuckets` est le seul point
- *  d'entrée public de ce découpage. */
-function periodLabelForDate(
+ *  granularité donnée. Exportée (round 21, cross-filtering « Effectifs & budget ») : réutilisée
+ *  directement par `StaffingPeriodBreakdown.tsx` (détail par chantier du tooltip) et par
+ *  `EffectifsPageClient.tsx` (filtre « Répartition par axe » sur la période cliquée dans le
+ *  graphique période) — les deux devaient auparavant dupliquer cette logique localement. */
+export function periodLabelForDate(
   isoDate: string,
   granularity: "quarterly" | "semiannual" | "annual"
 ): string {

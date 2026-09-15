@@ -2,12 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
-import {
-  isChantierLate,
-  isLevierLate,
-  programRoadmap,
-  type ProgramRoadmapRow,
-} from "@/lib/axisLogic";
+import { isLevierLate, programRoadmap, type ProgramRoadmapRow } from "@/lib/axisLogic";
 import {
   formatTimelineDay,
   timelineColumns,
@@ -20,7 +15,6 @@ import {
   TimelineHeaderRow,
   TimelineMarker,
   TimelineScaleToggle,
-  TimelineTodayMarker,
   hexToRgb,
   withAlpha,
   type TimelineScale,
@@ -76,6 +70,12 @@ export type ProgramRoadmapLabels = {
   /** Round 20, point 3 : titre/tooltip de l'icône d'alerte discrète d'un levier/chantier en
    *  retard (`isLevierLate`/`isChantierLate`, lib/axisLogic.ts). */
   late?: string;
+  /** Round 21 (retour PO) : tooltip de la pastille de comptage "N/total en retard" au niveau
+   *  chantier — gabarit avec jetons `{n}` (leviers en retard) et `{total}` (leviers du chantier),
+   *  cf. usage ci-dessous. Remplace l'icône seule (`late`), jugée ambiguë sur un chantier à
+   *  plusieurs leviers : impossible de distinguer "1 en retard sur 2" de "tout le chantier est en
+   *  retard" sans ce comptage explicite. */
+  lateCount?: string;
 };
 
 const ROW_LABEL_WIDTH = "w-72";
@@ -179,6 +179,7 @@ export function ProgramRoadmap({
     today: labels?.today ?? "Aujourd'hui",
     leviersSuffix: labels?.leviersSuffix ?? "leviers",
     late: labels?.late ?? "En retard",
+    lateCount: labels?.lateCount,
   };
 
   // Semestre par défaut : le programme complet s'étend typiquement sur plusieurs années, la maille
@@ -276,10 +277,19 @@ export function ProgramRoadmap({
                   )}
 
                   {axisGroup.chantierGroups.map((chantierGroup) => {
-                    // Round 20, point 3 : icône d'alerte discrète près du nom du chantier dès
-                    // qu'au moins un de ses leviers est en retard (`isChantierLate`,
-                    // lib/axisLogic.ts) — pas de contour rouge complet, demande PO explicite.
-                    const chantierLate = isChantierLate(chantierGroup.chantier, chantierGroup.rows);
+                    // Round 20, point 3 : indicateur discret près du nom du chantier dès qu'au
+                    // moins un de ses leviers est en retard (`isChantierLate`, lib/axisLogic.ts)
+                    // — pas de contour rouge complet, demande PO explicite.
+                    //
+                    // Round 21 (retour PO) : une icône seule ne dit pas COMBIEN de leviers sont en
+                    // retard — sur un chantier à 2 leviers, ça se lisait comme "tout le chantier
+                    // est en retard" alors qu'un seul pouvait l'être. On calcule donc le compte
+                    // réel (leviers en retard / total du chantier) et on l'affiche dans la pastille
+                    // ci-dessous plutôt que la seule icône.
+                    const lateLevierCount = chantierGroup.rows.filter((r) =>
+                      isLevierLate(r.action, r.progressPct)
+                    ).length;
+                    const totalLevierCount = chantierGroup.rows.length;
                     return (
                       <div key={chantierGroup.chantier.id}>
                         {/* En-tête de chantier — bouton (round 16) cliquable si `onChantierClick` est
@@ -303,9 +313,19 @@ export function ProgramRoadmap({
                               · {chantierGroup.rows.length} {l.leviersSuffix}
                             </span>
                           </span>
-                          {chantierLate && (
-                            <span className="shrink-0 text-rag-red" title={l.late}>
-                              <TriangleAlert size={12} aria-hidden />
+                          {lateLevierCount > 0 && (
+                            <span
+                              className="flex shrink-0 items-center gap-1 rounded-full bg-rag-red-light px-1.5 py-0.5 text-[10px] font-bold text-rag-red"
+                              title={
+                                l.lateCount
+                                  ? l.lateCount
+                                      .replace("{n}", String(lateLevierCount))
+                                      .replace("{total}", String(totalLevierCount))
+                                  : undefined
+                              }
+                            >
+                              <TriangleAlert size={11} aria-hidden />
+                              {lateLevierCount}/{totalLevierCount}
                             </span>
                           )}
                         </button>
@@ -353,7 +373,6 @@ export function ProgramRoadmap({
 
                               <div className="relative flex-1" style={{ height: trackHeight }}>
                                 <TimelineGridColumns columns={columns} />
-                                {todayPct != null && <TimelineTodayMarker leftPct={todayPct} />}
 
                                 <TimelineBar
                                   left={startPct}

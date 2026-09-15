@@ -14,7 +14,6 @@ import {
   TimelineGridColumns,
   TimelineHeaderRow,
   TimelineScaleToggle,
-  TimelineTodayMarker,
   hexToRgb,
   withAlpha,
   type TimelineScale,
@@ -305,10 +304,6 @@ export function ChantierGantt({
                     <div className="relative flex-1" style={{ height: trackHeight }}>
                       {/* Grille de colonnes */}
                       <TimelineGridColumns columns={columns} />
-
-                      {/* Marqueur "aujourd'hui" — même échelle que les barres (`pctOf`), masqué
-                          si le jour courant tombe hors de la plage affichée. */}
-                      {todayPct != null && <TimelineTodayMarker leftPct={todayPct} />}
 
                       {/* Bloc macro du chantier (maille exécutive) — REMPLI, avec la part
                           d'avancement en teinte soutenue. */}
