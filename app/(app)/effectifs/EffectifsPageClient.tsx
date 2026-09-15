@@ -4,6 +4,16 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, Users } from "lucide-react";
+import {
+  Bar as RechartsBar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import {
   BudgetDonutChart,
@@ -14,7 +24,7 @@ import { Modal } from "@/components/shared/Modal";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
-import { colorForDepartment } from "@/lib/axisLogic";
+import { colorForDepartment, hexForDepartment } from "@/lib/axisLogic";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
@@ -282,7 +292,55 @@ export function EffectifsPageClient() {
   }, [byAxis, selectedFunction]);
 
   const selectedTotal = selectedByAxis.reduce((sum, row) => sum + row.fte, 0);
-  const selectedMax = selectedByAxis[0]?.fte ?? 0;
+
+  /** Round 19 (PO : « la même vraie courbe/graphique que la répartition par période, ici pour
+   *  l'axe ») — remplace la grille de cartes "une par axe, une liste+barre CSS par équipe à
+   *  l'intérieur" par UN SEUL graphique en barres empilées, abscisse = axe, une série par équipe
+   *  (même principe que `StaffingPeriodBreakdown.tsx`, où l'abscisse est la période). Une grille de
+   *  mini-graphiques par axe n'aurait pas de sens ici : l'axe EST la dimension d'abscisse demandée
+   *  par le PO, elle ne peut donc pas aussi être la clé qui découpe les cartes.
+   *
+   *  `byAxisChartTeams` = union de toutes les équipes staffées sur N'IMPORTE quel axe (tri
+   *  alphabétique, même convention que `StaffingPeriodBreakdown`), pour que chaque série soit
+   *  définie de façon cohérente sur CHAQUE axe (0 par défaut plutôt qu'une valeur manquante, sans
+   *  quoi l'empilement des barres suivantes casserait). */
+  const byAxisChartTeams = useMemo(() => {
+    const names = new Set<string>();
+    for (const group of byAxis) {
+      for (const { fn } of totalsByFunction(group.entries)) names.add(fn);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [byAxis]);
+
+  const byAxisChartData = useMemo(
+    () =>
+      byAxis.map((group) => {
+        const totals = totalsByFunction(group.entries);
+        const row: Record<string, string | number> = {
+          axis: group.axis?.name ?? t("effectifs.axisUnknown"),
+        };
+        for (const fn of byAxisChartTeams) row[fn] = totals.find((r) => r.fn === fn)?.fte ?? 0;
+        return row;
+      }),
+    [byAxis, byAxisChartTeams, t]
+  );
+
+  /** Pendant de `byAxisChartData` pour le cas « une équipe sélectionnée » — une seule série
+   *  (`fte`), une barre par axe, dans le MÊME ordre décroissant que l'ancienne liste
+   *  (`selectedByAxis` est déjà triée par volume décroissant). `chantiersLabel` porte la légende
+   *  "quels chantiers de cet axe" qui s'affichait sous la barre CSS, désormais dans l'info-bulle du
+   *  graphique plutôt que perdue avec la liste. */
+  const selectedByAxisChartData = useMemo(
+    () =>
+      selectedByAxis.map((row) => ({
+        axis: row.axis?.name ?? t("effectifs.axisUnknown"),
+        fte: row.fte,
+        chantiersLabel: row.chantiers
+          .map((id) => chantierNames.get(id) ?? t("effectifs.chantierUnknown"))
+          .join(" · "),
+      })),
+    [selectedByAxis, chantierNames, t]
+  );
 
   // Bouton d'import Excel + lien base ETP : rendus directement dans l'en-tête (réutilisé par
   // toutes les branches de retour ci-dessous) plutôt que dans une variable de toolbar séparée.
@@ -523,7 +581,8 @@ export function EffectifsPageClient() {
         onSelectFunction={setSelectedFunction}
       />
 
-      {/* ── 2. Répartition par axe ─────────────────────────────────────────────────────────── */}
+      {/* ── 2. Répartition par axe (round 19 : graphique en barres empilées, abscisse = axe —
+          voir les doc-comments de `byAxisChartData`/`selectedByAxisChartData` ci-dessus) ─────── */}
       {selectedFunction ? (
         <Card className="mb-0">
           <CardHeader
@@ -535,89 +594,142 @@ export function EffectifsPageClient() {
             }
           />
           <CardBody>
-            {selectedByAxis.length === 0 ? (
+            {selectedByAxisChartData.length === 0 ? (
               <p className="text-sm text-text-secondary">{t("effectifs.noStaffingForFunction")}</p>
             ) : (
-              <ul className="space-y-3">
-                {selectedByAxis.map((row) => {
-                  const sharePct = selectedTotal > 0 ? (row.fte / selectedTotal) * 100 : 0;
-                  return (
-                    <li key={row.axis?.id ?? "__orphans__"}>
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="text-[13px] font-semibold text-primary">
-                          {row.axis?.name ?? t("effectifs.axisUnknown")}
-                        </span>
-                        <span className="text-[12px] text-secondary">
-                          <strong className="text-primary">{formatFte(row.fte)}</strong>{" "}
-                          {t("staffing.fteUnit")} · {Math.round(sharePct)}{" "}
-                          {t("effectifs.percentOfFunction")}
-                        </span>
-                      </div>
-                      <div className="mt-1.5">
-                        <Bar
-                          pct={selectedMax > 0 ? (row.fte / selectedMax) * 100 : 0}
-                          fn={selectedFunction}
-                        />
-                      </div>
-                      <p className="mt-1 text-[11px] text-tertiary">
-                        {row.chantiers
-                          .map((id) => chantierNames.get(id) ?? t("effectifs.chantierUnknown"))
-                          .join(" · ")}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart
+                  data={selectedByAxisChartData}
+                  margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+                  <XAxis dataKey="axis" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                    tickFormatter={(v) => String(Math.round(Number(v)))}
+                  />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload || payload.length === 0) return null;
+                      const chantiersLabel = (
+                        payload[0]?.payload as { chantiersLabel?: string } | undefined
+                      )?.chantiersLabel;
+                      return (
+                        <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
+                          <p className="mb-1 font-bold text-primary">{label}</p>
+                          <p className="text-secondary">
+                            <strong className="text-primary">
+                              {formatFte(Number(payload[0]?.value))}
+                            </strong>{" "}
+                            {t("staffing.fteUnit")}
+                          </p>
+                          {chantiersLabel && (
+                            <p className="mt-1 text-[11px] text-tertiary">{chantiersLabel}</p>
+                          )}
+                        </div>
+                      );
+                    }}
+                  />
+                  <RechartsBar
+                    dataKey="fte"
+                    name={selectedFunction}
+                    fill={hexForDepartment(selectedFunction)}
+                    radius={[3, 3, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </CardBody>
         </Card>
       ) : (
-        <section className="space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-text-primary">
-            {t("effectifs.byAxis")}
-          </h2>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {byAxis.map((group) => {
-              const axisTotals = totalsByFunction(group.entries);
-              const axisTotal = axisTotals.reduce((sum, row) => sum + row.fte, 0);
-              const axisMax = axisTotals[0]?.fte ?? 0;
-              return (
-                <Card key={group.axis?.id ?? "__orphans__"} className="mb-0">
-                  <CardHeader
-                    title={group.axis?.name ?? t("effectifs.axisUnknown")}
-                    actions={
-                      <span className="text-[12px] text-secondary">
-                        <strong className="text-primary">{formatFte(axisTotal)}</strong>{" "}
-                        {t("staffing.fteUnit")}
-                      </span>
-                    }
+        <Card className="mb-0">
+          <CardHeader title={t("effectifs.byAxis")} />
+          <CardBody>
+            {byAxisChartTeams.length === 0 ? (
+              <p className="text-[12px] text-tertiary">{t("effectifs.noStaffingOnAxis")}</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart
+                  data={byAxisChartData}
+                  margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+                  <XAxis dataKey="axis" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                    tickFormatter={(v) => String(Math.round(Number(v)))}
                   />
-                  <CardBody>
-                    {axisTotals.length === 0 ? (
-                      <p className="text-[12px] text-tertiary">{t("effectifs.noStaffingOnAxis")}</p>
-                    ) : (
-                      <ul className="space-y-2">
-                        {axisTotals.map(({ fn, fte }) => (
-                          <li key={fn}>
-                            <div className="flex flex-wrap items-baseline justify-between gap-2">
-                              <span className="text-[12px] text-primary">{fn}</span>
-                              <span className="text-[12px] text-secondary">
-                                {formatFte(fte)} {t("staffing.fteUnit")}
-                              </span>
-                            </div>
-                            <div className="mt-1">
-                              <Bar pct={axisMax > 0 ? (fte / axisMax) * 100 : 0} fn={fn} />
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </CardBody>
-                </Card>
-              );
-            })}
-          </div>
-        </section>
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload || payload.length === 0) return null;
+                      const total = payload.reduce(
+                        (sum, p) => sum + (typeof p.value === "number" ? p.value : 0),
+                        0
+                      );
+                      return (
+                        <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
+                          <p className="mb-1 font-bold text-primary">{label}</p>
+                          {payload
+                            .filter((p) => (typeof p.value === "number" ? p.value : 0) > 0)
+                            .map((p) => (
+                              <p
+                                key={String(p.dataKey)}
+                                className="flex items-center justify-between gap-3 text-secondary"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <span
+                                    className="inline-block h-2 w-2 rounded-full"
+                                    style={{ background: p.color }}
+                                  />
+                                  {p.name}
+                                </span>
+                                <span className="ml-2 font-semibold text-primary">
+                                  {formatFte(Number(p.value))} {t("staffing.fteUnit")}
+                                </span>
+                              </p>
+                            ))}
+                          <p className="mt-1 border-t border-border pt-1 font-bold text-primary">
+                            {formatFte(total)} {t("staffing.fteUnit")}
+                          </p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    wrapperStyle={{
+                      fontSize: 11,
+                      paddingBottom: 8,
+                      cursor: "pointer",
+                    }}
+                    onClick={(entry) => {
+                      const fn = typeof entry?.value === "string" ? entry.value : undefined;
+                      if (fn) setSelectedFunction(fn);
+                    }}
+                  />
+                  {byAxisChartTeams.map((fn) => (
+                    <RechartsBar
+                      key={fn}
+                      dataKey={fn}
+                      name={fn}
+                      stackId="axis"
+                      fill={hexForDepartment(fn)}
+                      cursor="pointer"
+                      onClick={() => setSelectedFunction(fn)}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardBody>
+        </Card>
       )}
     </div>
   );

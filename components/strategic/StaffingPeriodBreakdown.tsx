@@ -1,10 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
-import { colorForDepartment, staffingPeriodBuckets } from "@/lib/axisLogic";
+import { hexForDepartment, staffingPeriodBuckets } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ChantierStaffing } from "@/types";
 
@@ -28,6 +38,23 @@ import type { ChantierStaffing } from "@/types";
  * `EffectifsPageClient.tsx`::useCompanyDepartments) — même dénominateur que la comparaison
  * besoin/disponible affichée plus bas sur la page, jamais deux sources de vérité différentes pour
  * le même pourcentage.
+ *
+ * Round 19 (PO : « une vraie courbe/graphique, pas une liste de barres ») : la vue passe d'un
+ * `<ul>` de cartes-période (une barre CSS plate par période + une liste imbriquée sans barre par
+ * équipe) à un vrai graphique Recharts avec le TEMPS en abscisse — barres empilées, une série par
+ * équipe (`Bar dataKey={team} stackId="etp"`). Chaque `StaffingPeriodBucket.byFunction` (objet
+ * imbriqué) est reformaté en ligne PLATE `{ period, [team]: fte, ... }` (`chartData`), Recharts ne
+ * consommant que des lignes plates ; `teamNames` (union de toutes les équipes tous buckets
+ * confondus) garantit que chaque série est définie pour CHAQUE période, avec `0` par défaut plutôt
+ * qu'une valeur manquante (sans quoi une équipe absente d'une période casserait l'empilement des
+ * barres suivantes). Couleurs alignées EXACTEMENT sur les barres CSS historiques de cette page
+ * (`hexForDepartment`, équivalent hex de `colorForDepartment` — même hash, même palette, même
+ * index).
+ *
+ * L'interaction « cliquer une équipe pour filtrer » ne disparaît pas avec la liste : elle se pilote
+ * désormais depuis la légende (clic sur un nom d'équipe) ET directement depuis un segment de barre
+ * (clic sur un segment de la même équipe, dans n'importe quelle période) — les deux appellent le
+ * même `onSelectFunction`, avec le même comportement toggle qu'avant.
  */
 export function StaffingPeriodBreakdown({
   staffing,
@@ -50,18 +77,38 @@ export function StaffingPeriodBreakdown({
     () => staffingPeriodBuckets(staffing, granularity),
     [staffing, granularity]
   );
-  const maxTotal = useMemo(
-    () => buckets.reduce((max, b) => Math.max(max, b.totalFte), 0),
-    [buckets]
-  );
   const undatedCount = useMemo(() => staffing.filter((e) => !e.startDate).length, [staffing]);
 
   /** Disponible total tous équipes confondues (base ETP entreprise) — dénominateur du %
-   *  d'utilisation global affiché par période. `0` quand la base ETP est vide : `pctUtilized`
-   *  reste `null` plutôt que d'afficher un pourcentage trompeur ou une division par zéro. */
+   *  d'utilisation global affiché par période, désormais dans l'info-bulle du graphique plutôt que
+   *  sur un en-tête de carte-période disparu avec la liste. `0` quand la base ETP est vide :
+   *  `pctUtilized` reste `null` plutôt que d'afficher un pourcentage trompeur ou une division par
+   *  zéro. */
   const totalAvailable = useMemo(
     () => Object.values(fteByDept).reduce((sum, v) => sum + v, 0),
     [fteByDept]
+  );
+
+  /** Union de toutes les équipes tous buckets confondus — voir doc-comment du composant. Triée
+   *  alphabétiquement pour un ordre de légende/empilement stable indépendant de l'ordre d'arrivée
+   *  des lignes de staffing. */
+  const teamNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const bucket of buckets) {
+      for (const fn of Object.keys(bucket.byFunction)) names.add(fn);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [buckets]);
+
+  /** Reformatage plat `{ period, [team]: fte }` — voir doc-comment du composant. */
+  const chartData = useMemo(
+    () =>
+      buckets.map((bucket) => {
+        const row: Record<string, string | number> = { period: bucket.period };
+        for (const fn of teamNames) row[fn] = bucket.byFunction[fn] ?? 0;
+        return row;
+      }),
+    [buckets, teamNames]
   );
 
   return (
@@ -104,78 +151,93 @@ export function StaffingPeriodBreakdown({
         {buckets.length === 0 ? (
           <p className="text-sm text-text-secondary">{t("staffingPeriod.empty")}</p>
         ) : (
-          <ul className="space-y-4">
-            {buckets.map((bucket) => {
-              const pctUtilized =
-                totalAvailable > 0 ? Math.round((bucket.totalFte / totalAvailable) * 100) : null;
-              const functionsInBucket = Object.keys(bucket.byFunction)
-                .filter((fn) => (bucket.byFunction[fn] ?? 0) > 0)
-                .sort((a, b) => a.localeCompare(b));
-              return (
-                <li key={bucket.period} className="rounded-md border border-border p-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-[13px] font-bold text-primary">{bucket.period}</span>
-                    <span className="flex flex-wrap items-baseline gap-2">
-                      <span className="text-[12px] text-secondary">
-                        <strong className="text-primary">{formatFte(bucket.totalFte)}</strong>{" "}
-                        {t("staffing.fteUnit")}
-                      </span>
-                      {pctUtilized !== null && (
-                        <span className="text-[13px] font-bold text-primary">
-                          {t("staffingPeriod.utilization").replace("{pct}", String(pctUtilized))}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-200">
-                    <div
-                      className="h-full rounded-full bg-bp-coral transition-all"
-                      style={{
-                        width: `${maxTotal > 0 ? (bucket.totalFte / maxTotal) * 100 : 0}%`,
-                      }}
-                    />
-                  </div>
-                  <ul className="mt-3 space-y-1.5">
-                    {functionsInBucket.map((fn) => {
-                      const fte = bucket.byFunction[fn] ?? 0;
-                      const available = fteByDept[fn];
-                      const selected = selectedFunction === fn;
-                      return (
-                        <li key={fn}>
-                          <button
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => onSelectFunction?.(selected ? null : fn)}
-                            className={`flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left text-[12px] transition ${
-                              selected
-                                ? "bg-neutral-50 ring-1 ring-bp-coral"
-                                : "hover:bg-neutral-50"
-                            }`}
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+              <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+                tickFormatter={(v) => String(Math.round(Number(v)))}
+              />
+              <Tooltip
+                content={({ active, payload, label }) => {
+                  if (!active || !payload || payload.length === 0) return null;
+                  const total = payload.reduce(
+                    (sum, p) => sum + (typeof p.value === "number" ? p.value : 0),
+                    0
+                  );
+                  const pctUtilized =
+                    totalAvailable > 0 ? Math.round((total / totalAvailable) * 100) : null;
+                  return (
+                    <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
+                      <p className="mb-1 font-bold text-primary">{label}</p>
+                      {payload
+                        .filter((p) => (typeof p.value === "number" ? p.value : 0) > 0)
+                        .map((p) => (
+                          <p
+                            key={String(p.dataKey)}
+                            className="flex items-center justify-between gap-3 text-secondary"
                           >
-                            <span className="flex items-center gap-1.5 text-primary">
+                            <span className="flex items-center gap-1.5">
                               <span
-                                className={`inline-block h-2 w-2 rounded-full ${colorForDepartment(fn)}`}
+                                className="inline-block h-2 w-2 rounded-full"
+                                style={{ background: p.color }}
                               />
-                              {fn}
+                              {p.name}
                             </span>
-                            <span className="text-secondary">
-                              {formatFte(fte)} {t("staffing.fteUnit")}
-                              {available !== undefined && (
-                                <span className="ml-1 text-tertiary">
-                                  / {formatFte(available)} {t("staffing.fteUnit")} (
-                                  {Math.round((fte / (available || 1)) * 100)}%)
-                                </span>
-                              )}
+                            <span className="ml-2 font-semibold text-primary">
+                              {formatFte(Number(p.value))} {t("staffing.fteUnit")}
                             </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </li>
-              );
-            })}
-          </ul>
+                          </p>
+                        ))}
+                      <p className="mt-1 border-t border-border pt-1 font-bold text-primary">
+                        {formatFte(total)} {t("staffing.fteUnit")}
+                        {pctUtilized !== null &&
+                          ` · ${t("staffingPeriod.utilization").replace("{pct}", String(pctUtilized))}`}
+                      </p>
+                    </div>
+                  );
+                }}
+              />
+              <Legend
+                verticalAlign="top"
+                align="right"
+                wrapperStyle={{
+                  fontSize: 11,
+                  paddingBottom: 8,
+                  cursor: onSelectFunction ? "pointer" : undefined,
+                }}
+                onClick={(entry) => {
+                  const fn = typeof entry?.value === "string" ? entry.value : undefined;
+                  if (!fn) return;
+                  onSelectFunction?.(selectedFunction === fn ? null : fn);
+                }}
+                formatter={(value) => (
+                  <span
+                    style={{ fontWeight: selectedFunction === value ? 700 : 400 }}
+                    className="text-primary"
+                  >
+                    {value}
+                  </span>
+                )}
+              />
+              {teamNames.map((fn) => (
+                <Bar
+                  key={fn}
+                  dataKey={fn}
+                  name={fn}
+                  stackId="etp"
+                  fill={hexForDepartment(fn)}
+                  fillOpacity={selectedFunction && selectedFunction !== fn ? 0.35 : 1}
+                  cursor={onSelectFunction ? "pointer" : undefined}
+                  onClick={() => onSelectFunction?.(selectedFunction === fn ? null : fn)}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
         )}
         {undatedCount > 0 && (
           <p className="mt-3 text-[11px] text-tertiary">

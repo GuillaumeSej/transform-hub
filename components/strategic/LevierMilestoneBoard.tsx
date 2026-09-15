@@ -2,6 +2,8 @@
 
 import {
   colorForChantier,
+  displayMilestoneId,
+  milestoneProgressPct,
   milestoneWeightPct,
   progressBucket,
   type ProgressBucket,
@@ -71,6 +73,19 @@ const AVG_PROGRESS_DOT_CLASS: Record<ProgressBucket, string> = {
   green: "bg-rag-green",
 };
 
+/** Fond teinté + texte de la pastille "{pct}%" propre à CHAQUE carte de levier (round 19) — même
+ *  convention que `BUCKET_PILL_CLASS` de `ChantierDetailPanel.tsx` (fond `-light` + texte de la
+ *  couleur du bucket, `green` utilisant `text-rag-green-dark` pour le contraste, mêmes tokens
+ *  `rag-*`), reprise ici plutôt que réimportée (fichier distinct, pas exportée là-bas). Distincte
+ *  de `AVG_PROGRESS_DOT_CLASS` ci-dessus, qui reste la pastille discrète de la MOYENNE par colonne
+ *  — celle-ci est le badge visible du pourcentage INDIVIDUEL d'une carte. */
+const CARD_PROGRESS_PILL_CLASS: Record<ProgressBucket, string> = {
+  empty: "bg-neutral-100 text-tertiary",
+  red: "bg-rag-red-light text-rag-red",
+  amber: "bg-rag-amber-light text-rag-amber",
+  green: "bg-rag-green-light text-rag-green-dark",
+};
+
 export const CHANTIER_BORDER_CLASS: Record<string, string> = {
   "bg-blue-500": "border-blue-500",
   "bg-emerald-500": "border-emerald-500",
@@ -103,17 +118,33 @@ export function LevierCard({
   // lavage de fond complet) reste lisible avec le texte à 100% comme à 10%, contrairement à un
   // fond teinté qui viendrait réduire le contraste du nom du levier.
   const weightPct = milestoneWeightPct(action);
+  // Round 19, point 3 : avancement PROPRE de ce levier (jalons pondérés `milestoneProgressPct`,
+  // lib/axisLogic.ts) — jusqu'ici seule la moyenne PAR COLONNE était visible sur ce widget
+  // (`avgPct`, plus bas), jamais le pourcentage individuel d'une carte précise. Mode dégradé
+  // assumé, comme `currentMilestoneAverage` ci-dessous : ce composant n'a pas `allChantiers`/
+  // `allActions` sous la main, donc pas d'`autoValues` — les items auto du jalon courant comptent
+  // pour 0 tant qu'ils n'ont pas de valeur manuelle déclarée (jamais une survalorisation).
+  const progressPct = milestoneProgressPct(action);
+  const progressPillClass = CARD_PROGRESS_PILL_CLASS[progressBucket(progressPct)];
+  const displayedStage = displayMilestoneId(action.milestones?.currentMilestone ?? "E0");
   return (
     <button
       type="button"
       onClick={() => onLevierClick(chantier.id, action.id)}
-      title={`${action.name} · ${chantier.name} · ${weightPct}%`}
+      title={`${action.name} · ${chantier.name} · ${displayedStage} · ${progressPct}%`}
       className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 bg-white p-2 pb-2.5 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass}`}
     >
       <span className="flex w-full items-center gap-1.5">
         <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${chantierColor}`} />
         <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-primary">
           {action.name}
+        </span>
+        {/* Pourcentage d'avancement PROPRE à cette carte (round 19, point 3) — additif à la
+            pastille de moyenne PAR COLONNE (`avgPct` plus bas), qui reste inchangée. */}
+        <span
+          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${progressPillClass}`}
+        >
+          {progressPct}%
         </span>
       </span>
       <span className="w-full truncate pl-3.5 text-[10.5px] text-tertiary" title={chantier.name}>
@@ -234,7 +265,7 @@ export function LevierMilestoneBoard({
                 >
                   <div className="mb-2 flex items-center justify-between px-0.5">
                     <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
-                      {milestoneId}
+                      {displayMilestoneId(milestoneId)}
                     </span>
                     <span className="rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
                       {cards.length}

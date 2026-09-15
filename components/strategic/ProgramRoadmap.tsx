@@ -18,12 +18,7 @@ import {
   withAlpha,
   type TimelineScale,
 } from "@/components/strategic/TimelineBars";
-import {
-  programRoadmap,
-  progressBucket,
-  type ProgramRoadmapRow,
-  type ProgressBucket,
-} from "@/lib/axisLogic";
+import { programRoadmap, type ProgramRoadmapRow } from "@/lib/axisLogic";
 import type { Chantier, ChantierAction, LevierKanbanStatus, StrategicAxis } from "@/types";
 
 /**
@@ -99,21 +94,6 @@ function deliverableMarkerColor(status: LevierKanbanStatus | undefined): string 
       return DELIVERABLE_COLOR_RED;
   }
 }
-
-/** Couleur de remplissage de la mini barre d'avancement par levier (round 18, polish) — même
- *  convention `progressBucket` → `bg-rag-*` que `BUCKET_DOT_CLASS`/`BUCKET_PILL_CLASS` de
- *  `ChantierDetailPanel.tsx`/`MilestoneChecklistPanel.tsx` (dupliquée ici pour la même raison
- *  qu'elles se dupliquent déjà entre elles : ces fichiers ne sont pas dans le périmètre modifiable
- *  de ce lot, et il n'existe pas de point de partage naturel pour une seule petite table de
- *  couleurs). Remplace l'ancien remplissage teinté par la couleur de l'AXE — retour PO : à `h-1`
- *  et teinté, la barre se voyait à peine ; la couleur RAG rend en plus le statut (retard/en
- *  cours/terminé) lisible d'un coup d'œil, sans dépendre de la couleur (arbitraire) de l'axe. */
-const BUCKET_FILL_CLASS: Record<ProgressBucket, string> = {
-  empty: "bg-neutral-300",
-  red: "bg-rag-red",
-  amber: "bg-rag-amber",
-  green: "bg-rag-green",
-};
 
 // Hauteurs de ligne (round 17) : agrandies par rapport au round 15 (le PO trouvait la vue trop
 // plate/compacte) tout en restant plus resserrées que `ChantierGantt.tsx`/`ChantierDetailPanel.tsx`
@@ -330,14 +310,6 @@ export function ProgramRoadmap({
                                 title={row.action.name}
                               >
                                 {row.action.name}
-                              </div>
-                              <div className="mt-1 h-2 overflow-hidden rounded-full bg-neutral-200">
-                                <div
-                                  className={`h-full rounded-full ${
-                                    BUCKET_FILL_CLASS[progressBucket(row.progressPct)]
-                                  }`}
-                                  style={{ width: `${row.progressPct}%` }}
-                                />
                               </div>
                             </div>
 
