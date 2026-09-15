@@ -33,14 +33,20 @@ const COMPANY_ID = "c-demo-setup";
 // Étape 2 du script de démo : niveaux créés À LA MAIN dans la fiche entreprise avant tout import.
 // Les libellés doivent matcher la colonne "Niveau" des fichiers d'arborescence, et le niveau macro
 // financier doit porter `semantic: "pnl"` — sans quoi `derivePnlAccounts` retombe sur le fallback
-// et TOUTES les lignes de leviers échouent sur "Compte P&L introuvable".
+// et TOUTES les lignes de leviers échouent sur "Compte P&L introuvable". 4 étages financiers / 3
+// étages géographiques — voir demo/arborescence_financiere_demo.xlsx et
+// demo/arborescence_geographique_demo.xlsx (P&L > Catégorie > Centre de coût > Poste de dépense,
+// Continent > Pays > Entité).
 const FINANCIAL_LEVELS: HierarchyLevelDef[] = [
   { key: "pnl_account", label: "P&L", order: 0, semantic: "pnl" },
-  { key: "cost_center", label: "Centre de coût", order: 1 },
+  { key: "category", label: "Catégorie", order: 1 },
+  { key: "cost_center", label: "Centre de coût", order: 2 },
+  { key: "expense_item", label: "Poste de dépense", order: 3 },
 ];
 const GEOGRAPHIC_LEVELS: HierarchyLevelDef[] = [
   { key: "continent", label: "Continent", order: 0, semantic: "continent" },
   { key: "country", label: "Pays", order: 1, semantic: "country" },
+  { key: "legal_entity", label: "Entité", order: 2, semantic: "legal_entity" },
 ];
 
 describe("parcours de setup complet avec les 4 fichiers demo/ (doc/demo-script.md §3)", () => {
@@ -54,7 +60,7 @@ describe("parcours de setup complet avec les 4 fichiers demo/ (doc/demo-script.m
       "financial"
     );
     expect(financial.errors).toEqual([]);
-    expect(financial.toCreate.length).toBe(10);
+    expect(financial.toCreate.length).toBe(59);
 
     // ── Étape 2b : arborescence géographique ──────────────────────────────────────────────
     const geographic = validateHierarchyImportRows(
@@ -65,7 +71,7 @@ describe("parcours de setup complet avec les 4 fichiers demo/ (doc/demo-script.m
       "geographic"
     );
     expect(geographic.errors).toEqual([]);
-    expect(geographic.toCreate.length).toBe(6);
+    expect(geographic.toCreate.length).toBe(14);
 
     // ── Chaînage : les comptes P&L viennent de l'arborescence qu'on vient d'importer ──────
     // (mêmes appels que `useStorage`, fallback vide = aucune donnée mock pour cette entreprise).

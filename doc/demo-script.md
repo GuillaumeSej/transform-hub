@@ -84,35 +84,45 @@ principale : ~11 leviers actifs, arborescence financière (P&L → Aggrégat) et
 ## 3. Démo "from scratch" — nouvelle entreprise
 
 Se connecter en **`admin`** (super-admin). Les 4 fichiers Excel du dossier [`demo/`](../demo/)
-couvrent ce parcours de bout en bout — régénérés par `node scripts/generate-demo-excel.js` si les
-formats d'import changent, ne jamais les éditer à la main.
+couvrent ce parcours de bout en bout.
+
+> **Dette connue** : `leviers_demo.xlsx` et les deux fichiers d'arborescence ont été enrichis à la
+> main (leviers de performance industrielle agroalimentaire, arborescence financière à 4 étages,
+> géographique à 3 étages) sans repasser par `scripts/generate-demo-excel.js`, qui reste sur
+> l'ancien format 2 étages / 30 leviers génériques — ce script doit être remis à jour (ou retiré)
+> avant de considérer `demo/` comme reproductible par régénération automatique. En attendant,
+> `base_etp_demo.xlsx` seul est encore produit par ce générateur.
 
 1. **Admin > Entreprises > Nouvelle entreprise** : créer l'entreprise (nom, secteur, exercice
    fiscal). Pas de fichier Excel pour cette étape — formulaire uniquement.
 2. **Configurer les arborescences** (onglets "Arborescence financière" / "Arborescence
    géographique" de la fiche entreprise) :
-   - Financière : ajouter un niveau macro nommé **P&L** (usage standard "Ligne P&L") puis un
-     niveau **Centre de coût**, enregistrer la structure, puis importer
-     [`demo/arborescence_financiere_demo.xlsx`](../demo/arborescence_financiere_demo.xlsx) (10
-     nœuds : 4 comptes P&L, 6 centres de coût).
-   - Géographique : ajouter un niveau macro nommé **Continent** puis un niveau **Pays**,
-     enregistrer la structure, puis importer
-     [`demo/arborescence_geographique_demo.xlsx`](../demo/arborescence_geographique_demo.xlsx) (6
-     nœuds : 2 continents, 4 pays).
+   - Financière : ajouter 4 niveaux macro nommés exactement **P&L**, **Catégorie**, **Centre de
+     coût**, **Poste de dépense** (dans cet ordre), enregistrer la structure, puis importer
+     [`demo/arborescence_financiere_demo.xlsx`](../demo/arborescence_financiere_demo.xlsx) (59
+     nœuds : 4 comptes P&L, 10 catégories, 15 centres de coût, 30 postes de dépense).
+   - Géographique : ajouter 3 niveaux macro nommés exactement **Continent**, **Pays**, **Entité**
+     (dans cet ordre), enregistrer la structure, puis importer
+     [`demo/arborescence_geographique_demo.xlsx`](../demo/arborescence_geographique_demo.xlsx) (14
+     nœuds : 2 continents, 4 pays, 8 entités).
    - Les libellés de niveaux doivent être nommés exactement ainsi (ou les mêmes clés) : la colonne
      "Niveau" du fichier matche par libellé ou par clé, insensible à la casse.
 3. **Créer un utilisateur** (onglet "Utilisateurs") avec un rôle autre qu'Admin Entreprise (ex.
    CTO) pour accéder aux pages Dashboard/Leviers/RH — Admin Entreprise ne voit que la
    configuration de l'entreprise, pas les pages opérationnelles.
-4. **Import des données**, connecté avec ce nouvel utilisateur :
+4. **Créer un Programme Performance** (Admin > Entreprises > Programmes) AVANT d'importer les
+   leviers : `programId` est obligatoire sur chaque levier, et la colonne "Programme" du fichier de
+   démo est laissée vide (ne se résout automatiquement que si l'entreprise n'a exactement qu'un
+   seul programme).
+5. **Import des données**, connecté avec ce nouvel utilisateur :
    - Leviers + Actions + Impacts via Bibliothèque des leviers > Importer un fichier >
-     [`demo/leviers_demo.xlsx`](../demo/leviers_demo.xlsx) (30 leviers, 6 actions, 4 impacts —
-     6 workstreams auto-créés et 21 leviers porteurs d'au moins une dépendance).
+     [`demo/leviers_demo.xlsx`](../demo/leviers_demo.xlsx) (45 leviers, 90 actions, 90 impacts —
+     workstreams auto-créés et une majorité de leviers porteurs d'au moins une dépendance).
    - Base ETP + mouvements via Base ETP > Importer Excel >
      [`demo/base_etp_demo.xlsx`](../demo/base_etp_demo.xlsx) (100 employés, 20 mouvements liés
      aux leviers importés). À importer APRÈS les leviers : la colonne "Levier (code)" des
      mouvements référence les codes `AC-0xx` créés à l'étape précédente.
-5. **Vérifier les affichages** : dashboard exécutif (KPIs, filtres dynamiques selon les niveaux
+6. **Vérifier les affichages** : dashboard exécutif (KPIs, filtres dynamiques selon les niveaux
    configurés, graphique P&L par compte), bibliothèque des leviers (colonne P&L macro + tooltip),
    Focus Levier (sections repliables, risque calculé).
 
