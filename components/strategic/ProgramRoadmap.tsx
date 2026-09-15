@@ -1,6 +1,13 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { TriangleAlert } from "lucide-react";
+import {
+  isChantierLate,
+  isLevierLate,
+  programRoadmap,
+  type ProgramRoadmapRow,
+} from "@/lib/axisLogic";
 import {
   formatTimelineDay,
   timelineColumns,
@@ -18,7 +25,6 @@ import {
   withAlpha,
   type TimelineScale,
 } from "@/components/strategic/TimelineBars";
-import { programRoadmap, type ProgramRoadmapRow } from "@/lib/axisLogic";
 import type { Chantier, ChantierAction, LevierKanbanStatus, StrategicAxis } from "@/types";
 
 /**
@@ -67,6 +73,9 @@ export type ProgramRoadmapLabels = {
   today?: string;
   /** Suffixe "N leviers" affiché sous le nom de chaque chantier. */
   leviersSuffix?: string;
+  /** Round 20, point 3 : titre/tooltip de l'icône d'alerte discrète d'un levier/chantier en
+   *  retard (`isLevierLate`/`isChantierLate`, lib/axisLogic.ts). */
+  late?: string;
 };
 
 const ROW_LABEL_WIDTH = "w-72";
@@ -169,6 +178,7 @@ export function ProgramRoadmap({
     progress: labels?.progress ?? "Avancement",
     today: labels?.today ?? "Aujourd'hui",
     leviersSuffix: labels?.leviersSuffix ?? "leviers",
+    late: labels?.late ?? "En retard",
   };
 
   // Semestre par défaut : le programme complet s'étend typiquement sur plusieurs années, la maille
@@ -265,107 +275,152 @@ export function ProgramRoadmap({
                     </div>
                   )}
 
-                  {axisGroup.chantierGroups.map((chantierGroup) => (
-                    <div key={chantierGroup.chantier.id}>
-                      {/* En-tête de chantier — bouton (round 16) cliquable si `onChantierClick` est
+                  {axisGroup.chantierGroups.map((chantierGroup) => {
+                    // Round 20, point 3 : icône d'alerte discrète près du nom du chantier dès
+                    // qu'au moins un de ses leviers est en retard (`isChantierLate`,
+                    // lib/axisLogic.ts) — pas de contour rouge complet, demande PO explicite.
+                    const chantierLate = isChantierLate(chantierGroup.chantier, chantierGroup.rows);
+                    return (
+                      <div key={chantierGroup.chantier.id}>
+                        {/* En-tête de chantier — bouton (round 16) cliquable si `onChantierClick` est
                           fourni, sinon reste un simple texte non interactif (comportement
                           historique). */}
-                      <button
-                        type="button"
-                        disabled={!onChantierClick}
-                        onClick={
-                          onChantierClick
-                            ? () => onChantierClick(chantierGroup.chantier.id)
-                            : undefined
-                        }
-                        className={`${ROW_LABEL_WIDTH} truncate pl-2.5 pt-2 text-left text-[11.5px] font-semibold text-secondary transition ${
-                          onChantierClick ? "hover:bg-white/60 hover:text-primary" : ""
-                        }`}
-                      >
-                        {chantierGroup.chantier.name}
-                        <span className="ml-1 font-normal text-tertiary">
-                          · {chantierGroup.rows.length} {l.leviersSuffix}
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          disabled={!onChantierClick}
+                          onClick={
+                            onChantierClick
+                              ? () => onChantierClick(chantierGroup.chantier.id)
+                              : undefined
+                          }
+                          className={`${ROW_LABEL_WIDTH} flex items-center gap-1 pl-2.5 pt-2 text-left text-[11.5px] font-semibold text-secondary transition ${
+                            onChantierClick ? "hover:bg-white/60 hover:text-primary" : ""
+                          }`}
+                        >
+                          <span className="truncate">
+                            {chantierGroup.chantier.name}
+                            <span className="ml-1 font-normal text-tertiary">
+                              · {chantierGroup.rows.length} {l.leviersSuffix}
+                            </span>
+                          </span>
+                          {chantierLate && (
+                            <span className="shrink-0 text-rag-red" title={l.late}>
+                              <TriangleAlert size={12} aria-hidden />
+                            </span>
+                          )}
+                        </button>
 
-                      {chantierGroup.rows.map((row) => {
-                        const startPct = pctOf(row.start);
-                        const widthPct = Math.max(1.2, pctOf(row.end) - startPct);
-                        const hasDeliverables = row.deliverables.length > 0;
-                        const trackHeight = hasDeliverables
-                          ? LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT
-                          : LEVIER_BAR_HEIGHT;
+                        {chantierGroup.rows.map((row) => {
+                          const startPct = pctOf(row.start);
+                          const widthPct = Math.max(1.2, pctOf(row.end) - startPct);
+                          const hasDeliverables = row.deliverables.length > 0;
+                          const trackHeight = hasDeliverables
+                            ? LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT
+                            : LEVIER_BAR_HEIGHT;
+                          // Round 20, point 3 : icône d'alerte discrète juste après la barre d'un
+                          // levier en retard (`isLevierLate`, lib/axisLogic.ts).
+                          const levierLate = isLevierLate(row.action, row.progressPct);
 
-                        return (
-                          <div
-                            key={row.action.id}
-                            className="flex items-stretch gap-2 border-b border-border/60 py-1.5 pl-2.5 last:border-b-0"
-                          >
+                          return (
                             <div
-                              className={`${ROW_LABEL_WIDTH} shrink-0 border-l-[3px] pl-2`}
-                              style={{ borderColor: axisColor }}
+                              key={row.action.id}
+                              className="flex items-stretch gap-2 border-b border-border/60 py-1.5 pl-2.5 last:border-b-0"
                             >
                               <div
-                                className="truncate text-[10.5px] font-medium text-primary"
-                                title={row.action.name}
+                                className={`${ROW_LABEL_WIDTH} shrink-0 border-l-[3px] pl-2`}
+                                style={{ borderColor: axisColor }}
                               >
-                                {row.action.name}
-                              </div>
-                            </div>
-
-                            <div className="relative flex-1" style={{ height: trackHeight }}>
-                              <TimelineGridColumns columns={columns} />
-                              {todayPct != null && <TimelineTodayMarker leftPct={todayPct} />}
-
-                              <TimelineBar
-                                left={startPct}
-                                width={widthPct}
-                                top={0}
-                                height={LEVIER_BAR_HEIGHT}
-                                color={axisColor}
-                                variant="solid"
-                                progressPct={row.progressPct}
-                                onClick={
-                                  onLevierClick
-                                    ? () => onLevierClick(row.chantier.id, row.action.id)
-                                    : undefined
-                                }
-                                ariaLabel={row.action.name}
-                                tooltipText={`${row.action.name} · ${formatTimelineDay(row.start)} → ${formatTimelineDay(
-                                  row.end
-                                )} · ${l.progress} ${row.progressPct}%`}
-                                label={row.action.name}
-                                labelClassName="min-w-0 flex-1 truncate text-[9.5px] font-semibold"
-                                inlineMinWidthPct={10}
-                                trailing={
-                                  <span className="shrink-0 text-[9.5px] font-bold">
-                                    {row.progressPct}%
-                                  </span>
-                                }
-                              />
-
-                              {row.deliverables.map((deliverable) => (
-                                <TimelineMarker
-                                  key={deliverable.id}
-                                  leftPct={pctOf(deliverable.dueDate!)}
-                                  top={LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT / 2}
-                                  size={17}
-                                  color={deliverableMarkerColor(deliverable.status)}
+                                {/* Round 20, point 2 : nom du levier cliquable (même destination que
+                                  la barre ci-dessous, `onLevierClick`) et centré verticalement dans
+                                  sa colonne — la ligne parente est `flex items-stretch`, ce label
+                                  collait donc en haut sans ce centrage propre. */}
+                                <div
+                                  className={`flex h-full items-center truncate text-[10.5px] font-medium text-primary ${
+                                    onLevierClick
+                                      ? "cursor-pointer hover:text-bp-coral hover:underline"
+                                      : ""
+                                  }`}
+                                  title={row.action.name}
                                   onClick={
                                     onLevierClick
                                       ? () => onLevierClick(row.chantier.id, row.action.id)
                                       : undefined
                                   }
-                                  ariaLabel={deliverable.label}
-                                  tooltipText={`${deliverable.label} · ${formatTimelineDay(deliverable.dueDate!)}`}
+                                >
+                                  {row.action.name}
+                                </div>
+                              </div>
+
+                              <div className="relative flex-1" style={{ height: trackHeight }}>
+                                <TimelineGridColumns columns={columns} />
+                                {todayPct != null && <TimelineTodayMarker leftPct={todayPct} />}
+
+                                <TimelineBar
+                                  left={startPct}
+                                  width={widthPct}
+                                  top={0}
+                                  height={LEVIER_BAR_HEIGHT}
+                                  color={axisColor}
+                                  variant="solid"
+                                  progressPct={row.progressPct}
+                                  onClick={
+                                    onLevierClick
+                                      ? () => onLevierClick(row.chantier.id, row.action.id)
+                                      : undefined
+                                  }
+                                  ariaLabel={row.action.name}
+                                  tooltipText={`${row.action.name} · ${formatTimelineDay(row.start)} → ${formatTimelineDay(
+                                    row.end
+                                  )} · ${l.progress} ${row.progressPct}%`}
+                                  label={row.action.name}
+                                  labelClassName="min-w-0 flex-1 truncate text-[9.5px] font-semibold"
+                                  inlineMinWidthPct={10}
+                                  trailing={
+                                    <span className="shrink-0 text-[9.5px] font-bold">
+                                      {row.progressPct}%
+                                    </span>
+                                  }
                                 />
-                              ))}
+
+                                {/* Icône d'alerte discrète juste après la barre — PAS un contour
+                                  rouge complet (demande PO explicite, voir plan round 20). */}
+                                {levierLate && (
+                                  <span
+                                    className="absolute -translate-y-1/2 text-rag-red"
+                                    style={{
+                                      left: `${Math.min(startPct + widthPct, 95)}%`,
+                                      top: LEVIER_BAR_HEIGHT / 2,
+                                      marginLeft: 4,
+                                    }}
+                                    title={l.late}
+                                  >
+                                    <TriangleAlert size={12} aria-hidden />
+                                  </span>
+                                )}
+
+                                {row.deliverables.map((deliverable) => (
+                                  <TimelineMarker
+                                    key={deliverable.id}
+                                    leftPct={pctOf(deliverable.dueDate!)}
+                                    top={LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT / 2}
+                                    size={17}
+                                    color={deliverableMarkerColor(deliverable.status)}
+                                    onClick={
+                                      onLevierClick
+                                        ? () => onLevierClick(row.chantier.id, row.action.id)
+                                        : undefined
+                                    }
+                                    ariaLabel={deliverable.label}
+                                    tooltipText={`${deliverable.label} · ${formatTimelineDay(deliverable.dueDate!)}`}
+                                  />
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}

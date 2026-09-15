@@ -26,8 +26,10 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   chantierDependencyAlerts,
   countOnTrackAtRisk,
+  isLevierLate,
   numberIndicators,
   programBlockedActions,
+  programRoadmap,
   resolveChantierOwner,
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
@@ -133,6 +135,7 @@ function DashboardStatChip({
   label,
   tone = "neutral",
   accent,
+  size = "sm",
 }: {
   icon: LucideIcon;
   /** Chaîne déjà formatée acceptée en plus d'un nombre brut — round 7, point 2 : la puce budget
@@ -145,6 +148,11 @@ function DashboardStatChip({
   /** Teinte catégorielle (round 13, point 3, voir `CHIP_ACCENTS` ci-dessus) — ignorée si
    *  `tone === "amber"` : le signal risque prime toujours sur la distinction catégorielle. */
   accent?: keyof typeof CHIP_ACCENTS;
+  /** Round 20 : `"lg"` agrandit légèrement la valeur et met le libellé en majuscules/`tracking-wide`
+   *  (même esprit que le libellé déjà en majuscules sur la carte d'axe) — réservé à la puce "Budget
+   *  alloué" du bandeau, qui doit se distinguer des 3 autres compteurs. Défaut `"sm"` = comportement
+   *  historique, inchangé pour tout autre appelant. */
+  size?: "sm" | "lg";
 }) {
   const accentStyles = tone === "neutral" && accent ? CHIP_ACCENTS[accent] : null;
   return (
@@ -170,8 +178,12 @@ function DashboardStatChip({
           aria-hidden
         />
       </span>
-      <span className={tone === "amber" ? "text-rag-amber" : "text-primary"}>{value}</span>
-      {label}
+      <span
+        className={`${size === "lg" ? "text-[12.5px] font-bold" : ""} ${tone === "amber" ? "text-rag-amber" : "text-primary"}`}
+      >
+        {value}
+      </span>
+      <span className={size === "lg" ? "uppercase tracking-wide" : ""}>{label}</span>
     </span>
   );
 }
@@ -276,7 +288,9 @@ export function StrategicDashboardView() {
     params.set("chantier", chantierId);
     if (focusActionId) params.set("action", focusActionId);
     else params.delete("action");
-    router.push(`/dashboard?${params.toString()}`);
+    // `{ scroll: false }` (round 20) : sans cette option, l'App Router remonte la page en haut à
+    // chaque ouverture du panneau — même correctif que `setRoadmapParam` plus bas.
+    router.push(`/dashboard?${params.toString()}`, { scroll: false });
   };
 
   /** Ferme le panneau chantier — `router.replace` (pas `push`) pour ne pas empiler une entrée
@@ -286,7 +300,8 @@ export function StrategicDashboardView() {
     params.delete("chantier");
     params.delete("action");
     const qs = params.toString();
-    router.replace(qs ? `/dashboard?${qs}` : "/dashboard");
+    // `{ scroll: false }` (round 20) : même raison que `openChantierPanel` ci-dessus.
+    router.replace(qs ? `/dashboard?${qs}` : "/dashboard", { scroll: false });
   };
 
   const openChantierId = searchParams.get("chantier");
@@ -355,6 +370,21 @@ export function StrategicDashboardView() {
   const chantierNameById = useMemo(
     () => new Map(chantiers.map((chantier) => [chantier.id, chantier.name])),
     [chantiers]
+  );
+
+  /** Round 20, point 3 : leviers en retard (`isLevierLate`, lib/axisLogic.ts) — alimente la 3e
+   *  sous-section du widget "chantier-dependency-alerts", même parti pris purement informatif que
+   *  `dependencyAlerts`/`blockedActions` ci-dessus. Passe par `programRoadmap` plutôt que
+   *  `milestoneProgressPct(action)` nu : c'est la MÊME fonction (avec les mêmes `autoValues`
+   *  résolus via `resolveMilestoneAutoFlags`) qui alimente déjà `ProgramRoadmap` juste après —
+   *  sans ça, un levier pouvait apparaître "en retard" ici alors que la feuille de route affichait
+   *  déjà 100% pour ce même levier (deux calculs divergents du même pourcentage). */
+  const lateLeviers = useMemo(
+    () =>
+      programRoadmap(axes, chantiers, chantierActions)
+        .filter((row) => isLevierLate(row.action, row.progressPct))
+        .map((row) => row.action),
+    [axes, chantiers, chantierActions]
   );
 
   // ─── Feuille de route programme (round 17, permutation) — porté verbatim depuis
@@ -620,7 +650,7 @@ export function StrategicDashboardView() {
                       atRisk ? `${indicator.name} — ${t("indicatorStatus.atRisk")}` : indicator.name
                     }
                     onClick={() => router.push(`/kpi?indicator=${indicator.id}`)}
-                    className={`flex h-5 max-w-[180px] shrink-0 items-center truncate rounded-full px-2 text-[10px] font-bold transition hover:bg-black hover:text-white ${
+                    className={`flex min-h-[20px] max-w-[260px] shrink-0 items-center rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition hover:bg-black hover:text-white ${
                       atRisk ? "bg-rag-amber-light text-rag-amber" : "bg-neutral-100 text-secondary"
                     }`}
                   >
@@ -702,6 +732,7 @@ export function StrategicDashboardView() {
     progress: t("strategicAxes.roadmap.progress"),
     today: t("strategicAxes.ganttToday"),
     leviersSuffix: t("strategicAxes.roadmap.leviersSuffix"),
+    late: t("strategicAxes.roadmap.late"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────
@@ -1001,6 +1032,7 @@ export function StrategicDashboardView() {
                   value={`${allocatedBudgetTotal.toLocaleString()} ${activeProgram.currency}`}
                   label={t("strategicDashboard.allocatedBudget")}
                   accent="orange"
+                  size="lg"
                 />
               }
               title={t("strategicDashboard.popover.budgetTitle")}
@@ -1263,6 +1295,40 @@ export function StrategicDashboardView() {
                     <p className="mt-1 text-[12px] leading-snug text-secondary">
                       {reasons.join(", ")}
                     </p>
+                  </button>
+                ))}
+          </div>
+
+          {/* Sous-section 3 (round 20, point 3) : leviers en retard (`isLevierLate`,
+              lib/axisLogic.ts) — même patron de ligne cliquable que les deux sous-sections
+              ci-dessus (teinte `rag-red`, distincte de l'amber des prérequis et du corail des
+              dépendances, pour un 3e type d'alerte bien identifiable). */}
+          <div className="mt-4 border-t-2 border-border pt-3">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-secondary">
+                {t("strategicDashboard.lateLeviersHeading")}
+              </span>
+              {lateLeviers.length > 0 && (
+                <span className="rounded-full bg-rag-red px-2 py-0.5 text-[10.5px] font-bold text-white">
+                  {lateLeviers.length}
+                </span>
+              )}
+            </div>
+            {lateLeviers.length === 0
+              ? emptyLine(t("strategicDashboard.noLateLeviers"))
+              : lateLeviers.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={() => openChantierPanel(action.chantierId, action.id)}
+                    className="block w-full border-b border-border py-2.5 text-left transition last:border-0 first:pt-0 hover:bg-neutral-50"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-semibold text-rag-red">{action.name}</span>
+                      <span className="text-[10.5px] text-tertiary">
+                        {chantierNameById.get(action.chantierId) ?? action.chantierId}
+                      </span>
+                    </div>
                   </button>
                 ))}
           </div>

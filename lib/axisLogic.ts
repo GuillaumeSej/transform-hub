@@ -852,35 +852,45 @@ export function chantierMilestoneProgressPct(
   return Math.round(total / own.length);
 }
 
-// ─── Poids illustratif par jalon (round 9) ─────────────────────────────────────────────────────
+// ─── Retard d'un levier/chantier (round 20) ────────────────────────────────────────────────────
 
 /**
- * Poids CUMULATIF par jalon (seuil atteint une fois ce jalon COURANT, pas un delta) — round 19 :
- * recalculé comme la somme cumulée de `MILESTONE_WEIGHT_DELTA` ci-dessus (E0=10, E1=10+10=20,
- * E2=20+15=35, E3=35+50=85, E4=85+15=100), pour que les deux référentiels ne puissent plus diverger
- * (avant round 19 ils étaient indépendants et n'avaient jamais à concorder — desormais
- * `MILESTONE_WEIGHT_DELTA` est la seule source de poids, ce tableau n'en est qu'une lecture
- * cumulative). Utilisé UNIQUEMENT pour le remplissage visuel (fond proportionnel) des blocs de
- * `LevierMilestoneBoard.tsx` — **ne remplace ni `milestoneProgressPct` ni
- * `chantierMilestoneProgressPct`**, qui restent la seule source pour les barres de progression
- * existantes (chantier, Gantt, etc.).
+ * Un LEVIER est-il en retard ? Vrai si sa date de fin (`ChantierAction.end`) est STRICTEMENT
+ * passée (le jour même de l'échéance n'est pas encore en retard — cohérent avec `daysBetween`, qui
+ * ne compte qu'à partir du lendemain) ET que son avancement déclaratif (`milestoneProgressPct`,
+ * jalons E0→E4) n'a pas atteint 100% — un levier terminé APRÈS son échéance initiale n'est donc
+ * jamais "en retard" au sens de cette fonction, seulement un levier encore ouvert au-delà de sa
+ * date de fin prévue.
+ *
+ * `today` est un paramètre injectable (défaut `new Date()`) uniquement pour les tests — aucun
+ * appelant applicatif ne doit le renseigner.
  */
-export const MILESTONE_WEIGHT: Record<MilestoneId, number> = {
-  E0: 10,
-  E1: 20,
-  E2: 35,
-  E3: 85,
-  E4: 100,
-};
+/** `progressPct` est fourni par l'appelant plutôt que recalculé ici : `milestoneProgressPct` seule
+ *  (sans `autoValues` résolus via `resolveMilestoneAutoFlags`) peut différer du pourcentage RÉEL
+ *  affiché à l'écran (ex. `programRoadmap`, qui résout les auto-flags) — un appel interne aveugle
+ *  ferait apparaître un levier "en retard" alors même que l'écran affiche déjà 100% à côté. En
+ *  exigeant le même `progressPct` que celui affiché, retard et pourcentage ne peuvent plus diverger. */
+export function isLevierLate(
+  action: ChantierAction,
+  progressPct: number,
+  today: Date = new Date()
+): boolean {
+  const todayISO = today.toISOString().slice(0, 10);
+  return daysBetween(action.end, todayISO) > 0 && progressPct < 100;
+}
 
-/**
- * Poids du jalon COURANT d'une entité (pas un cumul des jalons franchis, contrairement à
- * `milestoneProgressPct`) — alimente le remplissage visuel de `LevierMilestoneBoard.tsx`. Une
- * entité sans état de jalon du tout (`milestones` absent) est traitée comme si elle était à E0.
- */
-export function milestoneWeightPct(entity: { milestones?: ChantierMilestoneState }): number {
-  const current = entity.milestones?.currentMilestone;
-  return current ? MILESTONE_WEIGHT[current] : MILESTONE_WEIGHT.E0;
+/** Un CHANTIER est-il en retard ? Vrai si au moins un de ses leviers l'est (`isLevierLate`
+ *  ci-dessus) — dérivée directe, aucune notion de retard propre au chantier. Même parti pris que
+ *  `isLevierLate` : `progressPct` est porté par chaque entrée plutôt que recalculé ici. */
+export function isChantierLate(
+  chantier: Pick<Chantier, "id">,
+  actionsWithProgress: { action: ChantierAction; progressPct: number }[],
+  today?: Date
+): boolean {
+  return actionsWithProgress.some(
+    ({ action, progressPct }) =>
+      action.chantierId === chantier.id && isLevierLate(action, progressPct, today)
+  );
 }
 
 // ─── Prérequis bloquants du programme (round 9) ────────────────────────────────────────────────

@@ -1220,6 +1220,7 @@ const es: Record<string, string> = {
   "strategicAxes.roadmap.scaleYear": "Año",
   "strategicAxes.roadmap.progress": "Avance",
   "strategicAxes.roadmap.leviersSuffix": "actividades",
+  "strategicAxes.roadmap.late": "Retrasado",
   "strategicAxes.actionsCompleted": "actividades finalizadas",
   "strategicAxes.moreActionsSuffix": "más",
   "strategicAxes.cardNoActions": "Sin actividades",
@@ -1572,11 +1573,12 @@ const es: Record<string, string> = {
   "effectifs.empty": "No hay ETC declarados en este programa.",
   "effectifs.emptyHint": "Abra un proyecto desde un eje estratégico y añada ETC por equipo.",
   "effectifs.kpi.totalFte": "ETC movilizados en total",
-  "effectifs.kpi.totalFteSub": "Suma de todas las líneas de dotación del programa",
+  "effectifs.kpi.totalFteSub": "Total de todo el programa, todos los periodos combinados",
   "effectifs.byAxis": "Reparto por eje",
   "effectifs.byAxisFor": "Reparto por eje",
   "effectifs.allFunctions": "Todos los equipos",
   "effectifs.clickHint": "Haga clic en un equipo para ver su reparto por eje.",
+  "effectifs.filteredOn": "Filtrado por: {fn}",
   "effectifs.percentOfFunction": "% del equipo",
   "effectifs.axisUnknown": "Eje desconocido",
   "effectifs.chantierUnknown": "Proyecto desconocido",
@@ -1609,6 +1611,7 @@ const es: Record<string, string> = {
   "staffingPeriod.undatedNote":
     "{n} línea(s) de dotación sin fecha de inicio, no mostradas en esta vista.",
   "staffingPeriod.utilization": "{pct}% de utilización",
+  "staffingPeriod.byChantier": "Por proyecto:",
 
   // ─── Importación Excel de personal movilizado (ronda 7 — StaffingImportButton.tsx) ───────
   "staffingImport.templateButton": "Descargar la plantilla",
@@ -1684,6 +1687,9 @@ const es: Record<string, string> = {
   // Ronda 12: media de los `progressPct` declarados de los leviers de la columna (`{pct}`
   // sustituido manualmente, ver `LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.avgProgress": "{pct}% de media",
+  "strategicDashboard.levierBoard.late": "Retrasado",
+  "strategicDashboard.lateLeviersHeading": "Actividades retrasadas",
+  "strategicDashboard.noLateLeviers": "Ninguna actividad retrasada",
   // Ronda 15: hoja de ruta de todo el programa (`ProgramRoadmap.tsx`) — vista de ancho completo, al
   // final del panel (una fila por actividad, en todos los ejes/proyectos).
 
