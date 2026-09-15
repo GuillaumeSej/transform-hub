@@ -16,6 +16,7 @@
     "format": "prettier --write .",
     "prepare": "husky",
     "create-admin": "node scripts/create-admin.js",
+    "bulk-create-lever-owners": "node scripts/bulk-create-lever-owners.js",
     "migrate-lever-meta-tenant-split": "node scripts/migrate-lever-meta-tenant-split.js"
   },
   "dependencies": {
