@@ -155,7 +155,10 @@ export function StrategicAxesView() {
     params.set("chantier", chantierId);
     if (focusActionId) params.set("action", focusActionId);
     else params.delete("action");
-    router.push(`/levers?${params.toString()}`);
+    // `{ scroll: false }` (round 20) : sans cette option, l'App Router remonte la page en haut à
+    // chaque ouverture du panneau — même correctif que les filtres de la feuille de route (voir
+    // le commentaire dans `KpiPageClient.tsx`).
+    router.push(`/levers?${params.toString()}`, { scroll: false });
   };
 
   /** Ferme le panneau chantier — `router.replace` (pas `push`) pour ne pas empiler une entrée
@@ -165,7 +168,8 @@ export function StrategicAxesView() {
     params.delete("chantier");
     params.delete("action");
     const qs = params.toString();
-    router.replace(qs ? `/levers?${qs}` : "/levers");
+    // `{ scroll: false }` (round 20) : même raison que `openChantierPanel` ci-dessus.
+    router.replace(qs ? `/levers?${qs}` : "/levers", { scroll: false });
   };
 
   const openChantierId = searchParams.get("chantier");

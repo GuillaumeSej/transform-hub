@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Users } from "lucide-react";
+import { ArrowUpRight, Users, X } from "lucide-react";
 import {
   Bar as RechartsBar,
   BarChart,
@@ -173,6 +173,11 @@ export function EffectifsPageClient() {
   );
 
   const chantierNames = useMemo(() => new Map(chantiers.map((c) => [c.id, c.name])), [chantiers]);
+
+  /** Même lookup que `chantierNames` ci-dessus, en `Record` plutôt qu'en `Map` — round 20, point 3 :
+   *  `StaffingPeriodBreakdown` (composant partagé, pas de dépendance à cette page) attend une map
+   *  de noms sous cette forme pour son détail par chantier au survol d'une équipe. */
+  const chantierNamesById = useMemo(() => Object.fromEntries(chantierNames), [chantierNames]);
 
   // ── Budget FINANCIER alloué (round 12) ─────────────────────────────────────────────────────
   // Nouvelle section monétaire, distincte du besoin/disponible ETP ci-dessus (une question de €,
@@ -577,12 +582,32 @@ export function EffectifsPageClient() {
       <StaffingPeriodBreakdown
         staffing={staffing}
         fteByDept={fteByDept}
+        chantierNamesById={chantierNamesById}
         selectedFunction={selectedFunction}
         onSelectFunction={setSelectedFunction}
       />
 
       {/* ── 2. Répartition par axe (round 19 : graphique en barres empilées, abscisse = axe —
           voir les doc-comments de `byAxisChartData`/`selectedByAxisChartData` ci-dessus) ─────── */}
+      {/* Round 20 (point 4, PO : le lien entre les deux graphiques n'était pas visible) — chip
+          "Filtré sur : {équipe}" avec bouton de réinitialisation, affichée uniquement quand
+          `selectedFunction` est actif. Le filtrage lui-même existe déjà (voir `selectedByAxis` /
+          `byAxis` ci-dessus) : cette chip ne fait qu'exposer visuellement ce lien déjà fonctionnel. */}
+      {selectedFunction && (
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-[12px] font-semibold text-primary">
+            {t("effectifs.filteredOn").replace("{fn}", selectedFunction)}
+            <button
+              type="button"
+              aria-label={t("effectifs.allFunctions")}
+              onClick={() => setSelectedFunction(null)}
+              className="flex items-center justify-center rounded-full p-0.5 text-secondary transition hover:bg-neutral-200 hover:text-primary"
+            >
+              <X size={12} />
+            </button>
+          </span>
+        </div>
+      )}
       {selectedFunction ? (
         <Card className="mb-0">
           <CardHeader

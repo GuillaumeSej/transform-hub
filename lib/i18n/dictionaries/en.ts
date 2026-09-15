@@ -1232,6 +1232,7 @@ const en: Record<string, string> = {
   "strategicAxes.roadmap.scaleYear": "Year",
   "strategicAxes.roadmap.progress": "Progress",
   "strategicAxes.roadmap.leviersSuffix": "levers",
+  "strategicAxes.roadmap.late": "Late",
   "strategicAxes.actionsCompleted": "levers completed",
   "strategicAxes.moreActionsSuffix": "more",
   "strategicAxes.cardNoActions": "No levers",
@@ -1575,11 +1576,12 @@ const en: Record<string, string> = {
   "effectifs.empty": "No FTE declared on this programme.",
   "effectifs.emptyHint": "Open a workstream from a strategic axis and add FTEs per team.",
   "effectifs.kpi.totalFte": "Total FTEs assigned",
-  "effectifs.kpi.totalFteSub": "Sum of every staffing line in the programme",
+  "effectifs.kpi.totalFteSub": "Total across the whole programme, all periods combined",
   "effectifs.byAxis": "Split by axis",
   "effectifs.byAxisFor": "Split by axis",
   "effectifs.allFunctions": "All teams",
   "effectifs.clickHint": "Click a team to see how it splits across axes.",
+  "effectifs.filteredOn": "Filtered on: {fn}",
   "effectifs.percentOfFunction": "% of that team",
   "effectifs.axisUnknown": "Unknown axis",
   "effectifs.chantierUnknown": "Unknown workstream",
@@ -1611,6 +1613,7 @@ const en: Record<string, string> = {
   "staffingPeriod.empty": "No dated FTE for this granularity.",
   "staffingPeriod.undatedNote": "{n} staffing line(s) with no start date, not shown in this view.",
   "staffingPeriod.utilization": "{pct}% utilization",
+  "staffingPeriod.byChantier": "By workstream:",
 
   // ─── Staffing Excel import (round 7 — StaffingImportButton.tsx) ───────────────────────────
   "staffingImport.templateButton": "Download the template",
@@ -1683,6 +1686,9 @@ const en: Record<string, string> = {
   // Round 12: average of the declared `progressPct` of the column's leviers (`{pct}` substituted
   // manually, see `LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.avgProgress": "{pct}% average",
+  "strategicDashboard.levierBoard.late": "Late",
+  "strategicDashboard.lateLeviersHeading": "Late levers",
+  "strategicDashboard.noLateLeviers": "No late levers",
   // Round 15: program-wide roadmap (`ProgramRoadmap.tsx`) — full-width, whole-program view at the
   // bottom of the dashboard (one row per levier, across all axes/chantiers).
 

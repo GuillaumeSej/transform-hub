@@ -1281,6 +1281,9 @@ const fr: Record<string, string> = {
   "strategicAxes.roadmap.scaleYear": "Année",
   "strategicAxes.roadmap.progress": "Avancement",
   "strategicAxes.roadmap.leviersSuffix": "leviers",
+  // Round 20, point 3 : icône d'alerte discrète sur un levier/chantier en retard (`isLevierLate`,
+  // lib/axisLogic.ts) — titre/tooltip de l'icône, `ProgramRoadmap.tsx`.
+  "strategicAxes.roadmap.late": "En retard",
   "strategicAxes.actionsCompleted": "leviers terminés",
   "strategicAxes.moreActionsSuffix": "autres",
   "strategicAxes.cardNoActions": "Aucun levier",
@@ -1653,11 +1656,12 @@ const fr: Record<string, string> = {
   "effectifs.emptyHint":
     "Ouvrez un chantier depuis un axe stratégique et ajoutez-y des ETP par équipe.",
   "effectifs.kpi.totalFte": "ETP mobilisés au total",
-  "effectifs.kpi.totalFteSub": "Somme de toutes les lignes de staffing du programme",
+  "effectifs.kpi.totalFteSub": "Total sur l'ensemble du programme, toutes périodes confondues",
   "effectifs.byAxis": "Répartition par axe",
   "effectifs.byAxisFor": "Répartition par axe",
   "effectifs.allFunctions": "Toutes les équipes",
   "effectifs.clickHint": "Cliquez une équipe pour voir sa répartition par axe.",
+  "effectifs.filteredOn": "Filtré sur : {fn}",
   "effectifs.percentOfFunction": "% de l'équipe",
   "effectifs.axisUnknown": "Axe inconnu",
   "effectifs.chantierUnknown": "Chantier inconnu",
@@ -1694,6 +1698,7 @@ const fr: Record<string, string> = {
   "staffingPeriod.undatedNote":
     "{n} ligne(s) de staffing sans date de début, non représentée(s) dans cette vue.",
   "staffingPeriod.utilization": "{pct}% d'utilisation",
+  "staffingPeriod.byChantier": "Par chantier :",
 
   // ─── Import Excel des effectifs (round 7 — StaffingImportButton.tsx) ──────────────────────
   "staffingImport.templateButton": "Télécharger le modèle",
@@ -1768,8 +1773,15 @@ const fr: Record<string, string> = {
   // Round 12 : moyenne des `progressPct` déclarés des leviers de la colonne (`{pct}` substitué
   // manuellement, voir `LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.avgProgress": "{pct}% en moyenne",
+  // Round 20, point 3 : pastille/bordure "En retard" sur une `LevierCard` (`isLevierLate`,
+  // lib/axisLogic.ts) — distincte de la pastille rouge existante du bucket de progression 0-33%.
+  "strategicDashboard.levierBoard.late": "En retard",
   // Round 15 : feuille de route programme (`ProgramRoadmap.tsx`) — vue globale, pleine largeur, en
   // bas du dashboard (une ligne par levier, tous axes/chantiers confondus).
+  // Round 20, point 3 : 3e sous-section du widget "chantier-dependency-alerts" (leviers en retard),
+  // même patron que les deux sous-sections existantes ci-dessus.
+  "strategicDashboard.lateLeviersHeading": "Leviers en retard",
+  "strategicDashboard.noLateLeviers": "Aucun levier en retard",
 
   // ─── Plan Stratégique — fiche de configuration d'un programme (admin) ─────
   "adminPrograms.manage": "Gérer",

@@ -13,9 +13,10 @@ import {
   computeIndicatorDelta,
   computeIndicatorStatus,
   countOnTrackAtRisk,
+  isChantierLate,
+  isLevierLate,
   latestMeasurement,
   milestoneProgressPct,
-  milestoneWeightPct,
   numberIndicators,
   programBlockedActions,
   programRoadmap,
@@ -1139,36 +1140,52 @@ describe("chantierMilestoneProgressPct", () => {
   });
 });
 
-// ─── Poids illustratif par jalon (round 9) ─────────────────────────────────────────────────────
+// ─── Retard d'un levier/chantier (round 20) ────────────────────────────────────────────────────
 
-describe("milestoneWeightPct", () => {
-  // Round 19 : MILESTONE_WEIGHT est désormais la somme cumulée de MILESTONE_WEIGHT_DELTA
-  // (E0=10, E1=20, E2=35, E3=85, E4=100) plutôt que des valeurs indépendantes.
-  it("returns the weight of the CURRENT milestone (not a cumulative sum)", () => {
-    expect(
-      milestoneWeightPct({
-        milestones: { currentMilestone: "E0", passedMilestones: [], checklists: {} },
-      })
-    ).toBe(10);
-    expect(
-      milestoneWeightPct({
-        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} },
-      })
-    ).toBe(35);
-    expect(
-      milestoneWeightPct({
-        milestones: {
-          currentMilestone: "E4",
-          passedMilestones: ["E0", "E1", "E2", "E3", "E4"],
-          checklists: {},
-        },
-      })
-    ).toBe(100);
+describe("isLevierLate", () => {
+  const today = new Date("2026-06-15T00:00:00");
+
+  it("is late when the end date has passed and progress is below 100%", () => {
+    const action = makeAction("CH1", "2026-01-01", "2026-06-01"); // fin passée, pas de milestones (0%)
+    expect(isLevierLate(action, 0, today)).toBe(true);
   });
 
-  it("defaults to E0's weight when milestones is absent", () => {
-    expect(milestoneWeightPct({ milestones: undefined })).toBe(10);
-    expect(milestoneWeightPct({})).toBe(10);
+  it("is NOT late when it was completed, even after its deadline", () => {
+    const action: ChantierAction = {
+      ...makeAction("CH1", "2026-01-01", "2026-06-01"),
+      milestones: {
+        currentMilestone: "E4",
+        passedMilestones: ["E0", "E1", "E2", "E3", "E4"],
+        checklists: {},
+      },
+    };
+    expect(isLevierLate(action, 100, today)).toBe(false);
+  });
+
+  it("is NOT late when it is not due yet", () => {
+    const action = makeAction("CH1", "2026-06-01", "2026-12-31"); // fin dans le futur
+    expect(isLevierLate(action, 0, today)).toBe(false);
+  });
+});
+
+describe("isChantierLate", () => {
+  const today = new Date("2026-06-15T00:00:00");
+
+  it("is late when at least one of its levers is late", () => {
+    const chantier = makeChantier("CH1");
+    const actionsWithProgress = [
+      { action: makeAction("CH1", "2026-06-01", "2026-12-31", "on-time"), progressPct: 0 }, // pas encore échu
+      { action: makeAction("CH1", "2026-01-01", "2026-06-01", "late"), progressPct: 0 }, // échu, 0%
+    ];
+    expect(isChantierLate(chantier, actionsWithProgress, today)).toBe(true);
+  });
+
+  it("is NOT late when none of its levers is late", () => {
+    const chantier = makeChantier("CH1");
+    const actionsWithProgress = [
+      { action: makeAction("CH1", "2026-06-01", "2026-12-31", "on-time"), progressPct: 0 },
+    ];
+    expect(isChantierLate(chantier, actionsWithProgress, today)).toBe(false);
   });
 });
 

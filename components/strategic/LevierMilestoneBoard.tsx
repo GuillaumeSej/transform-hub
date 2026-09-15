@@ -1,10 +1,11 @@
 "use client";
 
+import { TriangleAlert } from "lucide-react";
 import {
   colorForChantier,
   displayMilestoneId,
+  isLevierLate,
   milestoneProgressPct,
-  milestoneWeightPct,
   progressBucket,
   type ProgressBucket,
 } from "@/lib/axisLogic";
@@ -110,14 +111,8 @@ export function LevierCard({
 }: LevierBoardCard & {
   onLevierClick: (chantierId: string, focusActionId?: string) => void;
 }) {
+  const { t } = useTranslation();
   const borderClass = CHANTIER_BORDER_CLASS[chantierColor] ?? "border-border";
-  // Round 9, point 1 : remplissage pondéré par le poids du jalon COURANT (`milestoneWeightPct`,
-  // lib/axisLogic.ts — E0/E1/E2 cadrage léger, E3 exécution longue, E4 clôture) — un DEUXIÈME
-  // signal qui doit coexister avec l'accent de couleur par chantier (`border-l-4` ci-dessus) sans
-  // le remplacer : une fine bande en bas de carte (largeur proportionnelle au poids, jamais un
-  // lavage de fond complet) reste lisible avec le texte à 100% comme à 10%, contrairement à un
-  // fond teinté qui viendrait réduire le contraste du nom du levier.
-  const weightPct = milestoneWeightPct(action);
   // Round 19, point 3 : avancement PROPRE de ce levier (jalons pondérés `milestoneProgressPct`,
   // lib/axisLogic.ts) — jusqu'ici seule la moyenne PAR COLONNE était visible sur ce widget
   // (`avgPct`, plus bas), jamais le pourcentage individuel d'une carte précise. Mode dégradé
@@ -127,18 +122,38 @@ export function LevierCard({
   const progressPct = milestoneProgressPct(action);
   const progressPillClass = CARD_PROGRESS_PILL_CLASS[progressBucket(progressPct)];
   const displayedStage = displayMilestoneId(action.milestones?.currentMilestone ?? "E0");
+  // Round 20, point 4 : la bande décorative du bas utilise désormais la MÊME valeur que la
+  // pastille ci-dessus (`progressPct`, avec crédit partiel) — elle utilisait jusqu'ici
+  // `milestoneWeightPct` (poids du jalon COURANT, sans crédit partiel), d'où la divergence remontée
+  // par le PO ("la barre est presque pleine mais ça affiche 60%"). `milestoneWeightPct`/
+  // `MILESTONE_WEIGHT` (lib/axisLogic.ts) n'ont plus d'autre appelant et ont été supprimés.
+  // Round 20, point 3 : levier en retard (`isLevierLate`, lib/axisLogic.ts) — bordure/pastille
+  // "En retard" (ton `rag-red`), volontairement DISTINCTE de la pastille rouge `CARD_PROGRESS_PILL_CLASS`
+  // déjà utilisée pour un avancement 0-33% (deux signaux différents, jamais fusionnés).
+  const late = isLevierLate(action, progressPct);
   return (
     <button
       type="button"
       onClick={() => onLevierClick(chantier.id, action.id)}
       title={`${action.name} · ${chantier.name} · ${displayedStage} · ${progressPct}%`}
-      className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 bg-white p-2 pb-2.5 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass}`}
+      className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 bg-white p-2 pb-2.5 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass} ${
+        late ? "ring-1 ring-inset ring-rag-red" : ""
+      }`}
     >
       <span className="flex w-full items-center gap-1.5">
         <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${chantierColor}`} />
         <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-primary">
           {action.name}
         </span>
+        {late && (
+          <span
+            className="flex shrink-0 items-center gap-0.5 rounded-full bg-rag-red px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
+            title={t("strategicDashboard.levierBoard.late", "En retard")}
+          >
+            <TriangleAlert size={10} aria-hidden />
+            {t("strategicDashboard.levierBoard.late", "En retard")}
+          </span>
+        )}
         {/* Pourcentage d'avancement PROPRE à cette carte (round 19, point 3) — additif à la
             pastille de moyenne PAR COLONNE (`avgPct` plus bas), qui reste inchangée. */}
         <span
@@ -153,7 +168,7 @@ export function LevierCard({
       <span
         aria-hidden
         className="absolute bottom-0 left-0 h-[3px] rounded-r-full bg-black/50 transition-[width]"
-        style={{ width: `${weightPct}%` }}
+        style={{ width: `${progressPct}%` }}
       />
     </button>
   );

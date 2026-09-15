@@ -56,15 +56,41 @@ import type { ChantierStaffing } from "@/types";
  * (clic sur un segment de la même équipe, dans n'importe quelle période) — les deux appellent le
  * même `onSelectFunction`, avec le même comportement toggle qu'avant.
  */
+/** Réplique volontaire de `periodLabelForDate` (`lib/axisLogic.ts`, non exportée — ce fichier n'a
+ *  pas la main sur `axisLogic.ts` pour ce chantier, round 20 : périmètre agent figé). Nécessaire
+ *  pour retrouver, à partir d'une ligne `ChantierStaffing` brute, la même étiquette de période que
+ *  celle produite par `staffingPeriodBuckets` pour `buckets` — sans quoi le détail par chantier du
+ *  tooltip (round 20, point 3) pourrait diverger de l'agrégat affiché. */
+function periodLabelForDateLocal(
+  isoDate: string,
+  granularity: "quarterly" | "semiannual" | "annual"
+): string {
+  const year = isoDate.slice(0, 4);
+  const month = Number(isoDate.slice(5, 7)); // 1-12
+  switch (granularity) {
+    case "quarterly":
+      return `${year}-Q${Math.floor((month - 1) / 3) + 1}`;
+    case "semiannual":
+      return `${year}-S${month <= 6 ? 1 : 2}`;
+    case "annual":
+      return year;
+  }
+}
+
 export function StaffingPeriodBreakdown({
   staffing,
   fteByDept,
+  chantierNamesById = {},
   selectedFunction = null,
   onSelectFunction,
 }: {
   staffing: ChantierStaffing[];
   /** Disponible réel par équipe (base ETP entreprise, live) — voir doc-comment ci-dessus. */
   fteByDept: Record<string, number>;
+  /** `Chantier.id` → nom, pour le détail par chantier du tooltip (round 20, point 3) — construit
+   *  par l'appelant (`EffectifsPageClient.tsx` a déjà tous les chantiers du programme chargés).
+   *  Optionnel : un chantier absent de la map retombe sur `effectifs.chantierUnknown`. */
+  chantierNamesById?: Record<string, string>;
   selectedFunction?: string | null;
   onSelectFunction?: (fn: string | null) => void;
 }) {
@@ -72,6 +98,12 @@ export function StaffingPeriodBreakdown({
   const [granularity, setGranularity] = useState<"quarterly" | "semiannual" | "annual">(
     "quarterly"
   );
+  /** Équipe actuellement survolée (segment de barre OU entrée de légende) — round 20, point 3 :
+   *  distinct de `selectedFunction` (le clic, qui pilote le filtre de la section "Répartition par
+   *  axe" plus bas sur la page). Le tooltip privilégie le survol quand il existe, et retombe sur
+   *  `selectedFunction` sinon, pour montrer le détail par chantier de l'équipe la plus pertinente
+   *  dans chaque contexte. */
+  const [hoveredFunction, setHoveredFunction] = useState<string | null>(null);
 
   const buckets = useMemo(
     () => staffingPeriodBuckets(staffing, granularity),
@@ -88,6 +120,37 @@ export function StaffingPeriodBreakdown({
     () => Object.values(fteByDept).reduce((sum, v) => sum + v, 0),
     [fteByDept]
   );
+
+  /** % d'utilisation pour un total d'ETP mobilisés donné — factorisé (round 20, point 2) pour que
+   *  le libellé visible au-dessus du graphique ET le tooltip au survol utilisent EXACTEMENT le même
+   *  calcul, jamais deux chemins de calcul différents pour le même pourcentage. */
+  const pctUtilizedFor = (total: number): number | null =>
+    totalAvailable > 0 ? Math.round((total / totalAvailable) * 100) : null;
+
+  /** Détail par chantier, par (période, équipe) — round 20, point 3 : reconstruit depuis les
+   *  lignes `ChantierStaffing` brutes (jamais depuis `buckets`, qui n'agrège que par équipe, sans
+   *  granularité chantier) en réutilisant EXACTEMENT le même découpage de période que
+   *  `staffingPeriodBuckets` (voir `periodLabelForDateLocal` ci-dessus). Structure :
+   *  période → équipe → chantierId → ETP. */
+  const chantierBreakdownByPeriodFn = useMemo(() => {
+    const map = new Map<string, Map<string, Map<string, number>>>();
+    for (const entry of staffing) {
+      if (!entry.startDate) continue;
+      const period = periodLabelForDateLocal(entry.startDate, granularity);
+      let byFn = map.get(period);
+      if (!byFn) {
+        byFn = new Map();
+        map.set(period, byFn);
+      }
+      let byChantier = byFn.get(entry.function);
+      if (!byChantier) {
+        byChantier = new Map();
+        byFn.set(entry.function, byChantier);
+      }
+      byChantier.set(entry.chantierId, (byChantier.get(entry.chantierId) ?? 0) + (entry.fte || 0));
+    }
+    return map;
+  }, [staffing, granularity]);
 
   /** Union de toutes les équipes tous buckets confondus — voir doc-comment du composant. Triée
    *  alphabétiquement pour un ordre de légende/empilement stable indépendant de l'ordre d'arrivée
@@ -151,93 +214,151 @@ export function StaffingPeriodBreakdown({
         {buckets.length === 0 ? (
           <p className="text-sm text-text-secondary">{t("staffingPeriod.empty")}</p>
         ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-              <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                allowDecimals={false}
-                tickFormatter={(v) => String(Math.round(Number(v)))}
-              />
-              <Tooltip
-                content={({ active, payload, label }) => {
-                  if (!active || !payload || payload.length === 0) return null;
-                  const total = payload.reduce(
-                    (sum, p) => sum + (typeof p.value === "number" ? p.value : 0),
-                    0
-                  );
-                  const pctUtilized =
-                    totalAvailable > 0 ? Math.round((total / totalAvailable) * 100) : null;
-                  return (
-                    <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
-                      <p className="mb-1 font-bold text-primary">{label}</p>
-                      {payload
-                        .filter((p) => (typeof p.value === "number" ? p.value : 0) > 0)
-                        .map((p) => (
-                          <p
-                            key={String(p.dataKey)}
-                            className="flex items-center justify-between gap-3 text-secondary"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <span
-                                className="inline-block h-2 w-2 rounded-full"
-                                style={{ background: p.color }}
-                              />
-                              {p.name}
-                            </span>
-                            <span className="ml-2 font-semibold text-primary">
-                              {formatFte(Number(p.value))} {t("staffing.fteUnit")}
-                            </span>
-                          </p>
-                        ))}
-                      <p className="mt-1 border-t border-border pt-1 font-bold text-primary">
-                        {formatFte(total)} {t("staffing.fteUnit")}
-                        {pctUtilized !== null &&
-                          ` · ${t("staffingPeriod.utilization").replace("{pct}", String(pctUtilized))}`}
-                      </p>
-                    </div>
-                  );
-                }}
-              />
-              <Legend
-                verticalAlign="top"
-                align="right"
-                wrapperStyle={{
-                  fontSize: 11,
-                  paddingBottom: 8,
-                  cursor: onSelectFunction ? "pointer" : undefined,
-                }}
-                onClick={(entry) => {
-                  const fn = typeof entry?.value === "string" ? entry.value : undefined;
-                  if (!fn) return;
-                  onSelectFunction?.(selectedFunction === fn ? null : fn);
-                }}
-                formatter={(value) => (
+          <>
+            {/* % d'utilisation visible sans survol (round 20, point 2) — une ligne de libellés au-
+                dessus du graphique, une entrée par période, dans le même ordre que l'abscisse.
+                Réutilise `pctUtilizedFor`, exactement le même calcul que celui du tooltip
+                ci-dessous, pour que les deux ne puissent jamais diverger. */}
+            <div className="mb-2 flex flex-wrap gap-2">
+              {buckets.map((bucket) => {
+                const pct = pctUtilizedFor(bucket.totalFte);
+                return (
                   <span
-                    style={{ fontWeight: selectedFunction === value ? 700 : 400 }}
-                    className="text-primary"
+                    key={bucket.period}
+                    className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold text-secondary"
                   >
-                    {value}
+                    {bucket.period}
+                    {" · "}
+                    {pct !== null
+                      ? t("staffingPeriod.utilization").replace("{pct}", String(pct))
+                      : "—"}
                   </span>
-                )}
-              />
-              {teamNames.map((fn) => (
-                <Bar
-                  key={fn}
-                  dataKey={fn}
-                  name={fn}
-                  stackId="etp"
-                  fill={hexForDepartment(fn)}
-                  fillOpacity={selectedFunction && selectedFunction !== fn ? 0.35 : 1}
-                  cursor={onSelectFunction ? "pointer" : undefined}
-                  onClick={() => onSelectFunction?.(selectedFunction === fn ? null : fn)}
+                );
+              })}
+            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+                <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                  tickFormatter={(v) => String(Math.round(Number(v)))}
                 />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const total = payload.reduce(
+                      (sum, p) => sum + (typeof p.value === "number" ? p.value : 0),
+                      0
+                    );
+                    const pctUtilized = pctUtilizedFor(total);
+                    // Détail par chantier (round 20, point 3) : pour l'équipe survolée (priorité)
+                    // ou, à défaut, l'équipe actuellement sélectionnée — voir doc-comment de
+                    // `hoveredFunction` plus haut.
+                    const activeFn = hoveredFunction ?? selectedFunction ?? null;
+                    const chantierEntries = activeFn
+                      ? Array.from(
+                          chantierBreakdownByPeriodFn.get(String(label))?.get(activeFn) ?? []
+                        ).sort((a, b) => b[1] - a[1])
+                      : [];
+                    return (
+                      <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
+                        <p className="mb-1 font-bold text-primary">{label}</p>
+                        {payload
+                          .filter((p) => (typeof p.value === "number" ? p.value : 0) > 0)
+                          .map((p) => (
+                            <p
+                              key={String(p.dataKey)}
+                              className="flex items-center justify-between gap-3 text-secondary"
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <span
+                                  className="inline-block h-2 w-2 rounded-full"
+                                  style={{ background: p.color }}
+                                />
+                                {p.name}
+                              </span>
+                              <span className="ml-2 font-semibold text-primary">
+                                {formatFte(Number(p.value))} {t("staffing.fteUnit")}
+                              </span>
+                            </p>
+                          ))}
+                        <p className="mt-1 border-t border-border pt-1 font-bold text-primary">
+                          {formatFte(total)} {t("staffing.fteUnit")}
+                          {pctUtilized !== null &&
+                            ` · ${t("staffingPeriod.utilization").replace("{pct}", String(pctUtilized))}`}
+                        </p>
+                        {chantierEntries.length > 0 && (
+                          <div className="mt-1 border-t border-border pt-1">
+                            <p className="mb-0.5 font-semibold text-tertiary">
+                              {t("staffingPeriod.byChantier")} {activeFn}
+                            </p>
+                            {chantierEntries.map(([chantierId, fte]) => (
+                              <p
+                                key={chantierId}
+                                className="flex items-center justify-between gap-3 text-tertiary"
+                              >
+                                <span>
+                                  {chantierNamesById[chantierId] ?? t("effectifs.chantierUnknown")}
+                                </span>
+                                <span className="ml-2 font-semibold text-secondary">
+                                  {formatFte(fte)} {t("staffing.fteUnit")}
+                                </span>
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+                <Legend
+                  verticalAlign="top"
+                  align="right"
+                  wrapperStyle={{
+                    fontSize: 11,
+                    paddingBottom: 8,
+                    cursor: onSelectFunction ? "pointer" : undefined,
+                  }}
+                  onClick={(entry) => {
+                    const fn = typeof entry?.value === "string" ? entry.value : undefined;
+                    if (!fn) return;
+                    onSelectFunction?.(selectedFunction === fn ? null : fn);
+                  }}
+                  onMouseEnter={(entry) => {
+                    const fn = typeof entry?.value === "string" ? entry.value : undefined;
+                    if (fn) setHoveredFunction(fn);
+                  }}
+                  onMouseLeave={() => setHoveredFunction(null)}
+                  formatter={(value) => (
+                    <span
+                      style={{ fontWeight: selectedFunction === value ? 700 : 400 }}
+                      className="text-primary"
+                    >
+                      {value}
+                    </span>
+                  )}
+                />
+                {teamNames.map((fn) => (
+                  <Bar
+                    key={fn}
+                    dataKey={fn}
+                    name={fn}
+                    stackId="etp"
+                    fill={hexForDepartment(fn)}
+                    fillOpacity={selectedFunction && selectedFunction !== fn ? 0.35 : 1}
+                    cursor={onSelectFunction ? "pointer" : undefined}
+                    onClick={() => onSelectFunction?.(selectedFunction === fn ? null : fn)}
+                    onMouseEnter={() => setHoveredFunction(fn)}
+                    onMouseLeave={() => setHoveredFunction(null)}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </>
         )}
         {undatedCount > 0 && (
           <p className="mt-3 text-[11px] text-tertiary">

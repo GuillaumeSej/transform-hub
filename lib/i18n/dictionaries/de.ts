@@ -1219,6 +1219,7 @@ const de: Record<string, string> = {
   "strategicAxes.roadmap.scaleYear": "Jahr",
   "strategicAxes.roadmap.progress": "Fortschritt",
   "strategicAxes.roadmap.leviersSuffix": "Aktivitäten",
+  "strategicAxes.roadmap.late": "Verzögert",
   "strategicAxes.actionsCompleted": "Aktivitäten abgeschlossen",
   "strategicAxes.moreActionsSuffix": "weitere",
   "strategicAxes.cardNoActions": "Keine Aktivität",
@@ -1575,11 +1576,12 @@ const de: Record<string, string> = {
   "effectifs.emptyHint":
     "Öffnen Sie ein Vorhaben aus einer strategischen Achse und erfassen Sie VZÄ je Team.",
   "effectifs.kpi.totalFte": "Eingesetzte VZÄ insgesamt",
-  "effectifs.kpi.totalFteSub": "Summe aller Einsatzzeilen des Programms",
+  "effectifs.kpi.totalFteSub": "Summe über das gesamte Programm, alle Zeiträume zusammen",
   "effectifs.byAxis": "Verteilung nach Achse",
   "effectifs.byAxisFor": "Verteilung nach Achse",
   "effectifs.allFunctions": "Alle Teams",
   "effectifs.clickHint": "Klicken Sie auf ein Team, um seine Verteilung nach Achse zu sehen.",
+  "effectifs.filteredOn": "Gefiltert nach: {fn}",
   "effectifs.percentOfFunction": "% des Teams",
   "effectifs.axisUnknown": "Unbekannte Achse",
   "effectifs.chantierUnknown": "Unbekanntes Vorhaben",
@@ -1613,6 +1615,7 @@ const de: Record<string, string> = {
   "staffingPeriod.undatedNote":
     "{n} Personaleinsatzzeile(n) ohne Startdatum, in dieser Ansicht nicht dargestellt.",
   "staffingPeriod.utilization": "{pct}% Auslastung",
+  "staffingPeriod.byChantier": "Nach Vorhaben:",
 
   // ─── Excel-Import des Personaleinsatzes (Runde 7 — StaffingImportButton.tsx) ──────────────
   "staffingImport.templateButton": "Vorlage herunterladen",
@@ -1689,6 +1692,9 @@ const de: Record<string, string> = {
   // Runde 12: Durchschnitt der deklarierten `progressPct` der Leviers dieser Spalte (`{pct}` wird
   // manuell ersetzt, siehe `LevierMilestoneBoard.tsx`).
   "strategicDashboard.levierBoard.avgProgress": "{pct}% im Durchschnitt",
+  "strategicDashboard.levierBoard.late": "Verzögert",
+  "strategicDashboard.lateLeviersHeading": "Verzögerte Aktivitäten",
+  "strategicDashboard.noLateLeviers": "Keine verzögerten Aktivitäten",
   // Runde 15: programmweite Roadmap (`ProgramRoadmap.tsx`) — Vollbreiten-Ansicht des GESAMTEN
   // Programms am unteren Rand des Dashboards (eine Zeile pro Aktivität, über alle Achsen/
   // Arbeitspakete hinweg).
