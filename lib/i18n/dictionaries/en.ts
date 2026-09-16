@@ -1403,6 +1403,10 @@ const en: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Milestone passed",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Current milestone",
 
+  "strategicChantierDetail.milestones.section.A": "Prerequisites",
+  "strategicChantierDetail.milestones.section.B": "Execution",
+  "strategicChantierDetail.milestones.section.C": "Closure",
+
   // Round 12: declared percentage input (0-100) instead of a 3-level flag.
   "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
     "Declared progress, as a percentage",
@@ -1493,6 +1497,7 @@ const en: Record<string, string> = {
   "businessKpis.noValue": "No measurement",
   "kpi.axisUnknown": "Indicators without an axis",
   "kpi.macroIndicators": "Axis indicators",
+  "kpi.axisChantiersLabel": "Work packages of this axis",
   "kpi.indicatorNumber": "KPI number",
   "kpi.chantier": "Work package",
   // ─── "Axis KPIs" section + single-select Axis / Work package / Owner dropdowns (round 13,
@@ -1578,18 +1583,12 @@ const en: Record<string, string> = {
   "effectifs.emptyHint": "Open a workstream from a strategic axis and add FTEs per team.",
   "effectifs.kpi.totalFte": "Total FTEs assigned",
   "effectifs.kpi.totalFteSub": "Total across the whole programme, all periods combined",
-  "effectifs.byAxis": "Split by axis",
-  "effectifs.byAxisFor": "Split by axis",
   "effectifs.allFunctions": "All teams",
-  "effectifs.clickHint": "Click a team to see how it splits across axes.",
   "effectifs.filteredOn": "Filtered on: {fn}",
   "effectifs.filteredOnPeriod": "Period: {period}",
   "effectifs.byChantierLabel": "Workstreams",
-  "effectifs.percentOfFunction": "% of that team",
   "effectifs.axisUnknown": "Unknown axis",
   "effectifs.chantierUnknown": "Unknown workstream",
-  "effectifs.noStaffingOnAxis": "No FTE declared on this axis.",
-  "effectifs.noStaffingForFunction": "No FTE from this team on the programme's axes.",
   "effectifs.viewBaseEtp": "View FTE roster",
   "effectifs.needVsAvailable.title": "Declared need vs available (FTE roster)",
   "effectifs.needVsAvailable.empty":
@@ -1606,10 +1605,16 @@ const en: Record<string, string> = {
   "effectifs.moneyBudget.centerLabelConsumed": "Consumed / allocated",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consumed",
 
-  // ─── FTE split by period (round 7 — StaffingPeriodBreakdown.tsx) ──────────────────────────
-  "staffingPeriod.title": "FTE split by period",
-  "staffingPeriod.subtitle":
-    "Dated FTEs only, grouped by quarter, half-year, or year. Click a function to see its split by axis.",
+  // ─── FTE breakdown (round 7 — StaffingPeriodBreakdown.tsx; merged round 22 with the former
+  // "Split by axis" card of EffectifsPageClient.tsx) ────────────────────────────────────────
+  "staffingPeriod.title": "FTE breakdown",
+  "staffingPeriod.subtitle": "FTEs assigned to programme workstreams, {mode}, {scope}.",
+  "staffingPeriod.subtitle.modeTeam": "by team",
+  "staffingPeriod.subtitle.modeAxis": "by axis",
+  "staffingPeriod.subtitle.scopeAll": "across the whole timeline",
+  "staffingPeriod.subtitle.scopePeriod": "for {period}",
+  "staffingPeriod.mode.period": "Period",
+  "staffingPeriod.mode.axis": "Axis",
   "staffingPeriod.granularity.quarterly": "Quarter",
   "staffingPeriod.granularity.semiannual": "Half-year",
   "staffingPeriod.granularity.annual": "Year",
@@ -1617,6 +1622,7 @@ const en: Record<string, string> = {
   "staffingPeriod.undatedNote": "{n} staffing line(s) with no start date, not shown in this view.",
   "staffingPeriod.utilization": "{pct}% utilization",
   "staffingPeriod.byChantier": "By workstream:",
+  "staffingPeriod.pinnedDetail.title": "Detail — {period}",
 
   // ─── Staffing Excel import (round 7 — StaffingImportButton.tsx) ───────────────────────────
   "staffingImport.templateButton": "Download the template",
