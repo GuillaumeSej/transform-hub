@@ -1377,6 +1377,7 @@ const de: Record<string, string> = {
   // ─── An eine Aktivität geknüpfter KPI, auf ihrer Zeile angezeigt (Runde 10, Punkt 2) ──────
   "strategicChantierDetail.indicatorLink.label": "KPI Nr. {n} · {name}",
   "strategicChantierDetail.indicatorLink.notFound": "KPI nicht gefunden",
+  "strategicChantierDetail.linkedIndicatorTitle": "Verknüpfter KPI",
 
   "strategicChantierDetail.actionFocused": "Über den Link geöffnete Aktivität",
   "strategicChantierDetail.actionForm.missingHint": "Name und Daten ausfüllen, um zu speichern.",
@@ -1494,7 +1495,7 @@ const de: Record<string, string> = {
   "businessKpis.noValue": "Keine Messung",
   "kpi.axisUnknown": "Indikatoren ohne Achse",
   "kpi.macroIndicators": "Indikatoren der Achse",
-  "kpi.axisChantiersLabel": "Arbeitspakete dieser Achse",
+  "kpi.linkedChantiersLabel": "Verknüpfte Arbeitspakete",
   "kpi.indicatorNumber": "KPI-Nummer",
   "kpi.chantier": "Arbeitspaket",
   // ─── Abschnitt "KPIs der Achsen" + Einzelauswahl-Dropdowns Achse / Arbeitspaket / Verantwortlich

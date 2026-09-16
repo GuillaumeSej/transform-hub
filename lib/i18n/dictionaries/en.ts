@@ -1386,6 +1386,7 @@ const en: Record<string, string> = {
   // ─── KPI linked to a lever, shown on its row (round 10, point 2) ──────────────────────────
   "strategicChantierDetail.indicatorLink.label": "KPI #{n} · {name}",
   "strategicChantierDetail.indicatorLink.notFound": "KPI not found",
+  "strategicChantierDetail.linkedIndicatorTitle": "Linked KPI",
 
   "strategicChantierDetail.actionFocused": "Lever opened from the link",
   "strategicChantierDetail.actionForm.missingHint": "Fill in the name and dates to save.",
@@ -1497,7 +1498,7 @@ const en: Record<string, string> = {
   "businessKpis.noValue": "No measurement",
   "kpi.axisUnknown": "Indicators without an axis",
   "kpi.macroIndicators": "Axis indicators",
-  "kpi.axisChantiersLabel": "Work packages of this axis",
+  "kpi.linkedChantiersLabel": "Linked work packages",
   "kpi.indicatorNumber": "KPI number",
   "kpi.chantier": "Work package",
   // ─── "Axis KPIs" section + single-select Axis / Work package / Owner dropdowns (round 13,

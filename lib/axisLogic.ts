@@ -1249,6 +1249,18 @@ export function resolveIndicatorOwner(
  *  agrégé programme). */
 export type ProgramRoadmapDeliverable = Pick<Deliverable, "id" | "label" | "dueDate" | "status">;
 
+/** Échéance EFFECTIVE d'un livrable : sa `dueDate` explicite si déclarée, sinon la fin de sa
+ *  DERNIÈRE `phase` (round <n> — avant ce correctif, un livrable phasé mais sans `dueDate` autonome
+ *  n'apparaissait sur AUCUNE timeline, ni celle du chantier ni la feuille de route programme, alors
+ *  que le PO attend qu'un livrable déclaré avec des phases reste visible : « il faut bien que tous
+ *  les livrables attendus des leviers, on le voit »). `undefined` seulement si le livrable n'a NI
+ *  `dueDate` NI aucune `phase` — reste alors bien absent des deux timelines, comme avant. Partagée
+ *  par `normalizeRoadmapDeliverables` ci-dessous et par `ChantierDetailPanel.tsx` (import direct,
+ *  pour ne pas dupliquer la règle entre les deux call sites). */
+export function effectiveDueDate(d: Pick<Deliverable, "dueDate" | "phases">): string | undefined {
+  return d.dueDate ?? d.phases?.[d.phases.length - 1]?.end;
+}
+
 /**
  * UNE ligne de la feuille de route programme = UN LEVIER (`ChantierAction`), avec son axe et son
  * chantier parents déjà résolus — évite à l'appelant de refaire les deux `.find()` pour chaque
@@ -1270,8 +1282,9 @@ export type ProgramRoadmapRow = {
    *  supprimé). Volontairement RECALCULÉ ici plutôt qu'importé (la fonction source n'est pas
    *  exportée) mais compose les MÊMES primitives exportées, donc les deux ne peuvent pas diverger. */
   progressPct: number;
-  /** Livrables de ce levier portant une `dueDate` déclarée, uniquement (un livrable sans échéance
-   *  n'a rien à positionner sur la feuille de route) — même filtre que `dueDeliverables` dans
+  /** Livrables de ce levier ayant une échéance EFFECTIVE (`effectiveDueDate` : `dueDate` déclarée,
+   *  ou repli sur la fin de la dernière `phase`), uniquement (un livrable sans AUCUNE des deux n'a
+   *  rien à positionner sur la feuille de route) — même filtre que `dueDeliverables` dans
    *  `ChantierDetailPanel.tsx`. */
   deliverables: ProgramRoadmapDeliverable[];
 };
@@ -1280,14 +1293,18 @@ export type ProgramRoadmapRow = {
  *  `normalizeDeliverables` (fonction privée de `ChantierDetailPanel.tsx`, dupliquée ici plutôt
  *  qu'importée : elle n'est pas exportée et ce fichier n'est pas dans le périmètre modifiable de ce
  *  lot) : un livrable écrit AVANT l'introduction du modèle riche est une simple chaîne (`string[]`),
- *  traitée comme un livrable sans échéance ni statut plutôt que de faire planter la lecture. */
+ *  traitée comme un livrable sans échéance ni statut plutôt que de faire planter la lecture.
+ *
+ *  `dueDate` posé ici est déjà l'échéance EFFECTIVE (`effectiveDueDate`, ci-dessus) plutôt que la
+ *  `dueDate` brute du livrable : `ProgramRoadmap.tsx` (seul lecteur de ce type) continue de lire
+ *  `.dueDate` sans rien savoir du repli sur `phases`, donc pas besoin de le toucher. */
 function normalizeRoadmapDeliverables(
   raw: ChantierAction["deliverables"]
 ): ProgramRoadmapDeliverable[] {
   return (raw ?? []).map((d, i) =>
     typeof d === "string"
       ? { id: `legacy-${i}`, label: d }
-      : { id: d.id, label: d.label, dueDate: d.dueDate, status: d.status }
+      : { id: d.id, label: d.label, dueDate: effectiveDueDate(d), status: d.status }
   );
 }
 

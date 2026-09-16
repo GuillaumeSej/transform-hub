@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LineChart, Lock, Pencil, Plus, Target } from "lucide-react";
+import {
+  CalendarClock,
+  Hash,
+  ListChecks,
+  Lock,
+  LineChart,
+  Pencil,
+  Plus,
+  Target,
+} from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { Dropdown, type DropdownGroup, type DropdownOption } from "@/components/shared/Dropdown";
@@ -100,6 +109,7 @@ function IndicatorCard({
   updateIndicator,
   number,
   highlighted,
+  linkedChantiers,
 }: {
   indicator: Indicator;
   /** Mesures DE CET indicateur uniquement (déjà filtrées par l'appelant). */
@@ -114,9 +124,16 @@ function IndicatorCard({
   /** Mise en évidence brève à l'arrivée via `/kpi?indicator=<id>` (round 10, contrat de navigation
    *  KPI — voir le `useEffect` de `KpiPageClient`). */
   highlighted?: boolean;
+  /** Chantiers dont un LEVIER déclare cet indicateur comme son KPI lié (`ChantierAction.indicatorId`)
+   *  — voir `chantierIdsByIndicatorId`, `KpiPageClient`. Round 23 : remplace l'ancien chip row
+   *  "chantiers de l'axe" (informatif, jamais cliquable, listait TOUS les chantiers de l'axe sans
+   *  rapport avec l'indicateur affiché) par une liste précise et navigable. Vide la plupart du
+   *  temps (peu de leviers lient un KPI) — la rangée ne s'affiche alors pas du tout. */
+  linkedChantiers: { id: string; name: string }[];
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
+  const router = useRouter();
 
   const canFill = canFillIndicator(indicator, user);
   const quantitative = indicator.kind === "quantitative";
@@ -259,10 +276,18 @@ function IndicatorCard({
                 </span>
               )}
               <span className="text-sm">{indicator.name}</span>
-              <span className="rounded-full bg-bg-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                  quantitative
+                    ? "border-bp-coral/25 bg-bp-coral/10 text-bp-coral"
+                    : "border-border bg-bg-surface text-text-secondary"
+                }`}
+              >
+                {quantitative ? <Hash size={10} /> : <ListChecks size={10} />}
                 {t(`kpi.kind.${indicator.kind}`)}
               </span>
-              <span className="rounded-full bg-bg-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-bg-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+                <CalendarClock size={10} />
                 {t(`kpi.frequency.${indicator.frequency}`)}
               </span>
             </span>
@@ -332,6 +357,25 @@ function IndicatorCard({
 
             {/* ── Écriture : objectif + saisie de mesure ───────────────────────────────────── */}
             <div className="space-y-4">
+              {/* Chantiers dont un levier lie cet indicateur comme son KPI (round 23) — voir
+                  `linkedChantiers` ci-dessus. Absent la plupart du temps, d'où le garde-fou de
+                  longueur plutôt qu'une rangée vide. */}
+              {linkedChantiers.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
+                  <span className="font-medium">{t("kpi.linkedChantiersLabel")} :</span>
+                  {linkedChantiers.map((chantier) => (
+                    <button
+                      key={chantier.id}
+                      type="button"
+                      onClick={() => router.push(`/levers?chantier=${chantier.id}`)}
+                      className="cursor-pointer rounded-full bg-bg-surface px-2 py-0.5 text-[10px] font-medium text-text-secondary transition-colors hover:bg-bp-coral/10 hover:text-bp-coral"
+                    >
+                      {chantier.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Objectif / seuil — toujours visible, éditable seulement si autorisé. */}
               <div className="rounded-lg border border-border bg-bg-surface/60 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -505,6 +549,7 @@ export function KpiPageClient() {
   const {
     axes,
     chantiers,
+    chantierActions,
     indicators,
     measurements,
     loading: dataLoading,
@@ -681,17 +726,31 @@ export function KpiPageClient() {
     [axes, chantiers, indicators]
   );
 
-  /** Chantiers de CHAQUE axe, en clair (indépendant de tout filtre ou de la présence d'un
-   *  indicateur) — contrairement à `chantierGroups` ci-dessus, façonné en `DropdownGroup[]` pour
-   *  le dropdown de filtre et borné par `selectedAxisId`. Sert uniquement à donner du contexte
-   *  aux indicateurs macro/axe dans `AxisSection`, qui ne référencent sinon aucun chantier. */
-  const chantierNamesByAxisId = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    for (const axis of axes) {
-      map[axis.id] = chantiers.filter((c) => c.axisId === axis.id).map((c) => c.name);
+  /** Réponse à "quels chantiers ont un LEVIER qui déclare cet indicateur comme son KPI lié"
+   *  (round 23, remplace l'ancien `chantierNamesByAxisId` — qui listait TOUS les chantiers de
+   *  l'axe sans rapport avec l'indicateur affiché). Construit depuis `chantierActions` (déjà
+   *  souscrit par `useStrategicData`, aucun aller-retour Firestore supplémentaire) plutôt que
+   *  depuis un champ inverse sur `Indicator`, qui n'existe pas : le lien est porté par le levier
+   *  (`ChantierAction.indicatorId`), jamais par l'indicateur lui-même. */
+  const chantiersByIndicatorId = useMemo(() => {
+    const idsByIndicator = new Map<string, Set<string>>();
+    for (const action of chantierActions) {
+      if (!action.indicatorId) continue;
+      const bucket = idsByIndicator.get(action.indicatorId);
+      if (bucket) bucket.add(action.chantierId);
+      else idsByIndicator.set(action.indicatorId, new Set([action.chantierId]));
     }
+    const chantierById = new Map<string, Chantier>(chantiers.map((c) => [c.id, c]));
+    const map = new Map<string, { id: string; name: string }[]>();
+    idsByIndicator.forEach((chantierIds, indicatorId) => {
+      const resolved = Array.from(chantierIds)
+        .map((id) => chantierById.get(id))
+        .filter((c): c is Chantier => !!c)
+        .map((c) => ({ id: c.id, name: c.name }));
+      if (resolved.length > 0) map.set(indicatorId, resolved);
+    });
     return map;
-  }, [axes, chantiers]);
+  }, [chantierActions, chantiers]);
 
   // ── Contrat de navigation KPI (round 10) : `/kpi?indicator=<id>` défile jusqu'à la carte visée
   // et la met brièvement en évidence — même esprit que le surlignage `focusActionId` de
@@ -733,6 +792,7 @@ export function KpiPageClient() {
       updateIndicator={updateIndicator}
       number={indicatorNumbers.get(indicator.id)}
       highlighted={indicator.id === highlightedIndicatorId}
+      linkedChantiers={chantiersByIndicatorId.get(indicator.id) ?? []}
     />
   );
 
@@ -868,7 +928,6 @@ export function KpiPageClient() {
                 macro={macro}
                 byChantier={byChantier}
                 renderCard={renderCard}
-                axisChantierNames={chantierNamesByAxisId[axis.id] ?? []}
               />
             ))}
             {orphans.length > 0 && (
@@ -891,18 +950,14 @@ function AxisSection({
   macro,
   byChantier,
   renderCard,
-  axisChantierNames,
 }: {
   axis: StrategicAxis;
   macro: Indicator[];
   byChantier: { chantier: Chantier; indicators: Indicator[] }[];
   renderCard: (indicator: Indicator) => React.ReactNode;
-  /** Noms des chantiers de CET axe (voir `chantierNamesByAxisId`, `KpiPageClient`) — affichés en
-   *  contexte sous chaque indicateur macro/axe seulement quand l'axe en compte PLUSIEURS (un seul
-   *  chantier n'apporte rien de plus que ce que `axis.name` dit déjà). */
-  axisChantierNames: string[];
 }) {
   const { t } = useTranslation();
+  const router = useRouter();
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-baseline gap-2 border-b border-border pb-1.5">
@@ -915,31 +970,21 @@ function AxisSection({
           <p className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
             {t("kpi.macroIndicators")}
           </p>
-          {macro.map((indicator) => (
-            <div key={indicator.id} className="space-y-2">
-              {axisChantierNames.length > 1 && (
-                <div className="flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
-                  <span className="font-medium">{t("kpi.axisChantiersLabel")} :</span>
-                  {axisChantierNames.map((name) => (
-                    <span
-                      key={name}
-                      className="rounded-full bg-bg-surface px-2 py-0.5 text-[10px] font-medium text-text-secondary"
-                    >
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {renderCard(indicator)}
-            </div>
-          ))}
+          {macro.map(renderCard)}
         </div>
       )}
 
       {byChantier.map(({ chantier, indicators: chantierIndicators }) => (
         <div key={chantier.id} className="space-y-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
-            {t("kpi.chantier")} · {chantier.name}
+            {t("kpi.chantier")} ·{" "}
+            <button
+              type="button"
+              onClick={() => router.push(`/levers?chantier=${chantier.id}`)}
+              className="cursor-pointer hover:text-bp-coral hover:underline"
+            >
+              {chantier.name}
+            </button>
           </p>
           {chantierIndicators.map(renderCard)}
         </div>

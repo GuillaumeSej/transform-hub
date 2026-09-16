@@ -1377,6 +1377,7 @@ const es: Record<string, string> = {
   // ─── KPI vinculado a una actividad, mostrado en su fila (ronda 10, punto 2) ───────────────
   "strategicChantierDetail.indicatorLink.label": "KPI n.º {n} · {name}",
   "strategicChantierDetail.indicatorLink.notFound": "KPI no encontrado",
+  "strategicChantierDetail.linkedIndicatorTitle": "KPI asociado",
 
   "strategicChantierDetail.actionFocused": "Actividad abierta desde el enlace",
   "strategicChantierDetail.actionForm.missingHint": "Complete el nombre y las fechas para guardar.",
@@ -1492,7 +1493,7 @@ const es: Record<string, string> = {
   "businessKpis.noValue": "Sin medición",
   "kpi.axisUnknown": "Indicadores sin eje asignado",
   "kpi.macroIndicators": "Indicadores del eje",
-  "kpi.axisChantiersLabel": "Frentes de trabajo de este eje",
+  "kpi.linkedChantiersLabel": "Frentes de trabajo vinculados",
   "kpi.indicatorNumber": "KPI número",
   "kpi.chantier": "Frente de trabajo",
   // ─── Sección "KPI de los ejes" + desplegables de selección única Eje / Frente de trabajo /
