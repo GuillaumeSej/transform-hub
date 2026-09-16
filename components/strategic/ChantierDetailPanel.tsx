@@ -14,10 +14,12 @@ import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
 import { SuccessKpiList } from "@/components/strategic/SuccessKpiList";
 import {
   formatTimelineDay,
+  hexToRgb,
   timelineColumns,
   timelinePctOf,
   timelineRange,
   timelineYearBands,
+  withAlpha,
   TimelineBar,
   TimelineGridColumns,
   TimelineHeaderRow,
@@ -32,6 +34,7 @@ import {
   chantierDependencyAlerts,
   chantierMilestoneProgressPct,
   displayMilestoneId,
+  effectiveDueDate,
   milestoneProgressPct,
   numberIndicators,
   progressBucket,
@@ -40,7 +43,7 @@ import {
   type ProgressBucket,
 } from "@/lib/axisLogic";
 import { cn } from "@/lib/utils";
-import { addDays } from "@/lib/dateUtils";
+import { addDays, parseISO } from "@/lib/dateUtils";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantier } from "@/lib/firestore/chantiers";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -206,12 +209,31 @@ const DELIVERABLE_LANE_HEIGHT = 28;
 const DELIVERABLE_BAR_HEIGHT = 20;
 /** Hauteur de la sous-piste compacte portant les losanges de livrables sous la barre d'un levier,
  *  sur l'onglet "Timeline" fusionné (round <n>) — seulement ajoutée si le levier a au moins un
- *  livrable avec `dueDate` déclarée (voir son calcul dans le rendu de l'onglet). */
+ *  livrable avec une échéance EFFECTIVE (`effectiveDueDate`, `lib/axisLogic.ts` : `dueDate`
+ *  déclarée, ou repli sur la fin de sa dernière phase — voir son calcul dans le rendu de
+ *  l'onglet). */
 const DELIVERABLE_MARKER_LANE_HEIGHT = 18;
 
-/** « 3 sept. 2026 → 31 déc. 2027 ». */
+/** Date ISO ("2026-09-03") → « 03/09/2026 » — même analyse de date que `formatTimelineDay`
+ *  (`parseISO`, `lib/dateUtils.ts`) mais rendu numérique DD/MM/YYYY, jour/mois zéro-paddés, plus
+ *  compact et plus lisible en gros caractère que le format abrégé "3 sept. 2026" utilisé ailleurs
+ *  (infobulles Gantt/Timeline via `formatTimelineDay`, volontairement inchangé). Réservé aux 3
+ *  emplacements de cette fiche qui affichent des dates en évidence (en-tête de ligne de levier,
+ *  échéances "Livrables attendus", "Période" de l'onglet "Vue d'ensemble" — voir `formatRange`
+ *  ci-dessous). */
+function formatDateNumeric(iso: string): string {
+  const time = parseISO(iso);
+  if (Number.isNaN(time)) return iso;
+  return new Date(time).toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+/** « 03/09/2026 → 31/12/2027 ». */
 function formatRange(start: string, end: string): string {
-  return `${formatTimelineDay(start)} → ${formatTimelineDay(end)}`;
+  return `${formatDateNumeric(start)} → ${formatDateNumeric(end)}`;
 }
 
 /** Formatage d'un montant budgétaire pour `BudgetVsActualBar` (round <n>, blocs "consommé"
@@ -1299,6 +1321,15 @@ export function ChantierDetailPanel({
     [data.axes, chantier]
   );
 
+  /** Couleur d'accent (liséré + fond teinté) de la carte "Vue d'ensemble" ci-dessous — même hex
+   *  brut que celui déjà consommé par `TimelineBar` (`hexToRgb`/`withAlpha`), avec repli sur le
+   *  même gris neutre que `ProgramRoadmap.tsx` (`FALLBACK_COLOR`) quand l'axe n'a pas de couleur
+   *  valide, pour rester cohérent avec le reste de l'appli plutôt que d'inventer un nouveau gris. */
+  const axisAccentColor = useMemo(
+    () => (axis?.color && hexToRgb(axis.color) ? axis.color : "#a99e9a"),
+    [axis]
+  );
+
   const chantierActions = useMemo(
     () =>
       chantier
@@ -1781,229 +1812,260 @@ export function ChantierDetailPanel({
       {/* ── Onglet "Vue d'ensemble" : en-tête, critères de succès, grille d'effort ──────────── */}
       <div className={activeTab === "overview" ? undefined : "hidden"}>
         {/* ── En-tête : nom/étape, sponsor/pilote (éditables), période, avancement ────────────── */}
-        <Card>
-          <CardHeader
-            title={
-              <div className="flex flex-wrap items-center gap-2">
-                <span>{chantier.name}</span>
-              </div>
-            }
-            actions={
-              axis && (
-                <button
-                  onClick={() => navigateAway(`/levers/detail?id=${axis.id}`)}
-                  className="text-xs font-medium text-secondary hover:text-primary hover:underline"
-                >
-                  {axis.name}
-                </button>
-              )
-            }
-          />
-          <CardBody>
-            {chantier.description && (
-              <p className="mb-3 max-w-2xl text-[13px] text-secondary">{chantier.description}</p>
-            )}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <UserPicker
-                users={data.users}
-                value={chantier.sponsorName}
-                onChange={(v) => updateChantierField(v ? { sponsorName: v } : {})}
-                label={t("strategicChantierDetail.sponsor")}
-                placeholder={t("strategicAxes.unassigned")}
-                id="chantier-sponsor"
-              />
-              <UserPicker
-                users={data.users}
-                value={chantier.pilote}
-                onChange={(v) => updateChantierField(v ? { pilote: v } : {})}
-                label={t("strategicChantierDetail.pilote")}
-                placeholder={t("strategicAxes.unassigned")}
-                id="chantier-pilote"
-              />
-              <div>
-                <span className="text-xs font-medium text-text-secondary">
-                  {t("strategicAxes.chantierPeriod")}
-                </span>
-                <div className="mt-1.5 text-[13px] font-semibold text-primary">
-                  {bounds
-                    ? formatRange(bounds.start, bounds.end)
-                    : t("strategicAxes.chantierNoDates")}
+        {/* Liséré gauche + fond légèrement teinté de la couleur de l'axe (round <n>) — même patron
+            que la carte d'axe de `ProgramRoadmap.tsx` (`borderLeft` + `withAlpha(axisColor, …)`
+            en inline `style`, une couleur d'axe arbitraire n'ayant pas de classe Tailwind statique
+            correspondante) : la PO trouvait cet onglet "très blanc" comparé au reste de la fiche,
+            qui a déjà de la couleur (barre "Avancement", radar "Grille de notation d'effort"). La
+            bordure/le fond neutres portés par défaut par `Card` sont neutralisés ci-dessous
+            (`border-0 bg-transparent`) pour que ce seul conteneur dessine le cadre de la carte. */}
+        <div
+          className="mb-4 overflow-hidden rounded-lg border border-border"
+          style={{
+            borderLeft: `4px solid ${axisAccentColor}`,
+            backgroundColor: withAlpha(axisAccentColor, 0.04),
+          }}
+        >
+          <Card className="mb-0 border-0 bg-transparent shadow-none">
+            <CardHeader
+              title={
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>{chantier.name}</span>
                 </div>
-              </div>
-              <div>
-                <label
-                  className="text-xs font-medium text-text-secondary"
-                  htmlFor="chantier-allocated-budget"
-                >
-                  {t("strategicChantierDetail.allocatedBudget")}
-                  {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
-                </label>
-                <input
-                  id="chantier-allocated-budget"
-                  type="number"
-                  inputMode="decimal"
-                  value={allocatedBudgetInput}
-                  onChange={(e) => setAllocatedBudgetInput(e.target.value)}
-                  onBlur={() => {
-                    const trimmed = allocatedBudgetInput.trim();
-                    if (trimmed === "") {
-                      if (chantier.allocatedBudget !== undefined)
-                        clearChantierField("allocatedBudget");
-                      return;
-                    }
-                    const parsed = Number(trimmed);
-                    if (Number.isNaN(parsed) || parsed === chantier.allocatedBudget) return;
-                    // Round 12 : validation SYMÉTRIQUE de celle du formulaire de levier — le budget
-                    // du CHANTIER ne peut pas descendre sous la somme des budgets de ses leviers
-                    // ACTUELS (`chantierActions`, pas ce qui est en cours de saisie dans un
-                    // formulaire de levier éventuellement ouvert par ailleurs). Rejet : ni écriture,
-                    // ni tentative — l'input revient à la dernière valeur enregistrée, et un toast
-                    // explique pourquoi (même canal que `updateChantierField`/`clearChantierField`).
-                    const leviersBudgetSum = sumLevierBudgets(chantier.id, chantierActions);
-                    if (parsed < leviersBudgetSum) {
-                      setAllocatedBudgetInput(
-                        chantier.allocatedBudget !== undefined
-                          ? String(chantier.allocatedBudget)
-                          : ""
-                      );
-                      showToast(
-                        t("strategicAxes.chantierSaveErrorTitle"),
-                        t("strategicChantierDetail.allocatedBudgetBelowLeviers"),
-                        "error"
-                      );
-                      return;
-                    }
-                    updateChantierField({ allocatedBudget: parsed });
-                  }}
-                  className={INPUT_CLASS}
+              }
+              actions={
+                axis && (
+                  <button
+                    onClick={() => navigateAway(`/levers/detail?id=${axis.id}`)}
+                    className="text-xs font-medium text-secondary hover:text-primary hover:underline"
+                  >
+                    {axis.name}
+                  </button>
+                )
+              }
+            />
+            <CardBody>
+              {chantier.description && (
+                <p className="mb-3 max-w-2xl text-[13px] text-secondary">{chantier.description}</p>
+              )}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <UserPicker
+                  users={data.users}
+                  value={chantier.sponsorName}
+                  onChange={(v) => updateChantierField(v ? { sponsorName: v } : {})}
+                  label={t("strategicChantierDetail.sponsor")}
+                  placeholder={t("strategicAxes.unassigned")}
+                  id="chantier-sponsor"
                 />
-              </div>
-              {/* ── Budget consommé du chantier (round <n>) — pendant déclaratif de "budget alloué"
+                <UserPicker
+                  users={data.users}
+                  value={chantier.pilote}
+                  onChange={(v) => updateChantierField(v ? { pilote: v } : {})}
+                  label={t("strategicChantierDetail.pilote")}
+                  placeholder={t("strategicAxes.unassigned")}
+                  id="chantier-pilote"
+                />
+                <div>
+                  <span className="text-xs font-medium text-text-secondary">
+                    {t("strategicAxes.chantierPeriod")}
+                  </span>
+                  <div className="mt-1.5 text-[14px] font-semibold text-primary">
+                    {bounds
+                      ? formatRange(bounds.start, bounds.end)
+                      : t("strategicAxes.chantierNoDates")}
+                  </div>
+                </div>
+                <div>
+                  <label
+                    className="flex items-center gap-1.5 text-xs font-medium text-text-secondary"
+                    htmlFor="chantier-allocated-budget"
+                  >
+                    <span
+                      aria-hidden
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: axisAccentColor }}
+                    />
+                    {t("strategicChantierDetail.allocatedBudget")}
+                    {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
+                  </label>
+                  <input
+                    id="chantier-allocated-budget"
+                    type="number"
+                    inputMode="decimal"
+                    value={allocatedBudgetInput}
+                    onChange={(e) => setAllocatedBudgetInput(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = allocatedBudgetInput.trim();
+                      if (trimmed === "") {
+                        if (chantier.allocatedBudget !== undefined)
+                          clearChantierField("allocatedBudget");
+                        return;
+                      }
+                      const parsed = Number(trimmed);
+                      if (Number.isNaN(parsed) || parsed === chantier.allocatedBudget) return;
+                      // Round 12 : validation SYMÉTRIQUE de celle du formulaire de levier — le budget
+                      // du CHANTIER ne peut pas descendre sous la somme des budgets de ses leviers
+                      // ACTUELS (`chantierActions`, pas ce qui est en cours de saisie dans un
+                      // formulaire de levier éventuellement ouvert par ailleurs). Rejet : ni écriture,
+                      // ni tentative — l'input revient à la dernière valeur enregistrée, et un toast
+                      // explique pourquoi (même canal que `updateChantierField`/`clearChantierField`).
+                      const leviersBudgetSum = sumLevierBudgets(chantier.id, chantierActions);
+                      if (parsed < leviersBudgetSum) {
+                        setAllocatedBudgetInput(
+                          chantier.allocatedBudget !== undefined
+                            ? String(chantier.allocatedBudget)
+                            : ""
+                        );
+                        showToast(
+                          t("strategicAxes.chantierSaveErrorTitle"),
+                          t("strategicChantierDetail.allocatedBudgetBelowLeviers"),
+                          "error"
+                        );
+                        return;
+                      }
+                      updateChantierField({ allocatedBudget: parsed });
+                    }}
+                    className={INPUT_CLASS}
+                  />
+                </div>
+                {/* ── Budget consommé du chantier (round <n>) — pendant déclaratif de "budget alloué"
                 ci-dessus pour `Chantier.consumedBudget` : EXACTE même discipline de saisie (texte
                 libre local, sauvegarde au blur, clé retirée si vidée), voir `clearChantierField`. */}
-              <div>
-                <label
-                  className="text-xs font-medium text-text-secondary"
-                  htmlFor="chantier-consumed-budget"
-                >
-                  {t("strategicChantierDetail.consumedBudget")}
-                  {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
-                </label>
-                <input
-                  id="chantier-consumed-budget"
-                  type="number"
-                  inputMode="decimal"
-                  value={consumedBudgetInput}
-                  onChange={(e) => setConsumedBudgetInput(e.target.value)}
-                  onBlur={() => {
-                    const trimmed = consumedBudgetInput.trim();
-                    if (trimmed === "") {
-                      if (chantier.consumedBudget !== undefined)
-                        clearChantierField("consumedBudget");
-                      return;
-                    }
-                    const parsed = Number(trimmed);
-                    if (Number.isNaN(parsed) || parsed === chantier.consumedBudget) return;
-                    updateChantierField({ consumedBudget: parsed });
-                  }}
-                  className={INPUT_CLASS}
-                />
-                <BudgetVsActualBar
-                  className="mt-2"
-                  planned={chantier.allocatedBudget ?? 0}
-                  consumed={chantier.consumedBudget ?? 0}
-                  formatValue={(n) => formatBudgetAmount(n, activeProgram?.currency)}
-                />
-              </div>
-              {/* ── ETP consommés du chantier (round <n>) — même pendant pour `Chantier.consumedFte`,
+                <div>
+                  <label
+                    className="flex items-center gap-1.5 text-xs font-medium text-text-secondary"
+                    htmlFor="chantier-consumed-budget"
+                  >
+                    <span
+                      aria-hidden
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: axisAccentColor }}
+                    />
+                    {t("strategicChantierDetail.consumedBudget")}
+                    {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
+                  </label>
+                  <input
+                    id="chantier-consumed-budget"
+                    type="number"
+                    inputMode="decimal"
+                    value={consumedBudgetInput}
+                    onChange={(e) => setConsumedBudgetInput(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = consumedBudgetInput.trim();
+                      if (trimmed === "") {
+                        if (chantier.consumedBudget !== undefined)
+                          clearChantierField("consumedBudget");
+                        return;
+                      }
+                      const parsed = Number(trimmed);
+                      if (Number.isNaN(parsed) || parsed === chantier.consumedBudget) return;
+                      updateChantierField({ consumedBudget: parsed });
+                    }}
+                    className={INPUT_CLASS}
+                  />
+                  <BudgetVsActualBar
+                    className="mt-2"
+                    planned={chantier.allocatedBudget ?? 0}
+                    consumed={chantier.consumedBudget ?? 0}
+                    formatValue={(n) => formatBudgetAmount(n, activeProgram?.currency)}
+                  />
+                </div>
+                {/* ── ETP consommés du chantier (round <n>) — même pendant pour `Chantier.consumedFte`,
                 comparé aux ETP PLANIFIÉS (`plannedFteTotal`, somme des lignes `ChantierStaffing` du
                 chantier — voir son commentaire ci-dessus, pas de champ "ETP cible" déclaratif). */}
-              <div>
-                <label
-                  className="text-xs font-medium text-text-secondary"
-                  htmlFor="chantier-consumed-fte"
-                >
-                  {t("strategicChantierDetail.consumedFte")} ({t("staffing.fteUnit")})
-                </label>
-                <input
-                  id="chantier-consumed-fte"
-                  type="number"
-                  inputMode="decimal"
-                  value={consumedFteInput}
-                  onChange={(e) => setConsumedFteInput(e.target.value)}
-                  onBlur={() => {
-                    const trimmed = consumedFteInput.trim();
-                    if (trimmed === "") {
-                      if (chantier.consumedFte !== undefined) clearChantierField("consumedFte");
-                      return;
-                    }
-                    const parsed = Number(trimmed);
-                    if (Number.isNaN(parsed) || parsed === chantier.consumedFte) return;
-                    updateChantierField({ consumedFte: parsed });
-                  }}
-                  className={INPUT_CLASS}
-                />
-                <BudgetVsActualBar
-                  className="mt-2"
-                  planned={plannedFteTotal}
-                  consumed={chantier.consumedFte ?? 0}
-                  formatValue={(n) => `${formatFte(n)} ${t("staffing.fteUnit")}`}
-                />
-              </div>
-              <div>
-                <span className="text-xs font-medium text-text-secondary">
-                  {t("strategicAxes.progress")}
-                </span>
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${progressPct}%`,
-                        backgroundColor: axis?.color ?? "var(--bp-warm-taupe)",
-                      }}
-                    />
-                  </div>
-                  <span className="shrink-0 text-[13px] font-bold text-primary">
-                    {progressPct}%
-                  </span>
-                </div>
-              </div>
-              {confidentialityLevels.length > 0 && (
                 <div>
                   <label
                     className="text-xs font-medium text-text-secondary"
-                    htmlFor="chantier-confidentiality"
+                    htmlFor="chantier-consumed-fte"
                   >
-                    {t("strategicChantierDetail.confidentialityLevel", "Niveau de confidentialité")}
+                    {t("strategicChantierDetail.consumedFte")} ({t("staffing.fteUnit")})
                   </label>
-                  <select
-                    id="chantier-confidentiality"
+                  <input
+                    id="chantier-consumed-fte"
+                    type="number"
+                    inputMode="decimal"
+                    value={consumedFteInput}
+                    onChange={(e) => setConsumedFteInput(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = consumedFteInput.trim();
+                      if (trimmed === "") {
+                        if (chantier.consumedFte !== undefined) clearChantierField("consumedFte");
+                        return;
+                      }
+                      const parsed = Number(trimmed);
+                      if (Number.isNaN(parsed) || parsed === chantier.consumedFte) return;
+                      updateChantierField({ consumedFte: parsed });
+                    }}
                     className={INPUT_CLASS}
-                    value={chantier.confidentialityLevel ?? ""}
-                    onChange={(e) =>
-                      e.target.value
-                        ? updateChantierField({ confidentialityLevel: e.target.value })
-                        : clearChantierField("confidentialityLevel")
-                    }
-                  >
-                    <option value="">
-                      {t(
-                        "strategicChantierDetail.confidentialityLevelNone",
-                        "Aucun (visible par tous)"
-                      )}
-                    </option>
-                    {confidentialityLevels.map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  <BudgetVsActualBar
+                    className="mt-2"
+                    planned={plannedFteTotal}
+                    consumed={chantier.consumedFte ?? 0}
+                    formatValue={(n) => `${formatFte(n)} ${t("staffing.fteUnit")}`}
+                  />
                 </div>
-              )}
-            </div>
-          </CardBody>
-        </Card>
+                <div>
+                  <span className="text-xs font-medium text-text-secondary">
+                    {t("strategicAxes.progress")}
+                  </span>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div
+                      className="h-2.5 flex-1 overflow-hidden rounded-full"
+                      style={{ backgroundColor: withAlpha(axisAccentColor, 0.15) }}
+                    >
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${progressPct}%`,
+                          backgroundColor: axis?.color ?? "var(--bp-warm-taupe)",
+                        }}
+                      />
+                    </div>
+                    <span className="shrink-0 text-[15px] font-bold text-primary">
+                      {progressPct}%
+                    </span>
+                  </div>
+                </div>
+                {confidentialityLevels.length > 0 && (
+                  <div>
+                    <label
+                      className="text-xs font-medium text-text-secondary"
+                      htmlFor="chantier-confidentiality"
+                    >
+                      {t(
+                        "strategicChantierDetail.confidentialityLevel",
+                        "Niveau de confidentialité"
+                      )}
+                    </label>
+                    <select
+                      id="chantier-confidentiality"
+                      className={INPUT_CLASS}
+                      value={chantier.confidentialityLevel ?? ""}
+                      onChange={(e) =>
+                        e.target.value
+                          ? updateChantierField({ confidentialityLevel: e.target.value })
+                          : clearChantierField("confidentialityLevel")
+                      }
+                    >
+                      <option value="">
+                        {t(
+                          "strategicChantierDetail.confidentialityLevelNone",
+                          "Aucun (visible par tous)"
+                        )}
+                      </option>
+                      {confidentialityLevels.map((level) => (
+                        <option key={level} value={level}>
+                          {level}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </CardBody>
+          </Card>
+        </div>
 
         {/* ── Critères de succès ──────────────────────────────────────────────────────────────── */}
         <Card>
@@ -2044,9 +2106,11 @@ export function ChantierDetailPanel({
           dédié aux phases de livrables) : une barre par levier, façon Gantt, remplie/colorée selon
           son avancement — jalons E0→E4 pour tout levier, avec ou sans KPI rattaché (round 18, voir
           `progressionPctFor`/`progressionColorFor` en tête de fichier) — complétée d'un losange par
-          livrable ayant une `dueDate` déclarée (`TimelineMarker`, couleur via
-          `deliverableStatusColor`), sur le MÊME axe temporel que la barre de son levier parent (pas
-          un axe séparé — c'est justement ce qui manquait à l'ancien onglet dédié). ─────────────── */}
+          livrable ayant une échéance EFFECTIVE (`effectiveDueDate`, `lib/axisLogic.ts` : `dueDate`
+          déclarée, ou repli sur la fin de sa dernière phase si aucune `dueDate` autonome n'est
+          renseignée) (`TimelineMarker`, couleur via `deliverableStatusColor`), sur le MÊME axe
+          temporel que la barre de son levier parent (pas un axe séparé — c'est justement ce qui
+          manquait à l'ancien onglet dédié). ─────────────────────────────────────────────────────── */}
       <div className={activeTab === "progression" ? undefined : "hidden"}>
         <Card>
           <CardHeader
@@ -2096,7 +2160,7 @@ export function ChantierDetailPanel({
                     const left = progressionPctOfComputed(action.start);
                     const width = Math.max(1.5, progressionPctOfComputed(action.end) - left);
                     const dueDeliverables = normalizeDeliverables(action.deliverables).filter(
-                      (d) => d.dueDate
+                      (d) => effectiveDueDate(d) !== undefined
                     );
                     const laneHeight =
                       dueDeliverables.length > 0
@@ -2134,14 +2198,14 @@ export function ChantierDetailPanel({
                           {dueDeliverables.map((d) => (
                             <TimelineMarker
                               key={d.id}
-                              leftPct={progressionPctOfComputed(d.dueDate!)}
+                              leftPct={progressionPctOfComputed(effectiveDueDate(d)!)}
                               top={DELIVERABLE_LANE_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT / 2}
                               color={deliverableStatusColor(d.status)}
                               onClick={() =>
                                 setOpenDeliverable({ actionId: action.id, deliverableId: d.id })
                               }
                               ariaLabel={d.label}
-                              tooltipText={`${d.label} · ${formatTimelineDay(d.dueDate!)}`}
+                              tooltipText={`${d.label} · ${formatTimelineDay(effectiveDueDate(d)!)}`}
                             />
                           ))}
                         </div>
@@ -2350,13 +2414,18 @@ export function ChantierDetailPanel({
                               </span>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-tertiary">
-                              <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-secondary">
-                                {formatTimelineDay(action.start)}
+                              <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[14px] font-semibold text-secondary">
+                                {formatDateNumeric(action.start)}
                                 <span className="mx-1 font-bold text-tertiary">→</span>
-                                {formatTimelineDay(action.end)}
+                                {formatDateNumeric(action.end)}
                               </span>
                               {action.owner && (
-                                <span>· {resolveUserLabel(action.owner, data.users)}</span>
+                                <>
+                                  <span className="text-[11px] text-tertiary">· </span>
+                                  <span className="text-[13px] font-semibold text-primary">
+                                    {resolveUserLabel(action.owner, data.users)}
+                                  </span>
+                                </>
                               )}
                               {action.sponsor && (
                                 <span>
@@ -2437,7 +2506,7 @@ export function ChantierDetailPanel({
                                         {d.phases.map((p) => (
                                           <span
                                             key={p.id}
-                                            className="rounded-full border border-border bg-white px-2 py-0.5 text-xs text-secondary"
+                                            className="rounded-full border border-border bg-white px-2 py-0.5 text-[14px] font-semibold text-secondary"
                                           >
                                             {formatRange(p.start, p.end)}
                                             {p.note ? ` · ${p.note}` : ""}
@@ -2450,6 +2519,46 @@ export function ChantierDetailPanel({
                               </ul>
                             )}
                           </div>
+
+                          {/* ── KPI associé au LEVIER (round <n> — EXTRAIT du bloc "Méthode de
+                        jalons" ci-dessous, où il était trop discret et mal placé selon le PO : « je
+                        ne sais pas si c'est vraiment au bon endroit ») : sa propre carte, MÊME
+                        convention que "Livrables attendus" ci-dessus (`rounded-lg border
+                        border-border bg-neutral-50/50 p-3`), placée juste avant les jalons pour
+                        l'ordre de lecture description → livrables → KPI associé → jalons →
+                        dépendances. Absente du tout si le levier n'a pas de `indicatorId` (même
+                        parti pris qu'avant l'extraction — pas de carte vide). ────────────────── */}
+                          {action.indicatorId && (
+                            <div className="mt-3 rounded-lg border border-border bg-neutral-50/50 p-3">
+                              <div className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+                                {t("strategicChantierDetail.linkedIndicatorTitle", "KPI associé")}
+                              </div>
+                              <div className="mt-1">
+                                {linkedIndicator ? (
+                                  <button
+                                    onClick={() =>
+                                      navigateAway(`/kpi?indicator=${action.indicatorId}`)
+                                    }
+                                    className="text-[13px] font-medium text-bp-coral hover:underline"
+                                  >
+                                    {t(
+                                      "strategicChantierDetail.indicatorLink.label",
+                                      "KPI n°{n} · {name}"
+                                    )
+                                      .replace("{n}", String(linkedIndicatorNumber ?? "?"))
+                                      .replace("{name}", linkedIndicator.name)}
+                                  </button>
+                                ) : (
+                                  <span className="text-[13px] text-tertiary">
+                                    {t(
+                                      "strategicChantierDetail.indicatorLink.notFound",
+                                      "KPI introuvable"
+                                    )}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
 
                           {/* ── Suivi du LEVIER : jalons E0→E4, universellement pour tout levier
                         avec ou sans KPI rattaché (round 18 — l'ancien aiguillage vers un kanban
@@ -2473,32 +2582,6 @@ export function ChantierDetailPanel({
                                 {actionProgressPct}%
                               </span>
                             </div>
-                            {action.indicatorId && (
-                              <div className="mt-1">
-                                {linkedIndicator ? (
-                                  <button
-                                    onClick={() =>
-                                      navigateAway(`/kpi?indicator=${action.indicatorId}`)
-                                    }
-                                    className="text-[11px] font-medium text-bp-coral hover:underline"
-                                  >
-                                    {t(
-                                      "strategicChantierDetail.indicatorLink.label",
-                                      "KPI n°{n} · {name}"
-                                    )
-                                      .replace("{n}", String(linkedIndicatorNumber ?? "?"))
-                                      .replace("{name}", linkedIndicator.name)}
-                                  </button>
-                                ) : (
-                                  <span className="text-[11px] text-tertiary">
-                                    {t(
-                                      "strategicChantierDetail.indicatorLink.notFound",
-                                      "KPI introuvable"
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-                            )}
                             <div className="mt-2">
                               <MilestoneStepper
                                 currentMilestone={actionMilestones.currentMilestone}

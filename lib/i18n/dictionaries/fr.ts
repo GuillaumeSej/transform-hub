@@ -1457,6 +1457,9 @@ const fr: Record<string, string> = {
   // ─── KPI rattaché à un levier, affiché sur sa ligne (round 10, point 2) ───────────────────
   "strategicChantierDetail.indicatorLink.label": "KPI n°{n} · {name}",
   "strategicChantierDetail.indicatorLink.notFound": "KPI introuvable",
+  // Titre de la carte "KPI associé" (round <n>) — section dédiée où ce lien a été extrait du
+  // bloc "Méthode de jalons", même convention de titre que les autres sections du levier.
+  "strategicChantierDetail.linkedIndicatorTitle": "KPI associé",
 
   "strategicChantierDetail.actionFocused": "Levier ouvert depuis le lien",
   "strategicChantierDetail.actionForm.missingHint":
@@ -1572,7 +1575,7 @@ const fr: Record<string, string> = {
   "businessKpis.noValue": "Aucune mesure",
   "kpi.axisUnknown": "Indicateurs sans axe rattaché",
   "kpi.macroIndicators": "Indicateurs de l'axe",
-  "kpi.axisChantiersLabel": "Chantiers de l'axe",
+  "kpi.linkedChantiersLabel": "Chantiers liés",
   "kpi.indicatorNumber": "KPI numéro",
   "kpi.chantier": "Chantier",
   // ─── Section "KPI des axes" + dropdowns Axe / Chantier / Responsable à sélection unique
