@@ -681,6 +681,18 @@ export function KpiPageClient() {
     [axes, chantiers, indicators]
   );
 
+  /** Chantiers de CHAQUE axe, en clair (indépendant de tout filtre ou de la présence d'un
+   *  indicateur) — contrairement à `chantierGroups` ci-dessus, façonné en `DropdownGroup[]` pour
+   *  le dropdown de filtre et borné par `selectedAxisId`. Sert uniquement à donner du contexte
+   *  aux indicateurs macro/axe dans `AxisSection`, qui ne référencent sinon aucun chantier. */
+  const chantierNamesByAxisId = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const axis of axes) {
+      map[axis.id] = chantiers.filter((c) => c.axisId === axis.id).map((c) => c.name);
+    }
+    return map;
+  }, [axes, chantiers]);
+
   // ── Contrat de navigation KPI (round 10) : `/kpi?indicator=<id>` défile jusqu'à la carte visée
   // et la met brièvement en évidence — même esprit que le surlignage `focusActionId` de
   // `ChantierDetailPanel.tsx` (bordure/anneau `bp-coral` temporaire), à ceci près que là-bas la
@@ -856,6 +868,7 @@ export function KpiPageClient() {
                 macro={macro}
                 byChantier={byChantier}
                 renderCard={renderCard}
+                axisChantierNames={chantierNamesByAxisId[axis.id] ?? []}
               />
             ))}
             {orphans.length > 0 && (
@@ -878,11 +891,16 @@ function AxisSection({
   macro,
   byChantier,
   renderCard,
+  axisChantierNames,
 }: {
   axis: StrategicAxis;
   macro: Indicator[];
   byChantier: { chantier: Chantier; indicators: Indicator[] }[];
   renderCard: (indicator: Indicator) => React.ReactNode;
+  /** Noms des chantiers de CET axe (voir `chantierNamesByAxisId`, `KpiPageClient`) — affichés en
+   *  contexte sous chaque indicateur macro/axe seulement quand l'axe en compte PLUSIEURS (un seul
+   *  chantier n'apporte rien de plus que ce que `axis.name` dit déjà). */
+  axisChantierNames: string[];
 }) {
   const { t } = useTranslation();
   return (
@@ -897,7 +915,24 @@ function AxisSection({
           <p className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
             {t("kpi.macroIndicators")}
           </p>
-          {macro.map(renderCard)}
+          {macro.map((indicator) => (
+            <div key={indicator.id} className="space-y-2">
+              {axisChantierNames.length > 1 && (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
+                  <span className="font-medium">{t("kpi.axisChantiersLabel")} :</span>
+                  {axisChantierNames.map((name) => (
+                    <span
+                      key={name}
+                      className="rounded-full bg-bg-surface px-2 py-0.5 text-[10px] font-medium text-text-secondary"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {renderCard(indicator)}
+            </div>
+          ))}
         </div>
       )}
 

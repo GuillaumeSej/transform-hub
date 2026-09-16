@@ -388,7 +388,9 @@ function PrerequisitesEditor({
 
   return (
     <div>
-      <span className="text-[13px] font-bold text-primary">{labels.prerequisitesTitle}</span>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+        {labels.prerequisitesTitle}
+      </div>
       {value.length === 0 ? (
         <p className="mt-1 text-[12px] text-tertiary">{labels.prerequisiteNone}</p>
       ) : (
@@ -2412,8 +2414,8 @@ export function ChantierDetailPanel({
                             </p>
                           )}
 
-                          <div className="mt-2">
-                            <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                          <div className="mt-3 rounded-lg border border-border bg-neutral-50/50 p-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
                               {t("strategicAxes.deliverables")}
                             </div>
                             {actionDeliverables.length === 0 ? (
@@ -2452,9 +2454,13 @@ export function ChantierDetailPanel({
                           {/* ── Suivi du LEVIER : jalons E0→E4, universellement pour tout levier
                         avec ou sans KPI rattaché (round 18 — l'ancien aiguillage vers un kanban
                         classique pour les leviers sans `indicatorId` a été supprimé) ─────────── */}
-                          <div className="mt-3 border-t border-border pt-3">
+                          {/* Round polish UX : pas de `border` ici (contrairement aux 2 autres
+                        sous-sections du levier) pour éviter un double-cadre avec la carte blanche
+                        déjà dessinée par `MilestoneStepper` juste en dessous — seul le fond
+                        `bg-neutral-50/50` + `p-3` est repris pour garder un poids visuel cohérent. */}
+                          <div className="mt-3 rounded-lg bg-neutral-50/50 p-3">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
                                 {t("strategicChantierDetail.milestones.title")}
                               </span>
                               <span
@@ -2554,13 +2560,14 @@ export function ChantierDetailPanel({
                           </div>
 
                           {/* ── Dépendances / Prérequis du LEVIER (round 7 — fusion) ──────────────────
-                        titre à changer en "Dépendances / Prérequis" par un round i18n suivant
-                        (workstream C, renommage "action" → "levier") — key `prerequisites.title`
-                        inchangée volontairement, hors scope ici.
-                        Round 9, point 2 : `border-t-2` (plus marqué que le `border-t` du bloc
-                        jalons/kanban ci-dessus) pour que les deux sous-sections internes du levier
-                        se distinguent d'un coup d'œil. */}
-                          <div className="mt-3 border-t-2 border-border pt-3">
+                        Round polish UX : la distinction entre sous-sections du levier se fait
+                        maintenant via une carte `rounded-lg border ... bg-neutral-50/50 p-3`
+                        uniforme (même traitement que le bloc "Livrables attendus" ci-dessus),
+                        remplaçant l'ancien `border-t-2` ad hoc. Le titre visible de ce bloc est
+                        rendu par `PrerequisitesEditor` lui-même via `labels.prerequisitesTitle`
+                        (clé `strategicChantierDetail.prerequisites.title`, déjà existante et
+                        réutilisée telle quelle — pas de nouvelle clé i18n nécessaire). */}
+                          <div className="mt-3 rounded-lg border border-border bg-neutral-50/50 p-3">
                             {chantierBlockingAlerts.length > 0 && (
                               <div className="mb-2 space-y-1">
                                 {chantierBlockingAlerts.map((alert) => (

@@ -1395,6 +1395,10 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Meilenstein erreicht",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Aktueller Meilenstein",
 
+  "strategicChantierDetail.milestones.section.A": "Voraussetzungen",
+  "strategicChantierDetail.milestones.section.B": "Umsetzung",
+  "strategicChantierDetail.milestones.section.C": "Abschluss",
+
   // Runde 12: deklarierter Prozentsatz (0-100) statt einer Ampel mit 3 Stufen.
   "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
     "Deklarierter Fortschritt, in Prozent",
@@ -1490,6 +1494,7 @@ const de: Record<string, string> = {
   "businessKpis.noValue": "Keine Messung",
   "kpi.axisUnknown": "Indikatoren ohne Achse",
   "kpi.macroIndicators": "Indikatoren der Achse",
+  "kpi.axisChantiersLabel": "Arbeitspakete dieser Achse",
   "kpi.indicatorNumber": "KPI-Nummer",
   "kpi.chantier": "Arbeitspaket",
   // ─── Abschnitt "KPIs der Achsen" + Einzelauswahl-Dropdowns Achse / Arbeitspaket / Verantwortlich
@@ -1578,18 +1583,12 @@ const de: Record<string, string> = {
     "Öffnen Sie ein Vorhaben aus einer strategischen Achse und erfassen Sie VZÄ je Team.",
   "effectifs.kpi.totalFte": "Eingesetzte VZÄ insgesamt",
   "effectifs.kpi.totalFteSub": "Summe über das gesamte Programm, alle Zeiträume zusammen",
-  "effectifs.byAxis": "Verteilung nach Achse",
-  "effectifs.byAxisFor": "Verteilung nach Achse",
   "effectifs.allFunctions": "Alle Teams",
-  "effectifs.clickHint": "Klicken Sie auf ein Team, um seine Verteilung nach Achse zu sehen.",
   "effectifs.filteredOn": "Gefiltert nach: {fn}",
   "effectifs.filteredOnPeriod": "Zeitraum: {period}",
   "effectifs.byChantierLabel": "Vorhaben",
-  "effectifs.percentOfFunction": "% des Teams",
   "effectifs.axisUnknown": "Unbekannte Achse",
   "effectifs.chantierUnknown": "Unbekanntes Vorhaben",
-  "effectifs.noStaffingOnAxis": "Für diese Achse sind keine VZÄ erfasst.",
-  "effectifs.noStaffingForFunction": "Keine VZÄ dieses Teams auf den Achsen des Programms.",
   "effectifs.viewBaseEtp": "VZÄ-Basis ansehen",
   "effectifs.needVsAvailable.title": "Gemeldeter Bedarf vs. verfügbar (VZÄ-Basis)",
   "effectifs.needVsAvailable.empty":
@@ -1607,10 +1606,17 @@ const de: Record<string, string> = {
   "effectifs.moneyBudget.centerLabelConsumed": "Verbraucht / zugewiesen",
   "effectifs.moneyBudget.consumedTooltipSuffix": "verbraucht",
 
-  // ─── VZÄ-Verteilung nach Periode (Runde 7 — StaffingPeriodBreakdown.tsx) ──────────────────
-  "staffingPeriod.title": "VZÄ-Verteilung nach Periode",
+  // ─── VZÄ-Verteilung (Runde 7 — StaffingPeriodBreakdown.tsx; Runde 22 mit der ehemaligen Karte
+  // "Verteilung nach Achse" von EffectifsPageClient.tsx zusammengeführt) ────────────────────
+  "staffingPeriod.title": "VZÄ-Verteilung",
   "staffingPeriod.subtitle":
-    "Nur datierte VZÄ, gruppiert nach Quartal, Halbjahr oder Jahr. Klicken Sie auf eine Funktion, um ihre Verteilung nach Achse zu sehen.",
+    "VZÄ, die den Vorhaben des Programms zugeordnet sind, {mode}, {scope}.",
+  "staffingPeriod.subtitle.modeTeam": "nach Team",
+  "staffingPeriod.subtitle.modeAxis": "nach Achse",
+  "staffingPeriod.subtitle.scopeAll": "über den gesamten Zeitraum",
+  "staffingPeriod.subtitle.scopePeriod": "für {period}",
+  "staffingPeriod.mode.period": "Periode",
+  "staffingPeriod.mode.axis": "Achse",
   "staffingPeriod.granularity.quarterly": "Quartal",
   "staffingPeriod.granularity.semiannual": "Halbjahr",
   "staffingPeriod.granularity.annual": "Jahr",
@@ -1619,6 +1625,7 @@ const de: Record<string, string> = {
     "{n} Personaleinsatzzeile(n) ohne Startdatum, in dieser Ansicht nicht dargestellt.",
   "staffingPeriod.utilization": "{pct}% Auslastung",
   "staffingPeriod.byChantier": "Nach Vorhaben:",
+  "staffingPeriod.pinnedDetail.title": "Detail — {period}",
 
   // ─── Excel-Import des Personaleinsatzes (Runde 7 — StaffingImportButton.tsx) ──────────────
   "staffingImport.templateButton": "Vorlage herunterladen",

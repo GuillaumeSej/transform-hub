@@ -137,7 +137,7 @@ export function MilestoneChecklistPanel({
       {groups.map((group) => (
         <div key={group.section} className="space-y-3">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-            {group.section}
+            {group.section} · {t(`strategicChantierDetail.milestones.section.${group.section}`)}
           </div>
 
           {group.defs.map((def) => {

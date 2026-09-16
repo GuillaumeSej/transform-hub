@@ -3,17 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Users, X } from "lucide-react";
-import {
-  Bar as RechartsBar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { ArrowUpRight, Users } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import {
   BudgetDonutChart,
@@ -24,14 +14,14 @@ import { Modal } from "@/components/shared/Modal";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
-import { colorForDepartment, hexForDepartment, periodLabelForDate } from "@/lib/axisLogic";
+import { colorForDepartment } from "@/lib/axisLogic";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { ChantierStaffing, StrategicAxis } from "@/types";
+import type { ChantierStaffing } from "@/types";
 
 /**
  * Page « Effectifs mobilisés » — lecture transverse du staffing saisi chantier par chantier
@@ -44,14 +34,15 @@ import type { ChantierStaffing, StrategicAxis } from "@/types";
  *     (`Employee.fte`, sommé — `useCompanyDepartments`, live). Remplace l'ancienne section
  *     « Budget d'ETP par fonction », où le "disponible" était un chiffre saisi à la main
  *     (`Program.staffingBudgets`, retiré) plutôt que la réalité de la base ETP.
- *  1. PAR PÉRIODE (`StaffingPeriodBreakdown`, round 7) : combien d'ETP le programme mobilise-t-il,
- *     trimestre/semestre/année par trimestre/semestre/année, et par équipe dans chaque période.
- *     Cliquer une équipe (dans n'importe quelle période) la sélectionne et devient le filtre du
- *     bloc suivant.
- *  2. PAR AXE : où ces ETP sont-ils consommés. Sans sélection, une carte par axe donne sa
- *     répartition complète ; une équipe sélectionnée bascule le bloc en comparaison directe entre
- *     axes pour CETTE équipe — la lecture « sur-staffage » attendue (un axe qui capte l'essentiel
- *     d'une équipe saute alors aux yeux).
+ *  1. PAR PÉRIODE ET PAR AXE (`StaffingPeriodBreakdown`, round 7, fusionné round 22) : combien
+ *     d'ETP le programme mobilise-t-il, trimestre/semestre/année par trimestre/semestre/année, et
+ *     par équipe OU par axe (toggle "Période"/"Axe" interne au composant) dans chaque période.
+ *     Round 22 (PO : le second graphique historique « Répartition par axe », sans dimension
+ *     temporelle, ne réagissait jamais au toggle de granularité seul) — les deux anciennes cartes
+ *     séparées ("par période" et "par axe") sont désormais UNE seule carte, l'abscisse restant
+ *     TOUJOURS la période dans les deux modes. Toute la logique de cross-filtering (équipe/chantier
+ *     sélectionnés, période épinglée, granularité) est désormais interne à ce composant — cette
+ *     page ne lève plus cet état, voir le doc-comment de `StaffingPeriodBreakdown.tsx`.
  *
  * Aucune écriture MANUELLE ici : la saisie ligne par ligne vit exclusivement dans la fiche
  * chantier, pour ne pas avoir deux flux de saisie divergents sur la même donnée (même parti pris
@@ -129,30 +120,6 @@ export function EffectifsPageClient() {
     loading: dataLoading,
   } = useStrategicData(user?.companyId ?? null, activeProgramId);
   const { fteByDept, loading: departmentsLoading } = useCompanyDepartments(user?.companyId ?? null);
-
-  /** Équipe sélectionnée = filtre du bloc « par axe ». `null` = vue complète. */
-  const [selectedFunction, setSelectedFunction] = useState<string | null>(null);
-
-  /** Chantier sélectionné (round 21, cross-filtering) = filtre supplémentaire du bloc « par axe »,
-   *  scopé à `selectedFunction` (voir `chantiersForSelectedFunction` ci-dessous) — n'a de sens que
-   *  quand une équipe est sélectionnée, donc remis à `null` chaque fois que `selectedFunction`
-   *  l'est aussi (voir `clearFunction`/le wrapper passé à `StaffingPeriodBreakdown` plus bas), pour
-   *  ne jamais référencer un chantier d'une équipe qui n'est plus affichée. */
-  const [selectedChantierId, setSelectedChantierId] = useState<string | null>(null);
-
-  /** Granularité de découpage temporel — round 21 : levée depuis `StaffingPeriodBreakdown.tsx`
-   *  (qui la portait auparavant en `useState` local) pour être PARTAGÉE avec `selectedPeriod`
-   *  ci-dessous, lui-même utilisé pour filtrer « Répartition par axe » sur une période précise. */
-  const [granularity, setGranularity] = useState<"quarterly" | "semiannual" | "annual">(
-    "quarterly"
-  );
-
-  /** Période épinglée (clic sur un libellé de `StaffingPeriodBreakdown`) — `null` = « Répartition
-   *  par axe » reste sur le total programme, toutes périodes confondues (comportement historique).
-   *  Quand définie, filtre `staffing` sur cette seule période (voir `byAxis` ci-dessous) avant tout
-   *  autre filtre — le graphique période devient ainsi le sélecteur d'« instantané » du graphique
-   *  axe, en plus de son rôle de vue tendance dans le temps. */
-  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
 
   /** Axe dont le drill-down budgétaire PAR CHANTIER (round 13) est actuellement ouvert — `null` =
    *  modale fermée. Le donut « Répartition par axe » de la section budget financier s'arrêtait au
@@ -284,143 +251,6 @@ export function EffectifsPageClient() {
   }, [budgetDrilldownAxisId, chantiers]);
 
   const budgetDrilldownAxis = axes.find((a) => a.id === budgetDrilldownAxisId) ?? null;
-
-  /** `staffing` réduit à la période épinglée (`selectedPeriod`, voir `StaffingPeriodBreakdown`
-   *  ci-dessous), si une l'est — round 21, cross-filtering. Dénominateur COMMUN à `byAxis` et à
-   *  `chantiersForSelectedFunction` plus bas, pour que les deux ne puissent jamais diverger sur ce
-   *  qu'elles considèrent « dans la période ». `null` = aucun filtre, `staffing` inchangé (total
-   *  programme, comportement historique). Seules les lignes DATÉES peuvent matcher une période
-   *  épinglée — une ligne sans `startDate` en est donc exclue dès qu'une période est épinglée. */
-  const periodFilteredStaffing = useMemo(() => {
-    if (!selectedPeriod) return staffing;
-    return staffing.filter(
-      (e) => e.startDate && periodLabelForDate(e.startDate, granularity) === selectedPeriod
-    );
-  }, [staffing, selectedPeriod, granularity]);
-
-  /** Un groupe par axe du programme (y compris les axes SANS staffing : leur absence est une
-   *  information — un axe sans aucun ETP déclaré n'est pas la même chose qu'un axe absent), plus
-   *  un groupe de repli pour les lignes dont l'axe n'existe plus. Round 21 : construit sur
-   *  `periodFilteredStaffing` (période épinglée, le cas échéant) plutôt que `staffing` brut, avec
-   *  un filtre chantier supplémentaire (`selectedChantierId`) — les deux filtres s'appliquent en
-   *  ET, `selectedFunction` s'appliquant lui-même en ET par-dessus dans `selectedByAxis`
-   *  ci-dessous. */
-  const byAxis = useMemo(() => {
-    const base = selectedChantierId
-      ? periodFilteredStaffing.filter((e) => e.chantierId === selectedChantierId)
-      : periodFilteredStaffing;
-    const groups: { axis: StrategicAxis | null; entries: ChantierStaffing[] }[] = axes.map(
-      (axis) => ({ axis, entries: base.filter((e) => e.axisId === axis.id) })
-    );
-    const knownAxisIds = new Set(axes.map((a) => a.id));
-    const orphans = base.filter((e) => !knownAxisIds.has(e.axisId));
-    if (orphans.length > 0) groups.push({ axis: null, entries: orphans });
-    return groups;
-  }, [axes, periodFilteredStaffing, selectedChantierId]);
-
-  /** Chantiers de l'équipe sélectionnée (round 21, cross-filtering) — alimente la rangée de chips
-   *  « Chantiers : » sous la chip « Filtré sur », pour affiner encore le graphique par axe à un
-   *  chantier précis. Scopée à `selectedFunction` (vide sinon) ET à `periodFilteredStaffing`
-   *  (même période épinglée que `byAxis`, pour rester cohérente avec ce qui est réellement
-   *  affiché) — mais PAS à `selectedChantierId` : la liste des chantiers proposés ne doit pas se
-   *  réduire au chantier déjà sélectionné. */
-  const chantiersForSelectedFunction = useMemo(() => {
-    if (!selectedFunction) return [];
-    const totals = new Map<string, number>();
-    for (const e of periodFilteredStaffing) {
-      if (e.function !== selectedFunction) continue;
-      totals.set(e.chantierId, (totals.get(e.chantierId) ?? 0) + (e.fte || 0));
-    }
-    return Array.from(totals.entries())
-      .map(([chantierId, fte]) => ({
-        chantierId,
-        name: chantierNamesById[chantierId] ?? t("effectifs.chantierUnknown"),
-        fte,
-      }))
-      .sort((a, b) => b.fte - a.fte);
-  }, [periodFilteredStaffing, selectedFunction, chantierNamesById, t]);
-
-  /** Comparaison inter-axes pour l'équipe sélectionnée, triée par volume décroissant. */
-  const selectedByAxis = useMemo(() => {
-    if (!selectedFunction) return [];
-    return byAxis
-      .map((group) => ({
-        axis: group.axis,
-        fte: group.entries
-          .filter((e) => e.function === selectedFunction)
-          .reduce((sum, e) => sum + (e.fte || 0), 0),
-        chantiers: Array.from(
-          new Set(
-            group.entries.filter((e) => e.function === selectedFunction).map((e) => e.chantierId)
-          )
-        ),
-      }))
-      .filter((row) => row.fte > 0)
-      .sort((a, b) => b.fte - a.fte);
-  }, [byAxis, selectedFunction]);
-
-  const selectedTotal = selectedByAxis.reduce((sum, row) => sum + row.fte, 0);
-
-  /** Round 19 (PO : « la même vraie courbe/graphique que la répartition par période, ici pour
-   *  l'axe ») — remplace la grille de cartes "une par axe, une liste+barre CSS par équipe à
-   *  l'intérieur" par UN SEUL graphique en barres empilées, abscisse = axe, une série par équipe
-   *  (même principe que `StaffingPeriodBreakdown.tsx`, où l'abscisse est la période). Une grille de
-   *  mini-graphiques par axe n'aurait pas de sens ici : l'axe EST la dimension d'abscisse demandée
-   *  par le PO, elle ne peut donc pas aussi être la clé qui découpe les cartes.
-   *
-   *  `byAxisChartTeams` = union de toutes les équipes staffées sur N'IMPORTE quel axe (tri
-   *  alphabétique, même convention que `StaffingPeriodBreakdown`), pour que chaque série soit
-   *  définie de façon cohérente sur CHAQUE axe (0 par défaut plutôt qu'une valeur manquante, sans
-   *  quoi l'empilement des barres suivantes casserait). */
-  const byAxisChartTeams = useMemo(() => {
-    const names = new Set<string>();
-    for (const group of byAxis) {
-      for (const { fn } of totalsByFunction(group.entries)) names.add(fn);
-    }
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [byAxis]);
-
-  const byAxisChartData = useMemo(
-    () =>
-      byAxis.map((group) => {
-        const totals = totalsByFunction(group.entries);
-        const row: Record<string, string | number> = {
-          axis: group.axis?.name ?? t("effectifs.axisUnknown"),
-        };
-        for (const fn of byAxisChartTeams) row[fn] = totals.find((r) => r.fn === fn)?.fte ?? 0;
-        return row;
-      }),
-    [byAxis, byAxisChartTeams, t]
-  );
-
-  /** Pendant de `byAxisChartData` pour le cas « une équipe sélectionnée » — une seule série
-   *  (`fte`), une barre par axe, dans le MÊME ordre décroissant que l'ancienne liste
-   *  (`selectedByAxis` est déjà triée par volume décroissant). `chantiersLabel` porte la légende
-   *  "quels chantiers de cet axe" qui s'affichait sous la barre CSS, désormais dans l'info-bulle du
-   *  graphique plutôt que perdue avec la liste. */
-  const selectedByAxisChartData = useMemo(
-    () =>
-      selectedByAxis.map((row) => ({
-        axis: row.axis?.name ?? t("effectifs.axisUnknown"),
-        fte: row.fte,
-        chantiersLabel: row.chantiers
-          .map((id) => chantierNames.get(id) ?? t("effectifs.chantierUnknown"))
-          .join(" · "),
-      })),
-    [selectedByAxis, chantierNames, t]
-  );
-
-  /** Sélectionne (ou désélectionne, `fn === null`) l'équipe filtrant « Répartition par axe » —
-   *  round 21, cross-filtering : `selectedChantierId` est scopé à `selectedFunction`
-   *  (`chantiersForSelectedFunction` ci-dessus), donc désélectionner l'équipe doit aussi effacer le
-   *  chantier sélectionné pour ne jamais laisser un chantier d'une équipe qui n'est plus affichée.
-   *  Passée à la fois au bouton de la chip "Filtré sur" et à `onSelectFunction` de
-   *  `StaffingPeriodBreakdown` (légende + segments de barre), pour que TOUTE façon de
-   *  changer/effacer l'équipe purge `selectedChantierId` de la même manière. */
-  const selectFunction = (fn: string | null) => {
-    setSelectedFunction(fn);
-    if (fn === null) setSelectedChantierId(null);
-  };
 
   // Bouton d'import Excel + lien base ETP : rendus directement dans l'en-tête (réutilisé par
   // toutes les branches de retour ci-dessous) plutôt que dans une variable de toolbar séparée.
@@ -652,247 +482,16 @@ export function EffectifsPageClient() {
         barSegments={totalFteBarSegments}
       />
 
-      {/* ── 1. Répartition par période (round 7 — remplace l'ancienne section "Au global, par
-          grande fonction", sans dimension temporelle) ─────────────────────────────────────── */}
+      {/* ── 1. Répartition des ETP, par période ET par axe (round 7, fusionné round 22 — voir le
+          doc-comment de `StaffingPeriodBreakdown.tsx` : le composant porte désormais lui-même tout
+          le cross-filtering équipe/chantier/période qui vivait auparavant sur cette page, ainsi que
+          l'ex-carte "Répartition par axe" retirée d'ici). ─────────────────────────────────────── */}
       <StaffingPeriodBreakdown
         staffing={staffing}
         fteByDept={fteByDept}
+        axes={axes}
         chantierNamesById={chantierNamesById}
-        selectedFunction={selectedFunction}
-        onSelectFunction={selectFunction}
-        granularity={granularity}
-        onGranularityChange={setGranularity}
-        selectedPeriod={selectedPeriod}
-        onSelectPeriod={setSelectedPeriod}
       />
-
-      {/* ── 2. Répartition par axe (round 19 : graphique en barres empilées, abscisse = axe —
-          voir les doc-comments de `byAxisChartData`/`selectedByAxisChartData` ci-dessus) ─────── */}
-      {/* Round 20 (point 4, PO : le lien entre les deux graphiques n'était pas visible) — chip
-          "Filtré sur : {équipe}" avec bouton de réinitialisation, affichée uniquement quand
-          `selectedFunction` est actif. Le filtrage lui-même existe déjà (voir `selectedByAxis` /
-          `byAxis` ci-dessus) : cette chip ne fait qu'exposer visuellement ce lien déjà fonctionnel.
-          Round 21 (cross-filtering) : même principe pour `selectedPeriod` (chip "Période : {…}",
-          épinglée depuis `StaffingPeriodBreakdown`) — les deux chips coexistent et se combinent en
-          ET, chacune avec son propre bouton de réinitialisation indépendant. */}
-      {(selectedFunction || selectedPeriod) && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {selectedFunction && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-[12px] font-semibold text-primary">
-              {t("effectifs.filteredOn").replace("{fn}", selectedFunction)}
-              <button
-                type="button"
-                aria-label={t("effectifs.allFunctions")}
-                onClick={() => selectFunction(null)}
-                className="flex items-center justify-center rounded-full p-0.5 text-secondary transition hover:bg-neutral-200 hover:text-primary"
-              >
-                <X size={12} />
-              </button>
-            </span>
-          )}
-          {selectedPeriod && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-[12px] font-semibold text-primary">
-              {t("effectifs.filteredOnPeriod").replace("{period}", selectedPeriod)}
-              <button
-                type="button"
-                aria-label={t("effectifs.filteredOnPeriod").replace("{period}", selectedPeriod)}
-                onClick={() => setSelectedPeriod(null)}
-                className="flex items-center justify-center rounded-full p-0.5 text-secondary transition hover:bg-neutral-200 hover:text-primary"
-              >
-                <X size={12} />
-              </button>
-            </span>
-          )}
-        </div>
-      )}
-      {/* Round 21 (cross-filtering) : rangée de chips "Chantiers : …", une par chantier de
-          l'équipe sélectionnée (voir `chantiersForSelectedFunction` ci-dessus) — n'apparaît que
-          quand une équipe est sélectionnée ET a des chantiers à proposer ; permet d'affiner encore
-          « Répartition par axe » à un seul chantier de cette équipe. */}
-      {selectedFunction && chantiersForSelectedFunction.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[12px] font-semibold text-secondary">
-            {t("effectifs.byChantierLabel")} :
-          </span>
-          {chantiersForSelectedFunction.map((row) => {
-            const isSelected = selectedChantierId === row.chantierId;
-            return (
-              <button
-                key={row.chantierId}
-                type="button"
-                aria-pressed={isSelected}
-                onClick={() => setSelectedChantierId(isSelected ? null : row.chantierId)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold transition ${
-                  isSelected
-                    ? "bg-black text-white"
-                    : "bg-neutral-100 text-primary hover:bg-neutral-200"
-                }`}
-              >
-                {row.name}
-                <span className={isSelected ? "text-white/70" : "text-tertiary"}>
-                  {formatFte(row.fte)} {t("staffing.fteUnit")}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {selectedFunction ? (
-        <Card className="mb-0">
-          <CardHeader
-            title={`${t("effectifs.byAxisFor")} · ${selectedFunction}${
-              selectedPeriod ? ` — ${selectedPeriod}` : ""
-            }${
-              selectedChantierId
-                ? ` · ${chantierNamesById[selectedChantierId] ?? t("effectifs.chantierUnknown")}`
-                : ""
-            }`}
-            actions={
-              <span className="text-[12px] text-secondary">
-                {formatFte(selectedTotal)} {t("staffing.fteUnit")}
-              </span>
-            }
-          />
-          <CardBody>
-            {selectedByAxisChartData.length === 0 ? (
-              <p className="text-sm text-text-secondary">{t("effectifs.noStaffingForFunction")}</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart
-                  data={selectedByAxisChartData}
-                  margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-                  <XAxis dataKey="axis" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    tick={{ fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    allowDecimals={false}
-                    tickFormatter={(v) => String(Math.round(Number(v)))}
-                  />
-                  <Tooltip
-                    content={({ active, payload, label }) => {
-                      if (!active || !payload || payload.length === 0) return null;
-                      const chantiersLabel = (
-                        payload[0]?.payload as { chantiersLabel?: string } | undefined
-                      )?.chantiersLabel;
-                      return (
-                        <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
-                          <p className="mb-1 font-bold text-primary">{label}</p>
-                          <p className="text-secondary">
-                            <strong className="text-primary">
-                              {formatFte(Number(payload[0]?.value))}
-                            </strong>{" "}
-                            {t("staffing.fteUnit")}
-                          </p>
-                          {chantiersLabel && (
-                            <p className="mt-1 text-[11px] text-tertiary">{chantiersLabel}</p>
-                          )}
-                        </div>
-                      );
-                    }}
-                  />
-                  <RechartsBar
-                    dataKey="fte"
-                    name={selectedFunction}
-                    fill={hexForDepartment(selectedFunction)}
-                    radius={[3, 3, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardBody>
-        </Card>
-      ) : (
-        <Card className="mb-0">
-          <CardHeader
-            title={`${t("effectifs.byAxis")}${selectedPeriod ? ` — ${selectedPeriod}` : ""}`}
-          />
-          <CardBody>
-            {byAxisChartTeams.length === 0 ? (
-              <p className="text-[12px] text-tertiary">{t("effectifs.noStaffingOnAxis")}</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={320}>
-                <BarChart
-                  data={byAxisChartData}
-                  margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-                  <XAxis dataKey="axis" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    tick={{ fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    allowDecimals={false}
-                    tickFormatter={(v) => String(Math.round(Number(v)))}
-                  />
-                  <Tooltip
-                    content={({ active, payload, label }) => {
-                      if (!active || !payload || payload.length === 0) return null;
-                      const total = payload.reduce(
-                        (sum, p) => sum + (typeof p.value === "number" ? p.value : 0),
-                        0
-                      );
-                      return (
-                        <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
-                          <p className="mb-1 font-bold text-primary">{label}</p>
-                          {payload
-                            .filter((p) => (typeof p.value === "number" ? p.value : 0) > 0)
-                            .map((p) => (
-                              <p
-                                key={String(p.dataKey)}
-                                className="flex items-center justify-between gap-3 text-secondary"
-                              >
-                                <span className="flex items-center gap-1.5">
-                                  <span
-                                    className="inline-block h-2 w-2 rounded-full"
-                                    style={{ background: p.color }}
-                                  />
-                                  {p.name}
-                                </span>
-                                <span className="ml-2 font-semibold text-primary">
-                                  {formatFte(Number(p.value))} {t("staffing.fteUnit")}
-                                </span>
-                              </p>
-                            ))}
-                          <p className="mt-1 border-t border-border pt-1 font-bold text-primary">
-                            {formatFte(total)} {t("staffing.fteUnit")}
-                          </p>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Legend
-                    verticalAlign="top"
-                    align="right"
-                    wrapperStyle={{
-                      fontSize: 11,
-                      paddingBottom: 8,
-                      cursor: "pointer",
-                    }}
-                    onClick={(entry) => {
-                      const fn = typeof entry?.value === "string" ? entry.value : undefined;
-                      if (fn) selectFunction(fn);
-                    }}
-                  />
-                  {byAxisChartTeams.map((fn) => (
-                    <RechartsBar
-                      key={fn}
-                      dataKey={fn}
-                      name={fn}
-                      stackId="axis"
-                      fill={hexForDepartment(fn)}
-                      cursor="pointer"
-                      onClick={() => selectFunction(fn)}
-                    />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardBody>
-        </Card>
-      )}
     </div>
   );
 }

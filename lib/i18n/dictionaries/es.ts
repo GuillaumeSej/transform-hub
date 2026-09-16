@@ -1394,6 +1394,10 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Hito superado",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Hito actual",
 
+  "strategicChantierDetail.milestones.section.A": "Requisitos previos",
+  "strategicChantierDetail.milestones.section.B": "Ejecución",
+  "strategicChantierDetail.milestones.section.C": "Cierre",
+
   // Ronda 12: porcentaje declarado (0-100) en lugar de un semáforo de 3 niveles.
   "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
     "Avance declarado, en porcentaje",
@@ -1488,6 +1492,7 @@ const es: Record<string, string> = {
   "businessKpis.noValue": "Sin medición",
   "kpi.axisUnknown": "Indicadores sin eje asignado",
   "kpi.macroIndicators": "Indicadores del eje",
+  "kpi.axisChantiersLabel": "Frentes de trabajo de este eje",
   "kpi.indicatorNumber": "KPI número",
   "kpi.chantier": "Frente de trabajo",
   // ─── Sección "KPI de los ejes" + desplegables de selección única Eje / Frente de trabajo /
@@ -1575,18 +1580,12 @@ const es: Record<string, string> = {
   "effectifs.emptyHint": "Abra un proyecto desde un eje estratégico y añada ETC por equipo.",
   "effectifs.kpi.totalFte": "ETC movilizados en total",
   "effectifs.kpi.totalFteSub": "Total de todo el programa, todos los periodos combinados",
-  "effectifs.byAxis": "Reparto por eje",
-  "effectifs.byAxisFor": "Reparto por eje",
   "effectifs.allFunctions": "Todos los equipos",
-  "effectifs.clickHint": "Haga clic en un equipo para ver su reparto por eje.",
   "effectifs.filteredOn": "Filtrado por: {fn}",
   "effectifs.filteredOnPeriod": "Periodo: {period}",
   "effectifs.byChantierLabel": "Proyectos",
-  "effectifs.percentOfFunction": "% del equipo",
   "effectifs.axisUnknown": "Eje desconocido",
   "effectifs.chantierUnknown": "Proyecto desconocido",
-  "effectifs.noStaffingOnAxis": "No hay ETC declarados en este eje.",
-  "effectifs.noStaffingForFunction": "No hay ETC de este equipo en los ejes del programa.",
   "effectifs.viewBaseEtp": "Ver la base de ETC",
   "effectifs.needVsAvailable.title": "Necesidad declarada vs disponible (base de ETC)",
   "effectifs.needVsAvailable.empty":
@@ -1603,10 +1602,16 @@ const es: Record<string, string> = {
   "effectifs.moneyBudget.centerLabelConsumed": "Consumido / asignado",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consumido",
 
-  // ─── Reparto de ETC por periodo (ronda 7 — StaffingPeriodBreakdown.tsx) ───────────────────
-  "staffingPeriod.title": "Reparto de ETC por periodo",
-  "staffingPeriod.subtitle":
-    "Solo ETC con fecha, agrupados por trimestre, semestre o año. Haga clic en una función para ver su reparto por eje.",
+  // ─── Reparto de ETC (ronda 7 — StaffingPeriodBreakdown.tsx; fusionada en la ronda 22 con la
+  // antigua tarjeta "Reparto por eje" de EffectifsPageClient.tsx) ───────────────────────────
+  "staffingPeriod.title": "Reparto de ETC",
+  "staffingPeriod.subtitle": "ETC asignados a los proyectos del programa, {mode}, {scope}.",
+  "staffingPeriod.subtitle.modeTeam": "por equipo",
+  "staffingPeriod.subtitle.modeAxis": "por eje",
+  "staffingPeriod.subtitle.scopeAll": "en todo el periodo",
+  "staffingPeriod.subtitle.scopePeriod": "para {period}",
+  "staffingPeriod.mode.period": "Periodo",
+  "staffingPeriod.mode.axis": "Eje",
   "staffingPeriod.granularity.quarterly": "Trimestre",
   "staffingPeriod.granularity.semiannual": "Semestre",
   "staffingPeriod.granularity.annual": "Año",
@@ -1615,6 +1620,7 @@ const es: Record<string, string> = {
     "{n} línea(s) de dotación sin fecha de inicio, no mostradas en esta vista.",
   "staffingPeriod.utilization": "{pct}% de utilización",
   "staffingPeriod.byChantier": "Por proyecto:",
+  "staffingPeriod.pinnedDetail.title": "Detalle — {period}",
 
   // ─── Importación Excel de personal movilizado (ronda 7 — StaffingImportButton.tsx) ───────
   "staffingImport.templateButton": "Descargar la plantilla",

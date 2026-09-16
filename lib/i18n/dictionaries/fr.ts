@@ -1475,6 +1475,10 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Jalon franchi",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Jalon courant",
 
+  "strategicChantierDetail.milestones.section.A": "Préalable",
+  "strategicChantierDetail.milestones.section.B": "Réalisation",
+  "strategicChantierDetail.milestones.section.C": "Conclusion",
+
   // Round 12 : saisie par pourcentage déclaré (0-100) plutôt que par feu à 3 niveaux.
   "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
     "Avancement déclaré, en pourcentage",
@@ -1568,6 +1572,7 @@ const fr: Record<string, string> = {
   "businessKpis.noValue": "Aucune mesure",
   "kpi.axisUnknown": "Indicateurs sans axe rattaché",
   "kpi.macroIndicators": "Indicateurs de l'axe",
+  "kpi.axisChantiersLabel": "Chantiers de l'axe",
   "kpi.indicatorNumber": "KPI numéro",
   "kpi.chantier": "Chantier",
   // ─── Section "KPI des axes" + dropdowns Axe / Chantier / Responsable à sélection unique
@@ -1660,18 +1665,12 @@ const fr: Record<string, string> = {
     "Ouvrez un chantier depuis un axe stratégique et ajoutez-y des ETP par équipe.",
   "effectifs.kpi.totalFte": "ETP mobilisés au total",
   "effectifs.kpi.totalFteSub": "Total sur l'ensemble du programme, toutes périodes confondues",
-  "effectifs.byAxis": "Répartition par axe",
-  "effectifs.byAxisFor": "Répartition par axe",
   "effectifs.allFunctions": "Toutes les équipes",
-  "effectifs.clickHint": "Cliquez une équipe pour voir sa répartition par axe.",
   "effectifs.filteredOn": "Filtré sur : {fn}",
   "effectifs.filteredOnPeriod": "Période : {period}",
   "effectifs.byChantierLabel": "Chantiers",
-  "effectifs.percentOfFunction": "% de l'équipe",
   "effectifs.axisUnknown": "Axe inconnu",
   "effectifs.chantierUnknown": "Chantier inconnu",
-  "effectifs.noStaffingOnAxis": "Aucun ETP déclaré sur cet axe.",
-  "effectifs.noStaffingForFunction": "Aucun ETP de cette équipe sur les axes du programme.",
   "effectifs.viewBaseEtp": "Voir la base ETP",
   "effectifs.needVsAvailable.title": "Besoin déclaré vs disponible (base ETP)",
   "effectifs.needVsAvailable.empty":
@@ -1692,10 +1691,19 @@ const fr: Record<string, string> = {
   "effectifs.moneyBudget.centerLabelConsumed": "Consommé / alloué",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consommé",
 
-  // ─── Répartition des ETP par période (round 7 — StaffingPeriodBreakdown.tsx) ──────────────
-  "staffingPeriod.title": "Répartition des ETP par période",
-  "staffingPeriod.subtitle":
-    "ETP datés uniquement, regroupés par trimestre, semestre ou année. Cliquez une fonction pour voir sa répartition par axe.",
+  // ─── Répartition des ETP (round 7 — StaffingPeriodBreakdown.tsx ; fusionnée round 22 avec
+  // l'ex-carte "Répartition par axe" d'EffectifsPageClient.tsx) ──────────────────────────────
+  "staffingPeriod.title": "Répartition des ETP",
+  // Round 22 : sous-titre dynamique — {mode} et {scope} sont remplacés par le composant selon le
+  // toggle "Période"/"Axe" et selon qu'une période est épinglée (voir les clés .subtitle.* ci-
+  // dessous), pour répondre explicitement à "ça représente quoi, ce nombre d'ETP ?".
+  "staffingPeriod.subtitle": "ETP affectés aux chantiers du programme, {mode}, {scope}.",
+  "staffingPeriod.subtitle.modeTeam": "par équipe",
+  "staffingPeriod.subtitle.modeAxis": "par axe",
+  "staffingPeriod.subtitle.scopeAll": "sur l'ensemble de la période",
+  "staffingPeriod.subtitle.scopePeriod": "pour {period}",
+  "staffingPeriod.mode.period": "Période",
+  "staffingPeriod.mode.axis": "Axe",
   "staffingPeriod.granularity.quarterly": "Trimestre",
   "staffingPeriod.granularity.semiannual": "Semestre",
   "staffingPeriod.granularity.annual": "Année",
@@ -1704,6 +1712,9 @@ const fr: Record<string, string> = {
     "{n} ligne(s) de staffing sans date de début, non représentée(s) dans cette vue.",
   "staffingPeriod.utilization": "{pct}% d'utilisation",
   "staffingPeriod.byChantier": "Par chantier :",
+  // Round 22 : panneau de détail persistant pour une période épinglée (additif — la clé
+  // "effectifs.filteredOnPeriod" reste utilisée telle quelle pour la chip de réinitialisation).
+  "staffingPeriod.pinnedDetail.title": "Détail — {period}",
 
   // ─── Import Excel des effectifs (round 7 — StaffingImportButton.tsx) ──────────────────────
   "staffingImport.templateButton": "Télécharger le modèle",
