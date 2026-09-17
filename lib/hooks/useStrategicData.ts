@@ -24,6 +24,7 @@ import {
   deleteChantierStaffing,
 } from "@/lib/firestore/chantierStaffing";
 import { subscribeUsers, subscribeCompanies } from "@/lib/firestore/admin";
+import { appendAuditEntries } from "@/lib/firestore/levers";
 import {
   computeIndicatorStatus,
   resolveStrategicOwnershipScope,
@@ -32,7 +33,13 @@ import {
 } from "@/lib/axisLogic";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { isAnyAdmin } from "@/lib/roleProfiles";
+import {
+  buildUpdateAuditEntries,
+  makeCreatedAuditEntry,
+  makeDeletedAuditEntry,
+} from "@/lib/strategicAuditLogic";
 import type {
+  AuditEntry,
   AuthUser,
   Chantier,
   ChantierAction,
@@ -43,6 +50,16 @@ import type {
   Role,
   StrategicAxis,
 } from "@/types";
+
+/** Journalise en tâche de fond, sans jamais faire échouer la mutation appelante si l'écriture du
+ *  journal d'audit échoue (même parti pris que `persistAudit` dans `lib/hooks/useStorage.ts`,
+ *  simple `.catch` + log plutôt qu'une erreur remontée à l'appelant). */
+function logAudit(companyId: string | null | undefined, entries: AuditEntry[]): void {
+  if (entries.length === 0) return;
+  appendAuditEntries(companyId, entries).catch((err) =>
+    console.error("[betrack] audit stratégique :", err)
+  );
+}
 
 /**
  * Point d'accès React unique aux données du Plan Stratégique (axes / chantiers / actions /
@@ -169,6 +186,11 @@ function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Même repli que `DEMO_USER` (`lib/hooks/useStorage.ts`) pour les mutations dont l'appelant n'a
+ *  pas (encore) migré vers le paramètre `user` de ce hook (voir son doc-comment) — attribution
+ *  d'audit générique plutôt que de bloquer la journalisation faute d'identité connue. */
+const AUDIT_FALLBACK_USER = "Utilisateur démo";
+
 export function useStrategicData(
   companyId: string | null | undefined,
   programId: string | null | undefined,
@@ -188,10 +210,24 @@ export function useStrategicData(
    * façon besoin de l'autre, aucun call site connu ne veut l'un sans l'autre. `username` est
    * désormais nécessaire (en plus des champs déjà requis pour la confidentialité) pour comparer aux
    * `owner`/`pilote` des entités.
+   *
+   * `name` (round audit trail Plan Stratégique) sert UNIQUEMENT à attribuer les entrées d'audit
+   * (`AuditEntry.user`, voir `lib/strategicAuditLogic.ts`) à un auteur lisible — même convention
+   * que `leversLogic.addComment`/`useStorage.ts::addComment`, qui utilisent `user.name` (pas
+   * `username`, réservé aux comparaisons d'identité strictes). Un appelant qui omet `user` (voir
+   * ci-dessus) n'active pas non plus l'attribution nominative : ses mutations sont journalisées
+   * sous un auteur générique (voir `AUDIT_FALLBACK_USER` ci-dessous), exactement comme les
+   * mutations Plan Performance non encore migrées à l'utilisateur réel (`DEMO_USER`,
+   * `lib/hooks/useStorage.ts`).
    */
   user?: Pick<
     AuthUser,
-    "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin" | "confidentialityClearance"
+    | "username"
+    | "profiles"
+    | "isGlobalAdmin"
+    | "isCompanyAdmin"
+    | "confidentialityClearance"
+    | "name"
   > | null
 ): StrategicData {
   const [allAxes, setAllAxes] = useState<StrategicAxis[]>([]);
@@ -280,6 +316,9 @@ export function useStrategicData(
   // N'est souscrite que si l'appelant a explicitement passé `user` (voir doc du paramètre
   // ci-dessus) — les appelants non migrés ne payent aucun abonnement supplémentaire.
   const filterActive = user !== undefined;
+  // Auteur attribué aux entrées d'audit des mutations ci-dessous — voir le doc-comment du
+  // paramètre `user` (champ `name`) et `AUDIT_FALLBACK_USER` plus haut.
+  const auditUser = user?.name ?? AUDIT_FALLBACK_USER;
   const [company, setCompany] = useState<Company | null>(null);
   useEffect(() => {
     if (!filterActive || !companyId) {
@@ -450,20 +489,33 @@ export function useStrategicData(
         lastUpdate: nowDate(),
       };
       await saveStrategicAxis(axis);
+      logAudit(companyId, [makeCreatedAuditEntry(auditUser, axis.id, "axe", axis.name)]);
       return axis;
     },
-    [companyId, programId]
+    [companyId, programId, auditUser]
   );
 
-  const updateAxis = useCallback<StrategicData["updateAxis"]>(async (id, patch) => {
-    const existing = axesRef.current.find((a) => a.id === id);
-    if (!existing) return;
-    await saveStrategicAxis({ ...existing, ...patch, id, lastUpdate: nowDate() });
-  }, []);
+  const updateAxis = useCallback<StrategicData["updateAxis"]>(
+    async (id, patch) => {
+      const existing = axesRef.current.find((a) => a.id === id);
+      if (!existing) return;
+      const after: StrategicAxis = { ...existing, ...patch, id, lastUpdate: nowDate() };
+      await saveStrategicAxis(after);
+      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
+    },
+    [companyId, auditUser]
+  );
 
-  const removeAxis = useCallback<StrategicData["removeAxis"]>(async (id) => {
-    await deleteStrategicAxis(id);
-  }, []);
+  const removeAxis = useCallback<StrategicData["removeAxis"]>(
+    async (id) => {
+      const existing = axesRef.current.find((a) => a.id === id);
+      await deleteStrategicAxis(id);
+      if (existing) {
+        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "axe", existing.name)]);
+      }
+    },
+    [companyId, auditUser]
+  );
 
   const createChantier = useCallback<StrategicData["createChantier"]>(
     async (input) => {
@@ -478,43 +530,68 @@ export function useStrategicData(
         lastUpdate: nowDate(),
       };
       await saveChantier(chantier);
+      logAudit(companyId, [
+        makeCreatedAuditEntry(auditUser, chantier.id, "chantier", chantier.name),
+      ]);
       return chantier;
     },
-    [companyId, programId]
+    [companyId, programId, auditUser]
   );
 
-  const updateChantier = useCallback<StrategicData["updateChantier"]>(async (id, patch) => {
-    const existing = chantiersRef.current.find((c) => c.id === id);
-    if (!existing) return;
-    await saveChantier({ ...existing, ...patch, id, lastUpdate: nowDate() });
-  }, []);
+  const updateChantier = useCallback<StrategicData["updateChantier"]>(
+    async (id, patch) => {
+      const existing = chantiersRef.current.find((c) => c.id === id);
+      if (!existing) return;
+      const after: Chantier = { ...existing, ...patch, id, lastUpdate: nowDate() };
+      await saveChantier(after);
+      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
+    },
+    [companyId, auditUser]
+  );
 
-  const removeChantier = useCallback<StrategicData["removeChantier"]>(async (id) => {
-    await deleteChantier(id);
-  }, []);
+  const removeChantier = useCallback<StrategicData["removeChantier"]>(
+    async (id) => {
+      const existing = chantiersRef.current.find((c) => c.id === id);
+      await deleteChantier(id);
+      if (existing) {
+        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "chantier", existing.name)]);
+      }
+    },
+    [companyId, auditUser]
+  );
 
   const createChantierAction = useCallback<StrategicData["createChantierAction"]>(
     async (input) => {
       if (!companyId) throw new Error("createChantierAction: companyId manquant");
       const action: ChantierAction = { ...input, id: newId("CA"), companyId };
       await saveChantierAction(action);
+      logAudit(companyId, [makeCreatedAuditEntry(auditUser, action.id, "projet", action.name)]);
       return action;
     },
-    [companyId]
+    [companyId, auditUser]
   );
 
   const updateChantierAction = useCallback<StrategicData["updateChantierAction"]>(
     async (id, patch) => {
       const existing = actionsRef.current.find((a) => a.id === id);
       if (!existing) return;
-      await saveChantierAction({ ...existing, ...patch, id });
+      const after: ChantierAction = { ...existing, ...patch, id };
+      await saveChantierAction(after);
+      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
     },
-    []
+    [companyId, auditUser]
   );
 
-  const removeChantierAction = useCallback<StrategicData["removeChantierAction"]>(async (id) => {
-    await deleteChantierAction(id);
-  }, []);
+  const removeChantierAction = useCallback<StrategicData["removeChantierAction"]>(
+    async (id) => {
+      const existing = actionsRef.current.find((a) => a.id === id);
+      await deleteChantierAction(id);
+      if (existing) {
+        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "projet", existing.name)]);
+      }
+    },
+    [companyId, auditUser]
+  );
 
   const createIndicator = useCallback<StrategicData["createIndicator"]>(
     async (input) => {
@@ -532,24 +609,40 @@ export function useStrategicData(
         lastUpdate: nowDate(),
       };
       await saveIndicator(indicator);
+      logAudit(companyId, [
+        makeCreatedAuditEntry(auditUser, indicator.id, "indicateur", indicator.name),
+      ]);
       return indicator;
     },
-    [companyId, programId]
+    [companyId, programId, auditUser]
   );
 
-  const updateIndicator = useCallback<StrategicData["updateIndicator"]>(async (id, patch) => {
-    const existing = indicatorsRef.current.find((i) => i.id === id);
-    if (!existing) return;
-    const next: Indicator = { ...existing, ...patch, id, lastUpdate: nowDate() };
-    // Modifier l'objectif/le sens/la nature change mécaniquement le verdict sur la dernière
-    // mesure — on recalcule ici pour ne pas laisser un statut périmé en base.
-    next.status = computeIndicatorStatus(next, measurementsRef.current);
-    await saveIndicator(next);
-  }, []);
+  const updateIndicator = useCallback<StrategicData["updateIndicator"]>(
+    async (id, patch) => {
+      const existing = indicatorsRef.current.find((i) => i.id === id);
+      if (!existing) return;
+      const next: Indicator = { ...existing, ...patch, id, lastUpdate: nowDate() };
+      // Modifier l'objectif/le sens/la nature change mécaniquement le verdict sur la dernière
+      // mesure — on recalcule ici pour ne pas laisser un statut périmé en base.
+      next.status = computeIndicatorStatus(next, measurementsRef.current);
+      await saveIndicator(next);
+      // Diff sur le `patch` d'origine (pas `next`, dont `status` peut avoir été recalculé
+      // au-dessus sans que l'appelant l'ait demandé) — même convention que les autres mutations.
+      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, next));
+    },
+    [companyId, auditUser]
+  );
 
-  const removeIndicator = useCallback<StrategicData["removeIndicator"]>(async (id) => {
-    await deleteIndicator(id);
-  }, []);
+  const removeIndicator = useCallback<StrategicData["removeIndicator"]>(
+    async (id) => {
+      const existing = indicatorsRef.current.find((i) => i.id === id);
+      await deleteIndicator(id);
+      if (existing) {
+        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "indicateur", existing.name)]);
+      }
+    },
+    [companyId, auditUser]
+  );
 
   const addMeasurement = useCallback<StrategicData["addMeasurement"]>(
     async (input) => {

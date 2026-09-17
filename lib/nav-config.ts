@@ -180,6 +180,17 @@ export const roles: Record<Role, RoleDefinition> = {
       // Round 13 : le pilote du Plan Stratégique peut désormais consulter/compléter la base ETP
       // entreprise (Plan Performance) — voir les commentaires identiques sur `cto`/`hr` ci-dessus.
       { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
+      // Round audit trail Plan Stratégique : réutilise le MÊME id/route qu'`"admin-history"`
+      // (ADMIN_NAV_DEFINITIONS.company ci-dessous), pas un item séparé — la page
+      // (app/(app)/admin/history/page.tsx) ne teste `isCompanyAdmin` nulle part, elle se contente
+      // de scoper le journal à `user.companyId` (voir son composant), donc rien à dupliquer/
+      // restructurer pour l'accueillir (exactement le plan déjà noté dans le commentaire de
+      // `comex_member` ci-dessous, qui anticipait ce round). `section: "reference"` regroupe
+      // l'entrée avec "Base ETP" sous "Données de référence" plutôt qu'avec le pilotage courant —
+      // seul `strategic_lead` (pilote) y accède ici, PAS les 5 autres rôles Plan Stratégique ni
+      // `comex_member` (demande PO explicite, périmètre de lecture déjà tranché à un round
+      // antérieur pour ce dernier).
+      { id: "admin-history", icon: "History", label: "nav.history", section: "reference" },
     ],
   },
   axis_sponsor: {
@@ -265,7 +276,9 @@ export const roles: Record<Role, RoleDefinition> = {
   // ici. Round ultérieur prévu : un item nav dédié à l'historique/audit trail (pendant du
   // `"admin-history"` d'ADMIN_NAV_DEFINITIONS ci-dessous, mais visible sans être admin) — il
   // suffira de pousser une entrée supplémentaire dans le tableau `nav` ci-dessous, rien à
-  // restructurer pour l'accueillir.
+  // restructurer pour l'accueillir. Round audit trail Plan Stratégique : ce pattern a depuis été
+  // appliqué à `strategic_lead` (voir sa nav ci-dessus) — VOLONTAIREMENT PAS à `comex_member` ici
+  // (demande PO explicite : le pilote seul, pas le périmètre de lecture COMEX déjà tranché).
   comex_member: {
     label: "roles.comexMember.label",
     short: "roles.comexMember.short",
