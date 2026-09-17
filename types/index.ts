@@ -304,6 +304,11 @@ export type Lever = {
    *  export Excel...) conservent malgré tout un repli `?? "Non assigné"` pour rester robustes à un
    *  programme supprimé après coup (orphelin), pas parce que le champ redeviendrait optionnel. */
   programId: string;
+  /** Poids déclaratif (0-100) de ce levier dans l'avancement de son workstream, renseigné par le
+   *  pilote du workstream (pas calculé). Les poids des leviers d'un même workstream n'ont pas
+   *  besoin de sommer à 100 — voir `lib/workstreamLogic.ts::workstreamDeclaredProgress` pour le
+   *  calcul de la moyenne pondérée. Non défini = poids implicite égal entre leviers du workstream. */
+  workstreamWeightPct?: number;
 };
 
 /** Ligne d'impact d'une action — décrit UN effet financier/RH sur UN poste de coût.
@@ -352,6 +357,11 @@ export type LeverAction = {
    *  mapping P&L, centre de coût, et entité. Le levier parent consolide automatiquement
    *  ses KPIs depuis la somme des impacts de toutes ses actions. */
   impacts?: ActionImpact[];
+  /** Avancement déclaratif (0-100) de cette action, renseigné par le pilote du levier — distinct
+   *  de `status` (étape maturité). Sert au calcul de `leverDeclaredProgress` puis
+   *  `workstreamDeclaredProgress` (voir `lib/workstreamLogic.ts`). Non défini = action non encore
+   *  déclarée, ignorée du calcul (pas comptée comme 0%). */
+  declaredProgressPct?: number;
 };
 
 export type Department = {

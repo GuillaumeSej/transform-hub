@@ -1087,22 +1087,24 @@ export function DashboardPagePerformance() {
                       </p>
                     ) : (
                       <>
-                        {alertsOnPage.map((a) => (
-                          <AlertItem
-                            key={a.id}
-                            alert={a}
-                            onClick={() => goToAlert(a)}
-                            onToggleResolved={
-                              readOnly ? undefined : () => toggleAlertResolved(a.id)
-                            }
-                            scopeLabel={resolveScopeLabel(a.scope)}
-                            tooltips={{
-                              severity: t(`alerts.tooltip.severity.${a.type}`),
-                              impact: t("alerts.tooltip.impact"),
-                              auto: t("alerts.tooltip.auto"),
-                            }}
-                          />
-                        ))}
+                        <div className="max-h-[420px] min-h-[420px] overflow-y-auto pr-1">
+                          {alertsOnPage.map((a) => (
+                            <AlertItem
+                              key={a.id}
+                              alert={a}
+                              onClick={() => goToAlert(a)}
+                              onToggleResolved={
+                                readOnly ? undefined : () => toggleAlertResolved(a.id)
+                              }
+                              scopeLabel={resolveScopeLabel(a.scope)}
+                              tooltips={{
+                                severity: t(`alerts.tooltip.severity.${a.type}`),
+                                impact: t("alerts.tooltip.impact"),
+                                auto: t("alerts.tooltip.auto"),
+                              }}
+                            />
+                          ))}
+                        </div>
                         {alertPageCount > 1 && (
                           <div className="flex items-center justify-center gap-3 pt-3 mt-2 border-t border-border">
                             <button
@@ -1161,134 +1163,141 @@ export function DashboardPagePerformance() {
                       </p>
                     ) : (
                       <>
-                        <div className="flex flex-col gap-3">
-                          {dependencyPagination.items.map((a, i) => {
-                            const sev = depSeverity(a.delayDays);
-                            const meta = DEPENDENCY_TYPE_META[a.type];
-                            return (
-                              <div
-                                key={`${a.sourceId}-${a.targetId}-${i}`}
-                                onClick={() => {
-                                  router.push(`/levers/detail?id=${a.sourceId}`);
-                                }}
-                                className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
-                              >
-                                <div className="mb-2 flex items-start justify-between gap-2">
-                                  <div>
-                                    <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
-                                      {t("dashboard.dependency.planningRule", "Règle de planning")}
+                        <div className="max-h-[420px] min-h-[420px] overflow-y-auto pr-1">
+                          <div className="flex flex-col gap-3">
+                            {dependencyPagination.items.map((a, i) => {
+                              const sev = depSeverity(a.delayDays);
+                              const meta = DEPENDENCY_TYPE_META[a.type];
+                              return (
+                                <div
+                                  key={`${a.sourceId}-${a.targetId}-${i}`}
+                                  onClick={() => {
+                                    router.push(`/levers/detail?id=${a.sourceId}`);
+                                  }}
+                                  className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
+                                >
+                                  <div className="mb-2 flex items-start justify-between gap-2">
+                                    <div>
+                                      <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                                        {t(
+                                          "dashboard.dependency.planningRule",
+                                          "Règle de planning"
+                                        )}
+                                      </div>
+                                      <div className="mt-1 text-[11px] font-semibold text-primary">
+                                        {a.type === "FS" &&
+                                          t(
+                                            "dashboard.dependency.rule.fs",
+                                            "La cible doit finir avant le début de la source"
+                                          )}
+                                        {a.type === "SF" &&
+                                          t(
+                                            "dashboard.dependency.rule.sf",
+                                            "La cible doit démarrer avant la fin de la source"
+                                          )}
+                                        {a.type === "SS" &&
+                                          t(
+                                            "dashboard.dependency.rule.ss",
+                                            "Les deux éléments doivent démarrer ensemble"
+                                          )}
+                                        {a.type === "FF" &&
+                                          t(
+                                            "dashboard.dependency.rule.ff",
+                                            "Les deux éléments doivent finir ensemble"
+                                          )}
+                                      </div>
                                     </div>
-                                    <div className="mt-1 text-[11px] font-semibold text-primary">
-                                      {a.type === "FS" &&
-                                        t(
-                                          "dashboard.dependency.rule.fs",
-                                          "La cible doit finir avant le début de la source"
-                                        )}
-                                      {a.type === "SF" &&
-                                        t(
-                                          "dashboard.dependency.rule.sf",
-                                          "La cible doit démarrer avant la fin de la source"
-                                        )}
-                                      {a.type === "SS" &&
-                                        t(
-                                          "dashboard.dependency.rule.ss",
-                                          "Les deux éléments doivent démarrer ensemble"
-                                        )}
-                                      {a.type === "FF" &&
-                                        t(
-                                          "dashboard.dependency.rule.ff",
-                                          "Les deux éléments doivent finir ensemble"
-                                        )}
-                                    </div>
+                                    <DependencyTypeBadge type={a.type} />
                                   </div>
-                                  <DependencyTypeBadge type={a.type} />
-                                </div>
-                                {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
+                                  {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
                                   mobile (les deux blocs côte à côte débordaient sous ~480px), côte à
                                   côte avec flèche dès sm. min-w-0 partout : sans lui, flex-1 refuse de
                                   rétrécir sous la largeur du contenu et pousse hors de la carte. */}
-                                {meta.directional ? (
-                                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
-                                    <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
-                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                                        {t("dep.blocker")}
+                                  {meta.directional ? (
+                                    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
+                                      <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
+                                        <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                                          {t("dep.blocker")}
+                                        </div>
+                                        <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                          {a.targetName}
+                                        </div>
+                                        <div className="mt-0.5 text-[10px] text-secondary">
+                                          {meta.targetMilestone} : {a.targetDate}
+                                        </div>
                                       </div>
-                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                        {a.targetName}
+                                      <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
+                                        <ArrowDown size={14} className="sm:hidden" />
+                                        <ArrowRight size={14} className="hidden sm:block" />
+                                        <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
+                                          {a.type}
+                                        </span>
                                       </div>
-                                      <div className="mt-0.5 text-[10px] text-secondary">
-                                        {meta.targetMilestone} : {a.targetDate}
+                                      <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
+                                        <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                          {t("dep.blocked")}
+                                        </div>
+                                        <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                          {a.sourceName}
+                                        </div>
+                                        <div className="mt-0.5 text-[10px] text-secondary">
+                                          {meta.sourceMilestone} : {a.sourceDate}
+                                        </div>
                                       </div>
                                     </div>
-                                    <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
-                                      <ArrowDown size={14} className="sm:hidden" />
-                                      <ArrowRight size={14} className="hidden sm:block" />
-                                      <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
+                                  ) : (
+                                    /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
+                                    <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
+                                      <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
+                                        <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                          {t("dep.atRisk")}
+                                        </div>
+                                        <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                          {a.sourceName}
+                                        </div>
+                                        <div className="mt-0.5 text-[10px] text-secondary">
+                                          {meta.sourceMilestone} : {a.sourceDate}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
+                                        <ArrowUpDown size={10} />
                                         {a.type}
-                                      </span>
-                                    </div>
-                                    <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
-                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                        {t("dep.blocked")}
                                       </div>
-                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                        {a.sourceName}
-                                      </div>
-                                      <div className="mt-0.5 text-[10px] text-secondary">
-                                        {meta.sourceMilestone} : {a.sourceDate}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
-                                  <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
-                                    <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
-                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                        {t("dep.atRisk")}
-                                      </div>
-                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                        {a.sourceName}
-                                      </div>
-                                      <div className="mt-0.5 text-[10px] text-secondary">
-                                        {meta.sourceMilestone} : {a.sourceDate}
+                                      <div className="bg-bp-coral/[0.03] p-2">
+                                        <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                          {t("dep.atRisk")}
+                                        </div>
+                                        <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                          {a.targetName}
+                                        </div>
+                                        <div className="mt-0.5 text-[10px] text-secondary">
+                                          {meta.targetMilestone} : {a.targetDate}
+                                        </div>
                                       </div>
                                     </div>
-                                    <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
-                                      <ArrowUpDown size={10} />
-                                      {a.type}
-                                    </div>
-                                    <div className="bg-bp-coral/[0.03] p-2">
-                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                        {t("dep.atRisk")}
-                                      </div>
-                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                        {a.targetName}
-                                      </div>
-                                      <div className="mt-0.5 text-[10px] text-secondary">
-                                        {meta.targetMilestone} : {a.targetDate}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                                {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
-                                  que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
-                                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
-                                  <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
-                                    {sev.label}
-                                  </span>
-                                  <span className="text-secondary">
-                                    {a.delayDays}{" "}
-                                    {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
-                                  </span>
-                                  {a.impactEur > 0 && (
-                                    <span className="ml-auto font-bold text-bp-coral">
-                                      {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
-                                    </span>
                                   )}
+                                  {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
+                                  que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
+                                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}
+                                    >
+                                      {sev.label}
+                                    </span>
+                                    <span className="text-secondary">
+                                      {a.delayDays}{" "}
+                                      {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
+                                    </span>
+                                    {a.impactEur > 0 && (
+                                      <span className="ml-auto font-bold text-bp-coral">
+                                        {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
                         {dependencyPagination.pageCount > 1 && (
                           <DashboardPager
