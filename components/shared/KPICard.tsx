@@ -1,8 +1,10 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
+import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { Tooltip } from "@/components/shared/Tooltip";
 
 // Brand BearingPoint : le filet d'accent (élément graphique) peut porter la famille
 // rouge/taupe ; les icônes restent encre sur fond neutre (jamais colorées).
@@ -45,6 +47,7 @@ export function KPICard({
   onClick,
   className,
   hero = false,
+  infoTooltip,
 }: {
   label: string;
   value: string;
@@ -65,6 +68,10 @@ export function KPICard({
   /** Mise en avant mobile : chiffre agrandi sous le breakpoint desktop de la grille KPI
    *  (1100px, voir dashboard) — au-dessus, identique aux autres cartes. */
   hero?: boolean;
+  /** Texte optionnel affiché dans un tooltip au survol d'une icône ⓘ à côté du label — pour
+   *  expliquer un périmètre de calcul ambigu (ex. distinguer les 3 indicateurs "ETP" du programme,
+   *  voir audit issue #3) sans alourdir `sub`. Absent par défaut : aucune icône rendue. */
+  infoTooltip?: string;
 }) {
   const { t } = useTranslation();
   return (
@@ -89,8 +96,17 @@ export function KPICard({
       {/* Contenu textuel — occupe le haut du widget */}
       <div>
         <div className="mb-1.5 flex items-start justify-between gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-secondary">
+          <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-secondary">
             {label}
+            {infoTooltip && (
+              <Tooltip text={infoTooltip}>
+                <Info
+                  size={12}
+                  className="shrink-0 text-tertiary"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </Tooltip>
+            )}
           </span>
           <div
             className={cn(

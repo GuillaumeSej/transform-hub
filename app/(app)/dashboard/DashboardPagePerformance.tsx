@@ -13,6 +13,7 @@ import {
   ChevronUp,
   CircleCheck,
   GripVertical,
+  Info,
   LayoutGrid,
   Maximize2,
   Plus,
@@ -33,6 +34,7 @@ import {
 } from "@/lib/firestore/admin";
 import type { Company, HierarchyLevelDef, HierarchyNode, Program } from "@/types";
 import * as engine from "@/lib/engine";
+import { hrProgramSummary } from "@/lib/hrProgramSummary";
 import {
   METRIC_REGISTRY,
   getAvailableDimensions,
@@ -441,6 +443,15 @@ export function DashboardPagePerformance() {
   }, [visibleData, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
+  // ETP RH (réalisé/cible) — même source que le KPI "Impact ETP" du Dashboard RH
+  // (`app/(app)/hr/page.tsx`), pour le widget de réconciliation ETP ci-dessous (audit #3). Pas
+  // scopée au programme sélectionné : `data.workforce.movements` est déjà company-wide, même
+  // périmètre que `summary.suppressionsPlanned/Realized` juste au-dessus (dérivé de
+  // `filteredData.workforce.movements`, lui-même identique à `data.workforce.movements`).
+  const hrEtpSummary = useMemo(
+    () => hrProgramSummary(data.workforce.movements).fte,
+    [data.workforce.movements]
+  );
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
 
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
@@ -1705,8 +1716,11 @@ export function DashboardPagePerformance() {
                         t("dashboard.tableHeader.leverCount", "Leviers"),
                         t("dashboard.tableHeader.realizedTarget", "Réalisé / Cible"),
                         t("dashboard.tableHeader.progress", "Progression"),
-                        "CAPEX",
-                        t("dashboard.tableHeader.opexOneOff", "OPEX one-off"),
+                        t("dashboard.tableHeader.capexRealizedPlan", "CAPEX (réalisé / plan)"),
+                        t(
+                          "dashboard.tableHeader.opexOneOffRealizedPlan",
+                          "OPEX one-off (réalisé / plan)"
+                        ),
                       ].map((h) => (
                         <th
                           key={h}
@@ -1729,9 +1743,28 @@ export function DashboardPagePerformance() {
                       // `WorkstreamSummary.opex` (lib/engine.ts) agrège opexOneOff + opexRec — on a
                       // besoin ici du seul OPEX one-off, recalculé sur le même périmètre de leviers
                       // que `ss` (même logique d'agrégation que le CAPEX déjà affiché).
-                      const opexOneOff = filteredData.levers
-                        .filter((l) => l.ws === ws.id && l.status !== "cancelled")
-                        .reduce((s, l) => s + l.opexOneOff, 0);
+                      // `ss.capex`/`opexOneOff` (ci-dessous) sont des montants PLAN/réactualisé
+                      // (valeur courante du champ `Lever.capex`/`opexOneOff`), jamais réalisés — audit
+                      // #7 : l'ancien libellé "CAPEX"/"OPEX one-off" sans qualificatif laissait croire
+                      // à un réalisé, alors que le KPI héros "CAPEX & coûts one-off" au-dessus AFFICHE
+                      // bien un réalisé. On calcule donc ici un "réalisé" par workstream avec la MÊME
+                      // formule que `engine.programSummary.engagedCosts` (capex/opex one-off × 100%
+                      // si levier livré, sinon × progress%), pour rester cohérent avec ce KPI plutôt
+                      // que de se contenter de renommer la colonne.
+                      const wsLevers = filteredData.levers.filter(
+                        (l) => l.ws === ws.id && l.status !== "cancelled"
+                      );
+                      const engagedFactor = (l: (typeof wsLevers)[number]) =>
+                        l.status === "delivered" ? 1 : l.progress / 100;
+                      const opexOneOff = wsLevers.reduce((s, l) => s + l.opexOneOff, 0);
+                      const capexRealized = wsLevers.reduce(
+                        (s, l) => s + l.capex * engagedFactor(l),
+                        0
+                      );
+                      const opexOneOffRealized = wsLevers.reduce(
+                        (s, l) => s + l.opexOneOff * engagedFactor(l),
+                        0
+                      );
                       return (
                         <tr
                           key={ws.id}
@@ -1758,8 +1791,14 @@ export function DashboardPagePerformance() {
                           <td className="px-3 py-2.5">
                             <ProgressBar pct={ss.progressPct} />
                           </td>
-                          <td className="px-3 py-2.5 tabular-nums">{engine.fmtCurr(ss.capex)}</td>
-                          <td className="px-3 py-2.5 tabular-nums">{engine.fmtCurr(opexOneOff)}</td>
+                          <td className="px-3 py-2.5 tabular-nums">
+                            <strong>{engine.fmtCurr(capexRealized)}</strong> /{" "}
+                            {engine.fmtCurr(ss.capex)}
+                          </td>
+                          <td className="px-3 py-2.5 tabular-nums">
+                            <strong>{engine.fmtCurr(opexOneOffRealized)}</strong> /{" "}
+                            {engine.fmtCurr(opexOneOff)}
+                          </td>
                         </tr>
                       );
                     })}
@@ -1978,7 +2017,11 @@ export function DashboardPagePerformance() {
           })()}
           onClick={() => goToLevers({})}
         />
-        {/* 5. ETP impactés — fteImpact comme valeur, suppressions comme barre + % */}
+        {/* 5. ETP impactés — fteImpact comme valeur, suppressions comme barre + %
+            Audit #3 : ce chiffre, la barre "postes supprimés" ci-dessous ET le KPI "Impact ETP" du
+            Dashboard RH sont 3 mesures ETP légitimement DIFFÉRENTES qui ne se réconcilient jamais
+            numériquement (planification leviers / suivi RH réel / départs forcés uniquement) —
+            l'icône ⓘ rend cette distinction explicite plutôt que de laisser croire à une erreur. */}
         <KPICard
           label={t("dashboard.kpi.fteImpacted")}
           value={String(summary.fteImpact)}
@@ -1989,8 +2032,68 @@ export function DashboardPagePerformance() {
               ? Math.round((summary.suppressionsRealized / summary.suppressionsPlanned) * 100)
               : 0
           }
+          infoTooltip={t(
+            "dashboard.kpi.fteImpactedTooltip",
+            'Somme des ETP estimés au niveau des leviers (planification), à ne pas confondre avec le suivi RH réel (voir Dashboard RH). "X / Y postes supprimés" ne compte que les départs forcés réalisés/planifiés suivis dans le module RH — un SOUS-ENSEMBLE de cet impact ETP global, pas une décomposition complète.'
+          )}
           onClick={() => router.push("/hr")}
         />
+      </div>
+
+      {/* Widget de réconciliation ETP — audit #3 : les 3 chiffres "ETP" ci-dessus/du Dashboard RH
+          ne se recoupent jamais visuellement (pages différentes) ; ce bandeau compact les affiche
+          côte à côte en UN seul endroit pour qu'un program lead ne les prenne jamais pour la même
+          mesure. Ne force PAS ces chiffres à coïncider (métiers légitimement différents) — clarifie
+          seulement leur nature respective. */}
+      <div className="mb-4 rounded-lg border border-border bg-white p-4 shadow-sm">
+        <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-secondary">
+          {t("dashboard.etpReconciliation.title", "Réconciliation ETP — 3 mesures, 3 périmètres")}
+          <Tooltip
+            text={t(
+              "dashboard.etpReconciliation.tooltip",
+              "Ces 3 chiffres mesurent des choses différentes et ne sont pas censés être égaux : planification des leviers, suivi RH réel, et départs forcés (sous-ensemble du suivi RH)."
+            )}
+          >
+            <Info size={12} className="shrink-0 text-tertiary" />
+          </Tooltip>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-md bg-neutral-50 px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+              {t("dashboard.etpReconciliation.leverPlan", "ETP leviers (planifié)")}
+            </div>
+            <div className="mt-0.5 text-lg font-bold text-primary">{summary.fteImpact}</div>
+            <div className="mt-0.5 text-[10.5px] text-tertiary">
+              {t(
+                "dashboard.etpReconciliation.leverPlanHint",
+                "Estimation à la création/mise à jour du levier"
+              )}
+            </div>
+          </div>
+          <div className="rounded-md bg-neutral-50 px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+              {t("dashboard.etpReconciliation.hrTracked", "ETP RH (réalisé / cible)")}
+            </div>
+            <div className="mt-0.5 text-lg font-bold text-primary">
+              {hrEtpSummary.realized} / {hrEtpSummary.target}
+            </div>
+            <div className="mt-0.5 text-[10.5px] text-tertiary">
+              {t("dashboard.etpReconciliation.hrTrackedHint", "Tous mouvements RH suivis")}
+            </div>
+          </div>
+          <div className="rounded-md bg-neutral-50 px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+              {t("dashboard.etpReconciliation.suppressions", "Postes supprimés (réalisé / cible)")}
+            </div>
+            <div className="mt-0.5 text-lg font-bold text-primary">
+              {engine.fmtInt(summary.suppressionsRealized)} /{" "}
+              {engine.fmtInt(summary.suppressionsPlanned)}
+            </div>
+            <div className="mt-0.5 text-[10.5px] text-tertiary">
+              {t("dashboard.etpReconciliation.suppressionsHint", "Départs forcés uniquement")}
+            </div>
+          </div>
+        </div>
       </div>
 
       {editMode && (
