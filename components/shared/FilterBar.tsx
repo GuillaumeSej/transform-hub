@@ -12,6 +12,12 @@ export type FilterDef<T> = {
 
 export type ActiveFilters = Record<string, string[]>;
 
+/** État d'un `DropdownFilterBar.tsx` : une valeur active (ou aucune) par dimension, contrairement
+ * à `ActiveFilters` ci-dessus (multi-valeurs par dimension, pour ce `FilterBar` à chips). Défini
+ * ici pour rester à côté de `FilterDef`/`ActiveFilters`, que `DropdownFilterBar` réutilise tel
+ * quel pour ses `defs`. */
+export type SingleActiveFilters = Record<string, string | null>;
+
 export function FilterBar<T>({
   items,
   defs,

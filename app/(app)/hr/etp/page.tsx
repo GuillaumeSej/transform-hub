@@ -15,7 +15,8 @@ import { Modal } from "@/components/shared/Modal";
 import { MovementForm, type MovementFormValues } from "@/components/shared/MovementForm";
 import { HrExcelButtons } from "@/components/shared/HrExcelButtons";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import { FilterBar, type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/FilterBar";
+import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
 import type { Employee, WorkforceMovement } from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -319,9 +320,9 @@ export default function BaseEtpPage() {
   const filteredEmployees = useMemo(
     () =>
       employeeRows.filter((row) =>
-        Object.entries(etpActiveFilters).every(([key, values]) => {
+        Object.entries(etpActiveFilters).every(([key, value]) => {
           const def = etpFilterDefs.find((d) => d.key === key);
-          return !def || values.length === 0 || values.includes(def.getValue(row));
+          return !def || value == null || def.getValue(row) === value;
         })
       ),
     [employeeRows, etpActiveFilters, etpFilterDefs]
@@ -330,9 +331,9 @@ export default function BaseEtpPage() {
   const filteredMovements = useMemo(
     () =>
       movementRows.filter((row) =>
-        Object.entries(movementActiveFilters).every(([key, values]) => {
+        Object.entries(movementActiveFilters).every(([key, value]) => {
           const def = movementFilterDefs.find((d) => d.key === key);
-          return !def || values.length === 0 || values.includes(def.getValue(row));
+          return !def || value == null || def.getValue(row) === value;
         })
       ),
     [movementRows, movementActiveFilters, movementFilterDefs]
@@ -672,7 +673,7 @@ export default function BaseEtpPage() {
       {tab === "etp" && (
         <>
           <div className="mb-3.5 rounded-md border border-border bg-white p-3">
-            <FilterBar
+            <DropdownFilterBar
               items={employeeRows}
               defs={etpFilterDefs}
               active={etpActiveFilters}
@@ -695,7 +696,7 @@ export default function BaseEtpPage() {
       {tab === "mouvements" && (
         <>
           <div className="mb-3.5 rounded-md border border-border bg-white p-3">
-            <FilterBar
+            <DropdownFilterBar
               items={movementRows}
               defs={movementFilterDefs}
               active={movementActiveFilters}
