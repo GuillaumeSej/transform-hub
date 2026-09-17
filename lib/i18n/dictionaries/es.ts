@@ -46,8 +46,12 @@ const es: Record<string, string> = {
   "roles.admin_entreprise.short": "Admin ENT",
   "roles.cto.label": "Chief Transformation Officer",
   "roles.cto.short": "CTO",
-  "roles.sponsor.label": "Sponsor de Workstream",
-  "roles.sponsor.short": "Sponsor",
+  "roles.sponsor.label": "Líder de Workstream",
+  "roles.sponsor.short": "Líder",
+  "roles.programSponsor.label": "Sponsor de Programa",
+  "roles.programSponsor.short": "Sponsor Prog.",
+  "roles.programOwner.label": "Owner de Programa",
+  "roles.programOwner.short": "Owner Prog.",
   "roles.lever.label": "Responsable de Palanca",
   "roles.lever.short": "PM",
   "roles.finance.label": "Controller Financiero",
@@ -98,6 +102,9 @@ const es: Record<string, string> = {
   // Selector de programa activo (véase components/shared/ProgramSwitcher.tsx) — solo se muestra
   // cuando el usuario tiene más de un programa.
   "topbar.program": "Programa activo",
+  "topbar.consolidatedViewShort": "Vista consolidada",
+  "topbar.consolidatedViewCompany": "Vista consolidada — todos los programas de la empresa",
+  "topbar.consolidatedViewMine": "Vista consolidada — todos mis programas Performance",
 
   // ─── dashboard ────────────────────────────────────────────────────────────
   "dashboard.title": "Dashboard Ejecutivo",
@@ -573,6 +580,7 @@ const es: Record<string, string> = {
   "adminProgramsPanel.nameLabel": "Nombre del programa",
   "adminProgramsPanel.namePlaceholder": "Nombre",
   "adminProgramsPanel.sponsor": "Patrocinador",
+  "adminProgramsPanel.owner": "Propietario",
   "adminProgramsPanel.ambitionLabel": "Ambición",
   "adminProgramsPanel.ambitionPlaceholder": "Ej. Ser líder del mercado antes de 2027",
   "adminProgramsPanel.count": "{n} programa(s)",

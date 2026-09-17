@@ -32,33 +32,55 @@ import type { AuthUser, NavItem, Role, RoleDefinition } from "@/types";
  *     elle qui alimente désormais `"effectifs"` (comparaison besoin/disponible par équipe) ;
  *   - Finance / RH (dashboard) / Workstreams / Opérations n'ont pas de sens sans leviers et
  *     restent donc réservés au Plan Performance. */
+/** Nav du `cto` — même écrans/périmètre que les deux rôles "programme" de la fondation vue
+ *  consolidée (`program_sponsor`/`program_owner`, voir types/index.ts) : SEULE leur VISIBILITÉ
+ *  diffère (tous les programmes de l'entreprise pour `cto`, seulement ceux dont l'utilisateur est
+ *  sponsor/owner pour les deux autres — voir `lib/consolidatedProgramAccess.ts`), pas la nav.
+ *  Facteur commun plutôt que dupliqué trois fois, pour que les trois définitions ne puissent pas
+ *  diverger accidentellement au fil des rounds futurs (une modification de la nav CTO doit se
+ *  répercuter automatiquement sur les deux nouveaux rôles). */
+const CTO_LIKE_NAV: RoleDefinition["nav"] = [
+  { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
+  {
+    id: "levers",
+    icon: "Target",
+    label: "nav.leverLibrary",
+    labelByProgramType: { strategic: "nav.axes" },
+  },
+  { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+  { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+  {
+    id: "finance",
+    icon: "LineChart",
+    label: "nav.financeModule",
+    programTypes: ["performance"],
+  },
+  { id: "hr", icon: "Users", label: "nav.hrDashboard", programTypes: ["performance"] },
+  // Round 13 : plus de `programTypes` sur "hr-etp" — la base ETP est scopée ENTREPRISE, pas
+  // programme (voir lib/hooks/useCompanyDepartments.ts), donc visible que le programme actif
+  // soit Performance ou Stratégique (contrairement à "hr" ci-dessus, le dashboard RH complet,
+  // qui reste lui réservé au Plan Performance).
+  { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
+];
+
 export const roles: Record<Role, RoleDefinition> = {
   cto: {
     label: "roles.cto.label",
     short: "roles.cto.short",
-    nav: [
-      { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
-      {
-        id: "levers",
-        icon: "Target",
-        label: "nav.leverLibrary",
-        labelByProgramType: { strategic: "nav.axes" },
-      },
-      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
-      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
-      {
-        id: "finance",
-        icon: "LineChart",
-        label: "nav.financeModule",
-        programTypes: ["performance"],
-      },
-      { id: "hr", icon: "Users", label: "nav.hrDashboard", programTypes: ["performance"] },
-      // Round 13 : plus de `programTypes` sur "hr-etp" — la base ETP est scopée ENTREPRISE, pas
-      // programme (voir lib/hooks/useCompanyDepartments.ts), donc visible que le programme actif
-      // soit Performance ou Stratégique (contrairement à "hr" ci-dessus, le dashboard RH complet,
-      // qui reste lui réservé au Plan Performance).
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
-    ],
+    nav: CTO_LIKE_NAV,
+  },
+  // Fondation vue consolidée multi-programmes (voir types/index.ts) : même nav qu'un `cto` — seule
+  // la liste des programmes que `getConsolidatedPerformancePrograms`/`getAuthorizedPrograms` leur
+  // rendent visibles diffère, pas les écrans eux-mêmes.
+  program_sponsor: {
+    label: "roles.programSponsor.label",
+    short: "roles.programSponsor.short",
+    nav: CTO_LIKE_NAV,
+  },
+  program_owner: {
+    label: "roles.programOwner.label",
+    short: "roles.programOwner.short",
+    nav: CTO_LIKE_NAV,
   },
   sponsor: {
     label: "roles.sponsor.label",

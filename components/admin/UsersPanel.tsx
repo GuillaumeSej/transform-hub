@@ -33,11 +33,18 @@ const PASSWORD_TOO_SHORT_MESSAGE = `Le mot de passe doit contenir au moins ${MIN
  *  traduit, mêmes libellés littéraux que les rôles du Plan Stratégique ci-dessous. */
 const PERFORMANCE_ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "cto", label: "CTO" },
-  { value: "sponsor", label: "Sponsor" },
+  // Libellé "Workstream Leader" (renommage du libellé affiché — la clé technique `sponsor` reste
+  // inchangée, toujours scopée WORKSTREAM, voir types/index.ts).
+  { value: "sponsor", label: "Workstream Leader" },
   { value: "lever", label: "Lever Owner" },
   { value: "finance", label: "Finance" },
   { value: "hr", label: "HR" },
   { value: "ops", label: "Ops" },
+  // Fondation vue consolidée multi-programmes (voir types/index.ts) : deux rôles Plan Performance
+  // scopés PROGRAMME (pas workstream) — même visualisation qu'un CTO, mais restreints à leur
+  // périmètre de programmes (sponsor/owner), voir lib/consolidatedProgramAccess.ts.
+  { value: "program_sponsor", label: "Program Sponsor" },
+  { value: "program_owner", label: "Program Owner" },
 ];
 
 /** Libellés FR des 6 profils du Plan Stratégique (organigramme 3-5-15) — les clés i18n `roles.*`

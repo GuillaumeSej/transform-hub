@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, FolderKanban } from "lucide-react";
-import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { ChevronDown, FolderKanban, LayoutGrid } from "lucide-react";
+import { CONSOLIDATED_PROGRAM_ID, useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { resolveProgramType } from "@/lib/axisLogic";
-import { getAuthorizedPrograms } from "@/lib/roleProfiles";
+import { getConsolidatedPerformancePrograms } from "@/lib/consolidatedProgramAccess";
+import { getAuthorizedPrograms, hasRole } from "@/lib/roleProfiles";
 
 /**
  * Sélecteur de PROGRAMME ACTIF dans le Topbar — même pattern de dropdown que le sélecteur de
@@ -21,10 +22,22 @@ import { getAuthorizedPrograms } from "@/lib/roleProfiles";
  * un utilisateur mono-profil ne voit que les programmes de son type). Ne s'affiche jamais pour un
  * admin GLOBAL (pas de `companyId`, pas de contexte "entreprise" cohérent — voir
  * `useActiveProgram`, qui ne lui attribue déjà aucun `activeProgram` par défaut pour la même
- * raison), ni quand il n'y a qu'un seul programme autorisé (rien à choisir).
+ * raison), ni quand il n'y a qu'un seul programme autorisé ET aucune vue consolidée disponible
+ * (rien à choisir).
+ *
+ * Vue consolidée (fondation chantier CTO multi-programmes) : une entrée "Vue consolidée" apparaît
+ * en tête de liste quand `getConsolidatedPerformancePrograms` (lib/consolidatedProgramAccess.ts)
+ * renvoie PLUS D'UN programme pour l'utilisateur courant — pas la peine de la proposer s'il n'y a
+ * qu'un seul programme dans son périmètre, rien à consolider. Son libellé s'adapte au rôle : un
+ * `cto` voit "tous les programmes de l'entreprise", un `program_sponsor`/`program_owner` voit "tous
+ * mes programmes" (son périmètre est nécessairement plus étroit, voir la doc de
+ * `getConsolidatedPerformancePrograms`). La sélectionner appelle
+ * `setActiveProgramId(CONSOLIDATED_PROGRAM_ID)`, qui bascule `useActiveProgram` en mode
+ * `isConsolidatedView`.
  */
 export function ProgramSwitcher() {
-  const { programs, activeProgram, activeProgramId, setActiveProgramId } = useActiveProgram();
+  const { programs, activeProgram, activeProgramId, isConsolidatedView, setActiveProgramId } =
+    useActiveProgram();
   const { t } = useTranslation();
   const { user } = useRole();
   const { confirmDiscard } = useUnsavedChanges();
@@ -33,9 +46,17 @@ export function ProgramSwitcher() {
   const [open, setOpen] = useState(false);
 
   const authorizedPrograms = getAuthorizedPrograms(user, programs);
+  const consolidatedPrograms = getConsolidatedPerformancePrograms(user, programs);
+  const canConsolidate = consolidatedPrograms.length > 1;
 
   if (!user?.companyId) return null;
-  if (authorizedPrograms.length < 2) return null;
+  if (authorizedPrograms.length < 2 && !canConsolidate) return null;
+
+  // Libellé adapté au rôle : un CTO consolide "l'entreprise", un sponsor/owner de programme
+  // consolide "ses" programmes (périmètre plus étroit, voir la doc-comment ci-dessus).
+  const consolidatedLabel = hasRole(user, "cto")
+    ? t("topbar.consolidatedViewCompany", "Vue consolidée — tous les programmes de l'entreprise")
+    : t("topbar.consolidatedViewMine", "Vue consolidée — tous mes programmes Performance");
 
   const select = async (id: string) => {
     // Navigation potentiellement destructrice (édition en cours) — même garde que les liens de nav
@@ -50,8 +71,11 @@ export function ProgramSwitcher() {
     // doit donc aussi mettre le paramètre à jour, sinon la page continuerait d'afficher l'ancien
     // programme. `window.location.search` plutôt que `useSearchParams()` : ce hook forcerait une
     // frontière Suspense sur TOUTES les pages du groupe (app) au build statique, alors qu'ici la
-    // lecture n'a lieu qu'au clic.
-    if (pathname === "/dashboard") {
+    // lecture n'a lieu qu'au clic. Pas de mise à jour `?program=` pour la sélection "vue
+    // consolidée" : le dashboard exécutif lit `isConsolidatedView`/`consolidatedPrograms` du
+    // contexte directement, pas ce paramètre (un lot ultérieur de la page dashboard décidera si
+    // elle veut, elle aussi, un paramètre d'URL dédié partageable).
+    if (pathname === "/dashboard" && id !== CONSOLIDATED_PROGRAM_ID) {
       const params = new URLSearchParams(window.location.search);
       params.set("program", id);
       router.replace(`/dashboard?${params.toString()}`);
@@ -70,11 +94,19 @@ export function ProgramSwitcher() {
         onClick={() => setOpen((v) => !v)}
         aria-label={t("topbar.program")}
         aria-expanded={open}
-        title={`${t("topbar.program")} · ${activeProgram?.name ?? ""}`}
+        title={`${t("topbar.program")} · ${isConsolidatedView ? consolidatedLabel : (activeProgram?.name ?? "")}`}
         className="flex h-[34px] max-w-[130px] items-center gap-1.5 rounded-full border border-border bg-white px-2.5 text-xs font-semibold text-secondary transition hover:border-black sm:max-w-[220px]"
       >
-        <FolderKanban size={13} className="flex-shrink-0" />
-        <span className="truncate">{activeProgram?.name ?? t("topbar.program")}</span>
+        {isConsolidatedView ? (
+          <LayoutGrid size={13} className="flex-shrink-0" />
+        ) : (
+          <FolderKanban size={13} className="flex-shrink-0" />
+        )}
+        <span className="truncate">
+          {isConsolidatedView
+            ? t("topbar.consolidatedViewShort", "Vue consolidée")
+            : (activeProgram?.name ?? t("topbar.program"))}
+        </span>
         <ChevronDown size={12} className="flex-shrink-0" />
       </button>
       {open && (
@@ -82,6 +114,18 @@ export function ProgramSwitcher() {
           <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-tertiary">
             {t("topbar.program")}
           </div>
+          {canConsolidate && (
+            <button
+              type="button"
+              onClick={() => void select(CONSOLIDATED_PROGRAM_ID)}
+              className={`flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-xs font-medium transition hover:bg-neutral-50 ${
+                isConsolidatedView ? "font-semibold text-primary" : "text-secondary"
+              }`}
+            >
+              <LayoutGrid size={12} className="flex-shrink-0" />
+              <span className="truncate">{consolidatedLabel}</span>
+            </button>
+          )}
           {authorizedPrograms.map((p) => {
             const active = p.id === activeProgramId;
             return (

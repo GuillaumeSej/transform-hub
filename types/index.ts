@@ -24,6 +24,23 @@
  * `admin` (super-admin global) et `admin_entreprise` (admin d'entreprise) n'en font PAS partie :
  * ce ne sont pas des "profils métier" mais des habilitations additives, portées par
  * `AuthUser.isGlobalAdmin`/`isCompanyAdmin` — voir le commentaire sur `AuthUser` ci-dessous.
+ *
+ * Vue consolidée multi-programmes (fondation) : deux rôles Plan Performance scopés au niveau
+ * PROGRAMME (pas workstream, contrairement à `sponsor`) ont été ajoutés :
+ *   - `program_sponsor` : sponsor d'UN OU PLUSIEURS programmes Performance (`Program.sponsor`,
+ *                          `AuthUser.username`) — même visualisation/nav que `cto`, mais restreint
+ *                          aux programmes dont il est sponsor (voir
+ *                          `lib/consolidatedProgramAccess.ts::getConsolidatedPerformancePrograms`).
+ *   - `program_owner`   : owner d'UN OU PLUSIEURS programmes Performance (`Program.owner`,
+ *                          `AuthUser.username`) — même mécanique, restreinte aux programmes dont il
+ *                          est owner.
+ * Noms choisis pour ne pas collisionner avec `sponsor` (rôle historique scopé WORKSTREAM via
+ * `Workstream.sponsorUsername`, voir `lib/leversLogic.ts::isLeverSponsoredBy`) : le préfixe
+ * `program_` marque sans ambiguïté le scope PROGRAMME. Comme `cto`, ce sont des rôles rattachables
+ * à un `programId` précis sur leur `ProfileAssignment` (round multi-profils multi-programmes) —
+ * mais leur périmètre de VISIBILITÉ pour la vue consolidée se déduit de `Program.sponsor`/
+ * `Program.owner`, PAS de `ProfileAssignment.programId` (qui reste le mécanisme du sélecteur
+ * mono-programme existant, voir `getAuthorizedPrograms`).
  */
 export type Role =
   | "cto"
@@ -32,6 +49,8 @@ export type Role =
   | "finance"
   | "hr"
   | "ops"
+  | "program_sponsor"
+  | "program_owner"
   | "strategic_lead"
   | "axis_sponsor"
   | "chantier_owner"
@@ -40,9 +59,10 @@ export type Role =
   | "budget_control"
   | "comex_member";
 
-/** Les 6 rôles du Plan Performance (round historique), PLUS `comex_member` (round 25) — voir son
- *  commentaire juste en dessous de `STRATEGIC_ROLES` : c'est le seul rôle qui figure dans LES DEUX
- *  tableaux `PERFORMANCE_ROLES`/`STRATEGIC_ROLES` à la fois. */
+/** Les 6 rôles historiques du Plan Performance, PLUS `program_sponsor`/`program_owner` (fondation
+ *  vue consolidée) et `comex_member` (round 25) — voir son commentaire juste en dessous de
+ *  `STRATEGIC_ROLES` : c'est le seul rôle qui figure dans LES DEUX tableaux
+ *  `PERFORMANCE_ROLES`/`STRATEGIC_ROLES` à la fois. */
 export const PERFORMANCE_ROLES: Role[] = [
   "cto",
   "sponsor",
@@ -50,6 +70,8 @@ export const PERFORMANCE_ROLES: Role[] = [
   "finance",
   "hr",
   "ops",
+  "program_sponsor",
+  "program_owner",
   "comex_member",
 ];
 
@@ -722,8 +744,14 @@ export type Program = {
   name: string;
   /** `AuthUser.username` du sponsor (sélectionné via `UserPicker`, restreint aux utilisateurs de
    *  `companyId`) — jamais un texte libre. Optionnel : un programme peut ne pas avoir de sponsor
-   *  désigné. */
+   *  désigné. Sert aussi de périmètre à la vue consolidée du rôle `program_sponsor` (voir
+   *  `lib/consolidatedProgramAccess.ts`). */
   sponsor?: string;
+  /** `AuthUser.username` de l'owner (même pattern que `sponsor` ci-dessus : sélectionné via
+   *  `UserPicker`, jamais un texte libre). Optionnel. Sert de périmètre à la vue consolidée du rôle
+   *  `program_owner` (voir `lib/consolidatedProgramAccess.ts`) — distinct du sponsor : un programme
+   *  peut avoir l'un, l'autre, les deux, ou aucun. */
+  owner?: string;
   currency: string;
   fyStart: string;
   fyEnd: string;
@@ -743,9 +771,16 @@ export type Program = {
    *  l'activation se décide par programme, pas globalement pour toute l'entreprise). */
   actionPlanEnabled?: boolean;
   /** Vision/accroche courte du programme (round 12), affichée de façon persistante sur le
-   *  dashboard stratégique — texte libre, distinct de `name` (l'intitulé) : "ce qu'on cherche à
-   *  atteindre" plutôt que "comment le programme s'appelle". Optionnel, aucune valeur par défaut :
-   *  un programme sans ambition déclarée n'affiche simplement rien à cet endroit. */
+   *  dashboard stratégique (`components/strategic/StrategicDashboardView.tsx`) — texte libre,
+   *  distinct de `name` (l'intitulé) : "ce qu'on cherche à atteindre" plutôt que "comment le
+   *  programme s'appelle". Optionnel, aucune valeur par défaut : un programme sans ambition
+   *  déclarée n'affiche simplement rien à cet endroit.
+   *
+   *  N'a de sens QUE pour un programme "strategic" (retiré du formulaire de création/édition pour
+   *  un programme "performance" dans `components/admin/ProgramsPanel.tsx` — un Plan Performance n'a
+   *  pas d'"ambition" au sens de cette vision 3-5-15). Champ conservé sur `Program` (pas retiré du
+   *  type) car réellement lu par `StrategicDashboardView` : seul son édition côté Performance a été
+   *  retirée. */
   ambition?: string;
 };
 

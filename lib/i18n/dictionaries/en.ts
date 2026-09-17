@@ -52,6 +52,10 @@ const en: Record<string, string> = {
   "roles.cto.short": "CTO",
   "roles.sponsor.label": "Workstream Leader",
   "roles.sponsor.short": "Leader",
+  "roles.programSponsor.label": "Program Sponsor",
+  "roles.programSponsor.short": "Prog. Sponsor",
+  "roles.programOwner.label": "Program Owner",
+  "roles.programOwner.short": "Prog. Owner",
   "roles.lever.label": "Initiative Leader",
   "roles.lever.short": "IL",
   "roles.finance.label": "Finance Controller",
@@ -102,6 +106,9 @@ const en: Record<string, string> = {
   // Active-program selector (see components/shared/ProgramSwitcher.tsx) — only rendered when the
   // user has more than one program.
   "topbar.program": "Active program",
+  "topbar.consolidatedViewShort": "Consolidated view",
+  "topbar.consolidatedViewCompany": "Consolidated view — all company programs",
+  "topbar.consolidatedViewMine": "Consolidated view — all my Performance programs",
 
   // ─── dashboard ────────────────────────────────────────────────────────────
   "dashboard.title": "Executive Dashboard",
@@ -591,6 +598,7 @@ const en: Record<string, string> = {
   "adminProgramsPanel.nameLabel": "Program name",
   "adminProgramsPanel.namePlaceholder": "Name",
   "adminProgramsPanel.sponsor": "Sponsor",
+  "adminProgramsPanel.owner": "Owner",
   "adminProgramsPanel.ambitionLabel": "Ambition",
   "adminProgramsPanel.ambitionPlaceholder": "E.g. Become the market leader by 2027",
   "adminProgramsPanel.count": "{n} program(s)",
