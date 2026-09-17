@@ -90,7 +90,9 @@ export function InitiativeHealthMatrix({
                 >
                   {group.label}
                 </div>
-                <div className="text-center text-[10px] text-tertiary">{group.cells.length}</div>
+                <div className="text-center text-[10px] text-tertiary">
+                  {group.cells.filter((cell) => cell.health !== "cancelled").length}
+                </div>
                 <div className="mt-1.5 flex flex-col gap-1 rounded-sm border border-sky-100 bg-sky-50 p-1.5">
                   {cells.map(({ lever, health, computedRisk, activeAlertCount }) => (
                     <button

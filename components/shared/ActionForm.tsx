@@ -159,7 +159,6 @@ export function ActionForm({
       end,
       status,
       declaredProgressPct,
-      cost: 0,
       impacts: validImpacts,
     });
   };

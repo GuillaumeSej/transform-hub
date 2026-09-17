@@ -34,7 +34,20 @@ export type LegacySubLever = {
   status: LeverStatus;
   deliveredDate?: string;
   dependencies: LeverDependency[];
-  actions: LeverAction[];
+  actions: LegacySubLeverAction[];
+};
+
+/** Action d'un ancien sous-levier — ne porte pas de `cost` réel (les impacts financiers sont
+ *  recalculés par `migrateSubLever` à partir des totaux du sous-levier), seulement un `weight`
+ *  relatif servant à répartir ces totaux entre les actions. Confiné à ce script de migration. */
+export type LegacySubLeverAction = {
+  id: string;
+  name: string;
+  start: string; // ISO date
+  end: string; // ISO date
+  status: ActionStatus;
+  weight: number; // pondération relative pour la répartition des impacts du sous-levier
+  deliveredDate?: string;
 };
 
 function actionStatus(status: LeverStatus, progress = 0): ActionStatus {
@@ -159,7 +172,6 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
         ownerInit: sub.ownerInit ?? parent.ownerInit,
         start: sub.start,
         end: sub.end,
-        cost: 0,
         status,
         deliveredDate: sub.deliveredDate ?? deliveredDate(status, sub.end),
         impacts: financialImpacts(
@@ -184,14 +196,14 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
 
   const sortedActions = [...sub.actions].sort((a, b) => a.end.localeCompare(b.end));
   const lastActionId = sortedActions.at(-1)!.id;
-  const totalLegacyCost = sortedActions.reduce((sum, action) => sum + Math.max(0, action.cost), 0);
+  const totalWeight = sortedActions.reduce((sum, action) => sum + Math.max(0, action.weight), 0);
   const equalWeight = 1 / sortedActions.length;
   // netSavings = savings − opexRec (lib/leverConsolidate.ts) : le CAPEX et l'OPEX one-off ne
   // réduisent plus netSavings, seul l'OPEX récurrent y est déduit.
   const grossValue = Math.max(0, sub.netSavings + sub.opexRec);
 
   return sortedActions.map((action, index) => {
-    const weight = totalLegacyCost > 0 ? Math.max(0, action.cost) / totalLegacyCost : equalWeight;
+    const weight = totalWeight > 0 ? Math.max(0, action.weight) / totalWeight : equalWeight;
     const isLast = action.id === lastActionId;
     const impacts: ActionImpact[] = [];
 
@@ -256,7 +268,11 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
     }
 
     return {
-      ...action,
+      id: action.id,
+      name: action.name,
+      start: action.start,
+      end: action.end,
+      status: action.status,
       owner: sub.owner ?? parent.owner,
       ownerInit: sub.ownerInit ?? parent.ownerInit,
       deliveredDate: resolvedDeliveredDate,
@@ -295,7 +311,6 @@ function buildSimpleActions(lever: Lever): LeverAction[] {
       name: "Cadrage et préparation",
       start: lever.start,
       end: firstEnd,
-      cost: Math.round(lever.opexOneOff * 1000),
       status: firstStatus,
       deliveredDate: deliveredDate(firstStatus, firstEnd),
       impacts:
@@ -323,7 +338,6 @@ function buildSimpleActions(lever: Lever): LeverAction[] {
       name: "Mise en œuvre et déploiement",
       start: secondStart,
       end: secondEnd,
-      cost: Math.round((lever.capex + lever.opexRec) * 1000),
       status: secondStatus,
       deliveredDate: deliveredDate(secondStatus, secondEnd),
       impacts: financialImpacts(
@@ -348,7 +362,6 @@ function buildSimpleActions(lever: Lever): LeverAction[] {
       name: "Réalisation et sécurisation des gains",
       start: thirdStart,
       end: lever.end,
-      cost: 0,
       status: thirdStatus,
       deliveredDate: lever.deliveredDate ?? deliveredDate(thirdStatus, lever.end),
       impacts: financialImpacts(

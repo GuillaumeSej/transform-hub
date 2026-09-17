@@ -11,7 +11,6 @@ const lateAction = (id = "a1"): LeverAction => ({
   name: `Action ${id}`,
   start: "2026-01-01",
   end: "2026-01-15", // largement passé par rapport à "aujourd'hui" en test
-  cost: 0,
   status: "todo",
   impacts: [{ id: `${id}-imp`, label: "Savings", type: "saving", nature: "opex_rec", amount: 1 }],
 });
@@ -21,7 +20,6 @@ const onTimeAction = (id = "a1"): LeverAction => ({
   name: `Action ${id}`,
   start: "2026-01-01",
   end: "2099-01-01", // très loin dans le futur, jamais en retard
-  cost: 0,
   status: "todo",
 });
 

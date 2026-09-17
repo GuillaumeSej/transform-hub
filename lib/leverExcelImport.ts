@@ -113,7 +113,6 @@ export const ACTION_IMPORT_HEADERS = [
   "Date début",
   "Date fin",
   "Statut",
-  "Coût (€K)",
 ] as const;
 
 export const IMPACT_IMPORT_HEADERS = [
@@ -613,7 +612,6 @@ export function validateLeverImportRows(
       owner: str(row["Owner"]) || undefined,
       start,
       end,
-      cost: numOr(row["Coût (€K)"], 0),
       status,
       impacts: [],
     };

@@ -2,7 +2,7 @@
 
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fmtCurr, isActionLate } from "@/lib/engine";
+import { actionNetImpact, fmtCurr, isActionLate } from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ActionStatus, LeverAction } from "@/types";
 
@@ -106,7 +106,7 @@ export function ActionKanban({
                         {a.start} → {a.end}
                       </span>
                       <span className="font-semibold text-secondary">
-                        {fmtCurr(a.cost / 1000, 0)}
+                        {fmtCurr(actionNetImpact(a), 0)}
                       </span>
                     </div>
                     {!readOnly && (

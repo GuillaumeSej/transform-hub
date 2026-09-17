@@ -9,7 +9,6 @@ function makeAction(overrides?: Partial<LeverAction>): LeverAction {
     start: "2026-01-01",
     end: "2026-12-31",
     status: "todo",
-    cost: 0,
     ...overrides,
   };
 }

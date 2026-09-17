@@ -44,7 +44,6 @@ function action(overrides: Partial<LeverAction>): LeverAction {
     name: "Action test",
     start: "2026-01-01",
     end: "2026-06-01",
-    cost: 0,
     status: "in_progress",
     impacts: [],
     ...overrides,

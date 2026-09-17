@@ -26,7 +26,6 @@ import { Button } from "@/components/shared/Button";
 import { ExportButton } from "@/components/shared/ExportButton";
 import { LeverImportButton } from "@/components/shared/LeverImportButton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { Tooltip } from "@/components/shared/Tooltip";
 import { StageBadge } from "@/components/shared/StageBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
@@ -34,7 +33,8 @@ import { Kanban } from "@/components/shared/Kanban";
 import { LeverLibraryTree } from "@/components/shared/LeverLibraryTree";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { type FilterDef } from "@/components/shared/FilterBar";
-import { CollapsibleFilterBar } from "@/components/shared/CollapsibleFilterBar";
+import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
+import { FilterToggleButton, useFilterBarExpanded } from "@/components/shared/CollapsibleFilterBar";
 import { ColumnVisibilityMenu } from "@/components/shared/ColumnVisibilityMenu";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
@@ -47,7 +47,6 @@ type LeverRow = Lever & {
   statusLabel: string;
   costCenterLabel: string;
   hasAlert: boolean;
-  roi: number | null;
   /** Motif du niveau de risque (`engine.computeLeverRisk(...).reason`) — affiché en tooltip sur
    *  le badge de la colonne "Risque", `risk` (hérité de `Lever`) restant le niveau seul. */
   riskReason: string;
@@ -470,6 +469,10 @@ export function LeversPagePerformance() {
   // remplace une implémentation ad hoc qui avait un bug (le premier clic sur un bouton de filtre
   // ne produisait aucun effet visible, voir le commentaire du hook pour le détail).
   const { activeFilters, setFilters } = useFilterBarState(filterDefs);
+  const { expanded: filterBarExpanded, toggle: toggleFilterBar } = useFilterBarExpanded(
+    "betrack_leversFilterBar_expanded"
+  );
+  const activeFilterCount = Object.values(activeFilters).filter((v) => v != null).length;
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -487,10 +490,7 @@ export function LeversPagePerformance() {
     );
   }, [programScopedLevers, activeFilters, filterDefs]);
 
-  const hasHierarchy = sortedHierarchyLevels.length > 0;
-
   const rows: LeverRow[] = filteredLevers.map((l) => {
-    const costs = l.capex + l.opexOneOff;
     const riskAssessment = engine.computeLeverRisk(l.id, alerts, riskThresholds);
     return {
       ...l,
@@ -507,41 +507,8 @@ export function LeversPagePerformance() {
         return centers.length ? Array.from(new Set(centers)).join(", ") : l.costCenter;
       })(),
       hasAlert: alertedLeverIds.has(l.id),
-      roi: costs > 0 ? Math.round((l.netSavings / costs) * 10) / 10 : null,
     };
   });
-
-  /** Une seule colonne, sur le niveau le plus macro (généralement P&L) — pas besoin des niveaux
-   *  plus fins dans la vue tableau. Le détail complet (tous les niveaux) reste consultable au
-   *  survol (tooltip) et dans le Focus Levier. N'existe que si l'entreprise a activé
-   *  l'arborescence. */
-  const macroHierarchyLevel = sortedHierarchyLevels[0];
-  const hierarchyColumns: ColumnDef<LeverRow>[] =
-    hasHierarchy && macroHierarchyLevel
-      ? [
-          {
-            key: `hierarchy_${macroHierarchyLevel.key}` as keyof LeverRow,
-            label: macroHierarchyLevel.label,
-            width: "160px",
-            render: (r: LeverRow) => {
-              const path = resolveHierarchyPath(
-                r.hierarchyLeafId ?? "",
-                hierarchyNodes,
-                sortedHierarchyLevels
-              );
-              const macroLabel = resolveMacroLabel(r);
-              const fullDetail = path.map((p) => p.label).join(" › ");
-              return (
-                <Tooltip
-                  text={fullDetail || macroLabel || t("levers.notProvided", "Non renseigné")}
-                >
-                  <span>{macroLabel || "—"}</span>
-                </Tooltip>
-              );
-            },
-          },
-        ]
-      : [];
 
   /** Édition inline (double-clic) : les colonnes marquées editable écrivent directement sur le
    * levier. Les selects (statut/priorité/risque) passent par un mapping label → valeur interne. */
@@ -652,7 +619,6 @@ export function LeversPagePerformance() {
       width: "110px",
     },
     { key: "entity", label: t("leverForm.entity"), editable: true, mobile: "hide", width: "150px" },
-    ...(hasHierarchy ? hierarchyColumns.map((c) => ({ ...c, mobile: "hide" as const })) : []),
     // ── Financier ──
     {
       key: "netSavings",
@@ -666,29 +632,29 @@ export function LeversPagePerformance() {
     },
     {
       key: "realized",
-      label: t("levers.realized", "Réalisé"),
+      label: t("levers.realized", "Savings réalisé (€M)"),
       align: "right",
       // Visible dans la vue carte mobile : avec Net Savings, c'est LA paire que DG/CTO
       // regardent (réalisé vs engagé) — le reste du détail financier reste desktop.
       mobile: "secondary",
-      width: "90px",
+      width: "140px",
       render: (r) => r.realized.toFixed(1),
     },
     {
       key: "progress",
-      label: "Progress",
+      label: "Avancement",
       mobile: "secondary",
       width: "120px",
       render: (r) => <ProgressBar pct={r.progress} />,
     },
     {
       key: "fteImpact",
-      label: "ETP",
+      label: "ETP impacté",
       align: "right",
       editable: true,
       type: "number",
       mobile: "hide",
-      width: "80px",
+      width: "100px",
     },
     {
       key: "capex",
@@ -702,21 +668,13 @@ export function LeversPagePerformance() {
     },
     {
       key: "opexOneOff",
-      label: "One-Off",
+      label: "OPEX one-off",
       align: "right",
       editable: true,
       type: "number",
       mobile: "hide",
-      width: "90px",
+      width: "110px",
       render: (r) => r.opexOneOff.toFixed(1),
-    },
-    {
-      key: "roi",
-      label: "ROI",
-      align: "right",
-      mobile: "hide",
-      width: "80px",
-      render: (r) => (r.roi != null ? `${r.roi}x` : "—"),
     },
     // ── Statut ──
     {
@@ -742,6 +700,12 @@ export function LeversPagePerformance() {
 
   // Colonnes réellement rendues, une fois les préférences utilisateur (Tâche 3) appliquées.
   const visibleColumns = columns.filter((c) => !hiddenColumnKeys.has(c.key));
+
+  // Un levier abandonné ne doit jamais être compté ni mélangé aux leviers actifs — vue Table :
+  // table séparée, sous celle des leviers actifs, lignes grisées (même principe que le Kanban/
+  // l'arborescence, voir Kanban.tsx CancelledLeversStrip et LeverLibraryTree.tsx).
+  const activeRows = rows.filter((r) => r.status !== "cancelled");
+  const cancelledRows = rows.filter((r) => r.status === "cancelled");
 
   // Entreprise sans aucun Plan Performance : pas de programme sur lequel scoper la table, donc
   // rien à afficher (même repli que le dashboard exécutif, voir DashboardPagePerformance).
@@ -825,13 +789,10 @@ export function LeversPagePerformance() {
       <Card className="overflow-visible">
         <CardBody flush>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-            <CollapsibleFilterBar
-              items={programScopedLevers}
-              defs={filterDefs}
-              active={activeFilters}
-              onChange={setFilters}
-              storageKey="betrack_leversFilterBar_expanded"
-              className="min-w-0 flex-1"
+            <FilterToggleButton
+              expanded={filterBarExpanded}
+              onToggle={toggleFilterBar}
+              activeCount={activeFilterCount}
             />
             <ColumnVisibilityMenu
               columns={columns.map((c) => ({ key: c.key, label: c.label }))}
@@ -869,19 +830,51 @@ export function LeversPagePerformance() {
               </button>
             </div>
           </div>
+          {/* Panneau de filtres pleine largeur — sous tout le bandeau d'outils ci-dessus (Filtres /
+              Colonnes / Table-Kanban-Arborescence), pas coincé dans le même conteneur flex qu'eux
+              (voir doc-comment useFilterBarExpanded). */}
+          {filterBarExpanded && (
+            <div className="border-b border-border p-3">
+              <DropdownFilterBar
+                items={programScopedLevers}
+                defs={filterDefs}
+                active={activeFilters}
+                onChange={setFilters}
+              />
+            </div>
+          )}
         </CardBody>
       </Card>
 
       {view === "table" ? (
-        <EditableTable
-          data={rows}
-          columns={visibleColumns}
-          onCellUpdate={handleCellUpdate}
-          onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
-          searchPlaceholder={t("levers.searchPlaceholder")}
-          defaultSort={{ key: "risk", direction: "desc" }}
-          readOnly={readOnly}
-        />
+        <div className="flex flex-col gap-4">
+          <EditableTable
+            data={activeRows}
+            columns={visibleColumns}
+            onCellUpdate={handleCellUpdate}
+            onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
+            searchPlaceholder={t("levers.searchPlaceholder")}
+            defaultSort={{ key: "risk", direction: "desc" }}
+            readOnly={readOnly}
+          />
+          {cancelledRows.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-tertiary">
+                {t("shared.kanban.cancelled", "Abandonnés")} ({cancelledRows.length})
+              </div>
+              <EditableTable
+                data={cancelledRows}
+                columns={visibleColumns}
+                onCellUpdate={handleCellUpdate}
+                onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
+                searchPlaceholder={t("levers.searchPlaceholder")}
+                defaultSort={{ key: "risk", direction: "desc" }}
+                readOnly
+                className="opacity-60 grayscale"
+              />
+            </div>
+          )}
+        </div>
       ) : view === "kanban" ? (
         <Kanban
           levers={filteredLevers}
