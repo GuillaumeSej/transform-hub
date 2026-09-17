@@ -131,8 +131,12 @@ function financialImpacts(
   // en fait partie) plutôt qu'à la ligne de savings, pour ne pas laisser croire qu'un gain de
   // pricing/revenu "crée" mécaniquement des ETP. Un fteImpact négatif (réduction, ex. productivité)
   // reste porté par la ligne de savings, dont il est la contrepartie RH directe.
-  const carryFteOnOpexLine = values.fteImpact > 0 && values.opexRec > 0;
-  if (values.opexRec > 0) {
+  // La ligne de coût récurrent doit exister pour porter le fteImpact positif même quand
+  // `opexRec` lui-même est nul (ex. buildSimpleActions répartit opexRec sur une AUTRE action que
+  // celle qui porte le gain/l'ETP) — sans quoi la condition initiale (opexRec > 0) retombait
+  // silencieusement sur l'ancien comportement bugué (ETP sur la ligne de savings).
+  const carryFteOnOpexLine = values.fteImpact > 0;
+  if (values.opexRec > 0 || carryFteOnOpexLine) {
     impacts.push({
       id: `${prefix}-OPEX`,
       label: carryFteOnOpexLine
@@ -246,8 +250,11 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
     // rattaché à la ligne de coût récurrent (dernière action, où le poste est effectivement
     // pourvu) plutôt qu'à la ligne de savings, pour ne pas laisser croire qu'un gain de
     // pricing/revenu "crée" mécaniquement des ETP.
-    const carryFteOnOpexLine = isLast && sub.fteImpact > 0 && sub.opexRec > 0;
-    if (sub.opexRec > 0) {
+    // La ligne doit exister même quand `sub.opexRec` est nul, sinon la condition initiale
+    // retombait silencieusement sur l'ancien comportement bugué (ETP sur la ligne de savings) —
+    // voir le même correctif dans financialImpacts().
+    const carryFteOnOpexLine = isLast && sub.fteImpact > 0;
+    if (sub.opexRec > 0 || carryFteOnOpexLine) {
       impacts.push({
         id: `IMP-${sub.id}-${index + 1}-OPEX`,
         label: carryFteOnOpexLine
@@ -293,7 +300,10 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
       owner: sub.owner ?? parent.owner,
       ownerInit: sub.ownerInit ?? parent.ownerInit,
       deliveredDate: resolvedDeliveredDate,
-      impacts: impacts.filter((impact) => impact.amount > 0),
+      // Une ligne à montant nul est gardée quand elle porte quand même un fteCount (ligne de
+      // recrutement sans opexRec propre) — sinon elle disparaîtrait silencieusement ici et le
+      // fteImpact positif du levier ne serait plus porté par aucune ligne.
+      impacts: impacts.filter((impact) => impact.amount > 0 || (impact.fteCount ?? 0) !== 0),
     };
   });
 }

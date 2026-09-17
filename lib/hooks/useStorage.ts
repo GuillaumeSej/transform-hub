@@ -15,7 +15,7 @@ import {
 import { derivePnlAccounts } from "@/lib/hierarchyLogic";
 import { migrateMockLeversToActions } from "@/lib/mockActionMigration";
 import type { CascadeShift } from "@/lib/engine";
-import { mockData, legacySubLevers } from "@/data/mockData";
+import { mockData } from "@/data/mockData";
 import type {
   AuditEntry,
   Alert,
@@ -69,46 +69,6 @@ function emptyProgramConfig(): programDb.ProgramSeed {
     },
     workstreams: [],
   };
-}
-
-/** Utilisée UNIQUEMENT par `resetToMockData` (reset démo explicite, jamais un effet de bord d'un
- *  chargement de page) — voir lib/firestore/levers.ts::forceReseedLevers pour le pourquoi de la
- *  suppression de l'ancien mécanisme d'auto-seed implicite (`ensureLeversSeeded`). Applique le
- *  verrouillage plan initial/réactualisation (voir leversLogic.applyPlanLock) au seed mockData :
- *  sans ça, les leviers de démo déjà en L3+/L4+ n'auraient pas de plan figé tant qu'on ne les
- *  modifie pas manuellement. */
-function lockedSeed() {
-  const migratedLevers = migrateMockLeversToActions(mockData.levers, legacySubLevers);
-  return {
-    levers: migratedLevers.map((l) =>
-      leversLogic.applyPlanLock({ ...l, companyId: l.companyId ?? "c1" })
-    ),
-    comments: mockData.comments,
-    audit: mockData.audit,
-  };
-}
-
-/** Utilisée UNIQUEMENT par `resetToMockData` (reset démo explicite) — voir lockedSeed() ci-dessus
- *  pour le même avertissement. */
-function workforceSeed(): workforceDb.WorkforceSeed {
-  return {
-    employees: mockData.workforce.employees,
-    movements: mockData.workforce.movements,
-    meta: {
-      totalFTE: mockData.workforce.totalFTE,
-      massSalary: mockData.workforce.massSalary,
-      budgetSalary: mockData.workforce.budgetSalary,
-      departments: mockData.workforce.departments,
-      countryBaselines: mockData.workforce.countryBaselines ?? [],
-      workstreamBaselines: mockData.workforce.workstreamBaselines ?? [],
-    },
-  };
-}
-
-/** Utilisée UNIQUEMENT par `resetToMockData` (reset démo explicite) — voir lockedSeed() ci-dessus
- *  pour le même avertissement. */
-function programSeed(): programDb.ProgramSeed {
-  return { program: mockData.program, workstreams: mockData.workstreams };
 }
 
 /**
@@ -661,21 +621,6 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     [companyId]
   );
 
-  const resetToMockData = useCallback(async () => {
-    setProgramConfig(programSeed());
-    await Promise.all([
-      leversDb
-        .forceReseedLevers(lockedSeed(), companyId)
-        .catch((err) => console.error("[betrack] échec du reset Firestore des leviers :", err)),
-      workforceDb
-        .forceReseedWorkforce(workforceSeed(), companyId)
-        .catch((err) => console.error("[betrack] échec du reset Firestore workforce :", err)),
-      programDb
-        .forceReseedProgram(programSeed(), companyId)
-        .catch((err) => console.error("[betrack] échec du reset Firestore programme :", err)),
-    ]);
-  }, [companyId]);
-
   return {
     ...data,
     // true dès la première réponse Firestore de subscribeLevers — voir le commentaire sur
@@ -705,6 +650,5 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     deleteWorkforceMovement,
     upsertEmployee,
     updateDepartment,
-    resetToMockData,
   };
 }

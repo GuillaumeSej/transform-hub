@@ -1,12 +1,86 @@
 import { describe, expect, it } from "vitest";
-import { mockData, legacySubLevers } from "@/data/mockData";
-import { migrateMockLeversToActions } from "@/lib/mockActionMigration";
+import { migrateMockLeversToActions, type LegacySubLever } from "@/lib/mockActionMigration";
+import type { Lever } from "@/types";
+
+const baseLever: Lever = {
+  id: "L001",
+  code: "L001",
+  programId: "p1",
+  type: "Sourcing",
+  name: "Optimisation achats",
+  ws: "WS-01",
+  owner: "Test Lever Owner",
+  ownerInit: "TL",
+  sponsor: "Test Sponsor",
+  sponsorInit: "TS",
+  geography: "Europe",
+  country: "France",
+  entity: "Entity A",
+  function: "Procurement",
+  costCenter: "CC01",
+  pnlMap: "COGS",
+  start: "2026-01-01",
+  end: "2026-12-31",
+  status: "in_progress",
+  progress: 50,
+  risk: "low",
+  grossSavings: 1.3,
+  netSavings: 1.1,
+  opexOneOff: 0.1,
+  opexRec: 0.2,
+  capex: 0.3,
+  fteImpact: -4,
+  popImpacted: "",
+  dependencies: [],
+  description: "Levier de test sans historique de sous-leviers.",
+  createdAt: "2026-01-01",
+  lastUpdate: "2026-06-01",
+};
+
+// Un levier de "recrutement" (fteImpact positif) : sert à vérifier que ce genre d'ETP n'est
+// jamais replié sur la même ligne d'impact que les savings — voir le test dédié plus bas.
+const hiringLever: Lever = {
+  ...baseLever,
+  id: "L002",
+  code: "L002",
+  name: "Montée en compétence — recrutement support",
+  netSavings: 0.5,
+  grossSavings: 0.6,
+  opexOneOff: 0.05,
+  opexRec: 0.1,
+  capex: 0,
+  fteImpact: 2,
+};
+
+function legacySub(overrides: Partial<LegacySubLever>): LegacySubLever {
+  return {
+    id: "SL001",
+    leverId: "L001",
+    name: "Sous-levier de test",
+    expensePost: "CC01",
+    businessUnit: "Procurement",
+    pnlMap: "COGS",
+    grossSavings: 0.6,
+    netSavings: 0.5,
+    opexOneOff: 0.05,
+    opexRec: 0.1,
+    capex: 0.15,
+    fteImpact: -2,
+    popImpacted: 10,
+    start: "2026-01-01",
+    end: "2026-06-30",
+    status: "in_progress",
+    dependencies: [],
+    actions: [],
+    ...overrides,
+  };
+}
 
 describe("mockActionMigration", () => {
-  const migrated = migrateMockLeversToActions(mockData.levers, legacySubLevers);
+  const migrated = migrateMockLeversToActions([baseLever, hiringLever], []);
 
   it("creates enriched actions for every lever", () => {
-    expect(migrated).toHaveLength(mockData.levers.length);
+    expect(migrated).toHaveLength(2);
     migrated.forEach((lever) => {
       expect(lever.actions?.length ?? 0).toBeGreaterThan(0);
       expect((lever.actions ?? []).some((action) => (action.impacts ?? []).length > 0)).toBe(true);
@@ -43,8 +117,9 @@ describe("mockActionMigration", () => {
   });
 
   it("preserves parent lever KPIs and progress", () => {
+    const source = [baseLever, hiringLever];
     migrated.forEach((lever) => {
-      const original = mockData.levers.find((candidate) => candidate.id === lever.id)!;
+      const original = source.find((candidate) => candidate.id === lever.id)!;
       expect(lever.progress).toBe(original.progress);
       expect(lever.netSavings).toBe(original.netSavings);
       expect(lever.capex).toBe(original.capex);
@@ -55,14 +130,35 @@ describe("mockActionMigration", () => {
   });
 
   it("preserves former sub-lever actions and enriches each with impacts", () => {
-    const parentIds = new Set(legacySubLevers.map((sub) => sub.leverId));
-    parentIds.forEach((leverId) => {
-      const expected = legacySubLevers
-        .filter((sub) => sub.leverId === leverId)
-        .reduce((sum, sub) => sum + Math.max(1, sub.actions.length), 0);
-      const lever = migrated.find((candidate) => candidate.id === leverId)!;
-      expect(lever.actions).toHaveLength(expected);
-    });
+    const subs = [
+      legacySub({ id: "SL001", leverId: "L001" }),
+      legacySub({
+        id: "SL002",
+        leverId: "L001",
+        actions: [
+          {
+            id: "A1",
+            name: "Cadrage",
+            start: "2026-01-01",
+            end: "2026-02-28",
+            status: "done",
+            weight: 1,
+          },
+          {
+            id: "A2",
+            name: "Déploiement",
+            start: "2026-03-01",
+            end: "2026-06-30",
+            status: "todo",
+            weight: 2,
+          },
+        ],
+      }),
+    ];
+    const result = migrateMockLeversToActions([baseLever], subs);
+    const lever = result.find((candidate) => candidate.id === "L001")!;
+    // SL001 n'a pas d'historique d'actions -> devient 1 action unique ; SL002 a 2 actions détaillées.
+    expect(lever.actions).toHaveLength(3);
   });
 
   it("preserves each parent lever net savings after consolidating migrated actions", () => {
@@ -85,7 +181,7 @@ describe("mockActionMigration", () => {
   });
 
   it("reconciles every migrated lever's impacts to the cent with its own financial fields", () => {
-    // Garde-fou de non-régression : pour CHAQUE levier du seed (pas un exemple isolé), la somme des
+    // Garde-fou de non-régression : pour CHAQUE levier (pas un exemple isolé), la somme des
     // impacts d'actions (correctement signés/typés, convention netSavings = savings − opexRec de
     // lib/leverConsolidate.ts) doit reconstituer exactement capex/opexOneOff/opexRec/netSavings tels
     // que saisis sur le levier — à la faveur de `alignActionsToLeverFinancials`, qui corrige tout
@@ -133,28 +229,14 @@ describe("mockActionMigration", () => {
   });
 
   it("promotes legacy sub-lever dependencies to parent levers", () => {
-    const source = {
-      ...mockData.levers[0],
-      id: "L-A",
-      dependencies: [],
-    };
-    const target = {
-      ...mockData.levers[1],
-      id: "L-B",
-      dependencies: [],
-    };
-    const subA = {
-      ...legacySubLevers[0],
+    const source = { ...baseLever, id: "L-A", dependencies: [] };
+    const target = { ...baseLever, id: "L-B", dependencies: [] };
+    const subA = legacySub({
       id: "SL-A",
       leverId: "L-A",
       dependencies: [{ targetId: "SL-B", type: "FS" as const }],
-    };
-    const subB = {
-      ...legacySubLevers[1],
-      id: "SL-B",
-      leverId: "L-B",
-      dependencies: [],
-    };
+    });
+    const subB = legacySub({ id: "SL-B", leverId: "L-B", dependencies: [] });
 
     const result = migrateMockLeversToActions([source, target], [subA, subB]);
     expect(result.find((lever) => lever.id === "L-A")?.dependencies).toEqual([
@@ -163,23 +245,13 @@ describe("mockActionMigration", () => {
   });
 
   it("drops dependencies between former sub-levers of the same parent lever", () => {
-    const parent = {
-      ...mockData.levers[0],
-      id: "L-A",
-      dependencies: [],
-    };
-    const subA = {
-      ...legacySubLevers[0],
+    const parent = { ...baseLever, id: "L-A", dependencies: [] };
+    const subA = legacySub({
       id: "SL-A1",
       leverId: "L-A",
       dependencies: [{ targetId: "SL-A2", type: "FS" as const }],
-    };
-    const subB = {
-      ...legacySubLevers[1],
-      id: "SL-A2",
-      leverId: "L-A",
-      dependencies: [],
-    };
+    });
+    const subB = legacySub({ id: "SL-A2", leverId: "L-A", dependencies: [] });
 
     const result = migrateMockLeversToActions([parent], [subA, subB]);
     expect(result[0].dependencies).toEqual([]);
