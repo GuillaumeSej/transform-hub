@@ -309,6 +309,25 @@ export type Lever = {
    *  besoin de sommer à 100 — voir `lib/workstreamLogic.ts::workstreamDeclaredProgress` pour le
    *  calcul de la moyenne pondérée. Non défini = poids implicite égal entre leviers du workstream. */
   workstreamWeightPct?: number;
+  /** Cascade de validation en cours pour le passage à l'étape "validated" (M3) — porteur du
+   *  levier → sponsor du workstream → CTO, dans cet ordre. Non défini = pas de cascade en cours
+   *  (pas encore soumis, ou déjà validé/refusé). Voir lib/leversLogic.ts::requestLeverApproval /
+   *  approveLeverStep. */
+  approval?: LeverApproval;
+};
+
+/** Étape de la cascade de validation d'un levier — dans l'ordre où elle doit être franchie. */
+export type LeverApprovalStep = "owner" | "sponsor" | "cto";
+
+export type LeverApproval = {
+  /** Étape actuellement en attente d'approbation. */
+  pendingStep: LeverApprovalStep;
+  ownerApprovedAt?: string;
+  sponsorApprovedAt?: string;
+  ctoApprovedAt?: string;
+  /** Username de l'utilisateur ayant initié la demande de validation. */
+  requestedBy: string;
+  requestedAt: string;
 };
 
 /** Ligne d'impact d'une action — décrit UN effet financier/RH sur UN poste de coût.
@@ -322,7 +341,14 @@ export type ActionImpact = {
   nature: "capex" | "opex_rec" | "oneoff";
   amount: number; // €M — toujours positif, le type détermine le signe
   fteCount?: number; // ETP (négatif = réduction)
-  pnlMap?: string; // compte P&L (hérite du levier si absent)
+  /** Id du HierarchyNode (maille la plus fine, ex. Cost Center) pour CETTE ligne d'impact —
+   *  même mécanique que Lever.hierarchyLeafId, mais résolue en priorité sur lui dans
+   *  engine.pnlImpactDetailed (un levier peut avoir des gains sur plusieurs comptes P&L
+   *  différents selon ses actions). Non défini = l'impact n'est pas encore rattaché (ex. levier
+   *  encore trop peu planifié) : il retombe alors dans le bucket "gains non attribués" plutôt que
+   *  d'hériter d'un rattachement au niveau du levier, qui n'existe plus à la création. */
+  hierarchyLeafId?: string;
+  pnlMap?: string; // compte P&L (hérite du levier si absent) — legacy, utilisé seulement si l'entreprise n'a pas d'arborescence financière configurée
   costCenter?: string;
   entity?: string; // entité légale (hérite du levier si absent)
   /** Nature du gain (uniquement pour type="saving") : baisse de coût / hausse de CA / impact BFR. */
