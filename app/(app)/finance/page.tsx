@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LineChart } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -13,6 +13,7 @@ import {
 } from "@/components/finance/FinanceCostCharts";
 import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import * as engine from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -161,9 +162,38 @@ export default function FinancePage() {
     [data, pnlFilteredLevers]
   );
 
-  // Filtre temporel (cascade Année → Trimestre → Mois).
-  const fyYear = new Date(data.program.fyStart).getFullYear().toString();
+  // Filtre temporel (cascade Année → Trimestre → Mois). `data.program.fyStart` (ProgramConfig,
+  // legacy mono-programme) est un vestige souvent vide/invalide pour une entreprise qui utilise
+  // le système de Programme moderne (voir useActiveProgram) — s'y fier en premier produisait un
+  // `pnlYear` littéralement "NaN" (aucune ligne ne matchait alors jamais aucune période, tout le
+  // tableau "Compte de résultat configuré" et le graphique "Impact P&L par compte" affichaient
+  // 0 partout). Priorité : Programme actif (moderne) > ProgramConfig (legacy) > année courante.
+  const { activeProgram } = useActiveProgram();
+  const fyYear = useMemo(() => {
+    const fromActiveProgram = activeProgram?.fyStart ? new Date(activeProgram.fyStart) : null;
+    if (fromActiveProgram && !isNaN(fromActiveProgram.getTime())) {
+      return String(fromActiveProgram.getFullYear());
+    }
+    const fromLegacy = data.program.fyStart ? new Date(data.program.fyStart) : null;
+    if (fromLegacy && !isNaN(fromLegacy.getTime())) {
+      return String(fromLegacy.getFullYear());
+    }
+    return String(new Date().getFullYear());
+  }, [activeProgram, data.program.fyStart]);
   const [pnlYear, setPnlYear] = useState(fyYear);
+  // `activeProgram` se résout de façon asynchrone (souscription Firestore) : au tout premier
+  // rendu il peut encore être `null`, donc `fyYear` initial retombe sur le legacy/l'année
+  // courante. Une fois le Programme actif résolu, réaligne `pnlYear` UNE SEULE FOIS (pas à
+  // chaque recalcul de `fyYear`, pour ne pas écraser une année choisie manuellement ensuite par
+  // l'utilisateur).
+  const fyYearSyncedRef = useRef(false);
+  useEffect(() => {
+    if (fyYearSyncedRef.current) return;
+    if (!activeProgram) return;
+    fyYearSyncedRef.current = true;
+    setPnlYear(fyYear);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProgram]);
   const [pnlQuarter, setPnlQuarter] = useState("");
   const [pnlMonth, setPnlMonth] = useState("");
 
