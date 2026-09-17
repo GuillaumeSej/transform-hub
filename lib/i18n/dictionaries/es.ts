@@ -212,6 +212,7 @@ const es: Record<string, string> = {
   "dashboard.workstream": "Workstream",
   "dashboard.country": "País",
   "dashboard.function": "Función",
+  "dashboard.leverDepartment": "Departamento",
   "dashboard.geography": "Geografía",
   "dashboard.tableHeader.leverCount": "Palancas",
   "dashboard.tableHeader.realizedTarget": "Realizado / Objetivo",

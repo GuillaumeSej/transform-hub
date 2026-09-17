@@ -365,7 +365,11 @@ export function DashboardPagePerformance() {
               getValue: (l: Lever) => l.geography,
             },
           ]),
-      { key: "function", label: t("dashboard.function", "Fonction"), getValue: (l) => l.function },
+      {
+        key: "function",
+        label: t("dashboard.leverDepartment", "Département"),
+        getValue: (l) => l.function,
+      },
       { key: "type", label: "Type", getValue: (l) => l.type },
       ...hierarchyFilterDefs,
     ],
@@ -651,6 +655,10 @@ export function DashboardPagePerformance() {
       target,
       realized,
       reforecast: Math.abs(reforecast - target) > 0.05 ? reforecast : undefined,
+      leverBreakdown: {
+        target: levers.map((l) => ({ name: l.name, value: l.netSavings })),
+        realized: levers.map((l) => ({ name: l.name, value: engine.realizedSavings(l) })),
+      },
     };
   });
 
@@ -677,6 +685,10 @@ export function DashboardPagePerformance() {
           target,
           realized,
           reforecast: Math.abs(reforecast - target) > 0.05 ? reforecast : undefined,
+          leverBreakdown: {
+            target: levers.map((l) => ({ name: l.name, value: l.netSavings })),
+            realized: levers.map((l) => ({ name: l.name, value: engine.realizedSavings(l) })),
+          },
         };
       })
       .sort((a, b) => b.target - a.target);
@@ -1411,7 +1423,6 @@ export function DashboardPagePerformance() {
                 data={barData}
                 labelTarget={t("chart.bar.target")}
                 labelRealized={t("chart.bar.realized")}
-                labelReforecast={t("chart.bar.reforecast")}
               />
             </CardBody>
           </Card>
@@ -1988,7 +1999,7 @@ export function DashboardPagePerformance() {
                   options={[
                     { value: "workstream", label: t("dashboard.workstream") },
                     { value: "country", label: t("dashboard.country") },
-                    { value: "function", label: t("dashboard.function") },
+                    { value: "function", label: t("dashboard.leverDepartment") },
                   ]}
                   value={dimension}
                   onChange={(next) =>
