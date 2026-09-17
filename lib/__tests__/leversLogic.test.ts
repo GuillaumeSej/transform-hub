@@ -10,6 +10,10 @@ import {
   canUserViewLever,
   isLeverOwnedBy,
   isLeverSponsoredBy,
+  isLeverCtoOf,
+  requestLeverApproval,
+  approveLeverApprovalStep,
+  rejectLeverApproval,
 } from "@/lib/leversLogic";
 import type { Lever, LeverStatus } from "@/types";
 
@@ -304,12 +308,31 @@ describe("leversLogic — updateLever (status change & plan lock triggering)", (
     expect(result.lever.reforecast).toBeDefined();
   });
 
-  it("triggers lockedPlan when status reaches validated", () => {
+  it("triggers lockedPlan when status reaches validated via the approval cascade bypass", () => {
+    // Round "cascade de validation" : le seul chemin légitime vers status="validated" est
+    // approveLeverApprovalStep (dernière étape CTO), qui patche `approval` ET `status` dans le
+    // même appel — voir le garde-fou documenté dans updateLever.
     const levers = [makeLever("qualified", { grossSavings: 20, netSavings: 15 })];
-    const result = updateLever(levers, "L001", { status: "validated" }, "user");
+    const result = updateLever(
+      levers,
+      "L001",
+      { status: "validated", approval: undefined },
+      "user"
+    );
+    expect(result.lever.status).toBe("validated");
     expect(result.lever.lockedPlan).toBeDefined();
     expect(result.lever.lockedPlan?.grossSavings).toBe(20);
     expect(result.lever.lockedPlan?.netSavings).toBe(15);
+  });
+
+  it("silently ignores a direct status:'validated' patch that bypasses the approval cascade", () => {
+    const levers = [makeLever("qualified", { grossSavings: 20, netSavings: 15, progress: 10 })];
+    const result = updateLever(levers, "L001", { status: "validated", progress: 40 }, "user");
+    // Le champ status est ignoré silencieusement...
+    expect(result.lever.status).toBe("qualified");
+    expect(result.lever.lockedPlan).toBeUndefined();
+    // ...mais les autres champs légitimes du même patch s'appliquent quand même.
+    expect(result.lever.progress).toBe(40);
   });
 
   it("protects financial fields once lockedPlan exists", () => {
@@ -602,4 +625,209 @@ describe("leversLogic — isLeverVisibleForClearance", () => {
       ).toBe(true);
     }
   );
+});
+
+describe("isLeverCtoOf", () => {
+  const lever = { programId: "p1" };
+
+  it("returns true for a global CTO profile (no programId)", () => {
+    const user = { profiles: [{ role: "cto" as const }] };
+    expect(isLeverCtoOf(lever, user)).toBe(true);
+  });
+
+  it("returns true for a CTO profile scoped to the lever's program", () => {
+    const user = { profiles: [{ role: "cto" as const, programId: "p1" }] };
+    expect(isLeverCtoOf(lever, user)).toBe(true);
+  });
+
+  it("returns false for a CTO profile scoped to a different program", () => {
+    const user = { profiles: [{ role: "cto" as const, programId: "p2" }] };
+    expect(isLeverCtoOf(lever, user)).toBe(false);
+  });
+
+  it("returns false for a user without the cto role", () => {
+    const user = { profiles: [{ role: "lever" as const }] };
+    expect(isLeverCtoOf(lever, user)).toBe(false);
+  });
+});
+
+describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / rejectLeverApproval)", () => {
+  const owner = {
+    name: "Test Lever Owner",
+    username: "test.lever.owner",
+    profiles: [{ role: "lever" as const }],
+  };
+  const sponsor = {
+    name: "Test Sponsor",
+    username: "test.sponsor",
+    profiles: [{ role: "sponsor" as const }],
+  };
+  const cto = {
+    name: "Test Cto",
+    username: "test.cto",
+    profiles: [{ role: "cto" as const }],
+  };
+  const stranger = {
+    name: "Stranger",
+    username: "stranger",
+    profiles: [{ role: "lever" as const }],
+  };
+  const admin = {
+    name: "Admin",
+    username: "admin",
+    profiles: [],
+    isGlobalAdmin: true,
+  };
+  const workstreams = [{ id: "WS-01", sponsorUsername: "test.sponsor" }];
+
+  function qualifiedLever(overrides?: Partial<Lever>): Lever {
+    return makeLever("qualified", {
+      ownerUsername: "test.lever.owner",
+      ws: "WS-01",
+      ...overrides,
+    });
+  }
+
+  describe("requestLeverApproval", () => {
+    it("lets the lever owner submit a request, moving pendingStep to sponsor", () => {
+      const levers = [qualifiedLever()];
+      const result = requestLeverApproval(levers, "L001", owner);
+      expect(result.lever.approval?.pendingStep).toBe("sponsor");
+      expect(result.lever.approval?.requestedBy).toBe("test.lever.owner");
+      expect(result.lever.approval?.ownerApprovedAt).toBeDefined();
+      expect(result.auditEntries[0].action).toBe("approval_requested");
+    });
+
+    it("lets an admin submit a request on behalf of the owner", () => {
+      const levers = [qualifiedLever()];
+      const result = requestLeverApproval(levers, "L001", admin);
+      expect(result.lever.approval?.pendingStep).toBe("sponsor");
+    });
+
+    it("throws when the caller is neither the owner nor an admin", () => {
+      const levers = [qualifiedLever()];
+      expect(() => requestLeverApproval(levers, "L001", stranger)).toThrow();
+    });
+
+    it("throws when the lever is not at status 'qualified'", () => {
+      const levers = [makeLever("idea", { ownerUsername: "test.lever.owner" })];
+      expect(() => requestLeverApproval(levers, "L001", owner)).toThrow();
+    });
+  });
+
+  describe("approveLeverApprovalStep", () => {
+    function leverPendingSponsor(overrides?: Partial<Lever>): Lever {
+      return qualifiedLever({
+        approval: {
+          pendingStep: "sponsor",
+          ownerApprovedAt: "2026-01-01T00:00:00.000Z",
+          requestedBy: "test.lever.owner",
+          requestedAt: "2026-01-01T00:00:00.000Z",
+        },
+        ...overrides,
+      });
+    }
+
+    it("moves pendingStep from sponsor to cto when the workstream sponsor approves", () => {
+      const levers = [leverPendingSponsor()];
+      const result = approveLeverApprovalStep(levers, "L001", "sponsor", sponsor, workstreams);
+      expect(result.lever.approval?.pendingStep).toBe("cto");
+      expect(result.lever.approval?.sponsorApprovedAt).toBeDefined();
+      expect(result.lever.status).toBe("qualified");
+    });
+
+    it("throws when a non-sponsor tries to approve the sponsor step", () => {
+      const levers = [leverPendingSponsor()];
+      expect(() =>
+        approveLeverApprovalStep(levers, "L001", "sponsor", stranger, workstreams)
+      ).toThrow();
+    });
+
+    it("throws when approving the wrong step (cto tries to approve while pendingStep is sponsor)", () => {
+      const levers = [leverPendingSponsor()];
+      expect(() => approveLeverApprovalStep(levers, "L001", "cto", cto, workstreams)).toThrow();
+    });
+
+    it("completes the cascade at the cto step: clears approval and sets status to validated with lockedPlan", () => {
+      const levers = [
+        leverPendingSponsor({
+          approval: {
+            pendingStep: "cto",
+            ownerApprovedAt: "2026-01-01T00:00:00.000Z",
+            sponsorApprovedAt: "2026-01-02T00:00:00.000Z",
+            requestedBy: "test.lever.owner",
+            requestedAt: "2026-01-01T00:00:00.000Z",
+          },
+          grossSavings: 20,
+          netSavings: 15,
+        }),
+      ];
+      const result = approveLeverApprovalStep(levers, "L001", "cto", cto, workstreams);
+      expect(result.lever.approval).toBeUndefined();
+      expect(result.lever.status).toBe("validated");
+      expect(result.lever.lockedPlan?.netSavings).toBe(15);
+      expect(result.auditEntries.some((e) => e.action === "approval_approved")).toBe(true);
+    });
+
+    it("throws when a non-cto tries to approve the cto step", () => {
+      const levers = [
+        leverPendingSponsor({
+          approval: {
+            pendingStep: "cto",
+            ownerApprovedAt: "2026-01-01T00:00:00.000Z",
+            sponsorApprovedAt: "2026-01-02T00:00:00.000Z",
+            requestedBy: "test.lever.owner",
+            requestedAt: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+      ];
+      expect(() =>
+        approveLeverApprovalStep(levers, "L001", "cto", stranger, workstreams)
+      ).toThrow();
+    });
+  });
+
+  describe("rejectLeverApproval", () => {
+    function leverPendingSponsor(): Lever {
+      return qualifiedLever({
+        approval: {
+          pendingStep: "sponsor",
+          ownerApprovedAt: "2026-01-01T00:00:00.000Z",
+          requestedBy: "test.lever.owner",
+          requestedAt: "2026-01-01T00:00:00.000Z",
+        },
+      });
+    }
+
+    it("lets the owner cancel the cascade, clearing approval", () => {
+      const levers = [leverPendingSponsor()];
+      const result = rejectLeverApproval(levers, "L001", owner, "changed my mind");
+      expect(result.lever.approval).toBeUndefined();
+      expect(result.lever.status).toBe("qualified");
+      expect(result.auditEntries[0].action).toBe("approval_rejected");
+      expect(result.auditEntries[0].new).toBe("changed my mind");
+    });
+
+    it("lets the pending sponsor cancel the cascade", () => {
+      const levers = [leverPendingSponsor()];
+      const result = rejectLeverApproval(levers, "L001", sponsor, undefined, workstreams);
+      expect(result.lever.approval).toBeUndefined();
+    });
+
+    it("lets an admin cancel the cascade", () => {
+      const levers = [leverPendingSponsor()];
+      const result = rejectLeverApproval(levers, "L001", admin);
+      expect(result.lever.approval).toBeUndefined();
+    });
+
+    it("throws when the caller has no standing to cancel", () => {
+      const levers = [leverPendingSponsor()];
+      expect(() => rejectLeverApproval(levers, "L001", stranger)).toThrow();
+    });
+
+    it("throws when there is no cascade in progress", () => {
+      const levers = [qualifiedLever()];
+      expect(() => rejectLeverApproval(levers, "L001", owner)).toThrow();
+    });
+  });
 });

@@ -601,7 +601,18 @@ export type SetAlertResolved = (
 export type AuditEntry = {
   ts: string;
   user: string;
-  action: "updated" | "commented" | "completed" | "created" | "validated" | "deleted";
+  action:
+    | "updated"
+    | "commented"
+    | "completed"
+    | "created"
+    | "validated"
+    | "deleted"
+    // Cascade de validation d'un levier (owner → sponsor → cto), voir
+    // lib/leversLogic.ts::requestLeverApproval/approveLeverApprovalStep/rejectLeverApproval.
+    | "approval_requested"
+    | "approval_approved"
+    | "approval_rejected";
   entity: string; // lever id, mouvement id (MV###) ou employé id (EMP###)
   field: string;
   old: string | number;

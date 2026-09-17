@@ -9,10 +9,17 @@ import type {
   FinancialSnapshot,
   Lever,
   LeverAction,
+  LeverApproval,
+  LeverApprovalStep,
   Role,
   Workstream,
 } from "@/types";
-import { getPerformanceProfiles, getStrategicProfiles, hasRole } from "@/lib/roleProfiles";
+import {
+  getPerformanceProfiles,
+  getStrategicProfiles,
+  hasRole,
+  isAnyAdmin,
+} from "@/lib/roleProfiles";
 
 /**
  * Résout la liste des niveaux de confidentialité auxquels un utilisateur non-admin a accès,
@@ -99,6 +106,21 @@ export function isLeverSponsoredBy(
   if (workstreamSponsorUsername && workstreamSponsorUsername === user.username) return true;
   if (lever.sponsorUsername) return lever.sponsorUsername === user.username;
   return normalizeOwnerName(lever.sponsor) === normalizeOwnerName(user.name);
+}
+
+/** Même principe qu'`isLeverOwnedBy`/`isLeverSponsoredBy`, pour le rôle "cto" — utilisé par la
+ *  dernière étape de la cascade de validation (`approveLeverApprovalStep`, voir plus bas). Un
+ *  profil "cto" sans `programId` (CTO global de l'entreprise, pas rattaché à un programme précis)
+ *  habilite sur N'IMPORTE QUEL levier de l'entreprise ; un profil "cto" avec `programId` n'habilite
+ *  que sur les leviers de CE programme (`lever.programId`). */
+export function isLeverCtoOf(
+  lever: Pick<Lever, "programId">,
+  user: Pick<AuthUser, "profiles">
+): boolean {
+  if (!hasRole(user, "cto")) return false;
+  return user.profiles.some(
+    (p) => p.role === "cto" && (p.programId == null || p.programId === lever.programId)
+  );
 }
 
 export function canUserViewLever(
@@ -293,18 +315,36 @@ export function updateLever(
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
   const before = levers[idx];
+
+  // Cascade de validation (owner → sponsor → cto, voir requestLeverApproval/
+  // approveLeverApprovalStep/rejectLeverApproval plus bas) : le SEUL chemin légitime vers
+  // status="validated" est la dernière étape de la cascade (CTO), qui appelle CETTE fonction en
+  // interne avec un patch qui touche AUSSI `approval` (pour le vider, cascade terminée) — c'est ce
+  // qui distingue ce passage légitime d'un patch direct `{ status: "validated" }` venu d'ailleurs
+  // (ex. un bouton de stepper qui court-circuiterait la cascade, un import). Dans ce dernier cas,
+  // on ignore SILENCIEUSEMENT le seul champ `status` du patch plutôt que de lever une exception,
+  // qui casserait d'autres usages légitimes du même appel (ex. modifier `progress` en même temps).
+  // Les autres transitions de statut (idea↔qualified, in_progress, delivered, cancelled) ne sont
+  // pas concernées par cette garde et restent librement modifiables par cette voie, comme avant.
+  const bypassesApprovalCascade = "approval" in patch;
+  let guardedPatch: Partial<Lever> = patch;
+  if (patch.status === "validated" && before.status !== "validated" && !bypassesApprovalCascade) {
+    guardedPatch = { ...patch };
+    delete guardedPatch.status;
+  }
+
   // Une fois le plan initial figé (L3+), les chiffres bruts ne sont plus modifiables par cette
   // voie — seule la réactualisation (patch.reforecast) l'est encore.
   const safePatch = before.lockedPlan
     ? {
-        ...patch,
+        ...guardedPatch,
         grossSavings: before.grossSavings,
         netSavings: before.netSavings,
         opexOneOff: before.opexOneOff,
         opexRec: before.opexRec,
         capex: before.capex,
       }
-    : patch;
+    : guardedPatch;
   // Annulation : on capture l'étape du cycle de vie quittée, pour que le Sankey chronologique
   // puisse brancher le levier sans avoir à deviner l'étape via une heuristique sur `progress`.
   const cancelledPatch: Partial<Lever> =
@@ -349,6 +389,193 @@ export function upsertLeverByCode(
     return { ...updateLever(levers, existing.id, input, user), created: false };
   }
   return { ...createLever(levers, input, user), created: true };
+}
+
+/**
+ * Cascade de validation du passage à l'étape "validated" (M3) : porteur du levier → sponsor du
+ * workstream → CTO, dans cet ordre — voir `LeverApproval`/`LeverApprovalStep` (types/index.ts) et
+ * le garde-fou correspondant dans `updateLever` ci-dessus. Design volontairement simple (pas de
+ * configuration par entreprise) : seul le passage à "validated" est concerné, les autres
+ * transitions de statut restent librement modifiables via `updateLever` comme avant.
+ *
+ * `requestLeverApproval` : initie la cascade — appelable uniquement par le porteur du levier
+ * (`isLeverOwnedBy`) ou un admin, sur un levier au statut "qualified" (l'étape juste avant
+ * "validated"). Le porteur, en demandant la validation, approuve implicitement sa propre étape
+ * ("owner") — pas d'étape "owner" séparée à cliquer ensuite, `pendingStep` passe directement à
+ * "sponsor".
+ */
+export function requestLeverApproval(
+  levers: Lever[],
+  id: string,
+  user: Pick<AuthUser, "name" | "username" | "isGlobalAdmin" | "isCompanyAdmin">
+): LeverMutationResult {
+  const idx = levers.findIndex((l) => l.id === id);
+  if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
+  const before = levers[idx];
+  if (!isAnyAdmin(user) && !isLeverOwnedBy(before, user)) {
+    throw new Error(
+      `Seul le porteur du levier "${id}" (ou un admin) peut soumettre une demande de validation`
+    );
+  }
+  if (before.status !== "qualified") {
+    throw new Error(
+      `Le levier "${id}" doit être au statut "qualified" pour soumettre une demande de validation`
+    );
+  }
+  const now = new Date().toISOString();
+  const approval: LeverApproval = {
+    pendingStep: "sponsor",
+    ownerApprovedAt: now,
+    requestedBy: user.username,
+    requestedAt: now,
+  };
+  const after: Lever = { ...before, approval };
+  const nextLevers = [...levers];
+  nextLevers[idx] = after;
+  return {
+    levers: nextLevers,
+    lever: after,
+    auditEntries: [
+      makeAuditEntry({
+        user: user.name,
+        action: "approval_requested",
+        entity: id,
+        field: "approval",
+        old: before.status,
+        new: "pending:sponsor",
+      }),
+    ],
+  };
+}
+
+/**
+ * Franchit une étape de la cascade ("sponsor" ou "cto") — vérifie que `lever.approval.pendingStep`
+ * correspond bien à `step` et que l'appelant y est habilité (sponsor du workstream du levier ou
+ * admin pour "sponsor" ; `isLeverCtoOf` ou admin pour "cto"). À l'étape "cto" (dernière), la
+ * cascade est terminée : `approval` est vidé et `status` passe à "validated" en réutilisant
+ * `updateLever` (pour ne pas dupliquer `applyPlanLock`/l'audit "updated" sur d'éventuels autres
+ * champs déjà en attente) — le patch inclut explicitement `approval: undefined`, ce qui est
+ * précisément ce que le garde-fou de `updateLever` accepte comme passage légitime.
+ */
+export function approveLeverApprovalStep(
+  levers: Lever[],
+  id: string,
+  step: Extract<LeverApprovalStep, "sponsor" | "cto">,
+  user: Pick<AuthUser, "name" | "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
+  workstreams: Pick<Workstream, "id" | "sponsorUsername">[]
+): LeverMutationResult {
+  const idx = levers.findIndex((l) => l.id === id);
+  if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
+  const before = levers[idx];
+  if (before.approval?.pendingStep !== step) {
+    throw new Error(`Le levier "${id}" n'est pas en attente de validation à l'étape "${step}"`);
+  }
+  const workstreamSponsorUsername = workstreams.find((w) => w.id === before.ws)?.sponsorUsername;
+  const authorized =
+    isAnyAdmin(user) ||
+    (step === "sponsor" && isLeverSponsoredBy(before, workstreamSponsorUsername, user)) ||
+    (step === "cto" && isLeverCtoOf(before, user));
+  if (!authorized) {
+    throw new Error(`Vous n'êtes pas habilité à approuver l'étape "${step}" de ce levier`);
+  }
+
+  const now = new Date().toISOString();
+  if (step === "sponsor") {
+    const after: Lever = {
+      ...before,
+      approval: { ...before.approval, pendingStep: "cto", sponsorApprovedAt: now },
+    };
+    const nextLevers = [...levers];
+    nextLevers[idx] = after;
+    return {
+      levers: nextLevers,
+      lever: after,
+      auditEntries: [
+        makeAuditEntry({
+          user: user.name,
+          action: "approval_approved",
+          entity: id,
+          field: "approval",
+          old: "pending:sponsor",
+          new: "pending:cto",
+        }),
+      ],
+    };
+  }
+
+  // step === "cto" : cascade terminée — pose ctoApprovedAt (informatif, l'objet est vidé juste
+  // après) puis applique le vidage de `approval` et le passage à "validated" via `updateLever`.
+  const ctoApprovedApproval: LeverApproval = { ...before.approval, ctoApprovedAt: now };
+  const leversWithCtoStamp = [...levers];
+  leversWithCtoStamp[idx] = { ...before, approval: ctoApprovedApproval };
+  const result = updateLever(
+    leversWithCtoStamp,
+    id,
+    { status: "validated", approval: undefined },
+    user.name
+  );
+  return {
+    ...result,
+    auditEntries: [
+      ...result.auditEntries,
+      makeAuditEntry({
+        user: user.name,
+        action: "approval_approved",
+        entity: id,
+        field: "approval",
+        old: "pending:cto",
+        new: "validated",
+      }),
+    ],
+  };
+}
+
+/**
+ * Annule la cascade en cours — annulable par le porteur du levier, le sponsor OU le cto
+ * actuellement en attente (`lever.approval.pendingStep`), ou un admin. Vide `lever.approval` :
+ * retour à l'état "qualified" normal, sans pénalité (une nouvelle demande peut être soumise plus
+ * tard via `requestLeverApproval`).
+ */
+export function rejectLeverApproval(
+  levers: Lever[],
+  id: string,
+  user: Pick<AuthUser, "name" | "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
+  reason?: string,
+  workstreams: Pick<Workstream, "id" | "sponsorUsername">[] = []
+): LeverMutationResult {
+  const idx = levers.findIndex((l) => l.id === id);
+  if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
+  const before = levers[idx];
+  if (!before.approval) {
+    throw new Error(`Le levier "${id}" n'a pas de demande de validation en cours`);
+  }
+  const pendingStep = before.approval.pendingStep;
+  const workstreamSponsorUsername = workstreams.find((w) => w.id === before.ws)?.sponsorUsername;
+  const authorized =
+    isAnyAdmin(user) ||
+    isLeverOwnedBy(before, user) ||
+    (pendingStep === "sponsor" && isLeverSponsoredBy(before, workstreamSponsorUsername, user)) ||
+    (pendingStep === "cto" && isLeverCtoOf(before, user));
+  if (!authorized) {
+    throw new Error(`Vous n'êtes pas habilité à rejeter la demande de validation de ce levier`);
+  }
+  const after: Lever = { ...before, approval: undefined };
+  const nextLevers = [...levers];
+  nextLevers[idx] = after;
+  return {
+    levers: nextLevers,
+    lever: after,
+    auditEntries: [
+      makeAuditEntry({
+        user: user.name,
+        action: "approval_rejected",
+        entity: id,
+        field: "approval",
+        old: pendingStep,
+        new: reason ?? "",
+      }),
+    ],
+  };
 }
 
 export type BulkLeverImportResult = {
