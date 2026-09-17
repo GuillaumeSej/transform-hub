@@ -611,7 +611,12 @@ export function StrategicDashboardView() {
     const axisHasBudgetSlices = axisChantiers.some((c) => (c.allocatedBudget ?? 0) > 0);
 
     return (
-      <div className="rounded-lg border border-border-strong bg-neutral-50 p-3">
+      // Round 24 (Phase 3, fix A) : plus de carte propre (bordure pleine/coins arrondis/fond opaque)
+      // — cet en-tête est injecté DANS le conteneur "carte" d'axe déjà stylé par `ProgramRoadmap.tsx`
+      // (bordure + fond teinté par axe), qui l'englobe. Un liséré bas simple (même précédent que le
+      // `border-b border-border-strong` de l'en-tête PAR DÉFAUT de `ProgramRoadmap.tsx`) sépare
+      // proprement ce contenu des lignes chantier/projet en dessous, sans dupliquer la carte.
+      <div className="border-b border-border-strong p-3">
         <div className="flex items-start gap-2.5">
           <span
             aria-hidden
@@ -636,42 +641,55 @@ export function StrategicDashboardView() {
           {axis.description ?? ""}
         </p>
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <span className="mr-0.5 text-xs text-tertiary">{t("strategicAxes.indicatorsCount")}</span>
-          {axisIndicators.length === 0 ? (
-            <span className="text-[11px] italic text-tertiary">
-              {t("strategicAxes.noIndicatorsShort")}
-            </span>
-          ) : (
-            <>
-              {shownIndicators.map((indicator) => {
-                const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
-                return (
-                  <button
-                    key={indicator.id}
-                    type="button"
-                    title={
-                      atRisk ? `${indicator.name} — ${t("indicatorStatus.atRisk")}` : indicator.name
-                    }
-                    onClick={() => router.push(`/kpi?indicator=${indicator.id}`)}
-                    className={`flex min-h-[20px] max-w-[260px] shrink-0 items-center rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition hover:bg-black hover:text-white ${
-                      atRisk ? "bg-rag-amber-light text-rag-amber" : "bg-neutral-100 text-secondary"
-                    }`}
+        {/* Round 24 (Phase 3, fix B) : même traitement de "section" que le bloc "budget alloué"
+            juste en dessous (liséré haut + libellé minuscule majuscule/tertiaire) — les deux se
+            lisent désormais comme deux sections parallèles de poids égal, plutôt qu'une liste de
+            puces nue au-dessus d'un vrai bloc structuré. DOM inchangé (indicateurs puis budget),
+            logique de clic/données intacte. */}
+        <div className="mt-2.5 flex flex-col gap-1.5 border-t border-border pt-2 text-[10.5px]">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+            {t("strategicAxes.indicatorsCount")}
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {axisIndicators.length === 0 ? (
+              <span className="text-[11px] italic text-tertiary">
+                {t("strategicAxes.noIndicatorsShort")}
+              </span>
+            ) : (
+              <>
+                {shownIndicators.map((indicator) => {
+                  const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
+                  return (
+                    <button
+                      key={indicator.id}
+                      type="button"
+                      title={
+                        atRisk
+                          ? `${indicator.name} — ${t("indicatorStatus.atRisk")}`
+                          : indicator.name
+                      }
+                      onClick={() => router.push(`/kpi?indicator=${indicator.id}`)}
+                      className={`flex min-h-[20px] max-w-[260px] shrink-0 items-center rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition hover:bg-black hover:text-white ${
+                        atRisk
+                          ? "bg-rag-amber-light text-rag-amber"
+                          : "bg-neutral-100 text-secondary"
+                      }`}
+                    >
+                      {`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}
+                    </button>
+                  );
+                })}
+                {hiddenIndicatorsCount > 0 && (
+                  <span
+                    className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
+                    title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
                   >
-                    {`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}
-                  </button>
-                );
-              })}
-              {hiddenIndicatorsCount > 0 && (
-                <span
-                  className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
-                  title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
-                >
-                  +{hiddenIndicatorsCount}
-                </span>
-              )}
-            </>
-          )}
+                    +{hiddenIndicatorsCount}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {axisChantiers.length > 0 && (

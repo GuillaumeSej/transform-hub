@@ -422,7 +422,7 @@ export function ProgramRoadmap({
                                     key={deliverable.id}
                                     leftPct={pctOf(deliverable.dueDate!)}
                                     top={LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT / 2}
-                                    size={17}
+                                    size={9}
                                     color={deliverableMarkerColor(deliverable.status)}
                                     onClick={
                                       onProjetClick

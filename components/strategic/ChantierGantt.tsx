@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Lock, TriangleAlert } from "lucide-react";
+import { Lock } from "lucide-react";
 import {
   formatTimelineDay,
   packTimelineLanes,
@@ -99,12 +99,22 @@ const ALERT_COLOR = "#f5a623";
 
 // Round 4, point 9 : blocs de chantier/action agrandis pour que les livrables/actions restent
 // lisibles à l'intérieur (demande PO explicite, format PERIAL).
-const CHANTIER_BAR_HEIGHT = 40;
 const ACTION_LANE_HEIGHT = 32;
 /** Hauteur réelle d'une barre d'action DANS son couloir (le couloir laisse un peu d'air
  *  au-dessus/en dessous, comme l'espacement `LANES_TOP` ci-dessous). */
 const ACTION_BAR_HEIGHT = 24;
-const LANES_TOP = CHANTIER_BAR_HEIGHT + 6;
+// Round 24 (Phase 3, fix C) : le bloc macro de chantier n'est plus une barre pleine hauteur
+// (40px, contour + contenu en ligne) mais un simple "bracket" fin (`TimelineBar` variant
+// "bracket") — le nom du chantier et son avancement sont DÉJÀ affichés dans la colonne
+// d'identité à gauche (voir plus bas), la barre pleine faisait doublon. 7px choisi dans la
+// fourchette demandée (6-8px) : assez épais pour rester cliquable/visible, assez fin pour ne
+// plus se lire comme une "deuxième barre" à côté des couloirs de projet pleins en dessous.
+const CHANTIER_BAR_HEIGHT = 7;
+/** Espace vertical entre le bracket de chantier et le premier couloir de projet — resserré par
+ *  rapport à l'ancien `+ 6` (qui suivait une barre de 40px) mais toujours un espace visible
+ *  distinct, pour que les couloirs ne collent pas directement sous le bracket. */
+const CHANTIER_BAR_GAP = 8;
+const LANES_TOP = CHANTIER_BAR_HEIGHT + CHANTIER_BAR_GAP;
 
 export function ChantierGantt({
   chantiers,
@@ -305,16 +315,16 @@ export function ChantierGantt({
                       {/* Grille de colonnes */}
                       <TimelineGridColumns columns={columns} />
 
-                      {/* Bloc macro du chantier (maille exécutive) — REMPLI, avec la part
-                          d'avancement en teinte soutenue. */}
+                      {/* Bloc macro du chantier (maille exécutive) — fin "bracket" de portée (round
+                          24, fix C) : nom + avancement restent affichés une seule fois, dans la
+                          colonne d'identité à gauche, pas ici. Cliquable/infobulle inchangés. */}
                       <TimelineBar
                         left={startPct}
                         width={widthPct}
                         top={0}
                         height={CHANTIER_BAR_HEIGHT}
                         color={blockColor}
-                        variant="outline"
-                        progressPct={progressPct}
+                        variant="bracket"
                         ringed={isAlerted}
                         onClick={() => openChantier(chantier)}
                         ariaLabel={chantier.name}
@@ -326,17 +336,6 @@ export function ChantierGantt({
                             : ""
                         }`}
                         label={chantier.name}
-                        labelClassName="min-w-0 flex-1 truncate text-[11px] font-semibold text-primary"
-                        icon={
-                          isAlerted ? (
-                            <TriangleAlert size={11} className="shrink-0 text-rag-amber" />
-                          ) : undefined
-                        }
-                        trailing={
-                          <span className="shrink-0 text-[11px] font-bold text-primary">
-                            {progressPct}%
-                          </span>
-                        }
                       />
 
                       {/* Actions individuelles (maille fine), NOMMÉES — même pop-up au clic. */}

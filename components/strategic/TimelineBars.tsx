@@ -355,10 +355,16 @@ export function TimelineBar({
   top: number;
   height: number;
   color: string;
-  variant?: "outline" | "solid";
+  /** Round 24 (Phase 3, fix C) : `"bracket"` — variante allégée pour un simple "indicateur de
+   *  portée" (ex. le bloc macro d'un chantier dans `ChantierGantt.tsx`, quand le nom/l'avancement
+   *  sont déjà affichés ailleurs dans une colonne d'identité dédiée) : remplissage plein, SANS
+   *  bordure ni contenu en ligne (icône/label/fin de ligne jamais rendus, même si `label` est
+   *  fourni — requis par le type mais alors utilisé uniquement pour `aria-label`/l'infobulle). */
+  variant?: "outline" | "solid" | "bracket";
   /** 0-100 — surcouche d'avancement à gauche. Pertinent pour `variant="outline"` (surcouche sur fond
    *  translucide) ET, round 19, pour `variant="solid"` (remplissage à deux tons — voir le
-   *  doc-comment de `TimelineBar` ci-dessus). Omis pour un `"solid"` : remplissage plat inchangé. */
+   *  doc-comment de `TimelineBar` ci-dessus). Omis pour un `"solid"` : remplissage plat inchangé.
+   *  Sans effet sur `variant="bracket"` (pas de surcouche d'avancement sur un simple repère). */
   progressPct?: number;
   /** Anneau ambre (cascade de dépendance en alerte, etc.). */
   ringed?: boolean;
@@ -373,7 +379,11 @@ export function TimelineBar({
   inlineMinWidthPct?: number;
   besideLabelClassName?: string;
 }) {
-  const inline = width >= inlineMinWidthPct;
+  // Round 24 (Phase 3, fix C) : `"bracket"` n'affiche JAMAIS de contenu en ligne (ni repli à côté de
+  // la barre) — c'est un simple repère de portée, le nom/l'avancement vivent déjà dans la colonne
+  // d'identité de l'appelant.
+  const isBracket = variant === "bracket";
+  const inline = !isBracket && width >= inlineMinWidthPct;
   // Round 19 : rendu à deux tons — voir doc-comment de `TimelineBar` ci-dessus. Gated sur les DEUX
   // conditions : un `variant="solid"` sans `progressPct` (actions de `ChantierGantt.tsx`) doit
   // rester inchangé.
@@ -409,7 +419,9 @@ export function TimelineBar({
           backgroundColor:
             variant === "solid"
               ? withAlpha(color, solidTwoTone ? 0.22 : 0.9)
-              : withAlpha(color, 0.16),
+              : isBracket
+                ? withAlpha(color, 0.85)
+                : withAlpha(color, 0.16),
           borderColor: variant === "outline" ? withAlpha(color, 0.65) : undefined,
           color: variant === "solid" ? readableTextColor(color) : undefined,
           // Round 19 : sur la base claire du rendu à deux tons, un texte blanc câblé pour la teinte
@@ -450,7 +462,7 @@ export function TimelineBar({
           </div>
         )}
       </div>
-      {!inline && (
+      {!inline && !isBracket && (
         <span
           aria-hidden
           className={`pointer-events-none absolute left-full top-0 ml-1 whitespace-nowrap ${besideLabelClassName}`}
@@ -463,15 +475,21 @@ export function TimelineBar({
 }
 
 /**
- * UN repère ponctuel (losange), positionné en pourcentage sur la piste temporelle — pendant de
- * `TimelineBar` pour un événement DATÉ mais SANS durée (ex. l'échéance d'un livrable), là où
- * `TimelineBar` suppose toujours une plage `left`→`left+width`. Primitive pure : ne connaît que le
- * positionnement/la couleur, l'appelant décide de la sémantique (couleur par statut, etc.).
+ * UN repère ponctuel (petit point plein), positionné en pourcentage sur la piste temporelle —
+ * pendant de `TimelineBar` pour un événement DATÉ mais SANS durée (ex. l'échéance d'un livrable), là
+ * où `TimelineBar` suppose toujours une plage `left`→`left+width`. Primitive pure : ne connaît que
+ * le positionnement/la couleur, l'appelant décide de la sémantique (couleur par statut, etc.).
+ *
+ * Round 24 (Phase 3, fix D) : forme changée de losange (carré pivoté 45°) à simple point rond — le
+ * losange, jugé trop imposant/visuellement incohérent avec le reste de la charte (qui privilégie
+ * des pastilles rondes pour toute identité axe/chantier ailleurs dans cette même fonctionnalité),
+ * cède la place à un petit disque plein `rounded-full`, taille par défaut réduite en conséquence
+ * (12 → 9).
  */
 export function TimelineMarker({
   leftPct,
   top,
-  size = 12,
+  size = 9,
   color,
   onClick,
   ariaLabel,
@@ -502,7 +520,7 @@ export function TimelineMarker({
               }
             : undefined
         }
-        className={`rounded-[2px] border border-white shadow-sm ${
+        className={`rounded-full border border-white shadow-sm ${
           onClick
             ? "cursor-pointer transition hover:brightness-110 hover:ring-2 hover:ring-bp-coral/40"
             : ""
@@ -511,7 +529,7 @@ export function TimelineMarker({
           width: size,
           height: size,
           backgroundColor: color,
-          transform: "translate(-50%, -50%) rotate(45deg)",
+          transform: "translate(-50%, -50%)",
         }}
       />
     </Tooltip>
