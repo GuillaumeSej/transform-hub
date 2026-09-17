@@ -169,6 +169,39 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     allowedSpans: ["M", "L", "XL"],
   },
   {
+    // Positionné juste après portfolio-funnel (au lieu de plus bas dans le registre) : les deux
+    // sont en span "M" et se complètent sur la même ligne de la grille 4 colonnes, ce qui évite un
+    // trou visuel à droite de portfolio-funnel avant que le prochain widget "XL" ne reflow sur la
+    // ligne suivante. Voir le commentaire sur SPAN_COL_CLASS plus haut dans ce fichier.
+    type: "marimekko",
+    label: "Économies prévues",
+    icon: "LayoutGrid",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+    viewOptions: [
+      { key: "function-country", labelKey: "dashboard.widgetView.functionCountry" },
+      { key: "workstream-lever", labelKey: "dashboard.widgetView.workstreamLever" },
+    ],
+    defaultView: "function-country",
+    // Marimekko = forme à 2 dimensions (primaire × secondaire) — le builder générique impose donc
+    // exactement 2 dimensions choisies par l'utilisateur (voir lib/dashboardPivot.ts).
+    builderDimensionCount: 2,
+    defaultCustomViews: [
+      {
+        id: "function-country",
+        metric: "realizedSavings",
+        dimensions: ["function", "country"],
+        label: "Département × Pays",
+      },
+      {
+        id: "workstream-lever",
+        metric: "realizedSavings",
+        dimensions: ["ws", "lever"],
+        label: "Workstream × Levier",
+      },
+    ],
+  },
+  {
     // Widget fusionné "Alertes" + "Alertes de dépendances" (Sept 2026) — anciennement deux
     // widgets séparés toujours pleinement visibles ; regroupés en un seul centre de risque
     // replié par défaut (résumé compact + bouton d'expansion vers les deux panneaux côte à
@@ -225,35 +258,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
     excludeFromDefault: true,
-  },
-  {
-    type: "marimekko",
-    label: "Économies prévues",
-    icon: "LayoutGrid",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
-    viewOptions: [
-      { key: "function-country", labelKey: "dashboard.widgetView.functionCountry" },
-      { key: "workstream-lever", labelKey: "dashboard.widgetView.workstreamLever" },
-    ],
-    defaultView: "function-country",
-    // Marimekko = forme à 2 dimensions (primaire × secondaire) — le builder générique impose donc
-    // exactement 2 dimensions choisies par l'utilisateur (voir lib/dashboardPivot.ts).
-    builderDimensionCount: 2,
-    defaultCustomViews: [
-      {
-        id: "function-country",
-        metric: "realizedSavings",
-        dimensions: ["function", "country"],
-        label: "Département × Pays",
-      },
-      {
-        id: "workstream-lever",
-        metric: "realizedSavings",
-        dimensions: ["ws", "lever"],
-        label: "Workstream × Levier",
-      },
-    ],
   },
   {
     type: "workstream-breakdown",

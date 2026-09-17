@@ -100,7 +100,7 @@ describe("dashboardWidgets — initiative health reorder migration", () => {
 
   it("does not move initiative-health if neither 'risk-center' nor 'portfolio-funnel' is present", () => {
     const before: DashboardWidgetInstance[] = [
-      { instanceId: "sankey", type: "sankey", span: "M" },
+      { instanceId: "bridge", type: "bridge", span: "M" },
       {
         instanceId: "initiative-health",
         type: "initiative-health",
