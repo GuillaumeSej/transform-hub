@@ -175,9 +175,29 @@ type PlanLockable = Pick<
   | "opexOneOff"
   | "opexRec"
   | "capex"
+  | "actions"
 >;
 
+/** Fige le snapshot financier d'un levier (audit issue #5, "Plan initial" faux/ne correspondant
+ *  pas aux lignes d'impact — parfois seulement au CAPEX). Root cause : ce snapshot copiait
+ *  auparavant les champs bruts du levier (`entity.grossSavings`/`netSavings`/…) tels quels — or
+ *  pour un levier DÉJÀ piloté par un plan d'actions chiffré au moment du gel (import Excel, seed
+ *  démo, création directe à un statut avancé), ces champs bruts ne sont pas garantis d'avoir été
+ *  synchronisés avec les impacts d'actions avant l'appel à `applyPlanLock` — le gel figeait alors
+ *  définitivement une valeur fausse (`updateLever` interdit toute correction ultérieure des champs
+ *  bruts une fois `lockedPlan` posé). On consolide donc désormais depuis les impacts d'actions en
+ *  priorité quand ils existent, pour figer le VRAI plan initial dès le premier verrouillage. */
 function snapshot(entity: PlanLockable): FinancialSnapshot {
+  const consolidated = consolidateLeverFromActions(entity as Lever);
+  if (consolidated) {
+    return {
+      grossSavings: consolidated.grossSavings ?? entity.grossSavings,
+      netSavings: consolidated.netSavings ?? entity.netSavings,
+      opexOneOff: consolidated.opexOneOff ?? entity.opexOneOff,
+      opexRec: consolidated.opexRec ?? entity.opexRec,
+      capex: consolidated.capex ?? entity.capex,
+    };
+  }
   return {
     grossSavings: entity.grossSavings,
     netSavings: entity.netSavings,

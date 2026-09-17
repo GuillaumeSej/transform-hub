@@ -51,7 +51,10 @@ import {
   leverGrossRealizedToDate,
   leverJCurve,
   leverPayback,
+  resolveLockedPlanNet,
 } from "@/lib/leverConsolidate";
+import { mentionsHiring, reconcileLeverMovements } from "@/lib/leverMovementReconciliation";
+import { fteEffect } from "@/lib/hrEngine";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import type { ActionImpact, ActionStatus, Company, LeverAction, Program } from "@/types";
 
@@ -233,8 +236,25 @@ export function LeverDetailClientPerformance() {
     ? leverGrossRealizedToDate(lever)
     : engine.realizedGrossSavings(lever);
   const realFte = engine.realizedFte(lever);
-  const lockedPlanDisplay = engine.displayedLockedPlanNet(lever);
+  // "Plan initial (net)" — corrigé pour toujours correspondre à la somme des lignes d'impact des
+  // actions quand le levier en a (audit issue #5, voir lib/leverConsolidate.ts::resolveLockedPlanNet
+  // pour le détail du root cause) : engine.displayedLockedPlanNet(lever) reste utilisé ailleurs
+  // (dashboard, etc.) et n'est pas modifié ici.
+  const lockedPlanDisplay = resolveLockedPlanNet(lever);
   const reforecastDisplay = engine.displayedReforecastNet(lever);
+  // Réconciliation ETP levier ↔ mouvements RH (audit issues #1, #2, #6) — voir
+  // lib/leverMovementReconciliation.ts. `realFte` sert de référence "Réalisé à date (ETP)" pour
+  // ne jamais diverger de ce qui est déjà affiché juste au-dessus du panneau de réconciliation.
+  // Pas de useMemo : calcul dérivé bon marché (filtre/somme sur les mouvements d'UN levier), placé
+  // ici comme `real`/`realGross` plus haut — un hook ne peut pas être ajouté après les `return`
+  // conditionnels de `!lever`/`!canView` déjà passés à ce point de la fonction.
+  const movementReconciliation = reconcileLeverMovements(lever, data.workforce.movements, realFte);
+  const leverFteForBadge = consolidatedKPIs?.fteImpact ?? lever.fteImpact;
+  // Garde-fou générique (audit issue #6) : un ETP visé positif ("postes créés") sans qu'aucun
+  // texte du levier (description, libellés d'impacts d'actions) ne mentionne un recrutement est
+  // suspect — un autre agent traite le cas de données spécifique COM-001 séparément, cette
+  // vérification par mot-clé est volontairement générique et s'applique à N'IMPORTE QUEL levier.
+  const positiveFteNeedsCheck = leverFteForBadge > 0 && !mentionsHiring(lever);
   const comments = data.getComments(lever.id);
   const actions = lever.actions ?? [];
   // CAPEX / OPEX one-off / OPEX récurrent affichés sous les 3 chiffres clés du bandeau exécutif —
@@ -1189,16 +1209,136 @@ export function LeverDetailClientPerformance() {
             <SectionTitle>{t("leverDetail.hrImpactTitle", "Impact RH")}</SectionTitle>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Stat label={t("leverForm.fteImpact", "Impact estimé (ETP)")}>
-                {(consolidatedKPIs?.fteImpact ?? lever.fteImpact) > 0
-                  ? `+${consolidatedKPIs?.fteImpact ?? lever.fteImpact}`
-                  : (consolidatedKPIs?.fteImpact ?? lever.fteImpact)}
+                <span className="inline-flex flex-wrap items-center">
+                  {fmtSignedFte(leverFteForBadge)}
+                  <FteDirectionBadge value={leverFteForBadge} />
+                  {positiveFteNeedsCheck && <PositiveFteWarningBadge />}
+                </span>
               </Stat>
               <Stat label={t("leverDetail.realizedToDateFte", "Réalisé à date (ETP)")}>
-                {realFte > 0 ? `+${realFte}` : realFte}
+                <span className="inline-flex flex-wrap items-center">
+                  {fmtSignedFte(realFte)}
+                  <FteDirectionBadge value={realFte} />
+                </span>
               </Stat>
-              <Stat label={t("leverForm.popImpacted", "Population impactée")}>
-                {data.workstreams.find((w) => w.id === lever.popImpacted)?.name ?? "—"}
-              </Stat>
+              <div className="sm:col-span-3 lg:col-span-1">
+                <Stat label={t("leverForm.popImpacted", "Population impactée")}>
+                  {movementReconciliation.movements.length === 0 ? (
+                    <span className="font-normal text-tertiary">
+                      {t("leverDetail.popImpacted.none", "Aucun mouvement RH lié à ce levier")}
+                    </span>
+                  ) : (
+                    <span className="flex flex-col gap-1 font-normal">
+                      <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                        {t("leverDetail.popImpacted.count", "{n} mouvement(s) lié(s)").replace(
+                          "{n}",
+                          String(movementReconciliation.movements.length)
+                        )}
+                      </span>
+                      {movementReconciliation.movements.map((m) => {
+                        const mismatch = movementReconciliation.mismatchedMovements.some(
+                          (x) => x.id === m.id
+                        );
+                        return (
+                          <span key={m.id} className="flex items-center gap-1.5 text-xs">
+                            <span
+                              className={mismatch ? "font-semibold text-rag-red" : "text-primary"}
+                            >
+                              {m.label} ({m.type}, {fmtSignedFte(fteEffect(m))}, {m.status})
+                            </span>
+                            {mismatch && (
+                              <TriangleAlert size={11} className="shrink-0 text-rag-red" />
+                            )}
+                          </span>
+                        );
+                      })}
+                    </span>
+                  )}
+                </Stat>
+              </div>
+            </div>
+
+            {/* Panneau de réconciliation ETP levier ↔ mouvements RH (audit issue #1) — même
+                langage visuel que les alertes de dépendances ci-dessus (badge rond
+                bg-rag-*-light/text-rag-* + TriangleAlert), réutilisé plutôt qu'un nouveau
+                composant d'alerte. */}
+            <div className="mt-3 rounded-md border border-border bg-neutral-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                  {t(
+                    "leverDetail.hrReconciliation.title",
+                    "Réconciliation ETP — mouvements RH liés"
+                  )}
+                </span>
+                {movementReconciliation.hasWarning && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rag-red-light px-2 py-0.5 text-[10px] font-bold normal-case text-rag-red">
+                    <TriangleAlert size={10} />{" "}
+                    {t("leverDetail.hrReconciliation.warning", "Écart à vérifier")}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1.5 text-xs text-primary">
+                {t(
+                  "leverDetail.hrReconciliation.summary",
+                  "Mouvements RH liés : {realized} ETP réalisés / {all} ETP au total, sur {target} ETP visés"
+                )
+                  .replace("{realized}", fmtSignedFte(movementReconciliation.realizedFte))
+                  .replace("{all}", fmtSignedFte(movementReconciliation.allFte))
+                  .replace("{target}", fmtSignedFte(movementReconciliation.leverFteImpact))}
+              </p>
+              {/* Distinction visuelle créations/réductions (audit issue #6) sur les 3 chiffres
+                  ci-dessus, pas seulement le texte "réalisés/au total/visés". */}
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-tertiary">
+                <span className="inline-flex items-center">
+                  {t("leverDetail.hrReconciliation.realizedShort", "Réalisés")}
+                  <FteDirectionBadge value={movementReconciliation.realizedFte} />
+                </span>
+                <span className="inline-flex items-center">
+                  {t("leverDetail.hrReconciliation.allShort", "Au total")}
+                  <FteDirectionBadge value={movementReconciliation.allFte} />
+                </span>
+                <span className="inline-flex items-center">
+                  {t("leverDetail.hrReconciliation.targetShort", "Visés")}
+                  <FteDirectionBadge value={movementReconciliation.leverFteImpact} />
+                </span>
+              </div>
+              {movementReconciliation.hasNoMovements && (
+                <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-rag-red">
+                  <TriangleAlert size={11} className="shrink-0" />{" "}
+                  {t(
+                    "leverDetail.hrReconciliation.noMovements",
+                    "Aucun mouvement RH lié à ce levier — couverture 0 %."
+                  )}
+                </p>
+              )}
+              {!movementReconciliation.hasNoMovements &&
+                movementReconciliation.isRealizedMismatch && (
+                  <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-rag-red">
+                    <TriangleAlert size={11} className="shrink-0" />{" "}
+                    {t(
+                      "leverDetail.hrReconciliation.realizedMismatch",
+                      "Le cumul des mouvements réalisés ({realized} ETP) diverge du « Réalisé à date » du levier ({target} ETP)."
+                    )
+                      .replace("{realized}", fmtSignedFte(movementReconciliation.realizedFte))
+                      .replace("{target}", fmtSignedFte(realFte))}
+                  </p>
+                )}
+              {movementReconciliation.mismatchedMovements.length > 0 && (
+                <div className="mt-1.5 space-y-1">
+                  {movementReconciliation.mismatchedMovements.map((m) => (
+                    <p key={m.id} className="flex items-center gap-1.5 text-[11px] text-rag-amber">
+                      <TriangleAlert size={11} className="shrink-0" />{" "}
+                      {t(
+                        "leverDetail.hrReconciliation.directionMismatch",
+                        "{label} ({type}, {fte} ETP) — sens incohérent avec l'impact visé du levier"
+                      )
+                        .replace("{label}", m.label)
+                        .replace("{type}", m.type)
+                        .replace("{fte}", fmtSignedFte(fteEffect(m)))}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           </CardBody>
         </Card>
@@ -1444,5 +1584,46 @@ function OverviewField({ label, children }: { label: string; children: React.Rea
       </div>
       <div className="mt-1 text-[13px] text-primary">{children}</div>
     </div>
+  );
+}
+
+/** Formate un ETP signé avec son "+" explicite (0 reste "0", jamais "+0") — même convention que
+ *  l'affichage historique de "Impact estimé (ETP)"/"Réalisé à date (ETP)", factorisée ici pour
+ *  être réutilisée par le panneau de réconciliation RH (audit issue #6). */
+function fmtSignedFte(value: number): string {
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
+/** Libellé "postes créés" / "postes supprimés/réduits" accolé à une valeur ETP signée — l'audit a
+ *  trouvé qu'un simple +/- ne suffisait pas à éviter la confusion (issue #6, ex. un "+2" lu comme
+ *  une erreur de saisie faute d'indice visuel). Ne juge jamais si la valeur est "à vérifier" :
+ *  c'est le rôle de `PositiveFteWarningBadge` ci-dessous. */
+function FteDirectionBadge({ value }: { value: number }) {
+  const { t } = useTranslation();
+  if (value === 0) return null;
+  return (
+    <span
+      className={`ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[9.5px] font-bold normal-case ${
+        value > 0 ? "bg-rag-green-light text-rag-green-dark" : "bg-rag-red-light text-rag-red"
+      }`}
+    >
+      {value > 0
+        ? t("leverDetail.fte.created", "postes créés")
+        : t("leverDetail.fte.reduced", "postes supprimés/réduits")}
+    </span>
+  );
+}
+
+/** Badge d'alerte générique (audit issue #6) : un ETP visé POSITIF sans aucune mention de
+ *  recrutement/embauche dans le texte du levier (description ou libellés d'impacts d'actions) est
+ *  suspect — voir `lib/leverMovementReconciliation.ts::mentionsHiring`. Même langage visuel que
+ *  les autres badges d'alerte de cette page (rag-amber, `TriangleAlert`). */
+function PositiveFteWarningBadge() {
+  const { t } = useTranslation();
+  return (
+    <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-1.5 py-0.5 text-[9.5px] font-bold normal-case text-rag-amber">
+      <TriangleAlert size={9} className="shrink-0" />{" "}
+      {t("leverDetail.fte.positiveWarning", "ETP positif — à vérifier")}
+    </span>
   );
 }
