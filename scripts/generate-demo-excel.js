@@ -303,11 +303,37 @@ for (let i = 0; i < LEVER_COUNT; i++) {
   const opexRec = Math.round(netSavings * 0.02 * 100) / 100;
   const fteImpact = i % 4 === 0 ? 0 : -(2 + (i % 5));
   const popImpacted = Math.abs(fteImpact) * (6 + (i % 4));
-  const startMonth = 1 + (i % 10);
-  const durationMonths = 5 + (i % 8);
+  // Les dates sont choisies en fonction du STATUT pour rester cohérentes avec "aujourd'hui"
+  // (DEMO_TODAY, ~2026-09-17) : un levier "Réalisé" doit avoir terminé ses actions AVANT
+  // aujourd'hui (sinon le calcul de "Réalisé à date", basé sur les dates de livraison réelles —
+  // voir lib/leverConsolidate.ts::leverJCurve — affiche €0K malgré un statut à 100%, ce qui a été
+  // repéré comme une incohérence lors de l'audit). Un levier "Identifié"/"Planifié" doit au
+  // contraire démarrer après aujourd'hui (rien n'a encore pu être livré). "Exécuté" chevauche
+  // aujourd'hui (en cours). Toujours déterministe (i % N), pas de Math.random().
+  let startMonth, durationMonths;
+  if (status === "Réalisé") {
+    // Termine strictement avant DEMO_TODAY (mois 1 à 8 = janvier à août 2026).
+    durationMonths = 2 + (i % 4); // 2 à 5 mois
+    const endMonth = 3 + (i % 6); // fin en mars..août 2026
+    startMonth = Math.max(1, endMonth - durationMonths);
+  } else if (status === "Exécuté") {
+    // Chevauche DEMO_TODAY : commence avant, finit après.
+    startMonth = 1 + (i % 8); // janvier à août 2026
+    durationMonths = 7 + (i % 6); // finit entre avril 2027 et fin d'année, toujours après septembre 2026
+  } else if (status === "Planifié") {
+    // Démarre juste après DEMO_TODAY : quasiment rien n'a pu être livré.
+    startMonth = 9 + (i % 3); // septembre à novembre 2026
+    durationMonths = 5 + (i % 6);
+  } else {
+    // "Identifié" (et statuts par défaut) : entièrement dans le futur.
+    startMonth = 11 + (i % 3); // novembre 2026 à janvier 2027
+    durationMonths = 5 + (i % 6);
+  }
   const endMonthRaw = startMonth + durationMonths;
-  const startDate = `2026-${String(startMonth).padStart(2, "0")}-01`;
-  const endYear = endMonthRaw > 12 ? 2027 : 2026;
+  const startYear = startMonth > 12 ? 2027 : 2026;
+  const startMonthNorm = ((startMonth - 1) % 12) + 1;
+  const startDate = `${startYear}-${String(startMonthNorm).padStart(2, "0")}-01`;
+  const endYear = startYear + (endMonthRaw > 12 ? 1 : 0);
   const endMonth = ((endMonthRaw - 1) % 12) + 1;
   const endDate = `${endYear}-${String(endMonth).padStart(2, "0")}-28`;
 
