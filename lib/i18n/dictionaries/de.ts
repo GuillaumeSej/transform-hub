@@ -1163,6 +1163,10 @@ const de: Record<string, string> = {
   "strategicAxes.axisCreated": "Achse angelegt",
   "strategicAxes.axisUpdated": "Achse aktualisiert",
   "strategicAxes.chantiersView": "Arbeitspakete",
+  // Runde 24 (Phase 4, Teil 1): Beschriftungen der beiden lokalen Tabs dieser Seite — siehe den
+  // Doc-Kommentar am Anfang von `StrategicAxesView.tsx`.
+  "strategicAxes.tabs.advancement": "Fortschritt",
+  "strategicAxes.tabs.byAxis": "Nach Achse",
   // Runde 17 (Tausch): Titel des festen Abschnitts "Fortschrittsstatus der Hebel" dieser Seite
   // (E0→E4-Ansicht nach Hebel + klassisches Kanban für Hebel ohne KPI) — migriert vom ehemaligen
   // Schlüssel `strategicDashboard.widget.chantierHealth` (dieses Dashboard-Widget ist weg, dieser
@@ -1170,7 +1174,18 @@ const de: Record<string, string> = {
   // `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` in Runde 16 (siehe unten), aus dem
   // symmetrisch umgekehrten Grund.
   "strategicAxes.projetAdvancementTitle": "Fortschrittsstatus der Projekte",
+  // Runde 24 (Phase 4, Teil 2/3): nummeriertes Achsenpräfix ("Achse {n}: {name}") — 1-basierte
+  // Position in `data.axes` (nie neu sortiert), gemeinsam genutzt vom Achsenblock des Tabs
+  // "Fortschritt" und der Achsen-Kopfzeile des Akkordeons "Nach Achse"
+  // (`AxisChantierProjetAccordion.tsx`).
+  "strategicAxes.axisNumberPrefix": "Achse {n}: {name}",
+  // Beschriftung des eigenen "Arbeitspakete"-Abschnitts im Tab "Fortschritt" (Runde 24, Phase 4,
+  // Teil 2) — ersetzt die alte Farblegende, die bisher in `ProjetMilestoneBoard.tsx` lag (entfernt).
+  "strategicAxes.chantiersLabel": "Arbeitspakete",
   "strategicAxes.axisNoChantier": "Kein Arbeitspaket",
+  // Platzhalter der Ebene 3 (Projekte) des Akkordeons "Nach Achse" (Runde 24, Phase 4, Teil 3),
+  // wenn ein aufgeklapptes Arbeitspaket noch kein Projekt hat.
+  "strategicAxes.chantierNoProjet": "Kein Projekt",
   "strategicAxes.chantierAlerted": "Abhängigkeitswarnung",
   "strategicAxes.kanbanEmptyColumn": "Keine Achse",
   // Budgetverteilungs-Donut (Runde 12) — reicher Achsen-Header der Roadmap (`ProgramRoadmap`,

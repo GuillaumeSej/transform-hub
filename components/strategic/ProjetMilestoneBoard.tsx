@@ -2,7 +2,6 @@
 
 import { TriangleAlert } from "lucide-react";
 import {
-  colorForChantier,
   displayMilestoneId,
   isProjetLate,
   milestoneProgressPct,
@@ -49,9 +48,12 @@ export type ProjetBoardGroup = {
   /** TOUS les leviers de l'axe (avec ou sans KPI rattaché, round 18), groupés par jalon courant
    *  (E0…E4). */
   milestones: Record<MilestoneId, ProjetBoardCard[]>;
-  /** Chantiers de l'axe (round 10, point 1) — alimente la légende de couleur affichée sous
-   *  l'en-tête de section, juste avant les colonnes E0→E4. Optionnel : un appelant qui ne l'a pas
-   *  sous la main (aucun aujourd'hui) n'affiche simplement pas de légende. */
+  /** Chantiers de l'axe (round 10, point 1) — round 24 (Phase 4) : n'est plus rendu ICI (l'ancienne
+   *  légende de couleur sous l'en-tête de section a été retirée, devenue redondante avec la
+   *  section "Chantiers" dédiée que `StrategicAxesView.tsx` affiche désormais au-dessus de ce
+   *  composant). Champ CONSERVÉ malgré tout : c'est cette même page qui continue de le peupler et
+   *  de le lire pour construire sa propre section "Chantiers" — retirer le champ casserait ce seul
+   *  appelant pour aucun bénéfice. */
   chantiers?: Chantier[];
 };
 
@@ -231,32 +233,6 @@ export function ProjetMilestoneBoard({
               {group.label}
             </span>
           </div>
-          {/* Légende de couleur des chantiers (round 10, point 1) — même `colorForChantier` que les
-              bordures/pastilles des bulles ci-dessous, pour qu'un chantier se reconnaisse d'un
-              coup d'œil entre la légende et les colonnes E0-E4. Compacte : pastille + nom, pas une
-              liste détaillée. */}
-          {group.chantiers && group.chantiers.length > 0 && (
-            <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-              {group.chantiers.map((chantier) => (
-                <button
-                  key={chantier.id}
-                  type="button"
-                  onClick={() => onProjetClick(chantier.id)}
-                  title={chantier.name}
-                  className="flex items-center gap-1.5 rounded text-[10.5px] text-tertiary transition hover:text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-black"
-                >
-                  <span
-                    aria-hidden
-                    className={`h-2 w-2 shrink-0 rounded-full ${colorForChantier(chantier.id)}`}
-                  />
-                  {/* Round 12 : nom en entier (plus de troncature `max-w-[140px] truncate`) et
-                      cliquable — demande PO explicite, ouvre le panneau du chantier comme les
-                      bulles de leviers ci-dessous (`onProjetClick` sans `focusActionId`). */}
-                  <span>{chantier.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
           <div className="grid grid-cols-1 gap-2 min-[640px]:grid-cols-5">
             {MILESTONE_ORDER.map((milestoneId) => {
               const cards = group.milestones[milestoneId] ?? [];

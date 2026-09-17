@@ -1164,6 +1164,10 @@ const es: Record<string, string> = {
   "strategicAxes.axisCreated": "Eje creado",
   "strategicAxes.axisUpdated": "Eje actualizado",
   "strategicAxes.chantiersView": "Proyectos",
+  // Ronda 24 (Fase 4, Parte 1): etiquetas de las dos pestañas locales de esta página — ver el
+  // comentario de cabecera de `StrategicAxesView.tsx`.
+  "strategicAxes.tabs.advancement": "Avance",
+  "strategicAxes.tabs.byAxis": "Por eje",
   // Ronda 17 (intercambio): título de la sección fija "Estado de avance de las actividades" de
   // esta página (vista E0→E4 por palanca + kanban clásico de las palancas sin KPI) — migrado
   // desde la antigua clave `strategicDashboard.widget.chantierHealth` (ese widget del panel
@@ -1171,7 +1175,17 @@ const es: Record<string, string> = {
   // de nombres que `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` en la ronda 16 (ver
   // más abajo), por la razón simétrica inversa.
   "strategicAxes.projetAdvancementTitle": "Estado de avance de las iniciativas",
+  // Ronda 24 (Fase 4, Parte 2/3): prefijo numerado del eje ("Eje {n}: {name}") — posición 1-based
+  // en `data.axes` (nunca reordenada), compartido entre el bloque de eje de la pestaña "Avance" y
+  // la cabecera de eje del acordeón "Por eje" (`AxisChantierProjetAccordion.tsx`).
+  "strategicAxes.axisNumberPrefix": "Eje {n}: {name}",
+  // Etiqueta de la sección "Proyectos" dedicada de la pestaña "Avance" (ronda 24, Fase 4, Parte 2)
+  // — sustituye la antigua leyenda de color interna de `ProjetMilestoneBoard.tsx`, ahora retirada.
+  "strategicAxes.chantiersLabel": "Proyectos",
   "strategicAxes.axisNoChantier": "Ningún proyecto",
+  // Marcador de posición del nivel 3 (proyectos) del acordeón "Por eje" (ronda 24, Fase 4, Parte 3)
+  // cuando un proyecto (chantier) desplegado aún no tiene ninguna iniciativa.
+  "strategicAxes.chantierNoProjet": "Ninguna iniciativa",
   "strategicAxes.chantierAlerted": "Alerta de dependencia",
   "strategicAxes.kanbanEmptyColumn": "Ningún eje",
   // Donut de reparto presupuestario (ronda 12) — encabezado de eje enriquecido de la hoja de ruta

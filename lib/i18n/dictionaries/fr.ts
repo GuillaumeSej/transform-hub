@@ -1220,6 +1220,10 @@ const fr: Record<string, string> = {
   "strategicAxes.axisCreated": "Axe créé",
   "strategicAxes.axisUpdated": "Axe mis à jour",
   "strategicAxes.chantiersView": "Chantiers",
+  // Round 24 (Phase 4, Partie 1) : libellés des deux onglets locaux de cette page — voir le
+  // doc-comment de tête de `StrategicAxesView.tsx`.
+  "strategicAxes.tabs.advancement": "Avancement",
+  "strategicAxes.tabs.byAxis": "Vue par axe",
   // Round 17 (permutation) : titre de la section fixe "État des lieux d'avancement des leviers" de
   // cette page (vue E0→E4 par levier, tous leviers confondus depuis round 18 — voir son ancien
   // kanban classique des leviers sans KPI, supprimé) — migré depuis l'ex-clé
@@ -1227,7 +1231,17 @@ const fr: Record<string, string> = {
   // ICI, sans bascule d'onglet), même migration de namespace que `strategicDashboard.roadmap.*` →
   // `strategicAxes.roadmap.*` au round 16 (voir plus bas), pour la raison symétrique inverse.
   "strategicAxes.projetAdvancementTitle": "État des lieux d'avancement des projets",
+  // Round 24 (Phase 4, Partie 2/3) : préfixe numéroté d'un axe ("Axe {n} : {name}") — position
+  // 1-based dans `data.axes` (jamais retriée), partagé par le bloc d'axe de l'onglet "Avancement"
+  // et l'en-tête d'axe de l'accordéon "Vue par axe" (`AxisChantierProjetAccordion.tsx`).
+  "strategicAxes.axisNumberPrefix": "Axe {n} : {name}",
+  // Libellé de la section "Chantiers" dédiée de l'onglet "Avancement" (round 24, Phase 4, Partie 2)
+  // — remplace l'ancienne légende de couleur interne à `ProjetMilestoneBoard.tsx`, retirée.
+  "strategicAxes.chantiersLabel": "Chantiers",
   "strategicAxes.axisNoChantier": "Aucun chantier",
+  // Placeholder du niveau 3 (projets) de l'accordéon "Vue par axe" (round 24, Phase 4, Partie 3)
+  // quand un chantier déplié n'a encore aucun projet.
+  "strategicAxes.chantierNoProjet": "Aucun projet",
   "strategicAxes.chantierAlerted": "Dépendance en alerte",
   "strategicAxes.kanbanEmptyColumn": "Aucun axe",
   // Donut de répartition budgétaire (round 12) — en-tête riche d'axe de la feuille de route

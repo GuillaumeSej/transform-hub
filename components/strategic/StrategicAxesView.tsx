@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/shared/Button";
-import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Modal } from "@/components/shared/Modal";
+import { AxisChantierProjetAccordion } from "@/components/strategic/AxisChantierProjetAccordion";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
 import {
@@ -14,6 +14,7 @@ import {
   type ProjetBoardGroup,
 } from "@/components/strategic/ProjetMilestoneBoard";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
+import { hexToRgb, withAlpha } from "@/components/strategic/TimelineBars";
 import { colorForChantier } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantierAction } from "@/lib/firestore/chantierActions";
@@ -52,7 +53,22 @@ import type { Chantier, MilestoneId } from "@/types";
  *
  * Le clic sur un chantier ouvre le panneau chantier (`ChantierDetailPanel`) SUR CETTE MÊME page via
  * `?chantier=<chantierId>` (et `&action=` si ciblé) — inchangé depuis les rounds précédents.
+ *
+ * Round 24 (Phase 4) : le corps de page se scinde en DEUX onglets locaux (`useState`, pas de
+ * persistance — même langage visuel que `ChantierDetailPanel.tsx`, qui note lui-même avoir copié
+ * ce patron d'onglets depuis une VERSION ANTÉRIEURE de cette page même : on le réadopte ici comme
+ * le précédent voulu, pas comme une invention nouvelle) :
+ *  - "Avancement" : même vue E0→E4 par axe qu'avant ce round, mais chaque axe gagne désormais son
+ *    propre bloc délimité (accent de couleur + fond teinté, même langage visuel que
+ *    `ProgramRoadmap.tsx`) et une section "Chantiers" dédiée (boutons cliquables), qui REMPLACE
+ *    l'ancienne légende texte interne à `ProjetMilestoneBoard.tsx` (retirée de ce composant, voir
+ *    son propre doc-comment).
+ *  - "Vue par axe" : nouvel accordéon Axe → Chantier → Projet (`AxisChantierProjetAccordion.tsx`),
+ *    tout replié par défaut — vue de navigation/drilldown, complémentaire à la vue "Avancement"
+ *    groupée par jalon.
  */
+const STRATEGIC_AXES_FALLBACK_COLOR = "#a99e9a";
+
 export function StrategicAxesView() {
   const { user } = useRole();
   const { activeProgramId, loading: programsLoading } = useActiveProgram();
@@ -64,6 +80,10 @@ export function StrategicAxesView() {
   const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
   const [newAxisOpen, setNewAxisOpen] = useState(false);
+
+  // Round 24 (Phase 4, Partie 1) : bascule d'onglet locale, sans persistance — voir le doc-comment
+  // de tête de ce fichier.
+  const [activeTab, setActiveTab] = useState<"advancement" | "byAxis">("advancement");
 
   // Échelle de confidentialité de l'entreprise — pour le sélecteur du formulaire de création d'axe
   // (même pattern que `components/shared/LeverForm.tsx`, voir `AxisForm`).
@@ -92,6 +112,18 @@ export function StrategicAxesView() {
     }
     return map;
   }, [data.chantiers]);
+
+  /** Numéro "Axe {n}" de chaque axe (round 24, Phase 4, Partie 2) — position 1-based dans
+   *  `data.axes`, jamais retriée : même ordre que celui déjà utilisé pour tout le reste de cette
+   *  page (import, création, `projetBoardGroups` ci-dessous). Aucun autre concept de numérotation
+   *  d'axe "officielle" trouvé ailleurs dans l'app — un simple index + 1 sur cet ordre déjà établi
+   *  est donc le choix le plus cohérent, réutilisé tel quel par `AxisChantierProjetAccordion.tsx`
+   *  (qui reçoit `data.axes` dans le même ordre et numérote pareil, indépendamment de cette map). */
+  const axisNumberById = useMemo(() => {
+    const map = new Map<string, number>();
+    data.axes.forEach((axis, index) => map.set(axis.id, index + 1));
+    return map;
+  }, [data.axes]);
 
   /** Groupes (un par axe) de la vue E0→E4 par levier — round 17 : porté depuis l'ancien widget
    *  dashboard "chantier-health" (`StrategicDashboardView.tsx`, `projetBoardGroups`), même calcul
@@ -273,29 +305,128 @@ export function StrategicAxesView() {
           <div className="mt-1 text-[13px]">{t("strategicAxes.emptyHint")}</div>
         </div>
       ) : (
-        // Round 17 (permutation) : contenu fixe — remplace les anciens onglets "Feuille de route"/
-        // "Cartes". Même rendu que l'ex-widget dashboard "chantier-health" (voir doc-comment de
-        // `projetBoardGroups` ci-dessus).
-        <Card className="mb-0">
-          <CardHeader title={t("strategicAxes.projetAdvancementTitle")} />
-          <CardBody>
+        // Round 24 (Phase 4, Partie 1) : bascule d'onglets — remplace le contenu fixe unique du
+        // round 17. Même langage visuel que `ChantierDetailPanel.tsx` (voir son propre
+        // doc-comment, qui note l'avoir initialement copié d'une version antérieure de CETTE
+        // page — on le réadopte donc ici en toute cohérence).
+        <div>
+          <div className="mb-4 flex w-fit overflow-hidden rounded-md border border-border">
+            {(
+              [
+                { id: "advancement", label: t("strategicAxes.tabs.advancement", "Avancement") },
+                { id: "byAxis", label: t("strategicAxes.tabs.byAxis", "Vue par axe") },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-1.5 text-xs font-semibold ${
+                  activeTab === tab.id ? "bg-black text-white" : "bg-white text-secondary"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Onglet "Avancement" (round 24, Phase 4, Partie 2) — même vue E0→E4 par axe qu'avant
+              ce round, mais chaque axe gagne désormais son propre bloc délimité (accent de couleur
+              + fond teinté, même langage visuel que `ProgramRoadmap.tsx`) et une section
+              "Chantiers" dédiée qui remplace l'ancienne légende interne à `ProjetMilestoneBoard`
+              (retirée de ce composant). ─────────────────────────────────────────────────────── */}
+          <div className={activeTab === "advancement" ? undefined : "hidden"}>
             {projetBoardGroups.length === 0 ? (
-              emptyLine(t("strategicAxes.axisNoChantier"))
+              <div className="rounded-lg border border-border bg-white p-6">
+                {emptyLine(t("strategicAxes.axisNoChantier"))}
+              </div>
             ) : (
-              <div className="space-y-6">
-                {projetBoardGroups.map((group) => (
-                  <div key={group.key}>
-                    <ProjetMilestoneBoard
-                      groups={[group]}
-                      labels={projetMilestoneLabels}
-                      onProjetClick={openChantierPanel}
-                    />
-                  </div>
-                ))}
+              <div className="space-y-4">
+                {projetBoardGroups.map((group) => {
+                  const axisColor =
+                    group.color && hexToRgb(group.color)
+                      ? group.color
+                      : STRATEGIC_AXES_FALLBACK_COLOR;
+                  const axisNumber = axisNumberById.get(group.key);
+                  return (
+                    <div
+                      key={group.key}
+                      className="overflow-hidden rounded-lg border border-border"
+                      style={{
+                        borderLeft: `4px solid ${axisColor}`,
+                        backgroundColor: withAlpha(axisColor, 0.05),
+                      }}
+                    >
+                      <div className="border-b border-border-strong px-4 py-3">
+                        <h3 className="truncate text-[13px] font-bold text-primary">
+                          {t("strategicAxes.axisNumberPrefix", "Axe {n} : {name}")
+                            .replace("{n}", String(axisNumber ?? ""))
+                            .replace("{name}", group.label)}
+                        </h3>
+                      </div>
+                      <div className="px-4 py-3.5">
+                        {/* Section "Chantiers" dédiée (round 24, Phase 4, Partie 2) — boutons
+                            cliquables (`Button`, même composant que le reste de cette page),
+                            ouvrent le panneau chantier exactement comme l'ancienne légende texte
+                            (`onProjetClick`/`openChantierPanel` sans `focusActionId`). */}
+                        {group.chantiers && group.chantiers.length > 0 && (
+                          <div className="mb-3.5">
+                            <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wide text-tertiary">
+                              {t("strategicAxes.chantiersLabel", "Chantiers")}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {group.chantiers.map((chantier) => (
+                                <Button
+                                  key={chantier.id}
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openChantierPanel(chantier.id)}
+                                  title={chantier.name}
+                                >
+                                  <span
+                                    aria-hidden
+                                    className={`h-2 w-2 shrink-0 rounded-full ${colorForChantier(chantier.id)}`}
+                                  />
+                                  {chantier.name}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Libellé d'avancement relocalisé (round 24, Phase 4, Partie 2) — ex-titre
+                            de `CardHeader` de la section fixe, désormais un simple label discret
+                            juste au-dessus du board E0→E4, même poids visuel que "Chantiers"
+                            ci-dessus. */}
+                        <div className="mb-2 text-[10.5px] font-bold uppercase tracking-wide text-tertiary">
+                          {t("strategicAxes.projetAdvancementTitle")}
+                        </div>
+
+                        <ProjetMilestoneBoard
+                          groups={[group]}
+                          labels={projetMilestoneLabels}
+                          onProjetClick={openChantierPanel}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
-          </CardBody>
-        </Card>
+          </div>
+
+          {/* ── Onglet "Vue par axe" (round 24, Phase 4, Partie 3) — accordéon Axe → Chantier →
+              Projet, tout replié par défaut. ────────────────────────────────────────────────── */}
+          <div className={activeTab === "byAxis" ? undefined : "hidden"}>
+            <AxisChantierProjetAccordion
+              axes={data.axes}
+              chantiers={data.chantiers}
+              chantierActions={data.chantierActions}
+              onProjetClick={openChantierPanel}
+            />
+          </div>
+        </div>
       )}
 
       {/* ── Panneau chantier (round 6, point 0) — remplace l'ancienne route dédiée, monté dans un

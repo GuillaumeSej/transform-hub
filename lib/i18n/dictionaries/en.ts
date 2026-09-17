@@ -1177,6 +1177,10 @@ const en: Record<string, string> = {
   "strategicAxes.axisCreated": "Axis created",
   "strategicAxes.axisUpdated": "Axis updated",
   "strategicAxes.chantiersView": "Workstreams",
+  // Round 24 (Phase 4, Part 1) : labels of this page's two local tabs — see the doc-comment at the
+  // top of `StrategicAxesView.tsx`.
+  "strategicAxes.tabs.advancement": "Progress",
+  "strategicAxes.tabs.byAxis": "By axis",
   // Round 17 (swap) : title of this page's fixed "Lever progress status" section (E0→E4 lever
   // view + classic kanban for levers without a KPI) — migrated from the former
   // `strategicDashboard.widget.chantierHealth` key (that dashboard widget is gone, this content
@@ -1184,7 +1188,17 @@ const en: Record<string, string> = {
   // `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` in round 16 (see below), for the
   // symmetric reverse reason.
   "strategicAxes.projetAdvancementTitle": "Project progress status",
+  // Round 24 (Phase 4, Part 2/3) : numbered axis prefix ("Axis {n}: {name}") — 1-based position in
+  // `data.axes` (never re-sorted), shared by the "Progress" tab's axis block and the "By axis"
+  // accordion's axis header (`AxisChantierProjetAccordion.tsx`).
+  "strategicAxes.axisNumberPrefix": "Axis {n}: {name}",
+  // Label of the dedicated "Chantiers" section of the "Progress" tab (round 24, Phase 4, Part 2) —
+  // replaces the old color legend that lived inside `ProjetMilestoneBoard.tsx`, now removed.
+  "strategicAxes.chantiersLabel": "Workstreams",
   "strategicAxes.axisNoChantier": "No workstream",
+  // Placeholder of the level-3 (projects) row of the "By axis" accordion (round 24, Phase 4, Part
+  // 3) when an expanded workstream has no project yet.
+  "strategicAxes.chantierNoProjet": "No project",
   "strategicAxes.chantierAlerted": "Dependency alert",
   "strategicAxes.kanbanEmptyColumn": "No axis",
   // Budget breakdown donut (round 12) — roadmap's (`ProgramRoadmap`, round 17: now mounted on the
