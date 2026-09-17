@@ -3,7 +3,9 @@ import { generateAlerts } from "@/lib/alertEngine";
 import type { BeTrackData, Lever, LeverAction, LeverStatus } from "@/types";
 
 /** Action en retard : statut non-"done" avec une date de fin passée (voir engine.isActionLate) —
- *  seul mécanisme de retard action → levier depuis le passage au retard piloté par les actions. */
+ *  seul mécanisme de retard action → levier depuis le passage au retard piloté par les actions.
+ *  Porte un impact "saving" de 1 (€M) : l'alerte de retard est désormais basée sur le montant
+ *  RÉEL des impacts "saving" des actions en retard, pas sur netSavings du levier × un ratio. */
 const lateAction = (id = "a1"): LeverAction => ({
   id,
   name: `Action ${id}`,
@@ -11,6 +13,7 @@ const lateAction = (id = "a1"): LeverAction => ({
   end: "2026-01-15", // largement passé par rapport à "aujourd'hui" en test
   cost: 0,
   status: "todo",
+  impacts: [{ id: `${id}-imp`, label: "Savings", type: "saving", nature: "opex_rec", amount: 1 }],
 });
 
 const onTimeAction = (id = "a1"): LeverAction => ({
@@ -195,40 +198,38 @@ describe("alertEngine — generateAlerts", () => {
     expect(savAlerts[0].type).toBe("amber");
   });
 
-  it("generates green alert for recently delivered lever (M5)", () => {
-    const recent = new Date();
-    recent.setDate(recent.getDate() - 2); // 2 days ago
+  it("generates recurring OPEX overrun alert when reforecast opexRec exceeds plan (any amount)", () => {
+    const plan = { grossSavings: 10, netSavings: 8, opexOneOff: 1, opexRec: 0.5, capex: 2 };
     const data = makeData({
       levers: [
         {
           ...baseLever,
-          status: "delivered" as LeverStatus,
-          progress: 100,
-          lastUpdate: recent.toISOString().slice(0, 10),
+          lockedPlan: plan,
+          reforecast: { ...plan, opexRec: 0.51 }, // +0.01M = dès le 1er €
         },
       ],
     });
-    const greenAlerts = generateAlerts(data).filter((a) => a.id.startsWith("AUTO-M5-"));
-    expect(greenAlerts).toHaveLength(1);
-    expect(greenAlerts[0].type).toBe("green");
-    expect(greenAlerts[0].impactEur).toBeGreaterThan(0);
+    const opexAlerts = generateAlerts(data).filter((a) => a.id.startsWith("AUTO-OPEXREC-"));
+    expect(opexAlerts).toHaveLength(1);
+    expect(opexAlerts[0].type).toBe("red");
+    expect(opexAlerts[0].impactEur!).toBeLessThan(0);
   });
 
-  it("does NOT generate green alert for lever delivered > 7 days ago", () => {
-    const old = new Date();
-    old.setDate(old.getDate() - 10);
+  it("does NOT generate a recurring OPEX overrun alert for a strategic program", () => {
+    const plan = { grossSavings: 10, netSavings: 8, opexOneOff: 1, opexRec: 0.5, capex: 2 };
     const data = makeData({
       levers: [
         {
           ...baseLever,
-          status: "delivered" as LeverStatus,
-          progress: 100,
-          lastUpdate: old.toISOString().slice(0, 10),
+          lockedPlan: plan,
+          reforecast: { ...plan, opexRec: 0.51 },
         },
       ],
     });
-    const greenAlerts = generateAlerts(data).filter((a) => a.id.startsWith("AUTO-M5-"));
-    expect(greenAlerts).toHaveLength(0);
+    const opexAlerts = generateAlerts(data, "strategic").filter((a) =>
+      a.id.startsWith("AUTO-OPEXREC-")
+    );
+    expect(opexAlerts).toHaveLength(0);
   });
 
   it("keeps auto alerts by default when a manual alert uses the same scope", () => {

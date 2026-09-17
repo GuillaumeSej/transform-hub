@@ -1,5 +1,5 @@
-import type { Alert, BeTrackData, Lever, ProgramType } from "@/types";
-import { realizedSavings, underperformers, dependencyAlerts } from "@/lib/engine";
+import type { Alert, BeTrackData, ProgramType } from "@/types";
+import { underperformers, dependencyAlerts } from "@/lib/engine";
 
 /**
  * Générateur d'alertes automatiques — fonction pure qui analyse les données du programme
@@ -17,13 +17,6 @@ const SEVERITY_ORDER: Record<string, number> = { red: 0, amber: 1, green: 2, blu
 /** Coûts d'implémentation (CAPEX + OPEX one-off), hors OPEX récurrent. */
 function implCosts(s: { capex: number; opexOneOff: number }): number {
   return s.capex + s.opexOneOff;
-}
-
-/** Vérifie si la dernière mise à jour d'un levier date de moins de N jours. */
-function isRecentUpdate(lever: Lever, withinDays: number): boolean {
-  if (!lever.lastUpdate) return false;
-  const diff = Date.now() - new Date(lever.lastUpdate).getTime();
-  return diff >= 0 && diff < withinDays * 24 * 60 * 60 * 1000;
 }
 
 /** Formatte un montant en €K ou €M lisible. */
@@ -58,7 +51,17 @@ export function generateAlerts(
   for (const u of underperf) {
     const totalActions = u.actions?.length ?? 0;
     const lateRatio = totalActions > 0 ? u.lateActionsCount / totalActions : 0;
-    const impact = -(u.netSavings * lateRatio);
+    // Impact = montant RÉEL des actions en retard (somme des ActionImpact.amount de type "saving"
+    // des actions en retard), pas netSavings du levier × ratio d'actions en retard — c'est le gain
+    // potentiellement perdu si ces actions en retard ne se réalisent pas, pas une estimation
+    // proportionnelle déconnectée des impacts réellement saisis.
+    const lateSavingsImpact = u.lateActions.reduce(
+      (sum, action) =>
+        sum +
+        (action.impacts ?? []).filter((i) => i.type === "saving").reduce((s, i) => s + i.amount, 0),
+      0
+    );
+    const impact = -lateSavingsImpact;
     auto.push({
       id: `AUTO-DELAY-${u.id}`,
       type: lateRatio > 0.5 ? "red" : "amber",
@@ -119,6 +122,28 @@ export function generateAlerts(
     }
   }
 
+  // ── 3bis. Dépassement OPEX récurrent (dès le 1er €) — Plan Performance uniquement ─
+  for (const l of financialAlertsEnabled ? active : []) {
+    if (!l.reforecast || !l.lockedPlan) continue;
+    if (l.reforecast.opexRec > l.lockedPlan.opexRec) {
+      const delta = l.reforecast.opexRec - l.lockedPlan.opexRec;
+      auto.push({
+        id: `AUTO-OPEXREC-${l.id}`,
+        type: "red",
+        ts: l.lastUpdate,
+        scope: l.id,
+        title: `Dépassement OPEX récurrent : ${l.name}`,
+        desc: `Reforecast ${fmtImpact(l.reforecast.opexRec)} vs plan ${fmtImpact(l.lockedPlan.opexRec)} (+${fmtImpact(delta)}).`,
+        actorRole: "finance",
+        impactEur: Math.round(-delta * 1000000),
+        owner: l.owner,
+        companyId: l.companyId,
+        source: "auto",
+        resolved: false,
+      });
+    }
+  }
+
   // ── 4. Savings réduits (dès le 1er €) — Plan Performance uniquement ─────────
   for (const l of financialAlertsEnabled ? active : []) {
     if (!l.reforecast || !l.lockedPlan) continue;
@@ -133,43 +158,6 @@ export function generateAlerts(
         desc: `Reforecast ${fmtImpact(l.reforecast.netSavings)} vs plan ${fmtImpact(l.lockedPlan.netSavings)} (−${fmtImpact(delta)}).`,
         actorRole: "finance",
         impactEur: Math.round(-delta * 1000000),
-        owner: l.owner,
-        companyId: l.companyId,
-        source: "auto",
-        resolved: false,
-      });
-    }
-  }
-
-  // ── 5. Levier passé à Exécuté (M4) ou Réalisé (M5) récemment (< 7j) ──────
-  for (const l of data.levers) {
-    if (l.status === "in_progress" && isRecentUpdate(l, 7)) {
-      auto.push({
-        id: `AUTO-M4-${l.id}`,
-        type: "green",
-        ts: l.lastUpdate,
-        scope: l.id,
-        title: `Levier passé en exécution : ${l.name}`,
-        desc: `Le levier est désormais en cours d'exécution (M4).`,
-        actorRole: "lever",
-        impactEur: 0,
-        owner: l.owner,
-        companyId: l.companyId,
-        source: "auto",
-        resolved: false,
-      });
-    }
-    if (l.status === "delivered" && isRecentUpdate(l, 7)) {
-      const realized = realizedSavings(l);
-      auto.push({
-        id: `AUTO-M5-${l.id}`,
-        type: "green",
-        ts: l.lastUpdate,
-        scope: l.id,
-        title: `Levier réalisé : ${l.name}`,
-        desc: `Valeur réalisée : ${fmtImpact(realized)}.`,
-        actorRole: "lever",
-        impactEur: Math.round(realized * 1000000),
         owner: l.owner,
         companyId: l.companyId,
         source: "auto",
