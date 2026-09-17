@@ -12,7 +12,7 @@ import {
   isLeverSponsoredBy,
   isLeverCtoOf,
   requestLeverApproval,
-  approveLeverApprovalStep,
+  approveLeverGate,
   rejectLeverApproval,
 } from "@/lib/leversLogic";
 import type { Lever, LeverStatus } from "@/types";
@@ -301,39 +301,39 @@ describe("leversLogic — createLever", () => {
 });
 
 describe("leversLogic — updateLever (status change & plan lock triggering)", () => {
-  it("updates status from idea to in_progress and triggers plan lock", () => {
-    const levers = [makeLever("idea")];
-    const result = updateLever(levers, "L001", { status: "in_progress" }, "user");
-    expect(result.lever.status).toBe("in_progress");
-    expect(result.lever.reforecast).toBeDefined();
+  it("updates status from in_progress to delivered freely (M4→M5 stays ungated)", () => {
+    const levers = [makeLever("in_progress")];
+    const result = updateLever(levers, "L001", { status: "delivered" }, "user");
+    expect(result.lever.status).toBe("delivered");
   });
 
-  it("triggers lockedPlan when status reaches qualified via the approval cascade bypass", () => {
-    // Round "cascade de validation" : le seul chemin légitime vers status="qualified" est
-    // approveLeverApprovalStep (dernière étape CTO), qui patche `approval` ET `status` dans le
-    // même appel — voir le garde-fou documenté dans updateLever.
-    const levers = [makeLever("idea", { grossSavings: 20, netSavings: 15 })];
-    const result = updateLever(
-      levers,
-      "L001",
-      { status: "qualified", approval: undefined },
-      "user"
-    );
-    expect(result.lever.status).toBe("qualified");
-    expect(result.lever.lockedPlan).toBeDefined();
-    expect(result.lever.lockedPlan?.grossSavings).toBe(20);
-    expect(result.lever.lockedPlan?.netSavings).toBe(15);
-  });
+  it.each(["qualified", "validated", "in_progress"] as const)(
+    "triggers lockedPlan/reforecast when status reaches '%s' via the approval bypass",
+    (targetStatus) => {
+      const levers = [makeLever("idea", { grossSavings: 20, netSavings: 15 })];
+      const result = updateLever(
+        levers,
+        "L001",
+        { status: targetStatus, approval: undefined },
+        "user"
+      );
+      expect(result.lever.status).toBe(targetStatus);
+      expect(result.lever.lockedPlan).toBeDefined();
+    }
+  );
 
-  it("silently ignores a direct status:'qualified' patch that bypasses the approval cascade", () => {
-    const levers = [makeLever("idea", { grossSavings: 20, netSavings: 15, progress: 10 })];
-    const result = updateLever(levers, "L001", { status: "qualified", progress: 40 }, "user");
-    // Le champ status est ignoré silencieusement...
-    expect(result.lever.status).toBe("idea");
-    expect(result.lever.lockedPlan).toBeUndefined();
-    // ...mais les autres champs légitimes du même patch s'appliquent quand même.
-    expect(result.lever.progress).toBe(40);
-  });
+  it.each(["qualified", "validated", "in_progress"] as const)(
+    "silently ignores a direct status:'%s' patch that bypasses the approval request",
+    (targetStatus) => {
+      const levers = [makeLever("idea", { grossSavings: 20, netSavings: 15, progress: 10 })];
+      const result = updateLever(levers, "L001", { status: targetStatus, progress: 40 }, "user");
+      // Le champ status est ignoré silencieusement...
+      expect(result.lever.status).toBe("idea");
+      expect(result.lever.lockedPlan).toBeUndefined();
+      // ...mais les autres champs légitimes du même patch s'appliquent quand même.
+      expect(result.lever.progress).toBe(40);
+    }
+  );
 
   it("protects financial fields once lockedPlan exists", () => {
     const levers = [
@@ -647,7 +647,7 @@ describe("isLeverCtoOf", () => {
   });
 });
 
-describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / rejectLeverApproval)", () => {
+describe("validation gates (requestLeverApproval / approveLeverGate / rejectLeverApproval)", () => {
   const owner = {
     name: "Test Lever Owner",
     username: "test.lever.owner",
@@ -676,8 +676,8 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
   };
   const workstreams = [{ id: "WS-01", sponsorUsername: "test.sponsor" }];
 
-  function qualifiedLever(overrides?: Partial<Lever>): Lever {
-    return makeLever("idea", {
+  function leverAt(status: LeverStatus, overrides?: Partial<Lever>): Lever {
+    return makeLever(status, {
       ownerUsername: "test.lever.owner",
       ws: "WS-01",
       ...overrides,
@@ -685,117 +685,115 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
   }
 
   describe("requestLeverApproval", () => {
-    it("lets the lever owner submit a request, moving pendingStep to sponsor", () => {
-      const levers = [qualifiedLever()];
-      const result = requestLeverApproval(levers, "L001", owner);
-      expect(result.lever.approval?.pendingStep).toBe("sponsor");
-      expect(result.lever.approval?.requestedBy).toBe("test.lever.owner");
-      expect(result.lever.approval?.ownerApprovedAt).toBeDefined();
-      expect(result.auditEntries[0].action).toBe("approval_requested");
-    });
+    it.each([
+      ["idea", "qualified"],
+      ["qualified", "validated"],
+      ["validated", "in_progress"],
+    ] as const)(
+      "lets the lever owner submit a request from '%s', targeting '%s'",
+      (fromStatus, gate) => {
+        const levers = [leverAt(fromStatus)];
+        const result = requestLeverApproval(levers, "L001", owner);
+        expect(result.lever.approval?.targetStatus).toBe(gate);
+        expect(result.lever.approval?.requestedBy).toBe("test.lever.owner");
+        expect(result.auditEntries[0].action).toBe("approval_requested");
+      }
+    );
 
     it("lets an admin submit a request on behalf of the owner", () => {
-      const levers = [qualifiedLever()];
+      const levers = [leverAt("idea")];
       const result = requestLeverApproval(levers, "L001", admin);
-      expect(result.lever.approval?.pendingStep).toBe("sponsor");
+      expect(result.lever.approval?.targetStatus).toBe("qualified");
     });
 
     it("throws when the caller is neither the owner nor an admin", () => {
-      const levers = [qualifiedLever()];
+      const levers = [leverAt("idea")];
       expect(() => requestLeverApproval(levers, "L001", stranger)).toThrow();
     });
 
-    it("throws when the lever is not at status 'idea'", () => {
-      const levers = [makeLever("qualified", { ownerUsername: "test.lever.owner" })];
-      expect(() => requestLeverApproval(levers, "L001", owner)).toThrow();
-    });
+    it.each(["in_progress", "delivered", "cancelled"] as const)(
+      "throws when the lever has no gate ahead (status '%s')",
+      (status) => {
+        const levers = [leverAt(status)];
+        expect(() => requestLeverApproval(levers, "L001", owner)).toThrow();
+      }
+    );
   });
 
-  describe("approveLeverApprovalStep", () => {
-    function leverPendingSponsor(overrides?: Partial<Lever>): Lever {
-      return qualifiedLever({
+  describe("approveLeverGate", () => {
+    function leverPending(targetStatus: "qualified" | "validated" | "in_progress"): Lever {
+      const fromStatus =
+        targetStatus === "qualified"
+          ? "idea"
+          : targetStatus === "validated"
+            ? "qualified"
+            : "validated";
+      return leverAt(fromStatus, {
         approval: {
-          pendingStep: "sponsor",
-          ownerApprovedAt: "2026-01-01T00:00:00.000Z",
+          targetStatus,
           requestedBy: "test.lever.owner",
           requestedAt: "2026-01-01T00:00:00.000Z",
         },
-        ...overrides,
+        grossSavings: 20,
+        netSavings: 15,
       });
     }
 
-    it("moves pendingStep from sponsor to cto when the workstream sponsor approves", () => {
-      const levers = [leverPendingSponsor()];
-      const result = approveLeverApprovalStep(levers, "L001", "sponsor", sponsor, workstreams);
-      expect(result.lever.approval?.pendingStep).toBe("cto");
-      expect(result.lever.approval?.sponsorApprovedAt).toBeDefined();
-      expect(result.lever.status).toBe("idea");
-    });
+    it.each(["qualified", "validated", "in_progress"] as const)(
+      "closes the gate '%s' directly when the workstream sponsor approves (no intermediate step)",
+      (gate) => {
+        const levers = [leverPending(gate)];
+        const result = approveLeverGate(levers, "L001", sponsor, workstreams);
+        expect(result.lever.approval).toBeUndefined();
+        expect(result.lever.status).toBe(gate);
+        expect(result.auditEntries.some((e) => e.action === "approval_approved")).toBe(true);
+      }
+    );
 
-    it("throws when a non-sponsor tries to approve the sponsor step", () => {
-      const levers = [leverPendingSponsor()];
-      expect(() =>
-        approveLeverApprovalStep(levers, "L001", "sponsor", stranger, workstreams)
-      ).toThrow();
-    });
+    it.each(["qualified", "validated", "in_progress"] as const)(
+      "closes the gate '%s' directly when the cto approves (no intermediate step)",
+      (gate) => {
+        const levers = [leverPending(gate)];
+        const result = approveLeverGate(levers, "L001", cto, workstreams);
+        expect(result.lever.approval).toBeUndefined();
+        expect(result.lever.status).toBe(gate);
+      }
+    );
 
-    it("throws when approving the wrong step (cto tries to approve while pendingStep is sponsor)", () => {
-      const levers = [leverPendingSponsor()];
-      expect(() => approveLeverApprovalStep(levers, "L001", "cto", cto, workstreams)).toThrow();
-    });
-
-    it("completes the cascade at the cto step: clears approval and sets status to qualified with lockedPlan", () => {
-      const levers = [
-        leverPendingSponsor({
-          approval: {
-            pendingStep: "cto",
-            ownerApprovedAt: "2026-01-01T00:00:00.000Z",
-            sponsorApprovedAt: "2026-01-02T00:00:00.000Z",
-            requestedBy: "test.lever.owner",
-            requestedAt: "2026-01-01T00:00:00.000Z",
-          },
-          grossSavings: 20,
-          netSavings: 15,
-        }),
-      ];
-      const result = approveLeverApprovalStep(levers, "L001", "cto", cto, workstreams);
-      expect(result.lever.approval).toBeUndefined();
-      expect(result.lever.status).toBe("qualified");
+    it("triggers lockedPlan when the qualified gate closes", () => {
+      const result = approveLeverGate([leverPending("qualified")], "L001", cto, workstreams);
       expect(result.lever.lockedPlan?.netSavings).toBe(15);
-      expect(result.auditEntries.some((e) => e.action === "approval_approved")).toBe(true);
     });
 
-    it("throws when a non-cto tries to approve the cto step", () => {
-      const levers = [
-        leverPendingSponsor({
-          approval: {
-            pendingStep: "cto",
-            ownerApprovedAt: "2026-01-01T00:00:00.000Z",
-            sponsorApprovedAt: "2026-01-02T00:00:00.000Z",
-            requestedBy: "test.lever.owner",
-            requestedAt: "2026-01-01T00:00:00.000Z",
-          },
-        }),
-      ];
-      expect(() =>
-        approveLeverApprovalStep(levers, "L001", "cto", stranger, workstreams)
-      ).toThrow();
+    it("throws when neither sponsor nor cto (nor admin) tries to approve", () => {
+      const levers = [leverPending("qualified")];
+      expect(() => approveLeverGate(levers, "L001", stranger, workstreams)).toThrow();
+    });
+
+    it("lets an admin approve any gate", () => {
+      const levers = [leverPending("qualified")];
+      const result = approveLeverGate(levers, "L001", admin, workstreams);
+      expect(result.lever.status).toBe("qualified");
+    });
+
+    it("throws when there is no approval request in progress", () => {
+      const levers = [leverAt("idea")];
+      expect(() => approveLeverGate(levers, "L001", sponsor, workstreams)).toThrow();
     });
   });
 
   describe("rejectLeverApproval", () => {
     function leverPendingSponsor(): Lever {
-      return qualifiedLever({
+      return leverAt("idea", {
         approval: {
-          pendingStep: "sponsor",
-          ownerApprovedAt: "2026-01-01T00:00:00.000Z",
+          targetStatus: "qualified",
           requestedBy: "test.lever.owner",
           requestedAt: "2026-01-01T00:00:00.000Z",
         },
       });
     }
 
-    it("lets the owner cancel the cascade, clearing approval", () => {
+    it("lets the owner cancel the request, clearing approval", () => {
       const levers = [leverPendingSponsor()];
       const result = rejectLeverApproval(levers, "L001", owner, "changed my mind");
       expect(result.lever.approval).toBeUndefined();
@@ -804,13 +802,19 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
       expect(result.auditEntries[0].new).toBe("changed my mind");
     });
 
-    it("lets the pending sponsor cancel the cascade", () => {
+    it("lets the workstream sponsor cancel the request", () => {
       const levers = [leverPendingSponsor()];
       const result = rejectLeverApproval(levers, "L001", sponsor, undefined, workstreams);
       expect(result.lever.approval).toBeUndefined();
     });
 
-    it("lets an admin cancel the cascade", () => {
+    it("lets the cto cancel the request", () => {
+      const levers = [leverPendingSponsor()];
+      const result = rejectLeverApproval(levers, "L001", cto, undefined, workstreams);
+      expect(result.lever.approval).toBeUndefined();
+    });
+
+    it("lets an admin cancel the request", () => {
       const levers = [leverPendingSponsor()];
       const result = rejectLeverApproval(levers, "L001", admin);
       expect(result.lever.approval).toBeUndefined();
@@ -821,8 +825,8 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
       expect(() => rejectLeverApproval(levers, "L001", stranger)).toThrow();
     });
 
-    it("throws when there is no cascade in progress", () => {
-      const levers = [qualifiedLever()];
+    it("throws when there is no request in progress", () => {
+      const levers = [leverAt("idea")];
       expect(() => rejectLeverApproval(levers, "L001", owner)).toThrow();
     });
   });

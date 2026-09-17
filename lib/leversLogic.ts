@@ -1,7 +1,7 @@
 import * as engine from "@/lib/engine";
 import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
 import type { CascadeShift } from "@/lib/engine";
-import { STATUS_ORDER } from "@/lib/status-config";
+import { GATE_BY_STATUS, STATUS_ORDER } from "@/lib/status-config";
 import type {
   AuditEntry,
   AuthUser,
@@ -10,7 +10,7 @@ import type {
   Lever,
   LeverAction,
   LeverApproval,
-  LeverApprovalStep,
+  LeverApprovalGate,
   Role,
   Workstream,
 } from "@/types";
@@ -109,7 +109,7 @@ export function isLeverSponsoredBy(
 }
 
 /** Même principe qu'`isLeverOwnedBy`/`isLeverSponsoredBy`, pour le rôle "cto" — utilisé par la
- *  dernière étape de la cascade de validation (`approveLeverApprovalStep`, voir plus bas). Un
+ *  validation d'une porte du cycle de vie (`approveLeverGate`, voir plus bas). Un
  *  profil "cto" sans `programId` (CTO global de l'entreprise, pas rattaché à un programme précis)
  *  habilite sur N'IMPORTE QUEL levier de l'entreprise ; un profil "cto" avec `programId` n'habilite
  *  que sur les leviers de CE programme (`lever.programId`). */
@@ -319,21 +319,26 @@ export function updateLever(
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
   const before = levers[idx];
 
-  // Cascade de validation (owner → sponsor → cto, voir requestLeverApproval/
-  // approveLeverApprovalStep/rejectLeverApproval plus bas) : le SEUL chemin légitime vers
-  // status="qualified" (UI "Validé", M2 — le vrai moment où le PROJET est validé et son gain
-  // figé, voir applyPlanLock) est la dernière étape de la cascade (CTO), qui appelle CETTE
-  // fonction en interne avec un patch qui touche AUSSI `approval` (pour le vider, cascade
-  // terminée) — c'est ce qui distingue ce passage légitime d'un patch direct
-  // `{ status: "qualified" }` venu d'ailleurs (ex. un bouton de stepper qui court-circuiterait la
-  // cascade, un import). Dans ce dernier cas, on ignore SILENCIEUSEMENT le seul champ `status` du
-  // patch plutôt que de lever une exception, qui casserait d'autres usages légitimes du même
-  // appel (ex. modifier `progress` en même temps). Les autres transitions de statut
-  // (idea↔validated, in_progress, delivered, cancelled) ne sont pas concernées par cette garde et
+  // Portes de validation (porteur → sponsor OU cto, voir requestLeverApproval/approveLeverGate/
+  // rejectLeverApproval plus bas) : le SEUL chemin légitime vers l'un des 3 statuts protégés
+  // ("qualified" M2, "validated" M3, "in_progress" M4 — voir `LeverApprovalGate`) est
+  // `approveLeverGate`, qui appelle CETTE fonction en interne avec un patch qui touche AUSSI
+  // `approval` (pour le vider, porte franchie) — c'est ce qui distingue ce passage légitime d'un
+  // patch direct `{ status: "qualified" }` venu d'ailleurs (ex. un bouton de stepper qui
+  // court-circuiterait la validation, un import). Dans ce dernier cas, on ignore SILENCIEUSEMENT
+  // le seul champ `status` du patch plutôt que de lever une exception, qui casserait d'autres
+  // usages légitimes du même appel (ex. modifier `progress` en même temps). Les autres
+  // transitions de statut (idea, delivered, cancelled) ne sont pas concernées par cette garde et
   // restent librement modifiables par cette voie, comme avant.
+  const GATED_STATUSES: readonly LeverApprovalGate[] = ["qualified", "validated", "in_progress"];
   const bypassesApprovalCascade = "approval" in patch;
   let guardedPatch: Partial<Lever> = patch;
-  if (patch.status === "qualified" && before.status !== "qualified" && !bypassesApprovalCascade) {
+  if (
+    patch.status &&
+    patch.status !== before.status &&
+    (GATED_STATUSES as readonly string[]).includes(patch.status) &&
+    !bypassesApprovalCascade
+  ) {
     guardedPatch = { ...patch };
     delete guardedPatch.status;
   }
@@ -397,20 +402,22 @@ export function upsertLeverByCode(
 }
 
 /**
- * Cascade de validation du passage à l'étape "qualified" (M2, UI "Validé") : porteur du levier →
- * sponsor du workstream → CTO, dans cet ordre — voir `LeverApproval`/`LeverApprovalStep`
- * (types/index.ts) et le garde-fou correspondant dans `updateLever` ci-dessus. C'est le moment où
- * le PROJET lui-même est validé (gain estimé figé en "planifié original", voir `applyPlanLock`) —
- * distinct de "validated" (M3, UI "Planifié"), qui concerne la validation du plan d'action une
- * fois les actions posées, non gérée par cette cascade. Design volontairement simple (pas de
- * configuration par entreprise) : seul le passage à "qualified" est concerné, les autres
- * transitions de statut restent librement modifiables via `updateLever` comme avant.
+ * Validation du passage de l'une des 3 portes du cycle de vie — "qualified" (M2, UI "Validé"),
+ * "validated" (M3, UI "Planifié") ou "in_progress" (M4, UI "Exécuté") — voir `LeverApproval`/
+ * `LeverApprovalGate` (types/index.ts) et le garde-fou correspondant dans `updateLever`
+ * ci-dessus. M4→M5 ("delivered") reste libre, atteint automatiquement à 100% du plan d'action.
+ * Design volontairement simple (pas de configuration par entreprise) : seules ces 3 portes sont
+ * concernées, les autres transitions de statut restent librement modifiables via `updateLever`
+ * comme avant.
  *
- * `requestLeverApproval` : initie la cascade — appelable uniquement par le porteur du levier
- * (`isLeverOwnedBy`) ou un admin, sur un levier au statut "idea" (l'étape juste avant
- * "qualified"). Le porteur, en demandant la validation, approuve implicitement sa propre étape
- * ("owner") — pas d'étape "owner" séparée à cliquer ensuite, `pendingStep` passe directement à
- * "sponsor".
+ * Modèle à approbateur UNIQUE (pas de cascade séquentielle) : le porteur du levier soumet la
+ * demande, puis SOIT le sponsor du workstream SOIT le CTO l'approuve — le premier des deux à
+ * agir ferme la porte, sans attendre l'autre.
+ *
+ * `requestLeverApproval` : appelable uniquement par le porteur du levier (`isLeverOwnedBy`) ou un
+ * admin, depuis le statut juste avant la porte concernée (`idea` → porte "qualified", `qualified`
+ * → porte "validated", `validated` → porte "in_progress" — voir `GATE_BY_STATUS`,
+ * lib/status-config.ts).
  */
 export function requestLeverApproval(
   levers: Lever[],
@@ -425,15 +432,15 @@ export function requestLeverApproval(
       `Seul le porteur du levier "${id}" (ou un admin) peut soumettre une demande de validation`
     );
   }
-  if (before.status !== "idea") {
+  const targetStatus = GATE_BY_STATUS[before.status];
+  if (!targetStatus) {
     throw new Error(
-      `Le levier "${id}" doit être au statut "idea" pour soumettre une demande de validation`
+      `Le levier "${id}" ne peut pas être soumis à validation depuis le statut "${before.status}"`
     );
   }
   const now = new Date().toISOString();
   const approval: LeverApproval = {
-    pendingStep: "sponsor",
-    ownerApprovedAt: now,
+    targetStatus,
     requestedBy: user.username,
     requestedAt: now,
   };
@@ -450,76 +457,54 @@ export function requestLeverApproval(
         entity: id,
         field: "approval",
         old: before.status,
-        new: "pending:sponsor",
+        new: `pending:${targetStatus}`,
       }),
     ],
   };
 }
 
 /**
- * Franchit une étape de la cascade ("sponsor" ou "cto") — vérifie que `lever.approval.pendingStep`
- * correspond bien à `step` et que l'appelant y est habilité (sponsor du workstream du levier ou
- * admin pour "sponsor" ; `isLeverCtoOf` ou admin pour "cto"). À l'étape "cto" (dernière), la
- * cascade est terminée : `approval` est vidé et `status` passe à "qualified" en réutilisant
- * `updateLever` (pour ne pas dupliquer `applyPlanLock`/l'audit "updated" sur d'éventuels autres
- * champs déjà en attente) — le patch inclut explicitement `approval: undefined`, ce qui est
- * précisément ce que le garde-fou de `updateLever` accepte comme passage légitime.
+ * Approuve la demande de validation en cours — vérifie que l'appelant est habilité (sponsor du
+ * workstream du levier, OU `isLeverCtoOf`, OU admin — un seul des deux rôles métier suffit).
+ * Ferme directement la porte : `approval` est vidé et `status` passe à `approval.targetStatus`
+ * en réutilisant `updateLever` (pour ne pas dupliquer `applyPlanLock`/l'audit "updated" sur
+ * d'éventuels autres champs déjà en attente) — le patch inclut explicitement `approval:
+ * undefined`, ce qui est précisément ce que le garde-fou de `updateLever` accepte comme passage
+ * légitime.
  */
-export function approveLeverApprovalStep(
+export function approveLeverGate(
   levers: Lever[],
   id: string,
-  step: Extract<LeverApprovalStep, "sponsor" | "cto">,
   user: Pick<AuthUser, "name" | "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
   workstreams: Pick<Workstream, "id" | "sponsorUsername">[]
 ): LeverMutationResult {
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
   const before = levers[idx];
-  if (before.approval?.pendingStep !== step) {
-    throw new Error(`Le levier "${id}" n'est pas en attente de validation à l'étape "${step}"`);
+  if (!before.approval) {
+    throw new Error(`Le levier "${id}" n'a pas de demande de validation en cours`);
   }
   const workstreamSponsorUsername = workstreams.find((w) => w.id === before.ws)?.sponsorUsername;
-  const authorized =
-    isAnyAdmin(user) ||
-    (step === "sponsor" && isLeverSponsoredBy(before, workstreamSponsorUsername, user)) ||
-    (step === "cto" && isLeverCtoOf(before, user));
-  if (!authorized) {
-    throw new Error(`Vous n'êtes pas habilité à approuver l'étape "${step}" de ce levier`);
+  const isSponsor = isLeverSponsoredBy(before, workstreamSponsorUsername, user);
+  const isCto = isLeverCtoOf(before, user);
+  if (!isAnyAdmin(user) && !isSponsor && !isCto) {
+    throw new Error(`Vous n'êtes pas habilité à approuver la demande de validation de ce levier`);
   }
 
   const now = new Date().toISOString();
-  if (step === "sponsor") {
-    const after: Lever = {
-      ...before,
-      approval: { ...before.approval, pendingStep: "cto", sponsorApprovedAt: now },
-    };
-    const nextLevers = [...levers];
-    nextLevers[idx] = after;
-    return {
-      levers: nextLevers,
-      lever: after,
-      auditEntries: [
-        makeAuditEntry({
-          user: user.name,
-          action: "approval_approved",
-          entity: id,
-          field: "approval",
-          old: "pending:sponsor",
-          new: "pending:cto",
-        }),
-      ],
-    };
-  }
-
-  // step === "cto" : cascade terminée — pose ctoApprovedAt (informatif, l'objet est vidé juste
-  // après) puis applique le vidage de `approval` et le passage à "qualified" via `updateLever`.
-  const ctoApprovedApproval: LeverApproval = { ...before.approval, ctoApprovedAt: now };
-  const leversWithCtoStamp = [...levers];
-  leversWithCtoStamp[idx] = { ...before, approval: ctoApprovedApproval };
+  const targetStatus = before.approval.targetStatus;
+  const approvedApproval: LeverApproval = {
+    ...before.approval,
+    approvedBy: user.username,
+    approvedByRole: isSponsor ? "sponsor" : isCto ? "cto" : undefined,
+    approvedAt: now,
+  };
+  const leversWithStamp = [...levers];
+  leversWithStamp[idx] = { ...before, approval: approvedApproval };
   const result = updateLever(
-    leversWithCtoStamp,
+    leversWithStamp,
     id,
-    { status: "qualified", approval: undefined },
+    { status: targetStatus, approval: undefined },
     user.name
   );
   return {
@@ -531,18 +516,17 @@ export function approveLeverApprovalStep(
         action: "approval_approved",
         entity: id,
         field: "approval",
-        old: "pending:cto",
-        new: "qualified",
+        old: `pending:${targetStatus}`,
+        new: targetStatus,
       }),
     ],
   };
 }
 
 /**
- * Annule la cascade en cours — annulable par le porteur du levier, le sponsor OU le cto
- * actuellement en attente (`lever.approval.pendingStep`), ou un admin. Vide `lever.approval` :
- * retour à l'état "idea" normal, sans pénalité (une nouvelle demande peut être soumise plus
- * tard via `requestLeverApproval`).
+ * Annule la demande en cours — annulable par le porteur du levier, le sponsor du workstream, le
+ * CTO, ou un admin. Vide `lever.approval` : le levier reste à son statut de départ, sans
+ * pénalité (une nouvelle demande peut être soumise plus tard via `requestLeverApproval`).
  */
 export function rejectLeverApproval(
   levers: Lever[],
@@ -557,13 +541,13 @@ export function rejectLeverApproval(
   if (!before.approval) {
     throw new Error(`Le levier "${id}" n'a pas de demande de validation en cours`);
   }
-  const pendingStep = before.approval.pendingStep;
+  const targetStatus = before.approval.targetStatus;
   const workstreamSponsorUsername = workstreams.find((w) => w.id === before.ws)?.sponsorUsername;
   const authorized =
     isAnyAdmin(user) ||
     isLeverOwnedBy(before, user) ||
-    (pendingStep === "sponsor" && isLeverSponsoredBy(before, workstreamSponsorUsername, user)) ||
-    (pendingStep === "cto" && isLeverCtoOf(before, user));
+    isLeverSponsoredBy(before, workstreamSponsorUsername, user) ||
+    isLeverCtoOf(before, user);
   if (!authorized) {
     throw new Error(`Vous n'êtes pas habilité à rejeter la demande de validation de ce levier`);
   }
@@ -579,7 +563,7 @@ export function rejectLeverApproval(
         action: "approval_rejected",
         entity: id,
         field: "approval",
-        old: pendingStep,
+        old: `pending:${targetStatus}`,
         new: reason ?? "",
       }),
     ],

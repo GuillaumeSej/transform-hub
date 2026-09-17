@@ -12,6 +12,7 @@ import { getDisplayRoleDefinition } from "@/lib/nav-config";
 import { Avatar } from "@/components/shared/Avatar";
 import type { Alert, Company, Lever } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
+import { STATUS_SHORT_LABEL } from "@/lib/status-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
 
@@ -25,6 +26,7 @@ const CRUMBS: Record<string, string> = {
   "/hr": "nav.hrDashboard",
   "/hr/etp": "nav.hrEtp",
   "/operations": "nav.operationsModule",
+  "/validation": "nav.validation",
 };
 
 /** Fil d'ariane des routes PARTAGÉES entre les deux types de programme : `/levers` sert aussi le
@@ -231,10 +233,12 @@ export function Topbar({
                     </button>
                   ))
                 )}
-                {/* Section distincte "Validations en attente" — leviers dont la cascade de
-                    validation (owner -> sponsor -> cto) attend l'utilisateur courant, voir
+                {/* Section distincte "Validations en attente" — leviers dont la demande de
+                    validation (sponsor OU cto) attend l'utilisateur courant, voir
                     lib/hooks/useApprovalQueue.ts. Séparation visuelle claire (bordure + sous-titre)
-                    plutôt qu'un onglet : le dropdown n'a pas de structure à onglets existante. */}
+                    plutôt qu'un onglet : le dropdown n'a pas de structure à onglets existante.
+                    Liste courte (badge de notification) — la page /validation offre la vue
+                    complète avec actions inline. */}
                 {approvalQueue.length > 0 && (
                   <div className="border-t-2 border-border">
                     <div className="bg-neutral-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-tertiary">
@@ -258,9 +262,13 @@ export function Topbar({
                           {lever.name}
                         </span>
                         <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
-                          {lever.approval?.pendingStep === "cto"
-                            ? t("shared.topbar.approvalStepCto", "En attente · CTO")
-                            : t("shared.topbar.approvalStepSponsor", "En attente · Sponsor")}
+                          {t(
+                            "shared.topbar.approvalPending",
+                            "En attente · sponsor ou CTO · {stage}"
+                          ).replace(
+                            "{stage}",
+                            lever.approval ? STATUS_SHORT_LABEL[lever.approval.targetStatus] : ""
+                          )}
                         </span>
                       </button>
                     ))}

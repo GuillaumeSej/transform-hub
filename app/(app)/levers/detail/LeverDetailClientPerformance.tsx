@@ -201,18 +201,18 @@ export function LeverDetailClientPerformance() {
   }
 
   const ws = data.workstreams.find((w) => w.id === lever.ws);
-  // Round "cascade de validation" : l'utilisateur courant a-t-il le droit d'agir (approuver ou
-  // rejeter) sur l'étape actuellement en attente de la cascade ? Même résolution du sponsor du
-  // workstream que `canUserViewLever`/`isLeverSponsoredBy` ailleurs dans ce fichier.
+  // Round "portes de validation" : l'utilisateur courant a-t-il le droit d'agir (approuver ou
+  // rejeter) sur la demande en cours ? Sponsor du workstream OU cto, peu importe la porte
+  // concernée (approbateur unique, voir lib/leversLogic.ts::approveLeverGate). Même résolution
+  // du sponsor du workstream que `canUserViewLever`/`isLeverSponsoredBy` ailleurs dans ce fichier.
   const canActOnPendingApproval =
     !!lever.approval &&
     !!user &&
     (isAnyAdmin(user) ||
-      (lever.approval.pendingStep === "sponsor" &&
-        isLeverSponsoredBy(lever, ws?.sponsorUsername, user)) ||
-      (lever.approval.pendingStep === "cto" && isLeverCtoOf(lever, user)));
+      isLeverSponsoredBy(lever, ws?.sponsorUsername, user) ||
+      isLeverCtoOf(lever, user));
   // Idem pour le bouton "Soumettre pour validation" (voir requestLeverApproval) : seul le
-  // porteur du levier ou un admin peut initier la cascade.
+  // porteur du levier ou un admin peut initier une demande.
   const canSubmitApproval = !!user && (isAnyAdmin(user) || isLeverOwnedBy(lever, user));
   // Réalisé à date : aligné sur la courbe en J (somme bottom-up des actions "done" à leur
   // deliveredDate, voir `leverJCurve`) quand le levier a des actions chiffrées, plutôt que
@@ -244,7 +244,6 @@ export function LeverDetailClientPerformance() {
   const capexTotal = consolidatedKPIs?.capex ?? lever.capex;
   const opexOneOffTotal = consolidatedKPIs?.opexOneOff ?? lever.opexOneOff;
   const opexRecTotal = consolidatedKPIs?.opexRec ?? lever.opexRec;
-  const hasAnyActions = actions.length > 0;
   const actionScope = { leverId: lever.id };
   /** Round 25 (gate d'édition COMEX) : ouvre le formulaire d'action en mode édition — un utilisateur
    *  en lecture seule ne doit JAMAIS l'atteindre, y compris via un clic sur une carte Kanban ou une
@@ -326,10 +325,11 @@ export function LeverDetailClientPerformance() {
               const isCurrent = lever.status === s;
               const isPast = STATUS_ORDER[lever.status] > STATUS_ORDER[s];
               const isAuto = s === "delivered";
-              // Round "cascade de validation" : le passage à "qualified" (M2) ne se déclenche
-              // plus par un clic direct sur l'étape du stepper — il passe désormais par la
-              // cascade porteur → sponsor → CTO (voir le bandeau juste en dessous du stepper).
-              const isCascadeGated = s === "qualified";
+              // Round "portes de validation" : le passage à "qualified" (M2), "validated" (M3)
+              // ou "in_progress" (M4) ne se déclenche plus par un clic direct sur l'étape du
+              // stepper — il passe désormais par une demande de validation (porteur → sponsor OU
+              // CTO, voir le bandeau juste en dessous du stepper).
+              const isCascadeGated = s === "qualified" || s === "validated" || s === "in_progress";
               const isBlocked = isAuto || isCascadeGated;
               return (
                 <div
@@ -356,7 +356,7 @@ export function LeverDetailClientPerformance() {
                         : isCascadeGated
                           ? t(
                               "leverDetail.approval.stageHint",
-                              "Cette étape nécessite la cascade de validation (porteur → sponsor → CTO), voir ci-dessous"
+                              "Cette étape nécessite une demande de validation (porteur → sponsor ou CTO), voir ci-dessous"
                             )
                           : t("leverDetail.moveToStage", "Passer en « {stage} »").replace(
                               "{stage}",
@@ -383,46 +383,52 @@ export function LeverDetailClientPerformance() {
               );
             })}
           </div>
-          {!readOnly && lever.status === "idea" && !lever.approval && canSubmitApproval && (
-            <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
-              <span className="flex items-center gap-1.5 text-xs text-info-blue">
-                <Send size={13} />{" "}
-                {t(
-                  "leverDetail.approval.submitHint",
-                  "Ce levier est prêt pour la cascade de validation (porteur → sponsor → CTO)."
-                )}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  try {
-                    data.requestLeverApproval(lever.id);
-                    showToast(
-                      t("leverDetail.approval.requested", "Demande de validation envoyée"),
-                      lever.name,
-                      "success"
-                    );
-                  } catch (err) {
-                    showToast(
-                      t("leverDetail.approval.error", "Action impossible"),
-                      err instanceof Error ? err.message : String(err),
-                      "error"
-                    );
-                  }
-                }}
-              >
-                {t("leverDetail.approval.submit", "Soumettre pour validation")}
-              </Button>
-            </div>
-          )}
+          {!readOnly &&
+            (lever.status === "idea" ||
+              lever.status === "qualified" ||
+              lever.status === "validated") &&
+            !lever.approval &&
+            canSubmitApproval && (
+              <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
+                <span className="flex items-center gap-1.5 text-xs text-info-blue">
+                  <Send size={13} />{" "}
+                  {t(
+                    "leverDetail.approval.submitHint",
+                    "Ce levier est prêt pour une demande de validation (porteur → sponsor ou CTO)."
+                  )}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    try {
+                      data.requestLeverApproval(lever.id);
+                      showToast(
+                        t("leverDetail.approval.requested", "Demande de validation envoyée"),
+                        lever.name,
+                        "success"
+                      );
+                    } catch (err) {
+                      showToast(
+                        t("leverDetail.approval.error", "Action impossible"),
+                        err instanceof Error ? err.message : String(err),
+                        "error"
+                      );
+                    }
+                  }}
+                >
+                  {t("leverDetail.approval.submit", "Soumettre pour validation")}
+                </Button>
+              </div>
+            )}
           {lever.approval && (
             <div className="mt-2.5 rounded-md bg-info-blue-light px-3 py-2">
               <div className="flex items-center gap-1.5 text-xs text-info-blue">
                 <Info size={13} />
-                {lever.approval.pendingStep === "sponsor"
-                  ? t("leverDetail.approval.pendingSponsor", "En attente de validation du sponsor")
-                  : t("leverDetail.approval.pendingCto", "En attente de validation du CTO")}
+                {t(
+                  "leverDetail.approval.pending",
+                  "En attente d'approbation (sponsor ou CTO) pour passer en « {stage} »"
+                ).replace("{stage}", lifecycle.shortLabel(lever.approval.targetStatus))}
               </div>
               {!readOnly && canActOnPendingApproval && (
                 <div className="mt-2 flex items-center gap-2">
@@ -430,12 +436,10 @@ export function LeverDetailClientPerformance() {
                     variant="primary"
                     size="sm"
                     onClick={() => {
-                      const step = lever.approval?.pendingStep;
-                      if (step !== "sponsor" && step !== "cto") return;
                       try {
-                        data.approveLeverApprovalStep(lever.id, step);
+                        data.approveLeverGate(lever.id);
                         showToast(
-                          t("leverDetail.approval.approved", "Étape approuvée"),
+                          t("leverDetail.approval.approved", "Demande approuvée"),
                           lever.name,
                           "success"
                         );
@@ -474,34 +478,6 @@ export function LeverDetailClientPerformance() {
                   </Button>
                 </div>
               )}
-            </div>
-          )}
-          {!readOnly && hasAnyActions && STATUS_ORDER[lever.status] < STATUS_ORDER.in_progress && (
-            <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
-              <span className="flex items-center gap-1.5 text-xs text-info-blue">
-                <Info size={13} />{" "}
-                {t(
-                  "leverDetail.actionsPlannedHint",
-                  "Des actions sont planifiées sur ce levier — il peut passer en « {stage} »."
-                ).replace("{stage}", lifecycle.shortLabel("in_progress"))}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  data.updateLever(lever.id, { status: "in_progress" });
-                  showToast(
-                    t("leverDetail.statusUpdated", "Niveau mis à jour"),
-                    `${lever.name} : ${lifecycle.shortLabel("in_progress")}`,
-                    "success"
-                  );
-                }}
-              >
-                {t("leverDetail.moveToStage", "Passer en « {stage} »").replace(
-                  "{stage}",
-                  lifecycle.shortLabel("in_progress")
-                )}
-              </Button>
             </div>
           )}
         </div>
