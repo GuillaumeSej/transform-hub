@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
-import { FilterBar, type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/FilterBar";
+import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import {
   Banknote,
   ChevronDown,
@@ -16,7 +17,6 @@ import {
   Maximize2,
   Plus,
   RotateCcw,
-  SlidersHorizontal,
   TriangleAlert,
   TrendingUp,
   Users,
@@ -56,20 +56,17 @@ import { DEPENDENCY_TYPE_META } from "@/lib/status-config";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { paginateDashboardItems } from "@/lib/dashboardPagination";
 import { groupLeversByHealthDimension, type LeverHealthDimension } from "@/lib/leverHealth";
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
 import { DashboardExportButton } from "@/components/shared/DashboardExportButton";
 import { SCurveChart } from "@/components/shared/charts/SCurveChart";
-import { WorkstreamBarChart } from "@/components/shared/charts/WorkstreamBarChart";
+import {
+  WorkstreamBarChart,
+  WorkstreamBarDetail,
+  type WorkstreamBarPoint,
+} from "@/components/shared/charts/WorkstreamBarChart";
 import { GeoDonutChart } from "@/components/shared/charts/GeoDonutChart";
 import { InitiativeHealthMatrix } from "@/components/shared/charts/InitiativeHealthMatrix";
 import { StageFunnel } from "@/components/shared/charts/StageFunnel";
@@ -215,12 +212,6 @@ export function DashboardPagePerformance() {
   useEffect(() => {
     if (selectedProgramId) setActiveProgramId(selectedProgramId);
   }, [selectedProgramId, setActiveProgramId]);
-
-  const handleProgramChange = (programId: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("program", programId);
-    router.push(`/dashboard?${params.toString()}`);
-  };
 
   // Leviers scopés au programme sélectionné — appliqué AVANT le filtrage de la barre de filtres
   // (les options de filtres ne doivent refléter que les leviers du programme courant), mais reste
@@ -383,8 +374,6 @@ export function DashboardPagePerformance() {
   // hook partagé gère n'importe quelle clé dynamique de `filterDefs` sans table de correspondance.
   const { activeFilters, setFilters } = useFilterBarState(filterDefs);
 
-  const hasActiveFilters = Object.keys(activeFilters).length > 0;
-
   // Filtrage générique par `filterDefs` — même patron que `LeversPagePerformance.tsx`/
   // `app/(app)/hr/etp/page.tsx`/`app/(app)/hr/page.tsx` (voir `useFilterBarState`, même base
   // partagée). Remplace `matchesGlobalFilters`, dont la forme fixe ne couvrait pas les dimensions
@@ -393,9 +382,9 @@ export function DashboardPagePerformance() {
   // drill-down VERS `/levers`, indépendamment du filtrage local ici).
   const filteredLevers = useMemo(() => {
     return programScopedLevers.filter((l) =>
-      Object.entries(activeFilters).every(([key, values]) => {
+      Object.entries(activeFilters).every(([key, value]) => {
         const def = filterDefs.find((d) => d.key === key);
-        return !def || values.length === 0 || values.includes(def.getValue(l));
+        return !def || value == null || def.getValue(l) === value;
       })
     );
   }, [programScopedLevers, activeFilters, filterDefs]);
@@ -410,28 +399,7 @@ export function DashboardPagePerformance() {
   const summary = engine.programSummary(filteredData);
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
 
-  // ── Tri des leviers sous-performants ───────────────────────────────────
-  const [underSort, setUnderSort] = useState<"gap" | "savings">("gap");
-  const [underSortDir, setUnderSortDir] = useState<"asc" | "desc">("desc");
-  const sortedUnderperformers = useMemo(() => {
-    const sorted = [...underperformingLevers];
-    sorted.sort((a, b) => {
-      const va = underSort === "gap" ? a.lateActionsCount : a.netSavings;
-      const vb = underSort === "gap" ? b.lateActionsCount : b.netSavings;
-      return underSortDir === "desc" ? vb - va : va - vb;
-    });
-    return sorted;
-  }, [underperformingLevers, underSort, underSortDir]);
-  const toggleUnderSort = (field: "gap" | "savings") => {
-    if (underSort === field) {
-      setUnderSortDir((prev) => (prev === "desc" ? "asc" : "desc"));
-    } else {
-      setUnderSort(field);
-      setUnderSortDir("desc");
-    }
-  };
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
-  const [underPage, setUnderPage] = useState(0);
   const [dependencyPage, setDependencyPage] = useState(0);
 
   // ── Widget fusionné "Alertes & Dépendances" (risk-center) ──────────────────────────────────
@@ -459,21 +427,11 @@ export function DashboardPagePerformance() {
     return arr;
   }, [depAlerts, depsSortKey]);
 
-  const underPagination = paginateDashboardItems(sortedUnderperformers, underPage, 8);
   const dependencyPagination = paginateDashboardItems(sortedDepAlerts, dependencyPage, 6);
 
   useEffect(() => {
-    setUnderPage(0);
     setDependencyPage(0);
   }, [selectedProgramId, activeFilters]);
-
-  useEffect(() => {
-    setUnderPage(0);
-  }, [underSort, underSortDir]);
-
-  useEffect(() => {
-    if (underPage !== underPagination.page) setUnderPage(underPagination.page);
-  }, [underPage, underPagination.page]);
 
   useEffect(() => {
     if (dependencyPage !== dependencyPagination.page) {
@@ -646,8 +604,8 @@ export function DashboardPagePerformance() {
   // ci-dessus ne le sont pas (`status`, `geo_xxx`, `hierarchy_xxx`…) — d'où le préfixage ici.
   const goToLevers = (params: Record<string, string>) => {
     const globalParams: Record<string, string> = {};
-    Object.entries(activeFilters).forEach(([key, values]) => {
-      if (values.length > 0) globalParams[`f_${key}`] = values.join(",");
+    Object.entries(activeFilters).forEach(([key, value]) => {
+      if (value) globalParams[`f_${key}`] = value;
     });
     const merged = { ...globalParams, ...params };
     const qs = new URLSearchParams(merged).toString();
@@ -778,8 +736,6 @@ export function DashboardPagePerformance() {
   const [dragInstanceId, setDragInstanceId] = useState<string | null>(null);
   const [dragOverInstanceId, setDragOverInstanceId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
-  // Filtres repliés par défaut sur mobile (< lg) — voir le bouton "Filtres" dans le rendu.
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // ─── Builder générique métrique × dimension(s) ─────────────────────────────────────────────
   // Widget "builder" (Marimekko, ventilations, P&L — voir `builderDimensionCount` du registre) déjà
@@ -793,6 +749,11 @@ export function DashboardPagePerformance() {
   const [builderTargetInstanceId, setBuilderTargetInstanceId] = useState<string | null>(null);
   const [builderMetric, setBuilderMetric] = useState<string>("");
   const [builderDims, setBuilderDims] = useState<string[]>(["", ""]);
+  // Détail par levier ouvert au clic sur un segment du widget "workstream-breakdown".
+  const [workstreamDetail, setWorkstreamDetail] = useState<{
+    point: WorkstreamBarPoint;
+    segment: "target" | "realized";
+  } | null>(null);
 
   useEffect(() => {
     setLayout(loadDashboardLayout());
@@ -1588,8 +1549,21 @@ export function DashboardPagePerformance() {
                 data={barData}
                 labelTarget={t("chart.bar.target")}
                 labelRealized={t("chart.bar.realized")}
+                onSegmentClick={(point, segment) => setWorkstreamDetail({ point, segment })}
               />
             </CardBody>
+            <Modal
+              open={workstreamDetail !== null}
+              onOpenChange={(open) => {
+                if (!open) setWorkstreamDetail(null);
+              }}
+              title={workstreamDetail?.point.label ?? ""}
+              maxWidth="560px"
+            >
+              {workstreamDetail && (
+                <WorkstreamBarDetail point={workstreamDetail.point} fmt={(v) => `€${v}M`} />
+              )}
+            </Modal>
           </Card>
         );
       }
@@ -1745,100 +1719,6 @@ export function DashboardPagePerformance() {
             </CardBody>
           </Card>
         );
-      case "underperformers":
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader
-              title={t("dashboard.widgets.underperformers")}
-              actions={
-                <div className="flex items-center gap-2">
-                  {/* Boutons de tri */}
-                  {(["gap", "savings"] as const).map((field) => {
-                    const isActive = underSort === field;
-                    const Icon = isActive && underSortDir === "asc" ? ArrowUp : ArrowDown;
-                    return (
-                      <button
-                        key={field}
-                        onClick={() => toggleUnderSort(field)}
-                        className={`flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10.5px] font-semibold transition ${
-                          isActive
-                            ? "bg-bp-coral/10 text-bp-coral"
-                            : "text-tertiary hover:bg-neutral-100 hover:text-secondary"
-                        }`}
-                      >
-                        <Icon size={11} />
-                        {field === "gap"
-                          ? t("dashboard.widgets.sortByDelay")
-                          : t("dashboard.widgets.sortBySavings")}
-                      </button>
-                    );
-                  })}
-                  <span className="text-[10.5px] font-semibold text-tertiary">
-                    {underperformingLevers.length}
-                  </span>
-                </div>
-              }
-            />
-            <CardBody>
-              {sortedUnderperformers.length === 0 ? (
-                <p className="py-6 text-center text-sm text-tertiary">
-                  {t("dashboard.widgets.noUnderperformers")}
-                </p>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-0">
-                    {underPagination.items.map((l) => (
-                      <div
-                        key={l.id}
-                        onClick={() => router.push(`/levers/detail?id=${l.id}`)}
-                        className="flex cursor-pointer items-start gap-3 border-b border-border py-2.5 last:border-b-0 hover:bg-neutral-50"
-                      >
-                        <Avatar initials={l.ownerInit} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="truncate text-[12.5px] font-semibold text-primary">
-                              {l.name}
-                            </div>
-                            <span className="flex-shrink-0 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10.5px] font-bold text-bp-coral">
-                              {l.lateActionsCount} {t("dashboard.widgets.lateActions")}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center gap-3 text-[11px] text-secondary">
-                            <span>
-                              {l.lateActionsCount} {t("dashboard.widgets.ofTotalActions")}{" "}
-                              {l.actions?.length ?? 0}
-                            </span>
-                            <span className="ml-auto font-semibold text-bp-coral">
-                              {engine.fmtCurr(l.netSavings)} {t("dashboard.widgets.atRiskAmount")}
-                            </span>
-                          </div>
-                          <div className="mt-1.5">
-                            <ProgressBar pct={l.progress} />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {underPagination.pageCount > 1 && (
-                    <DashboardPager
-                      page={underPagination.page}
-                      pageCount={underPagination.pageCount}
-                      onPrevious={() => setUnderPage(Math.max(0, underPagination.page - 1))}
-                      onNext={() =>
-                        setUnderPage(
-                          Math.min(underPagination.pageCount - 1, underPagination.page + 1)
-                        )
-                      }
-                      label={t("alerts.page")}
-                    />
-                  )}
-                </>
-              )}
-            </CardBody>
-          </Card>
-        );
-
       case "initiative-health": {
         const dimension = (
           instance.view === "country" || instance.view === "function" ? instance.view : "workstream"
@@ -1915,24 +1795,6 @@ export function DashboardPagePerformance() {
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
             {t("dashboard.title")}
           </h1>
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
-            {t("dashboard.program")}{" "}
-            <strong>
-              {programs.find((p) => p.id === selectedProgramId)?.name ?? data.program.name}
-            </strong>{" "}
-            · {summary.leverCount} {t("dashboard.leversActive")}
-            <select
-              value={selectedProgramId}
-              onChange={(e) => handleProgramChange(e.target.value)}
-              className="ml-1 rounded-sm border border-border bg-white px-2 py-0.5 text-[12px] font-semibold text-primary focus:border-bp-coral focus:outline-none"
-            >
-              {programs.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
         {/* Outils de bureau (export PPTX, personnalisation du layout) — sans objet au doigt
             sur téléphone : masqués sous lg pour laisser toute la place aux indicateurs. */}
@@ -1949,39 +1811,11 @@ export function DashboardPagePerformance() {
         </div>
       </div>
 
-      {/* Filtres — repliés par défaut sur mobile derrière un bouton (ils poussaient les KPI
-          sous la ligne de flottaison), toujours visibles à partir de lg. */}
-      <div className="mb-4 lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileFiltersOpen((v) => !v)}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-            hasActiveFilters || mobileFiltersOpen
-              ? "border-bp-coral bg-bp-coral text-white"
-              : "border-border bg-white text-secondary"
-          }`}
-        >
-          <SlidersHorizontal size={12} />
-          {t("dashboard.filters")}
-          {hasActiveFilters && (
-            <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-bold">
-              {Object.keys(activeFilters).length}
-            </span>
-          )}
-        </button>
-        {mobileFiltersOpen && (
-          <div className="mt-2">
-            <FilterBar
-              items={programScopedLevers}
-              defs={filterDefs}
-              active={activeFilters}
-              onChange={setFilters}
-            />
-          </div>
-        )}
-      </div>
-      <div className="mb-4 hidden lg:block">
-        <FilterBar
+      {/* Filtres — une rangée de dropdowns compacts (voir `DropdownFilterBar.tsx`), passent
+          naturellement à la ligne sur mobile via `flex-wrap` : plus besoin du repli sous bouton
+          qu'imposait l'ancienne double rangée de chips `FilterBar`. */}
+      <div className="mb-4">
+        <DropdownFilterBar
           items={programScopedLevers}
           defs={filterDefs}
           active={activeFilters}

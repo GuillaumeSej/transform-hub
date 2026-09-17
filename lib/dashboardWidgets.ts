@@ -45,7 +45,6 @@ export type DashboardWidgetType =
   | "geo-breakdown"
   | "workstream-table"
   | "dependencies"
-  | "underperformers"
   | "portfolio-funnel"
   | "savings-trajectory"
   | "initiative-health";
@@ -75,7 +74,6 @@ export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   "geo-breakdown": "portfolio",
   "workstream-table": "portfolio",
   dependencies: "prioritization",
-  underperformers: "prioritization",
   "initiative-health": "prioritization",
 };
 
@@ -202,17 +200,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     ],
   },
   {
-    // Widget fusionné "Alertes" + "Alertes de dépendances" (Sept 2026) — anciennement deux
-    // widgets séparés toujours pleinement visibles ; regroupés en un seul centre de risque
-    // replié par défaut (résumé compact + bouton d'expansion vers les deux panneaux côte à
-    // côte), pour alléger la page par défaut. Voir `case "risk-center"` côté page dashboard.
-    type: "risk-center",
-    label: "Alertes & Dépendances",
-    icon: "Bell",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-  },
-  {
     // Widget "Santé des initiatives" — remonté juste après portfolio-funnel + alerts en Août
     // 2026 pour rester au niveau du cockpit d'entrée (voir buildDefaultLayout). Le picker
     // "Ajouter un widget" applique automatiquement le même ordre.
@@ -312,11 +299,21 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     excludeFromDefault: true,
   },
   {
-    type: "underperformers",
-    label: "Leviers sous-performants",
-    icon: "TrendingDown",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
+    // Widget fusionné "Alertes" + "Alertes de dépendances" (Sept 2026) — anciennement deux
+    // widgets séparés toujours pleinement visibles ; regroupés en un seul centre de risque
+    // replié par défaut (résumé compact + bouton d'expansion vers les deux panneaux côte à
+    // côte), pour alléger la page par défaut. Voir `case "risk-center"` côté page dashboard.
+    //
+    // Positionné en fin de registre (au lieu de juste après portfolio-funnel/marimekko) : c'est
+    // un widget secondaire replié par défaut, pas un élément de cockpit prioritaire — placé après
+    // workstream-table (dernier widget "core" du layout par défaut) pour rester bas de page. Étant
+    // en span "XL", il occupe toujours sa propre ligne pleine largeur et ne crée pas de trou dans
+    // la grille, quel que soit l'endroit où il se trouve dans l'ordre par défaut.
+    type: "risk-center",
+    label: "Alertes & Dépendances",
+    icon: "Bell",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
   },
 ];
 

@@ -11,7 +11,6 @@ import {
   Maximize2,
   Plus,
   RotateCcw,
-  SlidersHorizontal,
   TriangleAlert,
   Users,
   X,
@@ -52,7 +51,8 @@ import {
   NetEconomyChart,
   SavingsPeriodCumulChart,
 } from "@/components/shared/charts/HrGooduelleCharts";
-import { FilterBar, type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/FilterBar";
+import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
@@ -204,8 +204,6 @@ export default function HrDashboardPage() {
   }, [movementDateRange.from, movementDateRange.to]);
 
   // ─── Filtres RH ──────────────────────────────────────────────────────────────────────────────
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-
   const filterDefs: FilterDef<WorkforceMovement>[] = useMemo(
     () => [
       { key: "type", label: "Type", getValue: (m) => m.type },
@@ -258,12 +256,12 @@ export default function HrDashboardPage() {
         return false;
       // Range picker temporel.
       if (m.plannedDate < dateFromISO || m.plannedDate > dateToISO) return false;
-      // FilterBar (nominal).
+      // DropdownFilterBar (nominal).
       for (const key of keys) {
-        const values = activeFilters[key];
-        if (!values || values.length === 0) continue;
+        const value = activeFilters[key];
+        if (!value) continue;
         const def = filterDefs.find((d) => d.key === key);
-        if (def && !values.includes(def.getValue(m))) return false;
+        if (def && def.getValue(m) !== value) return false;
       }
       return true;
     });
@@ -1284,39 +1282,11 @@ export default function HrDashboardPage() {
         </div>
       </div>
 
-      {/* Filtres RH — même mécanisme que le dashboard exécutif : repliés sur mobile,
-          toujours visibles sur desktop. Filtrent tous les graphiques et KPI. */}
-      <div className="mb-4 lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileFiltersOpen((v) => !v)}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-            hasActiveFilters || mobileFiltersOpen
-              ? "border-bp-coral bg-bp-coral text-white"
-              : "border-border bg-white text-secondary"
-          }`}
-        >
-          <SlidersHorizontal size={12} />
-          {t("dashboard.filters", "Filtres")}
-          {hasActiveFilters && (
-            <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-bold">
-              {Object.keys(activeFilters).length}
-            </span>
-          )}
-        </button>
-        {mobileFiltersOpen && (
-          <div className="mt-2">
-            <FilterBar
-              items={wf.movements}
-              defs={filterDefs}
-              active={activeFilters}
-              onChange={setActiveFilters}
-            />
-          </div>
-        )}
-      </div>
-      <div className="mb-4 hidden lg:block">
-        <FilterBar
+      {/* Filtres RH — rangée de dropdowns compacts (voir `DropdownFilterBar.tsx`), passent
+          naturellement à la ligne sur mobile via `flex-wrap`. Filtrent tous les graphiques et
+          KPI. */}
+      <div className="mb-4">
+        <DropdownFilterBar
           items={wf.movements}
           defs={filterDefs}
           active={activeFilters}
