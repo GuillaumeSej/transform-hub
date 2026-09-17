@@ -262,6 +262,11 @@ const fr: Record<string, string> = {
   "dashboard.workstream": "Workstream",
   "dashboard.country": "Pays",
   "dashboard.function": "Fonction",
+  // Libellé de la dimension Lever.function dans les widgets du dashboard (Marimekko,
+  // Réalisation des économies, Santé des initiatives, Savings par Pays / ...) : en pratique ce
+  // champ porte une donnée de niveau département, donc affiché "Département" côté UI — la clé
+  // "dashboard.function" reste inchangée pour Employee.func (module effectifs/ETP).
+  "dashboard.leverDepartment": "Département",
   "dashboard.geography": "Géographie",
   "dashboard.tableHeader.leverCount": "Leviers",
   "dashboard.tableHeader.realizedTarget": "Réalisé / Cible",
