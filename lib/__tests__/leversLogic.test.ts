@@ -188,15 +188,15 @@ function makeLever(status: LeverStatus, overrides?: Partial<Lever>): Lever {
 }
 
 describe("leversLogic — applyPlanLock", () => {
-  it("does nothing for status before L3 (validated)", () => {
+  it("does nothing for status before L2 (qualified)", () => {
     const lever = makeLever("idea");
     const result = applyPlanLock(lever);
     expect(result.lockedPlan).toBeUndefined();
     expect(result.reforecast).toBeUndefined();
   });
 
-  it("locks plan at L3 (validated)", () => {
-    const lever = makeLever("validated", {
+  it("locks plan at L2 (qualified)", () => {
+    const lever = makeLever("qualified", {
       grossSavings: 10,
       netSavings: 8,
       opexOneOff: 1,
@@ -236,7 +236,7 @@ describe("leversLogic — applyPlanLock", () => {
   });
 
   it("does not overwrite existing lockedPlan", () => {
-    const lever = makeLever("validated", {
+    const lever = makeLever("qualified", {
       lockedPlan: {
         grossSavings: 5,
         netSavings: 4,
@@ -308,28 +308,28 @@ describe("leversLogic — updateLever (status change & plan lock triggering)", (
     expect(result.lever.reforecast).toBeDefined();
   });
 
-  it("triggers lockedPlan when status reaches validated via the approval cascade bypass", () => {
-    // Round "cascade de validation" : le seul chemin légitime vers status="validated" est
+  it("triggers lockedPlan when status reaches qualified via the approval cascade bypass", () => {
+    // Round "cascade de validation" : le seul chemin légitime vers status="qualified" est
     // approveLeverApprovalStep (dernière étape CTO), qui patche `approval` ET `status` dans le
     // même appel — voir le garde-fou documenté dans updateLever.
-    const levers = [makeLever("qualified", { grossSavings: 20, netSavings: 15 })];
+    const levers = [makeLever("idea", { grossSavings: 20, netSavings: 15 })];
     const result = updateLever(
       levers,
       "L001",
-      { status: "validated", approval: undefined },
+      { status: "qualified", approval: undefined },
       "user"
     );
-    expect(result.lever.status).toBe("validated");
+    expect(result.lever.status).toBe("qualified");
     expect(result.lever.lockedPlan).toBeDefined();
     expect(result.lever.lockedPlan?.grossSavings).toBe(20);
     expect(result.lever.lockedPlan?.netSavings).toBe(15);
   });
 
-  it("silently ignores a direct status:'validated' patch that bypasses the approval cascade", () => {
-    const levers = [makeLever("qualified", { grossSavings: 20, netSavings: 15, progress: 10 })];
-    const result = updateLever(levers, "L001", { status: "validated", progress: 40 }, "user");
+  it("silently ignores a direct status:'qualified' patch that bypasses the approval cascade", () => {
+    const levers = [makeLever("idea", { grossSavings: 20, netSavings: 15, progress: 10 })];
+    const result = updateLever(levers, "L001", { status: "qualified", progress: 40 }, "user");
     // Le champ status est ignoré silencieusement...
-    expect(result.lever.status).toBe("qualified");
+    expect(result.lever.status).toBe("idea");
     expect(result.lever.lockedPlan).toBeUndefined();
     // ...mais les autres champs légitimes du même patch s'appliquent quand même.
     expect(result.lever.progress).toBe(40);
@@ -337,7 +337,7 @@ describe("leversLogic — updateLever (status change & plan lock triggering)", (
 
   it("protects financial fields once lockedPlan exists", () => {
     const levers = [
-      makeLever("validated", {
+      makeLever("qualified", {
         lockedPlan: { grossSavings: 10, netSavings: 8, opexOneOff: 1, opexRec: 0.5, capex: 2 },
         grossSavings: 10,
         netSavings: 8,
@@ -681,7 +681,7 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
   const workstreams = [{ id: "WS-01", sponsorUsername: "test.sponsor" }];
 
   function qualifiedLever(overrides?: Partial<Lever>): Lever {
-    return makeLever("qualified", {
+    return makeLever("idea", {
       ownerUsername: "test.lever.owner",
       ws: "WS-01",
       ...overrides,
@@ -709,8 +709,8 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
       expect(() => requestLeverApproval(levers, "L001", stranger)).toThrow();
     });
 
-    it("throws when the lever is not at status 'qualified'", () => {
-      const levers = [makeLever("idea", { ownerUsername: "test.lever.owner" })];
+    it("throws when the lever is not at status 'idea'", () => {
+      const levers = [makeLever("qualified", { ownerUsername: "test.lever.owner" })];
       expect(() => requestLeverApproval(levers, "L001", owner)).toThrow();
     });
   });
@@ -733,7 +733,7 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
       const result = approveLeverApprovalStep(levers, "L001", "sponsor", sponsor, workstreams);
       expect(result.lever.approval?.pendingStep).toBe("cto");
       expect(result.lever.approval?.sponsorApprovedAt).toBeDefined();
-      expect(result.lever.status).toBe("qualified");
+      expect(result.lever.status).toBe("idea");
     });
 
     it("throws when a non-sponsor tries to approve the sponsor step", () => {
@@ -748,7 +748,7 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
       expect(() => approveLeverApprovalStep(levers, "L001", "cto", cto, workstreams)).toThrow();
     });
 
-    it("completes the cascade at the cto step: clears approval and sets status to validated with lockedPlan", () => {
+    it("completes the cascade at the cto step: clears approval and sets status to qualified with lockedPlan", () => {
       const levers = [
         leverPendingSponsor({
           approval: {
@@ -764,7 +764,7 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
       ];
       const result = approveLeverApprovalStep(levers, "L001", "cto", cto, workstreams);
       expect(result.lever.approval).toBeUndefined();
-      expect(result.lever.status).toBe("validated");
+      expect(result.lever.status).toBe("qualified");
       expect(result.lever.lockedPlan?.netSavings).toBe(15);
       expect(result.auditEntries.some((e) => e.action === "approval_approved")).toBe(true);
     });
@@ -803,7 +803,7 @@ describe("approval cascade (requestLeverApproval / approveLeverApprovalStep / re
       const levers = [leverPendingSponsor()];
       const result = rejectLeverApproval(levers, "L001", owner, "changed my mind");
       expect(result.lever.approval).toBeUndefined();
-      expect(result.lever.status).toBe("qualified");
+      expect(result.lever.status).toBe("idea");
       expect(result.auditEntries[0].action).toBe("approval_rejected");
       expect(result.auditEntries[0].new).toBe("changed my mind");
     });

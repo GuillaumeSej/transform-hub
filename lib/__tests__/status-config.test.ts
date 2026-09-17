@@ -94,9 +94,9 @@ describe("status-config — DEFAULT_LIFECYCLE_STAGES", () => {
     expect(DEFAULT_LIFECYCLE_STAGES).toHaveLength(5);
   });
 
-  it("only validated has validationRequired", () => {
+  it("only qualified has validationRequired", () => {
     DEFAULT_LIFECYCLE_STAGES.forEach((s) => {
-      if (s.key === "validated") {
+      if (s.key === "qualified") {
         expect(s.validationRequired).toBe(true);
       } else {
         expect(s.validationRequired).toBe(false);

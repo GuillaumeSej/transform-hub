@@ -62,8 +62,8 @@ export const STATUS_ORDER: Record<LeverStatus, number> = {
 /** Référentiel de cycle de vie par défaut (5 étapes, seule la décision de lancement est une gate). */
 export const DEFAULT_LIFECYCLE_STAGES: LifecycleStage[] = [
   { key: "idea", label: "Identifié", validationRequired: false },
-  { key: "qualified", label: "Validé", validationRequired: false },
-  { key: "validated", label: "Planifié", validationRequired: true },
+  { key: "qualified", label: "Validé", validationRequired: true },
+  { key: "validated", label: "Planifié", validationRequired: false },
   { key: "in_progress", label: "Exécuté", validationRequired: false },
   { key: "delivered", label: "Réalisé", validationRequired: false },
 ];
