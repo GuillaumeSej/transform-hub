@@ -133,10 +133,18 @@ export function LeverDetailClientPerformance() {
     [lever, alerts, riskThresholds]
   );
 
+  // Exercice fiscal du Programme moderne réel du levier (lever.programId), avec repli sur
+  // data.program.fyStart/fyEnd (legacy ProgramConfig) si l'entreprise n'a pas encore de Programme
+  // moderne pour ce levier — mêmes `programs` déjà résolus plus haut (subscribePrograms) pour
+  // actionPlanEnabled/lifecycle, pas de nouvelle souscription.
+  const leverProgram = programs.find((p) => p.id === lever?.programId);
+  const jCurveFyStart = leverProgram?.fyStart ?? data.program.fyStart;
+  const jCurveFyEnd = leverProgram?.fyEnd ?? data.program.fyEnd;
+
   // J-Curve + consolidation — hooks doivent être avant tout return conditionnel
   const jCurveData = useMemo(
-    () => (lever ? leverJCurve(lever, data.program.fyStart, data.program.fyEnd) : []),
-    [lever, data.program.fyStart, data.program.fyEnd]
+    () => (lever ? leverJCurve(lever, jCurveFyStart, jCurveFyEnd) : []),
+    [lever, jCurveFyStart, jCurveFyEnd]
   );
   const paybackMonth = useMemo(() => leverPayback(jCurveData), [jCurveData]);
   const consolidatedKPIs = useMemo(
