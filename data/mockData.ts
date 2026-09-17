@@ -2973,7 +2973,7 @@ export const DEMO_HIERARCHY_NODES: HierarchyNode[] = [
     code: "REV",
     label: "Revenue",
     parentId: null,
-    financial: { baseline: 892.0, sign: 1, computed: false, selectable: true },
+    financial: { baseline: 892.0, computed: false, selectable: true },
   },
   {
     id: "fin-cogs",
@@ -2983,7 +2983,7 @@ export const DEMO_HIERARCHY_NODES: HierarchyNode[] = [
     code: "COGS",
     label: "Cost of Goods Sold",
     parentId: null,
-    financial: { baseline: -534.0, sign: -1, computed: false, selectable: true },
+    financial: { baseline: -534.0, computed: false, selectable: true },
   },
   {
     id: "fin-sga",
@@ -2993,7 +2993,7 @@ export const DEMO_HIERARCHY_NODES: HierarchyNode[] = [
     code: "SGA",
     label: "Selling & Marketing",
     parentId: null,
-    financial: { baseline: -98.5, sign: -1, computed: false, selectable: true },
+    financial: { baseline: -98.5, computed: false, selectable: true },
   },
   {
     id: "fin-ga",
@@ -3003,7 +3003,7 @@ export const DEMO_HIERARCHY_NODES: HierarchyNode[] = [
     code: "GA",
     label: "General & Admin",
     parentId: null,
-    financial: { baseline: -72.0, sign: -1, computed: false, selectable: true },
+    financial: { baseline: -72.0, computed: false, selectable: true },
   },
 
   // Centres de coût — un par levier de démo (L001-L018), rattachés au compte P&L de leur pnlMap.
