@@ -40,7 +40,6 @@ export type DashboardWidgetType =
   | "alerts"
   | "s-curve"
   | "bridge"
-  | "sankey"
   | "marimekko"
   | "workstream-breakdown"
   | "geo-breakdown"
@@ -73,7 +72,6 @@ export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   "savings-trajectory": "trajectory",
   "s-curve": "trajectory",
   bridge: "trajectory",
-  sankey: "portfolio",
   marimekko: "portfolio",
   "workstream-breakdown": "portfolio",
   "geo-breakdown": "portfolio",
@@ -226,14 +224,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "BarChart3",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
-    excludeFromDefault: true,
-  },
-  {
-    type: "sankey",
-    label: "Flux des leviers par étape (Sankey)",
-    icon: "GitBranch",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
     excludeFromDefault: true,
   },
   {

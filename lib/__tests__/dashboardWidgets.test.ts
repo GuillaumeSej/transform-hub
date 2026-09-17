@@ -202,7 +202,7 @@ describe("dashboardWidgets — configurable widgets (view)", () => {
 
   it("non-configurable widgets have no view field", () => {
     const layout = buildDefaultLayout();
-    expect(layout.find((w) => w.type === "sankey")?.view).toBeUndefined();
+    expect(layout.find((w) => w.type === "bridge")?.view).toBeUndefined();
   });
 
   it("addWidget sets the requested view, or the default when omitted", () => {
@@ -240,7 +240,7 @@ describe("dashboardWidgets — builder générique (customViews)", () => {
 
   it("non-builder widgets have no customViews field", () => {
     const layout = buildDefaultLayout();
-    expect(layout.find((w) => w.type === "sankey")?.customViews).toBeUndefined();
+    expect(layout.find((w) => w.type === "bridge")?.customViews).toBeUndefined();
   });
 
   it("addWidgetWithCustomView creates a fresh instance with exactly the requested view", () => {

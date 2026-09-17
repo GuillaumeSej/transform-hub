@@ -74,7 +74,6 @@ import { GeoDonutChart } from "@/components/shared/charts/GeoDonutChart";
 import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
 import { InitiativeHealthMatrix } from "@/components/shared/charts/InitiativeHealthMatrix";
 import { StageFunnel } from "@/components/shared/charts/StageFunnel";
-import { SankeyChart } from "@/components/shared/charts/SankeyChart";
 import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
 import { QuarterlyBridgeChart } from "@/components/shared/charts/QuarterlyBridgeChart";
 import type { Lever, LeverStatus } from "@/types";
@@ -590,7 +589,6 @@ export function DashboardPagePerformance() {
   const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
   const sCurve = engine.sCurve3(filteredData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
-  const sankeyChrono = engine.sankeyChronology(filteredData);
   const bridge = engine.financialBridge(filteredData, bridgeGranularity);
 
   // Reporte les filtres actuellement actifs sur CE dashboard vers `/levers` (Bibliothèque de
@@ -614,10 +612,6 @@ export function DashboardPagePerformance() {
     goToLevers(param ? { [param]: value } : {});
   };
   const goToStage = (status: LeverStatus) => goToLevers({ f_status: lifecycle.label(status) });
-  const goToStageLabel = (label: string) => {
-    const stage = stages.find((s) => s.label === label);
-    if (stage) goToStage(stage.status);
-  };
   const goToAlert = (alert: (typeof data.alerts)[number]) => {
     if (alert.scope.startsWith("WS-")) {
       const ws = data.workstreams.find((w) => w.id === alert.scope);
@@ -1022,8 +1016,6 @@ export function DashboardPagePerformance() {
             <CardHeader title={t("dashboard.widgets.portfolioFunnel")} />
             <CardBody>
               <StageFunnel data={stages} onStageClick={goToStage} />
-              <div className="my-3 border-t border-border" />
-              <SankeyChart data={sankeyChrono} height={260} onNodeClick={goToStageLabel} />
             </CardBody>
           </Card>
         );
@@ -1296,16 +1288,6 @@ export function DashboardPagePerformance() {
                 labelPlanned={t("chart.bridge.planned")}
                 plannedCumulative={sCurve.map((p) => p.planned)}
               />
-            </CardBody>
-          </Card>
-        );
-      case "sankey":
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader title={t("dashboard.widgets.sankey")} />
-            <CardBody>
-              <SankeyChart data={sankeyChrono} height={340} onNodeClick={goToStageLabel} />
             </CardBody>
           </Card>
         );
