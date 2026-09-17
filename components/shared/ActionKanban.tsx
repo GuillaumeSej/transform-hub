@@ -37,6 +37,7 @@ export function ActionKanban({
   onStatusChange,
   onCardClick,
   hasBlockingDependency,
+  readOnly = false,
 }: {
   actions: LeverAction[];
   onStatusChange: (actionId: string, status: ActionStatus) => void;
@@ -45,6 +46,11 @@ export function ActionKanban({
    *  (voir engine.dependencyAlerts) — la dépendance est portée par le LEVIER, pas par l'action,
    *  donc affichée une seule fois en en-tête plutôt que par carte. */
   hasBlockingDependency?: boolean;
+  /** Round 25 (gate d'édition COMEX) : masque les pastilles de changement rapide de statut —
+   *  `onStatusChange` seul ne suffit pas (l'appelant peut bloquer l'écriture, mais les boutons
+   *  resteraient visibles et cliquables sans rien faire, une affordance trompeuse). `false` par
+   *  défaut, aucun changement pour l'appelant existant. */
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const COLUMNS = getColumns(t);
@@ -103,22 +109,24 @@ export function ActionKanban({
                         {fmtCurr(a.cost / 1000, 0)}
                       </span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {COLUMNS.map((c) => (
-                        <button
-                          key={c.status}
-                          onClick={() => onStatusChange(a.id, c.status)}
-                          className={cn(
-                            "rounded-full border px-2 py-0.5 text-[9.5px] font-semibold transition",
-                            a.status === c.status
-                              ? "border-bp-coral bg-black text-white"
-                              : "border-border bg-white text-secondary hover:border-black"
-                          )}
-                        >
-                          {c.label}
-                        </button>
-                      ))}
-                    </div>
+                    {!readOnly && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {COLUMNS.map((c) => (
+                          <button
+                            key={c.status}
+                            onClick={() => onStatusChange(a.id, c.status)}
+                            className={cn(
+                              "rounded-full border px-2 py-0.5 text-[9.5px] font-semibold transition",
+                              a.status === c.status
+                                ? "border-bp-coral bg-black text-white"
+                                : "border-border bg-white text-secondary hover:border-black"
+                            )}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

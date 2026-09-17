@@ -34,6 +34,12 @@ export type EditableTableProps<T extends { id: string }> = {
   totalsConfig?: Partial<Record<keyof T, (rows: T[]) => React.ReactNode>>;
   defaultSort?: { key: keyof T & string; direction: "asc" | "desc" };
   className?: string;
+  /** Round 25 (gate d'édition COMEX) : désactive l'édition inline (double-clic) SANS toucher à la
+   *  définition des colonnes de chaque appelant — plus sûr qu'obliger chaque appelant à retirer
+   *  `editable`/`onCellUpdate` de sa propre config, ce composant générique étant réutilisé par
+   *  plusieurs pages Plan Performance (leviers, ETP, RH, workstreams...). `false` par défaut :
+   *  aucun changement pour les appelants existants qui ne passent pas ce prop. */
+  readOnly?: boolean;
 };
 
 /**
@@ -50,6 +56,7 @@ export function EditableTable<T extends { id: string }>({
   totalsConfig,
   defaultSort,
   className,
+  readOnly = false,
 }: EditableTableProps<T>) {
   const { t } = useTranslation();
   const resolvedSearchPlaceholder =
@@ -259,7 +266,7 @@ export function EditableTable<T extends { id: string }>({
                     <td
                       key={c.key}
                       onDoubleClick={(e) => {
-                        if (!c.editable) return;
+                        if (!c.editable || readOnly) return;
                         e.stopPropagation();
                         startEdit(row.id, c.key, row[c.key]);
                       }}

@@ -1,6 +1,11 @@
 import { daysBetween } from "@/lib/dateUtils";
 import { MILESTONE_ORDER, MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
-import { getStrategicProfile, hasAnyRole, isAnyAdmin } from "@/lib/roleProfiles";
+import {
+  getStrategicProfile,
+  getStrategicProfiles,
+  hasAnyRole,
+  isAnyAdmin,
+} from "@/lib/roleProfiles";
 import type {
   AuthUser,
   Chantier,
@@ -17,6 +22,7 @@ import type {
   MilestoneId,
   Program,
   ProgramType,
+  Role,
   StrategicAxis,
 } from "@/types";
 
@@ -271,6 +277,14 @@ export function canFillIndicator(
  *
  * NON CÂBLÉE dans l'UI à ce stade — introduite pour le lot « responsabilités du Plan Stratégique »
  * (organigramme 3-5-15 : sponsor d'axe, responsable de chantier, etc.).
+ *
+ * **Ne pas confondre avec `resolveStrategicOwnershipScope` (round 25, juste plus bas)** : deux
+ * questions différentes, volontairement NON unifiées. Celle-ci répond à "cet utilisateur a-t-il le
+ * DROIT D'ÉDITER ce chantier ?", par RÔLE, via une liste ouverte (`responsibleRoles`, permissif par
+ * défaut) — non câblée dans l'UI. `resolveStrategicOwnershipScope` répond à "quels axes/chantiers/
+ * projets cet utilisateur VOIT-IL ?", par PROPRIÉTAIRE NOMMÉ (`owner`/`pilote`, un `username`
+ * précis) — câblée dans `useStrategicData.ts`, restrictive par défaut pour les 3 rôles concernés.
+ * Un chantier peut donc être visible (scope) sans être éditable (manage), ou l'inverse.
  */
 export function canManageChantier(
   chantier: Pick<Chantier, "responsibleRoles">,
@@ -281,6 +295,137 @@ export function canManageChantier(
   const roles = chantier.responsibleRoles ?? [];
   if (roles.length === 0) return true;
   return hasAnyRole(user, roles);
+}
+
+// ─── Périmètre de visibilité par propriétaire nommé (round 25) ─────────────────────────────────
+
+/**
+ * Rôle Plan Stratégique EFFECTIF de l'utilisateur pour UN programme précis — distinct de
+ * `getStrategicProfile` (lib/roleProfiles.ts), qui renvoie le PREMIER profil stratégique trouvé
+ * sans tenir compte du programme affiché. Nécessaire ici : `resolveStrategicOwnershipScope`
+ * ci-dessous doit résoudre le bon rôle pour le programme ACTIF, faute de quoi un utilisateur
+ * cumulant deux profils stratégiques sur deux programmes distincts (autorisé par
+ * `assertValidProfiles`, lib/roleProfiles.ts) pourrait se voir appliquer le périmètre du MAUVAIS
+ * programme (ex. traité comme "internal_comm" — non restreint — sur le programme A alors qu'il
+ * est "axis_sponsor" — restreint — dessus, simplement parce que son profil B est listé en premier).
+ *
+ * Priorité : le profil dont `programId` correspond EXACTEMENT au programme actif ; à défaut, un
+ * profil "tous programmes" (`programId` absent) ; à défaut, le premier profil stratégique
+ * disponible (repli défensif, ne devrait pas survenir en pratique compte tenu des contraintes de
+ * `assertValidProfiles`, mais évite de retourner `undefined` sur un utilisateur qui a bien un
+ * profil stratégique, simplement sur un autre programme).
+ */
+export function resolveStrategicRoleForProgram(
+  user: Pick<AuthUser, "profiles"> | null | undefined,
+  programId: string | null | undefined
+): Role | undefined {
+  const profiles = getStrategicProfiles(user);
+  const forProgram = profiles.find((p) => p.programId && p.programId === programId);
+  if (forProgram) return forProgram.role;
+  const global = profiles.find((p) => !p.programId);
+  if (global) return global.role;
+  return profiles[0]?.role;
+}
+
+/**
+ * Périmètre de visibilité "propriétaire nommé" (round 25) — QUI voit QUOI dans le Plan
+ * Stratégique, pour les 3 rôles à ownership nominatif (voir le plan, section RBAC) :
+ *  - `axis_sponsor` : uniquement le(s) axe(s) dont il est `StrategicAxis.owner`, plus tout ce qui
+ *    en dépend (chantiers de ces axes, et — voir `indicators` de `useStrategicData.ts` — les
+ *    indicateurs macro de ces axes et chantier-scopés de ces chantiers).
+ *  - `chantier_owner` : uniquement le(s) chantier(s) dont il est `Chantier.pilote`. Les axes
+ *    PARENTS de ces chantiers restent dans `axisIds` (pour que le nom/contexte de l'axe reste
+ *    affichable — "pour orientation") mais ça ne donne PAS accès aux AUTRES chantiers de ce même
+ *    axe : c'est `chantierIds`, jamais `axisIds`, qui borne la liste des chantiers visibles.
+ *  - `chantier_contributor` : même granularité de VISIBILITÉ chantier que `chantier_owner`, mais
+ *    résolue différemment — un contributeur n'a pas de champ "mon chantier" propre (`pilote` reste
+ *    la notion du RESPONSABLE de chantier), donc un chantier est visible pour lui dès qu'AU MOINS
+ *    UN de ses projets (`ChantierAction.owner`) lui appartient. En plus de ça, `clickableActionIds`
+ *    restreint, DANS un chantier visible, les projets réellement OUVRABLES aux siens propres — les
+ *    autres projets du même chantier restent dans `chantierIds` (donc affichés, ex. sur le Gantt/
+ *    l'accordéon/le board E0→E4) mais l'appelant UI doit les rendre INERTES au clic plutôt que de
+ *    les omettre (voir `ProgramRoadmap.tsx`/`AxisChantierProjetAccordion.tsx`/
+ *    `ProjetMilestoneBoard.tsx`).
+ *  - tout autre rôle stratégique (`strategic_lead`, `internal_comm`, `budget_control`,
+ *    `comex_member`) et tout admin (`isGlobalAdmin`/`isCompanyAdmin`) : `"unrestricted"`, aucun
+ *    filtrage — comportement historique inchangé.
+ *
+ * `axes`/`chantiers`/`chantierActions` sont attendus DÉJÀ scopés au programme actif (même
+ * convention que `programRoadmap` ci-dessus) — cette fonction ne filtre jamais par `programId`
+ * elle-même, seul `programId` (passé séparément) sert à résoudre le bon profil via
+ * `resolveStrategicRoleForProgram`.
+ *
+ * Un utilisateur `null`/`undefined` produit un périmètre `"scoped"` à VIDE (rien de visible)
+ * plutôt que `"unrestricted"` : un appelant qui active le filtrage (voir `useStrategicData.ts`,
+ * `filterActive`) sans utilisateur résolu (session en cours de déconnexion, par ex.) ne doit
+ * jamais retomber sur "tout voir" par défaut.
+ */
+export type StrategicOwnershipScope =
+  | { mode: "unrestricted" }
+  | {
+      mode: "scoped";
+      /** Axes visibles — pour `axis_sponsor`, ses axes possédés ; pour `chantier_owner`/
+       *  `chantier_contributor`, les axes PARENTS de leurs chantiers visibles (contexte
+       *  d'orientation uniquement, ne donne accès à AUCUN autre chantier de cet axe). */
+      axisIds: Set<string>;
+      /** Chantiers visibles (voir le détail par rôle dans le doc-comment de la fonction). */
+      chantierIds: Set<string>;
+      /** Uniquement pour `chantier_contributor` : parmi les projets des chantiers visibles
+       *  ci-dessus, ceux réellement cliquables/ouvrables (les siens). `undefined` pour les deux
+       *  autres rôles scopés (`axis_sponsor`/`chantier_owner`) : TOUS les projets des chantiers
+       *  visibles sont cliquables pour eux, aucune restriction supplémentaire au niveau projet. */
+      clickableActionIds?: Set<string>;
+    };
+
+export function resolveStrategicOwnershipScope(
+  user:
+    Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined,
+  programId: string | null | undefined,
+  axes: StrategicAxis[],
+  chantiers: Chantier[],
+  chantierActions: ChantierAction[]
+): StrategicOwnershipScope {
+  if (!user) {
+    return {
+      mode: "scoped",
+      axisIds: new Set(),
+      chantierIds: new Set(),
+      clickableActionIds: new Set(),
+    };
+  }
+  if (isAnyAdmin(user)) return { mode: "unrestricted" };
+
+  const role = resolveStrategicRoleForProgram(user, programId);
+
+  if (role === "axis_sponsor") {
+    const axisIds = new Set(axes.filter((a) => a.owner === user.username).map((a) => a.id));
+    const chantierIds = new Set(
+      chantiers.filter((c) => c.axisIds.some((id) => axisIds.has(id))).map((c) => c.id)
+    );
+    return { mode: "scoped", axisIds, chantierIds };
+  }
+
+  if (role === "chantier_owner") {
+    const chantierIds = new Set(
+      chantiers.filter((c) => c.pilote === user.username).map((c) => c.id)
+    );
+    const axisIds = new Set(
+      chantiers.filter((c) => chantierIds.has(c.id)).flatMap((c) => c.axisIds)
+    );
+    return { mode: "scoped", axisIds, chantierIds };
+  }
+
+  if (role === "chantier_contributor") {
+    const ownActions = chantierActions.filter((a) => a.owner === user.username);
+    const chantierIds = new Set(ownActions.map((a) => a.chantierId));
+    const axisIds = new Set(
+      chantiers.filter((c) => chantierIds.has(c.id)).flatMap((c) => c.axisIds)
+    );
+    const clickableActionIds = new Set(ownActions.map((a) => a.id));
+    return { mode: "scoped", axisIds, chantierIds, clickableActionIds };
+  }
+
+  return { mode: "unrestricted" };
 }
 
 /**

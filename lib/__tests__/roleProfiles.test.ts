@@ -4,6 +4,7 @@ import {
   getPerformanceProfiles,
   getStrategicProfiles,
   hasRole,
+  isReadOnlyUser,
 } from "@/lib/roleProfiles";
 import { resolveConfidentialityClearance } from "@/lib/leversLogic";
 import type { ProfileAssignment } from "@/types";
@@ -105,6 +106,53 @@ describe("resolveConfidentialityClearance — unions across multiple profiles of
     };
     expect(resolveConfidentialityClearance(user, { lever: ["confidential"] }, "performance")).toBe(
       "all"
+    );
+  });
+});
+
+describe("isReadOnlyUser — round 25 (gate d'édition COMEX)", () => {
+  it("is read-only when the user's ONLY profile is comex_member", () => {
+    expect(isReadOnlyUser({ profiles: [{ role: "comex_member" }] })).toBe(true);
+  });
+
+  it("is read-only when comex_member is held on both tracks (two profiles, both comex_member)", () => {
+    expect(
+      isReadOnlyUser({
+        profiles: [
+          { role: "comex_member", programId: "p1" },
+          { role: "comex_member", programId: "p2" },
+        ],
+      })
+    ).toBe(true);
+  });
+
+  it("is NOT read-only when the user also holds an edit-granting role alongside comex_member", () => {
+    expect(
+      isReadOnlyUser({
+        profiles: [
+          { role: "comex_member", programId: "p1" },
+          { role: "chantier_owner", programId: "p2" },
+        ],
+      })
+    ).toBe(false);
+  });
+
+  it("is NOT read-only for an ordinary business role", () => {
+    expect(isReadOnlyUser({ profiles: [{ role: "lever" }] })).toBe(false);
+  });
+
+  it("is NOT read-only for a user with no profiles at all", () => {
+    expect(isReadOnlyUser({ profiles: [] })).toBe(false);
+    expect(isReadOnlyUser(null)).toBe(false);
+    expect(isReadOnlyUser(undefined)).toBe(false);
+  });
+
+  it("an admin is never read-only, even with only a comex_member profile", () => {
+    expect(isReadOnlyUser({ profiles: [{ role: "comex_member" }], isGlobalAdmin: true })).toBe(
+      false
+    );
+    expect(isReadOnlyUser({ profiles: [{ role: "comex_member" }], isCompanyAdmin: true })).toBe(
+      false
     );
   });
 });

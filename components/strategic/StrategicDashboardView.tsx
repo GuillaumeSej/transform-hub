@@ -65,7 +65,7 @@ import {
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
 import { ProgramRoadmap } from "@/components/strategic/ProgramRoadmap";
-import type { StrategicAxis } from "@/types";
+import type { Indicator, StrategicAxis } from "@/types";
 
 /**
  * Dashboard du PLAN STRATÉGIQUE — pendant de `DashboardPagePerformance.tsx` pour un programme de
@@ -203,7 +203,9 @@ function ChipPopover({
   chip: ReactNode;
   title: string;
   emptyLabel: string;
-  items: { key: string; label: ReactNode; onClick: () => void }[];
+  /** `onClick` omis (round 25, RBAC) : la ligne reste affichée mais devient inerte — voir
+   *  `isIndicatorPillClickable` ci-dessous pour le seul appelant qui l'omet aujourd'hui. */
+  items: { key: string; label: ReactNode; onClick?: () => void }[];
 }) {
   const toggleRef = useRef<() => void>(() => {});
   return (
@@ -232,19 +234,28 @@ function ChipPopover({
         <p className="py-2 text-center text-[11px] text-tertiary">{emptyLabel}</p>
       ) : (
         <div className="space-y-0.5">
-          {items.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => {
-                item.onClick();
-                toggleRef.current();
-              }}
-              className="block w-full rounded px-2 py-1.5 text-left text-[12px] text-primary hover:bg-neutral-50"
-            >
-              {item.label}
-            </button>
-          ))}
+          {items.map((item) =>
+            item.onClick ? (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => {
+                  item.onClick!();
+                  toggleRef.current();
+                }}
+                className="block w-full rounded px-2 py-1.5 text-left text-[12px] text-primary hover:bg-neutral-50"
+              >
+                {item.label}
+              </button>
+            ) : (
+              <div
+                key={item.key}
+                className="block w-full rounded px-2 py-1.5 text-left text-[12px] text-secondary"
+              >
+                {item.label}
+              </div>
+            )
+          )}
         </div>
       )}
     </Popover>
@@ -274,6 +285,17 @@ export function StrategicDashboardView() {
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
   const { axes, chantiers, chantierActions, indicators, measurements } = strategic;
+
+  /** Round 25 (RBAC) : `axis_sponsor` perd le clic-vers-KPI sur les puces "#N indicateur" de la
+   *  feuille de route (voir `renderAxisRoadmapHeader` ci-dessous et le `ChipPopover` "indicateurs"
+   *  du bandeau d'en-tête plus bas) pour tout indicateur CHANTIER-SCOPÉ — les "KPI business"
+   *  (indicateur macro, `chantierId` absent, voir `IndicatorStatusSummary.tsx`'s
+   *  `BusinessKpiCards`) restent eux pleinement cliquables/visibles pour ce rôle, INCHANGÉS. Cette
+   *  gate ne touche QUE ces deux emplacements précis (les "puces récapitulatives de trajectoire") —
+   *  ni `BusinessKpiCards` lui-même, ni aucun autre écran. */
+  const isAxisSponsor = strategic.strategicRole === "axis_sponsor";
+  const isIndicatorPillClickable = (indicator: Pick<Indicator, "chantierId">) =>
+    !(isAxisSponsor && indicator.chantierId);
 
   /** Panneau chantier INLINE (round 10, point 1 — remplace l'ancienne vraie navigation vers
    *  `/levers?chantier=…`, qui faisait quitter le dashboard) : même mécanisme que
@@ -659,17 +681,23 @@ export function StrategicDashboardView() {
               <>
                 {shownIndicators.map((indicator) => {
                   const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
+                  const clickable = isIndicatorPillClickable(indicator);
                   return (
                     <button
                       key={indicator.id}
                       type="button"
+                      disabled={!clickable}
                       title={
                         atRisk
                           ? `${indicator.name} — ${t("indicatorStatus.atRisk")}`
                           : indicator.name
                       }
-                      onClick={() => router.push(`/kpi?indicator=${indicator.id}`)}
-                      className={`flex min-h-[20px] max-w-[260px] shrink-0 items-center rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition hover:bg-black hover:text-white ${
+                      onClick={
+                        clickable ? () => router.push(`/kpi?indicator=${indicator.id}`) : undefined
+                      }
+                      className={`flex min-h-[20px] max-w-[260px] shrink-0 items-center rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition ${
+                        clickable ? "hover:bg-black hover:text-white" : "cursor-default"
+                      } ${
                         atRisk
                           ? "bg-rag-amber-light text-rag-amber"
                           : "bg-neutral-100 text-secondary"
@@ -1045,7 +1073,9 @@ export function StrategicDashboardView() {
                 .map((indicator) => ({
                   key: indicator.id,
                   label: `#${indicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`,
-                  onClick: () => router.push(`/kpi?indicator=${indicator.id}`),
+                  onClick: isIndicatorPillClickable(indicator)
+                    ? () => router.push(`/kpi?indicator=${indicator.id}`)
+                    : undefined,
                 }))}
             />
             <ChipPopover
@@ -1227,6 +1257,7 @@ export function StrategicDashboardView() {
                 onChantierClick={(chantierId) => openChantierPanel(chantierId)}
                 renderAxisHeader={(axis) => renderAxisRoadmapHeader(axis)}
                 labels={roadmapLabels}
+                clickableActionIds={strategic.clickableActionIds}
               />
             </div>
           </CardBody>

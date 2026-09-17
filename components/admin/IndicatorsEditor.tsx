@@ -45,7 +45,13 @@ import { Modal } from "@/components/shared/Modal";
  *  convention que `OPERATIONAL_ROLES` dans `CompanyFieldsEditor.tsx` / `ALL_ROLES` dans
  *  `UsersPanel.tsx`) : chaque écran d'admin choisit son propre sous-ensemble de rôles, il n'y a
  *  pas de liste partagée à maintenir. `admin`/`admin_entreprise` en sont exclus : ils sont
- *  toujours autorisés par `canFillIndicator`, les proposer n'aurait aucun effet. */
+ *  toujours autorisés par `canFillIndicator`, les proposer n'aurait aucun effet.
+ *
+ *  `comex_member` (round 25, transverse Performance/Stratégique — voir types/index.ts) en est
+ *  ÉGALEMENT exclu, délibérément : c'est un profil lecture seule par conception ("qui peut
+ *  RENSEIGNER cet indicateur" n'a pas de sens pour un rôle qui ne doit rien pouvoir éditer). Si un
+ *  lot ultérieur assouplit ce caractère lecture seule pour certains cas d'usage, revoir cette
+ *  exclusion à ce moment-là plutôt que d'anticiper ici. */
 const RESPONSIBLE_ROLES: { value: Role; shortKey: string; short: string; labelKey: string }[] = [
   { value: "cto", shortKey: "roles.cto.short", short: "CTO", labelKey: "roles.cto.label" },
   {
@@ -985,6 +991,7 @@ export function IndicatorsEditor({
         )}
         <AxisForm
           compact
+          users={users}
           stages={stages}
           confidentialityLevels={confidentialityLevels}
           submitLabel={t("common.add", "Ajouter")}

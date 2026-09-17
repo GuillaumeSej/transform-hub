@@ -90,12 +90,17 @@ const fr: Record<string, string> = {
   "roles.axisSponsor.short": "Sponsor axe",
   "roles.chantierOwner.label": "Responsable de chantier",
   "roles.chantierOwner.short": "Resp. chantier",
-  "roles.chantierContributor.label": "Contributeur chantier",
-  "roles.chantierContributor.short": "Contributeur",
+  "roles.chantierContributor.label": "Responsable projet",
+  "roles.chantierContributor.short": "Resp. projet",
   "roles.internalComm.label": "Communication interne",
   "roles.internalComm.short": "Com. interne",
   "roles.budgetControl.label": "Contrôle de gestion",
   "roles.budgetControl.short": "Contrôle gestion",
+  // Membre du COMEX (round 25) : profil transverse, lecture seule, valable sur les DEUX pistes
+  // (Plan Performance ET Plan Stratégique) — voir PERFORMANCE_ROLES/STRATEGIC_ROLES dans
+  // types/index.ts.
+  "roles.comexMember.label": "Membre du COMEX",
+  "roles.comexMember.short": "COMEX",
 
   // ─── login ────────────────────────────────────────────────────────────────
   "login.tagline": "BeTrack · Transformation",
@@ -735,6 +740,10 @@ const fr: Record<string, string> = {
   "adminHistory.entity.sublevers": "Sous-leviers",
   "adminHistory.entity.hrMovements": "Mouvements RH",
   "adminHistory.entity.employees": "Employés",
+  "adminHistory.entity.axis": "Axes",
+  "adminHistory.entity.chantier": "Chantiers",
+  "adminHistory.entity.projet": "Projets",
+  "adminHistory.entity.indicator": "Indicateurs",
   "adminHistory.entryCount": "{n} entrée(s)",
   "adminHistory.column.date": "Date",
   "adminHistory.column.user": "Utilisateur",
@@ -1732,11 +1741,11 @@ const fr: Record<string, string> = {
   // toggle "Période"/"Axe" et selon qu'une période est épinglée (voir les clés .subtitle.* ci-
   // dessous), pour répondre explicitement à "ça représente quoi, ce nombre d'ETP ?".
   "staffingPeriod.subtitle": "ETP affectés aux chantiers du programme, {mode}, {scope}.",
-  "staffingPeriod.subtitle.modeTeam": "par équipe",
+  "staffingPeriod.subtitle.modeTeam": "par département",
   "staffingPeriod.subtitle.modeAxis": "par axe",
   "staffingPeriod.subtitle.scopeAll": "sur l'ensemble de la période",
   "staffingPeriod.subtitle.scopePeriod": "pour {period}",
-  "staffingPeriod.mode.period": "Période",
+  "staffingPeriod.mode.period": "Département",
   "staffingPeriod.mode.axis": "Axe",
   "staffingPeriod.granularity.quarterly": "Trimestre",
   "staffingPeriod.granularity.semiannual": "Semestre",

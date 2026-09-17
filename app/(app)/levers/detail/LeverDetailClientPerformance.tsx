@@ -21,6 +21,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
+import { isReadOnlyUser } from "@/lib/roleProfiles";
 import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
 import type { CascadeResult } from "@/lib/engine";
@@ -65,6 +66,7 @@ type CascadeProposal = CascadeResult & { checked: Record<string, boolean> };
 export function LeverDetailClientPerformance() {
   const { t } = useTranslation();
   const { user } = useRole();
+  const readOnly = isReadOnlyUser(user);
   const data = useBeTrackData(user?.companyId ?? null);
   const [roleClearance, setRoleClearance] = useState<Company["roleClearance"]>();
   const [riskThresholds, setRiskThresholds] = useState<Company["riskThresholds"]>();
@@ -157,6 +159,16 @@ export function LeverDetailClientPerformance() {
   const actions = lever.actions ?? [];
   const hasAnyActions = actions.length > 0;
   const actionScope = { leverId: lever.id };
+  /** Round 25 (gate d'édition COMEX) : ouvre le formulaire d'action en mode édition — un utilisateur
+   *  en lecture seule ne doit JAMAIS l'atteindre, y compris via un clic sur une carte Kanban ou une
+   *  barre de Gantt (pas seulement le bouton "+ Action", déjà masqué ci-dessous) : `ActionForm`
+   *  reste un formulaire pleinement éditable (submit/delete/tableau d'impacts), pas de variante
+   *  lecture seule. Le détail de l'action reste consultable ailleurs (tableau d'impacts de l'onglet
+   *  "Impact", carte Kanban/barre Gantt elles-mêmes), donc aucune perte d'information. */
+  const openActionForEdit = (action: LeverAction) => {
+    if (readOnly) return;
+    setActionModal({ mode: "edit", action });
+  };
 
   // Alertes de dépendance liées à ce levier (dans les deux sens)
   const localIds = new Set([lever.id]);
@@ -205,9 +217,11 @@ export function LeverDetailClientPerformance() {
           {lever.status === "cancelled" && (
             <StageBadge status="cancelled" label={lifecycle.label("cancelled")} />
           )}
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
-            <Pencil size={13} /> {t("leverDetail.editLever", "Modifier le levier")}
-          </Button>
+          {!readOnly && (
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Pencil size={13} /> {t("leverDetail.editLever", "Modifier le levier")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -232,7 +246,7 @@ export function LeverDetailClientPerformance() {
                 >
                   <button
                     onClick={() => {
-                      if (isAuto || isCurrent) return;
+                      if (isAuto || isCurrent || readOnly) return;
                       data.updateLever(lever.id, { status: s });
                       showToast(
                         t("leverDetail.statusUpdated", "Niveau mis à jour"),
@@ -240,7 +254,7 @@ export function LeverDetailClientPerformance() {
                         "success"
                       );
                     }}
-                    disabled={isAuto}
+                    disabled={isAuto || readOnly}
                     title={
                       isAuto
                         ? t(
@@ -272,7 +286,7 @@ export function LeverDetailClientPerformance() {
               );
             })}
           </div>
-          {hasAnyActions && STATUS_ORDER[lever.status] < STATUS_ORDER.in_progress && (
+          {!readOnly && hasAnyActions && STATUS_ORDER[lever.status] < STATUS_ORDER.in_progress && (
             <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
               <span className="flex items-center gap-1.5 text-xs text-info-blue">
                 <Info size={13} />{" "}
@@ -687,10 +701,7 @@ export function LeverDetailClientPerformance() {
                 {(lever.actions ?? []).length > 0 && (
                   <>
                     <SectionTitle>{t("lever.actionTimeline", "Timeline des actions")}</SectionTitle>
-                    <ActionGantt
-                      actions={lever.actions ?? []}
-                      onActionClick={(action) => setActionModal({ mode: "edit", action })}
-                    />
+                    <ActionGantt actions={lever.actions ?? []} onActionClick={openActionForEdit} />
                   </>
                 )}
                 {consolidatedKPIs && (
@@ -768,15 +779,17 @@ export function LeverDetailClientPerformance() {
                 </span>
               }
             >
-              <div className="mb-2 flex justify-end">
-                <button
-                  onClick={() => setDepsModalOpen(true)}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-bp-coral hover:underline"
-                >
-                  <Pencil size={11} />{" "}
-                  {t("leverDetail.manageDependencies", "Gérer les dépendances")}
-                </button>
-              </div>
+              {!readOnly && (
+                <div className="mb-2 flex justify-end">
+                  <button
+                    onClick={() => setDepsModalOpen(true)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-bp-coral hover:underline"
+                  >
+                    <Pencil size={11} />{" "}
+                    {t("leverDetail.manageDependencies", "Gérer les dépendances")}
+                  </button>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -906,13 +919,15 @@ export function LeverDetailClientPerformance() {
                     <BarChart3 size={13} /> Gantt
                   </button>
                 </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setActionModal({ mode: "create" })}
-                >
-                  <Plus size={12} /> Action
-                </Button>
+                {!readOnly && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setActionModal({ mode: "create" })}
+                  >
+                    <Plus size={12} /> Action
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -955,17 +970,16 @@ export function LeverDetailClientPerformance() {
             {actionView === "kanban" ? (
               <ActionKanban
                 actions={actions}
-                onCardClick={(action) => setActionModal({ mode: "edit", action })}
-                onStatusChange={(actionId, status: ActionStatus) =>
-                  data.updateAction(actionScope, actionId, { status })
-                }
+                onCardClick={openActionForEdit}
+                onStatusChange={(actionId, status: ActionStatus) => {
+                  if (readOnly) return;
+                  data.updateAction(actionScope, actionId, { status });
+                }}
                 hasBlockingDependency={allDependencyAlerts.some((d) => d.sourceId === lever.id)}
+                readOnly={readOnly}
               />
             ) : (
-              <ActionGantt
-                actions={actions}
-                onActionClick={(action) => setActionModal({ mode: "edit", action })}
-              />
+              <ActionGantt actions={actions} onActionClick={openActionForEdit} />
             )}
 
             <p className="mt-4 flex items-start gap-1.5 text-[11px] text-tertiary">

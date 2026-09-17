@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, Users } from "lucide-react";
@@ -117,8 +117,9 @@ export function EffectifsPageClient() {
     chantiers,
     chantierActions,
     staffing,
+    strategicRole,
     loading: dataLoading,
-  } = useStrategicData(user?.companyId ?? null, activeProgramId);
+  } = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const { fteByDept, loading: departmentsLoading } = useCompanyDepartments(user?.companyId ?? null);
 
   /** Axe dont le drill-down budgétaire PAR CHANTIER (round 13) est actuellement ouvert — `null` =
@@ -126,6 +127,21 @@ export function EffectifsPageClient() {
    *  niveau de l'axe (round 12), jugé "trop grossier" par le PO : cliquer une part ouvre désormais
    *  un second donut, un slice par chantier de cet axe. */
   const [budgetDrilldownAxisId, setBudgetDrilldownAxisId] = useState<string | null>(null);
+
+  /** Round 25 (RBAC) : pour `axis_sponsor`, `axes` ne contient déjà plus que SON/SES propre(s)
+   *  axe(s) (scoping du hook) — le donut « Répartition par axe » de `moneyBudgetSection` n'a donc
+   *  plus rien d'informatif à montrer EN PREMIER pour ce rôle (une seule part à 100%, ou quelques
+   *  parts qui lui appartiennent toutes déjà). Plutôt que de le faire cliquer sur sa propre part
+   *  pour atteindre le drill-down « Répartition par chantier » — mécanisme déjà construit pour les
+   *  autres rôles, voir `budgetDrilldownModal` plus bas —, on ouvre directement ce drill-down sur
+   *  son premier axe dès que la liste (scopée) est connue. Le garde `budgetDrilldownAxisId === null`
+   *  ne redéclenche jamais l'ouverture après une fermeture manuelle (l'utilisateur peut refermer la
+   *  modale et rester sur la page). */
+  useEffect(() => {
+    if (strategicRole === "axis_sponsor" && axes.length > 0 && budgetDrilldownAxisId === null) {
+      setBudgetDrilldownAxisId(axes[0].id);
+    }
+  }, [strategicRole, axes, budgetDrilldownAxisId]);
 
   const globalTotals = useMemo(() => totalsByFunction(staffing), [staffing]);
   const totalFte = useMemo(() => staffing.reduce((sum, e) => sum + (e.fte || 0), 0), [staffing]);

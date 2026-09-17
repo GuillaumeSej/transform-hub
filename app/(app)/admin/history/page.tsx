@@ -73,6 +73,15 @@ export default function AdminHistoryPage() {
       if (entityFilter === "sublever" && !e.startsWith("sl")) return false;
       if (entityFilter === "movement" && !e.startsWith("mv")) return false;
       if (entityFilter === "employee" && !e.startsWith("emp")) return false;
+      // Entités Plan Stratégique (round audit trail) — ids générés par `newId()`
+      // (lib/hooks/useStrategicData.ts), toujours `{PREFIX}-...`, un préfixe distinct par type
+      // d'entité (voir son doc-comment) : "ax-" (axe), "ch-" (chantier), "ca-" (projet, alias de
+      // ChantierAction), "ind-" (indicateur). Vérifiés avec le tiret pour ne jamais chevaucher un
+      // futur préfixe Performance à une seule lettre.
+      if (entityFilter === "axis" && !e.startsWith("ax-")) return false;
+      if (entityFilter === "chantier" && !e.startsWith("ch-")) return false;
+      if (entityFilter === "projet" && !e.startsWith("ca-")) return false;
+      if (entityFilter === "indicator" && !e.startsWith("ind-")) return false;
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -124,6 +133,10 @@ export default function AdminHistoryPage() {
           <option value="sublever">{t("adminHistory.entity.sublevers", "Sous-leviers")}</option>
           <option value="movement">{t("adminHistory.entity.hrMovements", "Mouvements RH")}</option>
           <option value="employee">{t("adminHistory.entity.employees", "Employés")}</option>
+          <option value="axis">{t("adminHistory.entity.axis", "Axes")}</option>
+          <option value="chantier">{t("adminHistory.entity.chantier", "Chantiers")}</option>
+          <option value="projet">{t("adminHistory.entity.projet", "Projets")}</option>
+          <option value="indicator">{t("adminHistory.entity.indicator", "Indicateurs")}</option>
         </select>
         <span className="text-xs text-text-secondary">
           {t("adminHistory.entryCount", "{n} entrée(s)").replace("{n}", String(sorted.length))}

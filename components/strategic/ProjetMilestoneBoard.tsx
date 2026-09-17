@@ -110,8 +110,13 @@ export function ProjetCard({
   chantier,
   chantierColor,
   onProjetClick,
+  clickable = true,
 }: ProjetBoardCard & {
   onProjetClick: (chantierId: string, focusActionId?: string) => void;
+  /** Round 25 (RBAC `chantier_contributor`) — le projet reste rendu (couleur, avancement, statut
+   *  "en retard") mais devient inerte au clic quand `false`. Défaut `true` : comportement
+   *  historique inchangé pour tout appelant qui ne le passe pas. */
+  clickable?: boolean;
 }) {
   const { t } = useTranslation();
   const borderClass = CHANTIER_BORDER_CLASS[chantierColor] ?? "border-border";
@@ -136,11 +141,14 @@ export function ProjetCard({
   return (
     <button
       type="button"
-      onClick={() => onProjetClick(chantier.id, action.id)}
+      disabled={!clickable}
+      onClick={clickable ? () => onProjetClick(chantier.id, action.id) : undefined}
       title={`${action.name} · ${chantier.name} · ${displayedStage} · ${progressPct}%`}
-      className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 p-2 pb-2.5 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass} ${
-        late ? "bg-rag-red-light/40 ring-2 ring-inset ring-rag-red" : "bg-white"
-      }`}
+      className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 p-2 pb-2.5 text-left transition last:mb-0 focus:outline-none ${borderClass} ${
+        clickable
+          ? "hover:-translate-y-px hover:shadow-sm focus:ring-2 focus:ring-black"
+          : "opacity-60"
+      } ${late ? "bg-rag-red-light/40 ring-2 ring-inset ring-rag-red" : "bg-white"}`}
     >
       <span className="flex w-full flex-col gap-1">
         <span className="flex w-full items-center gap-1.5">
@@ -207,14 +215,20 @@ export function ProjetMilestoneBoard({
   groups,
   labels,
   onProjetClick,
+  clickableActionIds = "all",
 }: {
   groups: ProjetBoardGroup[];
   /** `emptyColumn` : placeholder discret d'une colonne de jalon sans levier — un texte plutôt que
    *  rien du tout, pour que la structure à 5 colonnes reste lisible même axe par axe. */
   labels: { emptyColumn: string };
   onProjetClick: (chantierId: string, focusActionId?: string) => void;
+  /** Round 25 (RBAC `chantier_contributor`) — voir `StrategicData.clickableActionIds`,
+   *  lib/hooks/useStrategicData.ts. Défaut `"all"` (comportement historique inchangé). */
+  clickableActionIds?: Set<string> | "all";
 }) {
   const { t } = useTranslation();
+  const isActionClickable = (actionId: string) =>
+    clickableActionIds === "all" || clickableActionIds.has(actionId);
   return (
     <div className="space-y-5">
       {groups.map((group) => (
@@ -290,6 +304,7 @@ export function ProjetMilestoneBoard({
                         chantier={card.chantier}
                         chantierColor={card.chantierColor}
                         onProjetClick={onProjetClick}
+                        clickable={isActionClickable(card.action.id)}
                       />
                     ))
                   )}

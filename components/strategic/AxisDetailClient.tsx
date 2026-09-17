@@ -25,6 +25,7 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { isReadOnlyUser } from "@/lib/roleProfiles";
 import type { Indicator } from "@/types";
 
 /**
@@ -56,6 +57,7 @@ import type { Indicator } from "@/types";
 
 export function AxisDetailClient() {
   const { user } = useRole();
+  const readOnly = isReadOnlyUser(user);
   const { activeProgramId } = useActiveProgram();
   const { t } = useTranslation();
   const router = useRouter();
@@ -237,9 +239,11 @@ export function AxisDetailClient() {
             {t("strategicAxes.owner")} : {axis.owner ?? t("strategicAxes.unassigned")}
           </div>
         </div>
-        <Button variant="outline" onClick={() => setEditAxisOpen(true)}>
-          <Pencil size={13} /> {t("strategicAxes.editAxis")}
-        </Button>
+        {!readOnly && (
+          <Button variant="outline" onClick={() => setEditAxisOpen(true)}>
+            <Pencil size={13} /> {t("strategicAxes.editAxis")}
+          </Button>
+        )}
       </div>
 
       <Modal
@@ -249,6 +253,7 @@ export function AxisDetailClient() {
         maxWidth="640px"
       >
         <AxisForm
+          users={data.users}
           initial={axis}
           stages={stages}
           confidentialityLevels={confidentialityLevels}
@@ -306,9 +311,11 @@ export function AxisDetailClient() {
         <CardHeader
           title={t("strategicAxes.ganttSection")}
           actions={
-            <Button variant="outline" size="sm" onClick={() => setNewChantierOpen(true)}>
-              <Plus size={12} /> {t("strategicAxes.newChantier")}
-            </Button>
+            !readOnly && (
+              <Button variant="outline" size="sm" onClick={() => setNewChantierOpen(true)}>
+                <Plus size={12} /> {t("strategicAxes.newChantier")}
+              </Button>
+            )
           }
         />
         <CardBody>

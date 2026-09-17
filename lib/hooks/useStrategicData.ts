@@ -24,10 +24,22 @@ import {
   deleteChantierStaffing,
 } from "@/lib/firestore/chantierStaffing";
 import { subscribeUsers, subscribeCompanies } from "@/lib/firestore/admin";
-import { computeIndicatorStatus } from "@/lib/axisLogic";
+import { appendAuditEntries } from "@/lib/firestore/levers";
+import {
+  computeIndicatorStatus,
+  resolveStrategicOwnershipScope,
+  resolveStrategicRoleForProgram,
+  type StrategicOwnershipScope,
+} from "@/lib/axisLogic";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { isAnyAdmin } from "@/lib/roleProfiles";
+import {
+  buildUpdateAuditEntries,
+  makeCreatedAuditEntry,
+  makeDeletedAuditEntry,
+} from "@/lib/strategicAuditLogic";
 import type {
+  AuditEntry,
   AuthUser,
   Chantier,
   ChantierAction,
@@ -35,8 +47,19 @@ import type {
   Company,
   Indicator,
   IndicatorMeasurement,
+  Role,
   StrategicAxis,
 } from "@/types";
+
+/** Journalise en tâche de fond, sans jamais faire échouer la mutation appelante si l'écriture du
+ *  journal d'audit échoue (même parti pris que `persistAudit` dans `lib/hooks/useStorage.ts`,
+ *  simple `.catch` + log plutôt qu'une erreur remontée à l'appelant). */
+function logAudit(companyId: string | null | undefined, entries: AuditEntry[]): void {
+  if (entries.length === 0) return;
+  appendAuditEntries(companyId, entries).catch((err) =>
+    console.error("[betrack] audit stratégique :", err)
+  );
+}
 
 /**
  * Point d'accès React unique aux données du Plan Stratégique (axes / chantiers / actions /
@@ -73,6 +96,29 @@ export type StrategicData = {
   users: AuthUser[];
   /** true tant que les six abonnements du plan n'ont pas tous répondu au moins une fois. */
   loading: boolean;
+
+  /** Rôle Plan Stratégique EFFECTIF de l'utilisateur pour CE programme (round 25) — voir
+   *  `resolveStrategicRoleForProgram`, lib/axisLogic.ts. `undefined` si l'appelant n'a pas activé
+   *  le filtrage (`user` omis, voir le paramètre `user` ci-dessous) ou si l'utilisateur n'a aucun
+   *  profil stratégique. Exposé pour les écrans qui ont besoin de distinguer un rôle PRÉCIS (ex.
+   *  gating du clic sur les puces d'indicateur pour `axis_sponsor`, `StrategicDashboardView.tsx`)
+   *  plutôt que la simple forme "restreint/pas restreint" d'`ownershipScope` ci-dessous. */
+  strategicRole: Role | undefined;
+  /** Périmètre de visibilité par propriétaire nommé (round 25) déjà appliqué aux projections
+   *  ci-dessus (`axes`/`chantiers`/`indicators`/`staffing`) — exposé BRUT en plus pour les
+   *  appelants qui ont besoin de la distinction fine (ex. `clickableActionIds` ci-dessous). Voir
+   *  `resolveStrategicOwnershipScope`, lib/axisLogic.ts. */
+  ownershipScope: StrategicOwnershipScope;
+  /** Projets réellement CLIQUABLES/ouvrables pour l'utilisateur courant — `"all"` (aucune
+   *  restriction, le cas de TOUS les rôles sauf `chantier_contributor`) ou l'ensemble précis de
+   *  leurs propres `ChantierAction.id`. Round 25, cas `chantier_contributor` : un projet peut être
+   *  VISIBLE (présent dans `chantierActions` ci-dessus, parce qu'il appartient à un chantier où ce
+   *  contributeur a au moins un projet à lui) sans être CLIQUABLE (ce n'est pas SON projet) — cette
+   *  distinction ne peut pas être un simple filtrage de liste (l'UI doit continuer à RENDRE le
+   *  projet, juste le rendre inerte au clic), d'où ce champ séparé plutôt que de le fusionner dans
+   *  `chantierActions`. Consommé par `ProgramRoadmap.tsx`/`AxisChantierProjetAccordion.tsx`/
+   *  `ProjetMilestoneBoard.tsx`. */
+  clickableActionIds: Set<string> | "all";
 
   // ── Mutations ──────────────────────────────────────────────────────────────────────────────
   createAxis: (
@@ -140,6 +186,11 @@ function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Même repli que `DEMO_USER` (`lib/hooks/useStorage.ts`) pour les mutations dont l'appelant n'a
+ *  pas (encore) migré vers le paramètre `user` de ce hook (voir son doc-comment) — attribution
+ *  d'audit générique plutôt que de bloquer la journalisation faute d'identité connue. */
+const AUDIT_FALLBACK_USER = "Utilisateur démo";
+
 export function useStrategicData(
   companyId: string | null | undefined,
   programId: string | null | undefined,
@@ -151,10 +202,32 @@ export function useStrategicData(
    * habilités, exactement comme `isLeverVisibleForClearance`/`resolveConfidentialityClearance`
    * (lib/leversLogic.ts) le font pour les leviers du Plan de Performance — admin/admin_entreprise
    * voient toujours tout.
+   *
+   * Round 25 : ce MÊME paramètre active AUSSI le filtrage par propriétaire nommé (`axis_sponsor`/
+   * `chantier_owner`/`chantier_contributor`, voir `resolveStrategicOwnershipScope`,
+   * lib/axisLogic.ts) — un seul et même interrupteur pour les deux mécanismes (confidentialité ET
+   * ownership) plutôt qu'un second paramètre : un appelant qui a migré pour activer l'un a de toute
+   * façon besoin de l'autre, aucun call site connu ne veut l'un sans l'autre. `username` est
+   * désormais nécessaire (en plus des champs déjà requis pour la confidentialité) pour comparer aux
+   * `owner`/`pilote` des entités.
+   *
+   * `name` (round audit trail Plan Stratégique) sert UNIQUEMENT à attribuer les entrées d'audit
+   * (`AuditEntry.user`, voir `lib/strategicAuditLogic.ts`) à un auteur lisible — même convention
+   * que `leversLogic.addComment`/`useStorage.ts::addComment`, qui utilisent `user.name` (pas
+   * `username`, réservé aux comparaisons d'identité strictes). Un appelant qui omet `user` (voir
+   * ci-dessus) n'active pas non plus l'attribution nominative : ses mutations sont journalisées
+   * sous un auteur générique (voir `AUDIT_FALLBACK_USER` ci-dessous), exactement comme les
+   * mutations Plan Performance non encore migrées à l'utilisateur réel (`DEMO_USER`,
+   * `lib/hooks/useStorage.ts`).
    */
   user?: Pick<
     AuthUser,
-    "profiles" | "isGlobalAdmin" | "isCompanyAdmin" | "confidentialityClearance"
+    | "username"
+    | "profiles"
+    | "isGlobalAdmin"
+    | "isCompanyAdmin"
+    | "confidentialityClearance"
+    | "name"
   > | null
 ): StrategicData {
   const [allAxes, setAllAxes] = useState<StrategicAxis[]>([]);
@@ -243,6 +316,9 @@ export function useStrategicData(
   // N'est souscrite que si l'appelant a explicitement passé `user` (voir doc du paramètre
   // ci-dessus) — les appelants non migrés ne payent aucun abonnement supplémentaire.
   const filterActive = user !== undefined;
+  // Auteur attribué aux entrées d'audit des mutations ci-dessous — voir le doc-comment du
+  // paramètre `user` (champ `name`) et `AUDIT_FALLBACK_USER` plus haut.
+  const auditUser = user?.name ?? AUDIT_FALLBACK_USER;
   const [company, setCompany] = useState<Company | null>(null);
   useEffect(() => {
     if (!filterActive || !companyId) {
@@ -260,28 +336,109 @@ export function useStrategicData(
     [user, company?.roleClearance]
   );
 
+  // ── Périmètre de visibilité par propriétaire nommé (round 25) ─────────────────────────────
+  // Même interrupteur `filterActive` que la confidentialité ci-dessus (voir le doc-comment du
+  // paramètre `user`) : un appelant non migré (`user` omis) ne paie ni l'un ni l'autre. Calculé à
+  // partir d'axes/chantiers/actions scopés au programme actif mais AVANT le masquage de
+  // confidentialité — les deux filtres sont INDÉPENDANTS (un axe doit passer les DEUX pour être
+  // visible, voir `axes`/`chantiers`/`indicators`/`staffing` ci-dessous), et `owner`/`pilote` ne
+  // sont pas affectés par la confidentialité.
+  const programScopedAxes = useMemo(
+    () => allAxes.filter((a) => a.programId === programId),
+    [allAxes, programId]
+  );
+  const programScopedChantiers = useMemo(
+    () => allChantiers.filter((c) => c.programId === programId),
+    [allChantiers, programId]
+  );
+  const programScopedActionsForScope = useMemo(() => {
+    const ids = new Set(programScopedChantiers.map((c) => c.id));
+    return allActions.filter((a) => ids.has(a.chantierId));
+  }, [allActions, programScopedChantiers]);
+  const strategicRole = useMemo(
+    () => (filterActive ? resolveStrategicRoleForProgram(user, programId) : undefined),
+    [filterActive, user, programId]
+  );
+  const ownershipScope: StrategicOwnershipScope = useMemo(() => {
+    if (!filterActive) return { mode: "unrestricted" };
+    return resolveStrategicOwnershipScope(
+      user,
+      programId,
+      programScopedAxes,
+      programScopedChantiers,
+      programScopedActionsForScope
+    );
+  }, [
+    filterActive,
+    user,
+    programId,
+    programScopedAxes,
+    programScopedChantiers,
+    programScopedActionsForScope,
+  ]);
+  /** Voir le doc-comment de `StrategicData.clickableActionIds`. */
+  const clickableActionIds: Set<string> | "all" = useMemo(() => {
+    if (ownershipScope.mode === "scoped" && ownershipScope.clickableActionIds) {
+      return ownershipScope.clickableActionIds;
+    }
+    return "all";
+  }, [ownershipScope]);
+
   // ── Projections scopées au programme actif ────────────────────────────────────────────────
-  // Le masquage de confidentialité (quand `filterActive`) s'applique ICI, une seule fois pour
-  // tous les écrans consommateurs (StrategicAxesView, ChantierDetailClient, KpiPageClient,
+  // Le masquage de confidentialité ET le périmètre par propriétaire nommé (tous deux actifs
+  // seulement quand `filterActive`) s'appliquent ICI, une seule fois pour tous les écrans
+  // consommateurs (StrategicAxesView, ChantierDetailClient, KpiPageClient,
   // StrategicDashboardView, …) — les actions/mesures qui en dérivent plus bas héritent donc
-  // automatiquement du masquage sans logique dupliquée par écran.
+  // automatiquement des deux filtres sans logique dupliquée par écran. Une entité doit passer LES
+  // DEUX filtres pour être visible (composition, pas substitution).
   const axes = useMemo(() => {
-    const scoped = allAxes.filter((a) => a.programId === programId);
-    if (!filterActive || isAdmin) return scoped;
-    return scoped.filter((a) => isLeverVisibleForClearance(a.confidentialityLevel, clearance));
-  }, [allAxes, programId, filterActive, isAdmin, clearance]);
+    let visible = programScopedAxes;
+    if (filterActive && !isAdmin) {
+      visible = visible.filter((a) =>
+        isLeverVisibleForClearance(a.confidentialityLevel, clearance)
+      );
+    }
+    if (ownershipScope.mode === "scoped") {
+      visible = visible.filter((a) => ownershipScope.axisIds.has(a.id));
+    }
+    return visible;
+  }, [programScopedAxes, filterActive, isAdmin, clearance, ownershipScope]);
   const chantiers = useMemo(() => {
-    const scoped = allChantiers.filter((c) => c.programId === programId);
-    if (!filterActive || isAdmin) return scoped;
-    return scoped.filter((c) => isLeverVisibleForClearance(c.confidentialityLevel, clearance));
-  }, [allChantiers, programId, filterActive, isAdmin, clearance]);
+    let visible = programScopedChantiers;
+    if (filterActive && !isAdmin) {
+      visible = visible.filter((c) =>
+        isLeverVisibleForClearance(c.confidentialityLevel, clearance)
+      );
+    }
+    if (ownershipScope.mode === "scoped") {
+      visible = visible.filter((c) => ownershipScope.chantierIds.has(c.id));
+    }
+    return visible;
+  }, [programScopedChantiers, filterActive, isAdmin, clearance, ownershipScope]);
   const indicators = useMemo(() => {
-    const scoped = allIndicators.filter((i) => i.programId === programId);
-    if (!filterActive || isAdmin) return scoped;
-    return scoped.filter((i) => isLeverVisibleForClearance(i.confidentialityLevel, clearance));
-  }, [allIndicators, programId, filterActive, isAdmin, clearance]);
+    let visible = allIndicators.filter((i) => i.programId === programId);
+    if (filterActive && !isAdmin) {
+      visible = visible.filter((i) =>
+        isLeverVisibleForClearance(i.confidentialityLevel, clearance)
+      );
+    }
+    if (ownershipScope.mode === "scoped") {
+      // Indicateur chantier-scopé : visible si SON chantier l'est. Indicateur macro (pas de
+      // `chantierId`, porté directement par l'axe) : visible si SON axe l'est — vrai pour
+      // `axis_sponsor` (ses propres axes) et, à titre d'orientation, pour `chantier_owner`/
+      // `chantier_contributor` sur l'axe PARENT de leur(s) chantier(s) visible(s) (même parti pris
+      // que `axisIds` dans `resolveStrategicOwnershipScope`, lib/axisLogic.ts).
+      visible = visible.filter((i) =>
+        i.chantierId
+          ? ownershipScope.chantierIds.has(i.chantierId)
+          : ownershipScope.axisIds.has(i.axisId)
+      );
+    }
+    return visible;
+  }, [allIndicators, programId, filterActive, isAdmin, clearance, ownershipScope]);
   // Actions et mesures ne portent pas de `programId` (elles le tiennent de leur parent) : on les
-  // rattache via l'ensemble des chantiers/indicateurs du programme.
+  // rattache via l'ensemble des chantiers/indicateurs du programme, déjà scopés (confidentialité +
+  // ownership) ci-dessus — aucun filtre supplémentaire nécessaire ici.
   const chantierActions = useMemo(() => {
     const ids = new Set(chantiers.map((c) => c.id));
     return allActions.filter((a) => ids.has(a.chantierId));
@@ -292,11 +449,18 @@ export function useStrategicData(
   }, [allMeasurements, indicators]);
   // Le staffing porte son propre `programId` (comme axes/chantiers/indicateurs) : filtrage direct,
   // sans passer par la liste des chantiers — une ligne dont le chantier vient d'être supprimé
-  // reste ainsi visible dans les agrégats plutôt que de disparaître silencieusement.
-  const staffing = useMemo(
-    () => allStaffing.filter((s) => s.programId === programId),
-    [allStaffing, programId]
-  );
+  // reste ainsi visible dans les agrégats plutôt que de disparaître silencieusement. Round 25 :
+  // ownership scoping ajouté (sinon `axis_sponsor`/`chantier_owner`/`chantier_contributor`
+  // verraient les ETP de TOUT le programme sur la page Effectifs, malgré des `axes`/`chantiers`
+  // déjà correctement bornés) — PAS de masquage de confidentialité ici, `ChantierStaffing` n'en
+  // porte pas (comme avant ce round).
+  const staffing = useMemo(() => {
+    let visible = allStaffing.filter((s) => s.programId === programId);
+    if (ownershipScope.mode === "scoped") {
+      visible = visible.filter((s) => ownershipScope.chantierIds.has(s.chantierId));
+    }
+    return visible;
+  }, [allStaffing, programId, ownershipScope]);
 
   // Refs toujours à jour : les mutations doivent lire l'état le plus récent sans être recréées à
   // chaque rendu (même motivation que les refs de `useBeTrackData`).
@@ -325,20 +489,33 @@ export function useStrategicData(
         lastUpdate: nowDate(),
       };
       await saveStrategicAxis(axis);
+      logAudit(companyId, [makeCreatedAuditEntry(auditUser, axis.id, "axe", axis.name)]);
       return axis;
     },
-    [companyId, programId]
+    [companyId, programId, auditUser]
   );
 
-  const updateAxis = useCallback<StrategicData["updateAxis"]>(async (id, patch) => {
-    const existing = axesRef.current.find((a) => a.id === id);
-    if (!existing) return;
-    await saveStrategicAxis({ ...existing, ...patch, id, lastUpdate: nowDate() });
-  }, []);
+  const updateAxis = useCallback<StrategicData["updateAxis"]>(
+    async (id, patch) => {
+      const existing = axesRef.current.find((a) => a.id === id);
+      if (!existing) return;
+      const after: StrategicAxis = { ...existing, ...patch, id, lastUpdate: nowDate() };
+      await saveStrategicAxis(after);
+      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
+    },
+    [companyId, auditUser]
+  );
 
-  const removeAxis = useCallback<StrategicData["removeAxis"]>(async (id) => {
-    await deleteStrategicAxis(id);
-  }, []);
+  const removeAxis = useCallback<StrategicData["removeAxis"]>(
+    async (id) => {
+      const existing = axesRef.current.find((a) => a.id === id);
+      await deleteStrategicAxis(id);
+      if (existing) {
+        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "axe", existing.name)]);
+      }
+    },
+    [companyId, auditUser]
+  );
 
   const createChantier = useCallback<StrategicData["createChantier"]>(
     async (input) => {
@@ -353,43 +530,68 @@ export function useStrategicData(
         lastUpdate: nowDate(),
       };
       await saveChantier(chantier);
+      logAudit(companyId, [
+        makeCreatedAuditEntry(auditUser, chantier.id, "chantier", chantier.name),
+      ]);
       return chantier;
     },
-    [companyId, programId]
+    [companyId, programId, auditUser]
   );
 
-  const updateChantier = useCallback<StrategicData["updateChantier"]>(async (id, patch) => {
-    const existing = chantiersRef.current.find((c) => c.id === id);
-    if (!existing) return;
-    await saveChantier({ ...existing, ...patch, id, lastUpdate: nowDate() });
-  }, []);
+  const updateChantier = useCallback<StrategicData["updateChantier"]>(
+    async (id, patch) => {
+      const existing = chantiersRef.current.find((c) => c.id === id);
+      if (!existing) return;
+      const after: Chantier = { ...existing, ...patch, id, lastUpdate: nowDate() };
+      await saveChantier(after);
+      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
+    },
+    [companyId, auditUser]
+  );
 
-  const removeChantier = useCallback<StrategicData["removeChantier"]>(async (id) => {
-    await deleteChantier(id);
-  }, []);
+  const removeChantier = useCallback<StrategicData["removeChantier"]>(
+    async (id) => {
+      const existing = chantiersRef.current.find((c) => c.id === id);
+      await deleteChantier(id);
+      if (existing) {
+        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "chantier", existing.name)]);
+      }
+    },
+    [companyId, auditUser]
+  );
 
   const createChantierAction = useCallback<StrategicData["createChantierAction"]>(
     async (input) => {
       if (!companyId) throw new Error("createChantierAction: companyId manquant");
       const action: ChantierAction = { ...input, id: newId("CA"), companyId };
       await saveChantierAction(action);
+      logAudit(companyId, [makeCreatedAuditEntry(auditUser, action.id, "projet", action.name)]);
       return action;
     },
-    [companyId]
+    [companyId, auditUser]
   );
 
   const updateChantierAction = useCallback<StrategicData["updateChantierAction"]>(
     async (id, patch) => {
       const existing = actionsRef.current.find((a) => a.id === id);
       if (!existing) return;
-      await saveChantierAction({ ...existing, ...patch, id });
+      const after: ChantierAction = { ...existing, ...patch, id };
+      await saveChantierAction(after);
+      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
     },
-    []
+    [companyId, auditUser]
   );
 
-  const removeChantierAction = useCallback<StrategicData["removeChantierAction"]>(async (id) => {
-    await deleteChantierAction(id);
-  }, []);
+  const removeChantierAction = useCallback<StrategicData["removeChantierAction"]>(
+    async (id) => {
+      const existing = actionsRef.current.find((a) => a.id === id);
+      await deleteChantierAction(id);
+      if (existing) {
+        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "projet", existing.name)]);
+      }
+    },
+    [companyId, auditUser]
+  );
 
   const createIndicator = useCallback<StrategicData["createIndicator"]>(
     async (input) => {
@@ -407,24 +609,40 @@ export function useStrategicData(
         lastUpdate: nowDate(),
       };
       await saveIndicator(indicator);
+      logAudit(companyId, [
+        makeCreatedAuditEntry(auditUser, indicator.id, "indicateur", indicator.name),
+      ]);
       return indicator;
     },
-    [companyId, programId]
+    [companyId, programId, auditUser]
   );
 
-  const updateIndicator = useCallback<StrategicData["updateIndicator"]>(async (id, patch) => {
-    const existing = indicatorsRef.current.find((i) => i.id === id);
-    if (!existing) return;
-    const next: Indicator = { ...existing, ...patch, id, lastUpdate: nowDate() };
-    // Modifier l'objectif/le sens/la nature change mécaniquement le verdict sur la dernière
-    // mesure — on recalcule ici pour ne pas laisser un statut périmé en base.
-    next.status = computeIndicatorStatus(next, measurementsRef.current);
-    await saveIndicator(next);
-  }, []);
+  const updateIndicator = useCallback<StrategicData["updateIndicator"]>(
+    async (id, patch) => {
+      const existing = indicatorsRef.current.find((i) => i.id === id);
+      if (!existing) return;
+      const next: Indicator = { ...existing, ...patch, id, lastUpdate: nowDate() };
+      // Modifier l'objectif/le sens/la nature change mécaniquement le verdict sur la dernière
+      // mesure — on recalcule ici pour ne pas laisser un statut périmé en base.
+      next.status = computeIndicatorStatus(next, measurementsRef.current);
+      await saveIndicator(next);
+      // Diff sur le `patch` d'origine (pas `next`, dont `status` peut avoir été recalculé
+      // au-dessus sans que l'appelant l'ait demandé) — même convention que les autres mutations.
+      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, next));
+    },
+    [companyId, auditUser]
+  );
 
-  const removeIndicator = useCallback<StrategicData["removeIndicator"]>(async (id) => {
-    await deleteIndicator(id);
-  }, []);
+  const removeIndicator = useCallback<StrategicData["removeIndicator"]>(
+    async (id) => {
+      const existing = indicatorsRef.current.find((i) => i.id === id);
+      await deleteIndicator(id);
+      if (existing) {
+        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "indicateur", existing.name)]);
+      }
+    },
+    [companyId, auditUser]
+  );
 
   const addMeasurement = useCallback<StrategicData["addMeasurement"]>(
     async (input) => {
@@ -490,6 +708,9 @@ export function useStrategicData(
     staffing,
     users,
     loading,
+    strategicRole,
+    ownershipScope,
+    clickableActionIds,
     createAxis,
     updateAxis,
     removeAxis,

@@ -1,4 +1,5 @@
 import {
+  arrayUnion,
   collection,
   doc,
   getDocs,
@@ -32,7 +33,14 @@ const subLeversCol = () => collection(db, "subLevers");
 /** Documents `leverMeta/{companyId}__{comments|auditLog}` — partitionnés par entreprise (voir
  * firestore.rules, section `match /leverMeta/{docId}`, et scripts/migrate-lever-meta-tenant-split.js
  * pour la migration depuis les anciens documents mutualisés `leverMeta/comments` /
- * `leverMeta/auditLog`, qui mélangeaient les données de TOUTES les entreprises). */
+ * `leverMeta/auditLog`, qui mélangeaient les données de TOUTES les entreprises).
+ *
+ * `auditDoc`/`subscribeAuditLog` sont malgré leur emplacement (`lib/firestore/levers.ts`) PARTAGÉS
+ * avec le Plan Stratégique depuis l'extension de l'audit trail à ses mutations (chantiers/axes/
+ * projets/indicateurs, voir `lib/hooks/useStrategicData.ts`) — jamais renommés/déplacés pour éviter
+ * de faire bouger tous les call sites existants (Plan Performance) pour un seul document
+ * réutilisé tel quel. Voir `appendAuditEntries` plus bas pour la voie d'écriture utilisée par le
+ * Plan Stratégique (ATOMIQUE, contrairement à `saveAuditLog` ci-dessous). */
 const commentsDoc = (companyId: string) => doc(db, "leverMeta", `${companyId}__comments`);
 const auditDoc = (companyId: string) => doc(db, "leverMeta", `${companyId}__auditLog`);
 
@@ -203,6 +211,28 @@ export async function saveAuditLog(
     return;
   }
   await setDoc(auditDoc(companyId), { entries });
+}
+
+/**
+ * Ajoute des entrées au journal d'audit partagé, de façon ATOMIQUE côté serveur (`arrayUnion`),
+ * plutôt qu'en réécrivant tout le tableau depuis un cache local comme `saveAuditLog` ci-dessus
+ * (toujours utilisée telle quelle par le Plan Performance/`useBeTrackData`, qui maintient son
+ * propre cache local `audit` prépendé puis réécrit en entier). `useStrategicData` (Plan
+ * Stratégique) écrit dans CE MÊME document partitionné mais SANS maintenir de cache local du
+ * journal complet — `AppShell` monte les deux hooks simultanément sur (quasi) toutes les pages, un
+ * `setDoc({entries: next})` calculé depuis un cache local resterait donc sujet à un "lost update"
+ * si l'autre écrivain committait entre-temps (l'écrasement de l'un par l'autre). `arrayUnion`
+ * élimine ce risque sans avoir à faire porter à `useStrategicData` un abonnement/cache
+ * supplémentaire dont il n'a par ailleurs aucun usage (il n'affiche jamais le journal, seule
+ * `app/(app)/admin/history/page.tsx` le lit). `merge: true` fait qu'un document pas encore créé
+ * pour cette entreprise est initialisé à la volée par le premier appel.
+ */
+export async function appendAuditEntries(
+  companyId: string | null | undefined,
+  entries: AuditEntry[]
+): Promise<void> {
+  if (!companyId || entries.length === 0) return;
+  await setDoc(auditDoc(companyId), { entries: arrayUnion(...entries) }, { merge: true });
 }
 
 type LeversSeed = {

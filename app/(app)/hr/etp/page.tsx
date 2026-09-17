@@ -6,6 +6,7 @@ import { CheckCircle2, Plus, TriangleAlert, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
+import { isReadOnlyUser } from "@/lib/roleProfiles";
 import * as hr from "@/lib/hrEngine";
 import { classifyMovementExecution, EXECUTION_LABELS } from "@/lib/hrExecution";
 import { fmtCurr } from "@/lib/engine";
@@ -99,6 +100,7 @@ export default function BaseEtpPage() {
   const { t } = useTranslation();
   const ALERT_LABELS = alertKindLabels(t);
   const { user } = useRole();
+  const readOnly = isReadOnlyUser(user);
   const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -474,17 +476,20 @@ export default function BaseEtpPage() {
     {
       key: "label",
       label: t("etp.column.label", "Libellé"),
-      render: (r) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setMovementModal({ movement: r.movement });
-          }}
-          className="font-semibold text-bp-coral hover:underline"
-        >
-          {r.label}
-        </button>
-      ),
+      render: (r) =>
+        readOnly ? (
+          <span className="font-semibold text-primary">{r.label}</span>
+        ) : (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setMovementModal({ movement: r.movement });
+            }}
+            className="font-semibold text-bp-coral hover:underline"
+          >
+            {r.label}
+          </button>
+        ),
     },
     { key: "type", label: t("etp.filter.type", "Type") },
     { key: "department", label: t("hr.department", "Département") },
@@ -501,6 +506,8 @@ export default function BaseEtpPage() {
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rag-green-dark">
             <CheckCircle2 size={13} /> {t("etp.validatedLabel", "Validé")}
           </span>
+        ) : readOnly ? (
+          <span className="text-[11px] text-tertiary">—</span>
         ) : (
           <Button
             variant="outline"
@@ -605,9 +612,11 @@ export default function BaseEtpPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <HrExcelButtons data={data} />
-          <Button variant="primary" onClick={() => setMovementModal({})}>
-            <Plus size={13} /> {t("etp.newMovement", "Nouveau mouvement")}
-          </Button>
+          {!readOnly && (
+            <Button variant="primary" onClick={() => setMovementModal({})}>
+              <Plus size={13} /> {t("etp.newMovement", "Nouveau mouvement")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -689,6 +698,7 @@ export default function BaseEtpPage() {
               "Rechercher (nom, matricule, fonction...)"
             )}
             defaultSort={{ key: "department", direction: "asc" }}
+            readOnly={readOnly}
           />
         </>
       )}
