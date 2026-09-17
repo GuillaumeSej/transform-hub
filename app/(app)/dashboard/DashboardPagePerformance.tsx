@@ -140,8 +140,12 @@ export function DashboardPagePerformance() {
   const selectedProgramId = searchParams.get("program") ?? "";
   const lifecycle = useLifecycleLabels(selectedProgramId || undefined);
   // Contexte global "programme actif" — synchronisé dans les deux sens avec le `?program=` de
-  // cette page (voir plus bas).
-  const { activeProgramId, setActiveProgramId } = useActiveProgram();
+  // cette page (voir plus bas). `isConsolidatedView`/`consolidatedPrograms` pilotent le mode "vue
+  // consolidée" (fondation chantier CTO multi-programmes, voir lib/consolidatedProgramAccess.ts) :
+  // au lieu d'un unique `selectedProgramId`, les leviers/alertes/KPI de CE dashboard doivent alors
+  // agréger TOUS les programmes de `consolidatedPrograms` — voir `programScopedLevers` plus bas.
+  const { activeProgramId, setActiveProgramId, isConsolidatedView, consolidatedPrograms } =
+    useActiveProgram();
 
   // Société courante — utilisée pour le budget CAPEX de référence (KPI ci-dessous) et
   // l'habilitation de confidentialité (filtrage des leviers visibles par profil).
@@ -202,24 +206,39 @@ export function DashboardPagePerformance() {
   // liste. D'où l'ancrage sur `activeProgramId` (qui retombe lui-même sur le premier programme
   // disponible, voir useActiveProgram) plutôt que sur `programs[0]` directement.
   useEffect(() => {
+    // Vue consolidée : ce dashboard n'a pas besoin d'un `?program=` (il lit `isConsolidatedView`/
+    // `consolidatedPrograms` du contexte directement, voir ProgramSwitcher) — ne pas y forcer
+    // `CONSOLIDATED_PROGRAM_ID`, qui ne correspond à aucun `programId` réel de levier.
+    if (isConsolidatedView) return;
     if (!selectedProgramId && (activeProgramId || programs.length > 0)) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("program", activeProgramId ?? programs[0].id);
       router.replace(`/dashboard?${params.toString()}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProgramId, programs, activeProgramId]);
+  }, [selectedProgramId, programs, activeProgramId, isConsolidatedView]);
 
   useEffect(() => {
-    if (selectedProgramId) setActiveProgramId(selectedProgramId);
-  }, [selectedProgramId, setActiveProgramId]);
+    // Ne PAS resynchroniser depuis une URL `?program=` restée sur un ancien programme pendant que
+    // la vue consolidée est active (sélectionnée depuis le Topbar, qui ne touche pas ce paramètre
+    // — voir ProgramSwitcher) : sans cette garde, ce seul effet ramenait aussitôt le contexte hors
+    // de la vue consolidée dès le premier rendu (mount, ou rechargement de page).
+    if (selectedProgramId && !isConsolidatedView) setActiveProgramId(selectedProgramId);
+  }, [selectedProgramId, isConsolidatedView, setActiveProgramId]);
 
   // Leviers scopés au programme sélectionné — appliqué AVANT le filtrage de la barre de filtres
   // (les options de filtres ne doivent refléter que les leviers du programme courant), mais reste
   // distinct des filtres globaux (c'est un scope, pas un filtre parmi d'autres).
+  // Vue consolidée : au lieu d'un unique `selectedProgramId`, le scope devient l'ensemble des
+  // `consolidatedPrograms` accessibles à l'utilisateur (voir `getConsolidatedPerformancePrograms`)
+  // — tous leurs leviers combinés alimentent alors les KPI/widgets ci-dessous, qui n'ont pas besoin
+  // d'être modifiés individuellement puisqu'ils dérivent tous, en cascade, de ce scope.
   const programScopedLevers = useMemo(
-    () => visibleLevers.filter((l) => l.programId === selectedProgramId),
-    [visibleLevers, selectedProgramId]
+    () =>
+      isConsolidatedView
+        ? visibleLevers.filter((l) => consolidatedPrograms.some((p) => p.id === l.programId))
+        : visibleLevers.filter((l) => l.programId === selectedProgramId),
+    [visibleLevers, selectedProgramId, isConsolidatedView, consolidatedPrograms]
   );
 
   // Programme actuellement sélectionné (objet complet, avec ses propres fyStart/fyEnd) — à
@@ -228,10 +247,36 @@ export function DashboardPagePerformance() {
   // dans lib/hooks/useStorage.ts) pour tout ce qui dépend de l'année fiscale DU PROGRAMME
   // affiché : `new Date("").getFullYear()` vaut NaN, ce qui rendait vide tout filtrage par date
   // dérivé de cette valeur (widget "Trajectoire des économies", filtre P&L).
+  // `undefined` en vue consolidée (aucun programme unique) — lire `effectiveFyStart`/
+  // `effectiveFyEnd` ci-dessous à la place, qui gèrent aussi ce cas.
   const selectedProgram = useMemo(
     () => programs.find((p) => p.id === selectedProgramId),
     [programs, selectedProgramId]
   );
+
+  // Bornes d'exercice fiscal EFFECTIVES pour les widgets temporels (trajectoire des économies,
+  // S-Curve/Bridge, filtre de date) : en vue consolidée, les programmes agrégés peuvent avoir des
+  // exercices différents — stratégie volontairement simple (pas de sur-ingénierie) : on prend
+  // l'UNION de leurs bornes (date de début la plus ancienne, date de fin la plus tardive), pour
+  // qu'aucune donnée d'un des programmes consolidés ne tombe hors de la plage affichée par défaut.
+  // Hors vue consolidée : comportement inchangé (bornes du programme sélectionné).
+  const effectiveFyStart = useMemo(() => {
+    if (isConsolidatedView) {
+      const starts = consolidatedPrograms.map((p) => p.fyStart).filter(Boolean);
+      return starts.length > 0
+        ? starts.reduce((min, s) => (s < min ? s : min))
+        : data.program.fyStart;
+    }
+    return selectedProgram?.fyStart ?? data.program.fyStart;
+  }, [isConsolidatedView, consolidatedPrograms, selectedProgram, data.program.fyStart]);
+
+  const effectiveFyEnd = useMemo(() => {
+    if (isConsolidatedView) {
+      const ends = consolidatedPrograms.map((p) => p.fyEnd).filter(Boolean);
+      return ends.length > 0 ? ends.reduce((max, e) => (e > max ? e : max)) : data.program.fyEnd;
+    }
+    return selectedProgram?.fyEnd ?? data.program.fyEnd;
+  }, [isConsolidatedView, consolidatedPrograms, selectedProgram, data.program.fyEnd]);
 
   // Arborescence financière (optionnelle) de l'entreprise — n'ajoute des dimensions "hiérarchie"
   // au builder générique que si l'entreprise a explicitement configuré des hierarchyLevels (voir
@@ -543,28 +588,25 @@ export function DashboardPagePerformance() {
   // ── Trajectoire des économies (widget combiné S-curve + Bridge) ────────
   const [trajView, setTrajView] = useState<"scurve" | "bridge">("scurve");
   const [trajGranularity, setTrajGranularity] = useState<engine.TimeGranularity>("month");
-  const [trajRangeStart, setTrajRangeStart] = useState(
-    selectedProgram?.fyStart ?? data.program.fyStart
-  );
-  const [trajRangeEnd, setTrajRangeEnd] = useState(selectedProgram?.fyEnd ?? data.program.fyEnd);
-  // Réaligne la plage par défaut sur le programme sélectionné dès qu'il devient disponible ou
-  // change (le premier rendu n'a en général pas encore `programs`, chargé de façon asynchrone) —
-  // sans ça `trajRangeStart`/`trajRangeEnd` restaient figés sur la valeur (vide) du tout premier
-  // rendu et la S-Curve/Bridge de ce widget n'affichait plus jamais rien, quel que soit le
-  // programme ou l'entreprise.
+  const [trajRangeStart, setTrajRangeStart] = useState(effectiveFyStart);
+  const [trajRangeEnd, setTrajRangeEnd] = useState(effectiveFyEnd);
+  // Réaligne la plage par défaut sur le programme sélectionné (ou, en vue consolidée, sur l'union
+  // des exercices des programmes consolidés — voir `effectiveFyStart`/`effectiveFyEnd`) dès qu'il
+  // devient disponible ou change (le premier rendu n'a en général pas encore `programs`, chargé de
+  // façon asynchrone) — sans ça `trajRangeStart`/`trajRangeEnd` restaient figés sur la valeur
+  // (vide) du tout premier rendu et la S-Curve/Bridge de ce widget n'affichait plus jamais rien,
+  // quel que soit le programme ou l'entreprise.
   useEffect(() => {
-    if (!selectedProgram) return;
-    setTrajRangeStart(selectedProgram.fyStart);
-    setTrajRangeEnd(selectedProgram.fyEnd);
-  }, [selectedProgram?.id, selectedProgram?.fyStart, selectedProgram?.fyEnd]);
+    if (!isConsolidatedView && !selectedProgram) return;
+    setTrajRangeStart(effectiveFyStart);
+    setTrajRangeEnd(effectiveFyEnd);
+  }, [isConsolidatedView, selectedProgram, effectiveFyStart, effectiveFyEnd]);
 
   /** Convertit un label de période ("Jan 2026", "Q2 2026") en Date pour le filtrage. */
   const labelToDate = useCallback(
     (label: string, granularity: engine.TimeGranularity): Date => {
       const parts = label.split(" ");
-      const year =
-        parseInt(parts[parts.length - 1]) ||
-        new Date(selectedProgram?.fyStart ?? data.program.fyStart).getFullYear();
+      const year = parseInt(parts[parts.length - 1]) || new Date(effectiveFyStart).getFullYear();
       if (granularity === "quarter") {
         const q = parseInt((parts[0] || "").replace("Q", "")) || 1;
         return new Date(year, (q - 1) * 3, 1);
@@ -572,7 +614,7 @@ export function DashboardPagePerformance() {
       const monthIdx = engine.MONTH_LABELS.indexOf(parts[0]);
       return new Date(year, monthIdx >= 0 ? monthIdx : 0, 1);
     },
-    [selectedProgram?.fyStart, data.program.fyStart]
+    [effectiveFyStart]
   );
 
   const trajSCurve = useMemo(() => {
@@ -630,7 +672,7 @@ export function DashboardPagePerformance() {
       goToLevers({});
     }
   };
-  const currentYear = new Date(selectedProgram?.fyStart ?? data.program.fyStart).getFullYear();
+  const currentYear = new Date(effectiveFyStart).getFullYear();
   const goToMonth = (month: string) => goToLevers({ f_endMonth: `${month} ${currentYear}` });
   const goToBridgePeriod = (period: string, granularity = bridgeGranularity) =>
     granularity === "quarter"
@@ -1360,22 +1402,14 @@ export function DashboardPagePerformance() {
                     <input
                       type="date"
                       value={trajRangeStart}
-                      onChange={(e) =>
-                        setTrajRangeStart(
-                          e.target.value || selectedProgram?.fyStart || data.program.fyStart
-                        )
-                      }
+                      onChange={(e) => setTrajRangeStart(e.target.value || effectiveFyStart)}
                       className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] focus:border-bp-coral focus:outline-none"
                     />
                     <span className="font-semibold">{t("dashboard.widgets.dateTo")}</span>
                     <input
                       type="date"
                       value={trajRangeEnd}
-                      onChange={(e) =>
-                        setTrajRangeEnd(
-                          e.target.value || selectedProgram?.fyEnd || data.program.fyEnd
-                        )
-                      }
+                      onChange={(e) => setTrajRangeEnd(e.target.value || effectiveFyEnd)}
                       className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] focus:border-bp-coral focus:outline-none"
                     />
                   </div>
