@@ -56,14 +56,7 @@ import { DEPENDENCY_TYPE_META } from "@/lib/status-config";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { paginateDashboardItems } from "@/lib/dashboardPagination";
 import { groupLeversByHealthDimension, type LeverHealthDimension } from "@/lib/leverHealth";
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
@@ -410,28 +403,7 @@ export function DashboardPagePerformance() {
   const summary = engine.programSummary(filteredData);
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
 
-  // ── Tri des leviers sous-performants ───────────────────────────────────
-  const [underSort, setUnderSort] = useState<"gap" | "savings">("gap");
-  const [underSortDir, setUnderSortDir] = useState<"asc" | "desc">("desc");
-  const sortedUnderperformers = useMemo(() => {
-    const sorted = [...underperformingLevers];
-    sorted.sort((a, b) => {
-      const va = underSort === "gap" ? a.lateActionsCount : a.netSavings;
-      const vb = underSort === "gap" ? b.lateActionsCount : b.netSavings;
-      return underSortDir === "desc" ? vb - va : va - vb;
-    });
-    return sorted;
-  }, [underperformingLevers, underSort, underSortDir]);
-  const toggleUnderSort = (field: "gap" | "savings") => {
-    if (underSort === field) {
-      setUnderSortDir((prev) => (prev === "desc" ? "asc" : "desc"));
-    } else {
-      setUnderSort(field);
-      setUnderSortDir("desc");
-    }
-  };
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
-  const [underPage, setUnderPage] = useState(0);
   const [dependencyPage, setDependencyPage] = useState(0);
 
   // ── Widget fusionné "Alertes & Dépendances" (risk-center) ──────────────────────────────────
@@ -459,21 +431,11 @@ export function DashboardPagePerformance() {
     return arr;
   }, [depAlerts, depsSortKey]);
 
-  const underPagination = paginateDashboardItems(sortedUnderperformers, underPage, 8);
   const dependencyPagination = paginateDashboardItems(sortedDepAlerts, dependencyPage, 6);
 
   useEffect(() => {
-    setUnderPage(0);
     setDependencyPage(0);
   }, [selectedProgramId, activeFilters]);
-
-  useEffect(() => {
-    setUnderPage(0);
-  }, [underSort, underSortDir]);
-
-  useEffect(() => {
-    if (underPage !== underPagination.page) setUnderPage(underPagination.page);
-  }, [underPage, underPagination.page]);
 
   useEffect(() => {
     if (dependencyPage !== dependencyPagination.page) {
@@ -1745,100 +1707,6 @@ export function DashboardPagePerformance() {
             </CardBody>
           </Card>
         );
-      case "underperformers":
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader
-              title={t("dashboard.widgets.underperformers")}
-              actions={
-                <div className="flex items-center gap-2">
-                  {/* Boutons de tri */}
-                  {(["gap", "savings"] as const).map((field) => {
-                    const isActive = underSort === field;
-                    const Icon = isActive && underSortDir === "asc" ? ArrowUp : ArrowDown;
-                    return (
-                      <button
-                        key={field}
-                        onClick={() => toggleUnderSort(field)}
-                        className={`flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10.5px] font-semibold transition ${
-                          isActive
-                            ? "bg-bp-coral/10 text-bp-coral"
-                            : "text-tertiary hover:bg-neutral-100 hover:text-secondary"
-                        }`}
-                      >
-                        <Icon size={11} />
-                        {field === "gap"
-                          ? t("dashboard.widgets.sortByDelay")
-                          : t("dashboard.widgets.sortBySavings")}
-                      </button>
-                    );
-                  })}
-                  <span className="text-[10.5px] font-semibold text-tertiary">
-                    {underperformingLevers.length}
-                  </span>
-                </div>
-              }
-            />
-            <CardBody>
-              {sortedUnderperformers.length === 0 ? (
-                <p className="py-6 text-center text-sm text-tertiary">
-                  {t("dashboard.widgets.noUnderperformers")}
-                </p>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-0">
-                    {underPagination.items.map((l) => (
-                      <div
-                        key={l.id}
-                        onClick={() => router.push(`/levers/detail?id=${l.id}`)}
-                        className="flex cursor-pointer items-start gap-3 border-b border-border py-2.5 last:border-b-0 hover:bg-neutral-50"
-                      >
-                        <Avatar initials={l.ownerInit} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="truncate text-[12.5px] font-semibold text-primary">
-                              {l.name}
-                            </div>
-                            <span className="flex-shrink-0 rounded-full bg-bp-coral/10 px-2 py-0.5 text-[10.5px] font-bold text-bp-coral">
-                              {l.lateActionsCount} {t("dashboard.widgets.lateActions")}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center gap-3 text-[11px] text-secondary">
-                            <span>
-                              {l.lateActionsCount} {t("dashboard.widgets.ofTotalActions")}{" "}
-                              {l.actions?.length ?? 0}
-                            </span>
-                            <span className="ml-auto font-semibold text-bp-coral">
-                              {engine.fmtCurr(l.netSavings)} {t("dashboard.widgets.atRiskAmount")}
-                            </span>
-                          </div>
-                          <div className="mt-1.5">
-                            <ProgressBar pct={l.progress} />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {underPagination.pageCount > 1 && (
-                    <DashboardPager
-                      page={underPagination.page}
-                      pageCount={underPagination.pageCount}
-                      onPrevious={() => setUnderPage(Math.max(0, underPagination.page - 1))}
-                      onNext={() =>
-                        setUnderPage(
-                          Math.min(underPagination.pageCount - 1, underPagination.page + 1)
-                        )
-                      }
-                      label={t("alerts.page")}
-                    />
-                  )}
-                </>
-              )}
-            </CardBody>
-          </Card>
-        );
-
       case "initiative-health": {
         const dimension = (
           instance.view === "country" || instance.view === "function" ? instance.view : "workstream"

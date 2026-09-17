@@ -12,7 +12,7 @@ export function StageFunnel({
 }) {
   const max = Math.max(1, ...data.map((d) => d.count));
   return (
-    <div className="flex h-[220px] items-end gap-3 px-1">
+    <div className="flex h-[300px] items-end gap-3 px-1">
       {data.map((d) => (
         <button
           key={d.status}
@@ -24,7 +24,7 @@ export function StageFunnel({
             className={`w-full rounded-t-sm transition group-hover:opacity-80 ${
               d.status === "cancelled" ? "bg-neutral-300" : "bg-bp-coral"
             }`}
-            style={{ height: `${Math.max(6, (d.count / max) * 150)}px` }}
+            style={{ height: `${Math.max(6, (d.count / max) * 210)}px` }}
           />
           <span className="text-[13px] font-bold text-secondary">{d.level}</span>
           <span className="text-[10px] uppercase tracking-wide text-tertiary">{d.label}</span>
