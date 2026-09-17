@@ -52,7 +52,6 @@ const EMPTY_NODE_FORM = {
   label: "",
   parentId: "",
   baseline: "",
-  sign: "1" as const,
   computed: false,
   selectable: true,
 };
@@ -135,12 +134,13 @@ export function HierarchyEditor({
         label: string;
         parentId: string;
         baseline: string;
-        sign: "1" | "-1";
         computed: boolean;
         selectable: boolean;
       }
     >
   >({});
+  const [editingBaselineId, setEditingBaselineId] = useState<string | null>(null);
+  const [savingBaselineId, setSavingBaselineId] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<HierarchyImportPreview | null>(null);
   const [importFileName, setImportFileName] = useState("");
   const [importing, setImporting] = useState(false);
@@ -354,6 +354,45 @@ export function HierarchyEditor({
         ),
         "error"
       );
+    }
+  };
+
+  /** Édition inline "façon Excel" de la baseline d'un nœud déjà persisté : double-clic sur la
+   *  cellule → input → Entrée/perte de focus sauvegarde. Réutilise `saveHierarchyNode` (setDoc
+   *  intégral), comme le reste de cet éditeur — pas de mécanisme de persistance séparé. Permet de
+   *  créer l'arborescence sans baseline puis de la compléter dans un second temps. */
+  const commitBaselineEdit = async (node: HierarchyNode, rawValue: string) => {
+    setEditingBaselineId(null);
+    const value = Number(rawValue.replace(",", "."));
+    const previous = node.financial?.baseline ?? 0;
+    if (!Number.isFinite(value) || value === previous) return;
+    const updated: HierarchyNode = {
+      ...node,
+      financial: { ...(node.financial ?? { baseline: 0 }), baseline: value },
+    };
+    setSavingBaselineId(node.id);
+    try {
+      await saveHierarchyNode(updated);
+      showToast(
+        t("adminHierarchy.toastNodeSavedTitle", "Valeur enregistrée"),
+        t("adminHierarchy.toastNodeSavedBody", "{name} est enregistrée dans Firebase.").replace(
+          "{name}",
+          node.label
+        ),
+        "success"
+      );
+    } catch (error) {
+      console.error("[betrack] échec de sauvegarde de la baseline :", error);
+      showToast(
+        t("adminHierarchy.toastSaveFailedTitle", "Enregistrement impossible"),
+        t(
+          "adminHierarchy.toastNodeSaveFailedBody",
+          "La valeur n'a pas été enregistrée dans Firebase."
+        ),
+        "error"
+      );
+    } finally {
+      setSavingBaselineId(null);
     }
   };
 
@@ -759,7 +798,7 @@ export function HierarchyEditor({
                         )}
                         {isPnl && (
                           <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
-                            {t("adminHierarchy.colBaselineSign", "Baseline / signe")}
+                            {t("adminHierarchy.colBaseline", "Baseline")}
                           </th>
                         )}
                         <th className="px-4 py-2 text-center text-xs font-semibold text-text-secondary">
@@ -781,11 +820,35 @@ export function HierarchyEditor({
                           )}
                           {isPnl && (
                             <td className="px-4 py-2 text-xs text-secondary">
-                              {n.financial?.baseline ?? 0} €M ·{" "}
-                              {n.financial?.sign === -1 ? "−" : "+"}
-                              {n.financial?.computed
-                                ? t("adminHierarchy.computedSuffix", " · Calculée")
-                                : ""}
+                              {editingBaselineId === n.id ? (
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  autoFocus
+                                  defaultValue={n.financial?.baseline ?? 0}
+                                  disabled={savingBaselineId === n.id}
+                                  onBlur={(e) => void commitBaselineEdit(n, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                    if (e.key === "Escape") setEditingBaselineId(null);
+                                  }}
+                                  className="w-24 rounded-lg border border-bp-coral bg-white px-2 py-1 text-xs outline-none"
+                                />
+                              ) : (
+                                <span
+                                  onDoubleClick={() => setEditingBaselineId(n.id)}
+                                  title={t(
+                                    "adminHierarchy.doubleClickToEdit",
+                                    "Double-cliquer pour modifier"
+                                  )}
+                                  className="cursor-pointer decoration-dotted hover:underline"
+                                >
+                                  {n.financial?.baseline ?? 0} €M
+                                  {n.financial?.computed
+                                    ? t("adminHierarchy.computedSuffix", " · Calculée")
+                                    : ""}
+                                </span>
+                              )}
                             </td>
                           )}
                           <td className="px-4 py-2 text-center">
@@ -839,7 +902,10 @@ export function HierarchyEditor({
                               <input
                                 type="number"
                                 step="0.1"
-                                placeholder={t("adminHierarchy.baselinePlaceholder", "Baseline €M")}
+                                placeholder={t(
+                                  "adminHierarchy.baselinePlaceholder",
+                                  "Baseline €M (négatif = coût)"
+                                )}
                                 value={form.baseline}
                                 onChange={(e) =>
                                   setNodeForm((prev) => ({
@@ -849,23 +915,6 @@ export function HierarchyEditor({
                                 }
                                 className="w-28 rounded-lg border border-border px-2 py-1 text-xs"
                               />
-                              <select
-                                value={form.sign}
-                                onChange={(e) =>
-                                  setNodeForm((prev) => ({
-                                    ...prev,
-                                    [level.key]: { ...form, sign: e.target.value as "1" | "-1" },
-                                  }))
-                                }
-                                className="rounded-lg border border-border px-2 py-1 text-xs"
-                              >
-                                <option value="1">
-                                  {t("adminHierarchy.signPositive", "Positif")}
-                                </option>
-                                <option value="-1">
-                                  {t("adminHierarchy.signNegative", "Négatif")}
-                                </option>
-                              </select>
                               <label className="flex items-center gap-1 text-[10px] text-secondary">
                                 <input
                                   type="checkbox"
@@ -932,9 +981,32 @@ export function HierarchyEditor({
                         {isPnl && (
                           <div className="mt-1 text-xs text-secondary">
                             {t("adminHierarchy.baselinePrefix", "Baseline :")}{" "}
-                            {n.financial?.baseline ?? 0} €M ·{" "}
-                            {t("adminHierarchy.signPrefix", "signe")}{" "}
-                            {n.financial?.sign === -1 ? "−" : "+"}
+                            {editingBaselineId === n.id ? (
+                              <input
+                                type="number"
+                                step="0.1"
+                                autoFocus
+                                defaultValue={n.financial?.baseline ?? 0}
+                                disabled={savingBaselineId === n.id}
+                                onBlur={(e) => void commitBaselineEdit(n, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                  if (e.key === "Escape") setEditingBaselineId(null);
+                                }}
+                                className="w-24 rounded-lg border border-bp-coral bg-white px-2 py-1 text-xs outline-none"
+                              />
+                            ) : (
+                              <span
+                                onDoubleClick={() => setEditingBaselineId(n.id)}
+                                title={t(
+                                  "adminHierarchy.doubleClickToEdit",
+                                  "Double-cliquer pour modifier"
+                                )}
+                                className="cursor-pointer decoration-dotted hover:underline"
+                              >
+                                {n.financial?.baseline ?? 0} €M
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -988,7 +1060,10 @@ export function HierarchyEditor({
                         <input
                           type="number"
                           step="0.1"
-                          placeholder={t("adminHierarchy.baselinePlaceholder", "Baseline €M")}
+                          placeholder={t(
+                            "adminHierarchy.baselinePlaceholder",
+                            "Baseline €M (négatif = coût)"
+                          )}
                           value={form.baseline}
                           onChange={(e) =>
                             setNodeForm((prev) => ({
@@ -996,25 +1071,8 @@ export function HierarchyEditor({
                               [level.key]: { ...form, baseline: e.target.value },
                             }))
                           }
-                          className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
+                          className="col-span-2 w-full rounded-lg border border-border px-2 py-1.5 text-sm"
                         />
-                        <select
-                          value={form.sign}
-                          onChange={(e) =>
-                            setNodeForm((prev) => ({
-                              ...prev,
-                              [level.key]: { ...form, sign: e.target.value as "1" | "-1" },
-                            }))
-                          }
-                          className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
-                        >
-                          <option value="1">
-                            {t("adminHierarchy.signPositiveMobile", "Signe positif")}
-                          </option>
-                          <option value="-1">
-                            {t("adminHierarchy.signNegativeMobile", "Signe négatif")}
-                          </option>
-                        </select>
                         <label className="col-span-2 flex items-center gap-1 text-xs text-secondary">
                           <input
                             type="checkbox"
