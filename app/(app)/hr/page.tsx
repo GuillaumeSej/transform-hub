@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { hasAnyRole } from "@/lib/roleProfiles";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as hr from "@/lib/hrEngine";
@@ -150,6 +151,11 @@ export default function HrDashboardPage() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
+  // Vue consolidée multi-programmes (fondation chantier CTO, voir lib/hooks/useActiveProgram.tsx) :
+  // demande métier explicite — SEUL le suivi des mouvements RH ci-dessous doit s'étendre à tous les
+  // programmes de `consolidatedPrograms` quand elle est active ; la Base ETP (app/(app)/hr/etp/page.tsx,
+  // onglet "etp") n'est PAS concernée et reste inchangée.
+  const { isConsolidatedView, consolidatedPrograms } = useActiveProgram();
   const [granularity, setGranularity] = useState<"month" | "quarter" | "year">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
 
@@ -348,22 +354,35 @@ export default function HrDashboardPage() {
   // orphelin, ou mouvements dont le levier parent a changé de programme après coup), le filtre
   // programme ci-dessous est désactivé plutôt que de masquer silencieusement tout le dashboard —
   // même comportement que la Base ETP, qui ne filtre jamais par programme.
+  // En vue consolidée (`isConsolidatedView`), ce filet de sécurité mono-programme ne s'applique
+  // plus : le scope devient `consolidatedPrograms` (voir filteredMovements ci-dessous), qui n'a pas
+  // besoin de ce repli.
   const programScopeHasMovements = useMemo(
-    () => !selectedProgramId || wf.movements.some((m) => m.programId === selectedProgramId),
-    [wf.movements, selectedProgramId]
+    () =>
+      isConsolidatedView ||
+      !selectedProgramId ||
+      wf.movements.some((m) => m.programId === selectedProgramId),
+    [wf.movements, selectedProgramId, isConsolidatedView]
   );
 
   const filteredMovements = useMemo(() => {
     const keys = Object.keys(activeFilters);
     return wf.movements.filter((m) => {
-      // Scope programme (aujourd'hui mono-programme mock, mais évolutif multi-programmes).
-      if (
+      if (isConsolidatedView) {
+        // Vue consolidée (chantier CTO, voir lib/hooks/useActiveProgram.tsx) : le scope couvre
+        // TOUS les programmes de `consolidatedPrograms` combinés, pas le programme unique du
+        // sélecteur local ci-dessous. Même filet de sécurité que le scope mono-programme : un
+        // mouvement sans `programId` (orphelin) reste visible plutôt que d'être masqué à tort.
+        if (m.programId && !consolidatedPrograms.some((p) => p.id === m.programId)) return false;
+      } else if (
+        // Scope programme (aujourd'hui mono-programme mock, mais évolutif multi-programmes).
         programScopeHasMovements &&
         selectedProgramId &&
         m.programId &&
         m.programId !== selectedProgramId
-      )
+      ) {
         return false;
+      }
       // Range picker temporel.
       if (m.plannedDate < dateFromISO || m.plannedDate > dateToISO) return false;
       // DropdownFilterBar (nominal).
@@ -383,6 +402,8 @@ export default function HrDashboardPage() {
     dateFromISO,
     dateToISO,
     programScopeHasMovements,
+    isConsolidatedView,
+    consolidatedPrograms,
   ]);
 
   const hasActiveFilters = Object.keys(activeFilters).length > 0;
@@ -1816,23 +1837,37 @@ export default function HrDashboardPage() {
 
       <div className="mb-4 rounded-lg border border-border bg-white p-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          {programs.length > 1 && (
+          {isConsolidatedView ? (
+            // Vue consolidée active (Topbar) : `activeProgram` global est null (voir
+            // lib/hooks/useActiveProgram.tsx) — pas de sélecteur mono-programme pertinent ici, le
+            // scope des mouvements couvre déjà tous les programmes (voir filteredMovements).
             <div className="inline-flex items-center gap-1">
               <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
                 {t("dashboard.program", "Programme")}
               </span>
-              <select
-                value={selectedProgramId}
-                onChange={(e) => setSelectedProgramId(e.target.value)}
-                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
-              >
-                {programs.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <span className="rounded-sm border border-border bg-neutral-50 px-1.5 py-0.5 text-[11px] font-semibold text-secondary">
+                {t("topbar.consolidatedViewShort", "Vue consolidée")}
+              </span>
             </div>
+          ) : (
+            programs.length > 1 && (
+              <div className="inline-flex items-center gap-1">
+                <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+                  {t("dashboard.program", "Programme")}
+                </span>
+                <select
+                  value={selectedProgramId}
+                  onChange={(e) => setSelectedProgramId(e.target.value)}
+                  className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
+                >
+                  {programs.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )
           )}
           <div className="inline-flex items-center gap-1">
             <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
