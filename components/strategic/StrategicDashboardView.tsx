@@ -26,7 +26,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   chantierDependencyAlerts,
   countOnTrackAtRisk,
-  isLevierLate,
+  isProjetLate,
   numberIndicators,
   programBlockedActions,
   programRoadmap,
@@ -341,7 +341,7 @@ export function StrategicDashboardView() {
       axes.map((axis) => ({
         axis,
         total: chantiers
-          .filter((chantier) => chantier.axisId === axis.id)
+          .filter((chantier) => chantier.axisIds.includes(axis.id))
           .reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0),
       })),
     [axes, chantiers]
@@ -372,7 +372,7 @@ export function StrategicDashboardView() {
     [chantiers]
   );
 
-  /** Round 20, point 3 : leviers en retard (`isLevierLate`, lib/axisLogic.ts) — alimente la 3e
+  /** Round 20, point 3 : leviers en retard (`isProjetLate`, lib/axisLogic.ts) — alimente la 3e
    *  sous-section du widget "chantier-dependency-alerts", même parti pris purement informatif que
    *  `dependencyAlerts`/`blockedActions` ci-dessus. Passe par `programRoadmap` plutôt que
    *  `milestoneProgressPct(action)` nu : c'est la MÊME fonction (avec les mêmes `autoValues`
@@ -382,7 +382,7 @@ export function StrategicDashboardView() {
   const lateLeviers = useMemo(
     () =>
       programRoadmap(axes, chantiers, chantierActions)
-        .filter((row) => isLevierLate(row.action, row.progressPct))
+        .filter((row) => isProjetLate(row.action, row.progressPct))
         .map((row) => row.action),
     [axes, chantiers, chantierActions]
   );
@@ -430,7 +430,7 @@ export function StrategicDashboardView() {
         .map((axis) => ({
           groupLabel: axis.name,
           options: chantiers
-            .filter((c) => c.axisId === axis.id)
+            .filter((c) => c.axisIds.includes(axis.id))
             .map((c) => ({ value: c.id, label: c.name })),
         }))
         .filter((group) => group.options.length > 0),
@@ -442,7 +442,7 @@ export function StrategicDashboardView() {
   // vue par levier, sans indicateur à résoudre.
   const roadmapOwnerOptions: DropdownOption[] = useMemo(() => {
     const scoped = chantiers.filter((c) => {
-      if (rmAxis && c.axisId !== rmAxis) return false;
+      if (rmAxis && !c.axisIds.includes(rmAxis)) return false;
       if (rmChantier && c.id !== rmChantier) return false;
       return true;
     });
@@ -461,7 +461,8 @@ export function StrategicDashboardView() {
     if (strategic.loading) return;
 
     const chantier = rmChantier ? chantiers.find((c) => c.id === rmChantier) : null;
-    const chantierInvalid = !!rmChantier && (!chantier || (!!rmAxis && chantier.axisId !== rmAxis));
+    const chantierInvalid =
+      !!rmChantier && (!chantier || (!!rmAxis && !chantier.axisIds.includes(rmAxis)));
 
     const validOwners = new Set(roadmapOwnerOptions.map((o) => o.value));
     const ownerInvalid = !!rmOwner && !validOwners.has(rmOwner);
@@ -487,7 +488,7 @@ export function StrategicDashboardView() {
   const roadmapChantiers = useMemo(
     () =>
       chantiers.filter((chantier) => {
-        if (rmAxis && chantier.axisId !== rmAxis) return false;
+        if (rmAxis && !chantier.axisIds.includes(rmAxis)) return false;
         if (rmChantier && chantier.id !== rmChantier) return false;
         if (
           rmOwner &&
@@ -520,13 +521,16 @@ export function StrategicDashboardView() {
   );
 
   // Chantiers regroupés par axe — porté depuis `StrategicAxesView.tsx`, alimente
-  // `renderAxisRoadmapHeader` (légende/liste de chantiers de l'en-tête riche d'axe).
+  // `renderAxisRoadmapHeader` (légende/liste de chantiers de l'en-tête riche d'axe). Round 24 : un
+  // chantier appartenant à plusieurs axes (`axisIds`) est poussé dans le bucket de CHACUN d'eux.
   const chantiersByAxis = useMemo(() => {
     const map = new Map<string, typeof chantiers>();
     for (const chantier of chantiers) {
-      const list = map.get(chantier.axisId);
-      if (list) list.push(chantier);
-      else map.set(chantier.axisId, [chantier]);
+      for (const axisId of chantier.axisIds) {
+        const list = map.get(axisId);
+        if (list) list.push(chantier);
+        else map.set(axisId, [chantier]);
+      }
     }
     return map;
   }, [chantiers]);
@@ -607,7 +611,12 @@ export function StrategicDashboardView() {
     const axisHasBudgetSlices = axisChantiers.some((c) => (c.allocatedBudget ?? 0) > 0);
 
     return (
-      <div className="rounded-lg border border-border-strong bg-neutral-50 p-3">
+      // Round 24 (Phase 3, fix A) : plus de carte propre (bordure pleine/coins arrondis/fond opaque)
+      // — cet en-tête est injecté DANS le conteneur "carte" d'axe déjà stylé par `ProgramRoadmap.tsx`
+      // (bordure + fond teinté par axe), qui l'englobe. Un liséré bas simple (même précédent que le
+      // `border-b border-border-strong` de l'en-tête PAR DÉFAUT de `ProgramRoadmap.tsx`) sépare
+      // proprement ce contenu des lignes chantier/projet en dessous, sans dupliquer la carte.
+      <div className="border-b border-border-strong p-3">
         <div className="flex items-start gap-2.5">
           <span
             aria-hidden
@@ -632,42 +641,55 @@ export function StrategicDashboardView() {
           {axis.description ?? ""}
         </p>
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <span className="mr-0.5 text-xs text-tertiary">{t("strategicAxes.indicatorsCount")}</span>
-          {axisIndicators.length === 0 ? (
-            <span className="text-[11px] italic text-tertiary">
-              {t("strategicAxes.noIndicatorsShort")}
-            </span>
-          ) : (
-            <>
-              {shownIndicators.map((indicator) => {
-                const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
-                return (
-                  <button
-                    key={indicator.id}
-                    type="button"
-                    title={
-                      atRisk ? `${indicator.name} — ${t("indicatorStatus.atRisk")}` : indicator.name
-                    }
-                    onClick={() => router.push(`/kpi?indicator=${indicator.id}`)}
-                    className={`flex min-h-[20px] max-w-[260px] shrink-0 items-center rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition hover:bg-black hover:text-white ${
-                      atRisk ? "bg-rag-amber-light text-rag-amber" : "bg-neutral-100 text-secondary"
-                    }`}
+        {/* Round 24 (Phase 3, fix B) : même traitement de "section" que le bloc "budget alloué"
+            juste en dessous (liséré haut + libellé minuscule majuscule/tertiaire) — les deux se
+            lisent désormais comme deux sections parallèles de poids égal, plutôt qu'une liste de
+            puces nue au-dessus d'un vrai bloc structuré. DOM inchangé (indicateurs puis budget),
+            logique de clic/données intacte. */}
+        <div className="mt-2.5 flex flex-col gap-1.5 border-t border-border pt-2 text-[10.5px]">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+            {t("strategicAxes.indicatorsCount")}
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {axisIndicators.length === 0 ? (
+              <span className="text-[11px] italic text-tertiary">
+                {t("strategicAxes.noIndicatorsShort")}
+              </span>
+            ) : (
+              <>
+                {shownIndicators.map((indicator) => {
+                  const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
+                  return (
+                    <button
+                      key={indicator.id}
+                      type="button"
+                      title={
+                        atRisk
+                          ? `${indicator.name} — ${t("indicatorStatus.atRisk")}`
+                          : indicator.name
+                      }
+                      onClick={() => router.push(`/kpi?indicator=${indicator.id}`)}
+                      className={`flex min-h-[20px] max-w-[260px] shrink-0 items-center rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition hover:bg-black hover:text-white ${
+                        atRisk
+                          ? "bg-rag-amber-light text-rag-amber"
+                          : "bg-neutral-100 text-secondary"
+                      }`}
+                    >
+                      {`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}
+                    </button>
+                  );
+                })}
+                {hiddenIndicatorsCount > 0 && (
+                  <span
+                    className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
+                    title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
                   >
-                    {`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}
-                  </button>
-                );
-              })}
-              {hiddenIndicatorsCount > 0 && (
-                <span
-                  className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
-                  title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
-                >
-                  +{hiddenIndicatorsCount}
-                </span>
-              )}
-            </>
-          )}
+                    +{hiddenIndicatorsCount}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {axisChantiers.length > 0 && (
@@ -1201,7 +1223,7 @@ export function StrategicDashboardView() {
                 axes={axes}
                 chantiers={roadmapChantiers}
                 actions={roadmapActions}
-                onLevierClick={openChantierPanel}
+                onProjetClick={openChantierPanel}
                 onChantierClick={(chantierId) => openChantierPanel(chantierId)}
                 renderAxisHeader={(axis) => renderAxisRoadmapHeader(axis)}
                 labels={roadmapLabels}
@@ -1300,7 +1322,7 @@ export function StrategicDashboardView() {
                 ))}
           </div>
 
-          {/* Sous-section 3 (round 20, point 3) : leviers en retard (`isLevierLate`,
+          {/* Sous-section 3 (round 20, point 3) : leviers en retard (`isProjetLate`,
               lib/axisLogic.ts) — même patron de ligne cliquable que les deux sous-sections
               ci-dessus (teinte `rag-red`, distincte de l'amber des prérequis et du corail des
               dépendances, pour un 3e type d'alerte bien identifiable). */}

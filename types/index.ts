@@ -788,7 +788,14 @@ export type Chantier = {
   id: string;
   companyId: string;
   programId: string;
-  axisId: string;
+  /** Axes stratégiques auxquels ce chantier appartient (round 24) — un chantier peut désormais
+   *  contribuer à PLUSIEURS axes simultanément. Toujours non-vide : `axisIds[0]` est l'axe
+   *  "primaire" au sens interne uniquement (jamais exposé comme concept nommé à l'utilisateur),
+   *  utilisé seulement là où un axe unique et déterministe est structurellement requis (ex.
+   *  routage d'une notification, repli de propriétaire d'axe). Partout ailleurs, un chantier
+   *  multi-axe doit être traité comme appartenant pleinement à CHACUN de ses axes (voir
+   *  `lib/axisLogic.ts`). */
+  axisIds: string[];
   name: string;
   description?: string;
   /** Référence un `MaturityStageConfig.id` du programme (même référentiel que l'axe). */
@@ -865,10 +872,10 @@ export type Deliverable = {
    *  mais ne sont plus dessinées en Gantt dans cette timeline. Absent = livrable sans échéance
    *  déclarée, invisible sur la timeline (mais toujours listé dans l'onglet "Leviers"). */
   dueDate?: string;
-  /** Statut à 3 états du livrable — RÉUTILISE `LevierKanbanStatus` (pas de nouvel enum, voir son
+  /** Statut à 3 états du livrable — RÉUTILISE `ProjetKanbanStatus` (pas de nouvel enum, voir son
    *  commentaire) : `undefined` traité comme "todo". Colore le losange sur la timeline (todo →
    *  rouge, in_progress → ambre, done → vert). */
-  status?: LevierKanbanStatus;
+  status?: ProjetKanbanStatus;
   /** Mini fil de commentaires embarqué directement dans le document (round <n>) — distinct du
    *  système de commentaires leviers/sub-levers du module Plan Performance (collection Firestore
    *  séparée) ; ici un simple tableau, pas de sous-collection. */
@@ -915,15 +922,16 @@ export type ChantierAction = {
   /** Lien optionnel vers un `Indicator` (KPI) de l'axe ou du chantier de ce levier — round 8, statut
    *  round 18 : purement informatif, n'aiguille plus aucun système de suivi (le suivi E0→E4 via
    *  `milestones` ci-dessus s'applique à tous les leviers, avec ou sans KPI rattaché). Liste des KPI
-   *  proposés à un levier donné (décision PO) : indicateurs "macro" de l'axe du chantier
-   *  (`Indicator.axisId === chantier.axisId && !Indicator.chantierId`) + indicateurs déjà rattachés à
-   *  CE chantier précis (`Indicator.chantierId === chantier.id`) — jamais un indicateur d'un autre
-   *  axe/chantier. */
+   *  proposés à un levier donné (décision PO) : indicateurs "macro" d'UN DES axes du chantier
+   *  (round 24 : `chantier.axisIds.includes(Indicator.axisId) && !Indicator.chantierId`, un chantier
+   *  multi-axe propose les macro-KPI de CHACUN de ses axes) + indicateurs déjà rattachés à CE
+   *  chantier précis (`Indicator.chantierId === chantier.id`) — jamais un indicateur d'un axe
+   *  totalement étranger au chantier. */
   indicatorId?: string;
   /** Budget alloué à ce LEVIER (round 12), affiché avec `Program.currency` du programme actif —
    *  pendant de `Chantier.allocatedBudget` mais au niveau du levier plutôt que du chantier (les
    *  deux coexistent : un budget de levier n'est pas déduit du budget du chantier, voir
-   *  `sumLevierBudgets` dans `lib/axisLogic.ts` pour l'agrégat). Optionnel : `undefined` tant
+   *  `sumProjetBudgets` dans `lib/axisLogic.ts` pour l'agrégat). Optionnel : `undefined` tant
    *  qu'aucun budget n'a été saisi (distinct de 0, qui signifie "budget nul mais renseigné"). */
   budget?: number;
   /** Montant réellement consommé/dépensé sur ce LEVIER, déclaré manuellement — distinct de `budget`
@@ -937,17 +945,17 @@ export type ChantierAction = {
   consumedFte?: number;
 };
 
-/** Statut à 3 états — introduit round 8 pour le "kanban classique" d'un levier sans KPI rattaché
- *  (`ChantierAction.kanbanStatus`), supprimé round 18 quand le PO a unifié tous les leviers sur le
+/** Statut à 3 états — introduit round 8 pour le "kanban classique" d'un projet sans KPI rattaché
+ *  (`ChantierAction.kanbanStatus`), supprimé round 18 quand le PO a unifié tous les projets sur le
  *  suivi E0→E4. Le type SURVIT néanmoins : il reste utilisé par `Deliverable.status`, un concept
- *  totalement différent (le statut d'UN livrable, pas le système de suivi global d'un levier) — ne
- *  pas re-brancher ce type sur un quelconque aiguillage au niveau levier. Même FORME que
+ *  totalement différent (le statut d'UN livrable, pas le système de suivi global d'un projet) — ne
+ *  pas re-brancher ce type sur un quelconque aiguillage au niveau projet. Même FORME que
  *  `ActionStatus` du Plan Performance (`components/shared/ActionKanban.tsx`, gabarit visuel suivi
  *  pour le composant équivalent côté Plan Stratégique) mais type entièrement SÉPARÉ — ne jamais
  *  importer/réutiliser `ActionStatus` ici, les deux domaines restent strictement indépendants (voir
  *  le commentaire de tête de `lib/axisLogic.ts`). Pas de valeur "delayed" (contrairement à
  *  `ActionStatus`) : ce statut est un simple aiguillage, la notion de retard n'a pas de sens ici. */
-export type LevierKanbanStatus = "todo" | "in_progress" | "done";
+export type ProjetKanbanStatus = "todo" | "in_progress" | "done";
 
 /** Un prérequis peut cibler une autre action du plan ("action", satisfait quand son étape est
  *  terminale) ou un événement hors plan ("external", ex. un recrutement — satisfait via `done`). */
@@ -1045,10 +1053,6 @@ export type ChantierStaffing = {
   id: string;
   companyId: string;
   programId: string;
-  /** Dénormalisé depuis le chantier : la page Effectifs agrège par axe sans avoir à recharger ni
-   *  à joindre la collection `chantiers`. Un chantier ne change jamais d'axe dans l'UI actuelle,
-   *  cette copie ne peut donc pas diverger. */
-  axisId: string;
   chantierId: string;
   /** Nom d'équipe/département — voir note de tête de section. Censé correspondre à un
    *  `Employee.department` de la base ETP entreprise, jamais une valeur figée dans ce type. */
@@ -1113,8 +1117,13 @@ export type NavItem = {
    *  qui n'ont pas de sens sans leviers. */
   programTypes?: ProgramType[];
   /** Surcharge du `label` selon le type de programme actif — ex. l'item "levers" s'intitule
-   *  "Axes stratégiques" quand le programme actif est stratégique (même route, même page). */
+   *  "Feuille de route" quand le programme actif est stratégique (même route, même page). */
   labelByProgramType?: Partial<Record<ProgramType, string>>;
+  /** Regroupement visuel optionnel dans la barre latérale (ex. séparer les données de
+   *  référence du pilotage courant). `undefined` = pas de rupture affichée (comportement
+   *  historique, liste plate). Un séparateur avec libellé apparaît dès que la section change
+   *  d'un item au suivant. */
+  section?: string;
 };
 
 export type RoleDefinition = {

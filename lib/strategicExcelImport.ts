@@ -480,7 +480,7 @@ export function validateStrategicImportRows(
       id,
       companyId: resolvedCompanyId,
       programId: resolvedProgramId,
-      axisId,
+      axisIds: [axisId],
       name,
       stage,
       dependencies: [], // résolu en passe 2, une fois tous les Code de chantiers connus
@@ -718,7 +718,7 @@ export function validateStrategicImportRows(
       }
       axisId =
         chantierAxisById.get(chantierId) ??
-        existingData.chantiers.find((c) => c.id === chantierId)?.axisId;
+        existingData.chantiers.find((c) => c.id === chantierId)?.axisIds?.[0];
       if (!axisId) {
         errors.push({
           sheet: "Indicateurs",

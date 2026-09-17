@@ -39,7 +39,7 @@ import {
   numberIndicators,
   progressBucket,
   resolveMilestoneAutoFlags,
-  sumLevierBudgets,
+  sumProjetBudgets,
   type ProgressBucket,
 } from "@/lib/axisLogic";
 import { cn } from "@/lib/utils";
@@ -63,7 +63,7 @@ import type {
   Deliverable,
   DeliverablePhase,
   Indicator,
-  LevierKanbanStatus,
+  ProjetKanbanStatus,
   MaturityStageConfig,
 } from "@/types";
 
@@ -172,7 +172,7 @@ function progressionColorFor(pct: number): string {
  *  `Deliverable.status` — mêmes 3 couleurs que `progressionColorFor` ci-dessus (todo/rouge,
  *  in_progress/ambre, done/vert), `undefined` traité comme "todo" (même convention que
  *  `LevierKanbanStatusControl`). */
-function deliverableStatusColor(status: LevierKanbanStatus | undefined): string {
+function deliverableStatusColor(status: ProjetKanbanStatus | undefined): string {
   switch (status) {
     case "done":
       return PROGRESSION_COLOR_GREEN;
@@ -518,12 +518,12 @@ function LevierKanbanStatusControl({
 }: {
   /** `undefined` traité comme "todo" pour la mise en avant du bouton actif — voir
    *  `Deliverable.status`, jamais forcé en base tant que l'utilisateur n'a pas cliqué. */
-  status: LevierKanbanStatus | undefined;
-  onChange: (next: LevierKanbanStatus) => void;
+  status: ProjetKanbanStatus | undefined;
+  onChange: (next: ProjetKanbanStatus) => void;
   labels: { title: string; todo: string; inProgress: string; done: string };
 }) {
-  const effectiveStatus: LevierKanbanStatus = status ?? "todo";
-  const COLUMNS: { value: LevierKanbanStatus; label: string }[] = [
+  const effectiveStatus: ProjetKanbanStatus = status ?? "todo";
+  const COLUMNS: { value: ProjetKanbanStatus; label: string }[] = [
     { value: "todo", label: labels.todo },
     { value: "in_progress", label: labels.inProgress },
     { value: "done", label: labels.done },
@@ -699,13 +699,13 @@ function AddDeliverableForm({
   onCancel: () => void;
   onSubmit: (
     actionId: string,
-    values: { label: string; dueDate: string; status: LevierKanbanStatus }
+    values: { label: string; dueDate: string; status: ProjetKanbanStatus }
   ) => void;
 }) {
   const [actionId, setActionId] = useState(actions.length === 1 ? actions[0].id : "");
   const [label, setLabel] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [status, setStatus] = useState<LevierKanbanStatus>("todo");
+  const [status, setStatus] = useState<ProjetKanbanStatus>("todo");
   const canSubmit = actionId.trim() !== "" && label.trim() !== "" && dueDate.trim() !== "";
   return (
     <Modal
@@ -860,7 +860,7 @@ function ChantierActionForm({
 
   // Validation du budget levier (round 12) — voir le commentaire du prop `chantierAllocatedBudget`.
   // Une saisie vide ou non numérique compte pour 0 dans la projection, même parti pris que
-  // `sumLevierBudgets` ("un levier sans budget renseigné compte pour 0, jamais exclu").
+  // `sumProjetBudgets` ("un levier sans budget renseigné compte pour 0, jamais exclu").
   const trimmedBudget = budgetInput.trim();
   const parsedBudget = trimmedBudget === "" ? undefined : Number(trimmedBudget);
   const otherLeviersBudgetSum = otherActions.reduce((sum, a) => sum + (a.budget ?? 0), 0);
@@ -1316,18 +1316,26 @@ export function ChantierDetailPanel({
     () => data.chantiers.find((c) => c.id === chantierId),
     [data.chantiers, chantierId]
   );
-  const axis = useMemo(
-    () => (chantier ? data.axes.find((a) => a.id === chantier.axisId) : undefined),
+  // Round 24 : un chantier appartient désormais potentiellement à PLUSIEURS axes (`axisIds`) —
+  // toutes les résolutions ci-dessous, dans l'ordre de `data.axes` (même convention que
+  // `chantiersByAxis` ailleurs dans le code).
+  const chantierAxes = useMemo(
+    () => (chantier ? data.axes.filter((a) => chantier.axisIds.includes(a.id)) : []),
     [data.axes, chantier]
   );
+  // Axe PRIMAIRE (`axisIds[0]`, jamais exposé comme tel à l'utilisateur — voir `types/index.ts`) :
+  // utilisé UNIQUEMENT ici pour la couleur d'accent de la carte "Vue d'ensemble", qui ne peut
+  // structurellement porter qu'une seule couleur (choix de conception non couvert explicitement par
+  // le brief round 24, tranché pour rester cohérent avec les autres usages "primaires" du modèle).
+  const primaryAxis = chantierAxes[0];
 
   /** Couleur d'accent (liséré + fond teinté) de la carte "Vue d'ensemble" ci-dessous — même hex
    *  brut que celui déjà consommé par `TimelineBar` (`hexToRgb`/`withAlpha`), avec repli sur le
    *  même gris neutre que `ProgramRoadmap.tsx` (`FALLBACK_COLOR`) quand l'axe n'a pas de couleur
    *  valide, pour rester cohérent avec le reste de l'appli plutôt que d'inventer un nouveau gris. */
   const axisAccentColor = useMemo(
-    () => (axis?.color && hexToRgb(axis.color) ? axis.color : "#a99e9a"),
-    [axis]
+    () => (primaryAxis?.color && hexToRgb(primaryAxis.color) ? primaryAxis.color : "#a99e9a"),
+    [primaryAxis]
   );
 
   const chantierActions = useMemo(
@@ -1340,7 +1348,7 @@ export function ChantierDetailPanel({
     [data.chantierActions, chantier]
   );
 
-  // ETP PLANIFIÉS (round <n>) — pendant de `sumLevierBudgets`/`allocatedBudget` pour l'ETP : il
+  // ETP PLANIFIÉS (round <n>) — pendant de `sumProjetBudgets`/`allocatedBudget` pour l'ETP : il
   // n'existe pas de champ "ETP cible" déclaratif sur `Chantier`/`ChantierAction` (contrairement au
   // budget), le seul planifié disponible est la somme des lignes de staffing (`ChantierStaffing`,
   // même collection que `ChantierStaffingEditor.tsx`, déjà abonnée via `data.staffing`). Sert de
@@ -1362,14 +1370,16 @@ export function ChantierDetailPanel({
   }, [chantierStaffing]);
 
   // KPI proposables au sélecteur optionnel d'un levier (round 8) — même filtre que `KpiPageClient.tsx`
-  // (`grouped` useMemo, `macro`/`byChantier`) : indicateurs macro de l'AXE du chantier (pas de
-  // `chantierId`) + indicateurs déjà rattachés à CE chantier précis. Jamais un indicateur d'un autre
-  // axe/chantier.
+  // (`grouped` useMemo, `macro`/`byChantier`) : indicateurs macro d'UN DES AXES du chantier (pas de
+  // `chantierId`) + indicateurs déjà rattachés à CE chantier précis. Jamais un indicateur d'un axe
+  // totalement étranger au chantier. Round 24 : un chantier multi-axe propose les macro-KPI de
+  // CHACUN de ses axes (`chantier.axisIds.includes(i.axisId)`), décision produit explicite.
   const chantierAvailableIndicators = useMemo(
     () =>
       chantier
         ? data.indicators.filter(
-            (i) => (i.axisId === chantier.axisId && !i.chantierId) || i.chantierId === chantier.id
+            (i) =>
+              (chantier.axisIds.includes(i.axisId) && !i.chantierId) || i.chantierId === chantier.id
           )
         : [],
     [data.indicators, chantier]
@@ -1679,7 +1689,7 @@ export function ChantierDetailPanel({
    *  de l'onglet "Timeline" (round <n>) — même discipline que `updateDeliverable` ci-dessus. */
   const addDeliverable = async (
     actionId: string,
-    values: { label: string; dueDate: string; status: LevierKanbanStatus }
+    values: { label: string; dueDate: string; status: ProjetKanbanStatus }
   ) => {
     const action = chantierActions.find((a) => a.id === actionId);
     if (!action) return;
@@ -1834,13 +1844,18 @@ export function ChantierDetailPanel({
                 </div>
               }
               actions={
-                axis && (
-                  <button
-                    onClick={() => navigateAway(`/levers/detail?id=${axis.id}`)}
-                    className="text-xs font-medium text-secondary hover:text-primary hover:underline"
-                  >
-                    {axis.name}
-                  </button>
+                chantierAxes.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {chantierAxes.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => navigateAway(`/levers/detail?id=${a.id}`)}
+                        className="text-xs font-medium text-secondary hover:text-primary hover:underline"
+                      >
+                        {a.name}
+                      </button>
+                    ))}
+                  </div>
                 )
               }
             />
@@ -1909,7 +1924,7 @@ export function ChantierDetailPanel({
                       // formulaire de levier éventuellement ouvert par ailleurs). Rejet : ni écriture,
                       // ni tentative — l'input revient à la dernière valeur enregistrée, et un toast
                       // explique pourquoi (même canal que `updateChantierField`/`clearChantierField`).
-                      const leviersBudgetSum = sumLevierBudgets(chantier.id, chantierActions);
+                      const leviersBudgetSum = sumProjetBudgets(chantier.id, chantierActions);
                       if (parsed < leviersBudgetSum) {
                         setAllocatedBudgetInput(
                           chantier.allocatedBudget !== undefined
@@ -2018,7 +2033,7 @@ export function ChantierDetailPanel({
                         className="h-full rounded-full"
                         style={{
                           width: `${progressPct}%`,
-                          backgroundColor: axis?.color ?? "var(--bp-warm-taupe)",
+                          backgroundColor: primaryAxis?.color ?? "var(--bp-warm-taupe)",
                         }}
                       />
                     </div>
@@ -2379,8 +2394,8 @@ export function ChantierDetailPanel({
                           aria-expanded={isOpen}
                           aria-label={
                             isOpen
-                              ? t("strategicChantierDetail.leviers.collapse")
-                              : t("strategicChantierDetail.leviers.expand")
+                              ? t("strategicChantierDetail.projets.collapse")
+                              : t("strategicChantierDetail.projets.expand")
                           }
                           onClick={() => toggleLevier(action.id)}
                           className="flex min-w-0 flex-1 items-start gap-2 text-left"
@@ -2688,7 +2703,6 @@ export function ChantierDetailPanel({
           <ChantierStaffingEditor
             companyId={user?.companyId ?? ""}
             programId={activeProgramId ?? ""}
-            axisId={chantier.axisId}
             chantierId={chantier.id}
             chantierActions={chantierActions}
           />

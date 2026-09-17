@@ -16,7 +16,7 @@ import type { Chantier, MaturityStageConfig, StrategicAxis } from "@/types";
 
 export type ChantierFormValues = Pick<
   Chantier,
-  "name" | "description" | "axisId" | "stage" | "confidentialityLevel"
+  "name" | "description" | "axisIds" | "stage" | "confidentialityLevel"
 >;
 
 export function ChantierForm({
@@ -30,7 +30,8 @@ export function ChantierForm({
   compact = false,
 }: {
   initial?: Partial<ChantierFormValues>;
-  /** Axes du programme — un chantier appartient toujours à exactement un axe. */
+  /** Axes du programme — un chantier appartient désormais à UN OU PLUSIEURS axes (round 24, voir
+   *  `types/index.ts`). */
   axes: StrategicAxis[];
   /** Étapes de maturité du programme (même référentiel que l'axe). */
   stages: MaturityStageConfig[];
@@ -46,14 +47,26 @@ export function ChantierForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [axisId, setAxisId] = useState(initial?.axisId ?? axes[0]?.id ?? "");
+  const [axisIds, setAxisIds] = useState<string[]>(
+    initial?.axisIds && initial.axisIds.length > 0
+      ? initial.axisIds
+      : axes[0]?.id
+        ? [axes[0].id]
+        : []
+  );
   const [stage, setStage] = useState(initial?.stage ?? stages[0]?.id ?? "");
   const [confidentialityLevel, setConfidentialityLevel] = useState(
     initial?.confidentialityLevel ?? ""
   );
   const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit = name.trim().length > 0 && axisId.length > 0 && stage.length > 0 && !submitting;
+  const toggleAxis = (axisId: string) => {
+    setAxisIds((ids) =>
+      ids.includes(axisId) ? ids.filter((id) => id !== axisId) : [...ids, axisId]
+    );
+  };
+
+  const canSubmit = name.trim().length > 0 && axisIds.length > 0 && stage.length > 0 && !submitting;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -65,7 +78,7 @@ export function ChantierForm({
         // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
         ...(description.trim() ? { description: description.trim() } : {}),
         ...(confidentialityLevel ? { confidentialityLevel } : {}),
-        axisId,
+        axisIds,
         stage,
       });
     } finally {
@@ -92,22 +105,28 @@ export function ChantierForm({
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-text-secondary" htmlFor="chantier-axis">
-            Axe de rattachement
-          </label>
-          <select
-            id="chantier-axis"
-            value={axisId}
-            onChange={(e) => setAxisId(e.target.value)}
-            className={inputClass}
-          >
-            {axes.length === 0 && <option value="">Aucun axe disponible</option>}
-            {axes.map((axis) => (
-              <option key={axis.id} value={axis.id}>
-                {axis.name}
-              </option>
-            ))}
-          </select>
+          <span className="text-xs font-medium text-text-secondary">Axes de rattachement</span>
+          {axes.length === 0 ? (
+            <p className="mt-1 text-xs text-text-secondary">Aucun axe disponible</p>
+          ) : (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {axes.map((axis) => (
+                <button
+                  key={axis.id}
+                  type="button"
+                  aria-pressed={axisIds.includes(axis.id)}
+                  onClick={() => toggleAxis(axis.id)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    axisIds.includes(axis.id)
+                      ? "bg-bp-coral text-white"
+                      : "border border-border text-text-secondary hover:bg-bg-elevated"
+                  }`}
+                >
+                  {axis.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <label className="text-xs font-medium text-text-secondary" htmlFor="chantier-stage">

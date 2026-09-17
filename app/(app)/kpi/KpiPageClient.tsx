@@ -598,7 +598,7 @@ export function KpiPageClient() {
         .map((axis) => ({
           groupLabel: axis.name,
           options: chantiers
-            .filter((c) => c.axisId === axis.id)
+            .filter((c) => c.axisIds.includes(axis.id))
             .map((c) => ({ value: c.id, label: c.name })),
         }))
         .filter((group) => group.options.length > 0),
@@ -640,7 +640,7 @@ export function KpiPageClient() {
     const chantier = selectedChantierId ? chantiers.find((c) => c.id === selectedChantierId) : null;
     const chantierInvalid =
       !!selectedChantierId &&
-      (!chantier || (!!selectedAxisId && chantier.axisId !== selectedAxisId));
+      (!chantier || (!!selectedAxisId && !chantier.axisIds.includes(selectedAxisId)));
 
     const validOwners = new Set(ownerOptions.map((o) => o.value));
     const ownerInvalid = !!selectedOwner && !validOwners.has(selectedOwner);
@@ -690,7 +690,7 @@ export function KpiPageClient() {
           (i) => !i.chantierId || !knownChantierIds.has(i.chantierId)
         );
         const byChantier = chantiers
-          .filter((c) => c.axisId === axis.id)
+          .filter((c) => c.axisIds.includes(axis.id))
           .map((chantier) => ({
             chantier,
             indicators: axisIndicators.filter((i) => i.chantierId === chantier.id),

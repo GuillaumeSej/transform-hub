@@ -14,7 +14,7 @@ import {
   computeIndicatorStatus,
   countOnTrackAtRisk,
   isChantierLate,
-  isLevierLate,
+  isProjetLate,
   latestMeasurement,
   milestoneProgressPct,
   numberIndicators,
@@ -30,7 +30,7 @@ import {
   staffingPeriodBuckets,
   sumLatestQuantitativeValues,
   sumConsumedBudget,
-  sumLevierBudgets,
+  sumProjetBudgets,
 } from "@/lib/axisLogic";
 import type {
   AuthUser,
@@ -345,7 +345,7 @@ function makeChantier(id: string, overrides?: Partial<Chantier>): Chantier {
     id,
     companyId: "c1",
     programId: "p1",
-    axisId: "AX001",
+    axisIds: ["AX001"],
     name: `Chantier ${id}`,
     stage: "defined",
     dependencies: [],
@@ -443,9 +443,9 @@ describe("chantierDependencyAlerts", () => {
 
   it("supports inter-axis dependencies (targetId in another axis of the same program)", () => {
     const chantiers = [
-      makeChantier("CH1", { axisId: "AX001" }),
+      makeChantier("CH1", { axisIds: ["AX001"] }),
       makeChantier("CH2", {
-        axisId: "AX002",
+        axisIds: ["AX002"],
         dependencies: [{ targetId: "CH1", type: "FS" }],
       }),
     ];
@@ -1140,14 +1140,14 @@ describe("chantierMilestoneProgressPct", () => {
   });
 });
 
-// ─── Retard d'un levier/chantier (round 20) ────────────────────────────────────────────────────
+// ─── Retard d'un projet/chantier (round 20) ────────────────────────────────────────────────────
 
-describe("isLevierLate", () => {
+describe("isProjetLate", () => {
   const today = new Date("2026-06-15T00:00:00");
 
   it("is late when the end date has passed and progress is below 100%", () => {
     const action = makeAction("CH1", "2026-01-01", "2026-06-01"); // fin passée, pas de milestones (0%)
-    expect(isLevierLate(action, 0, today)).toBe(true);
+    expect(isProjetLate(action, 0, today)).toBe(true);
   });
 
   it("is NOT late when it was completed, even after its deadline", () => {
@@ -1159,12 +1159,12 @@ describe("isLevierLate", () => {
         checklists: {},
       },
     };
-    expect(isLevierLate(action, 100, today)).toBe(false);
+    expect(isProjetLate(action, 100, today)).toBe(false);
   });
 
   it("is NOT late when it is not due yet", () => {
     const action = makeAction("CH1", "2026-06-01", "2026-12-31"); // fin dans le futur
-    expect(isLevierLate(action, 0, today)).toBe(false);
+    expect(isProjetLate(action, 0, today)).toBe(false);
   });
 });
 
@@ -1238,7 +1238,6 @@ function makeStaffing(overrides?: Partial<ChantierStaffing>): ChantierStaffing {
     id: "ST1",
     companyId: "c1",
     programId: "p1",
-    axisId: "AX001",
     chantierId: "CH1",
     function: "it",
     fte: 1,
@@ -1310,9 +1309,9 @@ describe("numberIndicators", () => {
   it("numbers macro-then-chantier within each axis, continuing the running counter across axes (no reset)", () => {
     const axes = [makeAxis("AX1"), makeAxis("AX2")];
     const chantiers = [
-      makeChantier("CH1", { axisId: "AX1" }),
-      makeChantier("CH2", { axisId: "AX2" }),
-      makeChantier("CH3", { axisId: "AX2" }),
+      makeChantier("CH1", { axisIds: ["AX1"] }),
+      makeChantier("CH2", { axisIds: ["AX2"] }),
+      makeChantier("CH3", { axisIds: ["AX2"] }),
     ];
     const indicators = [
       // Axe 1 : 2 indicateurs macro + 1 chantier (1 indicateur) = 3 au total.
@@ -1357,16 +1356,16 @@ describe("numberIndicators", () => {
 
   it("returns an empty map for an empty indicators array", () => {
     const axes = [makeAxis("AX1")];
-    const chantiers = [makeChantier("CH1", { axisId: "AX1" })];
+    const chantiers = [makeChantier("CH1", { axisIds: ["AX1"] })];
     expect(numberIndicators(axes, chantiers, [])).toEqual(new Map());
   });
 
   it("assigns a continuous 1..N sequence with no gaps and no duplicates for a larger mixed fixture", () => {
     const axes = [makeAxis("AX1"), makeAxis("AX2"), makeAxis("AX3")];
     const chantiers = [
-      makeChantier("CH1", { axisId: "AX1" }),
-      makeChantier("CH2", { axisId: "AX1" }),
-      makeChantier("CH3", { axisId: "AX3" }),
+      makeChantier("CH1", { axisIds: ["AX1"] }),
+      makeChantier("CH2", { axisIds: ["AX1"] }),
+      makeChantier("CH3", { axisIds: ["AX3"] }),
     ];
     const indicators = [
       makeIndicator({ id: "I1", axisId: "AX1" }),
@@ -1387,29 +1386,29 @@ describe("numberIndicators", () => {
   });
 });
 
-// ─── Budget par levier (round 12) ──────────────────────────────────────────────────────────────
+// ─── Budget par projet (round 12) ──────────────────────────────────────────────────────────────
 
-describe("sumLevierBudgets", () => {
-  it("returns 0 for a chantier with no levier at all", () => {
-    expect(sumLevierBudgets("CH1", [])).toBe(0);
+describe("sumProjetBudgets", () => {
+  it("returns 0 for a chantier with no projet at all", () => {
+    expect(sumProjetBudgets("CH1", [])).toBe(0);
   });
 
-  it("sums only the leviers of the requested chantier, treating a missing budget as 0", () => {
+  it("sums only the projets of the requested chantier, treating a missing budget as 0", () => {
     const actions: ChantierAction[] = [
       { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"), budget: 1000 },
       { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"), budget: 500 },
       makeAction("CH1", "2026-01-01", "2026-01-31", "A3"), // pas de budget renseigné → compte 0
       { ...makeAction("CH2", "2026-01-01", "2026-01-31", "A4"), budget: 999999 }, // autre chantier
     ];
-    expect(sumLevierBudgets("CH1", actions)).toBe(1500);
+    expect(sumProjetBudgets("CH1", actions)).toBe(1500);
   });
 
-  it("returns 0 when the chantier has leviers but none of them has a budget declared", () => {
+  it("returns 0 when the chantier has projets but none of them has a budget declared", () => {
     const actions: ChantierAction[] = [
       makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
       makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
     ];
-    expect(sumLevierBudgets("CH1", actions)).toBe(0);
+    expect(sumProjetBudgets("CH1", actions)).toBe(0);
   });
 });
 
@@ -1453,7 +1452,7 @@ describe("resolveChantierOwner", () => {
   });
 
   it("falls back to the parent axis owner when both pilote and sponsorName are unset", () => {
-    const chantier = makeChantier("CH1", { axisId: "AX1" });
+    const chantier = makeChantier("CH1", { axisIds: ["AX1"] });
     const axes = [makeAxis("AX1", { owner: "paul.durand" })];
     expect(resolveChantierOwner(chantier, axes, FALLBACK)).toBe("paul.durand");
   });
@@ -1464,11 +1463,11 @@ describe("resolveChantierOwner", () => {
     expect(resolveChantierOwner(chantier, [], FALLBACK)).toBe(FALLBACK);
 
     // Axe référencé introuvable.
-    const orphanChantier = makeChantier("CH2", { axisId: "GHOST" });
+    const orphanChantier = makeChantier("CH2", { axisIds: ["GHOST"] });
     expect(resolveChantierOwner(orphanChantier, [], FALLBACK)).toBe(FALLBACK);
 
     // Axe existant mais sans owner.
-    const chantierWithBareAxis = makeChantier("CH3", { axisId: "AX1" });
+    const chantierWithBareAxis = makeChantier("CH3", { axisIds: ["AX1"] });
     const axes = [makeAxis("AX1")];
     expect(resolveChantierOwner(chantierWithBareAxis, axes, FALLBACK)).toBe(FALLBACK);
   });
@@ -1541,7 +1540,7 @@ describe("programRoadmap", () => {
 
   it("builds one row per levier for a single axis / single chantier, sorted by start date", () => {
     const axes = [makeAxis("AX1")];
-    const chantiers = [makeChantier("CH1", { axisId: "AX1", name: "Refonte SI" })];
+    const chantiers = [makeChantier("CH1", { axisIds: ["AX1"], name: "Refonte SI" })];
     const actions: ChantierAction[] = [
       // Volontairement hors ordre dans le tableau d'entrée : la sortie doit être triée par début.
       // Round 18 : plus de `kanbanStatus`, jalons E0→E4 pour tout levier — A2 n'a pas encore de
@@ -1573,9 +1572,9 @@ describe("programRoadmap", () => {
   it("associates each row with its OWN axis/chantier across a multi-axis, multi-chantier program", () => {
     const axes = [makeAxis("AX1"), makeAxis("AX2")];
     const chantiers = [
-      makeChantier("CH1", { axisId: "AX1" }),
-      makeChantier("CH2", { axisId: "AX2" }),
-      makeChantier("CH3", { axisId: "AX2" }),
+      makeChantier("CH1", { axisIds: ["AX1"] }),
+      makeChantier("CH2", { axisIds: ["AX2"] }),
+      makeChantier("CH3", { axisIds: ["AX2"] }),
     ];
     const actions = [
       makeAction("CH2", "2027-02-01", "2027-04-30", "A-CH2"),
@@ -1601,11 +1600,11 @@ describe("programRoadmap", () => {
     expect(programRoadmapBounds(rows)).toEqual({ start: "2026-01-01", end: "2028-02-28" });
   });
 
-  it("excludes a chantier whose axisId references no known axis, and a levier whose chantierId references no known chantier", () => {
+  it("excludes a chantier whose axisIds references no known axis, and a levier whose chantierId references no known chantier", () => {
     const axes = [makeAxis("AX1")];
     const chantiers = [
-      makeChantier("CH1", { axisId: "AX1" }),
-      makeChantier("CH-ORPHAN", { axisId: "GHOST-AXIS" }),
+      makeChantier("CH1", { axisIds: ["AX1"] }),
+      makeChantier("CH-ORPHAN", { axisIds: ["GHOST-AXIS"] }),
     ];
     const actions = [
       makeAction("CH1", "2027-01-01", "2027-02-28", "A1"),
@@ -1620,7 +1619,7 @@ describe("programRoadmap", () => {
 
   it("computes progressPct via the milestone/E0-E4 path identically whether or not a KPI is linked", () => {
     const axes = [makeAxis("AX1")];
-    const chantiers = [makeChantier("CH1", { axisId: "AX1" })];
+    const chantiers = [makeChantier("CH1", { axisIds: ["AX1"] })];
     const actionWithKpi: ChantierAction = {
       ...makeAction("CH1", "2027-01-01", "2027-02-28", "A1"),
       indicatorId: "IND001",
@@ -1656,7 +1655,7 @@ describe("programRoadmap", () => {
 
   it("keeps only deliverables with a declared dueDate, and normalizes legacy string deliverables defensively", () => {
     const axes = [makeAxis("AX1")];
-    const chantiers = [makeChantier("CH1", { axisId: "AX1" })];
+    const chantiers = [makeChantier("CH1", { axisIds: ["AX1"] })];
     const action: ChantierAction = {
       ...makeAction("CH1", "2027-01-01", "2027-02-28", "A1"),
       deliverables: [

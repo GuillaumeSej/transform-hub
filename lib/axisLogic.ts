@@ -852,14 +852,14 @@ export function chantierMilestoneProgressPct(
   return Math.round(total / own.length);
 }
 
-// ─── Retard d'un levier/chantier (round 20) ────────────────────────────────────────────────────
+// ─── Retard d'un projet/chantier (round 20) ────────────────────────────────────────────────────
 
 /**
- * Un LEVIER est-il en retard ? Vrai si sa date de fin (`ChantierAction.end`) est STRICTEMENT
+ * Un PROJET est-il en retard ? Vrai si sa date de fin (`ChantierAction.end`) est STRICTEMENT
  * passée (le jour même de l'échéance n'est pas encore en retard — cohérent avec `daysBetween`, qui
  * ne compte qu'à partir du lendemain) ET que son avancement déclaratif (`milestoneProgressPct`,
- * jalons E0→E4) n'a pas atteint 100% — un levier terminé APRÈS son échéance initiale n'est donc
- * jamais "en retard" au sens de cette fonction, seulement un levier encore ouvert au-delà de sa
+ * jalons E0→E4) n'a pas atteint 100% — un projet terminé APRÈS son échéance initiale n'est donc
+ * jamais "en retard" au sens de cette fonction, seulement un projet encore ouvert au-delà de sa
  * date de fin prévue.
  *
  * `today` est un paramètre injectable (défaut `new Date()`) uniquement pour les tests — aucun
@@ -868,9 +868,9 @@ export function chantierMilestoneProgressPct(
 /** `progressPct` est fourni par l'appelant plutôt que recalculé ici : `milestoneProgressPct` seule
  *  (sans `autoValues` résolus via `resolveMilestoneAutoFlags`) peut différer du pourcentage RÉEL
  *  affiché à l'écran (ex. `programRoadmap`, qui résout les auto-flags) — un appel interne aveugle
- *  ferait apparaître un levier "en retard" alors même que l'écran affiche déjà 100% à côté. En
+ *  ferait apparaître un projet "en retard" alors même que l'écran affiche déjà 100% à côté. En
  *  exigeant le même `progressPct` que celui affiché, retard et pourcentage ne peuvent plus diverger. */
-export function isLevierLate(
+export function isProjetLate(
   action: ChantierAction,
   progressPct: number,
   today: Date = new Date()
@@ -879,9 +879,9 @@ export function isLevierLate(
   return daysBetween(action.end, todayISO) > 0 && progressPct < 100;
 }
 
-/** Un CHANTIER est-il en retard ? Vrai si au moins un de ses leviers l'est (`isLevierLate`
+/** Un CHANTIER est-il en retard ? Vrai si au moins un de ses projets l'est (`isProjetLate`
  *  ci-dessus) — dérivée directe, aucune notion de retard propre au chantier. Même parti pris que
- *  `isLevierLate` : `progressPct` est porté par chaque entrée plutôt que recalculé ici. */
+ *  `isProjetLate` : `progressPct` est porté par chaque entrée plutôt que recalculé ici. */
 export function isChantierLate(
   chantier: Pick<Chantier, "id">,
   actionsWithProgress: { action: ChantierAction; progressPct: number }[],
@@ -889,7 +889,7 @@ export function isChantierLate(
 ): boolean {
   return actionsWithProgress.some(
     ({ action, progressPct }) =>
-      action.chantierId === chantier.id && isLevierLate(action, progressPct, today)
+      action.chantierId === chantier.id && isProjetLate(action, progressPct, today)
   );
 }
 
@@ -1090,8 +1090,8 @@ export function staffingPeriodBuckets(
  *     `chantierId` pointe un chantier qui n'existe plus (référence orpheline), compte comme macro —
  *     dans l'ordre de `indicators` (jamais retrié).
  *  3. Puis, pour ce même axe, ses chantiers dans l'ordre de `chantiers` (jamais retrié) ; pour
- *     chaque chantier dont `axisId === axis.id`, ses indicateurs (`chantierId === chantier.id`)
- *     dans l'ordre de `indicators`.
+ *     chaque chantier dont `axisIds.includes(axis.id)` (un chantier multi-axe apparaît sous CHACUN
+ *     de ses axes), ses indicateurs (`chantierId === chantier.id`) dans l'ordre de `indicators`.
  *  4. Le compteur ne se réinitialise JAMAIS entre deux axes : le premier indicateur du deuxième axe
  *     continue directement après le dernier numéro attribué au premier.
  *
@@ -1125,7 +1125,7 @@ export function numberIndicators(
     }
 
     const byChantier = chantiers
-      .filter((c) => c.axisId === axis.id)
+      .filter((c) => c.axisIds.includes(axis.id))
       .map((chantier) => ({
         chantier,
         indicators: axisIndicators.filter((i) => i.chantierId === chantier.id),
@@ -1142,20 +1142,20 @@ export function numberIndicators(
   return numbers;
 }
 
-// ─── Budget par levier (round 12) ──────────────────────────────────────────────────────────────
+// ─── Budget par projet (round 12) ──────────────────────────────────────────────────────────────
 
 /**
- * Somme des budgets LEVIER (`ChantierAction.budget`, round 12) d'un chantier donné — pendant de
- * `Chantier.allocatedBudget` mais agrégé depuis les leviers plutôt que saisi directement sur le
- * chantier ; les deux budgets COEXISTENT (l'un n'est pas déduit de l'autre, l'agrégat des leviers
+ * Somme des budgets PROJET (`ChantierAction.budget`, round 12) d'un chantier donné — pendant de
+ * `Chantier.allocatedBudget` mais agrégé depuis les projets plutôt que saisi directement sur le
+ * chantier ; les deux budgets COEXISTENT (l'un n'est pas déduit de l'autre, l'agrégat des projets
  * n'est PAS censé égaler `allocatedBudget`, c'est à l'appelant de les comparer si besoin).
  *
- * Un levier sans `budget` renseigné compte pour `0` (jamais exclu de la somme, contrairement à
- * `chantierMilestoneProgressPct` où un levier sans KPI est exclu du DÉNOMINATEUR d'une moyenne :
+ * Un projet sans `budget` renseigné compte pour `0` (jamais exclu de la somme, contrairement à
+ * `chantierMilestoneProgressPct` où un projet sans KPI est exclu du DÉNOMINATEUR d'une moyenne :
  * ici il n'y a pas de moyenne, seulement une somme, donc rien à exclure). Chantier sans aucun
- * levier, ou uniquement des leviers sans budget : `0`.
+ * projet, ou uniquement des projets sans budget : `0`.
  */
-export function sumLevierBudgets(chantierId: string, actions: ChantierAction[]): number {
+export function sumProjetBudgets(chantierId: string, actions: ChantierAction[]): number {
   return actions
     .filter((action) => action.chantierId === chantierId)
     .reduce((sum, action) => sum + (action.budget ?? 0), 0);
@@ -1163,7 +1163,7 @@ export function sumLevierBudgets(chantierId: string, actions: ChantierAction[]):
 
 /**
  * Somme des montants CONSOMMÉS levier (`ChantierAction.consumedBudget`) d'un chantier donné —
- * pendant de `sumLevierBudgets` ci-dessus mais pour le consommé plutôt que le planifié ; même
+ * pendant de `sumProjetBudgets` ci-dessus mais pour le consommé plutôt que le planifié ; même
  * remarque : ne pas comparer directement à `Chantier.consumedBudget`, les deux coexistent sans
  * qu'un des deux soit déduit de l'autre.
  *
@@ -1192,13 +1192,13 @@ export function sumConsumedBudget(chantierId: string, actions: ChantierAction[])
  * paramètre `unassignedLabel` (module pur, sans accès à `t()`).
  */
 export function resolveChantierOwner(
-  chantier: Pick<Chantier, "pilote" | "sponsorName" | "axisId">,
+  chantier: Pick<Chantier, "pilote" | "sponsorName" | "axisIds">,
   axes: StrategicAxis[],
   unassignedLabel: string
 ): string {
   if (chantier.pilote) return chantier.pilote;
   if (chantier.sponsorName) return chantier.sponsorName;
-  const axis = axes.find((a) => a.id === chantier.axisId);
+  const axis = axes.find((a) => a.id === chantier.axisIds[0]);
   return axis?.owner ?? unassignedLabel;
 }
 
@@ -1317,10 +1317,12 @@ function normalizeRoadmapDeliverables(
  * Ordre de sortie — REPREND la même convention que `numberIndicators` ci-dessus (jamais de tri
  * caché) : les axes dans leur ordre d'apparition dans `axes`, puis pour chaque axe ses chantiers
  * dans l'ordre de `chantiers`, puis pour chaque chantier ses leviers triés par date de début (même
- * tri que `ChantierGantt.tsx`). Un chantier dont l'`axisId` ne référence aucun axe de `axes`, ou un
+ * tri que `ChantierGantt.tsx`). Un chantier dont aucun `axisIds` ne référence un axe de `axes`, ou un
  * levier dont le `chantierId` ne référence aucun chantier de `chantiers`, n'apparaît dans AUCUNE
  * ligne (référence orpheline — même parti pris défensif que `numberIndicators`/`chantierBounds` :
- * pas de ligne inventée avec un axe/chantier `undefined`).
+ * pas de ligne inventée avec un axe/chantier `undefined`). Round 24 : un chantier appartenant à
+ * PLUSIEURS axes produit UN JEU DE LIGNES PAR AXE (une ligne par (axe, levier) plutôt que par
+ * levier seul) — décision produit assumée, pas un bug : la feuille de route reste lue axe par axe.
  */
 export function programRoadmap(
   axes: StrategicAxis[],
@@ -1330,7 +1332,7 @@ export function programRoadmap(
   const rows: ProgramRoadmapRow[] = [];
 
   for (const axis of axes) {
-    const axisChantiers = chantiers.filter((c) => c.axisId === axis.id);
+    const axisChantiers = chantiers.filter((c) => c.axisIds.includes(axis.id));
     for (const chantier of axisChantiers) {
       const chantierActions = actions
         .filter((a) => a.chantierId === chantier.id)

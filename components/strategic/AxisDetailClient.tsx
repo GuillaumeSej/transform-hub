@@ -82,7 +82,7 @@ export function AxisDetailClient() {
 
   const axis = useMemo(() => data.axes.find((a) => a.id === id), [data.axes, id]);
   const axisChantiers = useMemo(
-    () => (axis ? data.chantiers.filter((c) => c.axisId === axis.id) : []),
+    () => (axis ? data.chantiers.filter((c) => c.axisIds.includes(axis.id)) : []),
     [data.chantiers, axis]
   );
   const chantierIds = useMemo(() => new Set(axisChantiers.map((c) => c.id)), [axisChantiers]);
@@ -347,7 +347,7 @@ export function AxisDetailClient() {
         maxWidth="640px"
       >
         <ChantierForm
-          initial={{ axisId: axis.id }}
+          initial={{ axisIds: [axis.id] }}
           axes={data.axes}
           stages={stages}
           confidentialityLevels={confidentialityLevels}

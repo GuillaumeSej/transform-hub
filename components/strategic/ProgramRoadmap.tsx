@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
-import { isLevierLate, programRoadmap, type ProgramRoadmapRow } from "@/lib/axisLogic";
+import { isProjetLate, programRoadmap, type ProgramRoadmapRow } from "@/lib/axisLogic";
 import {
   formatTimelineDay,
   timelineColumns,
@@ -19,7 +19,7 @@ import {
   withAlpha,
   type TimelineScale,
 } from "@/components/strategic/TimelineBars";
-import type { Chantier, ChantierAction, LevierKanbanStatus, StrategicAxis } from "@/types";
+import type { Chantier, ChantierAction, ProjetKanbanStatus, StrategicAxis } from "@/types";
 
 /**
  * Feuille de route PROGRAMME (round 15) — vue Gantt du plan stratégique COMPLET : une ligne par
@@ -46,7 +46,7 @@ import type { Chantier, ChantierAction, LevierKanbanStatus, StrategicAxis } from
  *
  * Chaque barre est teintée par la couleur de son AXE (pas du chantier, round 8, réservée au Kanban/
  * à la vue E0→E4) — `StrategicAxis.color`, la même couleur affichée partout ailleurs pour identifier
- * un axe (`StrategicAxesView.tsx`, `levierBoardGroups` de `StrategicDashboardView.tsx`).
+ * un axe (`StrategicAxesView.tsx`, `projetBoardGroups` de `StrategicDashboardView.tsx`).
  *
  * Échelle temporelle : Trimestre / Semestre / Année — PAS de maille "Mois" (beaucoup trop de
  * colonnes sur la largeur d'un programme pluriannuel complet, contrairement au Gantt d'un seul axe).
@@ -68,7 +68,7 @@ export type ProgramRoadmapLabels = {
   /** Suffixe "N leviers" affiché sous le nom de chaque chantier. */
   leviersSuffix?: string;
   /** Round 20, point 3 : titre/tooltip de l'icône d'alerte discrète d'un levier/chantier en
-   *  retard (`isLevierLate`/`isChantierLate`, lib/axisLogic.ts). */
+   *  retard (`isProjetLate`/`isChantierLate`, lib/axisLogic.ts). */
   late?: string;
   /** Round 21 (retour PO) : tooltip de la pastille de comptage "N/total en retard" au niveau
    *  chantier — gabarit avec jetons `{n}` (leviers en retard) et `{total}` (leviers du chantier),
@@ -93,7 +93,7 @@ const DELIVERABLE_COLOR_RED = "#ff3c47";
 const DELIVERABLE_COLOR_AMBER = "#806659";
 const DELIVERABLE_COLOR_GREEN = "#1a1a1a";
 
-function deliverableMarkerColor(status: LevierKanbanStatus | undefined): string {
+function deliverableMarkerColor(status: ProjetKanbanStatus | undefined): string {
   switch (status) {
     case "done":
       return DELIVERABLE_COLOR_GREEN;
@@ -143,7 +143,7 @@ export function ProgramRoadmap({
   axes,
   chantiers,
   actions,
-  onLevierClick,
+  onProjetClick,
   onChantierClick,
   renderAxisHeader,
   labels,
@@ -156,8 +156,8 @@ export function ProgramRoadmap({
   /** Clic sur une barre de levier ou un losange de livrable — l'appelant ouvre le panneau du
    *  CHANTIER parent, focalisé sur ce levier (même contrat que `openChantierPanel` de
    *  `StrategicDashboardView.tsx`). */
-  onLevierClick?: (chantierId: string, actionId: string) => void;
-  /** Clic sur l'en-tête de chantier (round 16) — même contrat que `onLevierClick` mais sans levier
+  onProjetClick?: (chantierId: string, actionId: string) => void;
+  /** Clic sur l'en-tête de chantier (round 16) — même contrat que `onProjetClick` mais sans levier
    *  ciblé : l'appelant ouvre le panneau du chantier sans le focaliser sur une action précise.
    *  Omis = l'en-tête de chantier reste un texte non interactif (comportement historique). */
   onChantierClick?: (chantierId: string) => void;
@@ -287,7 +287,7 @@ export function ProgramRoadmap({
                     // réel (leviers en retard / total du chantier) et on l'affiche dans la pastille
                     // ci-dessous plutôt que la seule icône.
                     const lateLevierCount = chantierGroup.rows.filter((r) =>
-                      isLevierLate(r.action, r.progressPct)
+                      isProjetLate(r.action, r.progressPct)
                     ).length;
                     const totalLevierCount = chantierGroup.rows.length;
                     return (
@@ -338,8 +338,8 @@ export function ProgramRoadmap({
                             ? LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT
                             : LEVIER_BAR_HEIGHT;
                           // Round 20, point 3 : icône d'alerte discrète juste après la barre d'un
-                          // levier en retard (`isLevierLate`, lib/axisLogic.ts).
-                          const levierLate = isLevierLate(row.action, row.progressPct);
+                          // levier en retard (`isProjetLate`, lib/axisLogic.ts).
+                          const levierLate = isProjetLate(row.action, row.progressPct);
 
                           return (
                             <div
@@ -351,19 +351,19 @@ export function ProgramRoadmap({
                                 style={{ borderColor: axisColor }}
                               >
                                 {/* Round 20, point 2 : nom du levier cliquable (même destination que
-                                  la barre ci-dessous, `onLevierClick`) et centré verticalement dans
+                                  la barre ci-dessous, `onProjetClick`) et centré verticalement dans
                                   sa colonne — la ligne parente est `flex items-stretch`, ce label
                                   collait donc en haut sans ce centrage propre. */}
                                 <div
                                   className={`flex h-full items-center truncate text-[10.5px] font-medium text-primary ${
-                                    onLevierClick
+                                    onProjetClick
                                       ? "cursor-pointer hover:text-bp-coral hover:underline"
                                       : ""
                                   }`}
                                   title={row.action.name}
                                   onClick={
-                                    onLevierClick
-                                      ? () => onLevierClick(row.chantier.id, row.action.id)
+                                    onProjetClick
+                                      ? () => onProjetClick(row.chantier.id, row.action.id)
                                       : undefined
                                   }
                                 >
@@ -383,8 +383,8 @@ export function ProgramRoadmap({
                                   variant="solid"
                                   progressPct={row.progressPct}
                                   onClick={
-                                    onLevierClick
-                                      ? () => onLevierClick(row.chantier.id, row.action.id)
+                                    onProjetClick
+                                      ? () => onProjetClick(row.chantier.id, row.action.id)
                                       : undefined
                                   }
                                   ariaLabel={row.action.name}
@@ -422,11 +422,11 @@ export function ProgramRoadmap({
                                     key={deliverable.id}
                                     leftPct={pctOf(deliverable.dueDate!)}
                                     top={LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT / 2}
-                                    size={17}
+                                    size={9}
                                     color={deliverableMarkerColor(deliverable.status)}
                                     onClick={
-                                      onLevierClick
-                                        ? () => onLevierClick(row.chantier.id, row.action.id)
+                                      onProjetClick
+                                        ? () => onProjetClick(row.chantier.id, row.action.id)
                                         : undefined
                                     }
                                     ariaLabel={deliverable.label}

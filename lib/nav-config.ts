@@ -57,7 +57,7 @@ export const roles: Record<Role, RoleDefinition> = {
       // programme (voir lib/hooks/useCompanyDepartments.ts), donc visible que le programme actif
       // soit Performance ou Stratégique (contrairement à "hr" ci-dessus, le dashboard RH complet,
       // qui reste lui réservé au Plan Performance).
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
     ],
   },
   sponsor: {
@@ -120,7 +120,7 @@ export const roles: Record<Role, RoleDefinition> = {
     nav: [
       { id: "hr", icon: "PieChart", label: "nav.hrDashboard", programTypes: ["performance"] },
       // Round 13 : voir le commentaire identique sur le rôle `cto` ci-dessus.
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
       {
         id: "levers",
         icon: "Target",
@@ -179,7 +179,7 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
       // Round 13 : le pilote du Plan Stratégique peut désormais consulter/compléter la base ETP
       // entreprise (Plan Performance) — voir les commentaires identiques sur `cto`/`hr` ci-dessus.
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
     ],
   },
   axis_sponsor: {
@@ -268,7 +268,7 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
       // Round 13 : un admin global n'a pas forcément de profil métier (Performance/Stratégique)
       // qui lui donnerait "hr-etp" par ailleurs — voir la liste d'accès `cto`/`hr`/`strategic_lead`
       // ci-dessus, à laquelle les admins s'ajoutent.
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
     ],
   },
   company: {
@@ -278,7 +278,7 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
       { id: "admin-users", icon: "Users", label: "nav.users" },
       { id: "admin-data", icon: "BarChart3", label: "nav.data" },
       { id: "admin-history", icon: "History", label: "nav.history" },
-      { id: "hr-etp", icon: "Users", label: "nav.hrEtp" },
+      { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
     ],
   },
 };

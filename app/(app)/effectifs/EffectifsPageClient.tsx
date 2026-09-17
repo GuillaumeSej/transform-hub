@@ -167,6 +167,15 @@ export function EffectifsPageClient() {
    *  de noms sous cette forme pour son détail par chantier au survol d'une équipe. */
   const chantierNamesById = useMemo(() => Object.fromEntries(chantierNames), [chantierNames]);
 
+  /** `Chantier.id` → `Chantier.axisIds` — round 24 : remplace l'ancien `ChantierStaffing.axisId`
+   *  dénormalisé (supprimé) pour le mode "axis" de `StaffingPeriodBreakdown`, qui rejoint désormais
+   *  chaque ligne de staffing à l'axe (ou aux axes) de son chantier via cette map plutôt que de lire
+   *  un axe stocké directement sur la ligne. */
+  const axisIdsByChantier = useMemo(
+    () => Object.fromEntries(chantiers.map((c) => [c.id, c.axisIds])),
+    [chantiers]
+  );
+
   // ── Budget FINANCIER alloué (round 12) ─────────────────────────────────────────────────────
   // Nouvelle section monétaire, distincte du besoin/disponible ETP ci-dessus (une question de €,
   // pas d'ETP) : total du budget alloué (`Chantier.allocatedBudget`, round 7) sur tout le
@@ -191,14 +200,21 @@ export function EffectifsPageClient() {
   // besoin, sans compteur "planifié" comparable sur `Chantier`. Les comparer produirait un
   // rapprochement trompeur (deux notions différentes), donc volontairement omis ici.
 
-  /** Alloué ET consommé, par axe — même découpage (`axes.map` + filtre par `axisId`) que
+  /** Alloué ET consommé, par axe — même découpage (`axes.map` + filtre par `axisIds`) que
    *  l'ex-`allocatedBudgetByAxis` (round 12, retiré round 16), mais regroupés ensemble : round 12
    *  s'en servait pour une `BudgetVsActualBar` par axe séparée, round 16 le réutilise directement
-   *  ci-dessous pour alimenter l'anneau "consommé" du donut unifié. */
+   *  ci-dessous pour alimenter l'anneau "consommé" du donut unifié.
+   *
+   *  Round 24 : un chantier peut désormais appartenir à PLUSIEURS axes — décision produit assumée
+   *  (visibilité complète par axe) : son `allocatedBudget`/`consumedBudget` COMPLET est compté sous
+   *  CHAQUE axe auquel il appartient (pas de répartition au prorata), donc la somme de ces lignes
+   *  par axe peut désormais dépasser le vrai total programme — voir `totalAllocatedBudget`/
+   *  `totalConsumedBudgetDeduped` ci-dessous pour le total PROGRAMME, qui lui compte chaque
+   *  chantier une seule fois. */
   const budgetByAxisWithConsumed = useMemo(
     () =>
       axes.map((axis) => {
-        const own = chantiers.filter((c) => c.axisId === axis.id);
+        const own = chantiers.filter((c) => c.axisIds.includes(axis.id));
         return {
           id: axis.id,
           name: axis.name,
@@ -207,6 +223,17 @@ export function EffectifsPageClient() {
         };
       }),
     [axes, chantiers]
+  );
+
+  /** Total CONSOMMÉ programme, dédupliqué — pendant de `totalAllocatedBudget` ci-dessus (déjà
+   *  correctement dédupliqué : il itère `chantiers`, la liste à plat, une fois chacun) mais pour le
+   *  consommé, round 24 : nécessaire pour l'overlay central du donut unifié ci-dessous, qui ne peut
+   *  plus dériver son total consommé de la somme des parts par axe (`unifiedBudgetSlices`) depuis
+   *  qu'un chantier multi-axe y apparaît dans plusieurs parts à la fois (voir le commentaire de
+   *  `budgetByAxisWithConsumed`). */
+  const totalConsumedBudgetDeduped = useMemo(
+    () => chantiers.reduce((sum, c) => sum + (c.consumedBudget ?? 0), 0),
+    [chantiers]
   );
 
   /** Round 16 (PO : fusion de la carte "Budget financier alloué" en un seul graphique) — parts du
@@ -234,7 +261,7 @@ export function EffectifsPageClient() {
   const budgetDrilldownSlices: BudgetDonutSlice[] | null = useMemo(() => {
     if (!budgetDrilldownAxisId) return null;
     return chantiers
-      .filter((c) => c.axisId === budgetDrilldownAxisId && c.allocatedBudget !== undefined)
+      .filter((c) => c.axisIds.includes(budgetDrilldownAxisId) && c.allocatedBudget !== undefined)
       .map((c) => ({ name: c.name, value: c.allocatedBudget ?? 0 }));
   }, [budgetDrilldownAxisId, chantiers]);
 
@@ -245,7 +272,7 @@ export function EffectifsPageClient() {
     if (!budgetDrilldownAxisId) return new Map<string, string>();
     return new Map(
       chantiers
-        .filter((c) => c.axisId === budgetDrilldownAxisId)
+        .filter((c) => c.axisIds.includes(budgetDrilldownAxisId))
         .map((c) => [c.name, c.id] as const)
     );
   }, [budgetDrilldownAxisId, chantiers]);
@@ -348,6 +375,12 @@ export function EffectifsPageClient() {
               centerLabel={t("effectifs.moneyBudget.centerLabelConsumed")}
               showConsumedRing
               consumedLabel={t("effectifs.moneyBudget.consumedTooltipSuffix")}
+              // Round 24 : `unifiedBudgetSlices` compte un chantier multi-axe une fois PAR axe
+              // auquel il appartient (voir `budgetByAxisWithConsumed`) — le total/consommé affiché
+              // au centre doit rester le vrai total PROGRAMME (chaque chantier une seule fois),
+              // donc calculé séparément ici plutôt que dérivé de `data.reduce(...)`.
+              total={totalAllocatedBudget}
+              consumedTotal={totalConsumedBudgetDeduped}
               onSliceClick={(name) => {
                 const axis = axisByName.get(name);
                 if (axis) setBudgetDrilldownAxisId(axis.id);
@@ -491,6 +524,7 @@ export function EffectifsPageClient() {
         fteByDept={fteByDept}
         axes={axes}
         chantierNamesById={chantierNamesById}
+        axisIdsByChantier={axisIdsByChantier}
       />
     </div>
   );

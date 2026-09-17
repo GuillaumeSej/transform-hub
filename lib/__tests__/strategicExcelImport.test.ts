@@ -136,7 +136,7 @@ describe("validateStrategicImportRows", () => {
     const ch2 = result.toCreate.chantiers.find((c) => c.name === "Digitalisation des contrats");
     expect(ch1).toBeDefined();
     expect(ch2).toBeDefined();
-    expect(ch1!.axisId).toBe(axis.id);
+    expect(ch1!.axisIds).toEqual([axis.id]);
     // Résolution FK same-file : la dépendance de CH2 pointe vers le VRAI id alloué à CH1, pas
     // vers le Code littéral "CH1" du fichier.
     expect(ch2!.dependencies).toEqual([{ targetId: ch1!.id, type: "FS" }]);

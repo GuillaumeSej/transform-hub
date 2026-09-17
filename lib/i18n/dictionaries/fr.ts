@@ -41,7 +41,7 @@ const fr: Record<string, string> = {
   "common.optional": "(optionnel)",
 
   // ─── nav ──────────────────────────────────────────────────────────────────
-  "nav.executiveDashboard": "Tableau de bord exécutif",
+  "nav.executiveDashboard": "Pilotage global",
   "nav.leverLibrary": "Bibliothèque des leviers",
   "nav.leverPipeline": "Pipeline des leviers",
   "nav.myLevers": "Mes leviers",
@@ -53,7 +53,7 @@ const fr: Record<string, string> = {
   "nav.operationsModule": "Module Opérations",
   // Plan Stratégique : `nav.axes` relabelle l'item "levers" (même route /levers), `nav.kpi` est
   // un item propre au Plan Stratégique — voir lib/nav-config.ts.
-  "nav.axes": "Axes stratégiques",
+  "nav.axes": "Feuille de route",
   "nav.kpi": "Indicateurs (KPI)",
   "nav.effectifs": "Budget & effectifs mobilisés",
   "nav.indicators": "Indicateurs",
@@ -64,6 +64,7 @@ const fr: Record<string, string> = {
   "nav.data": "Données",
   "nav.history": "Historique",
   "nav.sectionLabel": "Navigation",
+  "nav.sectionReferenceData": "Données de référence",
 
   // ─── roles ────────────────────────────────────────────────────────────────
   "roles.admin.label": "Administrateur",
@@ -1225,14 +1226,28 @@ const fr: Record<string, string> = {
   "strategicAxes.axisCreated": "Axe créé",
   "strategicAxes.axisUpdated": "Axe mis à jour",
   "strategicAxes.chantiersView": "Chantiers",
+  // Round 24 (Phase 4, Partie 1) : libellés des deux onglets locaux de cette page — voir le
+  // doc-comment de tête de `StrategicAxesView.tsx`.
+  "strategicAxes.tabs.advancement": "Avancement",
+  "strategicAxes.tabs.byAxis": "Vue par axe",
   // Round 17 (permutation) : titre de la section fixe "État des lieux d'avancement des leviers" de
   // cette page (vue E0→E4 par levier, tous leviers confondus depuis round 18 — voir son ancien
   // kanban classique des leviers sans KPI, supprimé) — migré depuis l'ex-clé
   // `strategicDashboard.widget.chantierHealth` (widget dashboard retiré, ce contenu vit maintenant
   // ICI, sans bascule d'onglet), même migration de namespace que `strategicDashboard.roadmap.*` →
   // `strategicAxes.roadmap.*` au round 16 (voir plus bas), pour la raison symétrique inverse.
-  "strategicAxes.levierAdvancementTitle": "État des lieux d'avancement des leviers",
+  "strategicAxes.projetAdvancementTitle": "État des lieux d'avancement des projets",
+  // Round 24 (Phase 4, Partie 2/3) : préfixe numéroté d'un axe ("Axe {n} : {name}") — position
+  // 1-based dans `data.axes` (jamais retriée), partagé par le bloc d'axe de l'onglet "Avancement"
+  // et l'en-tête d'axe de l'accordéon "Vue par axe" (`AxisChantierProjetAccordion.tsx`).
+  "strategicAxes.axisNumberPrefix": "Axe {n} : {name}",
+  // Libellé de la section "Chantiers" dédiée de l'onglet "Avancement" (round 24, Phase 4, Partie 2)
+  // — remplace l'ancienne légende de couleur interne à `ProjetMilestoneBoard.tsx`, retirée.
+  "strategicAxes.chantiersLabel": "Chantiers",
   "strategicAxes.axisNoChantier": "Aucun chantier",
+  // Placeholder du niveau 3 (projets) de l'accordéon "Vue par axe" (round 24, Phase 4, Partie 3)
+  // quand un chantier déplié n'a encore aucun projet.
+  "strategicAxes.chantierNoProjet": "Aucun projet",
   "strategicAxes.chantierAlerted": "Dépendance en alerte",
   "strategicAxes.kanbanEmptyColumn": "Aucun axe",
   // Donut de répartition budgétaire (round 12) — en-tête riche d'axe de la feuille de route
@@ -1263,11 +1278,11 @@ const fr: Record<string, string> = {
   // Gantt des chantiers
   "strategicAxes.ganttSection": "Chantiers de l'axe",
   "strategicAxes.ganttHint":
-    "Un bloc = un chantier, borné par son premier et son dernier levier. Cliquez sur un bloc ou sur un levier pour ouvrir le détail du chantier et ses livrables.",
+    "Un bloc = un chantier, borné par son premier et son dernier projet. Cliquez sur un bloc ou sur un projet pour ouvrir le détail du chantier et ses livrables.",
   "strategicAxes.noChantiers": "Aucun chantier sur cet axe.",
-  "strategicAxes.chantierUnplanned": "Chantiers sans levier planifié",
-  "strategicAxes.chantierNoDates": "Pas encore de date — ajoutez un levier",
-  "strategicAxes.actionsSuffix": "leviers",
+  "strategicAxes.chantierUnplanned": "Chantiers sans projet planifié",
+  "strategicAxes.chantierNoDates": "Pas encore de date — ajoutez un projet",
+  "strategicAxes.actionsSuffix": "projets",
   // Gantt : échelle temporelle réglable, avancement, synthèse de chantier
   "strategicAxes.ganttScale": "Échelle",
   "strategicAxes.ganttScaleMonth": "Mois",
@@ -1279,24 +1294,24 @@ const fr: Record<string, string> = {
   // `strategicDashboard.roadmap.*` (retiré, la feuille de route est désormais un onglet de cette
   // page, plus une section du dashboard exécutif). `today` réutilise `strategicAxes.ganttToday`
   // ci-dessus plutôt qu'une clé dupliquée.
-  "strategicAxes.roadmap.empty": "Aucun levier daté sur le programme.",
+  "strategicAxes.roadmap.empty": "Aucun projet daté sur le programme.",
   "strategicAxes.roadmap.scale": "Échelle",
   "strategicAxes.roadmap.scaleQuarter": "Trimestre",
   "strategicAxes.roadmap.scaleSemester": "Semestre",
   "strategicAxes.roadmap.scaleYear": "Année",
   "strategicAxes.roadmap.progress": "Avancement",
-  "strategicAxes.roadmap.leviersSuffix": "leviers",
-  // Round 20, point 3 : icône d'alerte discrète sur un levier/chantier en retard (`isLevierLate`,
+  "strategicAxes.roadmap.leviersSuffix": "projets",
+  // Round 20, point 3 : icône d'alerte discrète sur un levier/chantier en retard (`isProjetLate`,
   // lib/axisLogic.ts) — titre/tooltip de l'icône, `ProgramRoadmap.tsx`.
   "strategicAxes.roadmap.late": "En retard",
   // Round 21 (retour PO) : tooltip de la pastille de comptage "N/total en retard" au niveau
   // chantier — remplace l'icône seule, ambiguë sur un chantier à plusieurs leviers.
-  "strategicAxes.roadmap.lateCount": "{n} levier(s) en retard sur {total}",
-  "strategicAxes.actionsCompleted": "leviers terminés",
+  "strategicAxes.roadmap.lateCount": "{n} projet(s) en retard sur {total}",
+  "strategicAxes.actionsCompleted": "projets terminés",
   "strategicAxes.moreActionsSuffix": "autres",
-  "strategicAxes.cardNoActions": "Aucun levier",
+  "strategicAxes.cardNoActions": "Aucun projet",
   "strategicAxes.chantierOwner": "Responsable du chantier",
-  "strategicAxes.ownerFromActions": "d'après les responsables de leviers",
+  "strategicAxes.ownerFromActions": "d'après les responsables de projets",
   "strategicAxes.chantierPeriod": "Période",
   "strategicAxes.newChantier": "Nouveau chantier",
   "strategicAxes.newChantierModalTitle": "Nouveau chantier",
@@ -1304,19 +1319,19 @@ const fr: Record<string, string> = {
   "strategicAxes.chantierCreated": "Chantier créé",
   "strategicAxes.chantierDeleted": "Chantier supprimé",
   "strategicAxes.deleteChantier": "Supprimer le chantier",
-  "strategicAxes.confirmDeleteChantier": "Confirmer la suppression du chantier et de ses leviers",
+  "strategicAxes.confirmDeleteChantier": "Confirmer la suppression du chantier et de ses projets",
   // Pop-up chantier / actions / livrables
   "strategicAxes.chantierModalTitle": "Détail du chantier",
   "strategicAxes.dependsOn": "Dépend de",
-  "strategicAxes.chantierActions": "Leviers du chantier",
-  "strategicAxes.noActions": "Aucun levier sur ce chantier.",
-  "strategicAxes.newAction": "Nouveau levier",
+  "strategicAxes.chantierActions": "Projets du chantier",
+  "strategicAxes.noActions": "Aucun projet sur ce chantier.",
+  "strategicAxes.newAction": "Nouveau projet",
   "strategicAxes.editAction": "Modifier",
-  "strategicAxes.actionCreated": "Levier créé",
-  "strategicAxes.actionUpdated": "Levier mis à jour",
-  "strategicAxes.actionDeleted": "Levier supprimé",
+  "strategicAxes.actionCreated": "Projet créé",
+  "strategicAxes.actionUpdated": "Projet mis à jour",
+  "strategicAxes.actionDeleted": "Projet supprimé",
   "strategicAxes.confirmDelete": "Confirmer",
-  "strategicAxes.actionName": "Nom du levier",
+  "strategicAxes.actionName": "Nom du projet",
   "strategicAxes.actionOwner": "Responsable",
   "strategicAxes.actionStart": "Début",
   "strategicAxes.actionEnd": "Fin",
@@ -1358,7 +1373,7 @@ const fr: Record<string, string> = {
   "strategicAxes.chantierSaveErrorTitle": "Enregistrement impossible",
   "strategicAxes.chantierSaveError": "Le chantier n'a pas pu être enregistré.",
   "strategicAxes.actionSaveErrorTitle": "Enregistrement impossible",
-  "strategicAxes.actionSaveError": "Le levier n'a pas pu être enregistré.",
+  "strategicAxes.actionSaveError": "Le projet n'a pas pu être enregistré.",
   "strategicAxes.atRiskPopoverTitle": "Indicateurs à risque",
   // Round 6, point 4 : infobulle explicative sur la pastille "N à risque" elle-même (avant même
   // l'ouverture du popover), réutilisée par `AtRiskCountPill` partout où elle apparaît.
@@ -1383,7 +1398,7 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.pilote": "Pilote",
   "strategicChantierDetail.allocatedBudget": "Budget alloué",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
-    "Le budget du chantier ne peut pas être inférieur à la somme des budgets de ses leviers.",
+    "Le budget du chantier ne peut pas être inférieur à la somme des budgets de ses projets.",
   // ─── Consommé déclaratif du chantier (round <n>) — pendants de `allocatedBudget` ci-dessus pour
   // `Chantier.consumedBudget`/`consumedFte` ────────────────────────────────────────────────────
   "strategicChantierDetail.consumedBudget": "Budget consommé",
@@ -1426,22 +1441,22 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.kanban.done": "Terminé",
 
   "strategicChantierDetail.prerequisites.title": "Dépendances / Prérequis",
-  "strategicChantierDetail.prerequisites.kindAction": "Levier du plan",
+  "strategicChantierDetail.prerequisites.kindAction": "Projet du plan",
   "strategicChantierDetail.prerequisites.kindExternal": "Prérequis externe",
   "strategicChantierDetail.prerequisites.blockedBy": "Bloqué par :",
   "strategicChantierDetail.prerequisites.addRow": "Ajouter un prérequis",
   "strategicChantierDetail.prerequisites.kind": "Type",
-  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choisir un levier",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choisir un projet",
   "strategicChantierDetail.prerequisites.externalPlaceholder":
     "Ex. Recrutement, achat, validation budgétaire…",
   "strategicChantierDetail.prerequisites.done": "Fait",
   "strategicChantierDetail.prerequisites.removeRow": "Retirer ce prérequis",
   "strategicChantierDetail.prerequisites.none": "Aucun prérequis.",
-  "strategicChantierDetail.prerequisites.noOtherActions": "Aucun autre levier sur ce chantier.",
+  "strategicChantierDetail.prerequisites.noOtherActions": "Aucun autre projet sur ce chantier.",
 
   // ─── Bandeaux accordéon des leviers (round <n>) ───────────────────────────────────────────
-  "strategicChantierDetail.leviers.expand": "Déplier",
-  "strategicChantierDetail.leviers.collapse": "Replier",
+  "strategicChantierDetail.projets.expand": "Déplier",
+  "strategicChantierDetail.projets.collapse": "Replier",
 
   // ─── Modale de détail d'un livrable + formulaire de création (round <n>, onglet "Timeline"
   // fusionné — remplace l'ancien onglet dédié aux phases de livrables) ──────────────────────
@@ -1449,7 +1464,7 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.deliverableModal.comments": "Commentaires",
   "strategicChantierDetail.deliverableModal.commentPlaceholder": "Ajouter un commentaire…",
   "strategicChantierDetail.deliverableModal.noComments": "Aucun commentaire.",
-  "strategicChantierDetail.deliverableForm.leverSelect": "Levier rattaché",
+  "strategicChantierDetail.deliverableForm.leverSelect": "Projet rattaché",
 
   // ─── Onglets de la fiche chantier (round 10, point 2) ─────────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Vue d'ensemble",
@@ -1466,19 +1481,19 @@ const fr: Record<string, string> = {
   // bloc "Méthode de jalons", même convention de titre que les autres sections du levier.
   "strategicChantierDetail.linkedIndicatorTitle": "KPI associé",
 
-  "strategicChantierDetail.actionFocused": "Levier ouvert depuis le lien",
+  "strategicChantierDetail.actionFocused": "Projet ouvert depuis le lien",
   "strategicChantierDetail.actionForm.missingHint":
     "Renseignez le nom et les dates pour enregistrer.",
-  "strategicChantierDetail.actionForm.budgetLabel": "Budget du levier",
+  "strategicChantierDetail.actionForm.budgetLabel": "Budget du projet",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "Le total des budgets des leviers dépasserait le budget alloué du chantier.",
-  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Budget consommé du levier",
-  "strategicChantierDetail.actionForm.consumedFteLabel": "ETP consommés du levier",
+    "Le total des budgets des projets dépasserait le budget alloué du chantier.",
+  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Budget consommé du projet",
+  "strategicChantierDetail.actionForm.consumedFteLabel": "ETP consommés du projet",
   "strategicChantierDetail.successCriteria.placeholder": "On sera content en [année] si...",
 
   // ─── Plan Stratégique — jalons E0→E4 (round 5) ─────────────────────────────────────────
   "strategicChantierDetail.milestones.title": "Méthode de jalons E0→E4",
-  "strategicChantierDetail.milestones.stepper.title": "Jalons du levier",
+  "strategicChantierDetail.milestones.stepper.title": "Jalons du projet",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Se débloque après le jalon courant",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Jalon franchi",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Jalon courant",
@@ -1546,14 +1561,14 @@ const fr: Record<string, string> = {
   "strategicImport.lineLabel": "Ligne",
   "strategicImport.axesCountLabel": "axe(s) à créer",
   "strategicImport.chantiersCountLabel": "chantier(s) à créer",
-  "strategicImport.actionsCountLabel": "levier(s) à créer",
+  "strategicImport.actionsCountLabel": "projet(s) à créer",
   "strategicImport.indicatorsCountLabel": "indicateur(s) à créer",
   "strategicImport.templateDownloadedTitle": "Modèle téléchargé",
   "strategicImport.templateDownloadedBody":
     "5 feuilles : Axes (Code = clé), Chantiers (Code Axe = FK), Actions (Code Chantier = FK), Livrables (Code Action = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK). Supprimez les lignes d'exemple avant de remplir.",
   "strategicImport.ignoredRowsNote": "{n} ligne(s) ignorée(s)",
   "strategicImport.importDoneBody":
-    "{axes} axe(s) · {chantiers} chantier(s) · {actions} levier(s) · {indicators} indicateur(s) créé(s)",
+    "{axes} axe(s) · {chantiers} chantier(s) · {actions} projet(s) · {indicators} indicateur(s) créé(s)",
   "strategicImport.errorTitle": "Échec de l'import",
 
   // ─── Plan Stratégique — page KPI (saisie de mesures, édition d'objectif) ───
@@ -1657,8 +1672,8 @@ const fr: Record<string, string> = {
   "staffing.saveError": "Impossible d'enregistrer le staffing.",
   "staffing.startDate": "Début",
   "staffing.endDate": "Fin",
-  "staffing.action": "Levier concerné",
-  "staffing.actionNone": "Aucun levier en particulier",
+  "staffing.action": "Projet concerné",
+  "staffing.actionNone": "Aucun projet en particulier",
 
   // ─── Page Effectifs mobilisés (/effectifs, Plan Stratégique) ──────────────
   "effectifs.title": "Effectifs & budget mobilisés",
@@ -1792,20 +1807,20 @@ const fr: Record<string, string> = {
   "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
   "strategicDashboard.widget.businessKpis": "KPI business — Suivi du marché",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertes",
-  // Round 8 : placeholder d'une colonne de jalon E0-E4 sans levier (`LevierMilestoneBoard.tsx`).
-  "strategicDashboard.levierBoard.emptyColumn": "—",
+  // Round 8 : placeholder d'une colonne de jalon E0-E4 sans levier (`ProjetMilestoneBoard.tsx`).
+  "strategicDashboard.projetBoard.emptyColumn": "—",
   // Round 12 : moyenne des `progressPct` déclarés des leviers de la colonne (`{pct}` substitué
-  // manuellement, voir `LevierMilestoneBoard.tsx`).
-  "strategicDashboard.levierBoard.avgProgress": "{pct}% en moyenne",
-  // Round 20, point 3 : pastille/bordure "En retard" sur une `LevierCard` (`isLevierLate`,
+  // manuellement, voir `ProjetMilestoneBoard.tsx`).
+  "strategicDashboard.projetBoard.avgProgress": "{pct}% en moyenne",
+  // Round 20, point 3 : pastille/bordure "En retard" sur une `ProjetCard` (`isProjetLate`,
   // lib/axisLogic.ts) — distincte de la pastille rouge existante du bucket de progression 0-33%.
-  "strategicDashboard.levierBoard.late": "En retard",
+  "strategicDashboard.projetBoard.late": "En retard",
   // Round 15 : feuille de route programme (`ProgramRoadmap.tsx`) — vue globale, pleine largeur, en
   // bas du dashboard (une ligne par levier, tous axes/chantiers confondus).
   // Round 20, point 3 : 3e sous-section du widget "chantier-dependency-alerts" (leviers en retard),
   // même patron que les deux sous-sections existantes ci-dessus.
-  "strategicDashboard.lateLeviersHeading": "Leviers en retard",
-  "strategicDashboard.noLateLeviers": "Aucun levier en retard",
+  "strategicDashboard.lateLeviersHeading": "Projets en retard",
+  "strategicDashboard.noLateLeviers": "Aucun projet en retard",
 
   // ─── Plan Stratégique — fiche de configuration d'un programme (admin) ─────
   "adminPrograms.manage": "Gérer",

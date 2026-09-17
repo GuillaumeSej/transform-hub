@@ -14,7 +14,7 @@ function baseChantier(overrides: Partial<Chantier> = {}): Chantier {
     id: "CH1",
     companyId,
     programId,
-    axisId: "AX1",
+    axisIds: ["AX1"],
     name: "Refonte du parcours achats",
     stage: "planned",
     dependencies: [],
@@ -74,7 +74,6 @@ describe("validateStaffingImportRows", () => {
 
     const rhRow = result.rows.find((r) => r.entry.function === "RH");
     expect(rhRow?.entry.chantierId).toBe("CH1");
-    expect(rhRow?.entry.axisId).toBe("AX1");
     expect(rhRow?.entry.fte).toBe(1);
     expect(rhRow?.entry.startDate).toBe("2026-01-01");
     expect(rhRow?.entry.endDate).toBe("2026-06-30");
@@ -122,7 +121,6 @@ describe("validateStaffingImportRows", () => {
         id: "ST-existing-1",
         companyId,
         programId,
-        axisId: "AX1",
         chantierId: "CH1",
         function: "RH",
         fte: 1,
