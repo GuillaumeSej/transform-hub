@@ -1818,6 +1818,38 @@ const es: Record<string, string> = {
   "adminIndicators.saveError": "No se ha podido guardar el indicador.",
   "adminIndicators.deleteErrorTitle": "No se pudo eliminar",
   "adminIndicators.deleteError": "No se ha podido eliminar el indicador.",
+
+  // ─── gráficos de finanzas (drill-down + rediseño costes/savings) ───────────
+  "finance.chart.engagedTitle": "Costes comprometidos vs futuros (Invest)",
+  "finance.chart.engagedSubtitle": "CAPEX + OPEX puntual — OPEX recurrente excluido",
+  "finance.chart.timelineTitle": "Compromiso de costes en el tiempo (Invest)",
+  "finance.chart.timelineSubtitle":
+    "CAPEX + OPEX puntual — ver el gráfico Costes (Invest) vs Savings para la comparación con las ganancias",
+  "finance.chart.hierarchyTitle": "Desglose de costes por centro de coste / P&L",
+  "finance.chart.hierarchyNoConfig":
+    "No hay ninguna jerarquía financiera configurada para esta empresa.",
+  "finance.chart.investVsSavingsTitle": "Costes (Invest) vs Savings",
+  "finance.chart.investCost": "Costes (Invest)",
+  "finance.chart.grossSavings": "Ganancias brutas",
+  "finance.chart.netSavings": "Ganancias netas",
+  "finance.drilldown.totalLabel": "Total",
+  "finance.drilldown.empty": "Ninguna palanca contribuye a este importe.",
+  "finance.drilldown.back": "Volver a los workstreams",
+
+  // ─── biblioteca de proyectos: swimlanes, avance declarativo, vista árbol ───
+  "leverForm.workstreamWeightPct": "Peso en el avance del workstream (%)",
+  "leverForm.workstreamWeightPctPlaceholder": "Peso implícito",
+  "shared.actionForm.declaredProgressPct": "Avance declarativo (%)",
+  "shared.actionForm.declaredProgressPctPlaceholder": "No declarado",
+  "shared.declaredProgress.notProvided": "No indicado",
+  "shared.kanban.otherWorkstream": "Otros",
+  "levers.tree": "Vista de árbol",
+  "levers.tree.empty": "No hay palancas para mostrar.",
+  "levers.tree.wsNoLever": "Ninguna palanca en este workstream.",
+  "levers.tree.noType": "(Sin tipo)",
+  "levers.tree.filterByType": "Filtrar",
+  "levers.tree.openLever": "Abrir",
+  "levers.tree.leverNoAction": "Ninguna acción en esta palanca.",
 };
 
 export default es;

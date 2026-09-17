@@ -1823,6 +1823,38 @@ const de: Record<string, string> = {
   "adminIndicators.saveError": "Der Indikator konnte nicht gespeichert werden.",
   "adminIndicators.deleteErrorTitle": "Löschen nicht möglich",
   "adminIndicators.deleteError": "Der Indikator konnte nicht gelöscht werden.",
+
+  // ─── Finanz-Charts (Drilldown + Neugestaltung Kosten/Savings) ──────────────
+  "finance.chart.engagedTitle": "Gebundene vs. anstehende Kosten (Invest)",
+  "finance.chart.engagedSubtitle": "CAPEX + einmaliger OPEX — wiederkehrender OPEX ausgeschlossen",
+  "finance.chart.timelineTitle": "Kostenbindung im Zeitverlauf (Invest)",
+  "finance.chart.timelineSubtitle":
+    "CAPEX + einmaliger OPEX — siehe Diagramm Invest-Kosten vs. Savings für den Vergleich mit den Gewinnen",
+  "finance.chart.hierarchyTitle": "Kostenaufteilung nach Kostenstelle / GuV",
+  "finance.chart.hierarchyNoConfig":
+    "Für dieses Unternehmen ist keine Finanzhierarchie konfiguriert.",
+  "finance.chart.investVsSavingsTitle": "Invest-Kosten vs. Savings",
+  "finance.chart.investCost": "Invest-Kosten",
+  "finance.chart.grossSavings": "Bruttoeinsparungen",
+  "finance.chart.netSavings": "Nettoeinsparungen",
+  "finance.drilldown.totalLabel": "Gesamt",
+  "finance.drilldown.empty": "Kein Lever trägt zu diesem Betrag bei.",
+  "finance.drilldown.back": "Zurück zu den Workstreams",
+
+  // ─── Lever-Bibliothek: Swimlanes, deklarativer Fortschritt, Baumansicht ────
+  "leverForm.workstreamWeightPct": "Gewicht im Workstream-Fortschritt (%)",
+  "leverForm.workstreamWeightPctPlaceholder": "Implizites Gewicht",
+  "shared.actionForm.declaredProgressPct": "Deklarierter Fortschritt (%)",
+  "shared.actionForm.declaredProgressPctPlaceholder": "Nicht angegeben",
+  "shared.declaredProgress.notProvided": "Nicht angegeben",
+  "shared.kanban.otherWorkstream": "Sonstige",
+  "levers.tree": "Baumansicht",
+  "levers.tree.empty": "Keine Lever anzuzeigen.",
+  "levers.tree.wsNoLever": "Kein Lever in diesem Workstream.",
+  "levers.tree.noType": "(Kein Typ)",
+  "levers.tree.filterByType": "Filtern",
+  "levers.tree.openLever": "Öffnen",
+  "levers.tree.leverNoAction": "Keine Aktion für diesen Lever.",
 };
 
 export default de;

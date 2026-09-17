@@ -1815,6 +1815,37 @@ const en: Record<string, string> = {
   "adminIndicators.saveError": "The indicator could not be saved.",
   "adminIndicators.deleteErrorTitle": "Could not delete",
   "adminIndicators.deleteError": "The indicator could not be deleted.",
+
+  // ─── finance charts (drill-down + cost/savings rework) ─────────────────────
+  "finance.chart.engagedTitle": "Committed vs upcoming costs (Invest)",
+  "finance.chart.engagedSubtitle": "CAPEX + one-off OPEX — recurring OPEX excluded",
+  "finance.chart.timelineTitle": "Cost commitment over time (Invest)",
+  "finance.chart.timelineSubtitle":
+    "CAPEX + one-off OPEX — see the Invest vs Savings chart for the comparison with gains",
+  "finance.chart.hierarchyTitle": "Cost breakdown by cost center / P&L",
+  "finance.chart.hierarchyNoConfig": "No financial hierarchy is configured for this company.",
+  "finance.chart.investVsSavingsTitle": "Invest costs vs Savings",
+  "finance.chart.investCost": "Invest costs",
+  "finance.chart.grossSavings": "Gross savings",
+  "finance.chart.netSavings": "Net savings",
+  "finance.drilldown.totalLabel": "Total",
+  "finance.drilldown.empty": "No lever contributes to this amount.",
+  "finance.drilldown.back": "Back to workstreams",
+
+  // ─── levers library: swimlanes, declared progress, tree view ───────────────
+  "leverForm.workstreamWeightPct": "Weight in workstream progress (%)",
+  "leverForm.workstreamWeightPctPlaceholder": "Implicit weight",
+  "shared.actionForm.declaredProgressPct": "Declared progress (%)",
+  "shared.actionForm.declaredProgressPctPlaceholder": "Not declared",
+  "shared.declaredProgress.notProvided": "Not provided",
+  "shared.kanban.otherWorkstream": "Other",
+  "levers.tree": "Tree view",
+  "levers.tree.empty": "No levers to display.",
+  "levers.tree.wsNoLever": "No lever in this workstream.",
+  "levers.tree.noType": "(No type)",
+  "levers.tree.filterByType": "Filter",
+  "levers.tree.openLever": "Open",
+  "levers.tree.leverNoAction": "No action on this lever.",
 };
 
 export default en;

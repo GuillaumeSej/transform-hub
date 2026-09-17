@@ -1923,6 +1923,38 @@ const fr: Record<string, string> = {
   "adminIndicators.saveError": "L'indicateur n'a pas pu être enregistré.",
   "adminIndicators.deleteErrorTitle": "Suppression impossible",
   "adminIndicators.deleteError": "L'indicateur n'a pas pu être supprimé.",
+
+  // ─── finance charts (drill-down + refonte coûts/savings) ───────────────────
+  "finance.chart.engagedTitle": "Coûts engagés vs à venir (Invest)",
+  "finance.chart.engagedSubtitle": "CAPEX + OPEX one-off — OPEX récurrent exclu",
+  "finance.chart.timelineTitle": "Engagement des coûts dans le temps (Invest)",
+  "finance.chart.timelineSubtitle":
+    "CAPEX + OPEX one-off — voir le graphique Coûts (Invest) vs Savings pour la comparaison aux gains",
+  "finance.chart.hierarchyTitle": "Répartition des coûts par centre de coût / P&L",
+  "finance.chart.hierarchyNoConfig":
+    "Aucune arborescence financière n'est configurée pour cette entreprise.",
+  "finance.chart.investVsSavingsTitle": "Coûts (Invest) vs Savings",
+  "finance.chart.investCost": "Coûts (Invest)",
+  "finance.chart.grossSavings": "Gains bruts",
+  "finance.chart.netSavings": "Gains nets",
+  "finance.drilldown.totalLabel": "Total",
+  "finance.drilldown.empty": "Aucun levier ne contribue à ce montant.",
+  "finance.drilldown.back": "Retour aux workstreams",
+
+  // ─── levers library: swimlanes, avancement déclaratif, vue arborescence ────
+  "leverForm.workstreamWeightPct": "Poids dans l'avancement du workstream (%)",
+  "leverForm.workstreamWeightPctPlaceholder": "Poids implicite",
+  "shared.actionForm.declaredProgressPct": "Avancement déclaratif (%)",
+  "shared.actionForm.declaredProgressPctPlaceholder": "Non déclaré",
+  "shared.declaredProgress.notProvided": "Non renseigné",
+  "shared.kanban.otherWorkstream": "Autres",
+  "levers.tree": "Arborescence",
+  "levers.tree.empty": "Aucun levier à afficher.",
+  "levers.tree.wsNoLever": "Aucun levier dans ce workstream.",
+  "levers.tree.noType": "(Sans type)",
+  "levers.tree.filterByType": "Filtrer",
+  "levers.tree.openLever": "Ouvrir",
+  "levers.tree.leverNoAction": "Aucune action sur ce levier.",
 };
 
 export default fr;
