@@ -67,14 +67,24 @@ service cloud.firestore {
     }
 
     // Profil applicatif (role + companyId + password legacy...) — un seul `get()` par requête,
-    // réutilisé par toutes les fonctions ci-dessous. `adminUsers/{username}` doit exister pour
-    // tout compte Firebase Auth valide (voir lib/auth.ts:resolveAuthUserProfile, qui échoue
-    // explicitement sinon) : un compte Auth sans profil Firestore correspondant n'a aucun accès
-    // (ce `get()` échoue, donc tout appelant de `currentProfile()` sans profil recevra `false`
-    // par courtcircuit `isSignedIn() &&` en amont dans les fonctions qui l'utilisent — jamais un
-    // accès total par défaut).
+    // réutilisé par toutes les fonctions ci-dessous. CORRECTIF (round "profil manquant") : accéder
+    // à `.data` sur un `get()` dont le document N'EXISTE PAS lève une ERREUR D'ÉVALUATION de la
+    // règle, pas une valeur "absente" récupérable — contrairement à l'hypothèse initiale ici (une
+    // ancienne version de ce commentaire affirmait, à tort, qu'un tel échec retombait proprement
+    // sur `false` par le `isSignedIn() &&` en amont des fonctions appelantes). En pratique, TOUTE
+    // règle qui appelle `isSuperAdmin()`/`isCompanyAdmin()`/`belongsToCompany()` — donc PRESQUE
+    // TOUTES les collections de ce fichier — était refusée en bloc dès qu'un compte Firebase Auth
+    // authentifié n'avait pas (ou plus) de document `adminUsers/{username}` correspondant (compte
+    // créé hors flux normal, migration incomplète, document supprimé par erreur...). Le symptôme
+    // observé était identique à des règles non redéployées ("accès refusé" sur tout, y compris
+    // pour un compte censé être admin global) alors que les règles elles-mêmes étaient à jour.
+    // `exists()` avant le `get()` rend ce cas gracieux : un compte Auth sans profil Firestore se
+    // voit retourner un profil VIDE (`{}`), qui échoue ensuite normalement (et sans exception) les
+    // vérifications `isGlobalAdmin`/`role`/`companyId` via `.get(field, default)` plus bas —
+    // c'est le comportement qui était réellement voulu ici, jamais un accès total par défaut.
     function currentProfile() {
-      return get(/databases/$(database)/documents/adminUsers/$(currentUsername())).data;
+      let profilePath = /databases/$(database)/documents/adminUsers/$(currentUsername());
+      return exists(profilePath) ? get(profilePath).data : {};
     }
 
     // Compatible avec les deux formats de doc `adminUsers` : nouveau (`isGlobalAdmin: true`) et
@@ -88,8 +98,11 @@ service cloud.firestore {
             || currentProfile().get('role', '') == 'admin');
     }
 
+    // `.get('companyId', null)` plutôt qu'un accès direct `.companyId` — même raison que le
+    // `exists()` de `currentProfile()` juste au-dessus : un profil vide (compte Auth sans document
+    // `adminUsers` correspondant) ferait sinon échouer l'évaluation au lieu de retomber sur `null`.
     function myCompanyId() {
-      return currentProfile().companyId;
+      return currentProfile().get('companyId', null);
     }
 
     // Rôle admin d'ENTREPRISE (pas admin global) dont le companyId correspond. Même compatibilité
