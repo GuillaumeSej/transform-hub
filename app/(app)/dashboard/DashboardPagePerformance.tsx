@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
-import { FilterBar, type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/FilterBar";
+import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import {
   Banknote,
   ChevronDown,
@@ -16,7 +17,6 @@ import {
   Maximize2,
   Plus,
   RotateCcw,
-  SlidersHorizontal,
   TriangleAlert,
   TrendingUp,
   Users,
@@ -216,12 +216,6 @@ export function DashboardPagePerformance() {
     if (selectedProgramId) setActiveProgramId(selectedProgramId);
   }, [selectedProgramId, setActiveProgramId]);
 
-  const handleProgramChange = (programId: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("program", programId);
-    router.push(`/dashboard?${params.toString()}`);
-  };
-
   // Leviers scopés au programme sélectionné — appliqué AVANT le filtrage de la barre de filtres
   // (les options de filtres ne doivent refléter que les leviers du programme courant), mais reste
   // distinct des filtres globaux (c'est un scope, pas un filtre parmi d'autres).
@@ -383,8 +377,6 @@ export function DashboardPagePerformance() {
   // hook partagé gère n'importe quelle clé dynamique de `filterDefs` sans table de correspondance.
   const { activeFilters, setFilters } = useFilterBarState(filterDefs);
 
-  const hasActiveFilters = Object.keys(activeFilters).length > 0;
-
   // Filtrage générique par `filterDefs` — même patron que `LeversPagePerformance.tsx`/
   // `app/(app)/hr/etp/page.tsx`/`app/(app)/hr/page.tsx` (voir `useFilterBarState`, même base
   // partagée). Remplace `matchesGlobalFilters`, dont la forme fixe ne couvrait pas les dimensions
@@ -393,9 +385,9 @@ export function DashboardPagePerformance() {
   // drill-down VERS `/levers`, indépendamment du filtrage local ici).
   const filteredLevers = useMemo(() => {
     return programScopedLevers.filter((l) =>
-      Object.entries(activeFilters).every(([key, values]) => {
+      Object.entries(activeFilters).every(([key, value]) => {
         const def = filterDefs.find((d) => d.key === key);
-        return !def || values.length === 0 || values.includes(def.getValue(l));
+        return !def || value == null || def.getValue(l) === value;
       })
     );
   }, [programScopedLevers, activeFilters, filterDefs]);
@@ -646,8 +638,8 @@ export function DashboardPagePerformance() {
   // ci-dessus ne le sont pas (`status`, `geo_xxx`, `hierarchy_xxx`…) — d'où le préfixage ici.
   const goToLevers = (params: Record<string, string>) => {
     const globalParams: Record<string, string> = {};
-    Object.entries(activeFilters).forEach(([key, values]) => {
-      if (values.length > 0) globalParams[`f_${key}`] = values.join(",");
+    Object.entries(activeFilters).forEach(([key, value]) => {
+      if (value) globalParams[`f_${key}`] = value;
     });
     const merged = { ...globalParams, ...params };
     const qs = new URLSearchParams(merged).toString();
@@ -778,8 +770,6 @@ export function DashboardPagePerformance() {
   const [dragInstanceId, setDragInstanceId] = useState<string | null>(null);
   const [dragOverInstanceId, setDragOverInstanceId] = useState<string | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
-  // Filtres repliés par défaut sur mobile (< lg) — voir le bouton "Filtres" dans le rendu.
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // ─── Builder générique métrique × dimension(s) ─────────────────────────────────────────────
   // Widget "builder" (Marimekko, ventilations, P&L — voir `builderDimensionCount` du registre) déjà
@@ -1915,24 +1905,6 @@ export function DashboardPagePerformance() {
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
             {t("dashboard.title")}
           </h1>
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
-            {t("dashboard.program")}{" "}
-            <strong>
-              {programs.find((p) => p.id === selectedProgramId)?.name ?? data.program.name}
-            </strong>{" "}
-            · {summary.leverCount} {t("dashboard.leversActive")}
-            <select
-              value={selectedProgramId}
-              onChange={(e) => handleProgramChange(e.target.value)}
-              className="ml-1 rounded-sm border border-border bg-white px-2 py-0.5 text-[12px] font-semibold text-primary focus:border-bp-coral focus:outline-none"
-            >
-              {programs.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
         {/* Outils de bureau (export PPTX, personnalisation du layout) — sans objet au doigt
             sur téléphone : masqués sous lg pour laisser toute la place aux indicateurs. */}
@@ -1949,39 +1921,11 @@ export function DashboardPagePerformance() {
         </div>
       </div>
 
-      {/* Filtres — repliés par défaut sur mobile derrière un bouton (ils poussaient les KPI
-          sous la ligne de flottaison), toujours visibles à partir de lg. */}
-      <div className="mb-4 lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileFiltersOpen((v) => !v)}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-            hasActiveFilters || mobileFiltersOpen
-              ? "border-bp-coral bg-bp-coral text-white"
-              : "border-border bg-white text-secondary"
-          }`}
-        >
-          <SlidersHorizontal size={12} />
-          {t("dashboard.filters")}
-          {hasActiveFilters && (
-            <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-bold">
-              {Object.keys(activeFilters).length}
-            </span>
-          )}
-        </button>
-        {mobileFiltersOpen && (
-          <div className="mt-2">
-            <FilterBar
-              items={programScopedLevers}
-              defs={filterDefs}
-              active={activeFilters}
-              onChange={setFilters}
-            />
-          </div>
-        )}
-      </div>
-      <div className="mb-4 hidden lg:block">
-        <FilterBar
+      {/* Filtres — une rangée de dropdowns compacts (voir `DropdownFilterBar.tsx`), passent
+          naturellement à la ligne sur mobile via `flex-wrap` : plus besoin du repli sous bouton
+          qu'imposait l'ancienne double rangée de chips `FilterBar`. */}
+      <div className="mb-4">
+        <DropdownFilterBar
           items={programScopedLevers}
           defs={filterDefs}
           active={activeFilters}
