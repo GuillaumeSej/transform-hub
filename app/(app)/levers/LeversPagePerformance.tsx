@@ -31,7 +31,8 @@ import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
 import { Kanban } from "@/components/shared/Kanban";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import { FilterBar, type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/FilterBar";
+import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
 import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
@@ -57,7 +58,6 @@ export function LeversPagePerformance() {
     programs,
     performancePrograms,
     selectedProgramId,
-    setSelectedProgramId,
     loaded: programsLoaded,
   } = usePerformanceProgramSelector(user?.companyId);
   const lifecycle = useLifecycleLabels(selectedProgramId);
@@ -295,7 +295,7 @@ export function LeversPagePerformance() {
           ]),
       {
         key: "f_function",
-        label: t("dashboard.function", "Fonction"),
+        label: t("dashboard.leverDepartment", "Département"),
         getValue: (l) => l.function,
       },
       {
@@ -374,9 +374,9 @@ export function LeversPagePerformance() {
 
   const filteredLevers = useMemo(() => {
     return programScopedLevers.filter((lever) =>
-      Object.entries(activeFilters).every(([key, values]) => {
+      Object.entries(activeFilters).every(([key, value]) => {
         const def = filterDefs.find((d) => d.key === key);
-        return !def || values.length === 0 || values.includes(def.getValue(lever));
+        return !def || value == null || def.getValue(lever) === value;
       })
     );
   }, [programScopedLevers, activeFilters, filterDefs]);
@@ -434,9 +434,6 @@ export function LeversPagePerformance() {
           },
         ]
       : [];
-
-  const totalNet = filteredLevers.reduce((s, l) => s + l.netSavings, 0);
-  const totalReal = filteredLevers.reduce((s, l) => s + engine.realizedSavings(l), 0);
 
   /** Édition inline (double-clic) : les colonnes marquées editable écrivent directement sur le
    * levier. Les selects (statut/priorité/risque) passent par un mapping label → valeur interne. */
@@ -517,7 +514,7 @@ export function LeversPagePerformance() {
       width: "150px",
     },
     // ── Localisation ──
-    { key: "function", label: t("leverForm.function"), mobile: "hide", width: "130px" },
+    { key: "function", label: t("dashboard.leverDepartment"), mobile: "hide", width: "130px" },
     {
       key: "geography",
       label: t("leverForm.geography"),
@@ -654,28 +651,6 @@ export function LeversPagePerformance() {
               ? t("levers.title.mine")
               : t("levers.title.library")}
           </h1>
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
-            {filteredLevers.length} {t("levers.count")} · {t("levers.netSavingsShown")} :{" "}
-            <strong>{engine.fmtCurr(totalNet)}</strong> · {t("levers.realized")} :{" "}
-            <strong>{engine.fmtCurr(totalReal)}</strong>
-            {performancePrograms.length > 1 ? (
-              <select
-                value={selectedProgramId ?? ""}
-                onChange={(e) => setSelectedProgramId(e.target.value)}
-                className="ml-1 rounded-sm border border-border bg-white px-2 py-0.5 text-[12px] font-semibold text-primary focus:border-bp-coral focus:outline-none"
-              >
-                {performancePrograms.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              performancePrograms[0] && (
-                <strong className="text-primary">{performancePrograms[0].name}</strong>
-              )
-            )}
-          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Export/import Excel : outils de bureau, sans objet sur téléphone. */}
@@ -719,7 +694,7 @@ export function LeversPagePerformance() {
       <Card>
         <CardBody flush>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-            <FilterBar
+            <DropdownFilterBar
               items={programScopedLevers}
               defs={filterDefs}
               active={activeFilters}
