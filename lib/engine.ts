@@ -385,6 +385,28 @@ export const DEFAULT_RISK_THRESHOLDS: {
  * critères de bascule indépendants (montant, délai) dans computeLeverRisk ci-dessous. */
 const RISK_SEVERITY: Record<RiskLevel, number> = { critical: 3, high: 2, medium: 1, low: 0 };
 
+/** Résultat enrichi de `computeLeverRisk` : garde le niveau (`level`, ce qui est stocké dans
+ * `Lever.risk`) ET un motif textuel en français, concis (une phrase), prêt à afficher tel quel
+ * dans un badge/tooltip UI — explique quel critère (montant ou délai, le plus sévère des deux) a
+ * déterminé le niveau retenu, avec la valeur réelle et le seuil comparé. */
+export type LeverRiskAssessment = {
+  level: RiskLevel;
+  reason: string;
+};
+
+const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
+  critical: "critique",
+  high: "élevé",
+  medium: "moyen",
+  low: "faible",
+};
+
+function fmtRiskAmount(amount: number): string {
+  return amount >= 1000
+    ? `${(amount / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} k€`
+    : `${Math.round(amount).toLocaleString("fr-FR")} €`;
+}
+
 /** Risque d'un levier dérivé des alertes qui lui sont liées (Alert.scope === leverId, non
  * résolues), segmenté par cumul de montant à risque (valeur absolue de Alert.impactEur) selon les
  * seuils de l'entreprise (ou les seuils par défaut). Un levier sans alerte chiffrée est "low".
@@ -395,7 +417,10 @@ const RISK_SEVERITY: Record<RiskLevel, number> = { critical: 3, high: 2, medium:
  * l'ancienneté (en jours, depuis `Alert.createdAt`/`ts` en repli) de sa plus vieille alerte
  * ouverte dépasse ce délai, indépendamment du montant. Les deux critères sont évalués séparément,
  * et c'est le niveau le plus sévère des deux qui est retenu — un délai dépassé peut donc faire
- * monter le risque même si le montant cumulé reste sous le seuil, et inversement. */
+ * monter le risque même si le montant cumulé reste sous le seuil, et inversement.
+ *
+ * Retourne un objet enrichi (`LeverRiskAssessment`) : `level` (le `RiskLevel` simple, à assigner à
+ * `Lever.risk`) + `reason`, un texte expliquant lequel des deux critères a déterminé ce niveau. */
 export function computeLeverRisk(
   leverId: string,
   alerts: Alert[],
@@ -405,7 +430,7 @@ export function computeLeverRisk(
     delayDays?: number;
   }[] = DEFAULT_RISK_THRESHOLDS,
   today: Date = new Date()
-): RiskLevel {
+): LeverRiskAssessment {
   const scoped = alerts.filter((a) => a.scope === leverId && !a.resolved);
   const total = scoped
     .filter((a) => typeof a.impactEur === "number")
@@ -420,13 +445,25 @@ export function computeLeverRisk(
   const bySeverityDesc = [...thresholds].sort(
     (a, b) => RISK_SEVERITY[b.level] - RISK_SEVERITY[a.level]
   );
-  const byAmount = bySeverityDesc.find((t) => total >= t.minAmount)?.level ?? "low";
-  const byDelay = bySeverityDesc.find(
+  const amountThreshold = bySeverityDesc.find((t) => total >= t.minAmount);
+  const byAmount = amountThreshold?.level ?? "low";
+  const delayThreshold = bySeverityDesc.find(
     (t) => t.delayDays != null && oldestOpenDays >= t.delayDays
-  )?.level;
+  );
+  const byDelay = delayThreshold?.level;
 
-  if (!byDelay) return byAmount;
-  return RISK_SEVERITY[byDelay] > RISK_SEVERITY[byAmount] ? byDelay : byAmount;
+  const level = byDelay && RISK_SEVERITY[byDelay] > RISK_SEVERITY[byAmount] ? byDelay : byAmount;
+
+  let reason: string;
+  if (level === "low") {
+    reason = "Aucun critère de risque dépassé : niveau faible.";
+  } else if (byDelay && RISK_SEVERITY[byDelay] >= RISK_SEVERITY[byAmount]) {
+    reason = `Retard : la plus ancienne alerte ouverte date de ${Math.floor(oldestOpenDays)} jours (seuil ${RISK_LEVEL_LABELS[level]} : ${delayThreshold?.delayDays} jours).`;
+  } else {
+    reason = `Montant à risque : ${fmtRiskAmount(total)} d'alertes ouvertes (seuil ${RISK_LEVEL_LABELS[level]} : ${fmtRiskAmount(amountThreshold?.minAmount ?? 0)}).`;
+  }
+
+  return { level, reason };
 }
 
 /**

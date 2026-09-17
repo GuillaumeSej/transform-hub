@@ -25,7 +25,7 @@ export function computeLeverHealth(
 ): LeverHealthCell {
   const activeAlerts = alerts.filter((alert) => alert.scope === lever.id && !alert.resolved);
   const riskAlerts = activeAlerts.filter((alert) => alert.type === "red" || alert.type === "amber");
-  const computedRisk = computeLeverRisk(lever.id, riskAlerts, thresholds);
+  const computedRisk = computeLeverRisk(lever.id, riskAlerts, thresholds).level;
 
   let health: LeverHealthStatus = "onTrack";
   if (lever.status === "cancelled") {
