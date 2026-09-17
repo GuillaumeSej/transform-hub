@@ -10,8 +10,10 @@ import {
 } from "@/lib/firestore/chantierStaffing";
 import { colorForDepartment } from "@/lib/axisLogic";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
+import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { isReadOnlyUser } from "@/lib/roleProfiles";
 import type { ChantierAction, ChantierStaffing } from "@/types";
 
 /**
@@ -76,6 +78,8 @@ export function ChantierStaffingEditor({
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
+  const { user } = useRole();
+  const readOnly = isReadOnlyUser(user);
 
   const { departmentNames } = useCompanyDepartments(companyId);
 
@@ -220,110 +224,114 @@ export function ChantierStaffingEditor({
               <span className="whitespace-nowrap text-[12px] font-semibold text-primary">
                 {formatFte(entry.fte)} {t("staffing.fteUnit")}
               </span>
-              <button
-                type="button"
-                onClick={() => remove(entry.id)}
-                aria-label={t("staffing.remove")}
-                title={t("staffing.remove")}
-                className="rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
-              >
-                <Trash2 size={13} />
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => remove(entry.id)}
+                  aria-label={t("staffing.remove")}
+                  title={t("staffing.remove")}
+                  className="rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.function")}
-            {departmentNames.length > 0 ? (
+      {!readOnly && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <label className="block text-[11px] font-medium text-secondary">
+              {t("staffing.function")}
+              {departmentNames.length > 0 ? (
+                <select
+                  value={functionDraft}
+                  onChange={(e) => setFunctionDraft(e.target.value)}
+                  className={INPUT_CLASS}
+                >
+                  {departmentNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                // Aucune équipe dans la base ETP entreprise (module RH, `/hr/etp`) : rien à
+                // proposer — plutôt qu'un référentiel arbitraire, on renvoie explicitement vers la
+                // base ETP à compléter d'abord (round 13, voir doc-comment de tête de fichier).
+                <p className={`${INPUT_CLASS} bg-neutral-50 text-tertiary`}>
+                  {t("staffing.noDepartments")}
+                </p>
+              )}
+            </label>
+            <label className="block text-[11px] font-medium text-secondary">
+              {t("staffing.fte")}
+              <input
+                value={fteDraft}
+                onChange={(e) => setFteDraft(e.target.value)}
+                inputMode="decimal"
+                placeholder="1"
+                className={INPUT_CLASS}
+              />
+            </label>
+            <label className="block text-[11px] font-medium text-secondary">
+              {t("staffing.note")}
+              <input
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder={t("staffing.notePlaceholder")}
+                className={INPUT_CLASS}
+              />
+            </label>
+            <label className="block text-[11px] font-medium text-secondary">
+              {t("staffing.startDate")}
+              <input
+                type="date"
+                value={startDateDraft}
+                onChange={(e) => setStartDateDraft(e.target.value)}
+                className={INPUT_CLASS}
+              />
+            </label>
+            <label className="block text-[11px] font-medium text-secondary">
+              {t("staffing.endDate")}
+              <input
+                type="date"
+                value={endDateDraft}
+                onChange={(e) => setEndDateDraft(e.target.value)}
+                className={INPUT_CLASS}
+              />
+            </label>
+            <label className="block text-[11px] font-medium text-secondary">
+              {t("staffing.action")}
               <select
-                value={functionDraft}
-                onChange={(e) => setFunctionDraft(e.target.value)}
+                value={actionDraft}
+                onChange={(e) => setActionDraft(e.target.value)}
                 className={INPUT_CLASS}
               >
-                {departmentNames.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
+                <option value="">{t("staffing.actionNone")}</option>
+                {chantierActions.map((action) => (
+                  <option key={action.id} value={action.id}>
+                    {action.name}
                   </option>
                 ))}
               </select>
-            ) : (
-              // Aucune équipe dans la base ETP entreprise (module RH, `/hr/etp`) : rien à
-              // proposer — plutôt qu'un référentiel arbitraire, on renvoie explicitement vers la
-              // base ETP à compléter d'abord (round 13, voir doc-comment de tête de fichier).
-              <p className={`${INPUT_CLASS} bg-neutral-50 text-tertiary`}>
-                {t("staffing.noDepartments")}
-              </p>
-            )}
-          </label>
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.fte")}
-            <input
-              value={fteDraft}
-              onChange={(e) => setFteDraft(e.target.value)}
-              inputMode="decimal"
-              placeholder="1"
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.note")}
-            <input
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              placeholder={t("staffing.notePlaceholder")}
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.startDate")}
-            <input
-              type="date"
-              value={startDateDraft}
-              onChange={(e) => setStartDateDraft(e.target.value)}
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.endDate")}
-            <input
-              type="date"
-              value={endDateDraft}
-              onChange={(e) => setEndDateDraft(e.target.value)}
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.action")}
-            <select
-              value={actionDraft}
-              onChange={(e) => setActionDraft(e.target.value)}
-              className={INPUT_CLASS}
+            </label>
+          </div>
+          <div className="flex items-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={add}
+              disabled={saving || departmentNames.length === 0}
             >
-              <option value="">{t("staffing.actionNone")}</option>
-              {chantierActions.map((action) => (
-                <option key={action.id} value={action.id}>
-                  {action.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <Plus size={12} /> {t("staffing.add")}
+            </Button>
+          </div>
         </div>
-        <div className="flex items-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={add}
-            disabled={saving || departmentNames.length === 0}
-          >
-            <Plus size={12} /> {t("staffing.add")}
-          </Button>
-        </div>
-      </div>
-      <p className="mt-1.5 text-[11px] text-tertiary">{t("staffing.hint")}</p>
+      )}
+      {!readOnly && <p className="mt-1.5 text-[11px] text-tertiary">{t("staffing.hint")}</p>}
     </div>
   );
 }

@@ -53,6 +53,7 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import { isReadOnlyUser } from "@/lib/roleProfiles";
 import type {
   ActionPrerequisite,
   ActionPrerequisiteKind,
@@ -387,6 +388,7 @@ function PrerequisitesEditor({
   otherActions,
   labels,
   onChange,
+  readOnly = false,
 }: {
   value: ActionPrerequisite[];
   /** Autres actions du MÊME chantier (l'action éditée exclue) — univers du sélecteur de prérequis
@@ -394,6 +396,15 @@ function PrerequisitesEditor({
   otherActions: ChantierAction[];
   labels: PrerequisitesEditorLabels;
   onChange: (next: ActionPrerequisite[]) => void;
+  /** Round 25 (gate d'édition COMEX) : cet éditeur est monté DEUX fois — dans `ChantierActionForm`
+   *  (déjà inaccessible à un utilisateur en lecture seule, voir le bouton qui ouvre ce formulaire)
+   *  et directement sur la ligne de chaque levier (auto-sauvegarde immédiate, PAS derrière un
+   *  bouton d'ouverture) — c'est CET usage-là qui a besoin de ce prop. `false` par défaut pour ne
+   *  rien changer à l'usage existant dans `ChantierActionForm`. Masque le sélecteur de nature, le
+   *  bouton de suppression de ligne et le bouton d'ajout ; les champs restants (cible, libellé,
+   *  case "fait") passent en lecture seule (`disabled`) plutôt que d'être retirés, pour que
+   *  l'information déjà saisie reste visible. */
+  readOnly?: boolean;
 }) {
   const patchPrerequisite = (id: string, patch: Partial<ActionPrerequisite>) =>
     onChange(value.map((p) => (p.id === id ? { ...p, ...patch } : p)));
@@ -425,6 +436,7 @@ function PrerequisitesEditor({
               <select
                 aria-label={labels.prerequisiteKind}
                 value={p.kind}
+                disabled={readOnly}
                 onChange={(e) => {
                   const kind = e.target.value as ActionPrerequisiteKind;
                   patchPrerequisite(
@@ -448,6 +460,7 @@ function PrerequisitesEditor({
                 ) : (
                   <select
                     value={p.targetActionId ?? ""}
+                    disabled={readOnly}
                     onChange={(e) => patchPrerequisite(p.id, { targetActionId: e.target.value })}
                     className={`${SMALL_INPUT_CLASS} min-w-0 flex-1`}
                   >
@@ -463,6 +476,7 @@ function PrerequisitesEditor({
                 <>
                   <input
                     value={p.label ?? ""}
+                    disabled={readOnly}
                     onChange={(e) => patchPrerequisite(p.id, { label: e.target.value })}
                     placeholder={labels.prerequisiteExternalPlaceholder}
                     className={`${SMALL_INPUT_CLASS} min-w-0 flex-1`}
@@ -471,6 +485,7 @@ function PrerequisitesEditor({
                     <input
                       type="checkbox"
                       checked={p.done ?? false}
+                      disabled={readOnly}
                       onChange={(e) => patchPrerequisite(p.id, { done: e.target.checked })}
                     />
                     {labels.prerequisiteDone}
@@ -478,24 +493,28 @@ function PrerequisitesEditor({
                 </>
               )}
 
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={labels.prerequisiteRemoveRow}
-                title={labels.prerequisiteRemoveRow}
-                onClick={() => removePrerequisite(p.id)}
-              >
-                <Trash2 size={12} />
-              </Button>
+              {!readOnly && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={labels.prerequisiteRemoveRow}
+                  title={labels.prerequisiteRemoveRow}
+                  onClick={() => removePrerequisite(p.id)}
+                >
+                  <Trash2 size={12} />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
       )}
-      <div className="mt-2">
-        <Button variant="outline" size="sm" onClick={addPrerequisite}>
-          <Plus size={12} /> {labels.prerequisiteAddRow}
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="mt-2">
+          <Button variant="outline" size="sm" onClick={addPrerequisite}>
+            <Plus size={12} /> {labels.prerequisiteAddRow}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1294,6 +1313,7 @@ export function ChantierDetailPanel({
   onClose: () => void;
 }) {
   const { user } = useRole();
+  const readOnly = isReadOnlyUser(user);
   const { activeProgram, activeProgramId } = useActiveProgram();
   const { t } = useTranslation();
   const router = useRouter();
@@ -1888,22 +1908,48 @@ export function ChantierDetailPanel({
                 <p className="mb-3 max-w-2xl text-[13px] text-secondary">{chantier.description}</p>
               )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <UserPicker
-                  users={data.users}
-                  value={chantier.sponsorName}
-                  onChange={(v) => updateChantierField(v ? { sponsorName: v } : {})}
-                  label={t("strategicChantierDetail.sponsor")}
-                  placeholder={t("strategicAxes.unassigned")}
-                  id="chantier-sponsor"
-                />
-                <UserPicker
-                  users={data.users}
-                  value={chantier.pilote}
-                  onChange={(v) => updateChantierField(v ? { pilote: v } : {})}
-                  label={t("strategicChantierDetail.pilote")}
-                  placeholder={t("strategicAxes.unassigned")}
-                  id="chantier-pilote"
-                />
+                {readOnly ? (
+                  <div>
+                    <span className="text-xs font-medium text-text-secondary">
+                      {t("strategicChantierDetail.sponsor")}
+                    </span>
+                    <div className="mt-1.5 text-[14px] font-semibold text-primary">
+                      {chantier.sponsorName
+                        ? resolveUserLabel(chantier.sponsorName, data.users)
+                        : t("strategicAxes.unassigned")}
+                    </div>
+                  </div>
+                ) : (
+                  <UserPicker
+                    users={data.users}
+                    value={chantier.sponsorName}
+                    onChange={(v) => updateChantierField(v ? { sponsorName: v } : {})}
+                    label={t("strategicChantierDetail.sponsor")}
+                    placeholder={t("strategicAxes.unassigned")}
+                    id="chantier-sponsor"
+                  />
+                )}
+                {readOnly ? (
+                  <div>
+                    <span className="text-xs font-medium text-text-secondary">
+                      {t("strategicChantierDetail.pilote")}
+                    </span>
+                    <div className="mt-1.5 text-[14px] font-semibold text-primary">
+                      {chantier.pilote
+                        ? resolveUserLabel(chantier.pilote, data.users)
+                        : t("strategicAxes.unassigned")}
+                    </div>
+                  </div>
+                ) : (
+                  <UserPicker
+                    users={data.users}
+                    value={chantier.pilote}
+                    onChange={(v) => updateChantierField(v ? { pilote: v } : {})}
+                    label={t("strategicChantierDetail.pilote")}
+                    placeholder={t("strategicAxes.unassigned")}
+                    id="chantier-pilote"
+                  />
+                )}
                 <div>
                   <span className="text-xs font-medium text-text-secondary">
                     {t("strategicAxes.chantierPeriod")}
@@ -2172,7 +2218,7 @@ export function ChantierDetailPanel({
                     />
                   </>
                 )}
-                {chantierActions.length > 0 && (
+                {chantierActions.length > 0 && !readOnly && (
                   <Button variant="outline" size="sm" onClick={() => setAddDeliverableOpen(true)}>
                     <Plus size={12} /> {t("strategicAxes.addDeliverable")}
                   </Button>
@@ -2265,7 +2311,8 @@ export function ChantierDetailPanel({
           <CardHeader
             title={t("strategicAxes.chantierActions")}
             actions={
-              !actionForm && (
+              !actionForm &&
+              !readOnly && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -2482,36 +2529,38 @@ export function ChantierDetailPanel({
                             )}
                           </div>
                         </button>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setActionForm({ mode: "edit", actionId: action.id });
-                              openLevier(action.id);
-                            }}
-                          >
-                            <Pencil size={12} /> {t("strategicAxes.editAction")}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={async () => {
-                              if (pendingDeleteAction !== action.id) {
-                                setPendingDeleteAction(action.id);
-                                return;
-                              }
-                              await data.removeChantierAction(action.id);
-                              setPendingDeleteAction(null);
-                              showToast(t("strategicAxes.actionDeleted"), action.name, "success");
-                            }}
-                          >
-                            <Trash2 size={12} />{" "}
-                            {pendingDeleteAction === action.id
-                              ? t("strategicAxes.confirmDelete")
-                              : t("common.delete")}
-                          </Button>
-                        </div>
+                        {!readOnly && (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setActionForm({ mode: "edit", actionId: action.id });
+                                openLevier(action.id);
+                              }}
+                            >
+                              <Pencil size={12} /> {t("strategicAxes.editAction")}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                if (pendingDeleteAction !== action.id) {
+                                  setPendingDeleteAction(action.id);
+                                  return;
+                                }
+                                await data.removeChantierAction(action.id);
+                                setPendingDeleteAction(null);
+                                showToast(t("strategicAxes.actionDeleted"), action.name, "success");
+                              }}
+                            >
+                              <Trash2 size={12} />{" "}
+                              {pendingDeleteAction === action.id
+                                ? t("strategicAxes.confirmDelete")
+                                : t("common.delete")}
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       {isOpen && (
@@ -2707,6 +2756,7 @@ export function ChantierDetailPanel({
                               otherActions={chantierActions.filter((a) => a.id !== action.id)}
                               labels={actionFormLabels}
                               onChange={(next) => updateActionPrerequisites(action.id, next)}
+                              readOnly={readOnly}
                             />
                           </div>
                         </>
@@ -2734,31 +2784,33 @@ export function ChantierDetailPanel({
       </div>
 
       {/* ── Suppression du chantier — reste HORS onglets, action globale au chantier ─────────── */}
-      <div className="mt-4 border-t border-border pt-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={async () => {
-            if (!pendingDeleteChantier) {
-              setPendingDeleteChantier(true);
-              return;
-            }
-            // Les actions du chantier sont retirées d'abord : elles ne portent pas de `programId`
-            // et ne seraient plus rattachables à rien une fois le chantier parti.
-            for (const action of chantierActions) {
-              await data.removeChantierAction(action.id);
-            }
-            await data.removeChantier(chantier.id);
-            showToast(t("strategicAxes.chantierDeleted"), chantier.name, "success");
-            onClose();
-          }}
-        >
-          <Trash2 size={12} />{" "}
-          {pendingDeleteChantier
-            ? t("strategicAxes.confirmDeleteChantier")
-            : t("strategicAxes.deleteChantier")}
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="mt-4 border-t border-border pt-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              if (!pendingDeleteChantier) {
+                setPendingDeleteChantier(true);
+                return;
+              }
+              // Les actions du chantier sont retirées d'abord : elles ne portent pas de `programId`
+              // et ne seraient plus rattachables à rien une fois le chantier parti.
+              for (const action of chantierActions) {
+                await data.removeChantierAction(action.id);
+              }
+              await data.removeChantier(chantier.id);
+              showToast(t("strategicAxes.chantierDeleted"), chantier.name, "success");
+              onClose();
+            }}
+          >
+            <Trash2 size={12} />{" "}
+            {pendingDeleteChantier
+              ? t("strategicAxes.confirmDeleteChantier")
+              : t("strategicAxes.deleteChantier")}
+          </Button>
+        </div>
+      )}
 
       {/* ── Modales livrables (round <n>) — détail (clic losange) et création ────────────────── */}
       {openDeliverableItem && openDeliverable && (

@@ -27,6 +27,8 @@ import {
   resolveIndicatorStatus,
   resolveMilestoneAutoFlags,
   resolveProgramType,
+  resolveStrategicOwnershipScope,
+  resolveStrategicRoleForProgram,
   staffingPeriodBuckets,
   sumLatestQuantitativeValues,
   sumConsumedBudget,
@@ -518,6 +520,271 @@ describe("canManageChantier", () => {
   it("blocks an anonymous user, even on an unrestricted chantier", () => {
     expect(canManageChantier(makeChantier("CH1"), null)).toBe(false);
     expect(canManageChantier(makeChantier("CH1"), undefined)).toBe(false);
+  });
+});
+
+// ─── Périmètre de visibilité par propriétaire nommé (round 25) ────────────────────────────────
+
+describe("resolveStrategicRoleForProgram", () => {
+  it("returns undefined for a user with no strategic profile at all", () => {
+    expect(resolveStrategicRoleForProgram({ profiles: [{ role: "lever" }] }, "p1")).toBeUndefined();
+    expect(resolveStrategicRoleForProgram(null, "p1")).toBeUndefined();
+    expect(resolveStrategicRoleForProgram(undefined, "p1")).toBeUndefined();
+  });
+
+  it("prefers the strategic profile scoped to the active program over one scoped to another program", () => {
+    const user = {
+      profiles: [
+        { role: "axis_sponsor" as const, programId: "p2" },
+        { role: "chantier_owner" as const, programId: "p1" },
+      ],
+    };
+    expect(resolveStrategicRoleForProgram(user, "p1")).toBe("chantier_owner");
+    expect(resolveStrategicRoleForProgram(user, "p2")).toBe("axis_sponsor");
+  });
+
+  it("falls back to a global (programId-less) strategic profile when none matches the active program", () => {
+    const user = { profiles: [{ role: "internal_comm" as const }] };
+    expect(resolveStrategicRoleForProgram(user, "p1")).toBe("internal_comm");
+    expect(resolveStrategicRoleForProgram(user, "any-other-program")).toBe("internal_comm");
+  });
+});
+
+describe("resolveStrategicOwnershipScope", () => {
+  it("returns unrestricted for a global or company admin, regardless of role", () => {
+    expect(
+      resolveStrategicOwnershipScope(
+        { username: "admin1", profiles: [{ role: "axis_sponsor" }], isGlobalAdmin: true },
+        "p1",
+        [],
+        [],
+        []
+      )
+    ).toEqual({ mode: "unrestricted" });
+    expect(
+      resolveStrategicOwnershipScope(
+        { username: "admin2", profiles: [{ role: "chantier_contributor" }], isCompanyAdmin: true },
+        "p1",
+        [],
+        [],
+        []
+      )
+    ).toEqual({ mode: "unrestricted" });
+  });
+
+  it("returns unrestricted for the strategic roles without named ownership", () => {
+    for (const role of [
+      "strategic_lead",
+      "internal_comm",
+      "budget_control",
+      "comex_member",
+    ] as const) {
+      expect(
+        resolveStrategicOwnershipScope({ username: "u1", profiles: [{ role }] }, "p1", [], [], [])
+      ).toEqual({ mode: "unrestricted" });
+    }
+  });
+
+  it("returns unrestricted for a user without any strategic profile (defensive default)", () => {
+    expect(
+      resolveStrategicOwnershipScope({ username: "u1", profiles: [] }, "p1", [], [], [])
+    ).toEqual({ mode: "unrestricted" });
+  });
+
+  it("returns an empty scoped scope (nothing visible) for a null/undefined user", () => {
+    const empty = {
+      mode: "scoped",
+      axisIds: new Set(),
+      chantierIds: new Set(),
+      clickableActionIds: new Set(),
+    };
+    expect(resolveStrategicOwnershipScope(null, "p1", [], [], [])).toEqual(empty);
+    expect(resolveStrategicOwnershipScope(undefined, "p1", [], [], [])).toEqual(empty);
+  });
+
+  describe("axis_sponsor", () => {
+    it("scopes to a single owned axis, plus its chantiers — a non-owned axis's chantier is excluded", () => {
+      const axes = [
+        makeAxis("AX1", { owner: "sponsor1" }),
+        makeAxis("AX2", { owner: "someone.else" }),
+      ];
+      const chantiers = [
+        makeChantier("CH1", { axisIds: ["AX1"] }),
+        makeChantier("CH2", { axisIds: ["AX2"] }),
+      ];
+
+      const scope = resolveStrategicOwnershipScope(
+        { username: "sponsor1", profiles: [{ role: "axis_sponsor" }] },
+        "p1",
+        axes,
+        chantiers,
+        []
+      );
+
+      expect(scope.mode).toBe("scoped");
+      if (scope.mode !== "scoped") throw new Error("unreachable");
+      expect(scope.axisIds).toEqual(new Set(["AX1"]));
+      expect(scope.chantierIds).toEqual(new Set(["CH1"]));
+      // Aucune restriction supplémentaire au niveau projet pour ce rôle.
+      expect(scope.clickableActionIds).toBeUndefined();
+    });
+
+    it("scopes to SEVERAL owned axes at once, and their respective chantiers", () => {
+      const axes = [
+        makeAxis("AX1", { owner: "sponsor1" }),
+        makeAxis("AX2", { owner: "someone.else" }),
+        makeAxis("AX3", { owner: "sponsor1" }),
+      ];
+      const chantiers = [
+        makeChantier("CH1", { axisIds: ["AX1"] }),
+        makeChantier("CH2", { axisIds: ["AX2"] }),
+        makeChantier("CH3", { axisIds: ["AX3"] }),
+      ];
+
+      const scope = resolveStrategicOwnershipScope(
+        { username: "sponsor1", profiles: [{ role: "axis_sponsor" }] },
+        "p1",
+        axes,
+        chantiers,
+        []
+      );
+
+      if (scope.mode !== "scoped") throw new Error("unreachable");
+      expect(scope.axisIds).toEqual(new Set(["AX1", "AX3"]));
+      expect(scope.chantierIds).toEqual(new Set(["CH1", "CH3"]));
+    });
+
+    it("includes a multi-axis chantier as soon as ONE of its axes is owned", () => {
+      const axes = [
+        makeAxis("AX1", { owner: "sponsor1" }),
+        makeAxis("AX2", { owner: "someone.else" }),
+      ];
+      const chantiers = [makeChantier("CH1", { axisIds: ["AX2", "AX1"] })];
+
+      const scope = resolveStrategicOwnershipScope(
+        { username: "sponsor1", profiles: [{ role: "axis_sponsor" }] },
+        "p1",
+        axes,
+        chantiers,
+        []
+      );
+
+      if (scope.mode !== "scoped") throw new Error("unreachable");
+      expect(scope.chantierIds).toEqual(new Set(["CH1"]));
+    });
+  });
+
+  describe("chantier_owner", () => {
+    it("scopes to the chantier(s) piloted by the user, excluding OTHER chantiers of the same axis", () => {
+      const axes = [makeAxis("AX1")];
+      const chantiers = [
+        makeChantier("CH1", { axisIds: ["AX1"], pilote: "owner1" }),
+        makeChantier("CH2", { axisIds: ["AX1"], pilote: "someone.else" }),
+      ];
+
+      const scope = resolveStrategicOwnershipScope(
+        { username: "owner1", profiles: [{ role: "chantier_owner" }] },
+        "p1",
+        axes,
+        chantiers,
+        []
+      );
+
+      if (scope.mode !== "scoped") throw new Error("unreachable");
+      // CH2 (même axe, autre pilote) n'apparaît JAMAIS dans chantierIds.
+      expect(scope.chantierIds).toEqual(new Set(["CH1"]));
+      // L'axe parent reste dans axisIds — contexte d'orientation seulement, ne donne accès à
+      // AUCUN autre chantier de cet axe (voir juste au-dessus).
+      expect(scope.axisIds).toEqual(new Set(["AX1"]));
+      expect(scope.clickableActionIds).toBeUndefined();
+    });
+
+    it("sees no chantier at all when piloting none", () => {
+      const axes = [makeAxis("AX1")];
+      const chantiers = [makeChantier("CH1", { axisIds: ["AX1"], pilote: "someone.else" })];
+
+      const scope = resolveStrategicOwnershipScope(
+        { username: "owner1", profiles: [{ role: "chantier_owner" }] },
+        "p1",
+        axes,
+        chantiers,
+        []
+      );
+
+      if (scope.mode !== "scoped") throw new Error("unreachable");
+      expect(scope.chantierIds.size).toBe(0);
+      expect(scope.axisIds.size).toBe(0);
+    });
+  });
+
+  describe("chantier_contributor", () => {
+    it("makes a chantier visible as soon as the contributor owns at least one of its projets — its OTHER projets stay visible but not clickable", () => {
+      const axes = [makeAxis("AX1")];
+      const chantiers = [makeChantier("CH1", { axisIds: ["AX1"] })];
+      const actions: ChantierAction[] = [
+        { ...makeAction("CH1", "2027-01-01", "2027-02-01", "A-MINE"), owner: "contrib1" },
+        { ...makeAction("CH1", "2027-01-01", "2027-02-01", "A-OTHER"), owner: "someone.else" },
+      ];
+
+      const scope = resolveStrategicOwnershipScope(
+        { username: "contrib1", profiles: [{ role: "chantier_contributor" }] },
+        "p1",
+        axes,
+        chantiers,
+        actions
+      );
+
+      if (scope.mode !== "scoped") throw new Error("unreachable");
+      // Le chantier est VISIBLE (un seul projet possédé suffit)...
+      expect(scope.chantierIds).toEqual(new Set(["CH1"]));
+      expect(scope.axisIds).toEqual(new Set(["AX1"]));
+      // ...mais SEUL le projet possédé est cliquable — "A-OTHER" reste dans le chantier visible
+      // (voir `chantierIds` ci-dessus, l'appelant UI continue de le RENDRE) sans figurer ici : à
+      // l'appelant de le rendre inerte au clic plutôt que de l'omettre (voir
+      // `ProgramRoadmap.tsx`/`AxisChantierProjetAccordion.tsx`/`ProjetMilestoneBoard.tsx`).
+      expect(scope.clickableActionIds).toEqual(new Set(["A-MINE"]));
+    });
+
+    it("does not make a chantier visible at all when the contributor owns none of its projets", () => {
+      const axes = [makeAxis("AX1")];
+      const chantiers = [makeChantier("CH1", { axisIds: ["AX1"] })];
+      const actions: ChantierAction[] = [
+        { ...makeAction("CH1", "2027-01-01", "2027-02-01", "A1"), owner: "someone.else" },
+      ];
+
+      const scope = resolveStrategicOwnershipScope(
+        { username: "contrib1", profiles: [{ role: "chantier_contributor" }] },
+        "p1",
+        axes,
+        chantiers,
+        actions
+      );
+
+      if (scope.mode !== "scoped") throw new Error("unreachable");
+      expect(scope.chantierIds.size).toBe(0);
+      expect(scope.clickableActionIds?.size).toBe(0);
+    });
+
+    it("scopes chantiers by OWNED PROJETS, not by Chantier.pilote (a contributor is not necessarily the pilote)", () => {
+      const axes = [makeAxis("AX1")];
+      // CH1 : contrib1 n'en est PAS le pilote, mais possède un de ses projets → visible quand même.
+      const chantiers = [makeChantier("CH1", { axisIds: ["AX1"], pilote: "someone.else" })];
+      const actions: ChantierAction[] = [
+        { ...makeAction("CH1", "2027-01-01", "2027-02-01", "A-MINE"), owner: "contrib1" },
+      ];
+
+      const scope = resolveStrategicOwnershipScope(
+        { username: "contrib1", profiles: [{ role: "chantier_contributor" }] },
+        "p1",
+        axes,
+        chantiers,
+        actions
+      );
+
+      if (scope.mode !== "scoped") throw new Error("unreachable");
+      expect(scope.chantierIds).toEqual(new Set(["CH1"]));
+      expect(scope.clickableActionIds).toEqual(new Set(["A-MINE"]));
+    });
   });
 });
 

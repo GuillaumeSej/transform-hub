@@ -149,6 +149,7 @@ export function ProgramRoadmap({
   onChantierClick,
   renderAxisHeader,
   labels,
+  clickableActionIds = "all",
 }: {
   axes: StrategicAxis[];
   chantiers: Chantier[];
@@ -170,6 +171,12 @@ export function ProgramRoadmap({
    *  sans ce prop continue de fonctionner à l'identique. */
   renderAxisHeader?: (axis: StrategicAxis) => ReactNode;
   labels?: ProgramRoadmapLabels;
+  /** Round 25 (RBAC `chantier_contributor`) — voir `StrategicData.clickableActionIds`,
+   *  lib/hooks/useStrategicData.ts. Un levier dont l'id n'est PAS dans cet ensemble reste rendu
+   *  normalement (ligne, barre, losanges de livrable) mais devient INERTE au clic : `onProjetClick`
+   *  n'est jamais invoqué pour lui, quel que soit le prop `onProjetClick` fourni. Défaut `"all"`
+   *  (comportement historique inchangé) : tous les autres appelants restent inutilement affectés. */
+  clickableActionIds?: Set<string> | "all";
 }) {
   const l = {
     empty: labels?.empty ?? "Aucun levier daté sur le programme.",
@@ -192,6 +199,11 @@ export function ProgramRoadmap({
 
   const rows = useMemo(() => programRoadmap(axes, chantiers, actions), [axes, chantiers, actions]);
   const grouped = useMemo(() => groupRowsByAxisAndChantier(rows), [rows]);
+
+  /** Round 25 : un levier est cliquable si `onProjetClick` est fourni ET (`clickableActionIds`
+   *  vaut `"all"` OU liste explicitement son id) — voir le doc-comment du prop ci-dessus. */
+  const isActionClickable = (actionId: string) =>
+    !!onProjetClick && (clickableActionIds === "all" || clickableActionIds.has(actionId));
 
   const { minTime, maxTime } = useMemo(() => timelineRange(rows, scale), [rows, scale]);
   const pctOf = useMemo(() => timelinePctOf(minTime, maxTime), [minTime, maxTime]);
@@ -344,6 +356,13 @@ export function ProgramRoadmap({
                           // chevauchent jamais entre eux, plutôt que deux éléments positionnés
                           // indépendamment au même endroit.
                           const afterBarLeftPct = Math.min(startPct + widthPct, 95);
+                          // Round 25 (RBAC `chantier_contributor`) : ce levier précis est-il
+                          // cliquable pour l'utilisateur courant ? Voir `isActionClickable`
+                          // ci-dessus — remplace TOUTES les conditions `onProjetClick ? … :
+                          // undefined` de cette ligne (label, barre, triangle "en retard",
+                          // losanges de livrable), qui ne testaient jusqu'ici que la présence du
+                          // callback, jamais le droit sur CE levier précis.
+                          const rowClickable = isActionClickable(row.action.id);
 
                           return (
                             <div
@@ -360,14 +379,14 @@ export function ProgramRoadmap({
                                   collait donc en haut sans ce centrage propre. */}
                                 <div
                                   className={`flex h-full items-center truncate text-[10.5px] font-medium text-primary ${
-                                    onProjetClick
+                                    rowClickable
                                       ? "cursor-pointer hover:text-bp-coral hover:underline"
                                       : ""
                                   }`}
                                   title={row.action.name}
                                   onClick={
-                                    onProjetClick
-                                      ? () => onProjetClick(row.chantier.id, row.action.id)
+                                    rowClickable
+                                      ? () => onProjetClick!(row.chantier.id, row.action.id)
                                       : undefined
                                   }
                                 >
@@ -390,8 +409,8 @@ export function ProgramRoadmap({
                                   variant="solid"
                                   progressPct={row.progressPct}
                                   onClick={
-                                    onProjetClick
-                                      ? () => onProjetClick(row.chantier.id, row.action.id)
+                                    rowClickable
+                                      ? () => onProjetClick!(row.chantier.id, row.action.id)
                                       : undefined
                                   }
                                   ariaLabel={row.action.name}
@@ -436,14 +455,14 @@ export function ProgramRoadmap({
                                     >
                                       <button
                                         type="button"
-                                        disabled={!onProjetClick}
+                                        disabled={!rowClickable}
                                         onClick={
-                                          onProjetClick
-                                            ? () => onProjetClick(row.chantier.id, row.action.id)
+                                          rowClickable
+                                            ? () => onProjetClick!(row.chantier.id, row.action.id)
                                             : undefined
                                         }
                                         aria-label={`${row.action.name} · ${l.late}`}
-                                        className={`flex text-rag-red ${onProjetClick ? "cursor-pointer hover:brightness-110" : ""}`}
+                                        className={`flex text-rag-red ${rowClickable ? "cursor-pointer hover:brightness-110" : ""}`}
                                       >
                                         <TriangleAlert size={12} aria-hidden />
                                       </button>
@@ -464,8 +483,8 @@ export function ProgramRoadmap({
                                     top={LEVIER_BAR_HEIGHT / 2}
                                     color={deliverableMarkerColor(deliverable.status)}
                                     onClick={
-                                      onProjetClick
-                                        ? () => onProjetClick(row.chantier.id, row.action.id)
+                                      rowClickable
+                                        ? () => onProjetClick!(row.chantier.id, row.action.id)
                                         : undefined
                                     }
                                     ariaLabel={deliverable.label}

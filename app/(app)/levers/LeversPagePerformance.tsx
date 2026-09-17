@@ -18,7 +18,7 @@ import {
   isLeverVisibleForClearance,
   resolveConfidentialityClearance,
 } from "@/lib/leversLogic";
-import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
+import { hasRole, isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -49,6 +49,7 @@ type LeverRow = Lever & {
 
 export function LeversPagePerformance() {
   const { user } = useRole();
+  const readOnly = isReadOnlyUser(user);
   const data = useBeTrackData(user?.companyId ?? null);
   // Vue scopée à UN programme Performance sélectionnable (voir le sélecteur plus bas) : le cycle
   // de vie étant désormais configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un
@@ -664,9 +665,11 @@ export function LeversPagePerformance() {
               onCreateWorkstreams={(workstreams) => data.addWorkstreams(workstreams)}
             />
           </span>
-          <Button variant="primary" onClick={() => setNewLeverOpen(true)}>
-            <Plus size={13} /> {t("levers.newLever")}
-          </Button>
+          {!readOnly && (
+            <Button variant="primary" onClick={() => setNewLeverOpen(true)}>
+              <Plus size={13} /> {t("levers.newLever")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -733,6 +736,7 @@ export function LeversPagePerformance() {
           onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
           searchPlaceholder={t("levers.searchPlaceholder")}
           defaultSort={{ key: "risk", direction: "desc" }}
+          readOnly={readOnly}
         />
       ) : (
         <Kanban

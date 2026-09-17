@@ -28,6 +28,7 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import { isReadOnlyUser } from "@/lib/roleProfiles";
 import type { StrategicImportPreview } from "@/lib/strategicExcelImport";
 import type { Chantier, MilestoneId } from "@/types";
 
@@ -71,6 +72,7 @@ const STRATEGIC_AXES_FALLBACK_COLOR = "#a99e9a";
 
 export function StrategicAxesView() {
   const { user } = useRole();
+  const readOnly = isReadOnlyUser(user);
   const { activeProgramId, loading: programsLoading } = useActiveProgram();
   const { t } = useTranslation();
   const router = useRouter();
@@ -299,9 +301,11 @@ export function StrategicAxesView() {
             maturityStages={stages}
             onImport={handleImport}
           />
-          <Button variant="primary" onClick={() => setNewAxisOpen(true)}>
-            <Plus size={13} /> {t("strategicAxes.newAxis")}
-          </Button>
+          {!readOnly && (
+            <Button variant="primary" onClick={() => setNewAxisOpen(true)}>
+              <Plus size={13} /> {t("strategicAxes.newAxis")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -438,6 +442,7 @@ export function StrategicAxesView() {
                           groups={[group]}
                           labels={projetMilestoneLabels}
                           onProjetClick={openChantierPanel}
+                          clickableActionIds={data.clickableActionIds}
                         />
                       </div>
                     </div>
@@ -456,6 +461,7 @@ export function StrategicAxesView() {
               chantierActions={data.chantierActions}
               onProjetClick={openChantierPanel}
               onDeliverableClick={openChantierPanelOnDeliverable}
+              clickableActionIds={data.clickableActionIds}
             />
           </div>
         </div>

@@ -108,6 +108,31 @@ export function getActiveRole(
 }
 
 /**
+ * L'utilisateur est-il cantonné à la LECTURE SEULE, tous profils confondus ? Round 25 (gate
+ * d'édition COMEX) : `comex_member` ("Membre du COMEX", voir son commentaire dans types/index.ts)
+ * est le premier rôle de l'app à ne JAMAIS donner de droit d'édition, sur aucune des deux pistes —
+ * jusqu'ici aucune gate centrale "cet utilisateur peut-il éditer ?" n'existait, chaque bouton de
+ * création/édition/suppression s'affichait inconditionnellement quel que soit le rôle.
+ *
+ * `true` UNIQUEMENT si TOUS les profils de l'utilisateur sont `comex_member` (un utilisateur qui
+ * cumule `comex_member` ET un autre rôle, ex. `chantier_owner` sur un second programme, garde ses
+ * droits d'édition — on ne le verrouille pas au prétexte qu'il a AUSSI un profil COMEX). Un
+ * utilisateur SANS AUCUN profil (`profiles` vide, ex. compte admin_entreprise pur) n'est pas
+ * "cantonné à comex_member" au sens de cette fonction : `false`.
+ *
+ * Un admin (global ou entreprise) n'est JAMAIS en lecture seule, quels que soient ses profils
+ * métier — même court-circuit qu'`isAnyAdmin` partout ailleurs dans ce fichier.
+ */
+export function isReadOnlyUser(
+  user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
+): boolean {
+  if (isAnyAdmin(user)) return false;
+  const profiles = user?.profiles ?? [];
+  if (profiles.length === 0) return false;
+  return profiles.every((p) => p.role === "comex_member");
+}
+
+/**
  * Programmes de l'entreprise que cet utilisateur est autorisé à voir/sélectionner comme
  * "programme actif" (voir `useActiveProgram`/le sélecteur de programme du Topbar) :
  *  - un admin (global ou entreprise) voit TOUS les programmes de l'entreprise (déjà scopés par

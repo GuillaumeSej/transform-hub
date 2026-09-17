@@ -42,7 +42,7 @@ import {
   type PivotRow,
 } from "@/lib/dashboardPivot";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
-import { isAnyAdmin } from "@/lib/roleProfiles";
+import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -129,6 +129,7 @@ const FILTER_PARAM_BY_DIMENSION: Partial<Record<string, string>> = {
 
 export function DashboardPagePerformance() {
   const { user } = useRole();
+  const readOnly = isReadOnlyUser(user);
   const data = useBeTrackData(user?.companyId ?? null);
   const { t } = useTranslation();
   const router = useRouter();
@@ -1014,12 +1015,14 @@ export function DashboardPagePerformance() {
                   {/* ── Panneau gauche : Alertes ─────────────────────────────────────────── */}
                   <div className="min-w-0">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => setManualAlertOpen(true)}
-                        className="rounded-sm border border-border px-2 py-0.5 text-[10.5px] font-semibold text-secondary transition hover:border-black hover:text-primary"
-                      >
-                        + Alerte manuelle
-                      </button>
+                      {!readOnly && (
+                        <button
+                          onClick={() => setManualAlertOpen(true)}
+                          className="rounded-sm border border-border px-2 py-0.5 text-[10.5px] font-semibold text-secondary transition hover:border-black hover:text-primary"
+                        >
+                          + Alerte manuelle
+                        </button>
+                      )}
                       {(["red", "amber", "green", "blue"] as const).map((type) => {
                         const count = alertCounts[type];
                         if (count === 0) return null;
@@ -1068,13 +1071,15 @@ export function DashboardPagePerformance() {
                         <option value="delay">{t("risk.sortByDelay")}</option>
                         <option value="savings">{t("risk.sortBySavings")}</option>
                       </select>
-                      <button
-                        onClick={markAllResolved}
-                        className="ml-auto rounded-sm px-1.5 py-0.5 text-[10px] font-semibold text-tertiary transition hover:bg-neutral-100 hover:text-primary"
-                        title={t("alerts.markAllResolved")}
-                      >
-                        ✓ {t("alerts.markAllResolved")}
-                      </button>
+                      {!readOnly && (
+                        <button
+                          onClick={markAllResolved}
+                          className="ml-auto rounded-sm px-1.5 py-0.5 text-[10px] font-semibold text-tertiary transition hover:bg-neutral-100 hover:text-primary"
+                          title={t("alerts.markAllResolved")}
+                        >
+                          ✓ {t("alerts.markAllResolved")}
+                        </button>
+                      )}
                     </div>
                     {alertsOnPage.length === 0 ? (
                       <p className="py-6 text-center text-sm text-tertiary">
@@ -1087,7 +1092,9 @@ export function DashboardPagePerformance() {
                             key={a.id}
                             alert={a}
                             onClick={() => goToAlert(a)}
-                            onToggleResolved={() => toggleAlertResolved(a.id)}
+                            onToggleResolved={
+                              readOnly ? undefined : () => toggleAlertResolved(a.id)
+                            }
                             scopeLabel={resolveScopeLabel(a.scope)}
                             tooltips={{
                               severity: t(`alerts.tooltip.severity.${a.type}`),

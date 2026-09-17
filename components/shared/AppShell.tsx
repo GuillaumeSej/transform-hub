@@ -55,9 +55,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   // `companyId` passé à null hors mode stratégique : `useStrategicData` n'ouvre alors AUCUN
   // abonnement Firestore — un Plan Performance ne paie donc rien pour ce hook (on ne peut pas
   // appeler un hook conditionnellement, mais on peut le neutraliser par ses arguments).
+  // Round 25 (RBAC) : `user` désormais passé en 3e argument — sans lui, ce hook sautait à la fois
+  // le masquage de confidentialité ET le périmètre par propriétaire nommé (`axis_sponsor`/
+  // `chantier_owner`/`chantier_contributor`), la cloche de notifications ci-dessous
+  // (`strategicNotifications`) exposait alors des alertes sur des chantiers/indicateurs hors du
+  // périmètre de l'utilisateur.
   const strategic = useStrategicData(
     isStrategic ? (user?.companyId ?? null) : null,
-    activeProgramId
+    activeProgramId,
+    user
   );
 
   const strategicNotifications = useMemo(() => {
