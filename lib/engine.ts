@@ -30,6 +30,14 @@ export function realizedSavings(lever: Lever): number {
   return Math.round(lever.netSavings * (lever.progress / 100) * 100) / 100;
 }
 
+/** Équivalent BRUT (avant déduction des coûts) de `realizedSavings` — repli utilisé pour un
+ *  levier sans plan d'action chiffré (saisie manuelle), qui n'a pas de plan d'action pour dériver
+ *  un "gains bruts réalisés" via `leverConsolidate.leverGrossRealizedToDate`. */
+export function realizedGrossSavings(lever: Lever): number {
+  if (lever.status === "cancelled") return 0;
+  return Math.round(lever.grossSavings * (lever.progress / 100) * 100) / 100;
+}
+
 /** Valeur "Plan initial" affichée pour un levier : le snapshot figé s'il existe, sinon la valeur
  * courante de `netSavings` en repli — même chaîne que celle utilisée par `sCurve3`/`financialTotal`
  * pour la courbe "Plan" agrégée, afin que la page détail d'un levier et le dashboard exécutif ne

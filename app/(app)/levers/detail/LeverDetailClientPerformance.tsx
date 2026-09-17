@@ -46,7 +46,12 @@ import { ActionForm, type ActionFormValues } from "@/components/shared/ActionFor
 import { ActionKanban } from "@/components/shared/ActionKanban";
 import { ActionGantt } from "@/components/shared/charts/ActionGantt";
 import { JCurveChart } from "@/components/shared/charts/JCurveChart";
-import { consolidateLeverFromActions, leverJCurve, leverPayback } from "@/lib/leverConsolidate";
+import {
+  consolidateLeverFromActions,
+  leverGrossRealizedToDate,
+  leverJCurve,
+  leverPayback,
+} from "@/lib/leverConsolidate";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import type { ActionImpact, ActionStatus, Company, LeverAction, Program } from "@/types";
 
@@ -221,6 +226,12 @@ export function LeverDetailClientPerformance() {
     ? [...jCurveData].reverse().find((p) => p.actual !== null)?.actual
     : undefined;
   const real = jCurveActualToDate ?? engine.realizedSavings(lever);
+  // Gains BRUTS réalisés à date (avant déduction des coûts) — même périmètre que `real` (net) :
+  // pour un levier piloté par actions, somme des impacts "saving" des actions "done" ; sinon
+  // repli sur l'estimation grossSavings × progression, comme `real` le fait pour `netSavings`.
+  const realGross = consolidatedKPIs
+    ? leverGrossRealizedToDate(lever)
+    : engine.realizedGrossSavings(lever);
   const realFte = engine.realizedFte(lever);
   const lockedPlanDisplay = engine.displayedLockedPlanNet(lever);
   const reforecastDisplay = engine.displayedReforecastNet(lever);
@@ -750,15 +761,19 @@ export function LeverDetailClientPerformance() {
               />
               <div className="flex flex-1 flex-wrap gap-x-8 gap-y-4">
                 <BigStat
-                  label={t("leverDetail.realizedToDate", "Réalisé à date")}
+                  label={t("leverDetail.realizedToDate", "Réalisé à date (net)")}
                   value={engine.fmtCurr(real)}
+                  sub={t("leverDetail.ofWhichGross", "dont {amount} de gains bruts").replace(
+                    "{amount}",
+                    engine.fmtCurr(realGross)
+                  )}
                   accent
                 />
                 <BigStat
-                  label={t("leverDetail.lockedPlan", "Plan initial (figé à « {stage} »)").replace(
-                    "{stage}",
-                    lifecycle.label("qualified")
-                  )}
+                  label={t(
+                    "leverDetail.lockedPlanNet",
+                    "Plan initial (net, figé à « {stage} »)"
+                  ).replace("{stage}", lifecycle.label("qualified"))}
                   value={
                     <ProvisionalValue
                       amount={lockedPlanDisplay.value}
@@ -768,7 +783,7 @@ export function LeverDetailClientPerformance() {
                   }
                 />
                 <BigStat
-                  label={t("leverDetail.plannedReforecast", "Planifié (réactualisé)")}
+                  label={t("leverDetail.reforecastNet", "Réactualisé (net)")}
                   value={
                     <ProvisionalValue
                       amount={reforecastDisplay.value}
@@ -1367,10 +1382,13 @@ function BigStat({
   label,
   value,
   accent = false,
+  sub,
 }: {
   label: string;
   value: React.ReactNode;
   accent?: boolean;
+  /** Ligne secondaire optionnelle sous la valeur, ex. le détail "dont X€ de gains bruts". */
+  sub?: React.ReactNode;
 }) {
   return (
     <div>
@@ -1382,6 +1400,7 @@ function BigStat({
       >
         {value}
       </div>
+      {sub && <div className="mt-0.5 text-[11px] font-medium text-tertiary">{sub}</div>}
     </div>
   );
 }

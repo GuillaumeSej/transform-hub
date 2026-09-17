@@ -145,6 +145,17 @@ export function leverJCurve(lever: Lever, fyStart: string, fyEnd: string): JCurv
   return points;
 }
 
+/** Gains BRUTS (avant déduction des coûts) déjà réalisés à date, pour un levier piloté par
+ *  actions — somme des impacts de type "saving" des seules actions au statut "done" (même
+ *  périmètre que le "Réalisé" net de `leverJCurve`, qui lui soustrait aussi les coûts des actions
+ *  déjà livrées). Sert à afficher, sous le "Réalisé à date" (net), le détail "dont X€ de gains
+ *  bruts" — utile pour comprendre l'écart quand des coûts (capex/opex) ont déjà été engagés sur
+ *  des actions livrées. */
+export function leverGrossRealizedToDate(lever: Lever): number {
+  const doneActions = (lever.actions ?? []).filter((a) => a.status === "done");
+  return sumImpacts(doneActions, (imp) => imp.type === "saving");
+}
+
 /** Calcule le mois de payback (1er mois où le cumul plan ≥ 0 après avoir été négatif). */
 export function leverPayback(jcurve: JCurvePoint[]): string | null {
   let wasNegative = false;

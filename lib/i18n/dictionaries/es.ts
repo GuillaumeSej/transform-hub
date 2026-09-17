@@ -406,7 +406,8 @@ const es: Record<string, string> = {
   "leverDetail.impactedLeversHint":
     "Estas palancas dependen del elemento retrasado. Sus fechas nunca se modifican automáticamente: póngase en contacto con su responsable.",
   "leverDetail.progressLabel": "Progreso",
-  "leverDetail.realizedToDate": "Realizado a la fecha",
+  "leverDetail.realizedToDate": "Realizado a la fecha (neto)",
+  "leverDetail.ofWhichGross": "de los cuales {amount} de ganancias brutas",
   "leverDetail.lockedPlan": "Plan inicial (fijado en «{stage}»)",
   "leverDetail.lockedPlanNet": "Plan inicial (neto, fijado en «{stage}»)",
   "leverDetail.plannedReforecast": "Planificado (reactualizado)",
