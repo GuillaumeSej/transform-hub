@@ -701,10 +701,11 @@ export type HierarchyNode = {
   parentId: string | null;
   /** Les nœuds historiques sans domaine sont financiers. */
   domain?: HierarchyDomain;
-  /** Métadonnées des lignes P&L, utilisées uniquement au niveau semantic="pnl". */
+  /** Métadonnées des lignes P&L, utilisées uniquement au niveau semantic="pnl".
+   *  Le signe de `baseline` porte la nature du compte (négatif = coût, positif = revenu) — il n'y
+   *  a pas de champ `sign` séparé, ce serait redondant et source d'incohérence. */
   financial?: {
     baseline: number;
-    sign: 1 | -1;
     computed?: boolean;
     selectable?: boolean;
   };

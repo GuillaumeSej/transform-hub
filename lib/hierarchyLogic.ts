@@ -13,7 +13,6 @@ export type HierarchyNodeDraft = {
   label: string;
   parentId: string;
   baseline: string;
-  sign: "1" | "-1";
   selectable: boolean;
 };
 
@@ -49,11 +48,17 @@ export function buildHierarchyNodePayload({
     if (!Number.isFinite(baseline)) return null;
     node.financial = {
       baseline,
-      sign: draft.sign === "-1" ? -1 : 1,
       selectable: draft.selectable !== false,
     };
   }
   return node;
+}
+
+/** Dérive le signe d'un compte P&L à partir du signe de sa `baseline` : négatif = coût, positif
+ *  (ou nul) = revenu. Remplace l'ancien champ `financial.sign`, redondant avec le signe de
+ *  `baseline` et source d'incohérence (ex. `baseline: 500, sign: -1`). */
+export function pnlAccountSign(baseline: number): 1 | -1 {
+  return baseline < 0 ? -1 : 1;
 }
 
 export function hierarchyDomain(node: HierarchyNode): HierarchyDomain {
@@ -97,14 +102,17 @@ export function derivePnlAccounts(
   if (!pnlLevel) return fallback;
   const accounts = nodes
     .filter((node) => node.levelKey === pnlLevel.key)
-    .map((node) => ({
-      id: node.code,
-      name: node.label,
-      baseline: node.financial?.baseline ?? 0,
-      sign: node.financial?.sign ?? (1 as const),
-      computed: node.financial?.computed ?? false,
-      selectable: node.financial?.selectable ?? !node.financial?.computed,
-    }));
+    .map((node) => {
+      const baseline = node.financial?.baseline ?? 0;
+      return {
+        id: node.code,
+        name: node.label,
+        baseline,
+        sign: pnlAccountSign(baseline),
+        computed: node.financial?.computed ?? false,
+        selectable: node.financial?.selectable ?? !node.financial?.computed,
+      };
+    });
   if (accounts.length === 0) return fallback;
   const configuredIds = new Set(accounts.map((account) => account.id));
   const referencedIds = new Set(referencedAccountIds.filter(Boolean));

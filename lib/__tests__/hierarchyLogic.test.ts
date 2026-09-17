@@ -104,7 +104,6 @@ describe("hierarchyLogic — domains, tree and P&L", () => {
         label: " Revenue ",
         parentId: "",
         baseline: "",
-        sign: "1",
         selectable: true,
       },
     });
@@ -116,7 +115,7 @@ describe("hierarchyLogic — domains, tree and P&L", () => {
       code: "REV",
       label: "Revenue",
       parentId: null,
-      financial: { baseline: 0, sign: 1, selectable: true },
+      financial: { baseline: 0, selectable: true },
     });
     expect(JSON.stringify(node)).not.toContain("undefined");
   });
@@ -144,11 +143,37 @@ describe("hierarchyLogic — domains, tree and P&L", () => {
         code: "REV",
         label: "Revenue",
         parentId: null,
-        financial: { baseline: 125, sign: 1, computed: false, selectable: true },
+        financial: { baseline: 125, computed: false, selectable: true },
       },
     ];
     expect(derivePnlAccounts(levels, nodes, [])).toEqual([
       { id: "REV", name: "Revenue", baseline: 125, sign: 1, computed: false, selectable: true },
+    ]);
+  });
+
+  it("derives the sign from the baseline's own sign (negative = cost, positive = revenue)", () => {
+    const levels: HierarchyLevelDef[] = [{ key: "pnl", label: "P&L", order: 0, semantic: "pnl" }];
+    const nodes: HierarchyNode[] = [
+      {
+        id: "p1",
+        companyId: "c1",
+        domain: "financial",
+        levelKey: "pnl",
+        code: "COGS",
+        label: "Cost of Goods Sold",
+        parentId: null,
+        financial: { baseline: -534, computed: false, selectable: true },
+      },
+    ];
+    expect(derivePnlAccounts(levels, nodes, [])).toEqual([
+      {
+        id: "COGS",
+        name: "Cost of Goods Sold",
+        baseline: -534,
+        sign: -1,
+        computed: false,
+        selectable: true,
+      },
     ]);
   });
 
@@ -163,7 +188,7 @@ describe("hierarchyLogic — domains, tree and P&L", () => {
         code: "NEW",
         label: "New line",
         parentId: null,
-        financial: { baseline: 0, sign: 1 },
+        financial: { baseline: 0 },
       },
     ];
     const fallback = [{ id: "OLD", name: "Old line", baseline: 10, sign: 1 as const }];
