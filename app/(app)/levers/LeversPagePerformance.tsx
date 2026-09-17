@@ -818,7 +818,11 @@ export function LeversPagePerformance() {
         />
       </Modal>
 
-      <Card>
+      {/* overflow-visible : surcharge le overflow-hidden par défaut de Card (troncature des coins
+          arrondis) — cette carte ne contient QUE le bandeau d'outils (filtres/colonnes/vue), pas
+          le tableau, donc elle est courte (~90px) et coupait tout popover (filtre déroulant,
+          sélecteur de colonnes) dépassant sa hauteur. */}
+      <Card className="overflow-visible">
         <CardBody flush>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
             <CollapsibleFilterBar

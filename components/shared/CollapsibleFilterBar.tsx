@@ -88,7 +88,14 @@ export function CollapsibleFilterBar<T>({
         {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
       </button>
       {expanded && (
-        <div className="min-w-0 overflow-x-auto pb-1">
+        // overflow-x-auto force overflow-y à se comporter en clip (règle CSS : dès qu'un axe
+        // n'est pas "visible", l'autre axe "visible" est recalculé en "auto") — ce qui coupait
+        // chaque popover de filtre individuel (position absolute, plus haut que cette rangée).
+        // `has-[[aria-expanded=true]]:overflow-visible` bascule tout le conteneur en overflow
+        // visible (x ET y, donc plus de recalcul forcé) dès qu'un des Dropdown internes est
+        // ouvert (chacun pose déjà aria-expanded sur son bouton) — on sacrifie juste le scroll
+        // horizontal le temps qu'un menu soit ouvert, ce qui est sans conséquence pratique.
+        <div className="min-w-0 overflow-x-auto pb-1 has-[[aria-expanded=true]]:overflow-visible">
           <DropdownFilterBar
             items={items}
             defs={defs}
