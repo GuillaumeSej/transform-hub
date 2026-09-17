@@ -108,6 +108,18 @@ service cloud.firestore {
       return isSignedIn() && myCompanyId() == companyId;
     }
 
+    // Accès défensif à `companyId` sur un document CIBLE (pas le profil de l'appelant) : certains
+    // documents legacy (créés avant l'ajout de ce champ, ex. scripts/bulk-create-lever-owners.js
+    // avant correctif) n'ont pas de `companyId` du tout. `resource.data.companyId` sans `.get()`
+    // lève une erreur d'évaluation sur un tel document — ce qui fait échouer TOUTE la requête
+    // `list`/`onSnapshot` en cours (pas seulement ce document), donc "permission-denied" en bloc
+    // pour adminUsers/companies/programs même pour un admin légitime. `.get('companyId', null)`
+    // retombe sur `null`, qui ne correspondra à aucun `myCompanyId()` valide (accès refusé pour CE
+    // document précis, mais la requête entière reste évaluable).
+    function docCompanyId(data) {
+      return data.get('companyId', null);
+    }
+
     // Lecture : admin global OU membre de l'entreprise. Écriture métier courante : idem (voir
     // note "pas de RBAC fin" en tête de fichier) — réutilisée telle quelle par la plupart des
     // collections métier ci-dessous.
@@ -142,21 +154,21 @@ service cloud.firestore {
     match /adminUsers/{accountSlug} {
       allow read: if isSuperAdmin()
         || accountSlug == currentUsername()
-        || belongsToCompany(resource.data.companyId);
-      allow create: if isSuperAdmin() || isCompanyAdmin(request.resource.data.companyId);
+        || belongsToCompany(docCompanyId(resource.data));
+      allow create: if isSuperAdmin() || isCompanyAdmin(docCompanyId(request.resource.data));
       allow update: if isSuperAdmin()
-        || (isCompanyAdmin(resource.data.companyId)
-            && request.resource.data.companyId == resource.data.companyId);
-      allow delete: if isSuperAdmin() || isCompanyAdmin(resource.data.companyId);
+        || (isCompanyAdmin(docCompanyId(resource.data))
+            && docCompanyId(request.resource.data) == docCompanyId(resource.data));
+      allow delete: if isSuperAdmin() || isCompanyAdmin(docCompanyId(resource.data));
     }
 
     // ─── programs/{id} ─────────────────────────────────────────────────────────────────────────
     match /programs/{id} {
-      allow read: if canReadCompanyScoped(resource.data.companyId);
-      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
-      allow update: if canWriteCompanyScoped(resource.data.companyId)
-        && request.resource.data.companyId == resource.data.companyId;
-      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+      allow read: if canReadCompanyScoped(docCompanyId(resource.data));
+      allow create: if canWriteCompanyScoped(docCompanyId(request.resource.data));
+      allow update: if canWriteCompanyScoped(docCompanyId(resource.data))
+        && docCompanyId(request.resource.data) == docCompanyId(resource.data);
+      allow delete: if canWriteCompanyScoped(docCompanyId(resource.data));
     }
 
     // ─── lifecycleConfigs/{programId} — scopé PAR PROGRAMME depuis round N (auparavant un seul

@@ -18,7 +18,7 @@ import type {
   LeverStatus,
   Program,
 } from "@/types";
-import { hierarchyPathValue, resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import { hierarchyPathValue, resolveHierarchyNodeChain } from "@/lib/hierarchyLogic";
 import { resolveProgramType } from "@/lib/axisLogic";
 import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
 import { matchLeverOwner } from "@/lib/leverOwnerReconciliation";
@@ -42,10 +42,24 @@ const inputClass =
   "w-full rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none";
 const labelClass = "mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-tertiary";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  /** Affiche un astérisque après le libellé — réservé aux champs réellement bloquants à la
+   *  soumission (voir la validation dans le `onSubmit` du formulaire ci-dessous : code, nom,
+   *  programme), pas à tout champ qui a simplement une valeur par défaut non vide. */
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
-      <span className={labelClass}>{label}</span>
+      <span className={labelClass}>
+        {label}
+        {required && <span className="text-bp-coral"> *</span>}
+      </span>
       {children}
     </label>
   );
@@ -94,7 +108,7 @@ function emptyValues(data: BeTrackData): LeverFormValues {
     opexRec: 0,
     capex: 0,
     fteImpact: 0,
-    popImpacted: 0,
+    popImpacted: "",
     description: "",
   };
 }
@@ -183,19 +197,20 @@ export function LeverForm({
   }, [companyUsers]);
 
   const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
-  const [leafNodes, setLeafNodes] = useState<HierarchyNode[]>([]);
+  // TOUS les nœuds financiers (pas seulement la maille la plus fine) — nécessaire pour remonter le
+  // chemin complet depuis le centre de coût sélectionné jusqu'à la maille macro (P&L), voir
+  // `macroHierarchyLevel`/`financialMacro` plus bas.
+  const [financialNodes, setFinancialNodes] = useState<HierarchyNode[]>([]);
   const [geographyLevels, setGeographyLevels] = useState<HierarchyLevelDef[]>([]);
   const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
-  const [geographyLeafNodes, setGeographyLeafNodes] = useState<HierarchyNode[]>([]);
   const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
 
   useEffect(() => {
     if (!companyId) {
       setHierarchyLevels([]);
-      setLeafNodes([]);
+      setFinancialNodes([]);
       setGeographyLevels([]);
       setGeographyNodes([]);
-      setGeographyLeafNodes([]);
       setConfidentialityLevels([]);
       return;
     }
@@ -214,29 +229,25 @@ export function LeverForm({
       unsubGeoNodes?.();
       unsubNodes = null;
       if (levels.length === 0) {
-        setLeafNodes([]);
+        setFinancialNodes([]);
       } else {
-        const finestLevelKey = [...levels].sort((a, b) => b.order - a.order)[0].key;
         unsubNodes = subscribeHierarchyNodes(
           companyId,
           (nodes) => {
             if (cancelled) return;
-            setLeafNodes(nodes.filter((n) => n.levelKey === finestLevelKey));
+            setFinancialNodes(nodes);
           },
           "financial"
         );
       }
       if (geoLevels.length === 0) {
         setGeographyNodes([]);
-        setGeographyLeafNodes([]);
       } else {
-        const finestGeoLevelKey = [...geoLevels].sort((a, b) => b.order - a.order)[0].key;
         unsubGeoNodes = subscribeHierarchyNodes(
           companyId,
           (nodes) => {
             if (cancelled) return;
             setGeographyNodes(nodes);
-            setGeographyLeafNodes(nodes.filter((node) => node.levelKey === finestGeoLevelKey));
           },
           "geographic"
         );
@@ -252,6 +263,64 @@ export function LeverForm({
 
   const hasHierarchy = hierarchyLevels.length > 0;
   const hasGeographyHierarchy = geographyLevels.length > 0;
+
+  const sortedHierarchyLevels = [...hierarchyLevels].sort((a, b) => a.order - b.order);
+  const finestHierarchyLevel = sortedHierarchyLevels[sortedHierarchyLevels.length - 1];
+  // Maille macro = niveau "pnl" explicitement marqué s'il existe (voir `derivePnlAccounts`, qui
+  // identifie le compte P&L de la même façon), sinon le premier niveau (order 0 = "juste sous le
+  // compte P&L", voir doc-comment `HierarchyLevelDef`).
+  const macroHierarchyLevel =
+    hierarchyLevels.find((l) => l.semantic === "pnl") ?? sortedHierarchyLevels[0];
+  const leafNodes = finestHierarchyLevel
+    ? financialNodes.filter((n) => n.levelKey === finestHierarchyLevel.key)
+    : [];
+  const financialChain = resolveHierarchyNodeChain(
+    values.hierarchyLeafId ?? "",
+    financialNodes,
+    hierarchyLevels
+  );
+  const financialMacro = macroHierarchyLevel
+    ? financialChain.find((n) => n.levelKey === macroHierarchyLevel.key)
+    : undefined;
+
+  // Dès qu'un centre de coût est sélectionné (ou changé), on aligne automatiquement `pnlMap` sur
+  // le compte P&L résolu depuis l'arborescence — plus de sélection manuelle indépendante possible
+  // tant qu'une hiérarchie financière est configurée (voir demande "la maille macro est donnée
+  // automatiquement à partir de ce qu'on a sélectionné"). `financialMacro.code` correspond à
+  // l'id du PnlAccount dérivé (voir `derivePnlAccounts`, lib/hierarchyLogic.ts).
+  useEffect(() => {
+    if (!hasHierarchy) return;
+    if (financialMacro && financialMacro.code !== values.pnlMap) {
+      set("pnlMap", financialMacro.code);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHierarchy, financialMacro?.code]);
+
+  const sortedGeographyLevels = [...geographyLevels].sort((a, b) => a.order - b.order);
+  const geographyChain = resolveHierarchyNodeChain(
+    values.geographyLeafId ?? "",
+    geographyNodes,
+    geographyLevels
+  );
+  const geographySelectionByLevel = new Map(geographyChain.map((n) => [n.levelKey, n.id]));
+
+  /** Options d'un niveau géographique donné, filtrées aux enfants du niveau immédiatement plus
+   *  macro déjà sélectionné (cascade) — vide tant que ce niveau parent n'est pas encore choisi,
+   *  sauf pour le niveau racine (order le plus bas) qui liste tous ses nœuds. */
+  const geographyOptionsForLevel = (level: HierarchyLevelDef): HierarchyNode[] => {
+    const levelIndex = sortedGeographyLevels.findIndex((l) => l.key === level.key);
+    const parentLevel = levelIndex > 0 ? sortedGeographyLevels[levelIndex - 1] : undefined;
+    if (!parentLevel) {
+      return geographyNodes
+        .filter((n) => n.levelKey === level.key)
+        .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+    }
+    const parentId = geographySelectionByLevel.get(parentLevel.key);
+    if (!parentId) return [];
+    return geographyNodes
+      .filter((n) => n.levelKey === level.key && n.parentId === parentId)
+      .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  };
 
   const selectGeographyLeaf = (leafId: string) => {
     setValues((current) => {
@@ -308,9 +377,6 @@ export function LeverForm({
   const set = <K extends keyof LeverFormValues>(key: K, value: LeverFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
 
-  const num = (v: string) => (v === "" ? 0 : Number(v));
-  const isLocked = Boolean((initialValues as Lever | undefined)?.lockedPlan);
-
   return (
     <form
       id="lever-form"
@@ -322,7 +388,7 @@ export function LeverForm({
     >
       <SectionTitle>{t("leverForm.sectionIdentification")}</SectionTitle>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-        <Field label={t("leverForm.code")}>
+        <Field label={t("leverForm.code")} required>
           <input
             required
             className={inputClass}
@@ -357,7 +423,7 @@ export function LeverForm({
           </select>
         </Field>
         {projects.length > 0 ? (
-          <Field label={t("leverForm.project")}>
+          <Field label={t("leverForm.project")} required={projects.length > 1}>
             {projects.length > 1 ? (
               <select
                 required
@@ -386,7 +452,7 @@ export function LeverForm({
           </div>
         )}
         <div className="col-span-1 sm:col-span-2 md:col-span-3">
-          <Field label={t("leverForm.name")}>
+          <Field label={t("leverForm.name")} required>
             <input
               required
               className={inputClass}
@@ -516,51 +582,47 @@ export function LeverForm({
 
       <SectionTitle>{t("leverForm.sectionLocation")}</SectionTitle>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-        {hasGeographyHierarchy && (
-          <div className="col-span-1 sm:col-span-2 md:col-span-3">
-            <Field label={t("leverForm.geographyMesh", "Maille géographique configurée")}>
+        {/* Un sélecteur en cascade PAR NIVEAU configuré (région, pays, entité légale... — profondeur
+         *  et libellés propres à l'entreprise, voir Company.geographyHierarchyLevels), plutôt qu'un
+         *  unique menu "maille géographique configurée" qui affichait le chemin complet concaténé :
+         *  ce dernier faisait doublon avec ces champs et n'avait aucune raison de rester si chaque
+         *  niveau est déjà sélectionnable individuellement ci-dessous. Choisir un niveau filtre les
+         *  options du niveau suivant (enfants du nœud choisi) et réinitialise les niveaux plus fins
+         *  déjà sélectionnés (voir `selectGeographyLeaf`). Le nombre de champs affichés correspond
+         *  toujours exactement au nombre de niveaux configurés, jamais un nombre fixe. */}
+        {hasGeographyHierarchy ? (
+          sortedGeographyLevels.map((level) => (
+            <Field key={level.key} label={level.label}>
               <select
                 className={inputClass}
-                value={values.geographyLeafId ?? ""}
-                onChange={(e) => selectGeographyLeaf(e.target.value)}
+                value={geographySelectionByLevel.get(level.key) ?? ""}
+                onChange={(e) => {
+                  const nodeId = e.target.value;
+                  if (nodeId) {
+                    selectGeographyLeaf(nodeId);
+                    return;
+                  }
+                  // Désélection : on remonte à la sélection du niveau parent (ou on efface tout
+                  // si c'est le niveau le plus macro) plutôt que de laisser une sélection de
+                  // niveau fin incohérente avec un niveau macro vidé.
+                  const levelIndex = sortedGeographyLevels.findIndex((l) => l.key === level.key);
+                  const parentLevel =
+                    levelIndex > 0 ? sortedGeographyLevels[levelIndex - 1] : undefined;
+                  const parentId = parentLevel
+                    ? geographySelectionByLevel.get(parentLevel.key)
+                    : undefined;
+                  selectGeographyLeaf(parentId ?? "");
+                }}
               >
                 <option value="">{t("leverForm.selectPlaceholder")}</option>
-                {geographyLeafNodes.map((node) => (
+                {geographyOptionsForLevel(level).map((node) => (
                   <option key={node.id} value={node.id}>
-                    {resolveHierarchyPath(node.id, geographyNodes, geographyLevels)
-                      .map((entry) => entry.label)
-                      .join(" › ")}{" "}
-                    ({node.code})
+                    {node.label} ({node.code})
                   </option>
                 ))}
               </select>
             </Field>
-          </div>
-        )}
-        {/* Une fois une maille géographique sélectionnée ci-dessus, ces 3 champs sont dérivés du
-         *  chemin résolu (voir selectGeographyLeaf) et passent en lecture seule — les laisser
-         *  éditables permettait de les faire diverger silencieusement de la maille choisie (ex.
-         *  maille "France > Paris" mais country="Germany" laissé tel quel). Restent des <select>
-         *  librement éditables tant qu'aucune hiérarchie géographique n'est configurée pour
-         *  l'entreprise, ou qu'aucune maille n'est encore sélectionnée. */}
-        {hasGeographyHierarchy && values.geographyLeafId ? (
-          <>
-            <Field label={t("leverForm.geography")}>
-              <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
-                {values.geography || "—"}
-              </div>
-            </Field>
-            <Field label={t("leverForm.country")}>
-              <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
-                {values.country || "—"}
-              </div>
-            </Field>
-            <Field label={t("leverForm.entity")}>
-              <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
-                {values.entity || "—"}
-              </div>
-            </Field>
-          </>
+          ))
         ) : (
           <>
             <Field label={t("leverForm.geography")}>
@@ -628,7 +690,7 @@ export function LeverForm({
           </select>
         </Field>
         {hasHierarchy ? (
-          <Field label={t("leverForm.financialMesh")}>
+          <Field label={t("leverForm.costCenter")}>
             <select
               className={inputClass}
               value={values.hierarchyLeafId ?? ""}
@@ -651,21 +713,34 @@ export function LeverForm({
             />
           </Field>
         )}
-        <Field label={t("leverForm.pnlAccount")}>
-          <select
-            className={inputClass}
-            value={values.pnlMap}
-            onChange={(e) => set("pnlMap", e.target.value)}
-          >
-            {data.pnlAccounts
-              .filter((p) => p.selectable !== false && !p.computed)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-          </select>
-        </Field>
+        {/* Maille macro (compte P&L) : dès qu'une hiérarchie financière est configurée, elle n'est
+         *  plus sélectionnée manuellement — elle est dérivée automatiquement du centre de coût
+         *  choisi ci-dessus via la correspondance de l'arborescence (voir l'effet plus haut qui
+         *  aligne `values.pnlMap` sur `financialMacro`), pour ne jamais diverger silencieusement
+         *  du chemin réel (ex. centre de coût "Procurement" mais compte P&L "R&D" laissé au hasard). */}
+        {hasHierarchy ? (
+          <Field label={t("leverForm.pnlAccount")}>
+            <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+              {financialMacro?.label ?? "—"}
+            </div>
+          </Field>
+        ) : (
+          <Field label={t("leverForm.pnlAccount")}>
+            <select
+              className={inputClass}
+              value={values.pnlMap}
+              onChange={(e) => set("pnlMap", e.target.value)}
+            >
+              {data.pnlAccounts
+                .filter((p) => p.selectable !== false && !p.computed)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
+        )}
       </div>
 
       <SectionTitle>{t("leverForm.sectionStatus")}</SectionTitle>
@@ -699,101 +774,32 @@ export function LeverForm({
             ))}
           </select>
         </Field>
-        <Field label={t("leverForm.progress")}>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            className={inputClass}
-            value={values.progress}
-            onChange={(e) => set("progress", num(e.target.value))}
-          />
-        </Field>
         <Field label={t("leverForm.risk")}>
           <div className={`${inputClass} bg-neutral-100 text-tertiary`}>{values.risk}</div>
         </Field>
       </div>
 
-      <SectionTitle>{t("leverForm.sectionFinancial")}</SectionTitle>
-      {isLocked && (
-        <p className="mb-3 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
-          {t("leverForm.lockedPlanNotice")}{" "}
-          {lifecycle ? lifecycle.label("validated") : STATUS_LABEL.validated}{" "}
-          {t("leverForm.lockedPlanNoticeEnd")}
-        </p>
-      )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-        <Field label={t("leverForm.grossSavings")}>
-          <input
-            type="number"
-            step="0.1"
-            disabled={isLocked}
-            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-            value={values.grossSavings}
-            onChange={(e) => set("grossSavings", num(e.target.value))}
-          />
-        </Field>
-        <Field label={t("leverForm.netSavings")}>
-          <input
-            type="number"
-            step="0.1"
-            disabled={isLocked}
-            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-            value={values.netSavings}
-            onChange={(e) => set("netSavings", num(e.target.value))}
-          />
-        </Field>
-        <div />
-        <Field label={t("leverForm.capex")}>
-          <input
-            type="number"
-            step="0.1"
-            disabled={isLocked}
-            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-            value={values.capex}
-            onChange={(e) => set("capex", num(e.target.value))}
-          />
-        </Field>
-        <Field label={t("leverForm.opexOneOff")}>
-          <input
-            type="number"
-            step="0.1"
-            disabled={isLocked}
-            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-            value={values.opexOneOff}
-            onChange={(e) => set("opexOneOff", num(e.target.value))}
-          />
-        </Field>
-        <Field label={t("leverForm.opexRec")}>
-          <input
-            type="number"
-            step="0.1"
-            disabled={isLocked}
-            className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-            value={values.opexRec}
-            onChange={(e) => set("opexRec", num(e.target.value))}
-          />
-        </Field>
-      </div>
+      {/* Section "Impact financier"/"Impact RH" (progression, savings/CAPEX/OPEX, ETP) retirée du
+       *  formulaire : ces valeurs ne sont plus saisies à la main, seulement consolidées depuis le
+       *  plan d'action du levier (voir `consolidateLeverFromActions`/`engine.recomputeLeverProgress`,
+       *  appelés à chaque création/édition d'action) — un levier créé ici démarre donc à 0 partout
+       *  et se peuple au fur et à mesure que ses actions sont ajoutées. */}
 
       <SectionTitle>{t("leverForm.sectionHr")}</SectionTitle>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label={t("leverForm.fteImpact")}>
-          <input
-            type="number"
-            className={inputClass}
-            value={values.fteImpact}
-            onChange={(e) => set("fteImpact", num(e.target.value))}
-          />
-        </Field>
         <Field label={t("leverForm.popImpacted")}>
-          <input
-            type="number"
-            min={0}
+          <select
             className={inputClass}
             value={values.popImpacted}
-            onChange={(e) => set("popImpacted", num(e.target.value))}
-          />
+            onChange={(e) => set("popImpacted", e.target.value)}
+          >
+            <option value="">{t("leverForm.ownerNone", "Aucun")}</option>
+            {data.workstreams.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
         </Field>
       </div>
 

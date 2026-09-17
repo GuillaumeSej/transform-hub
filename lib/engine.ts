@@ -84,7 +84,6 @@ export function programSummary(data: BeTrackData): ProgramSummary {
   const capex = active.reduce((s, l) => s + l.capex, 0);
   const opex = active.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
   const fteImpact = active.reduce((s, l) => s + l.fteImpact, 0);
-  const popImpacted = active.reduce((s, l) => s + l.popImpacted, 0);
 
   // Cible réactualisée — même chaîne de repli que la courbe "Réactualisé" de sCurve3.
   const reforecastTarget = active.reduce(
@@ -131,7 +130,6 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     capex: Math.round(capex * 10) / 10,
     opex: Math.round(opex * 10) / 10,
     fteImpact,
-    popImpacted,
     leverCount: active.length,
     onTrack: active.filter((l) => l.risk === "low").length,
     atRisk: active.filter((l) => l.risk === "medium" || l.risk === "high").length,

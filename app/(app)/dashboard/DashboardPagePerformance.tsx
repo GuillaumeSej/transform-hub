@@ -232,6 +232,17 @@ export function DashboardPagePerformance() {
     [visibleLevers, selectedProgramId]
   );
 
+  // Programme actuellement sélectionné (objet complet, avec ses propres fyStart/fyEnd) — à
+  // utiliser à la place de `data.program` (vestige du modèle mono-programme, toujours vide
+  // `fyStart: ""`/`fyEnd: ""` depuis la migration multi-programmes, voir emptyProgramConfig()
+  // dans lib/hooks/useStorage.ts) pour tout ce qui dépend de l'année fiscale DU PROGRAMME
+  // affiché : `new Date("").getFullYear()` vaut NaN, ce qui rendait vide tout filtrage par date
+  // dérivé de cette valeur (widget "Trajectoire des économies", filtre P&L).
+  const selectedProgram = useMemo(
+    () => programs.find((p) => p.id === selectedProgramId),
+    [programs, selectedProgramId]
+  );
+
   // Arborescence financière (optionnelle) de l'entreprise — n'ajoute des dimensions "hiérarchie"
   // au builder générique que si l'entreprise a explicitement configuré des hierarchyLevels (voir
   // lib/dashboardPivot.ts, même pattern défensif que app/(app)/levers/page.tsx).
@@ -525,15 +536,28 @@ export function DashboardPagePerformance() {
   // ── Trajectoire des économies (widget combiné S-curve + Bridge) ────────
   const [trajView, setTrajView] = useState<"scurve" | "bridge">("scurve");
   const [trajGranularity, setTrajGranularity] = useState<engine.TimeGranularity>("month");
-  const [trajRangeStart, setTrajRangeStart] = useState(data.program.fyStart);
-  const [trajRangeEnd, setTrajRangeEnd] = useState(data.program.fyEnd);
+  const [trajRangeStart, setTrajRangeStart] = useState(
+    selectedProgram?.fyStart ?? data.program.fyStart
+  );
+  const [trajRangeEnd, setTrajRangeEnd] = useState(selectedProgram?.fyEnd ?? data.program.fyEnd);
+  // Réaligne la plage par défaut sur le programme sélectionné dès qu'il devient disponible ou
+  // change (le premier rendu n'a en général pas encore `programs`, chargé de façon asynchrone) —
+  // sans ça `trajRangeStart`/`trajRangeEnd` restaient figés sur la valeur (vide) du tout premier
+  // rendu et la S-Curve/Bridge de ce widget n'affichait plus jamais rien, quel que soit le
+  // programme ou l'entreprise.
+  useEffect(() => {
+    if (!selectedProgram) return;
+    setTrajRangeStart(selectedProgram.fyStart);
+    setTrajRangeEnd(selectedProgram.fyEnd);
+  }, [selectedProgram?.id, selectedProgram?.fyStart, selectedProgram?.fyEnd]);
 
   /** Convertit un label de période ("Jan 2026", "Q2 2026") en Date pour le filtrage. */
   const labelToDate = useCallback(
     (label: string, granularity: engine.TimeGranularity): Date => {
       const parts = label.split(" ");
       const year =
-        parseInt(parts[parts.length - 1]) || new Date(data.program.fyStart).getFullYear();
+        parseInt(parts[parts.length - 1]) ||
+        new Date(selectedProgram?.fyStart ?? data.program.fyStart).getFullYear();
       if (granularity === "quarter") {
         const q = parseInt((parts[0] || "").replace("Q", "")) || 1;
         return new Date(year, (q - 1) * 3, 1);
@@ -541,7 +565,7 @@ export function DashboardPagePerformance() {
       const monthIdx = engine.MONTH_LABELS.indexOf(parts[0]);
       return new Date(year, monthIdx >= 0 ? monthIdx : 0, 1);
     },
-    [data.program.fyStart]
+    [selectedProgram?.fyStart, data.program.fyStart]
   );
 
   const trajSCurve = useMemo(() => {
@@ -604,7 +628,7 @@ export function DashboardPagePerformance() {
       goToLevers({});
     }
   };
-  const currentYear = new Date(data.program.fyStart).getFullYear();
+  const currentYear = new Date(selectedProgram?.fyStart ?? data.program.fyStart).getFullYear();
   const goToMonth = (month: string) => goToLevers({ f_endMonth: `${month} ${currentYear}` });
   const goToBridgePeriod = (period: string, granularity = bridgeGranularity) =>
     granularity === "quarter"
@@ -740,8 +764,14 @@ export function DashboardPagePerformance() {
   );
 
   // ── Filtre temporel P&L (cascade Année → Trimestre → Mois) ──
-  const fyYear = new Date(data.program.fyStart).getFullYear().toString();
+  const fyYear = new Date(selectedProgram?.fyStart ?? data.program.fyStart)
+    .getFullYear()
+    .toString();
   const [pnlYear, setPnlYear] = useState(fyYear);
+  useEffect(() => {
+    if (selectedProgram) setPnlYear(fyYear);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProgram?.id]);
   const [pnlQuarter, setPnlQuarter] = useState("");
   const [pnlMonth, setPnlMonth] = useState("");
 
@@ -1166,14 +1196,22 @@ export function DashboardPagePerformance() {
                     <input
                       type="date"
                       value={trajRangeStart}
-                      onChange={(e) => setTrajRangeStart(e.target.value || data.program.fyStart)}
+                      onChange={(e) =>
+                        setTrajRangeStart(
+                          e.target.value || selectedProgram?.fyStart || data.program.fyStart
+                        )
+                      }
                       className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] focus:border-bp-coral focus:outline-none"
                     />
                     <span className="font-semibold">{t("dashboard.widgets.dateTo")}</span>
                     <input
                       type="date"
                       value={trajRangeEnd}
-                      onChange={(e) => setTrajRangeEnd(e.target.value || data.program.fyEnd)}
+                      onChange={(e) =>
+                        setTrajRangeEnd(
+                          e.target.value || selectedProgram?.fyEnd || data.program.fyEnd
+                        )
+                      }
                       className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] focus:border-bp-coral focus:outline-none"
                     />
                   </div>

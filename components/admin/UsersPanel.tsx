@@ -243,7 +243,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   // Validation temps réel du mot de passe — recalculée à chaque frappe, affichée sous le champ ET
   // utilisée pour désactiver le bouton Enregistrer tant qu'elle échoue.
   const passwordError =
-    form.password.length < MIN_PASSWORD_LENGTH ? PASSWORD_TOO_SHORT_MESSAGE : null;
+    (form.password ?? "").length < MIN_PASSWORD_LENGTH ? PASSWORD_TOO_SHORT_MESSAGE : null;
 
   // Le formulaire utilisateur est "dirty" dès qu'il est ouvert avec au moins un champ utile
   // rempli. En mode édition (editIdx != null), il est dirty tant qu'il est ouvert — on n'a pas
@@ -291,7 +291,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       isGlobalAdmin: !!u.isGlobalAdmin,
       isCompanyAdmin: !!u.isCompanyAdmin,
       companyId: u.companyId ?? companies[0]?.id ?? "",
-      password: u.password,
+      password: u.password ?? "",
       clearanceMode: clearanceModeOf(u.confidentialityClearance),
       clearanceLevels: Array.isArray(u.confidentialityClearance) ? u.confidentialityClearance : [],
       direction: u.direction ?? "",

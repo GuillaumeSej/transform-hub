@@ -140,11 +140,15 @@ export function hierarchyPathValue(
  * de se fier uniquement à l'ordre de remontée des `parentId`, qui pourrait être corrompu par une
  * saisie manuelle erronée (ex. parentId pointant vers un nœud du même niveau).
  */
-export function resolveHierarchyPath(
+/** Même remontée que `resolveHierarchyPath`, mais retourne les `HierarchyNode` complets (pas
+ *  seulement levelKey/label/code) — nécessaire pour piloter des sélecteurs en cascade par niveau
+ *  (voir `LeverForm.tsx`, section géographie), qui ont besoin de l'id de chaque nœud du chemin
+ *  pour présélectionner/filtrer les niveaux suivants. */
+export function resolveHierarchyNodeChain(
   leafId: string,
   nodes: HierarchyNode[],
   levels: HierarchyLevelDef[]
-): HierarchyPathEntry[] {
+): HierarchyNode[] {
   if (!leafId) return [];
 
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
@@ -163,6 +167,17 @@ export function resolveHierarchyPath(
 
   const orderByKey = new Map(levels.map((l) => [l.key, l.order]));
   chain.sort((a, b) => (orderByKey.get(a.levelKey) ?? 0) - (orderByKey.get(b.levelKey) ?? 0));
+  return chain;
+}
 
-  return chain.map((n) => ({ levelKey: n.levelKey, label: n.label, code: n.code }));
+export function resolveHierarchyPath(
+  leafId: string,
+  nodes: HierarchyNode[],
+  levels: HierarchyLevelDef[]
+): HierarchyPathEntry[] {
+  return resolveHierarchyNodeChain(leafId, nodes, levels).map((n) => ({
+    levelKey: n.levelKey,
+    label: n.label,
+    code: n.code,
+  }));
 }

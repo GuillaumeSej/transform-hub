@@ -523,7 +523,16 @@ export function validateLeverImportRows(
       opexRec: numOr(row["OPEX récurrent (€M/an)"], 0),
       capex: numOr(row["CAPEX (€M)"], 0),
       fteImpact: numOr(row["Impact estimé (ETP)"], 0),
-      popImpacted: numOr(row["Population impactée"], 0),
+      // Champ catégoriel (Workstream.id) depuis le round "population impactée" — pas de
+      // rattachement obligatoire ni de création à la volée (contrairement à "Workstream"
+      // ci-dessus) : une valeur qui ne correspond à aucun workstream connu retombe sur "" (non
+      // renseigné) plutôt que d'échouer l'import.
+      popImpacted:
+        [...data.workstreams, ...Array.from(newWorkstreamsByName.values())].find(
+          (w) =>
+            w.id.toLowerCase() === str(row["Population impactée"]).toLowerCase() ||
+            w.name.toLowerCase() === str(row["Population impactée"]).toLowerCase()
+        )?.id ?? "",
       companyId: resolvedCompanyId,
       dependencies: parseDependencies(str(row["Dépendances (ID:type, séparées par ;)"])),
       description: str(row["Description"]),

@@ -1049,7 +1049,7 @@ export function LeverDetailClientPerformance() {
                 {realFte > 0 ? `+${realFte}` : realFte}
               </Stat>
               <Stat label={t("leverForm.popImpacted", "Population impactée")}>
-                {lever.popImpacted}
+                {data.workstreams.find((w) => w.id === lever.popImpacted)?.name ?? "—"}
               </Stat>
             </div>
           </CardBody>

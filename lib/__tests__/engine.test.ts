@@ -64,7 +64,7 @@ const baseLever: Lever = {
   opexRec: 0.5,
   capex: 2,
   fteImpact: -5,
-  popImpacted: 100,
+  popImpacted: "",
   dependencies: [],
   description: "Test lever",
   createdAt: "2026-01-01",

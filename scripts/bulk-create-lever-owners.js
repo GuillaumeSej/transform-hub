@@ -222,6 +222,12 @@ async function main() {
       companyId,
       direction: o.direction || undefined,
       confidentialityClearance: "all",
+      // Le champ `password` doit toujours exister sur le doc adminUsers (UsersPanel.tsx le lit
+      // directement pour pré-remplir le formulaire d'édition) : un doc sans ce champ fait planter
+      // l'édition côté admin (`form.password.length` sur `undefined`). On stocke le mot de passe
+      // Auth généré ci-dessus (`null` seulement si le compte existait déjà et n'a pas été touché,
+      // auquel cas on ne connaît pas la valeur actuelle et on écrit une chaîne vide plutôt que null).
+      password: password ?? "",
     });
     console.log(`  ${status} : ${o.username} (uid ${uid})`);
     results.push({ ...o, status, password });
