@@ -1183,7 +1183,7 @@ const en: Record<string, string> = {
   // now lives HERE, with no tab toggle), same kind of namespace migration as
   // `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` in round 16 (see below), for the
   // symmetric reverse reason.
-  "strategicAxes.levierAdvancementTitle": "Lever progress status",
+  "strategicAxes.projetAdvancementTitle": "Project progress status",
   "strategicAxes.axisNoChantier": "No workstream",
   "strategicAxes.chantierAlerted": "Dependency alert",
   "strategicAxes.kanbanEmptyColumn": "No axis",
@@ -1210,11 +1210,11 @@ const en: Record<string, string> = {
   // Workstream Gantt
   "strategicAxes.ganttSection": "Workstreams of this axis",
   "strategicAxes.ganttHint":
-    "One block = one workstream, spanning its first to its last lever. Click a block or a lever to open the workstream detail and its deliverables.",
+    "One block = one workstream, spanning its first to its last project. Click a block or a project to open the workstream detail and its deliverables.",
   "strategicAxes.noChantiers": "No workstream on this axis.",
-  "strategicAxes.chantierUnplanned": "Workstreams with no planned lever",
-  "strategicAxes.chantierNoDates": "No dates yet — add a lever",
-  "strategicAxes.actionsSuffix": "levers",
+  "strategicAxes.chantierUnplanned": "Workstreams with no planned project",
+  "strategicAxes.chantierNoDates": "No dates yet — add a project",
+  "strategicAxes.actionsSuffix": "projects",
   // Gantt: adjustable time scale, progress, workstream summary
   "strategicAxes.ganttScale": "Scale",
   "strategicAxes.ganttScaleMonth": "Month",
@@ -1225,20 +1225,20 @@ const en: Record<string, string> = {
   // "Roadmap" tab (round 16) — program roadmap, migrated from the former `strategicDashboard.roadmap.*`
   // group (removed, the roadmap is now a tab of this page rather than a dashboard section). `today`
   // reuses `strategicAxes.ganttToday` above instead of a duplicate key.
-  "strategicAxes.roadmap.empty": "No dated lever on this program.",
+  "strategicAxes.roadmap.empty": "No dated project on this program.",
   "strategicAxes.roadmap.scale": "Scale",
   "strategicAxes.roadmap.scaleQuarter": "Quarter",
   "strategicAxes.roadmap.scaleSemester": "Half-year",
   "strategicAxes.roadmap.scaleYear": "Year",
   "strategicAxes.roadmap.progress": "Progress",
-  "strategicAxes.roadmap.leviersSuffix": "levers",
+  "strategicAxes.roadmap.leviersSuffix": "projects",
   "strategicAxes.roadmap.late": "Late",
-  "strategicAxes.roadmap.lateCount": "{n} lever(s) late out of {total}",
-  "strategicAxes.actionsCompleted": "levers completed",
+  "strategicAxes.roadmap.lateCount": "{n} project(s) late out of {total}",
+  "strategicAxes.actionsCompleted": "projects completed",
   "strategicAxes.moreActionsSuffix": "more",
-  "strategicAxes.cardNoActions": "No levers",
+  "strategicAxes.cardNoActions": "No projects",
   "strategicAxes.chantierOwner": "Workstream lead",
-  "strategicAxes.ownerFromActions": "based on lever owners",
+  "strategicAxes.ownerFromActions": "based on project owners",
   "strategicAxes.chantierPeriod": "Period",
   "strategicAxes.newChantier": "New workstream",
   "strategicAxes.newChantierModalTitle": "New workstream",
@@ -1246,19 +1246,19 @@ const en: Record<string, string> = {
   "strategicAxes.chantierCreated": "Workstream created",
   "strategicAxes.chantierDeleted": "Workstream deleted",
   "strategicAxes.deleteChantier": "Delete workstream",
-  "strategicAxes.confirmDeleteChantier": "Confirm deletion of the workstream and its levers",
+  "strategicAxes.confirmDeleteChantier": "Confirm deletion of the workstream and its projects",
   // Workstream / actions / deliverables pop-up
   "strategicAxes.chantierModalTitle": "Workstream detail",
   "strategicAxes.dependsOn": "Depends on",
-  "strategicAxes.chantierActions": "Workstream levers",
-  "strategicAxes.noActions": "No levers on this workstream.",
-  "strategicAxes.newAction": "New lever",
+  "strategicAxes.chantierActions": "Workstream projects",
+  "strategicAxes.noActions": "No projects on this workstream.",
+  "strategicAxes.newAction": "New project",
   "strategicAxes.editAction": "Edit",
-  "strategicAxes.actionCreated": "Lever created",
-  "strategicAxes.actionUpdated": "Lever updated",
-  "strategicAxes.actionDeleted": "Lever deleted",
+  "strategicAxes.actionCreated": "Project created",
+  "strategicAxes.actionUpdated": "Project updated",
+  "strategicAxes.actionDeleted": "Project deleted",
   "strategicAxes.confirmDelete": "Confirm",
-  "strategicAxes.actionName": "Lever name",
+  "strategicAxes.actionName": "Project name",
   "strategicAxes.actionOwner": "Owner",
   "strategicAxes.actionStart": "Start",
   "strategicAxes.actionEnd": "End",
@@ -1296,7 +1296,7 @@ const en: Record<string, string> = {
   "strategicAxes.chantierSaveErrorTitle": "Save failed",
   "strategicAxes.chantierSaveError": "The workstream could not be saved.",
   "strategicAxes.actionSaveErrorTitle": "Save failed",
-  "strategicAxes.actionSaveError": "The lever could not be saved.",
+  "strategicAxes.actionSaveError": "The project could not be saved.",
   "strategicAxes.atRiskPopoverTitle": "At-risk indicators",
   "strategicAxes.atRiskTooltip":
     "Unfavorable gap between the latest measured value and the indicator's target.",
@@ -1314,7 +1314,7 @@ const en: Record<string, string> = {
   "strategicChantierDetail.pilote": "Lead",
   "strategicChantierDetail.allocatedBudget": "Allocated budget",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
-    "The workstream's budget cannot be lower than the sum of its levers' budgets.",
+    "The workstream's budget cannot be lower than the sum of its projects' budgets.",
   "strategicChantierDetail.consumedBudget": "Consumed budget",
   "strategicChantierDetail.consumedFte": "Consumed FTEs",
   "strategicChantierDetail.confidentialityLevel": "Confidentiality level",
@@ -1351,22 +1351,22 @@ const en: Record<string, string> = {
   "strategicChantierDetail.kanban.done": "Done",
 
   "strategicChantierDetail.prerequisites.title": "Dependencies / Prerequisites",
-  "strategicChantierDetail.prerequisites.kindAction": "Plan lever",
+  "strategicChantierDetail.prerequisites.kindAction": "Plan project",
   "strategicChantierDetail.prerequisites.kindExternal": "External prerequisite",
   "strategicChantierDetail.prerequisites.blockedBy": "Blocked by:",
   "strategicChantierDetail.prerequisites.addRow": "Add a prerequisite",
   "strategicChantierDetail.prerequisites.kind": "Type",
-  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choose a lever",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Choose a project",
   "strategicChantierDetail.prerequisites.externalPlaceholder":
     "E.g. Hiring, purchasing, budget approval…",
   "strategicChantierDetail.prerequisites.done": "Done",
   "strategicChantierDetail.prerequisites.removeRow": "Remove this prerequisite",
   "strategicChantierDetail.prerequisites.none": "No prerequisites.",
-  "strategicChantierDetail.prerequisites.noOtherActions": "No other levers on this workstream.",
+  "strategicChantierDetail.prerequisites.noOtherActions": "No other projects on this workstream.",
 
   // ─── Lever accordion banners (round <n>) ──────────────────────────────────────────────────
-  "strategicChantierDetail.leviers.expand": "Expand",
-  "strategicChantierDetail.leviers.collapse": "Collapse",
+  "strategicChantierDetail.projets.expand": "Expand",
+  "strategicChantierDetail.projets.collapse": "Collapse",
 
   // ─── Deliverable detail modal + creation form (round <n>, merged "Timeline" tab — replaces
   // the old tab dedicated to deliverable phases) ────────────────────────────────────────────
@@ -1374,7 +1374,7 @@ const en: Record<string, string> = {
   "strategicChantierDetail.deliverableModal.comments": "Comments",
   "strategicChantierDetail.deliverableModal.commentPlaceholder": "Add a comment…",
   "strategicChantierDetail.deliverableModal.noComments": "No comments.",
-  "strategicChantierDetail.deliverableForm.leverSelect": "Linked lever",
+  "strategicChantierDetail.deliverableForm.leverSelect": "Linked project",
 
   // ─── Workstream detail tabs (round 10, point 2) ────────────────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Overview",
@@ -1388,18 +1388,18 @@ const en: Record<string, string> = {
   "strategicChantierDetail.indicatorLink.notFound": "KPI not found",
   "strategicChantierDetail.linkedIndicatorTitle": "Linked KPI",
 
-  "strategicChantierDetail.actionFocused": "Lever opened from the link",
+  "strategicChantierDetail.actionFocused": "Project opened from the link",
   "strategicChantierDetail.actionForm.missingHint": "Fill in the name and dates to save.",
-  "strategicChantierDetail.actionForm.budgetLabel": "Lever budget",
+  "strategicChantierDetail.actionForm.budgetLabel": "Project budget",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "The total of the lever budgets would exceed the workstream's allocated budget.",
-  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Consumed lever budget",
-  "strategicChantierDetail.actionForm.consumedFteLabel": "Consumed lever FTEs",
+    "The total of the project budgets would exceed the workstream's allocated budget.",
+  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Consumed project budget",
+  "strategicChantierDetail.actionForm.consumedFteLabel": "Consumed project FTEs",
   "strategicChantierDetail.successCriteria.placeholder": "We'll be happy in [year] if...",
 
   // ─── Strategic Plan — E0-E4 milestones (round 5) ────────────────────────────
   "strategicChantierDetail.milestones.title": "E0-E4 milestone method",
-  "strategicChantierDetail.milestones.stepper.title": "Lever milestones",
+  "strategicChantierDetail.milestones.stepper.title": "Project milestones",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Unlocks after the current milestone",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Milestone passed",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Current milestone",
@@ -1466,14 +1466,14 @@ const en: Record<string, string> = {
   "strategicImport.lineLabel": "Row",
   "strategicImport.axesCountLabel": "axis/axes to create",
   "strategicImport.chantiersCountLabel": "workstream(s) to create",
-  "strategicImport.actionsCountLabel": "lever(s) to create",
+  "strategicImport.actionsCountLabel": "project(s) to create",
   "strategicImport.indicatorsCountLabel": "indicator(s) to create",
   "strategicImport.templateDownloadedTitle": "Template downloaded",
   "strategicImport.templateDownloadedBody":
     "5 sheets: Axes (Code = key), Workstreams (Axis Code = FK), Actions (Workstream Code = FK), Deliverables (Action Code = FK, optional), Indicators (Axis Code OR Workstream Code = FK). Delete the example rows before filling in.",
   "strategicImport.ignoredRowsNote": "{n} row(s) ignored",
   "strategicImport.importDoneBody":
-    "{axes} axis/axes · {chantiers} workstream(s) · {actions} lever(s) · {indicators} indicator(s) created",
+    "{axes} axis/axes · {chantiers} workstream(s) · {actions} project(s) · {indicators} indicator(s) created",
   "strategicImport.errorTitle": "Import failed",
 
   // ─── Strategic Plan — KPI page (measurement entry, objective editing) ──────
@@ -1570,8 +1570,8 @@ const en: Record<string, string> = {
   "staffing.saveError": "Could not save the staffing entry.",
   "staffing.startDate": "Start",
   "staffing.endDate": "End",
-  "staffing.action": "Related lever",
-  "staffing.actionNone": "No specific lever",
+  "staffing.action": "Related project",
+  "staffing.actionNone": "No specific project",
 
   // ─── Staffing page (/effectifs, Strategic Plan) ───────────────────────────
   "effectifs.title": "Mobilized staffing & budget",
@@ -1691,14 +1691,14 @@ const en: Record<string, string> = {
   "strategicDashboard.widget.indicatorStatus": "Indicators · on track",
   "strategicDashboard.widget.businessKpis": "Business KPIs — Market tracking",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alerts",
-  // Round 8: placeholder for an empty E0-E4 milestone column (`LevierMilestoneBoard.tsx`).
-  "strategicDashboard.levierBoard.emptyColumn": "—",
+  // Round 8: placeholder for an empty E0-E4 milestone column (`ProjetMilestoneBoard.tsx`).
+  "strategicDashboard.projetBoard.emptyColumn": "—",
   // Round 12: average of the declared `progressPct` of the column's leviers (`{pct}` substituted
-  // manually, see `LevierMilestoneBoard.tsx`).
-  "strategicDashboard.levierBoard.avgProgress": "{pct}% average",
-  "strategicDashboard.levierBoard.late": "Late",
-  "strategicDashboard.lateLeviersHeading": "Late levers",
-  "strategicDashboard.noLateLeviers": "No late levers",
+  // manually, see `ProjetMilestoneBoard.tsx`).
+  "strategicDashboard.projetBoard.avgProgress": "{pct}% average",
+  "strategicDashboard.projetBoard.late": "Late",
+  "strategicDashboard.lateLeviersHeading": "Late projects",
+  "strategicDashboard.noLateLeviers": "No late projects",
   // Round 15: program-wide roadmap (`ProgramRoadmap.tsx`) — full-width, whole-program view at the
   // bottom of the dashboard (one row per levier, across all axes/chantiers).
 

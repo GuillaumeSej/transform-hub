@@ -26,7 +26,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   chantierDependencyAlerts,
   countOnTrackAtRisk,
-  isLevierLate,
+  isProjetLate,
   numberIndicators,
   programBlockedActions,
   programRoadmap,
@@ -372,7 +372,7 @@ export function StrategicDashboardView() {
     [chantiers]
   );
 
-  /** Round 20, point 3 : leviers en retard (`isLevierLate`, lib/axisLogic.ts) — alimente la 3e
+  /** Round 20, point 3 : leviers en retard (`isProjetLate`, lib/axisLogic.ts) — alimente la 3e
    *  sous-section du widget "chantier-dependency-alerts", même parti pris purement informatif que
    *  `dependencyAlerts`/`blockedActions` ci-dessus. Passe par `programRoadmap` plutôt que
    *  `milestoneProgressPct(action)` nu : c'est la MÊME fonction (avec les mêmes `autoValues`
@@ -382,7 +382,7 @@ export function StrategicDashboardView() {
   const lateLeviers = useMemo(
     () =>
       programRoadmap(axes, chantiers, chantierActions)
-        .filter((row) => isLevierLate(row.action, row.progressPct))
+        .filter((row) => isProjetLate(row.action, row.progressPct))
         .map((row) => row.action),
     [axes, chantiers, chantierActions]
   );
@@ -1201,7 +1201,7 @@ export function StrategicDashboardView() {
                 axes={axes}
                 chantiers={roadmapChantiers}
                 actions={roadmapActions}
-                onLevierClick={openChantierPanel}
+                onProjetClick={openChantierPanel}
                 onChantierClick={(chantierId) => openChantierPanel(chantierId)}
                 renderAxisHeader={(axis) => renderAxisRoadmapHeader(axis)}
                 labels={roadmapLabels}
@@ -1300,7 +1300,7 @@ export function StrategicDashboardView() {
                 ))}
           </div>
 
-          {/* Sous-section 3 (round 20, point 3) : leviers en retard (`isLevierLate`,
+          {/* Sous-section 3 (round 20, point 3) : leviers en retard (`isProjetLate`,
               lib/axisLogic.ts) — même patron de ligne cliquable que les deux sous-sections
               ci-dessus (teinte `rag-red`, distincte de l'amber des prérequis et du corail des
               dépendances, pour un 3e type d'alerte bien identifiable). */}

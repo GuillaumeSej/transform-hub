@@ -4,7 +4,7 @@ import { TriangleAlert } from "lucide-react";
 import {
   colorForChantier,
   displayMilestoneId,
-  isLevierLate,
+  isProjetLate,
   milestoneProgressPct,
   progressBucket,
   type ProgressBucket,
@@ -28,18 +28,18 @@ import type { Chantier, ChantierAction, MilestoneId } from "@/types";
  * (lib/axisLogic.ts, round 8) pour qu'un même chantier se reconnaisse d'un coup d'œil entre les
  * colonnes E0-E4.
  *
- * Clic sur une bulle → même destination que l'ancienne matrice (`onLevierClick`, ouverture du
+ * Clic sur une bulle → même destination que l'ancienne matrice (`onProjetClick`, ouverture du
  * panneau du CHANTIER parent — un levier n'a pas de panneau propre).
  */
 
-export type LevierBoardCard = {
+export type ProjetBoardCard = {
   action: ChantierAction;
   chantier: Chantier;
   /** `colorForChantier(chantier.id)` (lib/axisLogic.ts) — classe Tailwind `bg-*-500` pleine. */
   chantierColor: string;
 };
 
-export type LevierBoardGroup = {
+export type ProjetBoardGroup = {
   /** Id de l'axe — clé React de la section. */
   key: string;
   /** Nom de l'axe — en-tête de section. */
@@ -48,7 +48,7 @@ export type LevierBoardGroup = {
   color?: string;
   /** TOUS les leviers de l'axe (avec ou sans KPI rattaché, round 18), groupés par jalon courant
    *  (E0…E4). */
-  milestones: Record<MilestoneId, LevierBoardCard[]>;
+  milestones: Record<MilestoneId, ProjetBoardCard[]>;
   /** Chantiers de l'axe (round 10, point 1) — alimente la légende de couleur affichée sous
    *  l'en-tête de section, juste avant les colonnes E0→E4. Optionnel : un appelant qui ne l'a pas
    *  sous la main (aucun aujourd'hui) n'affiche simplement pas de légende. */
@@ -103,13 +103,13 @@ export const CHANTIER_BORDER_CLASS: Record<string, string> = {
 /** Carte/bulle d'un levier, colorée par son chantier parent (round 18 : jusqu'ici réutilisée telle
  *  quelle par `LevierKanbanBoard.tsx`, supprimé — reste exportée pour un futur consommateur ayant le
  *  même besoin). */
-export function LevierCard({
+export function ProjetCard({
   action,
   chantier,
   chantierColor,
-  onLevierClick,
-}: LevierBoardCard & {
-  onLevierClick: (chantierId: string, focusActionId?: string) => void;
+  onProjetClick,
+}: ProjetBoardCard & {
+  onProjetClick: (chantierId: string, focusActionId?: string) => void;
 }) {
   const { t } = useTranslation();
   const borderClass = CHANTIER_BORDER_CLASS[chantierColor] ?? "border-border";
@@ -127,14 +127,14 @@ export function LevierCard({
   // `milestoneWeightPct` (poids du jalon COURANT, sans crédit partiel), d'où la divergence remontée
   // par le PO ("la barre est presque pleine mais ça affiche 60%"). `milestoneWeightPct`/
   // `MILESTONE_WEIGHT` (lib/axisLogic.ts) n'ont plus d'autre appelant et ont été supprimés.
-  // Round 20, point 3 : levier en retard (`isLevierLate`, lib/axisLogic.ts) — bordure/pastille
+  // Round 20, point 3 : levier en retard (`isProjetLate`, lib/axisLogic.ts) — bordure/pastille
   // "En retard" (ton `rag-red`), volontairement DISTINCTE de la pastille rouge `CARD_PROGRESS_PILL_CLASS`
   // déjà utilisée pour un avancement 0-33% (deux signaux différents, jamais fusionnés).
-  const late = isLevierLate(action, progressPct);
+  const late = isProjetLate(action, progressPct);
   return (
     <button
       type="button"
-      onClick={() => onLevierClick(chantier.id, action.id)}
+      onClick={() => onProjetClick(chantier.id, action.id)}
       title={`${action.name} · ${chantier.name} · ${displayedStage} · ${progressPct}%`}
       className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 p-2 pb-2.5 text-left transition last:mb-0 hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black ${borderClass} ${
         late ? "bg-rag-red-light/40 ring-2 ring-inset ring-rag-red" : "bg-white"
@@ -157,10 +157,10 @@ export function LevierCard({
         {late && (
           <span
             className="flex w-fit shrink-0 items-center gap-0.5 rounded-full bg-rag-red px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
-            title={t("strategicDashboard.levierBoard.late", "En retard")}
+            title={t("strategicDashboard.projetBoard.late", "En retard")}
           >
             <TriangleAlert size={10} aria-hidden />
-            {t("strategicDashboard.levierBoard.late", "En retard")}
+            {t("strategicDashboard.projetBoard.late", "En retard")}
           </span>
         )}
       </span>
@@ -201,16 +201,16 @@ function currentMilestoneAverage(action: ChantierAction, milestoneId: MilestoneI
   return sum / defs.length;
 }
 
-export function LevierMilestoneBoard({
+export function ProjetMilestoneBoard({
   groups,
   labels,
-  onLevierClick,
+  onProjetClick,
 }: {
-  groups: LevierBoardGroup[];
+  groups: ProjetBoardGroup[];
   /** `emptyColumn` : placeholder discret d'une colonne de jalon sans levier — un texte plutôt que
    *  rien du tout, pour que la structure à 5 colonnes reste lisible même axe par axe. */
   labels: { emptyColumn: string };
-  onLevierClick: (chantierId: string, focusActionId?: string) => void;
+  onProjetClick: (chantierId: string, focusActionId?: string) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -241,7 +241,7 @@ export function LevierMilestoneBoard({
                 <button
                   key={chantier.id}
                   type="button"
-                  onClick={() => onLevierClick(chantier.id)}
+                  onClick={() => onProjetClick(chantier.id)}
                   title={chantier.name}
                   className="flex items-center gap-1.5 rounded text-[10.5px] text-tertiary transition hover:text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-black"
                 >
@@ -251,7 +251,7 @@ export function LevierMilestoneBoard({
                   />
                   {/* Round 12 : nom en entier (plus de troncature `max-w-[140px] truncate`) et
                       cliquable — demande PO explicite, ouvre le panneau du chantier comme les
-                      bulles de leviers ci-dessous (`onLevierClick` sans `focusActionId`). */}
+                      bulles de leviers ci-dessous (`onProjetClick` sans `focusActionId`). */}
                   <span>{chantier.name}</span>
                 </button>
               ))}
@@ -296,7 +296,7 @@ export function LevierMilestoneBoard({
                       />
                       <span>
                         {t(
-                          "strategicDashboard.levierBoard.avgProgress",
+                          "strategicDashboard.projetBoard.avgProgress",
                           "{pct}% en moyenne"
                         ).replace("{pct}", String(avgPct))}
                       </span>
@@ -308,12 +308,12 @@ export function LevierMilestoneBoard({
                     </p>
                   ) : (
                     cards.map((card) => (
-                      <LevierCard
+                      <ProjetCard
                         key={card.action.id}
                         action={card.action}
                         chantier={card.chantier}
                         chantierColor={card.chantierColor}
-                        onLevierClick={onLevierClick}
+                        onProjetClick={onProjetClick}
                       />
                     ))
                   )}

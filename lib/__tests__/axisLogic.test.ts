@@ -14,7 +14,7 @@ import {
   computeIndicatorStatus,
   countOnTrackAtRisk,
   isChantierLate,
-  isLevierLate,
+  isProjetLate,
   latestMeasurement,
   milestoneProgressPct,
   numberIndicators,
@@ -30,7 +30,7 @@ import {
   staffingPeriodBuckets,
   sumLatestQuantitativeValues,
   sumConsumedBudget,
-  sumLevierBudgets,
+  sumProjetBudgets,
 } from "@/lib/axisLogic";
 import type {
   AuthUser,
@@ -1140,14 +1140,14 @@ describe("chantierMilestoneProgressPct", () => {
   });
 });
 
-// ─── Retard d'un levier/chantier (round 20) ────────────────────────────────────────────────────
+// ─── Retard d'un projet/chantier (round 20) ────────────────────────────────────────────────────
 
-describe("isLevierLate", () => {
+describe("isProjetLate", () => {
   const today = new Date("2026-06-15T00:00:00");
 
   it("is late when the end date has passed and progress is below 100%", () => {
     const action = makeAction("CH1", "2026-01-01", "2026-06-01"); // fin passée, pas de milestones (0%)
-    expect(isLevierLate(action, 0, today)).toBe(true);
+    expect(isProjetLate(action, 0, today)).toBe(true);
   });
 
   it("is NOT late when it was completed, even after its deadline", () => {
@@ -1159,12 +1159,12 @@ describe("isLevierLate", () => {
         checklists: {},
       },
     };
-    expect(isLevierLate(action, 100, today)).toBe(false);
+    expect(isProjetLate(action, 100, today)).toBe(false);
   });
 
   it("is NOT late when it is not due yet", () => {
     const action = makeAction("CH1", "2026-06-01", "2026-12-31"); // fin dans le futur
-    expect(isLevierLate(action, 0, today)).toBe(false);
+    expect(isProjetLate(action, 0, today)).toBe(false);
   });
 });
 
@@ -1387,29 +1387,29 @@ describe("numberIndicators", () => {
   });
 });
 
-// ─── Budget par levier (round 12) ──────────────────────────────────────────────────────────────
+// ─── Budget par projet (round 12) ──────────────────────────────────────────────────────────────
 
-describe("sumLevierBudgets", () => {
-  it("returns 0 for a chantier with no levier at all", () => {
-    expect(sumLevierBudgets("CH1", [])).toBe(0);
+describe("sumProjetBudgets", () => {
+  it("returns 0 for a chantier with no projet at all", () => {
+    expect(sumProjetBudgets("CH1", [])).toBe(0);
   });
 
-  it("sums only the leviers of the requested chantier, treating a missing budget as 0", () => {
+  it("sums only the projets of the requested chantier, treating a missing budget as 0", () => {
     const actions: ChantierAction[] = [
       { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"), budget: 1000 },
       { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"), budget: 500 },
       makeAction("CH1", "2026-01-01", "2026-01-31", "A3"), // pas de budget renseigné → compte 0
       { ...makeAction("CH2", "2026-01-01", "2026-01-31", "A4"), budget: 999999 }, // autre chantier
     ];
-    expect(sumLevierBudgets("CH1", actions)).toBe(1500);
+    expect(sumProjetBudgets("CH1", actions)).toBe(1500);
   });
 
-  it("returns 0 when the chantier has leviers but none of them has a budget declared", () => {
+  it("returns 0 when the chantier has projets but none of them has a budget declared", () => {
     const actions: ChantierAction[] = [
       makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
       makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
     ];
-    expect(sumLevierBudgets("CH1", actions)).toBe(0);
+    expect(sumProjetBudgets("CH1", actions)).toBe(0);
   });
 });
 

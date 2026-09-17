@@ -852,14 +852,14 @@ export function chantierMilestoneProgressPct(
   return Math.round(total / own.length);
 }
 
-// ─── Retard d'un levier/chantier (round 20) ────────────────────────────────────────────────────
+// ─── Retard d'un projet/chantier (round 20) ────────────────────────────────────────────────────
 
 /**
- * Un LEVIER est-il en retard ? Vrai si sa date de fin (`ChantierAction.end`) est STRICTEMENT
+ * Un PROJET est-il en retard ? Vrai si sa date de fin (`ChantierAction.end`) est STRICTEMENT
  * passée (le jour même de l'échéance n'est pas encore en retard — cohérent avec `daysBetween`, qui
  * ne compte qu'à partir du lendemain) ET que son avancement déclaratif (`milestoneProgressPct`,
- * jalons E0→E4) n'a pas atteint 100% — un levier terminé APRÈS son échéance initiale n'est donc
- * jamais "en retard" au sens de cette fonction, seulement un levier encore ouvert au-delà de sa
+ * jalons E0→E4) n'a pas atteint 100% — un projet terminé APRÈS son échéance initiale n'est donc
+ * jamais "en retard" au sens de cette fonction, seulement un projet encore ouvert au-delà de sa
  * date de fin prévue.
  *
  * `today` est un paramètre injectable (défaut `new Date()`) uniquement pour les tests — aucun
@@ -868,9 +868,9 @@ export function chantierMilestoneProgressPct(
 /** `progressPct` est fourni par l'appelant plutôt que recalculé ici : `milestoneProgressPct` seule
  *  (sans `autoValues` résolus via `resolveMilestoneAutoFlags`) peut différer du pourcentage RÉEL
  *  affiché à l'écran (ex. `programRoadmap`, qui résout les auto-flags) — un appel interne aveugle
- *  ferait apparaître un levier "en retard" alors même que l'écran affiche déjà 100% à côté. En
+ *  ferait apparaître un projet "en retard" alors même que l'écran affiche déjà 100% à côté. En
  *  exigeant le même `progressPct` que celui affiché, retard et pourcentage ne peuvent plus diverger. */
-export function isLevierLate(
+export function isProjetLate(
   action: ChantierAction,
   progressPct: number,
   today: Date = new Date()
@@ -879,9 +879,9 @@ export function isLevierLate(
   return daysBetween(action.end, todayISO) > 0 && progressPct < 100;
 }
 
-/** Un CHANTIER est-il en retard ? Vrai si au moins un de ses leviers l'est (`isLevierLate`
+/** Un CHANTIER est-il en retard ? Vrai si au moins un de ses projets l'est (`isProjetLate`
  *  ci-dessus) — dérivée directe, aucune notion de retard propre au chantier. Même parti pris que
- *  `isLevierLate` : `progressPct` est porté par chaque entrée plutôt que recalculé ici. */
+ *  `isProjetLate` : `progressPct` est porté par chaque entrée plutôt que recalculé ici. */
 export function isChantierLate(
   chantier: Pick<Chantier, "id">,
   actionsWithProgress: { action: ChantierAction; progressPct: number }[],
@@ -889,7 +889,7 @@ export function isChantierLate(
 ): boolean {
   return actionsWithProgress.some(
     ({ action, progressPct }) =>
-      action.chantierId === chantier.id && isLevierLate(action, progressPct, today)
+      action.chantierId === chantier.id && isProjetLate(action, progressPct, today)
   );
 }
 
@@ -1142,20 +1142,20 @@ export function numberIndicators(
   return numbers;
 }
 
-// ─── Budget par levier (round 12) ──────────────────────────────────────────────────────────────
+// ─── Budget par projet (round 12) ──────────────────────────────────────────────────────────────
 
 /**
- * Somme des budgets LEVIER (`ChantierAction.budget`, round 12) d'un chantier donné — pendant de
- * `Chantier.allocatedBudget` mais agrégé depuis les leviers plutôt que saisi directement sur le
- * chantier ; les deux budgets COEXISTENT (l'un n'est pas déduit de l'autre, l'agrégat des leviers
+ * Somme des budgets PROJET (`ChantierAction.budget`, round 12) d'un chantier donné — pendant de
+ * `Chantier.allocatedBudget` mais agrégé depuis les projets plutôt que saisi directement sur le
+ * chantier ; les deux budgets COEXISTENT (l'un n'est pas déduit de l'autre, l'agrégat des projets
  * n'est PAS censé égaler `allocatedBudget`, c'est à l'appelant de les comparer si besoin).
  *
- * Un levier sans `budget` renseigné compte pour `0` (jamais exclu de la somme, contrairement à
- * `chantierMilestoneProgressPct` où un levier sans KPI est exclu du DÉNOMINATEUR d'une moyenne :
+ * Un projet sans `budget` renseigné compte pour `0` (jamais exclu de la somme, contrairement à
+ * `chantierMilestoneProgressPct` où un projet sans KPI est exclu du DÉNOMINATEUR d'une moyenne :
  * ici il n'y a pas de moyenne, seulement une somme, donc rien à exclure). Chantier sans aucun
- * levier, ou uniquement des leviers sans budget : `0`.
+ * projet, ou uniquement des projets sans budget : `0`.
  */
-export function sumLevierBudgets(chantierId: string, actions: ChantierAction[]): number {
+export function sumProjetBudgets(chantierId: string, actions: ChantierAction[]): number {
   return actions
     .filter((action) => action.chantierId === chantierId)
     .reduce((sum, action) => sum + (action.budget ?? 0), 0);
@@ -1163,7 +1163,7 @@ export function sumLevierBudgets(chantierId: string, actions: ChantierAction[]):
 
 /**
  * Somme des montants CONSOMMÉS levier (`ChantierAction.consumedBudget`) d'un chantier donné —
- * pendant de `sumLevierBudgets` ci-dessus mais pour le consommé plutôt que le planifié ; même
+ * pendant de `sumProjetBudgets` ci-dessus mais pour le consommé plutôt que le planifié ; même
  * remarque : ne pas comparer directement à `Chantier.consumedBudget`, les deux coexistent sans
  * qu'un des deux soit déduit de l'autre.
  *

@@ -1170,7 +1170,7 @@ const es: Record<string, string> = {
   // desaparece, este contenido vive ahora AQUÍ, sin pestañas), mismo tipo de migración de espacio
   // de nombres que `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` en la ronda 16 (ver
   // más abajo), por la razón simétrica inversa.
-  "strategicAxes.levierAdvancementTitle": "Estado de avance de las actividades",
+  "strategicAxes.projetAdvancementTitle": "Estado de avance de las iniciativas",
   "strategicAxes.axisNoChantier": "Ningún proyecto",
   "strategicAxes.chantierAlerted": "Alerta de dependencia",
   "strategicAxes.kanbanEmptyColumn": "Ningún eje",
@@ -1197,11 +1197,11 @@ const es: Record<string, string> = {
   // Gantt de los proyectos
   "strategicAxes.ganttSection": "Proyectos del eje",
   "strategicAxes.ganttHint":
-    "Un bloque = un proyecto, delimitado por su primera y su última actividad. Haga clic en un bloque o en una actividad para abrir el detalle del proyecto y sus entregables.",
+    "Un bloque = un proyecto, delimitado por su primera y su última iniciativa. Haga clic en un bloque o en una iniciativa para abrir el detalle del proyecto y sus entregables.",
   "strategicAxes.noChantiers": "Ningún proyecto en este eje.",
-  "strategicAxes.chantierUnplanned": "Proyectos sin actividad planificada",
-  "strategicAxes.chantierNoDates": "Aún sin fecha — añada una actividad",
-  "strategicAxes.actionsSuffix": "actividades",
+  "strategicAxes.chantierUnplanned": "Proyectos sin iniciativa planificada",
+  "strategicAxes.chantierNoDates": "Aún sin fecha — añada una iniciativa",
+  "strategicAxes.actionsSuffix": "iniciativas",
   // Gantt: escala temporal ajustable, avance, resumen del proyecto
   "strategicAxes.ganttScale": "Escala",
   "strategicAxes.ganttScaleMonth": "Mes",
@@ -1213,20 +1213,20 @@ const es: Record<string, string> = {
   // `strategicDashboard.roadmap.*` (eliminado, la hoja de ruta ahora es una pestaña de esta página
   // en lugar de una sección del panel). `today` reutiliza `strategicAxes.ganttToday` en vez de
   // duplicar la clave.
-  "strategicAxes.roadmap.empty": "Ninguna actividad con fecha en este programa.",
+  "strategicAxes.roadmap.empty": "Ninguna iniciativa con fecha en este programa.",
   "strategicAxes.roadmap.scale": "Escala",
   "strategicAxes.roadmap.scaleQuarter": "Trimestre",
   "strategicAxes.roadmap.scaleSemester": "Semestre",
   "strategicAxes.roadmap.scaleYear": "Año",
   "strategicAxes.roadmap.progress": "Avance",
-  "strategicAxes.roadmap.leviersSuffix": "actividades",
+  "strategicAxes.roadmap.leviersSuffix": "iniciativas",
   "strategicAxes.roadmap.late": "Retrasado",
-  "strategicAxes.roadmap.lateCount": "{n} actividad(es) retrasada(s) de {total}",
-  "strategicAxes.actionsCompleted": "actividades finalizadas",
+  "strategicAxes.roadmap.lateCount": "{n} iniciativa(s) retrasada(s) de {total}",
+  "strategicAxes.actionsCompleted": "iniciativas finalizadas",
   "strategicAxes.moreActionsSuffix": "más",
-  "strategicAxes.cardNoActions": "Sin actividades",
+  "strategicAxes.cardNoActions": "Sin iniciativas",
   "strategicAxes.chantierOwner": "Responsable del proyecto",
-  "strategicAxes.ownerFromActions": "según los responsables de las actividades",
+  "strategicAxes.ownerFromActions": "según los responsables de las iniciativas",
   "strategicAxes.chantierPeriod": "Periodo",
   "strategicAxes.newChantier": "Nuevo proyecto",
   "strategicAxes.newChantierModalTitle": "Nuevo proyecto",
@@ -1234,19 +1234,19 @@ const es: Record<string, string> = {
   "strategicAxes.chantierCreated": "Proyecto creado",
   "strategicAxes.chantierDeleted": "Proyecto eliminado",
   "strategicAxes.deleteChantier": "Eliminar el proyecto",
-  "strategicAxes.confirmDeleteChantier": "Confirmar la eliminación del proyecto y sus actividades",
+  "strategicAxes.confirmDeleteChantier": "Confirmar la eliminación del proyecto y sus iniciativas",
   // Ventana proyecto / acciones / entregables
   "strategicAxes.chantierModalTitle": "Detalle del proyecto",
   "strategicAxes.dependsOn": "Depende de",
-  "strategicAxes.chantierActions": "Actividades del proyecto",
-  "strategicAxes.noActions": "Ninguna actividad en este proyecto.",
-  "strategicAxes.newAction": "Nueva actividad",
+  "strategicAxes.chantierActions": "Iniciativas del proyecto",
+  "strategicAxes.noActions": "Ninguna iniciativa en este proyecto.",
+  "strategicAxes.newAction": "Nueva iniciativa",
   "strategicAxes.editAction": "Editar",
-  "strategicAxes.actionCreated": "Actividad creada",
-  "strategicAxes.actionUpdated": "Actividad actualizada",
-  "strategicAxes.actionDeleted": "Actividad eliminada",
+  "strategicAxes.actionCreated": "Iniciativa creada",
+  "strategicAxes.actionUpdated": "Iniciativa actualizada",
+  "strategicAxes.actionDeleted": "Iniciativa eliminada",
   "strategicAxes.confirmDelete": "Confirmar",
-  "strategicAxes.actionName": "Nombre de la actividad",
+  "strategicAxes.actionName": "Nombre de la iniciativa",
   "strategicAxes.actionOwner": "Responsable",
   "strategicAxes.actionStart": "Inicio",
   "strategicAxes.actionEnd": "Fin",
@@ -1284,7 +1284,7 @@ const es: Record<string, string> = {
   "strategicAxes.chantierSaveErrorTitle": "No se pudo guardar",
   "strategicAxes.chantierSaveError": "No se pudo guardar el proyecto.",
   "strategicAxes.actionSaveErrorTitle": "No se pudo guardar",
-  "strategicAxes.actionSaveError": "No se pudo guardar la actividad.",
+  "strategicAxes.actionSaveError": "No se pudo guardar la iniciativa.",
   "strategicAxes.atRiskPopoverTitle": "Indicadores en riesgo",
   "strategicAxes.atRiskTooltip":
     "Desviación desfavorable entre el último valor medido y el objetivo del indicador.",
@@ -1302,7 +1302,7 @@ const es: Record<string, string> = {
   "strategicChantierDetail.pilote": "Responsable",
   "strategicChantierDetail.allocatedBudget": "Presupuesto asignado",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
-    "El presupuesto del proyecto no puede ser inferior a la suma de los presupuestos de sus actividades.",
+    "El presupuesto del proyecto no puede ser inferior a la suma de los presupuestos de sus iniciativas.",
   "strategicChantierDetail.consumedBudget": "Presupuesto consumido",
   "strategicChantierDetail.consumedFte": "ETC consumidos",
   "strategicChantierDetail.confidentialityLevel": "Nivel de confidencialidad",
@@ -1339,23 +1339,23 @@ const es: Record<string, string> = {
   "strategicChantierDetail.kanban.done": "Terminado",
 
   "strategicChantierDetail.prerequisites.title": "Dependencias / Prerrequisitos",
-  "strategicChantierDetail.prerequisites.kindAction": "Actividad del plan",
+  "strategicChantierDetail.prerequisites.kindAction": "Iniciativa del plan",
   "strategicChantierDetail.prerequisites.kindExternal": "Prerrequisito externo",
   "strategicChantierDetail.prerequisites.blockedBy": "Bloqueado por:",
   "strategicChantierDetail.prerequisites.addRow": "Añadir un prerrequisito",
   "strategicChantierDetail.prerequisites.kind": "Tipo",
-  "strategicChantierDetail.prerequisites.targetPlaceholder": "Elegir una actividad",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Elegir una iniciativa",
   "strategicChantierDetail.prerequisites.externalPlaceholder":
     "Ej. Contratación, compra, validación presupuestaria…",
   "strategicChantierDetail.prerequisites.done": "Hecho",
   "strategicChantierDetail.prerequisites.removeRow": "Quitar este prerrequisito",
   "strategicChantierDetail.prerequisites.none": "Sin prerrequisitos.",
   "strategicChantierDetail.prerequisites.noOtherActions":
-    "Ninguna otra actividad en este workstream.",
+    "Ninguna otra iniciativa en este workstream.",
 
   // ─── Bandas acordeón de las actividades (ronda <n>) ───────────────────────────────────────
-  "strategicChantierDetail.leviers.expand": "Desplegar",
-  "strategicChantierDetail.leviers.collapse": "Contraer",
+  "strategicChantierDetail.projets.expand": "Desplegar",
+  "strategicChantierDetail.projets.collapse": "Contraer",
 
   // ─── Modal de detalle de un entregable + formulario de creación (ronda <n>, pestaña
   // "Cronología" fusionada — sustituye la antigua pestaña dedicada a las fases de los
@@ -1364,7 +1364,7 @@ const es: Record<string, string> = {
   "strategicChantierDetail.deliverableModal.comments": "Comentarios",
   "strategicChantierDetail.deliverableModal.commentPlaceholder": "Añadir un comentario…",
   "strategicChantierDetail.deliverableModal.noComments": "Sin comentarios.",
-  "strategicChantierDetail.deliverableForm.leverSelect": "Actividad vinculada",
+  "strategicChantierDetail.deliverableForm.leverSelect": "Iniciativa vinculada",
 
   // ─── Pestañas de la ficha de proyecto (ronda 10, punto 2) ─────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Resumen",
@@ -1379,18 +1379,19 @@ const es: Record<string, string> = {
   "strategicChantierDetail.indicatorLink.notFound": "KPI no encontrado",
   "strategicChantierDetail.linkedIndicatorTitle": "KPI asociado",
 
-  "strategicChantierDetail.actionFocused": "Actividad abierta desde el enlace",
+  "strategicChantierDetail.actionFocused": "Iniciativa abierta desde el enlace",
   "strategicChantierDetail.actionForm.missingHint": "Complete el nombre y las fechas para guardar.",
-  "strategicChantierDetail.actionForm.budgetLabel": "Presupuesto de la actividad",
+  "strategicChantierDetail.actionForm.budgetLabel": "Presupuesto de la iniciativa",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "El total de los presupuestos de las actividades superaría el presupuesto asignado del proyecto.",
-  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Presupuesto consumido de la actividad",
-  "strategicChantierDetail.actionForm.consumedFteLabel": "ETC consumidos de la actividad",
+    "El total de los presupuestos de las iniciativas superaría el presupuesto asignado del proyecto.",
+  "strategicChantierDetail.actionForm.consumedBudgetLabel":
+    "Presupuesto consumido de la iniciativa",
+  "strategicChantierDetail.actionForm.consumedFteLabel": "ETC consumidos de la iniciativa",
   "strategicChantierDetail.successCriteria.placeholder": "Estaremos satisfechos en [año] si...",
 
   // ─── Plan Estratégico — hitos E0-E4 (ronda 5) ────────────────────────────────
   "strategicChantierDetail.milestones.title": "Método de hitos E0-E4",
-  "strategicChantierDetail.milestones.stepper.title": "Hitos de la actividad",
+  "strategicChantierDetail.milestones.stepper.title": "Hitos de la iniciativa",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Se desbloquea tras el hito actual",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Hito superado",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Hito actual",
@@ -1459,14 +1460,14 @@ const es: Record<string, string> = {
   "strategicImport.lineLabel": "Línea",
   "strategicImport.axesCountLabel": "eje(s) a crear",
   "strategicImport.chantiersCountLabel": "proyecto(s) a crear",
-  "strategicImport.actionsCountLabel": "actividad(es) a crear",
+  "strategicImport.actionsCountLabel": "iniciativa(s) a crear",
   "strategicImport.indicatorsCountLabel": "indicador(es) a crear",
   "strategicImport.templateDownloadedTitle": "Plantilla descargada",
   "strategicImport.templateDownloadedBody":
     "5 hojas: Ejes (Code = clave), Proyectos (Code Eje = FK), Acciones (Code Proyecto = FK), Entregables (Code Acción = FK, opcional), Indicadores (Code Eje O Code Proyecto = FK). Elimine las filas de ejemplo antes de completar.",
   "strategicImport.ignoredRowsNote": "{n} línea(s) ignorada(s)",
   "strategicImport.importDoneBody":
-    "{axes} eje(s) · {chantiers} proyecto(s) · {actions} actividad(es) · {indicators} indicador(es) creado(s)",
+    "{axes} eje(s) · {chantiers} proyecto(s) · {actions} iniciativa(s) · {indicators} indicador(es) creado(s)",
   "strategicImport.errorTitle": "Fallo en la importación",
 
   // ─── Plan Estratégico — página KPI (registro de medidas, edición de objetivo) ─
@@ -1566,8 +1567,8 @@ const es: Record<string, string> = {
   "staffing.saveError": "No se ha podido guardar la dotación.",
   "staffing.startDate": "Inicio",
   "staffing.endDate": "Fin",
-  "staffing.action": "Actividad relacionada",
-  "staffing.actionNone": "Ninguna actividad en particular",
+  "staffing.action": "Iniciativa relacionada",
+  "staffing.actionNone": "Ninguna iniciativa en particular",
 
   // ─── Página Personal movilizado (/effectifs, Plan Estratégico) ────────────
   "effectifs.title": "Personal y presupuesto movilizados",
@@ -1692,14 +1693,14 @@ const es: Record<string, string> = {
   "strategicDashboard.widget.indicatorStatus": "Indicadores · trayectoria",
   "strategicDashboard.widget.businessKpis": "KPI de negocio — Seguimiento del mercado",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertas",
-  // Ronda 8: marcador de una columna de jalón E0-E4 vacía (`LevierMilestoneBoard.tsx`).
-  "strategicDashboard.levierBoard.emptyColumn": "—",
+  // Ronda 8: marcador de una columna de jalón E0-E4 vacía (`ProjetMilestoneBoard.tsx`).
+  "strategicDashboard.projetBoard.emptyColumn": "—",
   // Ronda 12: media de los `progressPct` declarados de los leviers de la columna (`{pct}`
-  // sustituido manualmente, ver `LevierMilestoneBoard.tsx`).
-  "strategicDashboard.levierBoard.avgProgress": "{pct}% de media",
-  "strategicDashboard.levierBoard.late": "Retrasado",
-  "strategicDashboard.lateLeviersHeading": "Actividades retrasadas",
-  "strategicDashboard.noLateLeviers": "Ninguna actividad retrasada",
+  // sustituido manualmente, ver `ProjetMilestoneBoard.tsx`).
+  "strategicDashboard.projetBoard.avgProgress": "{pct}% de media",
+  "strategicDashboard.projetBoard.late": "Retrasado",
+  "strategicDashboard.lateLeviersHeading": "Iniciativas retrasadas",
+  "strategicDashboard.noLateLeviers": "Ninguna iniciativa retrasada",
   // Ronda 15: hoja de ruta de todo el programa (`ProgramRoadmap.tsx`) — vista de ancho completo, al
   // final del panel (una fila por actividad, en todos los ejes/proyectos).
 

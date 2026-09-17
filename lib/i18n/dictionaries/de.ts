@@ -1169,7 +1169,7 @@ const de: Record<string, string> = {
   // Inhalt lebt jetzt HIER, ohne Tab-Umschalter), gleiche Art von Namensraum-Migration wie
   // `strategicDashboard.roadmap.*` → `strategicAxes.roadmap.*` in Runde 16 (siehe unten), aus dem
   // symmetrisch umgekehrten Grund.
-  "strategicAxes.levierAdvancementTitle": "Fortschrittsstatus der Aktivitäten",
+  "strategicAxes.projetAdvancementTitle": "Fortschrittsstatus der Projekte",
   "strategicAxes.axisNoChantier": "Kein Arbeitspaket",
   "strategicAxes.chantierAlerted": "Abhängigkeitswarnung",
   "strategicAxes.kanbanEmptyColumn": "Keine Achse",
@@ -1197,11 +1197,11 @@ const de: Record<string, string> = {
   // Gantt der Arbeitspakete
   "strategicAxes.ganttSection": "Arbeitspakete dieser Achse",
   "strategicAxes.ganttHint":
-    "Ein Block = ein Arbeitspaket, begrenzt durch seine erste und letzte Aktivität. Klicken Sie auf einen Block oder eine Aktivität, um das Arbeitspaket mit seinen Liefergegenständen zu öffnen.",
+    "Ein Block = ein Arbeitspaket, begrenzt durch sein erstes und letztes Projekt. Klicken Sie auf einen Block oder ein Projekt, um das Arbeitspaket mit seinen Liefergegenständen zu öffnen.",
   "strategicAxes.noChantiers": "Kein Arbeitspaket auf dieser Achse.",
-  "strategicAxes.chantierUnplanned": "Arbeitspakete ohne geplante Aktivität",
-  "strategicAxes.chantierNoDates": "Noch kein Datum — Aktivität hinzufügen",
-  "strategicAxes.actionsSuffix": "Aktivitäten",
+  "strategicAxes.chantierUnplanned": "Arbeitspakete ohne geplantes Projekt",
+  "strategicAxes.chantierNoDates": "Noch kein Datum — Projekt hinzufügen",
+  "strategicAxes.actionsSuffix": "Projekte",
   // Gantt: einstellbare Zeitskala, Fortschritt, Übersicht des Arbeitspakets
   "strategicAxes.ganttScale": "Skala",
   "strategicAxes.ganttScaleMonth": "Monat",
@@ -1212,20 +1212,20 @@ const de: Record<string, string> = {
   // Tab "Roadmap" (Runde 16) — Programm-Roadmap, migriert aus der ehemaligen Gruppe
   // `strategicDashboard.roadmap.*` (entfernt, die Roadmap ist jetzt ein Tab dieser Seite statt eines
   // Dashboard-Abschnitts). `today` verwendet oben `strategicAxes.ganttToday` statt eines Duplikats.
-  "strategicAxes.roadmap.empty": "Keine terminierte Aktivität in diesem Programm.",
+  "strategicAxes.roadmap.empty": "Kein terminiertes Projekt in diesem Programm.",
   "strategicAxes.roadmap.scale": "Maßstab",
   "strategicAxes.roadmap.scaleQuarter": "Quartal",
   "strategicAxes.roadmap.scaleSemester": "Halbjahr",
   "strategicAxes.roadmap.scaleYear": "Jahr",
   "strategicAxes.roadmap.progress": "Fortschritt",
-  "strategicAxes.roadmap.leviersSuffix": "Aktivitäten",
+  "strategicAxes.roadmap.leviersSuffix": "Projekte",
   "strategicAxes.roadmap.late": "Verzögert",
-  "strategicAxes.roadmap.lateCount": "{n} von {total} Aktivität(en) verzögert",
-  "strategicAxes.actionsCompleted": "Aktivitäten abgeschlossen",
+  "strategicAxes.roadmap.lateCount": "{n} von {total} Projekt(e) verzögert",
+  "strategicAxes.actionsCompleted": "Projekte abgeschlossen",
   "strategicAxes.moreActionsSuffix": "weitere",
-  "strategicAxes.cardNoActions": "Keine Aktivität",
+  "strategicAxes.cardNoActions": "Kein Projekt",
   "strategicAxes.chantierOwner": "Verantwortlich für das Arbeitspaket",
-  "strategicAxes.ownerFromActions": "abgeleitet aus den Aktivitätsverantwortlichen",
+  "strategicAxes.ownerFromActions": "abgeleitet aus den Projektverantwortlichen",
   "strategicAxes.chantierPeriod": "Zeitraum",
   "strategicAxes.newChantier": "Neues Arbeitspaket",
   "strategicAxes.newChantierModalTitle": "Neues Arbeitspaket",
@@ -1233,20 +1233,19 @@ const de: Record<string, string> = {
   "strategicAxes.chantierCreated": "Arbeitspaket angelegt",
   "strategicAxes.chantierDeleted": "Arbeitspaket gelöscht",
   "strategicAxes.deleteChantier": "Arbeitspaket löschen",
-  "strategicAxes.confirmDeleteChantier":
-    "Löschen des Arbeitspakets und seiner Aktivitäten bestätigen",
+  "strategicAxes.confirmDeleteChantier": "Löschen des Arbeitspakets und seiner Projekte bestätigen",
   // Pop-up Arbeitspaket / Maßnahmen / Liefergegenstände
   "strategicAxes.chantierModalTitle": "Detail des Arbeitspakets",
   "strategicAxes.dependsOn": "Hängt ab von",
-  "strategicAxes.chantierActions": "Aktivitäten des Arbeitspakets",
-  "strategicAxes.noActions": "Keine Aktivität in diesem Arbeitspaket.",
-  "strategicAxes.newAction": "Neue Aktivität",
+  "strategicAxes.chantierActions": "Projekte des Arbeitspakets",
+  "strategicAxes.noActions": "Kein Projekt in diesem Arbeitspaket.",
+  "strategicAxes.newAction": "Neues Projekt",
   "strategicAxes.editAction": "Bearbeiten",
-  "strategicAxes.actionCreated": "Aktivität angelegt",
-  "strategicAxes.actionUpdated": "Aktivität aktualisiert",
-  "strategicAxes.actionDeleted": "Aktivität gelöscht",
+  "strategicAxes.actionCreated": "Projekt angelegt",
+  "strategicAxes.actionUpdated": "Projekt aktualisiert",
+  "strategicAxes.actionDeleted": "Projekt gelöscht",
   "strategicAxes.confirmDelete": "Bestätigen",
-  "strategicAxes.actionName": "Name der Aktivität",
+  "strategicAxes.actionName": "Name des Projekts",
   "strategicAxes.actionOwner": "Verantwortlich",
   "strategicAxes.actionStart": "Beginn",
   "strategicAxes.actionEnd": "Ende",
@@ -1284,7 +1283,7 @@ const de: Record<string, string> = {
   "strategicAxes.chantierSaveErrorTitle": "Speichern fehlgeschlagen",
   "strategicAxes.chantierSaveError": "Das Vorhaben konnte nicht gespeichert werden.",
   "strategicAxes.actionSaveErrorTitle": "Speichern fehlgeschlagen",
-  "strategicAxes.actionSaveError": "Die Aktivität konnte nicht gespeichert werden.",
+  "strategicAxes.actionSaveError": "Das Projekt konnte nicht gespeichert werden.",
   "strategicAxes.atRiskPopoverTitle": "Gefährdete Indikatoren",
   "strategicAxes.atRiskTooltip":
     "Ungünstige Abweichung zwischen dem letzten gemessenen Wert und dem Ziel des Indikators.",
@@ -1302,7 +1301,7 @@ const de: Record<string, string> = {
   "strategicChantierDetail.pilote": "Leitung",
   "strategicChantierDetail.allocatedBudget": "Zugewiesenes Budget",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
-    "Das Budget des Arbeitspakets darf nicht niedriger sein als die Summe der Budgets seiner Aktivitäten.",
+    "Das Budget des Arbeitspakets darf nicht niedriger sein als die Summe der Budgets seiner Projekte.",
   "strategicChantierDetail.consumedBudget": "Verbrauchtes Budget",
   "strategicChantierDetail.consumedFte": "Verbrauchte VZÄ",
   "strategicChantierDetail.confidentialityLevel": "Vertraulichkeitsstufe",
@@ -1339,23 +1338,23 @@ const de: Record<string, string> = {
   "strategicChantierDetail.kanban.done": "Erledigt",
 
   "strategicChantierDetail.prerequisites.title": "Abhängigkeiten / Voraussetzungen",
-  "strategicChantierDetail.prerequisites.kindAction": "Aktivität des Plans",
+  "strategicChantierDetail.prerequisites.kindAction": "Projekt des Plans",
   "strategicChantierDetail.prerequisites.kindExternal": "Externe Voraussetzung",
   "strategicChantierDetail.prerequisites.blockedBy": "Blockiert durch:",
   "strategicChantierDetail.prerequisites.addRow": "Voraussetzung hinzufügen",
   "strategicChantierDetail.prerequisites.kind": "Typ",
-  "strategicChantierDetail.prerequisites.targetPlaceholder": "Aktivität auswählen",
+  "strategicChantierDetail.prerequisites.targetPlaceholder": "Projekt auswählen",
   "strategicChantierDetail.prerequisites.externalPlaceholder":
     "Z. B. Einstellung, Beschaffung, Budgetfreigabe…",
   "strategicChantierDetail.prerequisites.done": "Erledigt",
   "strategicChantierDetail.prerequisites.removeRow": "Diese Voraussetzung entfernen",
   "strategicChantierDetail.prerequisites.none": "Keine Voraussetzungen.",
   "strategicChantierDetail.prerequisites.noOtherActions":
-    "Keine weitere Aktivität in diesem Workstream.",
+    "Kein weiteres Projekt in diesem Workstream.",
 
   // ─── Aufklappbare Aktivitätsbanner (Runde <n>) ────────────────────────────────────────────
-  "strategicChantierDetail.leviers.expand": "Aufklappen",
-  "strategicChantierDetail.leviers.collapse": "Einklappen",
+  "strategicChantierDetail.projets.expand": "Aufklappen",
+  "strategicChantierDetail.projets.collapse": "Einklappen",
 
   // ─── Detailmodal eines Liefergegenstands + Erstellungsformular (Runde <n>, fusionierter
   // Reiter "Zeitleiste" — ersetzt den alten, den Phasen der Liefergegenstände gewidmeten
@@ -1364,7 +1363,7 @@ const de: Record<string, string> = {
   "strategicChantierDetail.deliverableModal.comments": "Kommentare",
   "strategicChantierDetail.deliverableModal.commentPlaceholder": "Kommentar hinzufügen…",
   "strategicChantierDetail.deliverableModal.noComments": "Keine Kommentare.",
-  "strategicChantierDetail.deliverableForm.leverSelect": "Zugehörige Aktivität",
+  "strategicChantierDetail.deliverableForm.leverSelect": "Zugehöriges Projekt",
 
   // ─── Reiter der Detailansicht des Arbeitspakets (Runde 10, Punkt 2) ───────────────────────
   "strategicChantierDetail.tabs.overview": "Übersicht",
@@ -1379,18 +1378,18 @@ const de: Record<string, string> = {
   "strategicChantierDetail.indicatorLink.notFound": "KPI nicht gefunden",
   "strategicChantierDetail.linkedIndicatorTitle": "Verknüpfter KPI",
 
-  "strategicChantierDetail.actionFocused": "Über den Link geöffnete Aktivität",
+  "strategicChantierDetail.actionFocused": "Über den Link geöffnetes Projekt",
   "strategicChantierDetail.actionForm.missingHint": "Name und Daten ausfüllen, um zu speichern.",
-  "strategicChantierDetail.actionForm.budgetLabel": "Budget der Aktivität",
+  "strategicChantierDetail.actionForm.budgetLabel": "Budget des Projekts",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "Die Summe der Budgets der Aktivitäten würde das zugewiesene Budget des Arbeitspakets überschreiten.",
-  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Verbrauchtes Budget der Aktivität",
-  "strategicChantierDetail.actionForm.consumedFteLabel": "Verbrauchte VZÄ der Aktivität",
+    "Die Summe der Budgets der Projekte würde das zugewiesene Budget des Arbeitspakets überschreiten.",
+  "strategicChantierDetail.actionForm.consumedBudgetLabel": "Verbrauchtes Budget des Projekts",
+  "strategicChantierDetail.actionForm.consumedFteLabel": "Verbrauchte VZÄ des Projekts",
   "strategicChantierDetail.successCriteria.placeholder": "Wir sind im [Jahr] zufrieden, wenn...",
 
   // ─── Strategieplan — Meilensteine E0-E4 (Runde 5) ───────────────────────────
   "strategicChantierDetail.milestones.title": "E0-E4-Meilensteinmethode",
-  "strategicChantierDetail.milestones.stepper.title": "Meilensteine der Aktivität",
+  "strategicChantierDetail.milestones.stepper.title": "Meilensteine des Projekts",
   "strategicChantierDetail.milestones.stepper.lockedTooltip":
     "Wird nach dem aktuellen Meilenstein freigeschaltet",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Meilenstein erreicht",
@@ -1462,14 +1461,14 @@ const de: Record<string, string> = {
   "strategicImport.lineLabel": "Zeile",
   "strategicImport.axesCountLabel": "Achse(n) zu erstellen",
   "strategicImport.chantiersCountLabel": "Arbeitspaket(e) zu erstellen",
-  "strategicImport.actionsCountLabel": "Aktivität(en) zu erstellen",
+  "strategicImport.actionsCountLabel": "Projekt(e) zu erstellen",
   "strategicImport.indicatorsCountLabel": "Indikator(en) zu erstellen",
   "strategicImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "strategicImport.templateDownloadedBody":
     "5 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencode = FK), Aktionen (Arbeitspaketcode = FK), Ergebnisse (Aktionscode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.",
   "strategicImport.ignoredRowsNote": "{n} Zeile(n) ignoriert",
   "strategicImport.importDoneBody":
-    "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Aktivität(en) · {indicators} Indikator(en) erstellt",
+    "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Projekt(e) · {indicators} Indikator(en) erstellt",
   "strategicImport.errorTitle": "Import fehlgeschlagen",
 
   // ─── Strategieplan — KPI-Seite (Messwerterfassung, Zielbearbeitung) ────────
@@ -1568,8 +1567,8 @@ const de: Record<string, string> = {
   "staffing.saveError": "Der Personaleinsatz konnte nicht gespeichert werden.",
   "staffing.startDate": "Beginn",
   "staffing.endDate": "Ende",
-  "staffing.action": "Betroffene Aktivität",
-  "staffing.actionNone": "Keine bestimmte Aktivität",
+  "staffing.action": "Betroffenes Projekt",
+  "staffing.actionNone": "Kein bestimmtes Projekt",
 
   // ─── Seite Personaleinsatz (/effectifs, Strategieplan) ────────────────────
   "effectifs.title": "Eingesetztes Personal & Budget",
@@ -1697,14 +1696,14 @@ const de: Record<string, string> = {
   "strategicDashboard.widget.indicatorStatus": "Indikatoren · im Plan",
   "strategicDashboard.widget.businessKpis": "Business-KPIs — Marktbeobachtung",
   "strategicDashboard.widget.chantierDependencyAlerts": "Warnungen",
-  // Runde 8: Platzhalter einer leeren E0-E4-Jalonspalte (`LevierMilestoneBoard.tsx`).
-  "strategicDashboard.levierBoard.emptyColumn": "—",
+  // Runde 8: Platzhalter einer leeren E0-E4-Jalonspalte (`ProjetMilestoneBoard.tsx`).
+  "strategicDashboard.projetBoard.emptyColumn": "—",
   // Runde 12: Durchschnitt der deklarierten `progressPct` der Leviers dieser Spalte (`{pct}` wird
-  // manuell ersetzt, siehe `LevierMilestoneBoard.tsx`).
-  "strategicDashboard.levierBoard.avgProgress": "{pct}% im Durchschnitt",
-  "strategicDashboard.levierBoard.late": "Verzögert",
-  "strategicDashboard.lateLeviersHeading": "Verzögerte Aktivitäten",
-  "strategicDashboard.noLateLeviers": "Keine verzögerten Aktivitäten",
+  // manuell ersetzt, siehe `ProjetMilestoneBoard.tsx`).
+  "strategicDashboard.projetBoard.avgProgress": "{pct}% im Durchschnitt",
+  "strategicDashboard.projetBoard.late": "Verzögert",
+  "strategicDashboard.lateLeviersHeading": "Verzögerte Projekte",
+  "strategicDashboard.noLateLeviers": "Keine verzögerten Projekte",
   // Runde 15: programmweite Roadmap (`ProgramRoadmap.tsx`) — Vollbreiten-Ansicht des GESAMTEN
   // Programms am unteren Rand des Dashboards (eine Zeile pro Aktivität, über alle Achsen/
   // Arbeitspakete hinweg).

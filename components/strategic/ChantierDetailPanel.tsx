@@ -39,7 +39,7 @@ import {
   numberIndicators,
   progressBucket,
   resolveMilestoneAutoFlags,
-  sumLevierBudgets,
+  sumProjetBudgets,
   type ProgressBucket,
 } from "@/lib/axisLogic";
 import { cn } from "@/lib/utils";
@@ -63,7 +63,7 @@ import type {
   Deliverable,
   DeliverablePhase,
   Indicator,
-  LevierKanbanStatus,
+  ProjetKanbanStatus,
   MaturityStageConfig,
 } from "@/types";
 
@@ -172,7 +172,7 @@ function progressionColorFor(pct: number): string {
  *  `Deliverable.status` — mêmes 3 couleurs que `progressionColorFor` ci-dessus (todo/rouge,
  *  in_progress/ambre, done/vert), `undefined` traité comme "todo" (même convention que
  *  `LevierKanbanStatusControl`). */
-function deliverableStatusColor(status: LevierKanbanStatus | undefined): string {
+function deliverableStatusColor(status: ProjetKanbanStatus | undefined): string {
   switch (status) {
     case "done":
       return PROGRESSION_COLOR_GREEN;
@@ -518,12 +518,12 @@ function LevierKanbanStatusControl({
 }: {
   /** `undefined` traité comme "todo" pour la mise en avant du bouton actif — voir
    *  `Deliverable.status`, jamais forcé en base tant que l'utilisateur n'a pas cliqué. */
-  status: LevierKanbanStatus | undefined;
-  onChange: (next: LevierKanbanStatus) => void;
+  status: ProjetKanbanStatus | undefined;
+  onChange: (next: ProjetKanbanStatus) => void;
   labels: { title: string; todo: string; inProgress: string; done: string };
 }) {
-  const effectiveStatus: LevierKanbanStatus = status ?? "todo";
-  const COLUMNS: { value: LevierKanbanStatus; label: string }[] = [
+  const effectiveStatus: ProjetKanbanStatus = status ?? "todo";
+  const COLUMNS: { value: ProjetKanbanStatus; label: string }[] = [
     { value: "todo", label: labels.todo },
     { value: "in_progress", label: labels.inProgress },
     { value: "done", label: labels.done },
@@ -699,13 +699,13 @@ function AddDeliverableForm({
   onCancel: () => void;
   onSubmit: (
     actionId: string,
-    values: { label: string; dueDate: string; status: LevierKanbanStatus }
+    values: { label: string; dueDate: string; status: ProjetKanbanStatus }
   ) => void;
 }) {
   const [actionId, setActionId] = useState(actions.length === 1 ? actions[0].id : "");
   const [label, setLabel] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [status, setStatus] = useState<LevierKanbanStatus>("todo");
+  const [status, setStatus] = useState<ProjetKanbanStatus>("todo");
   const canSubmit = actionId.trim() !== "" && label.trim() !== "" && dueDate.trim() !== "";
   return (
     <Modal
@@ -860,7 +860,7 @@ function ChantierActionForm({
 
   // Validation du budget levier (round 12) — voir le commentaire du prop `chantierAllocatedBudget`.
   // Une saisie vide ou non numérique compte pour 0 dans la projection, même parti pris que
-  // `sumLevierBudgets` ("un levier sans budget renseigné compte pour 0, jamais exclu").
+  // `sumProjetBudgets` ("un levier sans budget renseigné compte pour 0, jamais exclu").
   const trimmedBudget = budgetInput.trim();
   const parsedBudget = trimmedBudget === "" ? undefined : Number(trimmedBudget);
   const otherLeviersBudgetSum = otherActions.reduce((sum, a) => sum + (a.budget ?? 0), 0);
@@ -1340,7 +1340,7 @@ export function ChantierDetailPanel({
     [data.chantierActions, chantier]
   );
 
-  // ETP PLANIFIÉS (round <n>) — pendant de `sumLevierBudgets`/`allocatedBudget` pour l'ETP : il
+  // ETP PLANIFIÉS (round <n>) — pendant de `sumProjetBudgets`/`allocatedBudget` pour l'ETP : il
   // n'existe pas de champ "ETP cible" déclaratif sur `Chantier`/`ChantierAction` (contrairement au
   // budget), le seul planifié disponible est la somme des lignes de staffing (`ChantierStaffing`,
   // même collection que `ChantierStaffingEditor.tsx`, déjà abonnée via `data.staffing`). Sert de
@@ -1679,7 +1679,7 @@ export function ChantierDetailPanel({
    *  de l'onglet "Timeline" (round <n>) — même discipline que `updateDeliverable` ci-dessus. */
   const addDeliverable = async (
     actionId: string,
-    values: { label: string; dueDate: string; status: LevierKanbanStatus }
+    values: { label: string; dueDate: string; status: ProjetKanbanStatus }
   ) => {
     const action = chantierActions.find((a) => a.id === actionId);
     if (!action) return;
@@ -1909,7 +1909,7 @@ export function ChantierDetailPanel({
                       // formulaire de levier éventuellement ouvert par ailleurs). Rejet : ni écriture,
                       // ni tentative — l'input revient à la dernière valeur enregistrée, et un toast
                       // explique pourquoi (même canal que `updateChantierField`/`clearChantierField`).
-                      const leviersBudgetSum = sumLevierBudgets(chantier.id, chantierActions);
+                      const leviersBudgetSum = sumProjetBudgets(chantier.id, chantierActions);
                       if (parsed < leviersBudgetSum) {
                         setAllocatedBudgetInput(
                           chantier.allocatedBudget !== undefined
@@ -2379,8 +2379,8 @@ export function ChantierDetailPanel({
                           aria-expanded={isOpen}
                           aria-label={
                             isOpen
-                              ? t("strategicChantierDetail.leviers.collapse")
-                              : t("strategicChantierDetail.leviers.expand")
+                              ? t("strategicChantierDetail.projets.collapse")
+                              : t("strategicChantierDetail.projets.expand")
                           }
                           onClick={() => toggleLevier(action.id)}
                           className="flex min-w-0 flex-1 items-start gap-2 text-left"

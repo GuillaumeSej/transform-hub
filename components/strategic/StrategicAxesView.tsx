@@ -9,10 +9,10 @@ import { Modal } from "@/components/shared/Modal";
 import { AxisForm, type AxisFormValues } from "@/components/strategic/AxisForm";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
 import {
-  LevierMilestoneBoard,
-  type LevierBoardCard,
-  type LevierBoardGroup,
-} from "@/components/strategic/LevierMilestoneBoard";
+  ProjetMilestoneBoard,
+  type ProjetBoardCard,
+  type ProjetBoardGroup,
+} from "@/components/strategic/ProjetMilestoneBoard";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
 import { colorForChantier } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
@@ -42,12 +42,12 @@ import type { Chantier, MilestoneId } from "@/types";
  * supprimé — ses fonctionnalités propres, donut budgétaire par chantier et drill-down par
  * compteur, sont délibérément abandonnées, décision PO). Cette page affiche désormais, à demeure et
  * sans bascule, le contenu qui vivait auparavant sur le dashboard sous le widget "chantier-health" :
- * la vue E0→E4 par levier (`LevierMilestoneBoard`), une section par axe. Le grain "portefeuille
+ * la vue E0→E4 par levier (`ProjetMilestoneBoard`), une section par axe. Le grain "portefeuille
  * d'axes" de cette page (import, création, panneau chantier) reste inchangé — seul le corps de la
  * page change de contenu.
  *
  * Round 18 : le kanban classique des leviers sans KPI (`LevierKanbanBoard`) a été supprimé — le PO a
- * unifié tous les leviers sur le suivi E0→E4, avec ou sans KPI rattaché. `LevierMilestoneBoard`
+ * unifié tous les leviers sur le suivi E0→E4, avec ou sans KPI rattaché. `ProjetMilestoneBoard`
  * couvre désormais TOUS les leviers de l'axe.
  *
  * Le clic sur un chantier ouvre le panneau chantier (`ChantierDetailPanel`) SUR CETTE MÊME page via
@@ -77,7 +77,7 @@ export function StrategicAxesView() {
   }, [user?.companyId]);
 
   // Chantiers regroupés par axe, dans l'ordre de `data.chantiers` (déjà trié par le hook) — alimente
-  // la section fixe "État des lieux d'avancement des leviers" ci-dessous (`levierBoardGroups`).
+  // la section fixe "État des lieux d'avancement des leviers" ci-dessous (`projetBoardGroups`).
   const chantiersByAxis = useMemo(() => {
     const map = new Map<string, Chantier[]>();
     for (const chantier of data.chantiers) {
@@ -89,16 +89,16 @@ export function StrategicAxesView() {
   }, [data.chantiers]);
 
   /** Groupes (un par axe) de la vue E0→E4 par levier — round 17 : porté depuis l'ancien widget
-   *  dashboard "chantier-health" (`StrategicDashboardView.tsx`, `levierBoardGroups`), même calcul
+   *  dashboard "chantier-health" (`StrategicDashboardView.tsx`, `projetBoardGroups`), même calcul
    *  adapté à la forme de données de cette page (`chantiersByAxis` ci-dessus plutôt que
-   *  `axisBreakdown`, qui n'existe pas ici). Alimente `LevierMilestoneBoard`. Un axe sans aucun
+   *  `axisBreakdown`, qui n'existe pas ici). Alimente `ProjetMilestoneBoard`. Un axe sans aucun
    *  chantier n'ouvre pas de section vide. Round 18 : TOUS les leviers de l'axe (avec ou sans KPI
    *  rattaché) sont groupés par `action.milestones?.currentMilestone ?? "E0"` (5 colonnes) — l'ancien
    *  bucket séparé des leviers sans KPI (`withoutKpi`, consommé par le kanban classique supprimé) a
    *  disparu. Chaque entrée porte `chantierColor` (`colorForChantier`, lib/axisLogic.ts) pour que le
    *  même chantier affiche systématiquement la même couleur.
    */
-  const levierBoardGroups = useMemo<LevierBoardGroup[]>(
+  const projetBoardGroups = useMemo<ProjetBoardGroup[]>(
     () =>
       data.axes
         .map((axis) => ({ axis, chantiers: chantiersByAxis.get(axis.id) ?? [] }))
@@ -107,14 +107,14 @@ export function StrategicAxesView() {
           const chantierById = new Map(row.chantiers.map((chantier) => [chantier.id, chantier]));
 
           const milestones = MILESTONE_ORDER.reduce(
-            (acc, milestoneId) => ({ ...acc, [milestoneId]: [] as LevierBoardCard[] }),
-            {} as Record<MilestoneId, LevierBoardCard[]>
+            (acc, milestoneId) => ({ ...acc, [milestoneId]: [] as ProjetBoardCard[] }),
+            {} as Record<MilestoneId, ProjetBoardCard[]>
           );
 
           for (const action of data.chantierActions) {
             const chantier = chantierById.get(action.chantierId);
             if (!chantier) continue; // Levier d'un chantier hors de cet axe.
-            const card: LevierBoardCard = {
+            const card: ProjetBoardCard = {
               action,
               chantier,
               chantierColor: colorForChantier(chantier.id),
@@ -135,10 +135,10 @@ export function StrategicAxesView() {
   );
 
   /** Placeholder d'une colonne de jalon E0-E4 sans levier — même clé i18n que l'ex-widget dashboard
-   *  (`strategicDashboard.levierBoard.*`, propriété de `LevierMilestoneBoard.tsx`, hors périmètre de
+   *  (`strategicDashboard.projetBoard.*`, propriété de `ProjetMilestoneBoard.tsx`, hors périmètre de
    *  ce lot — non renommée : ce vocabulaire appartient au COMPOSANT, pas à la page qui le monte). */
-  const levierMilestoneLabels = {
-    emptyColumn: t("strategicDashboard.levierBoard.emptyColumn"),
+  const projetMilestoneLabels = {
+    emptyColumn: t("strategicDashboard.projetBoard.emptyColumn"),
   };
 
   const emptyLine = (label: string) => (
@@ -270,20 +270,20 @@ export function StrategicAxesView() {
       ) : (
         // Round 17 (permutation) : contenu fixe — remplace les anciens onglets "Feuille de route"/
         // "Cartes". Même rendu que l'ex-widget dashboard "chantier-health" (voir doc-comment de
-        // `levierBoardGroups` ci-dessus).
+        // `projetBoardGroups` ci-dessus).
         <Card className="mb-0">
-          <CardHeader title={t("strategicAxes.levierAdvancementTitle")} />
+          <CardHeader title={t("strategicAxes.projetAdvancementTitle")} />
           <CardBody>
-            {levierBoardGroups.length === 0 ? (
+            {projetBoardGroups.length === 0 ? (
               emptyLine(t("strategicAxes.axisNoChantier"))
             ) : (
               <div className="space-y-6">
-                {levierBoardGroups.map((group) => (
+                {projetBoardGroups.map((group) => (
                   <div key={group.key}>
-                    <LevierMilestoneBoard
+                    <ProjetMilestoneBoard
                       groups={[group]}
-                      labels={levierMilestoneLabels}
-                      onLevierClick={openChantierPanel}
+                      labels={projetMilestoneLabels}
+                      onProjetClick={openChantierPanel}
                     />
                   </div>
                 ))}
