@@ -25,5 +25,11 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     include: ["**/__tests__/**/*.test.{ts,tsx}"],
+    // .claude/worktrees/ héberge des worktrees git isolés d'agents en cours (voir
+    // .claude/agents/), chacun avec sa propre copie du repo (donc ses propres
+    // __tests__/*.test.ts) — sans cette exclusion, `vitest run` depuis la racine les ramasse
+    // aussi et exécute plusieurs fois la même suite sur des états de code potentiellement
+    // différents/obsolètes, ce qui produit de faux échecs sans rapport avec l'arbre principal.
+    exclude: ["**/node_modules/**", "**/.claude/worktrees/**"],
   },
 });

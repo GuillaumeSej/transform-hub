@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveApprovalQueue, type LeverWithApproval } from "@/lib/hooks/useApprovalQueue";
+import { resolveApprovalQueue } from "@/lib/hooks/useApprovalQueue";
 import type { AuthUser, BeTrackData, Lever, Workstream } from "@/types";
 
 /**
@@ -10,7 +10,7 @@ import type { AuthUser, BeTrackData, Lever, Workstream } from "@/types";
  * logique pure.
  */
 
-function makeLever(overrides: Partial<LeverWithApproval> = {}): LeverWithApproval {
+function makeLever(overrides: Partial<Lever> = {}): Lever {
   return {
     id: "L001",
     code: "L001",
@@ -62,10 +62,10 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
 }
 
 function makeData(
-  levers: LeverWithApproval[],
+  levers: Lever[],
   workstreams: Workstream[] = []
 ): Pick<BeTrackData, "levers" | "workstreams"> {
-  return { levers: levers as unknown as Lever[], workstreams };
+  return { levers, workstreams };
 }
 
 describe("resolveApprovalQueue", () => {

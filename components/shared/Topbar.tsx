@@ -10,8 +10,7 @@ import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 
 import { getDisplayRoleDefinition } from "@/lib/nav-config";
 import { Avatar } from "@/components/shared/Avatar";
-import type { Alert, Company } from "@/types";
-import type { LeverWithApproval } from "@/lib/hooks/useApprovalQueue";
+import type { Alert, Company, Lever } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
@@ -103,7 +102,7 @@ export function Topbar({
    *  lib/hooks/useApprovalQueue.ts) concernant l'utilisateur courant — affichée en section
    *  distincte du dropdown de notifications ci-dessous. Optionnel (défaut vide) pour ne pas
    *  casser un éventuel autre appelant de `Topbar` qui ne la fournirait pas encore. */
-  approvalQueue?: LeverWithApproval[];
+  approvalQueue?: Lever[];
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
