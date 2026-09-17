@@ -57,7 +57,6 @@ import { useNotifications } from "@/lib/hooks/useNotifications";
 import { paginateDashboardItems } from "@/lib/dashboardPagination";
 import { groupLeversByHealthDimension, type LeverHealthDimension } from "@/lib/leverHealth";
 import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
 import { DashboardExportButton } from "@/components/shared/DashboardExportButton";
@@ -1682,8 +1681,8 @@ export function DashboardPagePerformance() {
                         t("dashboard.tableHeader.leverCount", "Leviers"),
                         t("dashboard.tableHeader.realizedTarget", "Réalisé / Cible"),
                         t("dashboard.tableHeader.progress", "Progression"),
-                        t("dashboard.tableHeader.risk", "Risque"),
                         "CAPEX",
+                        t("dashboard.tableHeader.opexOneOff", "OPEX one-off"),
                       ].map((h) => (
                         <th
                           key={h}
@@ -1696,7 +1695,19 @@ export function DashboardPagePerformance() {
                   </thead>
                   <tbody>
                     {data.workstreams.map((ws) => {
-                      const ss = engine.workstreamSummary(visibleData, ws.id);
+                      // `filteredData` (programme(s) sélectionné(s)/vue consolidée + filtres de la
+                      // barre en cours) — MÊME source que le widget "Réalisation des économies"
+                      // (`wsBars` ci-dessus). Ce widget utilisait auparavant `visibleData` (tous les
+                      // programmes de l'entreprise, sans les filtres actifs), d'où l'écart signalé
+                      // entre les deux graphiques : les totaux par workstream ne portaient pas sur
+                      // le même périmètre de leviers.
+                      const ss = engine.workstreamSummary(filteredData, ws.id);
+                      // `WorkstreamSummary.opex` (lib/engine.ts) agrège opexOneOff + opexRec — on a
+                      // besoin ici du seul OPEX one-off, recalculé sur le même périmètre de leviers
+                      // que `ss` (même logique d'agrégation que le CAPEX déjà affiché).
+                      const opexOneOff = filteredData.levers
+                        .filter((l) => l.ws === ws.id && l.status !== "cancelled")
+                        .reduce((s, l) => s + l.opexOneOff, 0);
                       return (
                         <tr
                           key={ws.id}
@@ -1723,10 +1734,8 @@ export function DashboardPagePerformance() {
                           <td className="px-3 py-2.5">
                             <ProgressBar pct={ss.progressPct} />
                           </td>
-                          <td className="px-3 py-2.5">
-                            <StatusBadge risk={ss.worstRisk} />
-                          </td>
                           <td className="px-3 py-2.5 tabular-nums">{engine.fmtCurr(ss.capex)}</td>
+                          <td className="px-3 py-2.5 tabular-nums">{engine.fmtCurr(opexOneOff)}</td>
                         </tr>
                       );
                     })}
