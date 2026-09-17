@@ -69,7 +69,11 @@ import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
 import { DashboardExportButton } from "@/components/shared/DashboardExportButton";
 import { SCurveChart } from "@/components/shared/charts/SCurveChart";
-import { WorkstreamBarChart } from "@/components/shared/charts/WorkstreamBarChart";
+import {
+  WorkstreamBarChart,
+  WorkstreamBarDetail,
+  type WorkstreamBarPoint,
+} from "@/components/shared/charts/WorkstreamBarChart";
 import { GeoDonutChart } from "@/components/shared/charts/GeoDonutChart";
 import { InitiativeHealthMatrix } from "@/components/shared/charts/InitiativeHealthMatrix";
 import { StageFunnel } from "@/components/shared/charts/StageFunnel";
@@ -793,6 +797,11 @@ export function DashboardPagePerformance() {
   const [builderTargetInstanceId, setBuilderTargetInstanceId] = useState<string | null>(null);
   const [builderMetric, setBuilderMetric] = useState<string>("");
   const [builderDims, setBuilderDims] = useState<string[]>(["", ""]);
+  // Détail par levier ouvert au clic sur un segment du widget "workstream-breakdown".
+  const [workstreamDetail, setWorkstreamDetail] = useState<{
+    point: WorkstreamBarPoint;
+    segment: "target" | "realized";
+  } | null>(null);
 
   useEffect(() => {
     setLayout(loadDashboardLayout());
@@ -1588,8 +1597,21 @@ export function DashboardPagePerformance() {
                 data={barData}
                 labelTarget={t("chart.bar.target")}
                 labelRealized={t("chart.bar.realized")}
+                onSegmentClick={(point, segment) => setWorkstreamDetail({ point, segment })}
               />
             </CardBody>
+            <Modal
+              open={workstreamDetail !== null}
+              onOpenChange={(open) => {
+                if (!open) setWorkstreamDetail(null);
+              }}
+              title={workstreamDetail?.point.label ?? ""}
+              maxWidth="560px"
+            >
+              {workstreamDetail && (
+                <WorkstreamBarDetail point={workstreamDetail.point} fmt={(v) => `€${v}M`} />
+              )}
+            </Modal>
           </Card>
         );
       }
