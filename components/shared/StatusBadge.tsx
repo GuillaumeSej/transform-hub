@@ -1,3 +1,4 @@
+import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RiskLevel } from "@/types";
 
@@ -11,9 +12,12 @@ const STYLES: Record<RiskLevel, string> = {
 /** Badge RAG (risk level) — porté depuis `.badge` / `.risk-*` du prototype legacy.
  *
  *  `reason` (optionnel) : motif du niveau de risque (`LeverRiskAssessment.reason`, voir
- *  `engine.computeLeverRisk`) — affiché en tooltip natif (`title`) sur le badge quand fourni,
- *  pour ne pas changer la mise en page des call sites existants qui n'ont pas ce contexte
- *  (`workstreams/page.tsx`, `DashboardPagePerformance.tsx`, qui continuent à passer `risk` seul). */
+ *  `engine.computeLeverRisk`). Retour utilisateur : le tooltip natif (`title`) seul n'était pas
+ *  DÉCOUVRABLE — rien ne signalait qu'on pouvait survoler le badge. Quand `reason` est fourni, une
+ *  icône `Info` + `cursor-help` s'affiche donc à côté du badge et porte elle-même le `title` :
+ *  signal visuel explicite qu'il y a plus d'info au survol, sans changer la mise en page des call
+ *  sites existants qui n'ont pas ce contexte (`workstreams/page.tsx`, qui continue à passer `risk`
+ *  seul et n'affiche donc pas l'icône). */
 export function StatusBadge({
   risk,
   reason,
@@ -23,7 +27,7 @@ export function StatusBadge({
   reason?: string;
   className?: string;
 }) {
-  return (
+  const badge = (
     <span
       title={reason}
       className={cn(
@@ -40,6 +44,17 @@ export function StatusBadge({
         })}
       />
       {risk}
+    </span>
+  );
+
+  if (!reason) return badge;
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      {badge}
+      <span title={reason} className="inline-flex cursor-help">
+        <Info size={12} className="text-tertiary" />
+      </span>
     </span>
   );
 }
