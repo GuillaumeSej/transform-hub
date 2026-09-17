@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
@@ -682,10 +682,35 @@ export function DashboardPagePerformance() {
       ? goToLevers({ f_endQuarter: `${label} ${currentYear}` })
       : goToMonth(label);
 
-  const wsBars = data.workstreams.map((w) => {
+  // `data.workstreams` vient de `useBeTrackData` → `programConfig`, abonnement Firestore
+  // (`onSnapshot`) qui démarre à `[]` (voir `emptyProgramConfig()` dans lib/hooks/useStorage.ts)
+  // et se re-déclenche (donc repasse transitoirement par un état vide) à chaque re-souscription —
+  // changement de `companyId`, reconnexion réseau, etc. Le widget "Réalisation des économies"
+  // (`wsBars` ci-dessous) lit `data.workstreams` directement pour ses libellés d'axe X : sans
+  // garde-fou, un de ces instants transitoires vide fait disparaître puis réapparaître les titres
+  // sous le bar chart ("bug de loading des titres" signalé). `stableWorkstreams` retient le
+  // dernier tableau non vide reçu et ne le remplace que lorsqu'un nouveau tableau non vide arrive,
+  // ce qui absorbe ces flashs sans changer le rendu une fois les données réellement chargées (et
+  // sans masquer le cas légitime d'un périmètre sans aucun workstream, où `data.workstreams` reste
+  // vide en permanence).
+  const stableWorkstreamsRef = useRef(data.workstreams);
+  if (data.workstreams.length > 0) {
+    stableWorkstreamsRef.current = data.workstreams;
+  }
+  const stableWorkstreams =
+    data.workstreams.length > 0 ? data.workstreams : stableWorkstreamsRef.current;
+
+  const wsBars = stableWorkstreams.map((w) => {
     const levers = filteredData.levers.filter((l) => l.ws === w.id && l.status !== "cancelled");
-    const realized = engine.workstreamSummary(filteredData, w.id).realized;
-    const target = w.target;
+    // Cible recalculée dynamiquement depuis les leviers (bottom-up), PAS `w.target` (champ de
+    // configuration manuelle saisi dans l'admin/Configuration, qui peut devenir obsolète par
+    // rapport aux leviers réels) — même source que le widget "Synthèse des Workstreams" juste en
+    // dessous (`engine.workstreamSummary(filteredData, ws.id).target`, lib/engine.ts, voir son
+    // commentaire + celui sur `ss` plus bas). Avant ce fix, les deux widgets affichaient des
+    // cibles différentes pour un même workstream dès que `w.target` divergeait de la somme des
+    // `netSavings` des leviers actifs (même classe de bug que celui déjà corrigé pour
+    // `Program.target`, voir le commentaire plus bas sur l'ambition programme).
+    const { realized, target } = engine.workstreamSummary(filteredData, w.id);
     const reforecast =
       Math.round(levers.reduce((s, l) => s + (l.reforecast?.netSavings ?? l.netSavings), 0) * 10) /
       10;

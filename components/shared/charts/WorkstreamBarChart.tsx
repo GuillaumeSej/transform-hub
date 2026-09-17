@@ -69,25 +69,25 @@ function wrapLabel(label: string): [string, string] {
 }
 
 /** Tick custom pour l'axe X : label complet réparti sur 2 lignes (plus de troncature à 12
- *  caractères) + un petit carré de couleur déterministe devant le label (même hash que
- *  `hexForChantier`/`hexForDepartment`, réutilisé tel quel pour rester cohérent avec le reste de
- *  l'app plutôt que d'inventer une nouvelle palette). Le `<title>` SVG natif reste en place pour le
- *  survol (utile si une 2e ligne est malgré tout tronquée). */
+ *  caractères). Le code couleur par workstream (déterministe, `hexForChantier`) a été déplacé
+ *  dans le tooltip au survol d'une barre (voir `BreakdownList` ci-dessous) — la légende de
+ *  couleurs qui vivait ici (un carré + nom sous chaque barre) faisait doublon avec le libellé de
+ *  l'axe X déjà affiché juste en dessous et n'apportait aucune information supplémentaire.
+ *  Le `<title>` SVG natif reste en place pour le survol (utile si une 2e ligne est malgré tout
+ *  tronquée). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CategoryTick(props: any) {
   const { x = 0, y = 0, payload } = props;
   const label = (payload?.value as string) ?? "";
   const [line1, line2] = wrapLabel(label);
-  const swatchColor = hexForChantier(label);
   return (
     <g>
       <title>{label}</title>
-      <rect x={x - 4} y={y + 4} width={8} height={8} rx={1.5} fill={swatchColor} />
-      <text x={x} y={y + 22} textAnchor="middle" fontSize={10} fill="#1A1A1A">
+      <text x={x} y={y + 14} textAnchor="middle" fontSize={10} fill="#1A1A1A">
         {line1}
       </text>
       {line2 && (
-        <text x={x} y={y + 34} textAnchor="middle" fontSize={10} fill="#1A1A1A">
+        <text x={x} y={y + 26} textAnchor="middle" fontSize={10} fill="#1A1A1A">
           {line2}
         </text>
       )}
@@ -95,13 +95,20 @@ function CategoryTick(props: any) {
   );
 }
 
-/** Détail par levier au format du tooltip custom (nom + montant formaté). */
+/** Détail par levier au format du tooltip custom (nom + montant formaté), avec un carré de
+ *  couleur devant chaque levier — reprend la couleur du workstream survolé (`hexForChantier`,
+ *  même hash déterministe que l'ancienne légende sous le graphique, voir `CategoryTick`
+ *  ci-dessus), répétée sur chaque ligne : c'est la seule couleur pertinente et déjà disponible
+ *  ici (les leviers du breakdown n'exposent que `name`/`value`, aucun statut/maturité), et elle
+ *  reste cohérente avec la barre survolée. */
 function BreakdownList({
   items,
   fmt,
+  color,
 }: {
   items: { name: string; value: number }[];
   fmt: (v: number) => string;
+  color: string;
 }) {
   if (items.length === 0) return null;
   const sorted = [...items].sort((a, b) => b.value - a.value).slice(0, 8);
@@ -109,7 +116,13 @@ function BreakdownList({
     <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
       {sorted.map((item) => (
         <li key={item.name} className="flex items-center justify-between gap-3">
-          <span className="truncate text-tertiary">{item.name}</span>
+          <span className="flex min-w-0 items-center gap-1.5 truncate text-tertiary">
+            <span
+              className="inline-block h-2 w-2 shrink-0 rounded-[1.5px]"
+              style={{ backgroundColor: color }}
+            />
+            <span className="truncate">{item.name}</span>
+          </span>
           <span className="shrink-0 font-medium text-primary">{fmt(item.value)}</span>
         </li>
       ))}
@@ -285,7 +298,9 @@ export function WorkstreamBarChart({
           <span>{isTarget ? resolvedLabelTarget : resolvedLabelRealized}</span>
           <span className="font-semibold text-primary">{fmt(total)}</span>
         </div>
-        {breakdown && breakdown.length > 0 && <BreakdownList items={breakdown} fmt={fmt} />}
+        {breakdown && breakdown.length > 0 && (
+          <BreakdownList items={breakdown} fmt={fmt} color={hexForChantier(point.label)} />
+        )}
       </div>
     );
   };
@@ -313,7 +328,12 @@ export function WorkstreamBarChart({
             tickFormatter={(v) => `€${v}M`}
             domain={[0, Math.ceil(maxValue * 1.15)]}
           />
-          <Tooltip content={CustomTooltip} shared={false} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+          {/* `cursor={false}` : par défaut Recharts dessine, au survol/clic d'une barre, un
+              rectangle de fond gris très léger sur toute la hauteur du plot pour la catégorie
+              active (le halo de sélection standard de <Tooltip>) — c'est cette barre grise
+              parasite "qui va jusqu'au bout" et ne représente rien métier qui était signalée.
+              Le graphique ne doit garder que les deux barres empilées Cible/Réalisé. */}
+          <Tooltip content={CustomTooltip} shared={false} cursor={false} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {/* Barre réalisé (bas de la pile) — coral */}
           <Bar
