@@ -209,7 +209,18 @@ export function LeverDetailClientPerformance() {
   // Idem pour le bouton "Soumettre pour validation" (voir requestLeverApproval) : seul le
   // porteur du levier ou un admin peut initier la cascade.
   const canSubmitApproval = !!user && (isAnyAdmin(user) || isLeverOwnedBy(lever, user));
-  const real = engine.realizedSavings(lever);
+  // Réalisé à date : aligné sur la courbe en J (somme bottom-up des actions "done" à leur
+  // deliveredDate, voir `leverJCurve`) quand le levier a des actions chiffrées, plutôt que
+  // l'estimation "netSavings figé × progression %" (`engine.realizedSavings`) — cette dernière
+  // crédite à 50% les actions encore "in_progress" (voir `engine.actionProgress`), ce que la
+  // courbe en J et la timeline des actions ignorent tant qu'une action n'est pas "done". C'était
+  // la source de l'écart Overview vs courbe en J / timeline des actions signalé par le métier :
+  // on ne garde l'estimation par progression que pour les leviers sans actions chiffrées (saisie
+  // manuelle), qui n'ont ni courbe en J ni timeline pour servir de référence.
+  const jCurveActualToDate = consolidatedKPIs
+    ? [...jCurveData].reverse().find((p) => p.actual !== null)?.actual
+    : undefined;
+  const real = jCurveActualToDate ?? engine.realizedSavings(lever);
   const realFte = engine.realizedFte(lever);
   const lockedPlanDisplay = engine.displayedLockedPlanNet(lever);
   const reforecastDisplay = engine.displayedReforecastNet(lever);
@@ -297,10 +308,10 @@ export function LeverDetailClientPerformance() {
               const isCurrent = lever.status === s;
               const isPast = STATUS_ORDER[lever.status] > STATUS_ORDER[s];
               const isAuto = s === "delivered";
-              // Round "cascade de validation" : le passage à "validated" (M3) ne se déclenche
+              // Round "cascade de validation" : le passage à "qualified" (M2) ne se déclenche
               // plus par un clic direct sur l'étape du stepper — il passe désormais par la
               // cascade porteur → sponsor → CTO (voir le bandeau juste en dessous du stepper).
-              const isCascadeGated = s === "validated";
+              const isCascadeGated = s === "qualified";
               const isBlocked = isAuto || isCascadeGated;
               return (
                 <div
@@ -354,7 +365,7 @@ export function LeverDetailClientPerformance() {
               );
             })}
           </div>
-          {!readOnly && lever.status === "qualified" && !lever.approval && canSubmitApproval && (
+          {!readOnly && lever.status === "idea" && !lever.approval && canSubmitApproval && (
             <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
               <span className="flex items-center gap-1.5 text-xs text-info-blue">
                 <Send size={13} />{" "}
@@ -746,7 +757,7 @@ export function LeverDetailClientPerformance() {
                 <BigStat
                   label={t("leverDetail.lockedPlan", "Plan initial (figé à « {stage} »)").replace(
                     "{stage}",
-                    lifecycle.label("validated")
+                    lifecycle.label("qualified")
                   )}
                   value={
                     <ProvisionalValue
@@ -875,62 +886,6 @@ export function LeverDetailClientPerformance() {
                     <SectionTitle>{t("lever.actionTimeline", "Timeline des actions")}</SectionTitle>
                     <ActionGantt actions={lever.actions ?? []} onActionClick={openActionForEdit} />
                   </>
-                )}
-                {consolidatedKPIs && (
-                  <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-border bg-neutral-50 p-3 sm:grid-cols-3 lg:grid-cols-5">
-                    <div className="text-center">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
-                        {t("lever.grossGain", "Gain brut")}
-                      </div>
-                      <div className="mt-0.5 text-[15px] font-bold text-primary">
-                        {engine.fmtCurr(consolidatedKPIs.grossSavings ?? 0)}
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
-                        {t("lever.totalCost", "Coût total")}
-                      </div>
-                      <div className="mt-0.5 text-[15px] font-bold text-bp-coral">
-                        {engine.fmtCurr(
-                          (consolidatedKPIs.capex ?? 0) +
-                            (consolidatedKPIs.opexOneOff ?? 0) +
-                            (consolidatedKPIs.opexRec ?? 0)
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
-                        {t("lever.netGain", "Gain net")}
-                      </div>
-                      <div className="mt-0.5 text-[15px] font-bold text-rag-green-dark">
-                        {engine.fmtCurr(consolidatedKPIs.netSavings ?? 0)}
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
-                        ROI
-                      </div>
-                      <div className="mt-0.5 text-[15px] font-bold text-primary">
-                        {(() => {
-                          const totalCosts =
-                            (consolidatedKPIs.capex ?? 0) +
-                            (consolidatedKPIs.opexOneOff ?? 0) +
-                            (consolidatedKPIs.opexRec ?? 0);
-                          return totalCosts > 0
-                            ? `${((consolidatedKPIs.grossSavings ?? 0) / totalCosts).toFixed(1)}x`
-                            : "—";
-                        })()}
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
-                        {t("lever.payback", "Payback")}
-                      </div>
-                      <div className="mt-0.5 text-[15px] font-bold text-primary">
-                        {paybackMonth ?? "—"}
-                      </div>
-                    </div>
-                  </div>
                 )}
               </Collapsible>
             )}
@@ -1176,7 +1131,7 @@ export function LeverDetailClientPerformance() {
                 label={t(
                   "leverDetail.lockedPlanNet",
                   "Plan initial (net, figé à « {stage} »)"
-                ).replace("{stage}", lifecycle.label("validated"))}
+                ).replace("{stage}", lifecycle.label("qualified"))}
                 accent
               >
                 <ProvisionalValue
