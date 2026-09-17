@@ -1501,6 +1501,10 @@ export default function HrDashboardPage() {
               : undefined
           }
           accent="default"
+          infoTooltip={t(
+            "hr.kpi.fteImpactTooltip",
+            "Suivi réel des mouvements RH (recrutements, départs, mobilité), à comparer à titre indicatif à l'ETP planifié au niveau des leviers (voir Pilotage global)."
+          )}
         />
         <HrKPICard
           label={t("hr.kpi.annualSalarySavings", "Économies salariales annuelles")}

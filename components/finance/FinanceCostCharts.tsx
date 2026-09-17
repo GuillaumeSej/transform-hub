@@ -28,6 +28,7 @@ import {
   groupCostsByWorkstream,
   investCostRowsBySegment,
   isInvestNature,
+  leversWithUndetailedCosts,
   recurrentOpexRowsForPeriod,
   sortedHierarchyLevels,
   type FinanceGranularity,
@@ -72,7 +73,19 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
 
   return (
     <Card>
-      <CardHeader title={t("finance.chart.engagedTitle", "Coûts engagés vs à venir")} />
+      <CardHeader
+        title={
+          <span className="flex flex-col gap-0.5">
+            <span>{t("finance.chart.engagedTitle", "Coûts engagés vs à venir")}</span>
+            <span className="text-[10.5px] font-normal text-tertiary">
+              {t(
+                "finance.chart.engagedSubtitle",
+                'Périmètre Invest (CAPEX + OPEX one-off), OPEX récurrent exclu — à ne pas comparer directement au total "Répartition par centre de coût / P&L", qui inclut aussi l\'OPEX récurrent. "Déjà engagé" (date/statut déjà passé) est une notion différente du CAPEX "Réalisé" du KPI Pilotage global (pondéré par la progression % du levier) : les deux chiffres ne sont pas censés coïncider.'
+              )}
+            </span>
+          </span>
+        }
+      />
       <CardBody>
         {split.total === 0 ? (
           <EmptyState />
@@ -227,14 +240,41 @@ export function CostByHierarchyChart({
     return groupCostsByWorkstream(leafSlice.rows, data.workstreams);
   }, [leafSlice, data.workstreams]);
 
+  // Leviers avec un CAPEX/OPEX chiffré au niveau du levier mais sans plan d'action détaillé — ils
+  // ne contribuent à AUCUN graphique de coûts (tous basés sur `flattenCostImpacts`, donc sur les
+  // impacts d'action), pas seulement celui-ci. Voir `leversWithUndetailedCosts`. Affiché comme note
+  // explicite plutôt que de laisser le lecteur croire à tort que ces leviers n'ont "aucun coût".
+  const undetailedLevers = useMemo(() => leversWithUndetailedCosts(data), [data]);
+
+  const hierarchySubtitle = t(
+    "finance.chart.hierarchySubtitle",
+    'Tous types de coûts confondus (CAPEX + OPEX one-off + OPEX récurrent) — périmètre plus large que "Coûts engagés vs à venir" (Invest uniquement).'
+  );
+  const undetailedNote =
+    undetailedLevers.length > 0
+      ? t(
+          "finance.chart.undetailedCostsNote",
+          "{n} levier(s) avec un CAPEX/OPEX saisi au niveau du levier mais sans plan d'action détaillé, non inclus dans ce graphique (ni dans les autres graphiques Finance) : {names}."
+        )
+          .replace("{n}", String(undetailedLevers.length))
+          .replace("{names}", undetailedLevers.map((l) => l.name).join(", "))
+      : null;
+
   if (levels.length === 0) {
     return (
       <Card>
         <CardHeader
-          title={t(
-            "finance.chart.hierarchyTitle",
-            "Répartition des coûts par centre de coût / P&L"
-          )}
+          title={
+            <span className="flex flex-col gap-0.5">
+              <span>
+                {t(
+                  "finance.chart.hierarchyTitle",
+                  "Répartition des coûts par centre de coût / P&L"
+                )}
+              </span>
+              <span className="text-[10.5px] font-normal text-tertiary">{hierarchySubtitle}</span>
+            </span>
+          }
         />
         <CardBody>
           <p className="py-10 text-center text-sm text-tertiary">
@@ -251,7 +291,14 @@ export function CostByHierarchyChart({
   return (
     <Card>
       <CardHeader
-        title={t("finance.chart.hierarchyTitle", "Répartition des coûts par centre de coût / P&L")}
+        title={
+          <span className="flex flex-col gap-0.5">
+            <span>
+              {t("finance.chart.hierarchyTitle", "Répartition des coûts par centre de coût / P&L")}
+            </span>
+            <span className="text-[10.5px] font-normal text-tertiary">{hierarchySubtitle}</span>
+          </span>
+        }
         actions={
           drillPath.length > 0 ? (
             <button
@@ -287,6 +334,11 @@ export function CostByHierarchyChart({
               }
             }}
           />
+        )}
+        {undetailedNote && (
+          <p className="mt-3 rounded-md bg-neutral-50 px-2.5 py-2 text-[11px] text-tertiary">
+            {undetailedNote}
+          </p>
         )}
       </CardBody>
       <CostDrilldownModal

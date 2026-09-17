@@ -1,7 +1,9 @@
 "use client";
 
+import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { Tooltip } from "@/components/shared/Tooltip";
 
 /** KPI RH — miroir de `KPICard` du dashboard exécutif, adapté aux valeurs numériques du module
  *  RH (ETP entiers, montants en €M/€K). Affiche `value` en gros chiffre, avec `sub` (cible +
@@ -14,6 +16,7 @@ export function HrKPICard({
   barMarkerPct,
   accent = "default",
   className,
+  infoTooltip,
 }: {
   label: string;
   value: string;
@@ -24,6 +27,9 @@ export function HrKPICard({
   barMarkerPct?: number;
   accent?: "default" | "green" | "amber" | "red" | "brown";
   className?: string;
+  /** Texte optionnel affiché dans un tooltip au survol d'une icône ⓘ à côté du label — même
+   *  pattern que `KPICard.infoTooltip` (voir son doc-comment). */
+  infoTooltip?: string;
 }) {
   const { t } = useTranslation();
   const accentClass: Record<string, string> = {
@@ -42,7 +48,14 @@ export function HrKPICard({
         className
       )}
     >
-      <div className="text-[10px] font-bold uppercase tracking-widest text-tertiary">{label}</div>
+      <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-tertiary">
+        {label}
+        {infoTooltip && (
+          <Tooltip text={infoTooltip}>
+            <Info size={11} className="shrink-0 text-tertiary" />
+          </Tooltip>
+        )}
+      </div>
       <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
         {value}
       </div>

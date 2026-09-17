@@ -66,6 +66,26 @@ export function flattenSavingImpacts(data: BeTrackData): SavingImpactRow[] {
     );
 }
 
+/** Leviers actifs qui portent un coût CAPEX/OPEX chiffré au niveau du levier (champs cachés
+ *  `capex`/`opexOneOff`/`opexRec`, saisie manuelle sans plan d'action détaillé) mais dont AUCUN
+ *  impact "cost" n'apparaît dans `flattenCostImpacts` — parce qu'ils n'ont pas d'`actions`, ou que
+ *  leurs actions n'ont aucun impact de type "cost". Tous les graphiques de `financeCosts.ts`
+ *  (engagé/à venir, répartition par centre de coût, timeline...) sont construits exclusivement à
+ *  partir de `flattenCostImpacts` (source de vérité "plan d'action"), donc CES leviers n'y
+ *  contribuent jamais et n'apparaissent dans AUCUN graphique — pas seulement celui par centre de
+ *  coût. Sert à afficher une note explicite ("N leviers sans plan d'action détaillé, non inclus")
+ *  plutôt qu'un silence trompeur ("aucun coût saisi") quand ces leviers existent bel et bien avec
+ *  un CAPEX/OPEX renseigné. */
+export function leversWithUndetailedCosts(data: BeTrackData): Lever[] {
+  const leversWithCostImpacts = new Set(flattenCostImpacts(data).map((row) => row.lever.id));
+  return data.levers.filter(
+    (lever) =>
+      lever.status !== "cancelled" &&
+      !leversWithCostImpacts.has(lever.id) &&
+      (lever.capex > 0 || lever.opexOneOff > 0 || lever.opexRec > 0)
+  );
+}
+
 /** Un coût "Invest" = CAPEX ou OPEX one-off, à l'exclusion de l'OPEX récurrent — périmètre commun
  *  à `CostEngagedVsUpcomingChart`, `CostCommitmentTimelineChart` et à la série "Coûts (Invest)" du
  *  nouveau graphique Invest vs Savings. */
