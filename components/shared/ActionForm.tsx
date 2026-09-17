@@ -1,9 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { HierarchyLeafSelect } from "@/components/shared/HierarchyLeafSelect";
-import type { ActionImpact, ActionStatus, BeTrackData, LeverAction, SavingType } from "@/types";
+import { subscribeCompanies } from "@/lib/firestore/admin";
+import type {
+  ActionImpact,
+  ActionStatus,
+  BeTrackData,
+  HierarchyLevelDef,
+  LeverAction,
+  SavingType,
+} from "@/types";
 
 const inputClass =
   "w-full rounded-sm border border-border bg-white px-2 py-1.5 text-[12px] focus:border-bp-coral focus:outline-none";
@@ -55,7 +63,6 @@ export type ActionFormValues = Omit<LeverAction, "id">;
  *  d'encaissement et le mode de reconnaissance (lissé/one-shot) ; pour les CAPEX (nature="capex"),
  *  la date d'engagement. Un commentaire libre peut expliquer la méthode de calcul. */
 export function ActionForm({
-  data,
   companyId,
   initialValues,
   submitLabel,
@@ -63,6 +70,10 @@ export function ActionForm({
   onCancel,
   onDelete,
 }: {
+  /** Conservé dans l'interface pour compat avec les appelants existants — n'est plus utilisé
+   *  dans ce formulaire depuis le retrait des colonnes "Poste de coût"/"Entité (P&L)" (voir
+   *  demande "une seule colonne de rattachement", qui passe désormais par `HierarchyLeafSelect`
+   *  via `companyId`). */
   data: BeTrackData;
   /** Entreprise courante — nécessaire à `HierarchyLeafSelect` pour rattacher chaque ligne
    *  d'impact à l'arborescence financière (`ActionImpact.hierarchyLeafId`, voir round
@@ -99,6 +110,31 @@ export function ActionForm({
       : [emptyImpact()]
   );
 
+  // Demande métier "une seule colonne de rattachement financier" : la maille la plus fine de
+  // l'arborescence (`HierarchyLeafSelect`) remplace poste de coût/centre de coût texte/entité
+  // dès que l'entreprise a une hiérarchie financière configurée. Repli sur le champ texte libre
+  // legacy `costCenter` sinon — même logique que l'ancien `hasHierarchy` de `LeverForm.tsx`
+  // (voir doc-comment `HierarchyLeafSelect`, qui rend `null` dans ce cas et laisse l'appelant
+  // décider du repli).
+  const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  useEffect(() => {
+    if (!companyId) {
+      setHierarchyLevels([]);
+      return;
+    }
+    let cancelled = false;
+    const unsubscribe = subscribeCompanies((companies) => {
+      if (cancelled) return;
+      const company = companies.find((c) => c.id === companyId);
+      setHierarchyLevels(company?.hierarchyLevels ?? []);
+    }, companyId);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [companyId]);
+  const hasHierarchy = hierarchyLevels.length > 0;
+
   const updateImpact = (idx: number, patch: Partial<ActionImpact>) => {
     setImpacts((prev) => prev.map((imp, i) => (i === idx ? { ...imp, ...patch } : imp)));
   };
@@ -127,11 +163,6 @@ export function ActionForm({
       impacts: validImpacts,
     });
   };
-
-  const pnlOptions = data.pnlAccounts.filter((a) => !a.computed && a.selectable !== false);
-  const entityOptions = Array.from(
-    new Set(data.levers.map((l) => l.entity).filter((v): v is string => !!v))
-  ).sort();
 
   return (
     <div className="flex flex-col gap-4">
@@ -238,7 +269,7 @@ export function ActionForm({
         </div>
         <div className="max-h-[60vh] overflow-y-auto rounded-md border border-border">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1650px] border-collapse text-xs">
+            <table className="w-full min-w-[1270px] border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border bg-neutral-50">
                   <th className="sticky left-0 z-10 w-[90px] min-w-[90px] bg-neutral-50 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
@@ -265,21 +296,18 @@ export function ActionForm({
                   <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
                     {t("shared.actionForm.gainDate", "Date gain")}
                   </th>
+                  {/* Demande métier "une seule colonne de rattachement" : on ne garde plus que la
+                   *  maille la plus fine de l'arborescence financière (`HierarchyLeafSelect`,
+                   *  `impact.hierarchyLeafId`), qui fait automatiquement le lien avec le P&L —
+                   *  les anciennes colonnes "Poste de coût" (`pnlMap`), "Centre de coût" texte
+                   *  libre legacy (`costCenter`) et "Entité (P&L)" (`entity`) sont retirées de ce
+                   *  formulaire (elles restent lisibles en repli côté calcul, voir `lib/engine.ts`
+                   *  `resolveImpactAccount`, pour les données déjà saisies). Repli sur le champ
+                   *  texte libre legacy `costCenter` uniquement si l'entreprise n'a pas configuré
+                   *  de hiérarchie financière (`hasHierarchy`, même pattern que l'ancien
+                   *  `LeverForm.tsx`). */}
                   <th className="w-[150px] min-w-[150px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("shared.actionForm.costLine", "Poste de coût")}
-                  </th>
-                  {/* Round "rattachement financier par action" : rattachement à l'arborescence
-                   *  financière de l'entreprise, à côté du `pnlMap` legacy ci-dessus — voir
-                   *  `HierarchyLeafSelect`, ne s'affiche que si l'entreprise en a configuré une
-                   *  (sinon la cellule reste vide et seul `pnlMap` fait foi). */}
-                  <th className="w-[150px] min-w-[150px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("shared.actionForm.hierarchyCostCenter", "Centre de coût (arborescence)")}
-                  </th>
-                  <th className="w-[110px] min-w-[110px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
                     {t("leverForm.costCenter", "Centre de coût")}
-                  </th>
-                  <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("leverDetail.impactTable.entityPnl", "Entité (P&L)")}
                   </th>
                   <th className="w-[180px] min-w-[180px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
                     {t("hr.column.comment", "Commentaire")}
@@ -515,53 +543,23 @@ export function ActionForm({
                     </td>
 
                     <td className="w-[150px] min-w-[150px] px-2 py-1.5 align-top">
-                      <select
-                        className={selectClass}
-                        value={imp.pnlMap ?? ""}
-                        onChange={(e) => updateImpact(idx, { pnlMap: e.target.value || undefined })}
-                      >
-                        <option value="">—</option>
-                        {pnlOptions.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-
-                    <td className="w-[150px] min-w-[150px] px-2 py-1.5 align-top">
-                      <HierarchyLeafSelect
-                        companyId={companyId}
-                        value={imp.hierarchyLeafId}
-                        onChange={(leafId) => updateImpact(idx, { hierarchyLeafId: leafId })}
-                        className={selectClass}
-                      />
-                    </td>
-
-                    <td className="w-[110px] min-w-[110px] px-2 py-1.5 align-top">
-                      <input
-                        className={inputClass}
-                        value={imp.costCenter ?? ""}
-                        onChange={(e) =>
-                          updateImpact(idx, { costCenter: e.target.value || undefined })
-                        }
-                        placeholder={t("shared.actionForm.costCenterPlaceholder", "CC...")}
-                      />
-                    </td>
-
-                    <td className="w-[120px] min-w-[120px] px-2 py-1.5 align-top">
-                      <select
-                        className={selectClass}
-                        value={imp.entity ?? ""}
-                        onChange={(e) => updateImpact(idx, { entity: e.target.value || undefined })}
-                      >
-                        <option value="">—</option>
-                        {entityOptions.map((ent) => (
-                          <option key={ent} value={ent}>
-                            {ent}
-                          </option>
-                        ))}
-                      </select>
+                      {hasHierarchy ? (
+                        <HierarchyLeafSelect
+                          companyId={companyId}
+                          value={imp.hierarchyLeafId}
+                          onChange={(leafId) => updateImpact(idx, { hierarchyLeafId: leafId })}
+                          className={selectClass}
+                        />
+                      ) : (
+                        <input
+                          className={inputClass}
+                          value={imp.costCenter ?? ""}
+                          onChange={(e) =>
+                            updateImpact(idx, { costCenter: e.target.value || undefined })
+                          }
+                          placeholder={t("shared.actionForm.costCenterPlaceholder", "CC...")}
+                        />
+                      )}
                     </td>
 
                     <td className="w-[180px] min-w-[180px] px-2 py-1.5 align-top">
