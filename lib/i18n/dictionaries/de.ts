@@ -64,12 +64,14 @@ const de: Record<string, string> = {
   "roles.axisSponsor.short": "Sponsor",
   "roles.chantierOwner.label": "Arbeitspaket-Verantwortlicher",
   "roles.chantierOwner.short": "AP-Leitung",
-  "roles.chantierContributor.label": "Arbeitspaket-Mitwirkender",
-  "roles.chantierContributor.short": "Mitwirkend",
+  "roles.chantierContributor.label": "Projektverantwortlicher",
+  "roles.chantierContributor.short": "Projektleitung",
   "roles.internalComm.label": "Interne Kommunikation",
   "roles.internalComm.short": "Kommunikation",
   "roles.budgetControl.label": "Controlling",
   "roles.budgetControl.short": "Controlling",
+  "roles.comexMember.label": "Mitglied der Geschäftsleitung",
+  "roles.comexMember.short": "COMEX",
 
   // ─── login ────────────────────────────────────────────────────────────────
   "login.tagline": "BeTrack · Transformation",

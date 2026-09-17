@@ -249,6 +249,7 @@ export function AxisDetailClient() {
         maxWidth="640px"
       >
         <AxisForm
+          users={data.users}
           initial={axis}
           stages={stages}
           confidentialityLevels={confidentialityLevels}

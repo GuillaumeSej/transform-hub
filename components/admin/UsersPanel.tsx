@@ -46,14 +46,28 @@ const STRATEGIC_ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "strategic_lead", label: "Pilote du plan stratégique" },
   { value: "axis_sponsor", label: "Sponsor d'axe" },
   { value: "chantier_owner", label: "Responsable de chantier" },
-  { value: "chantier_contributor", label: "Contributeur chantier" },
+  { value: "chantier_contributor", label: "Responsable projet" },
   { value: "internal_comm", label: "Communication interne" },
   { value: "budget_control", label: "Contrôle de gestion" },
 ];
 
-/** Réunion des deux listes ci-dessus — sert uniquement à retrouver le libellé d'un `Role` donné
+/** Rôle transverse (round 25) : contrairement aux 12 rôles ci-dessus, chacun strictement mono-
+ *  piste, `comex_member` est valide aussi bien comme profil Plan Performance que Plan Stratégique
+ *  (voir `PERFORMANCE_ROLES`/`STRATEGIC_ROLES` dans types/index.ts). Rassemblé dans SON PROPRE
+ *  optgroup plutôt que dupliqué dans les deux listes ci-dessus : la valeur soumise par un
+ *  `<option>` HTML ne porte que le `Role`, pas l'optgroup d'origine — un doublon dans les deux
+ *  listes produirait deux entrées de menu identiques et indiscernables l'une de l'autre. */
+const CROSS_TRACK_ROLE_OPTIONS: { value: Role; label: string }[] = [
+  { value: "comex_member", label: "Membre du COMEX" },
+];
+
+/** Réunion des trois listes ci-dessus — sert uniquement à retrouver le libellé d'un `Role` donné
  *  (table des utilisateurs). */
-const ALL_ROLE_OPTIONS = [...PERFORMANCE_ROLE_OPTIONS, ...STRATEGIC_ROLE_OPTIONS];
+const ALL_ROLE_OPTIONS = [
+  ...PERFORMANCE_ROLE_OPTIONS,
+  ...STRATEGIC_ROLE_OPTIONS,
+  ...CROSS_TRACK_ROLE_OPTIONS,
+];
 
 /** Les 4 états sémantiques de AuthUser.confidentialityClearance (voir types/index.ts) : */
 type ClearanceMode = "inherit" | "none" | "custom" | "all";
@@ -752,9 +766,17 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             )}
             <div className="mt-2 space-y-2">
               {form.profiles.map((profile, idx) => {
-                const rolePrograms = isStrategicRole(profile.role)
-                  ? strategicPrograms
-                  : performancePrograms;
+                // `comex_member` est le seul rôle transverse aux deux pistes (voir
+                // CROSS_TRACK_ROLE_OPTIONS ci-dessus) : son picker de programme propose la
+                // réunion des programmes Performance ET Stratégique de l'entreprise, plutôt que
+                // de retomber arbitrairement sur une seule des deux listes via
+                // isStrategicRole/isPerformanceRole (qui renvoient tous deux `true` pour ce rôle).
+                const rolePrograms =
+                  profile.role === "comex_member"
+                    ? [...performancePrograms, ...strategicPrograms]
+                    : isStrategicRole(profile.role)
+                      ? strategicPrograms
+                      : performancePrograms;
                 return (
                   <div key={idx} className="flex items-center gap-2">
                     <select
@@ -785,6 +807,13 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                           </option>
                         ))}
                       </optgroup>
+                      <optgroup label="Transverse (Performance + Stratégique)">
+                        {CROSS_TRACK_ROLE_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
                     {profile.role && rolePrograms.length > 0 && (
                       <select
@@ -802,7 +831,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                       >
                         <option value="">
                           Tous les programmes{" "}
-                          {isStrategicRole(profile.role) ? "Stratégique" : "Performance"}
+                          {profile.role === "comex_member"
+                            ? ""
+                            : isStrategicRole(profile.role)
+                              ? "Stratégique"
+                              : "Performance"}
                         </option>
                         {rolePrograms.map((p) => (
                           <option key={p.id} value={p.id}>

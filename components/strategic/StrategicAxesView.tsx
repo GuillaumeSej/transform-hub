@@ -312,6 +312,7 @@ export function StrategicAxesView() {
         maxWidth="640px"
       >
         <AxisForm
+          users={data.users}
           stages={stages}
           confidentialityLevels={confidentialityLevels}
           submitLabel={t("strategicAxes.createAxis")}

@@ -67,12 +67,14 @@ const en: Record<string, string> = {
   "roles.axisSponsor.short": "Axis Sponsor",
   "roles.chantierOwner.label": "Workstream Owner",
   "roles.chantierOwner.short": "WS Owner",
-  "roles.chantierContributor.label": "Workstream Contributor",
-  "roles.chantierContributor.short": "Contributor",
+  "roles.chantierContributor.label": "Project Owner",
+  "roles.chantierContributor.short": "Proj. Owner",
   "roles.internalComm.label": "Internal Communication",
   "roles.internalComm.short": "Comms",
   "roles.budgetControl.label": "Management Control",
   "roles.budgetControl.short": "Controlling",
+  "roles.comexMember.label": "Executive Committee Member",
+  "roles.comexMember.short": "COMEX",
 
   // ─── login ────────────────────────────────────────────────────────────────
   "login.tagline": "BeTrack · Transformation",

@@ -51,6 +51,17 @@ export const DEFAULT_RISK_THRESHOLDS_FORM: {
   delayDays: DEFAULT_RISK_DELAY_DAYS[level],
 }));
 
+/** Rôles proposés dans la matrice d'habilitation par niveau de confidentialité (`roleClearance`).
+ *  Liste volontairement DUPLIQUÉE ici (même convention que `RESPONSIBLE_ROLES` dans
+ *  `IndicatorsEditor.tsx` / `ALL_ROLE_OPTIONS` dans `UsersPanel.tsx`) : chaque écran d'admin
+ *  choisit son propre sous-ensemble de rôles, il n'y a pas de liste partagée à maintenir.
+ *
+ *  Historiquement limitée aux 6 rôles du Plan Performance alors même que `Company.roleClearance`
+ *  est typé `Partial<Record<Role, string[]>>` (accepte n'importe quel `Role`) et que les entités
+ *  du Plan Stratégique portent elles aussi un `confidentialityLevel` (`StrategicAxis`, `Chantier`,
+ *  `Indicator`...) — lacune comblée round 25 en ajoutant les 6 rôles Stratégiques, à l'occasion de
+ *  l'ajout de `comex_member` (transverse aux deux pistes, voir types/index.ts) qui en avait de
+ *  toute façon besoin. */
 export const OPERATIONAL_ROLES: { value: Role; label: string }[] = [
   { value: "cto", label: "CTO" },
   { value: "sponsor", label: "Sponsor" },
@@ -58,6 +69,13 @@ export const OPERATIONAL_ROLES: { value: Role; label: string }[] = [
   { value: "finance", label: "Finance" },
   { value: "hr", label: "HR" },
   { value: "ops", label: "Ops" },
+  { value: "strategic_lead", label: "Pilote du plan stratégique" },
+  { value: "axis_sponsor", label: "Sponsor d'axe" },
+  { value: "chantier_owner", label: "Responsable de chantier" },
+  { value: "chantier_contributor", label: "Responsable projet" },
+  { value: "internal_comm", label: "Communication interne" },
+  { value: "budget_control", label: "Contrôle de gestion" },
+  { value: "comex_member", label: "Membre du COMEX" },
 ];
 
 export type CompanyFormState = {

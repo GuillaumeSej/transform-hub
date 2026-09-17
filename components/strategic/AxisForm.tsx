@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { MaturityStageConfig, StrategicAxis } from "@/types";
+import { UserPicker } from "@/components/strategic/UserPicker";
+import type { AuthUser, MaturityStageConfig, StrategicAxis } from "@/types";
 
 /**
  * Formulaire de création/édition d'un axe stratégique. Volontairement SANS aucune logique
@@ -20,6 +21,7 @@ export type AxisFormValues = Pick<
 const COLOR_CHOICES = ["#320300", "#FF3C47", "#806659", "#B8A99A", "#4A7C59", "#2F5D8C"];
 
 export function AxisForm({
+  users,
   initial,
   stages,
   confidentialityLevels,
@@ -28,6 +30,9 @@ export function AxisForm({
   submitLabel,
   compact = false,
 }: {
+  /** Utilisateurs de l'entreprise, pour le `UserPicker` du responsable — même prop que
+   *  `ChantierDetailPanel`/`ChantierAction` (voir `data.users`, `lib/hooks/useStrategicData.ts`). */
+  users: AuthUser[];
   initial?: Partial<AxisFormValues>;
   /** Étapes de maturité du programme (voir `useMaturityStages`) — la première est proposée par
    *  défaut pour un axe neuf. */
@@ -45,7 +50,7 @@ export function AxisForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [owner, setOwner] = useState(initial?.owner ?? "");
+  const [owner, setOwner] = useState<string | undefined>(initial?.owner);
   const [color, setColor] = useState(initial?.color ?? COLOR_CHOICES[0]);
   const [stage, setStage] = useState(initial?.stage ?? stages[0]?.id ?? "");
   const [confidentialityLevel, setConfidentialityLevel] = useState(
@@ -64,7 +69,7 @@ export function AxisForm({
         // Clés OMISES (jamais `undefined`) quand vides : `setDoc` rejette toute valeur
         // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
         ...(description.trim() ? { description: description.trim() } : {}),
-        ...(owner.trim() ? { owner: owner.trim() } : {}),
+        ...(owner ? { owner } : {}),
         ...(confidentialityLevel ? { confidentialityLevel } : {}),
         color,
         stage,
@@ -92,18 +97,13 @@ export function AxisForm({
             placeholder="Ex. Excellence opérationnelle"
           />
         </div>
-        <div>
-          <label className="text-xs font-medium text-text-secondary" htmlFor="axis-owner">
-            Responsable
-          </label>
-          <input
-            id="axis-owner"
-            value={owner}
-            onChange={(e) => setOwner(e.target.value)}
-            className={inputClass}
-            placeholder="Nom du responsable"
-          />
-        </div>
+        <UserPicker
+          users={users}
+          value={owner}
+          onChange={setOwner}
+          label="Responsable"
+          id="axis-owner"
+        />
         <div>
           <label className="text-xs font-medium text-text-secondary" htmlFor="axis-stage">
             Étape de maturité

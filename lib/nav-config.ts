@@ -252,6 +252,35 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
+
+  // ─── Membre du COMEX (round 25) — SEUL rôle transverse aux deux pistes (voir PERFORMANCE_ROLES/
+  // STRATEGIC_ROLES dans types/index.ts) : lecture seule, nav volontairement réduite aux pages de
+  // reporting/consultation des deux plans plutôt qu'aux pages de pilotage opérationnel (finance/
+  // hr/operations réservées aux rôles Performance qui les alimentent). "dashboard" est SANS
+  // `programTypes` : la route `/dashboard` s'auto-route déjà entre le dashboard exécutif
+  // Performance et le dashboard stratégique selon le programme actif (voir
+  // `app/(app)/dashboard/page.tsx`), exactement comme `levers` pour `/levers` — un seul item nav
+  // sert donc les deux pistes. Cette UI ne fait QUE lister/rendre la nav : l'enforcement réel du
+  // caractère lecture-seule (masquage des actions d'édition) est un lot ultérieur, non couvert
+  // ici. Round ultérieur prévu : un item nav dédié à l'historique/audit trail (pendant du
+  // `"admin-history"` d'ADMIN_NAV_DEFINITIONS ci-dessous, mais visible sans être admin) — il
+  // suffira de pousser une entrée supplémentaire dans le tableau `nav` ci-dessous, rien à
+  // restructurer pour l'accueillir.
+  comex_member: {
+    label: "roles.comexMember.label",
+    short: "roles.comexMember.short",
+    nav: [
+      { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
+      {
+        id: "levers",
+        icon: "Target",
+        label: "nav.leverLibrary",
+        labelByProgramType: { strategic: "nav.axes" },
+      },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+    ],
+  },
 };
 
 /** Nav des deux habilitations d'administration (`AuthUser.isGlobalAdmin`/`isCompanyAdmin`), ADDITIVES

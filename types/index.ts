@@ -16,8 +16,10 @@
  *                             l'avancement des chantiers.
  *   - `budget_control`      : Contrôle de gestion — consolidation des indicateurs et contrôle
  *                             budgétaire, en appui du pilote.
- * Le COMEX n'y figure PAS : c'est un organe de gouvernance collectif, pas un profil individuel
- * connectable à l'application.
+ * Round 25 : le COMEX dispose désormais D'UN profil individuel connectable, `comex_member`
+ * (lecture seule) — voir son commentaire ci-dessous. Le COMEX reste par ailleurs, comme avant, un
+ * organe de gouvernance COLLECTIF : `comex_member` sert à donner à UN membre (ou son délégué/
+ * assistant) un accès de consultation nominatif, pas à représenter l'organe lui-même.
  *
  * `admin` (super-admin global) et `admin_entreprise` (admin d'entreprise) n'en font PAS partie :
  * ce ne sont pas des "profils métier" mais des habilitations additives, portées par
@@ -35,12 +37,40 @@ export type Role =
   | "chantier_owner"
   | "chantier_contributor"
   | "internal_comm"
-  | "budget_control";
+  | "budget_control"
+  | "comex_member";
 
-/** Les 6 rôles du Plan Performance (round historique). */
-export const PERFORMANCE_ROLES: Role[] = ["cto", "sponsor", "lever", "finance", "hr", "ops"];
+/** Les 6 rôles du Plan Performance (round historique), PLUS `comex_member` (round 25) — voir son
+ *  commentaire juste en dessous de `STRATEGIC_ROLES` : c'est le seul rôle qui figure dans LES DEUX
+ *  tableaux `PERFORMANCE_ROLES`/`STRATEGIC_ROLES` à la fois. */
+export const PERFORMANCE_ROLES: Role[] = [
+  "cto",
+  "sponsor",
+  "lever",
+  "finance",
+  "hr",
+  "ops",
+  "comex_member",
+];
 
-/** Les 6 rôles du Plan Stratégique (organigramme 3-5-15). */
+/** Les 6 rôles du Plan Stratégique (organigramme 3-5-15), PLUS `comex_member` (round 25).
+ *
+ * `comex_member` ("Membre du COMEX") est VOLONTAIREMENT présent dans `PERFORMANCE_ROLES` ET
+ * `STRATEGIC_ROLES` : c'est le premier rôle transverse aux deux pistes (lecture seule sur les
+ * deux, demande PO explicite), là où les 12 autres rôles sont chacun strictement mono-piste.
+ * `isPerformanceRole`/`isStrategicRole` (lib/roleProfiles.ts) testent l'appartenance à CE tableau,
+ * pas une propriété portée par le rôle lui-même — un rôle présent dans les deux tableaux est donc
+ * "vu" comme appartenant aux deux pistes par ce code, ce qui est le comportement recherché ici :
+ * un profil `comex_member` donné (une entrée `ProfileAssignment`, avec son `programId` optionnel)
+ * peut être rattaché à un programme Performance OU Stratégique — `assertValidProfiles` (voir
+ * lib/roleProfiles.ts) continue de s'appliquer normalement à CHAQUE piste (au plus un profil
+ * `comex_member` par programme, ou un profil "tous programmes" non combinable avec un autre profil
+ * de la même piste) : un utilisateur peut ainsi cumuler un profil `comex_member` Performance ET un
+ * profil `comex_member` Stratégique (deux entrées distinctes), exactement comme il pourrait déjà
+ * cumuler un profil Performance et un profil Stratégique d'un autre rôle. Alternative envisagée et
+ * écartée : un mécanisme dédié "rôle transverse" en dehors de ces deux tableaux aurait demandé de
+ * changer la signature d'`assertValidProfiles`/`isPerformanceRole`/`isStrategicRole` pour un seul
+ * rôle sur 13, alors que la duplication ci-dessus réutilise ces fonctions telles quelles. */
 export const STRATEGIC_ROLES: Role[] = [
   "strategic_lead",
   "axis_sponsor",
@@ -48,6 +78,7 @@ export const STRATEGIC_ROLES: Role[] = [
   "chantier_contributor",
   "internal_comm",
   "budget_control",
+  "comex_member",
 ];
 
 /** Un profil métier assigné à un utilisateur : un rôle, optionnellement rattaché à un programme
@@ -693,6 +724,11 @@ export type StrategicAxis = {
   programId: string;
   name: string;
   description?: string;
+  /** `AuthUser.username`, saisi via `UserPicker` (round 25) — même convention que
+   *  `Chantier.pilote`/`Chantier.sponsorName`/`ChantierAction.owner`/`ChantierAction.sponsor` : plus
+   *  du texte libre, un lien résolu vers un compte réel de l'entreprise. `UserPicker` reste
+   *  défensif à l'égard des valeurs saisies AVANT cette conversion (texte libre historique, ou
+   *  utilisateur depuis retiré de l'entreprise) — voir son commentaire. */
   owner?: string;
   color?: string;
   /** Référence un `MaturityStageConfig.id` du programme. Explicite (jamais dérivé en base) pour
