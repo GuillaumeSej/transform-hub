@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { hexForChantier } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type WorkstreamBarPoint = {
@@ -29,19 +30,67 @@ export type WorkstreamBarPoint = {
 
 type ChartDatum = WorkstreamBarPoint & { remaining: number };
 
-/** Tick custom pour l'axe X : label tronqué avec <title> SVG natif pour le tooltip au hover. */
+/** Découpe un label en (au plus) 2 lignes pour l'affichage sous l'axe X — sans troncature dure du
+ *  nom complet dans le cas courant (contrairement à l'ancien `TruncatedTick` à `maxLen = 12`).
+ *  Coupe sur l'espace le plus proche du milieu quand c'est possible (évite de couper un mot en
+ *  deux), sinon retombe sur une coupe brute par nombre de caractères. Seule la 2e ligne peut encore
+ *  être tronquée avec `…`, et seulement dans le cas (rare) où même 2 lignes ne suffisent pas. */
+function wrapLabel(label: string): [string, string] {
+  const maxLineLen = 14;
+  if (label.length <= maxLineLen) return [label, ""];
+
+  const mid = Math.ceil(label.length / 2);
+  let splitIndex = -1;
+  let bestDistance = Infinity;
+  for (let i = 0; i < label.length; i += 1) {
+    if (label[i] === " ") {
+      const distance = Math.abs(i - mid);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        splitIndex = i;
+      }
+    }
+  }
+
+  let line1: string;
+  let line2: string;
+  if (splitIndex > 0 && splitIndex < label.length - 1) {
+    line1 = label.slice(0, splitIndex);
+    line2 = label.slice(splitIndex + 1);
+  } else {
+    line1 = label.slice(0, maxLineLen);
+    line2 = label.slice(maxLineLen);
+  }
+
+  if (line2.length > maxLineLen) {
+    line2 = `${line2.slice(0, maxLineLen - 1)}…`;
+  }
+  return [line1, line2];
+}
+
+/** Tick custom pour l'axe X : label complet réparti sur 2 lignes (plus de troncature à 12
+ *  caractères) + un petit carré de couleur déterministe devant le label (même hash que
+ *  `hexForChantier`/`hexForDepartment`, réutilisé tel quel pour rester cohérent avec le reste de
+ *  l'app plutôt que d'inventer une nouvelle palette). Le `<title>` SVG natif reste en place pour le
+ *  survol (utile si une 2e ligne est malgré tout tronquée). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function TruncatedTick(props: any) {
+function CategoryTick(props: any) {
   const { x = 0, y = 0, payload } = props;
   const label = (payload?.value as string) ?? "";
-  const maxLen = 12;
-  const truncated = label.length > maxLen ? label.slice(0, maxLen) + "…" : label;
+  const [line1, line2] = wrapLabel(label);
+  const swatchColor = hexForChantier(label);
   return (
     <g>
       <title>{label}</title>
-      <text x={x} y={y + 12} textAnchor="middle" fontSize={10} fill="#1A1A1A">
-        {truncated}
+      <rect x={x - 4} y={y + 4} width={8} height={8} rx={1.5} fill={swatchColor} />
+      <text x={x} y={y + 22} textAnchor="middle" fontSize={10} fill="#1A1A1A">
+        {line1}
       </text>
+      {line2 && (
+        <text x={x} y={y + 34} textAnchor="middle" fontSize={10} fill="#1A1A1A">
+          {line2}
+        </text>
+      )}
     </g>
   );
 }
@@ -71,6 +120,74 @@ function BreakdownList({
   );
 }
 
+/** Ligne de détail par levier fusionnée (cible + réalisé), pour la popup ouverte au clic sur une
+ *  barre — voir `WorkstreamBarChart.onSegmentClick`. */
+type LeverRow = { name: string; target: number; realized: number };
+
+function mergeLeverBreakdown(point: WorkstreamBarPoint): LeverRow[] {
+  const byName = new Map<string, LeverRow>();
+  for (const item of point.leverBreakdown?.target ?? []) {
+    byName.set(item.name, { name: item.name, target: item.value, realized: 0 });
+  }
+  for (const item of point.leverBreakdown?.realized ?? []) {
+    const existing = byName.get(item.name);
+    if (existing) {
+      existing.realized = item.value;
+    } else {
+      byName.set(item.name, { name: item.name, target: 0, realized: item.value });
+    }
+  }
+  return Array.from(byName.values()).sort((a, b) => b.target - a.target);
+}
+
+/** Popup de détail par levier ouverte au clic sur un segment de barre — une barre horizontale par
+ *  levier (cible en fond, réalisé en overlay coral, même logique visuelle que le graphique
+ *  principal) avec les montants et le taux de réalisation. */
+export function WorkstreamBarDetail({
+  point,
+  fmt,
+}: {
+  point: WorkstreamBarPoint;
+  fmt: (v: number) => string;
+}) {
+  const rows = mergeLeverBreakdown(point);
+  const maxTarget = Math.max(1, ...rows.map((r) => Math.max(r.target, r.realized)));
+
+  if (rows.length === 0) {
+    return <p className="text-sm text-tertiary">Aucun détail par levier disponible.</p>;
+  }
+
+  return (
+    <ul className="space-y-3">
+      {rows.map((row) => {
+        const pct = row.target > 0 ? Math.round((row.realized / row.target) * 100) : 0;
+        const targetWidth = Math.max(2, (row.target / maxTarget) * 100);
+        const realizedWidth = row.target > 0 ? Math.min(100, (row.realized / row.target) * 100) : 0;
+        return (
+          <li key={row.name}>
+            <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+              <span className="font-medium text-primary">{row.name}</span>
+              <span className="shrink-0 text-tertiary">
+                {fmt(row.realized)} / {fmt(row.target)} · {pct}%
+              </span>
+            </div>
+            <div className="relative h-3 w-full overflow-hidden rounded-full bg-neutral-100">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full bg-[rgba(168,154,147,0.35)]"
+                style={{ width: `${targetWidth}%` }}
+              />
+              <div
+                className="absolute inset-y-0 left-0 rounded-full bg-bp-coral"
+                style={{ width: `${(realizedWidth * targetWidth) / 100}%` }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** Savings réalisés vs cible par dimension (workstream, pays, département).
  *
  *  Chaque barre = cible (hauteur totale) avec remplissage coral (réalisé) empilé en bas — la
@@ -78,17 +195,21 @@ function BreakdownList({
  *  la cible ; en cas de sur-réalisation (`realized > target`), `remaining` est clampé à 0 donc la
  *  hauteur totale de la pile == `realized` (pas de somme cible+réalisé).
  *
- *  Valeurs affichées directement sur les barres (réalisé à l'intérieur du segment coral, cible
- *  au sommet de la pile). Tooltip détaillé au survol d'un segment : liste des leviers qui
- *  composent ce segment (même esprit que le détail par levier du Mekko). */
+ *  Valeurs affichées directement sur les barres (réalisé à l'intérieur du segment coral, écart à
+ *  l'intérieur du segment gris quand il est assez haut pour rester lisible, cible au sommet de la
+ *  pile). Tooltip détaillé au survol d'un segment : liste des leviers qui composent ce segment
+ *  (même esprit que le détail par levier du Mekko). Clic sur un segment : callback `onSegmentClick`
+ *  pour ouvrir un détail par levier (popup côté appelant). */
 export function WorkstreamBarChart({
   data,
   labelTarget,
   labelRealized,
+  onSegmentClick,
 }: {
   data: WorkstreamBarPoint[];
   labelTarget?: string;
   labelRealized?: string;
+  onSegmentClick?: (point: WorkstreamBarPoint, segment: "target" | "realized") => void;
 }) {
   const { t } = useTranslation();
   const resolvedLabelTarget = labelTarget ?? t("chart.bar.target", "Cible");
@@ -111,22 +232,41 @@ export function WorkstreamBarChart({
 
   const maxValue = Math.max(...data.map((d) => Math.max(d.target, d.realized)));
 
+  // Label combiné du segment "remaining" : la cible totale au-dessus de la pile (comportement
+  // existant) + l'écart (valeur propre au segment gris) centré à l'intérieur du segment, mais
+  // seulement quand ce dernier est assez haut pour rester lisible (évite le fouillis visuel sur
+  // les tout petits écarts).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const renderTargetLabel = (props: any) => {
-    const { x = 0, y = 0, width = 0, index } = props;
+  const renderRemainingLabels = (props: any) => {
+    const { x = 0, y = 0, width = 0, height = 0, index } = props;
     const d = chartData[index];
     if (!d) return null;
+    const showGap = height > 14 && d.remaining > 0;
     return (
-      <text
-        x={x + width / 2}
-        y={y - 6}
-        textAnchor="middle"
-        fontSize={10}
-        fontWeight={600}
-        fill="#1A1A1A"
-      >
-        {fmt(d.target)}
-      </text>
+      <g>
+        <text
+          x={x + width / 2}
+          y={y - 6}
+          textAnchor="middle"
+          fontSize={10}
+          fontWeight={600}
+          fill="#1A1A1A"
+        >
+          {fmt(d.target)}
+        </text>
+        {showGap && (
+          <text
+            x={x + width / 2}
+            y={y + height / 2 + 3}
+            textAnchor="middle"
+            fontSize={10}
+            fontWeight={600}
+            fill="#6B5D57"
+          >
+            {fmt(d.remaining)}
+          </text>
+        )}
+      </g>
     );
   };
 
@@ -152,14 +292,20 @@ export function WorkstreamBarChart({
 
   return (
     <div className="relative">
-      <ResponsiveContainer width="100%" height={280}>
+      <ResponsiveContainer width="100%" height={320}>
         <BarChart
           data={chartData}
-          margin={{ top: 20, right: 8, left: -16, bottom: 0 }}
+          margin={{ top: 20, right: 8, left: -16, bottom: 4 }}
           barCategoryGap="20%"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-          <XAxis dataKey="label" axisLine={false} tickLine={false} tick={TruncatedTick} />
+          <XAxis
+            dataKey="label"
+            axisLine={false}
+            tickLine={false}
+            tick={CategoryTick}
+            height={48}
+          />
           <YAxis
             tick={{ fontSize: 11 }}
             axisLine={false}
@@ -176,6 +322,16 @@ export function WorkstreamBarChart({
             stackId="a"
             fill="#FF3C47"
             radius={[0, 0, 0, 0]}
+            cursor={onSegmentClick ? "pointer" : undefined}
+            onClick={
+              onSegmentClick
+                ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (entry: any) => {
+                    const point = entry?.payload as WorkstreamBarPoint | undefined;
+                    if (point) onSegmentClick(point, "realized");
+                  }
+                : undefined
+            }
           >
             <LabelList
               dataKey="realized"
@@ -192,8 +348,18 @@ export function WorkstreamBarChart({
             stackId="a"
             fill="rgba(168,154,147,0.3)"
             radius={[4, 4, 0, 0]}
+            cursor={onSegmentClick ? "pointer" : undefined}
+            onClick={
+              onSegmentClick
+                ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (entry: any) => {
+                    const point = entry?.payload as WorkstreamBarPoint | undefined;
+                    if (point) onSegmentClick(point, "target");
+                  }
+                : undefined
+            }
           >
-            <LabelList dataKey="remaining" content={renderTargetLabel} />
+            <LabelList dataKey="remaining" content={renderRemainingLabels} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
