@@ -81,6 +81,44 @@ function StatusColumns({
   );
 }
 
+/** Bandeau des leviers abandonnés d'un groupe (workstream ou "Autres") — jamais mélangés aux
+ *  colonnes de statut actif (principe : un levier abandonné ne doit jamais être compté ni
+ *  affiché dans le même ensemble qu'un levier actif), toujours en dernier, grisé. */
+function CancelledLeversStrip({
+  levers,
+  onCardClick,
+}: {
+  levers: Lever[];
+  onCardClick: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  if (levers.length === 0) return null;
+  return (
+    <div className="mt-3 border-t border-dashed border-border pt-2.5">
+      <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wide text-tertiary">
+        {t("shared.kanban.cancelled", "Abandonnés")} ({levers.length})
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 min-[1101px]:grid-cols-5">
+        {levers.map((l) => (
+          <button
+            key={l.id}
+            onClick={() => onCardClick(l.id)}
+            className="block w-full rounded-sm border border-border bg-neutral-100 p-2.5 text-left opacity-60 grayscale transition hover:opacity-80"
+          >
+            <div className="mb-1.5 text-xs font-semibold text-secondary line-through">{l.name}</div>
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-semibold text-tertiary">
+                {l.code}
+              </span>
+              <span className="text-[12.5px] font-bold text-tertiary">{fmtCurr(l.netSavings)}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Vue kanban du pipeline de leviers par statut — porté depuis `.kanban`/`.kcard` du prototype legacy.
  * `stageOrder`/`stageLabel` permettent de refléter le référentiel de cycle de vie de l'entreprise
  * (via `useLifecycleLabels`) ; par défaut, retombe sur le cycle et les libellés codés en dur.
@@ -114,13 +152,18 @@ export function Kanban({
   const { t } = useTranslation();
 
   if (workstreams.length === 0) {
+    const activeLevers = levers.filter((l) => l.status !== "cancelled");
+    const cancelledLevers = levers.filter((l) => l.status === "cancelled");
     return (
-      <StatusColumns
-        levers={levers}
-        onCardClick={onCardClick}
-        stageOrder={stageOrder}
-        stageLabel={stageLabel}
-      />
+      <div>
+        <StatusColumns
+          levers={activeLevers}
+          onCardClick={onCardClick}
+          stageOrder={stageOrder}
+          stageLabel={stageLabel}
+        />
+        <CancelledLeversStrip levers={cancelledLevers} onCardClick={onCardClick} />
+      </div>
     );
   }
 
@@ -128,11 +171,17 @@ export function Kanban({
   // visible plutôt que silencieusement perdu — regroupé dans une swimlane "Autres" en fin de liste.
   const knownIds = new Set(workstreams.map((w) => w.id));
   const otherLevers = levers.filter((l) => !knownIds.has(l.ws));
+  const otherActiveLevers = otherLevers.filter((l) => l.status !== "cancelled");
+  const otherCancelledLevers = otherLevers.filter((l) => l.status === "cancelled");
 
   return (
     <div className="space-y-4">
       {workstreams.map((ws) => {
+        // Un levier abandonné ne doit jamais être compté (badge) ni mélangé aux colonnes de
+        // statut actif — voir CancelledLeversStrip ci-dessus.
         const wsLevers = levers.filter((l) => l.ws === ws.id);
+        const activeWsLevers = wsLevers.filter((l) => l.status !== "cancelled");
+        const cancelledWsLevers = wsLevers.filter((l) => l.status === "cancelled");
         const declaredPct = workstreamDeclaredProgress(progressLevers, ws.id);
         return (
           <div key={ws.id} className="overflow-hidden rounded-lg border border-border bg-white">
@@ -147,23 +196,24 @@ export function Kanban({
               />
               <span className="text-[12.5px] font-bold text-primary">{ws.name}</span>
               <span className="rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
-                {wsLevers.length}
+                {activeWsLevers.length}
               </span>
               <DeclaredProgressBadge pct={declaredPct} className="ml-auto" />
             </div>
             <div className="p-3">
-              {wsLevers.length === 0 ? (
+              {activeWsLevers.length === 0 ? (
                 <p className="py-4 text-center text-[11px] text-tertiary">
                   {t("shared.kanban.noItems", "Aucun")}
                 </p>
               ) : (
                 <StatusColumns
-                  levers={wsLevers}
+                  levers={activeWsLevers}
                   onCardClick={onCardClick}
                   stageOrder={stageOrder}
                   stageLabel={stageLabel}
                 />
               )}
+              <CancelledLeversStrip levers={cancelledWsLevers} onCardClick={onCardClick} />
             </div>
           </div>
         );
@@ -175,16 +225,17 @@ export function Kanban({
               {t("shared.kanban.otherWorkstream", "Autres")}
             </span>
             <span className="rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
-              {otherLevers.length}
+              {otherActiveLevers.length}
             </span>
           </div>
           <div className="p-3">
             <StatusColumns
-              levers={otherLevers}
+              levers={otherActiveLevers}
               onCardClick={onCardClick}
               stageOrder={stageOrder}
               stageLabel={stageLabel}
             />
+            <CancelledLeversStrip levers={otherCancelledLevers} onCardClick={onCardClick} />
           </div>
         </div>
       )}

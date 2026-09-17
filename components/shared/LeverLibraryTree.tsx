@@ -95,10 +95,15 @@ export function LeverLibraryTree({
         const wsOpen = expandedWsIds.has(group.id);
         const declaredPct =
           group.id === "__other__" ? null : workstreamDeclaredProgress(progressLevers, group.id);
+        // Un levier abandonné ne doit jamais être compté ni mélangé aux leviers actifs — écarté de
+        // l'arborescence Workstream → Type → Levier, regroupé à part en fin de swimlane, grisé
+        // (même principe que Kanban.tsx CancelledLeversStrip).
+        const activeGroupLevers = group.levers.filter((l) => l.status !== "cancelled");
+        const cancelledGroupLevers = group.levers.filter((l) => l.status === "cancelled");
         // Types présents dans CE groupe, dans l'ordre de première apparition (pas de référentiel
         // "types" trié séparément — `Lever.type` est une catégorie libre, voir doc-comment
         // `types/index.ts`).
-        const typesInGroup = Array.from(new Set(group.levers.map((l) => l.type)));
+        const typesInGroup = Array.from(new Set(activeGroupLevers.map((l) => l.type)));
 
         return (
           <div key={group.id} className="overflow-hidden rounded-lg border border-border bg-white">
@@ -123,7 +128,7 @@ export function LeverLibraryTree({
                 {group.name}
               </span>
               <span className="shrink-0 rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
-                {group.levers.length}
+                {activeGroupLevers.length}
               </span>
               <DeclaredProgressBadge pct={declaredPct} />
             </button>
@@ -138,7 +143,7 @@ export function LeverLibraryTree({
                   typesInGroup.map((type) => {
                     const typeKey = `${group.id}:${type}`;
                     const typeOpen = expandedTypeKeys.has(typeKey);
-                    const typeLevers = group.levers.filter((l) => l.type === type);
+                    const typeLevers = activeGroupLevers.filter((l) => l.type === type);
                     return (
                       <div key={typeKey}>
                         <div className="flex w-full items-center gap-2 py-2.5 pl-8 pr-3.5 text-left transition hover:bg-neutral-50">
@@ -265,6 +270,27 @@ export function LeverLibraryTree({
                       </div>
                     );
                   })
+                )}
+                {cancelledGroupLevers.length > 0 && (
+                  <div className="bg-neutral-100/70 px-4 py-2.5">
+                    <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wide text-tertiary">
+                      {t("shared.kanban.cancelled", "Abandonnés")} ({cancelledGroupLevers.length})
+                    </div>
+                    <div className="space-y-1">
+                      {cancelledGroupLevers.map((lever) => (
+                        <button
+                          key={lever.id}
+                          type="button"
+                          onClick={() => onLeverClick(lever.id)}
+                          className="flex w-full items-center gap-2 rounded-md border border-border bg-neutral-50 px-2.5 py-1.5 text-left opacity-60 grayscale transition hover:opacity-80"
+                        >
+                          <span className="min-w-0 flex-1 truncate text-[11.5px] font-medium text-secondary line-through">
+                            {lever.code} · {lever.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
