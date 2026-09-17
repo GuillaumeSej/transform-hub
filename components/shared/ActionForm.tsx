@@ -78,6 +78,14 @@ export function ActionForm({
   const [start, setStart] = useState(initialValues?.start ?? "");
   const [end, setEnd] = useState(initialValues?.end ?? "");
   const [status, setStatus] = useState<ActionStatus>(initialValues?.status ?? "todo");
+  // Round <n> (fondations RBAC déclaratives) : avancement déclaratif de l'action, saisi par son
+  // pilote (même contrôle d'édition que le reste de ce formulaire, voir `LeverDetailClientPerformance`
+  // — `openActionForEdit` est déjà gatée `readOnly`). Consommé par `lib/workstreamLogic.ts`
+  // (`leverDeclaredProgress`/`workstreamDeclaredProgress`) — non défini = action pas encore
+  // déclarée, ignorée du calcul plutôt que comptée comme 0% (voir doc-comment `types/index.ts`).
+  const [declaredProgressPct, setDeclaredProgressPct] = useState<number | undefined>(
+    initialValues?.declaredProgressPct
+  );
   const [impacts, setImpacts] = useState<ActionImpact[]>(
     initialValues?.impacts && initialValues.impacts.length > 0
       ? initialValues.impacts
@@ -107,6 +115,7 @@ export function ActionForm({
       start,
       end,
       status,
+      declaredProgressPct,
       cost: 0,
       impacts: validImpacts,
     });
@@ -185,6 +194,23 @@ export function ActionForm({
             type="date"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
+            {t("shared.actionForm.declaredProgressPct", "Avancement déclaratif (%)")}
+          </label>
+          <input
+            className={inputClass}
+            type="number"
+            min={0}
+            max={100}
+            step={1}
+            value={declaredProgressPct ?? ""}
+            onChange={(e) =>
+              setDeclaredProgressPct(e.target.value === "" ? undefined : Number(e.target.value))
+            }
+            placeholder={t("shared.actionForm.declaredProgressPctPlaceholder", "Non déclaré")}
           />
         </div>
       </div>
