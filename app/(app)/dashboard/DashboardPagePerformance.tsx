@@ -59,7 +59,6 @@ import { groupLeversByHealthDimension, type LeverHealthDimension } from "@/lib/l
 import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
-import { DashboardExportButton } from "@/components/shared/DashboardExportButton";
 import { SCurveChart } from "@/components/shared/charts/SCurveChart";
 import {
   WorkstreamBarChart,
@@ -1880,10 +1879,9 @@ export function DashboardPagePerformance() {
             {t("dashboard.title")}
           </h1>
         </div>
-        {/* Outils de bureau (export PPTX, personnalisation du layout) — sans objet au doigt
-            sur téléphone : masqués sous lg pour laisser toute la place aux indicateurs. */}
+        {/* Outils de bureau (personnalisation du layout) — sans objet au doigt sur téléphone :
+            masqués sous lg pour laisser toute la place aux indicateurs. */}
         <div className="hidden items-center gap-2 lg:flex">
-          {!editMode && <DashboardExportButton layout={layout} />}
           <Button
             variant={editMode ? "dark" : "outline"}
             size="md"

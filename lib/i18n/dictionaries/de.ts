@@ -21,7 +21,7 @@ const de: Record<string, string> = {
   "nav.myLevers": "Meine Hebel",
   "nav.linkedLevers": "Verknüpfte Hebel",
   "nav.workstreamDashboard": "Workstream Dashboard",
-  "nav.financeModule": "Finanzmodul",
+  "nav.financeModule": "Finanz-Dashboard",
   "nav.hrDashboard": "HR Dashboard",
   "nav.hrEtp": "VZÄ-Basis",
   "nav.operationsModule": "Betriebsmodul",
@@ -108,7 +108,7 @@ const de: Record<string, string> = {
   "topbar.consolidatedViewMine": "Konsolidierte Ansicht — alle meine Performance-Programme",
 
   // ─── dashboard ────────────────────────────────────────────────────────────
-  "dashboard.title": "Management-Dashboard",
+  "dashboard.title": "Gesamtsteuerung",
   "dashboard.program": "Programm",
   "dashboard.leversActive": "aktive Hebel",
   "dashboard.customize": "Anpassen",
@@ -339,7 +339,7 @@ const de: Record<string, string> = {
   "leverForm.pnlAccount": "Betroffenes P&L-Konto",
   "leverForm.startDate": "Startdatum",
   "leverForm.endDate": "Geschätztes Enddatum",
-  "leverForm.status": "Fortschrittsstufe",
+  "leverForm.status": "Reife",
   "leverForm.progress": "Fortschritt (%)",
   "leverForm.risk": "Risiko",
   "leverForm.lockedPlanNotice": "Ursprungsplan gesperrt seit Übergang zu «",
@@ -467,6 +467,7 @@ const de: Record<string, string> = {
     "Die folgenden Zeilen stammen direkt aus der vom globalen Administrator definierten Finanzhierarchie. Die Auswirkungen der Hebel werden automatisch konsolidiert.",
   "finance.pnlLine": "GuV-Zeile",
   "finance.baseline": "Baseline",
+  "finance.pnlRealizedNet": "Realisiert (netto)",
   "finance.notAllocatable": "Nicht zuordenbar",
   "finance.unallocatedHint": "Finanzielle Zuordnung noch zu präzisieren",
 
@@ -1814,16 +1815,15 @@ const de: Record<string, string> = {
   "adminIndicators.deleteError": "Der Indikator konnte nicht gelöscht werden.",
 
   // ─── Finanz-Charts (Drilldown + Neugestaltung Kosten/Savings) ──────────────
-  "finance.chart.engagedTitle": "Gebundene vs. anstehende Kosten (Invest)",
-  "finance.chart.engagedSubtitle": "CAPEX + einmaliger OPEX — wiederkehrender OPEX ausgeschlossen",
+  "finance.chart.engagedTitle": "Gebundene vs. anstehende Kosten",
   "finance.chart.timelineTitle": "Kostenbindung im Zeitverlauf (Invest)",
   "finance.chart.timelineSubtitle":
-    "CAPEX + einmaliger OPEX — siehe Diagramm Invest-Kosten vs. Savings für den Vergleich mit den Gewinnen",
+    "CAPEX + einmaliger OPEX — siehe Diagramm Investitionskosten vs. Savings für den Vergleich mit den Gewinnen",
   "finance.chart.hierarchyTitle": "Kostenaufteilung nach Kostenstelle / GuV",
   "finance.chart.hierarchyNoConfig":
     "Für dieses Unternehmen ist keine Finanzhierarchie konfiguriert.",
-  "finance.chart.investVsSavingsTitle": "Invest-Kosten vs. Savings",
-  "finance.chart.investCost": "Invest-Kosten",
+  "finance.chart.investVsSavingsTitle": "Investitionskosten vs. Savings",
+  "finance.chart.investCost": "Investitionskosten",
   "finance.chart.grossSavings": "Bruttoeinsparungen",
   "finance.chart.netSavings": "Nettoeinsparungen",
   "finance.drilldown.totalLabel": "Gesamt",

@@ -237,6 +237,13 @@ export function LeverDetailClientPerformance() {
   const reforecastDisplay = engine.displayedReforecastNet(lever);
   const comments = data.getComments(lever.id);
   const actions = lever.actions ?? [];
+  // CAPEX / OPEX one-off / OPEX récurrent affichés sous les 3 chiffres clés du bandeau exécutif —
+  // même source et même repli que le détail "Impact financier" plus bas (`consolidatedKPIs`, voir
+  // lib/leverConsolidate.ts::consolidateLeverFromActions) : consolidé depuis les impacts d'actions
+  // quand le levier en a, sinon repli sur les champs legacy saisis manuellement sur le levier.
+  const capexTotal = consolidatedKPIs?.capex ?? lever.capex;
+  const opexOneOffTotal = consolidatedKPIs?.opexOneOff ?? lever.opexOneOff;
+  const opexRecTotal = consolidatedKPIs?.opexRec ?? lever.opexRec;
   const hasAnyActions = actions.length > 0;
   const actionScope = { leverId: lever.id };
   /** Round 25 (gate d'édition COMEX) : ouvre le formulaire d'action en mode édition — un utilisateur
@@ -804,6 +811,22 @@ export function LeverDetailClientPerformance() {
                       reason={leverRiskAssessment.reason}
                     />
                   }
+                />
+              </div>
+              {/* Détail CAPEX / OPEX one-off / OPEX récurrent des 3 chiffres ci-dessus — mêmes
+                  totaux consolidés depuis actions/impacts (`consolidateLeverFromActions`) que ceux
+                  affichés dans l'onglet Impact, avec repli sur les champs legacy du levier
+                  (`lever.capex`/`opexOneOff`/`opexRec`) uniquement si aucune action n'a d'impacts
+                  chiffrés (mêmes conventions que `hasActionImpacts`/`consolidateLeverFromActions`,
+                  voir lib/leverConsolidate.ts). Rendu "muted" : continuation visuelle du bandeau,
+                  pas un second bloc de titres concurrents. */}
+              <div className="flex w-full flex-wrap gap-x-8 gap-y-2 border-t border-border pt-3">
+                <BigStat label="CAPEX" value={engine.fmtCurr(capexTotal)} muted />
+                <BigStat label="OPEX one-off" value={engine.fmtCurr(opexOneOffTotal)} muted />
+                <BigStat
+                  label={t("leverDetail.opexRecYear", "OPEX récurrent /an")}
+                  value={engine.fmtCurr(opexRecTotal)}
+                  muted
                 />
               </div>
             </div>
@@ -1383,12 +1406,16 @@ function BigStat({
   value,
   accent = false,
   sub,
+  muted = false,
 }: {
   label: string;
   value: React.ReactNode;
   accent?: boolean;
   /** Ligne secondaire optionnelle sous la valeur, ex. le détail "dont X€ de gains bruts". */
   sub?: React.ReactNode;
+  /** Rendu visuellement secondaire (plus petit, non gras) — ex. le détail CAPEX/OPEX sous les
+   *  trois chiffres clés, qui ne doit pas concurrencer visuellement le bandeau exécutif. */
+  muted?: boolean;
 }) {
   return (
     <div>
@@ -1396,7 +1423,11 @@ function BigStat({
         {label}
       </div>
       <div
-        className={`mt-1 text-xl font-bold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`}
+        className={`mt-1 ${
+          muted
+            ? "text-sm font-semibold text-secondary"
+            : `text-xl font-bold ${accent ? "text-primary underline decoration-bp-coral decoration-2 underline-offset-4" : "text-primary"}`
+        }`}
       >
         {value}
       </div>

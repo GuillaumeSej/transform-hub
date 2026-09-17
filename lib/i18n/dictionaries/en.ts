@@ -24,7 +24,7 @@ const en: Record<string, string> = {
   "nav.myLevers": "My Initiatives",
   "nav.linkedLevers": "Linked Initiatives",
   "nav.workstreamDashboard": "Workstream Dashboard",
-  "nav.financeModule": "Finance Module",
+  "nav.financeModule": "Finance Dashboard",
   "nav.hrDashboard": "HR Dashboard",
   "nav.hrEtp": "FTE Base",
   "nav.operationsModule": "Operations Module",
@@ -111,7 +111,7 @@ const en: Record<string, string> = {
   "topbar.consolidatedViewMine": "Consolidated view — all my Performance programs",
 
   // ─── dashboard ────────────────────────────────────────────────────────────
-  "dashboard.title": "Executive Dashboard",
+  "dashboard.title": "Global Steering",
   "dashboard.program": "Program",
   "dashboard.leversActive": "active initiatives",
   "dashboard.customize": "Customize",
@@ -357,7 +357,7 @@ const en: Record<string, string> = {
   "leverForm.pnlAccount": "Impacted P&L account",
   "leverForm.startDate": "Start date",
   "leverForm.endDate": "Estimated end date",
-  "leverForm.status": "Progress level",
+  "leverForm.status": "Maturity",
   "leverForm.progress": "Progress (%)",
   "leverForm.risk": "Risk",
   "leverForm.lockedPlanNotice": "Baseline plan locked upon moving to «",
@@ -485,6 +485,7 @@ const en: Record<string, string> = {
     "The lines below come directly from the financial hierarchy defined by the global administrator. Initiative impacts are consolidated automatically.",
   "finance.pnlLine": "P&L line",
   "finance.baseline": "Baseline",
+  "finance.pnlRealizedNet": "Realized (net)",
   "finance.notAllocatable": "Not allocatable",
   "finance.unallocatedHint": "Financial allocation to be specified",
 
@@ -1805,15 +1806,14 @@ const en: Record<string, string> = {
   "adminIndicators.deleteError": "The indicator could not be deleted.",
 
   // ─── finance charts (drill-down + cost/savings rework) ─────────────────────
-  "finance.chart.engagedTitle": "Committed vs upcoming costs (Invest)",
-  "finance.chart.engagedSubtitle": "CAPEX + one-off OPEX — recurring OPEX excluded",
+  "finance.chart.engagedTitle": "Committed vs upcoming costs",
   "finance.chart.timelineTitle": "Cost commitment over time (Invest)",
   "finance.chart.timelineSubtitle":
-    "CAPEX + one-off OPEX — see the Invest vs Savings chart for the comparison with gains",
+    "CAPEX + one-off OPEX — see the Investment cost vs Savings chart for the comparison with gains",
   "finance.chart.hierarchyTitle": "Cost breakdown by cost center / P&L",
   "finance.chart.hierarchyNoConfig": "No financial hierarchy is configured for this company.",
-  "finance.chart.investVsSavingsTitle": "Invest costs vs Savings",
-  "finance.chart.investCost": "Invest costs",
+  "finance.chart.investVsSavingsTitle": "Investment cost vs Savings",
+  "finance.chart.investCost": "Investment cost",
   "finance.chart.grossSavings": "Gross savings",
   "finance.chart.netSavings": "Net savings",
   "finance.drilldown.totalLabel": "Total",

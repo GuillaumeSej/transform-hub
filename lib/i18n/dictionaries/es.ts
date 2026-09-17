@@ -20,7 +20,7 @@ const es: Record<string, string> = {
   "nav.myLevers": "Mis Palancas",
   "nav.linkedLevers": "Palancas Vinculadas",
   "nav.workstreamDashboard": "Dashboard de Workstream",
-  "nav.financeModule": "Módulo Finanzas",
+  "nav.financeModule": "Panel de Finanzas",
   "nav.hrDashboard": "Dashboard RRHH",
   "nav.hrEtp": "Base FTE",
   "nav.operationsModule": "Módulo Operaciones",
@@ -107,7 +107,7 @@ const es: Record<string, string> = {
   "topbar.consolidatedViewMine": "Vista consolidada — todos mis programas Performance",
 
   // ─── dashboard ────────────────────────────────────────────────────────────
-  "dashboard.title": "Dashboard Ejecutivo",
+  "dashboard.title": "Pilotaje global",
   "dashboard.program": "Programa",
   "dashboard.leversActive": "palancas activas",
   "dashboard.customize": "Personalizar",
@@ -337,7 +337,7 @@ const es: Record<string, string> = {
   "leverForm.pnlAccount": "Cuenta P&L impactada",
   "leverForm.startDate": "Fecha de inicio",
   "leverForm.endDate": "Fecha de fin estimada",
-  "leverForm.status": "Nivel de avance",
+  "leverForm.status": "Madurez",
   "leverForm.progress": "Progreso (%)",
   "leverForm.risk": "Riesgo",
   "leverForm.lockedPlanNotice": "Plan inicial bloqueado al pasar a «",
@@ -465,6 +465,7 @@ const es: Record<string, string> = {
     "Las líneas siguientes provienen directamente de la jerarquía financiera definida por el administrador global. Los impactos de las palancas se consolidan automáticamente.",
   "finance.pnlLine": "Línea P&L",
   "finance.baseline": "Baseline",
+  "finance.pnlRealizedNet": "Realizado (neto)",
   "finance.notAllocatable": "No imputable",
   "finance.unallocatedHint": "Imputación financiera por precisar",
 
@@ -1807,16 +1808,15 @@ const es: Record<string, string> = {
   "adminIndicators.deleteError": "No se ha podido eliminar el indicador.",
 
   // ─── gráficos de finanzas (drill-down + rediseño costes/savings) ───────────
-  "finance.chart.engagedTitle": "Costes comprometidos vs futuros (Invest)",
-  "finance.chart.engagedSubtitle": "CAPEX + OPEX puntual — OPEX recurrente excluido",
+  "finance.chart.engagedTitle": "Costes comprometidos vs futuros",
   "finance.chart.timelineTitle": "Compromiso de costes en el tiempo (Invest)",
   "finance.chart.timelineSubtitle":
-    "CAPEX + OPEX puntual — ver el gráfico Costes (Invest) vs Savings para la comparación con las ganancias",
+    "CAPEX + OPEX puntual — ver el gráfico Coste de inversión vs Savings para la comparación con las ganancias",
   "finance.chart.hierarchyTitle": "Desglose de costes por centro de coste / P&L",
   "finance.chart.hierarchyNoConfig":
     "No hay ninguna jerarquía financiera configurada para esta empresa.",
-  "finance.chart.investVsSavingsTitle": "Costes (Invest) vs Savings",
-  "finance.chart.investCost": "Costes (Invest)",
+  "finance.chart.investVsSavingsTitle": "Coste de inversión vs Savings",
+  "finance.chart.investCost": "Coste de inversión",
   "finance.chart.grossSavings": "Ganancias brutas",
   "finance.chart.netSavings": "Ganancias netas",
   "finance.drilldown.totalLabel": "Total",

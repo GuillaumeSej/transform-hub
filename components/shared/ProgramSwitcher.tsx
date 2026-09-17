@@ -22,13 +22,16 @@ import { getAuthorizedPrograms, hasRole } from "@/lib/roleProfiles";
  * un utilisateur mono-profil ne voit que les programmes de son type). Ne s'affiche jamais pour un
  * admin GLOBAL (pas de `companyId`, pas de contexte "entreprise" cohérent — voir
  * `useActiveProgram`, qui ne lui attribue déjà aucun `activeProgram` par défaut pour la même
- * raison), ni quand il n'y a qu'un seul programme autorisé ET aucune vue consolidée disponible
- * (rien à choisir).
+ * raison), ni quand il n'y a ni au moins deux programmes autorisés à sélectionner un à un, ni
+ * aucune vue consolidée disponible (rien à choisir dans les deux cas).
  *
  * Vue consolidée (fondation chantier CTO multi-programmes) : une entrée "Vue consolidée" apparaît
- * en tête de liste quand `getConsolidatedPerformancePrograms` (lib/consolidatedProgramAccess.ts)
- * renvoie PLUS D'UN programme pour l'utilisateur courant — pas la peine de la proposer s'il n'y a
- * qu'un seul programme dans son périmètre, rien à consolider. Son libellé s'adapte au rôle : un
+ * en tête de liste dès que `getConsolidatedPerformancePrograms` (lib/consolidatedProgramAccess.ts)
+ * renvoie AU MOINS UN programme pour l'utilisateur courant — y compris un seul. Décision produit
+ * volontaire : même avec un unique programme Performance aujourd'hui, l'option reste proposée pour
+ * la cohérence de l'UX (un CTO doit toujours pouvoir choisir "vue consolidée" en tant que telle) et
+ * pour éviter que l'apparition/disparition de l'option au 2e programme ne force l'utilisateur à
+ * réapprendre l'interface. Son libellé s'adapte au rôle : un
  * `cto` voit "tous les programmes de l'entreprise", un `program_sponsor`/`program_owner` voit "tous
  * mes programmes" (son périmètre est nécessairement plus étroit, voir la doc de
  * `getConsolidatedPerformancePrograms`). La sélectionner appelle
@@ -47,9 +50,12 @@ export function ProgramSwitcher() {
 
   const authorizedPrograms = getAuthorizedPrograms(user, programs);
   const consolidatedPrograms = getConsolidatedPerformancePrograms(user, programs);
-  const canConsolidate = consolidatedPrograms.length > 1;
+  const canConsolidate = consolidatedPrograms.length >= 1;
 
   if (!user?.companyId) return null;
+  // Le switcher s'affiche dès qu'il y a un choix réel à faire : soit au moins deux programmes
+  // sélectionnables un à un, soit une vue consolidée disponible (même avec un seul programme
+  // consolidé — voir la doc-comment ci-dessus).
   if (authorizedPrograms.length < 2 && !canConsolidate) return null;
 
   // Libellé adapté au rôle : un CTO consolide "l'entreprise", un sponsor/owner de programme
