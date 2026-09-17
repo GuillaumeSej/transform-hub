@@ -151,11 +151,6 @@ export function useBeTrackData(companyId?: string | null) {
   // rapprochées, ex. créer une action juste après en avoir supprimé une autre).
   const leversRef = useRef(levers);
   leversRef.current = levers;
-  // Sert uniquement à lire programConfig.program.fyEnd à jour dans les callbacks de mutation
-  // d'actions ci-dessous (annualisation de l'OPEX récurrent, voir lib/leverConsolidate.ts) sans
-  // dépendre du cycle de rendu React — même pattern que leversRef.
-  const programConfigRef = useRef(programConfig);
-  programConfigRef.current = programConfig;
   const commentsRef = useRef(comments);
   commentsRef.current = comments;
   const auditRef = useRef(audit);
@@ -351,12 +346,7 @@ export function useBeTrackData(companyId?: string | null) {
    *  validation/construction des lignes en amont. Un seul writeBatch Firestore pour tout le lot. */
   const importLevers = useCallback(
     (inputs: Omit<Lever, "id" | "createdAt" | "lastUpdate">[]) => {
-      const result = leversLogic.bulkUpsertLeversByCode(
-        leversRef.current,
-        inputs,
-        DEMO_USER,
-        programConfigRef.current.program.fyEnd
-      );
+      const result = leversLogic.bulkUpsertLeversByCode(leversRef.current, inputs, DEMO_USER);
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
@@ -391,13 +381,7 @@ export function useBeTrackData(companyId?: string | null) {
 
   const createAction = useCallback(
     (scope: { leverId: string }, input: Omit<LeverAction, "id">) => {
-      const result = leversLogic.createAction(
-        leversRef.current,
-        scope,
-        input,
-        DEMO_USER,
-        programConfigRef.current.program.fyEnd
-      );
+      const result = leversLogic.createAction(leversRef.current, scope, input, DEMO_USER);
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
@@ -413,14 +397,7 @@ export function useBeTrackData(companyId?: string | null) {
 
   const updateAction = useCallback(
     (scope: { leverId: string }, actionId: string, patch: Partial<LeverAction>) => {
-      const result = leversLogic.updateAction(
-        leversRef.current,
-        scope,
-        actionId,
-        patch,
-        DEMO_USER,
-        programConfigRef.current.program.fyEnd
-      );
+      const result = leversLogic.updateAction(leversRef.current, scope, actionId, patch, DEMO_USER);
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
@@ -435,12 +412,7 @@ export function useBeTrackData(companyId?: string | null) {
   );
 
   const deleteAction = useCallback((scope: { leverId: string }, actionId: string) => {
-    const result = leversLogic.deleteAction(
-      leversRef.current,
-      scope,
-      actionId,
-      programConfigRef.current.program.fyEnd
-    );
+    const result = leversLogic.deleteAction(leversRef.current, scope, actionId);
     leversRef.current = result.levers;
     setLevers(result.levers);
     if (result.changedLever) {

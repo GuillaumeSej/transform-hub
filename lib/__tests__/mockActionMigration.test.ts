@@ -66,16 +66,18 @@ describe("mockActionMigration", () => {
   });
 
   it("preserves each parent lever net savings after consolidating migrated actions", () => {
+    // netSavings = savings − opexRec (voir lib/leverConsolidate.ts) : le CAPEX et l'OPEX one-off
+    // ne rentrent plus dans le calcul, seul l'OPEX récurrent est déduit des savings.
     const round = (value: number) => Math.round(value * 100) / 100;
     migrated.forEach((lever) => {
       const net = (lever.actions ?? []).reduce(
         (sum, action) =>
           sum +
-          (action.impacts ?? []).reduce(
-            (actionSum, impact) =>
-              actionSum + (impact.type === "saving" ? impact.amount : -impact.amount),
-            0
-          ),
+          (action.impacts ?? []).reduce((actionSum, impact) => {
+            if (impact.type === "saving") return actionSum + impact.amount;
+            if (impact.nature === "opex_rec") return actionSum - impact.amount;
+            return actionSum;
+          }, 0),
         0
       );
       expect(round(net)).toBe(round(lever.netSavings));

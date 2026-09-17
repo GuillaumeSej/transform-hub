@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { consolidateLeverFromActions, opexRecMultiplier } from "@/lib/leverConsolidate";
+import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
 import type { ActionImpact, Lever, LeverAction } from "@/types";
 
 const baseLever: Lever = {
@@ -62,36 +62,12 @@ function impact(overrides: Partial<ActionImpact>): ActionImpact {
   };
 }
 
-describe("leverConsolidate — opexRecMultiplier", () => {
-  it("returns 1 when fyEnd is absent (face-value, no annualization)", () => {
-    expect(opexRecMultiplier("2026-06-01", undefined)).toBe(1);
-  });
-
-  it("returns 1 when fyEnd is invalid", () => {
-    expect(opexRecMultiplier("2026-06-01", "not-a-date")).toBe(1);
-  });
-
-  it("returns the number of remaining years between actionEnd and fyEnd", () => {
-    // 2026-01-01 -> 2028-01-01 = ~2 years.
-    const years = opexRecMultiplier("2026-01-01", "2028-01-01");
-    expect(years).toBeCloseTo(2, 1);
-  });
-
-  it("is always at least 1, even if the action ends after fyEnd", () => {
-    expect(opexRecMultiplier("2028-01-01", "2026-01-01")).toBe(1);
-  });
-
-  it("is always at least 1, even if the action ends just before fyEnd", () => {
-    expect(opexRecMultiplier("2026-12-01", "2026-12-31")).toBe(1);
-  });
-});
-
-describe("leverConsolidate — consolidateLeverFromActions (OPEX récurrent)", () => {
+describe("leverConsolidate — consolidateLeverFromActions (netSavings = savings − opexRec)", () => {
   it("returns undefined when no action has impacts (manual entry lever)", () => {
     expect(consolidateLeverFromActions({ ...baseLever, actions: [] })).toBeUndefined();
   });
 
-  it("without fyEnd: a recurring OPEX cost is counted once, like a one-off (face-value, backward compat)", () => {
+  it("netSavings is savings minus recurring OPEX, with no temporal weighting", () => {
     const lever: Lever = {
       ...baseLever,
       actions: [
@@ -104,30 +80,11 @@ describe("leverConsolidate — consolidateLeverFromActions (OPEX récurrent)", (
       ],
     };
     const result = consolidateLeverFromActions(lever);
-    expect(result?.netSavings).toBe(8); // 10 - 2, no annualization
-    expect(result?.opexRec).toBe(2); // face-value run-rate, unchanged
+    expect(result?.netSavings).toBe(8); // 10 - 2
+    expect(result?.opexRec).toBe(2);
   });
 
-  it("with fyEnd: a recurring OPEX cost is annualized (multiplied by remaining years) in netSavings, but opexRec (run-rate) stays face-value", () => {
-    const lever: Lever = {
-      ...baseLever,
-      actions: [
-        action({
-          end: "2026-01-01",
-          impacts: [
-            impact({ id: "s1", type: "saving", amount: 10 }),
-            impact({ id: "c1", type: "cost", nature: "opex_rec", amount: 2 }),
-          ],
-        }),
-      ],
-    };
-    // 2026-01-01 -> 2028-01-01 = ~2 years remaining.
-    const result = consolidateLeverFromActions(lever, "2028-01-01");
-    expect(result?.netSavings).toBeCloseTo(10 - 2 * 2, 1); // annualized: 10 - 4 = 6
-    expect(result?.opexRec).toBe(2); // run-rate, unaffected by annualization
-  });
-
-  it("one-off and capex costs are never annualized, regardless of fyEnd", () => {
+  it("one-off and capex costs never affect netSavings, only opexRec does", () => {
     const lever: Lever = {
       ...baseLever,
       actions: [
@@ -147,29 +104,31 @@ describe("leverConsolidate — consolidateLeverFromActions (OPEX récurrent)", (
         }),
       ],
     };
-    const result = consolidateLeverFromActions(lever, "2030-01-01");
-    expect(result?.netSavings).toBe(7); // 10 - 2 - 1, unaffected by the far-future fyEnd
+    const result = consolidateLeverFromActions(lever);
+    expect(result?.netSavings).toBe(10); // 10 - 0 (capex/oneoff excluded)
+    expect(result?.capex).toBe(1);
+    expect(result?.opexOneOff).toBe(2);
   });
 
-  it("sums annualized opex_rec across multiple actions with different end dates", () => {
+  it("sums opex_rec across multiple actions, face-value, no annualization", () => {
     const lever: Lever = {
       ...baseLever,
       actions: [
         action({
           id: "A1",
-          end: "2026-01-01", // ~2 years remaining to fyEnd
+          end: "2026-01-01",
           impacts: [impact({ id: "c1", type: "cost", nature: "opex_rec", amount: 1 })],
         }),
         action({
           id: "A2",
-          end: "2027-01-01", // ~1 year remaining to fyEnd
+          end: "2027-01-01",
           impacts: [impact({ id: "c2", type: "cost", nature: "opex_rec", amount: 3 })],
         }),
       ],
     };
-    const result = consolidateLeverFromActions(lever, "2028-01-01");
-    // netSavings = 0 (no savings) - (1*2 + 3*1) = -5
-    expect(result?.netSavings).toBeCloseTo(-5, 1);
-    expect(result?.opexRec).toBe(4); // face-value run-rate sum, unaffected
+    const result = consolidateLeverFromActions(lever);
+    // netSavings = 0 (no savings) - (1 + 3) = -4
+    expect(result?.netSavings).toBe(-4);
+    expect(result?.opexRec).toBe(4);
   });
 });

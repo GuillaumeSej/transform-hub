@@ -30,37 +30,14 @@ export function hasActionImpacts(lever: Lever): boolean {
   return (lever.actions ?? []).some((a) => (a.impacts ?? []).length > 0);
 }
 
-const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
-
-/** Multiplicateur d'annualisation d'un coût OPEX récurrent porté par une action : contrairement à
- *  un coût ponctuel (one-off/CAPEX), un OPEX récurrent continue de s'appliquer chaque année
- *  jusqu'à la fin du programme (`fyEnd`) — il doit donc peser dans `netSavings` au prorata du
- *  nombre d'années restantes entre la fin de l'action qui le porte et `fyEnd`, pas être compté une
- *  seule fois comme un coût ponctuel. Toujours ≥ 1 (on compte au moins une année de coût, même si
- *  l'action se termine après ou juste avant `fyEnd`). Repli sur `1` (comportement face-value, pas
- *  d'annualisation) si `fyEnd` est absent ou invalide — ex. appelant qui n'a pas encore accès au
- *  programme du levier. */
-export function opexRecMultiplier(actionEnd: string, fyEnd: string | undefined): number {
-  if (!fyEnd) return 1;
-  const end = new Date(actionEnd).getTime();
-  const fy = new Date(fyEnd).getTime();
-  if (!Number.isFinite(end) || !Number.isFinite(fy)) return 1;
-  return Math.max(1, (fy - end) / MS_PER_YEAR);
-}
-
 /** Consolide les KPIs d'un levier depuis ses actions (si elles ont des impacts).
  *  Retourne undefined si le levier n'a pas d'actions avec impacts (= saisie manuelle).
  *
- *  `fyEnd` (optionnel, date de fin d'exercice du programme du levier) sert à annualiser les coûts
- *  OPEX récurrents dans le calcul de `netSavings` (voir `opexRecMultiplier`). Le champ persisté
- *  `opexRec` retourné ici reste la somme face-value (run-rate annuel, affiché "OPEX récurrent
- *  /an" ailleurs dans l'UI) — SEULE l'entrée de `netSavings` est pondérée par la durée restante,
- *  pour ne pas changer la signification du champ affiché par ailleurs (Finance charts, stat
- *  "OPEX récurrent /an" du détail levier). */
-export function consolidateLeverFromActions(
-  lever: Lever,
-  fyEnd?: string
-): Partial<Lever> | undefined {
+ *  `netSavings = savings − opexRec` : les montants saisis (savings comme opexRec) sont déjà des
+ *  montants annuels par construction dès la saisie (formulaire d'impact d'action), il n'y a donc
+ *  aucune pondération temporelle à appliquer. `capex` et `opexOneOff` sont calculés/consolidés à
+ *  part (KPI "CAPEX & coûts one-off") mais ne rentrent plus dans `netSavings`. */
+export function consolidateLeverFromActions(lever: Lever): Partial<Lever> | undefined {
   const actions = lever.actions ?? [];
   if (!actions.some((a) => (a.impacts ?? []).length > 0)) return undefined;
 
@@ -68,21 +45,11 @@ export function consolidateLeverFromActions(
   const capex = sumImpacts(actions, (i) => i.type === "cost" && i.nature === "capex");
   const opexOneOff = sumImpacts(actions, (i) => i.type === "cost" && i.nature === "oneoff");
   const opexRec = sumImpacts(actions, (i) => i.type === "cost" && i.nature === "opex_rec");
-  // Coût OPEX récurrent PONDÉRÉ par sa durée restante — utilisé uniquement pour netSavings (voir
-  // doc-comment ci-dessus), calculé action par action puisque chaque action a sa propre `end`.
-  const opexRecAnnualized = actions.reduce((sum, action) => {
-    const recAmount = (action.impacts ?? [])
-      .filter((i) => i.type === "cost" && i.nature === "opex_rec")
-      .reduce((s, i) => s + i.amount, 0);
-    if (recAmount === 0) return sum;
-    return sum + recAmount * opexRecMultiplier(action.end, fyEnd);
-  }, 0);
-  const totalCosts = capex + opexOneOff + opexRecAnnualized;
   const fteImpact = sumFTE(actions);
 
   return {
     grossSavings: Math.round(savings * 100) / 100,
-    netSavings: Math.round((savings - totalCosts) * 100) / 100,
+    netSavings: Math.round((savings - opexRec) * 100) / 100,
     capex: Math.round(capex * 100) / 100,
     opexOneOff: Math.round(opexOneOff * 100) / 100,
     opexRec: Math.round(opexRec * 100) / 100,

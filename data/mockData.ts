@@ -981,7 +981,9 @@ export const mockData: BeTrackData = {
       progress: 100,
       risk: "low",
       grossSavings: 1.5,
-      netSavings: 1.4,
+      // netSavings = savings − opexRec (lib/leverConsolidate.ts) : 1.41 + 0.06 (savings des
+      // actions ci-dessous) − 0.02 (OPEX récurrent de pilotage) = 1.45.
+      netSavings: 1.45,
       opexOneOff: 0.05,
       opexRec: 0.02,
       capex: 0.0,

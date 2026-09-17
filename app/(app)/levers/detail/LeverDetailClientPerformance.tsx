@@ -41,12 +41,7 @@ import { ActionForm, type ActionFormValues } from "@/components/shared/ActionFor
 import { ActionKanban } from "@/components/shared/ActionKanban";
 import { ActionGantt } from "@/components/shared/charts/ActionGantt";
 import { JCurveChart } from "@/components/shared/charts/JCurveChart";
-import {
-  consolidateLeverFromActions,
-  leverJCurve,
-  leverPayback,
-  opexRecMultiplier,
-} from "@/lib/leverConsolidate";
+import { consolidateLeverFromActions, leverJCurve, leverPayback } from "@/lib/leverConsolidate";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import type { ActionImpact, ActionStatus, Company, LeverAction, Program } from "@/types";
 
@@ -136,8 +131,8 @@ export function LeverDetailClientPerformance() {
   );
   const paybackMonth = useMemo(() => leverPayback(jCurveData), [jCurveData]);
   const consolidatedKPIs = useMemo(
-    () => (lever ? consolidateLeverFromActions(lever, data.program.fyEnd) : undefined),
-    [lever, data.program.fyEnd]
+    () => (lever ? consolidateLeverFromActions(lever) : undefined),
+    [lever]
   );
 
   if (!lever) {
@@ -1064,7 +1059,6 @@ export function LeverDetailClientPerformance() {
               fallbackPnlMap={lever.pnlMap}
               fallbackCostCenter={lever.costCenter}
               fallbackEntity={lever.entity}
-              fyEnd={data.program.fyEnd}
               pnlAccountName={(pnlId) =>
                 data.pnlAccounts.find((p) => p.id === pnlId)?.name ?? pnlId
               }
@@ -1140,16 +1134,12 @@ function ActionImpactTable({
   fallbackPnlMap,
   fallbackCostCenter,
   fallbackEntity,
-  fyEnd,
   pnlAccountName,
 }: {
   actions: LeverAction[];
   fallbackPnlMap: string;
   fallbackCostCenter: string;
   fallbackEntity: string;
-  /** Fin d'exercice du programme du levier — sert à pondérer les lignes OPEX récurrent dans le
-   *  total (voir opexRecMultiplier), pour que ce total reste identique à netSavings. */
-  fyEnd?: string;
   pnlAccountName: (id: string) => string;
 }) {
   const { t } = useTranslation();
@@ -1214,10 +1204,8 @@ function ActionImpactTable({
 
   // Un coût est par définition négatif : le total net = gains - coûts, pas la somme des valeurs
   // absolues (impact.amount est toujours stocké positif, seul `type` détermine le signe réel).
-  // Une ligne OPEX récurrent (rawNature === "opex_rec") est en plus pondérée par sa durée
-  // restante (opexRecMultiplier), exactement comme dans consolidateLeverFromActions — sinon ce
-  // total divergerait de netSavings (affiché plus haut dans l'onglet), qui applique la même
-  // annualisation.
+  // Les montants saisis (savings comme opexRec) sont déjà annuels par construction — aucune
+  // pondération temporelle n'est appliquée (voir lib/leverConsolidate.ts::consolidateLeverFromActions).
   return (
     <EditableTable
       data={rows}
@@ -1226,12 +1214,7 @@ function ActionImpactTable({
       totalsConfig={{
         amount: (list) =>
           list
-            .reduce((sum, row) => {
-              if (row.rawType !== "cost") return sum + row.amount;
-              const weight =
-                row.rawNature === "opex_rec" ? opexRecMultiplier(row.actionEnd, fyEnd) : 1;
-              return sum - row.amount * weight;
-            }, 0)
+            .reduce((sum, row) => (row.rawType === "cost" ? sum - row.amount : sum + row.amount), 0)
             .toFixed(2),
         fte: (list) => list.reduce((sum, row) => sum + row.fte, 0),
       }}
