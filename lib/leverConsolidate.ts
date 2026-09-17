@@ -100,6 +100,26 @@ export function leverJCurve(lever: Lever, fyStart: string, fyEnd: string): JCurv
   // Pour chaque mois, calculer le cumul plan et réalisé
   let cumulPlan = 0;
   let cumulActual = 0;
+
+  // Report d'entrée (audit issue #4, "Réalisé à date" figé à 0) : `months` ne couvre que
+  // `fyStart`..`fyEnd+1an`. Une action dont la date de fin (plan) ou de livraison (réalisé) tombe
+  // AVANT `fyStart` (ex. delivrée lors d'un exercice antérieur au programme actuellement
+  // configuré) ne correspond alors plus à aucun mois itéré ci-dessous : sa contribution était donc
+  // purement et simplement perdue, jamais ajoutée à `cumulPlan`/`cumulActual` — d'où un "Réalisé à
+  // date" qui restait obstinément à 0€ même pour un levier livré à 100 %, alors que
+  // `engine.realizedSavings` (colonne "Savings réalisé" de la liste des leviers) affichait, lui,
+  // un montant non nul. On pré-accumule donc ici la contribution de toute action antérieure à
+  // `fyStart`, pour que le premier point de la courbe reparte du bon cumul plutôt que de 0.
+  const fyStartDate = new Date(fyStart);
+  for (const action of actions) {
+    const actionEnd = new Date(action.end);
+    if (actionEnd < fyStartDate) cumulPlan += actionNetAmount(action);
+    if (action.status === "done") {
+      const dDate = action.deliveredDate ? new Date(action.deliveredDate) : new Date(action.end);
+      if (dDate < fyStartDate) cumulActual += actionNetAmount(action);
+    }
+  }
+
   const now = new Date();
 
   const points: JCurvePoint[] = [];
@@ -154,6 +174,31 @@ export function leverJCurve(lever: Lever, fyStart: string, fyEnd: string): JCurv
 export function leverGrossRealizedToDate(lever: Lever): number {
   const doneActions = (lever.actions ?? []).filter((a) => a.status === "done");
   return sumImpacts(doneActions, (imp) => imp.type === "saving");
+}
+
+/** Valeur "Plan initial (net)" affichée pour un levier (audit issue #5 : sur certains leviers,
+ *  ce chiffre ne correspondait pas à la somme des lignes d'impact des actions — parfois même
+ *  seulement au montant CAPEX). Root cause : `leversLogic.ts::applyPlanLock` fige `lockedPlan`
+ *  en copiant les champs bruts du levier (`grossSavings`/`netSavings`/…) au moment du passage à
+ *  "qualified" — or pour un levier créé DÉJÀ piloté par un plan d'actions chiffré (import Excel,
+ *  seed démo, création directe à un statut avancé), ces champs bruts n'ont pas forcément été
+ *  synchronisés avec les impacts d'actions avant ce gel, ce qui fige alors un "Plan initial" faux
+ *  et définitif (`updateLever` interdit ensuite toute correction de ces champs une fois figés).
+ *  `leversLogic.ts::snapshot` a été corrigé pour figer les montants consolidés dès le PROCHAIN
+ *  verrouillage — mais un levier déjà figé avec un snapshot historique incorrect (démo ou
+ *  production existante) garde ce mauvais chiffre en base. Cette fonction corrige donc aussi
+ *  l'AFFICHAGE : pour un levier piloté par actions, on préfère toujours la somme actuelle des
+ *  lignes d'impact au snapshot figé, pour qu'ils ne puissent plus diverger — sans réécrire les
+ *  données. `isLocked` reste vrai/faux selon la présence d'un `lockedPlan`, pour ne pas changer la
+ *  sémantique visuelle "figé"/"non figé" affichée par `ProvisionalValue`. */
+export function resolveLockedPlanNet(lever: Lever): { value: number; isLocked: boolean } {
+  const consolidated = consolidateLeverFromActions(lever);
+  if (consolidated) {
+    return { value: consolidated.netSavings ?? 0, isLocked: !!lever.lockedPlan };
+  }
+  return lever.lockedPlan
+    ? { value: lever.lockedPlan.netSavings, isLocked: true }
+    : { value: lever.netSavings, isLocked: false };
 }
 
 /** Calcule le mois de payback (1er mois où le cumul plan ≥ 0 après avoir été négatif). */
