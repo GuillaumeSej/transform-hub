@@ -11,6 +11,7 @@ import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 import { getDisplayRoleDefinition } from "@/lib/nav-config";
 import { Avatar } from "@/components/shared/Avatar";
 import type { Alert, Company } from "@/types";
+import type { LeverWithApproval } from "@/lib/hooks/useApprovalQueue";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
@@ -92,11 +93,17 @@ export function Topbar({
   onMenuClick,
   alerts,
   onAlertClick,
+  approvalQueue = [],
 }: {
   alertCount: number;
   onMenuClick: () => void;
   alerts: Alert[];
   onAlertClick: (alert: Alert) => void;
+  /** File d'attente de validation en cascade (owner -> sponsor -> cto, voir
+   *  lib/hooks/useApprovalQueue.ts) concernant l'utilisateur courant — affichée en section
+   *  distincte du dropdown de notifications ci-dessous. Optionnel (défaut vide) pour ne pas
+   *  casser un éventuel autre appelant de `Topbar` qui ne la fournirait pas encore. */
+  approvalQueue?: LeverWithApproval[];
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -187,7 +194,7 @@ export function Topbar({
                 )}
               </div>
               <div className="max-h-[360px] overflow-y-auto">
-                {alerts.length === 0 ? (
+                {alerts.length === 0 && approvalQueue.length === 0 ? (
                   <p className="px-4 py-6 text-center text-xs text-tertiary">
                     {t("shared.topbar.noNotifications", "Aucune notification à traiter.")}
                   </p>
@@ -224,6 +231,41 @@ export function Topbar({
                       </span>
                     </button>
                   ))
+                )}
+                {/* Section distincte "Validations en attente" — leviers dont la cascade de
+                    validation (owner -> sponsor -> cto) attend l'utilisateur courant, voir
+                    lib/hooks/useApprovalQueue.ts. Séparation visuelle claire (bordure + sous-titre)
+                    plutôt qu'un onglet : le dropdown n'a pas de structure à onglets existante. */}
+                {approvalQueue.length > 0 && (
+                  <div className="border-t-2 border-border">
+                    <div className="bg-neutral-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                      {t("shared.topbar.pendingApprovals", "Validations en attente")}
+                    </div>
+                    {approvalQueue.map((lever) => (
+                      <button
+                        key={lever.id}
+                        type="button"
+                        onClick={async () => {
+                          // Même garde-fou que les alertes ci-dessus : ne pas perdre une saisie en
+                          // cours en naviguant vers la fiche détail du levier.
+                          const proceed = await confirmDiscard();
+                          if (!proceed) return;
+                          setAlertsOpen(false);
+                          router.push(`/levers/detail?id=${lever.id}`);
+                        }}
+                        className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
+                      >
+                        <span className="block text-xs font-semibold text-primary">
+                          {lever.name}
+                        </span>
+                        <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
+                          {lever.approval?.pendingStep === "cto"
+                            ? t("shared.topbar.approvalStepCto", "En attente · CTO")
+                            : t("shared.topbar.approvalStepSponsor", "En attente · Sponsor")}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

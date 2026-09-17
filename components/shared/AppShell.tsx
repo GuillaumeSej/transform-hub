@@ -18,6 +18,7 @@ import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
 import { useNotifications } from "@/lib/hooks/useNotifications";
+import { useApprovalQueue } from "@/lib/hooks/useApprovalQueue";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Alert } from "@/types";
 
@@ -41,6 +42,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const data = useBeTrackData(user?.companyId ?? null);
   const notifications = useNotifications(data, user);
+  // File d'attente de validation en cascade (owner -> sponsor -> cto, voir
+  // lib/hooks/useApprovalQueue.ts) : uniquement pertinente pour le Plan Performance (les leviers,
+  // pas les chantiers/indicateurs du Plan Stratégique) — non filtrée ci-dessous par `isStrategic`
+  // (calculé plus bas) puisque `resolveApprovalQueue` ne retient déjà que les leviers portant un
+  // `approval` en cours, structurellement absent en mode stratégique.
+  const approvalQueue = useApprovalQueue(data, user);
   const [ready, setReady] = useState(false);
   const [noAccess, setNoAccess] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -280,8 +287,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
-          alertCount={shellAlerts.length}
+          alertCount={shellAlerts.length + approvalQueue.count}
           alerts={shellAlerts}
+          approvalQueue={approvalQueue.queue}
           onAlertClick={(alert) => {
             if (isStrategic) {
               // Une alerte stratégique ne pointe jamais un levier : cascade de dépendance → fiche
