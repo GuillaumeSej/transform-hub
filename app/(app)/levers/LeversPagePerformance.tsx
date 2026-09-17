@@ -46,6 +46,9 @@ type LeverRow = Lever & {
   costCenterLabel: string;
   hasAlert: boolean;
   roi: number | null;
+  /** Motif du niveau de risque (`engine.computeLeverRisk(...).reason`) — affiché en tooltip sur
+   *  le badge de la colonne "Risque", `risk` (hérité de `Lever`) restant le niveau seul. */
+  riskReason: string;
 };
 
 export function LeversPagePerformance() {
@@ -321,8 +324,9 @@ export function LeversPagePerformance() {
         key: "f_risk",
         label: t("leverForm.risk", "Risque"),
         // Recalculé depuis les alertes (voir engine.computeLeverRisk), pas la valeur stockée —
-        // les options proposées doivent refléter le risque réellement affiché.
-        getValue: (l) => engine.computeLeverRisk(l.id, alerts, riskThresholds),
+        // les options proposées doivent refléter le risque réellement affiché. Seul le niveau
+        // (.level) sert à filtrer/grouper — le motif (.reason) n'a de sens qu'en affichage.
+        getValue: (l) => engine.computeLeverRisk(l.id, alerts, riskThresholds).level,
       },
       ...(hierarchyFilterDefs.length > 0
         ? hierarchyFilterDefs
@@ -391,9 +395,11 @@ export function LeversPagePerformance() {
 
   const rows: LeverRow[] = filteredLevers.map((l) => {
     const costs = l.capex + l.opexOneOff;
+    const riskAssessment = engine.computeLeverRisk(l.id, alerts, riskThresholds);
     return {
       ...l,
-      risk: engine.computeLeverRisk(l.id, alerts, riskThresholds),
+      risk: riskAssessment.level,
+      riskReason: riskAssessment.reason,
       realized: engine.realizedSavings(l),
       wsName: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       statusLabel: lifecycle.label(l.status),
@@ -620,7 +626,7 @@ export function LeversPagePerformance() {
       label: "Risque",
       mobile: "secondary",
       width: "110px",
-      render: (r) => <StatusBadge risk={r.risk} />,
+      render: (r) => <StatusBadge risk={r.risk} reason={r.riskReason} />,
     },
   ];
 

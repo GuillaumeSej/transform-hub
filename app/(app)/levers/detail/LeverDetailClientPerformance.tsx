@@ -123,6 +123,15 @@ export function LeverDetailClientPerformance() {
   }, [focusActionId, lever?.id]);
   const allDependencyAlerts = useMemo(() => engine.dependencyAlerts(data), [data]);
   const alerts = useMemo(() => generateAlerts(data), [data]);
+  // Risque + motif recalculés à la volée depuis les alertes (voir engine.computeLeverRisk) — le
+  // niveau seul (Lever.risk) ne suffit plus à expliquer POURQUOI le badge affiche ce niveau.
+  const leverRiskAssessment = useMemo(
+    () =>
+      lever
+        ? engine.computeLeverRisk(lever.id, alerts, riskThresholds)
+        : { level: "low" as const, reason: "" },
+    [lever, alerts, riskThresholds]
+  );
 
   // J-Curve + consolidation — hooks doivent être avant tout return conditionnel
   const jCurveData = useMemo(
@@ -623,7 +632,10 @@ export function LeverDetailClientPerformance() {
                 <BigStat
                   label={t("leverForm.risk", "Risque")}
                   value={
-                    <StatusBadge risk={engine.computeLeverRisk(lever.id, alerts, riskThresholds)} />
+                    <StatusBadge
+                      risk={leverRiskAssessment.level}
+                      reason={leverRiskAssessment.reason}
+                    />
                   }
                 />
               </div>

@@ -8,10 +8,24 @@ const STYLES: Record<RiskLevel, string> = {
   critical: "bg-bp-deep-red/10 text-bp-deep-red",
 };
 
-/** Badge RAG (risk level) — porté depuis `.badge` / `.risk-*` du prototype legacy. */
-export function StatusBadge({ risk, className }: { risk: RiskLevel; className?: string }) {
+/** Badge RAG (risk level) — porté depuis `.badge` / `.risk-*` du prototype legacy.
+ *
+ *  `reason` (optionnel) : motif du niveau de risque (`LeverRiskAssessment.reason`, voir
+ *  `engine.computeLeverRisk`) — affiché en tooltip natif (`title`) sur le badge quand fourni,
+ *  pour ne pas changer la mise en page des call sites existants qui n'ont pas ce contexte
+ *  (`workstreams/page.tsx`, `DashboardPagePerformance.tsx`, qui continuent à passer `risk` seul). */
+export function StatusBadge({
+  risk,
+  reason,
+  className,
+}: {
+  risk: RiskLevel;
+  reason?: string;
+  className?: string;
+}) {
   return (
     <span
+      title={reason}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize",
         STYLES[risk],
