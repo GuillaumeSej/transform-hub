@@ -47,7 +47,7 @@ const fr: Record<string, string> = {
   "nav.myLevers": "Mes leviers",
   "nav.linkedLevers": "Leviers liés",
   "nav.workstreamDashboard": "Workstream Dashboard",
-  "nav.financeModule": "Module Finance",
+  "nav.financeModule": "Dashboard Finance",
   "nav.hrDashboard": "Dashboard RH",
   "nav.hrEtp": "Base ETP",
   "nav.operationsModule": "Module Opérations",
@@ -137,7 +137,7 @@ const fr: Record<string, string> = {
   "topbar.consolidatedViewMine": "Vue consolidée — tous mes programmes Performance",
 
   // ─── dashboard ────────────────────────────────────────────────────────────
-  "dashboard.title": "Tableau de bord exécutif",
+  "dashboard.title": "Pilotage global",
   "dashboard.program": "Programme",
   "dashboard.leversActive": "leviers actifs",
   "dashboard.customize": "Personnaliser",
@@ -389,7 +389,7 @@ const fr: Record<string, string> = {
   "leverForm.pnlAccount": "Compte P&L impacté",
   "leverForm.startDate": "Date de départ",
   "leverForm.endDate": "Date de fin estimée",
-  "leverForm.status": "Niveau d'avancement",
+  "leverForm.status": "Maturité",
   "leverForm.progress": "Progression (%)",
   "leverForm.risk": "Risque",
   "leverForm.lockedPlanNotice": "Plan initial figé au passage en «",
@@ -517,6 +517,7 @@ const fr: Record<string, string> = {
     "Les lignes ci-dessous proviennent directement de l'arborescence financière définie par l'administrateur global. Les impacts des leviers sont consolidés automatiquement.",
   "finance.pnlLine": "Ligne P&L",
   "finance.baseline": "Baseline",
+  "finance.pnlRealizedNet": "Réalisé (net)",
   "finance.notAllocatable": "Non imputable",
   "finance.unallocatedHint": "Rattachement financier à préciser",
 
@@ -1913,16 +1914,15 @@ const fr: Record<string, string> = {
   "adminIndicators.deleteError": "L'indicateur n'a pas pu être supprimé.",
 
   // ─── finance charts (drill-down + refonte coûts/savings) ───────────────────
-  "finance.chart.engagedTitle": "Coûts engagés vs à venir (Invest)",
-  "finance.chart.engagedSubtitle": "CAPEX + OPEX one-off — OPEX récurrent exclu",
+  "finance.chart.engagedTitle": "Coûts engagés vs à venir",
   "finance.chart.timelineTitle": "Engagement des coûts dans le temps (Invest)",
   "finance.chart.timelineSubtitle":
-    "CAPEX + OPEX one-off — voir le graphique Coûts (Invest) vs Savings pour la comparaison aux gains",
+    "CAPEX + OPEX one-off — voir le graphique Coût d'investissement vs Savings pour la comparaison aux gains",
   "finance.chart.hierarchyTitle": "Répartition des coûts par centre de coût / P&L",
   "finance.chart.hierarchyNoConfig":
     "Aucune arborescence financière n'est configurée pour cette entreprise.",
-  "finance.chart.investVsSavingsTitle": "Coûts (Invest) vs Savings",
-  "finance.chart.investCost": "Coûts (Invest)",
+  "finance.chart.investVsSavingsTitle": "Coût d'investissement vs Savings",
+  "finance.chart.investCost": "Coût d'investissement",
   "finance.chart.grossSavings": "Gains bruts",
   "finance.chart.netSavings": "Gains nets",
   "finance.drilldown.totalLabel": "Total",

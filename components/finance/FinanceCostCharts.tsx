@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  Legend,
   Line,
   ResponsiveContainer,
   Tooltip,
@@ -71,16 +72,7 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
 
   return (
     <Card>
-      <CardHeader
-        title={
-          <span className="flex flex-col gap-0.5">
-            <span>{t("finance.chart.engagedTitle", "Coûts engagés vs à venir (Invest)")}</span>
-            <span className="text-[10.5px] font-normal text-tertiary">
-              {t("finance.chart.engagedSubtitle", "CAPEX + OPEX one-off — OPEX récurrent exclu")}
-            </span>
-          </span>
-        }
-      />
+      <CardHeader title={t("finance.chart.engagedTitle", "Coûts engagés vs à venir")} />
       <CardBody>
         {split.total === 0 ? (
           <EmptyState />
@@ -141,7 +133,7 @@ export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
             <span className="text-[10.5px] font-normal text-tertiary">
               {t(
                 "finance.chart.timelineSubtitle",
-                "CAPEX + OPEX one-off — voir le graphique Coûts (Invest) vs Savings pour la comparaison aux gains"
+                "CAPEX + OPEX one-off — voir le graphique Coût d'investissement vs Savings pour la comparaison aux gains"
               )}
             </span>
           </span>
@@ -274,6 +266,7 @@ export function CostByHierarchyChart({
         }
       />
       <CardBody>
+        <HierarchyLevelBreadcrumb levels={levels} currentIndex={drillPath.length} />
         {slices.length === 0 ? (
           <EmptyState />
         ) : (
@@ -309,7 +302,40 @@ export function CostByHierarchyChart({
   );
 }
 
-/** #4 — "Coûts (Invest) vs Savings" : compare, sur une fenêtre temporelle choisie, les coûts
+/** Repère "à quel niveau de l'arborescence financière suis-je ?" pour le donut de répartition des
+ *  coûts ci-dessus : liste tous les niveaux configurés (`HierarchyLevelDef[]`, dans l'ordre),
+ *  reliés par des chevrons, avec le niveau courant mis en évidence (pastille sombre) — le reste en
+ *  gris neutre. Purement informatif (le drill-down se fait toujours en cliquant une part du donut
+ *  ou via le bouton retour du CardHeader) : évite de dupliquer un sélecteur existant. */
+function HierarchyLevelBreadcrumb({
+  levels,
+  currentIndex,
+}: {
+  levels: HierarchyLevelDef[];
+  currentIndex: number;
+}) {
+  if (levels.length === 0) return null;
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-1">
+      {levels.map((level, index) => (
+        <span key={level.key} className="flex items-center gap-1">
+          {index > 0 && <ChevronRight size={12} className="text-tertiary" />}
+          <span
+            className={
+              index === currentIndex
+                ? "rounded-full bg-black px-2 py-0.5 text-[10.5px] font-semibold text-white"
+                : "rounded-full px-2 py-0.5 text-[10.5px] font-medium text-tertiary"
+            }
+          >
+            {level.label}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** #4 — "Coût d'investissement vs Savings" : compare, sur une fenêtre temporelle choisie, les coûts
  *  d'investissement (CAPEX + OPEX one-off) aux gains — barres empilées gains nets + OPEX récurrent
  *  démarré (= gains bruts), tooltip détaillé au survol. */
 export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
@@ -323,7 +349,7 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
   return (
     <Card>
       <CardHeader
-        title={t("finance.chart.investVsSavingsTitle", "Coûts (Invest) vs Savings")}
+        title={t("finance.chart.investVsSavingsTitle", "Coût d'investissement vs Savings")}
         actions={<GranularityToggle value={granularity} onChange={setGranularity} />}
       />
       <CardBody>
@@ -341,9 +367,10 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
                 tickFormatter={(v) => `€${v}M`}
               />
               <Tooltip content={<InvestVsSavingsTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar
                 dataKey="investCost"
-                name={t("finance.chart.investCost", "Coûts (Invest)")}
+                name={t("finance.chart.investCost", "Coût d'investissement")}
                 fill="#806659"
                 radius={[3, 3, 0, 0]}
               />
@@ -393,7 +420,7 @@ function InvestVsSavingsTooltip({
     <div className="rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
       <p className="text-[12px] font-semibold text-primary">{d.period}</p>
       <p className="mt-1 text-[12px] text-secondary">
-        {t("finance.chart.investCost", "Coûts (Invest)")} : {engine.fmtCurr(d.investCost)}
+        {t("finance.chart.investCost", "Coût d'investissement")} : {engine.fmtCurr(d.investCost)}
       </p>
       <p className="mt-0.5 text-[12px] text-secondary">
         {t("finance.chart.grossSavings", "Gains bruts")} : {engine.fmtCurr(d.grossSavings)}

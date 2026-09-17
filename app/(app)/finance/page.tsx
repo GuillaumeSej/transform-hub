@@ -393,7 +393,9 @@ export default function FinancePage() {
                   <th className="px-3 py-2 text-left">{t("finance.pnlLine", "Ligne P&L")}</th>
                   <th className="px-3 py-2 text-right">{t("finance.baseline", "Baseline")}</th>
                   <th className="px-3 py-2 text-right">{t("chart.pnl.plan", "Plan")}</th>
-                  <th className="px-3 py-2 text-right">{t("levers.realized", "Réalisé")}</th>
+                  <th className="px-3 py-2 text-right">
+                    {t("finance.pnlRealizedNet", "Réalisé (net)")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -451,7 +453,9 @@ export default function FinancePage() {
                       <dd>{engine.fmtCurr(impact?.plan ?? 0)}</dd>
                     </div>
                     <div>
-                      <dt className="text-tertiary">{t("levers.realized", "Réalisé")}</dt>
+                      <dt className="text-tertiary">
+                        {t("finance.pnlRealizedNet", "Réalisé (net)")}
+                      </dt>
                       <dd>{engine.fmtCurr(impact?.realized ?? 0)}</dd>
                     </div>
                   </dl>
@@ -476,7 +480,9 @@ export default function FinancePage() {
                     <dd>{engine.fmtCurr(unallocatedRow.plan)}</dd>
                   </div>
                   <div>
-                    <dt className="text-tertiary">{t("levers.realized", "Réalisé")}</dt>
+                    <dt className="text-tertiary">
+                      {t("finance.pnlRealizedNet", "Réalisé (net)")}
+                    </dt>
                     <dd>{engine.fmtCurr(unallocatedRow.realized)}</dd>
                   </div>
                 </dl>
