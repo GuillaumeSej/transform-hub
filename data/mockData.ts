@@ -1313,7 +1313,8 @@ export const mockData: BeTrackData = {
         capex: 0.3,
       },
       dependencies: [],
-      description: "Optimisation pricing dynamique B2B sur portefeuille €450M revenu.",
+      description:
+        "Optimisation pricing dynamique B2B sur portefeuille €450M revenu, portée par le recrutement d'un Pricing Analyst dédié par région (Europe et Americas — cf. sous-leviers) pour piloter le moteur de pricing après déploiement.",
       createdAt: "2025-10-30",
       lastUpdate: "2026-06-22",
     },

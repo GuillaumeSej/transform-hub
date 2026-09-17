@@ -126,13 +126,22 @@ function financialImpacts(
       entity: values.entity,
     });
   }
+  // Un fteImpact positif est une AUGMENTATION d'effectif (recrutement), donc un coût — jamais un
+  // gain financier : on le rattache à la ligne de coût récurrent (le salaire chargé du recrutement
+  // en fait partie) plutôt qu'à la ligne de savings, pour ne pas laisser croire qu'un gain de
+  // pricing/revenu "crée" mécaniquement des ETP. Un fteImpact négatif (réduction, ex. productivité)
+  // reste porté par la ligne de savings, dont il est la contrepartie RH directe.
+  const carryFteOnOpexLine = values.fteImpact > 0 && values.opexRec > 0;
   if (values.opexRec > 0) {
     impacts.push({
       id: `${prefix}-OPEX`,
-      label: "Coûts récurrents",
+      label: carryFteOnOpexLine
+        ? `Coûts récurrents (dont recrutement, +${values.fteImpact} ETP)`
+        : "Coûts récurrents",
       type: "cost",
       nature: "opex_rec",
       amount: values.opexRec,
+      fteCount: carryFteOnOpexLine ? values.fteImpact : undefined,
       pnlMap: values.pnlMap,
       costCenter: values.costCenter,
       entity: values.entity,
@@ -148,7 +157,7 @@ function financialImpacts(
       type: "saving",
       nature: "opex_rec",
       amount: Math.round(grossValue * 100) / 100,
-      fteCount: values.fteImpact || undefined,
+      fteCount: carryFteOnOpexLine ? undefined : values.fteImpact || undefined,
       pnlMap: values.pnlMap,
       costCenter: values.costCenter,
       entity: values.entity,
@@ -233,13 +242,21 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
         entity: parent.entity,
       });
     }
+    // Un fteImpact positif (recrutement) est un coût, jamais un gain — voir financialImpacts() :
+    // rattaché à la ligne de coût récurrent (dernière action, où le poste est effectivement
+    // pourvu) plutôt qu'à la ligne de savings, pour ne pas laisser croire qu'un gain de
+    // pricing/revenu "crée" mécaniquement des ETP.
+    const carryFteOnOpexLine = isLast && sub.fteImpact > 0 && sub.opexRec > 0;
     if (sub.opexRec > 0) {
       impacts.push({
         id: `IMP-${sub.id}-${index + 1}-OPEX`,
-        label: `${action.name} — coûts récurrents`,
+        label: carryFteOnOpexLine
+          ? `${action.name} — coûts récurrents (dont recrutement, +${sub.fteImpact} ETP)`
+          : `${action.name} — coûts récurrents`,
         type: "cost",
         nature: "opex_rec",
         amount: Math.round(sub.opexRec * weight * 100) / 100,
+        fteCount: carryFteOnOpexLine ? sub.fteImpact : undefined,
         pnlMap: sub.pnlMap || parent.pnlMap,
         costCenter: sub.expensePost || parent.costCenter,
         entity: parent.entity,
@@ -257,7 +274,7 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
         type: "saving",
         nature: "opex_rec",
         amount: Math.round(grossValue * 100) / 100,
-        fteCount: sub.fteImpact || undefined,
+        fteCount: carryFteOnOpexLine ? undefined : sub.fteImpact || undefined,
         pnlMap: sub.pnlMap || parent.pnlMap,
         costCenter: sub.expensePost || parent.costCenter,
         entity: parent.entity,
@@ -487,7 +504,11 @@ function alignActionsToLeverFinancials(actions: LeverAction[], lever: Lever): Le
     })
   );
 
-  // Le FTE n'est pas un montant financier : rattache l'écart à la dernière ligne de savings.
+  // Le FTE n'est pas un montant financier : rattache l'écart à une ligne d'impact existante.
+  // Un delta positif (recrutement net) est un coût — rattaché à une ligne de coût opex_rec quand il
+  // y en a une (même convention que financialImpacts()/migrateSubLever() : un gain de pricing/revenu
+  // ne "crée" jamais mécaniquement des ETP) ; un delta négatif (réduction nette) reste porté par la
+  // dernière ligne de savings, dont il est la contrepartie RH directe.
   const currentFte = next.reduce(
     (sum, action) =>
       sum + (action.impacts ?? []).reduce((s, impact) => s + (impact.fteCount ?? 0), 0),
@@ -495,17 +516,25 @@ function alignActionsToLeverFinancials(actions: LeverAction[], lever: Lever): Le
   );
   const fteDelta = lever.fteImpact - currentFte;
   if (fteDelta !== 0) {
-    for (let actionIdx = next.length - 1; actionIdx >= 0; actionIdx--) {
-      const impacts = next[actionIdx].impacts ?? [];
-      const impactIdx = impacts.findLastIndex((impact) => impact.type === "saving");
-      if (impactIdx !== -1) {
-        impacts[impactIdx] = {
-          ...impacts[impactIdx],
-          fteCount: (impacts[impactIdx].fteCount ?? 0) + fteDelta,
-        };
-        break;
+    const attachTo = (predicate: (impact: ActionImpact) => boolean): boolean => {
+      for (let actionIdx = next.length - 1; actionIdx >= 0; actionIdx--) {
+        const impacts = next[actionIdx].impacts ?? [];
+        const impactIdx = impacts.findLastIndex(predicate);
+        if (impactIdx !== -1) {
+          impacts[impactIdx] = {
+            ...impacts[impactIdx],
+            fteCount: (impacts[impactIdx].fteCount ?? 0) + fteDelta,
+          };
+          return true;
+        }
       }
-    }
+      return false;
+    };
+    const isOpexRec = (impact: ActionImpact) =>
+      impact.type === "cost" && impact.nature === "opex_rec";
+    const isSaving = (impact: ActionImpact) => impact.type === "saving";
+    // Repli si aucune ligne de coût opex_rec n'existe pour un delta positif : reste porté par le savings.
+    if (fteDelta <= 0 || !attachTo(isOpexRec)) attachTo(isSaving);
   }
 
   return next;

@@ -245,8 +245,38 @@ const LEVER_NAME_SUFFIXES = [
   "Retail",
 ];
 
+// Utilitaires déterministes partagés par la génération Leviers/Actions/Impacts ci-dessous — même
+// convention que lib/mockActionMigration.ts (midpoint/round2/netSavings = savings − opexRec), pour
+// que chaque levier généré reconcilie EXACTEMENT (capex/opexOneOff/opexRec/netSavings/fteImpact)
+// avec la somme de ses propres lignes Actions/Impacts, au lieu de laisser le levier "planifié"
+// diverger silencieusement de son détail (bug d'origine : seuls 3 des 30 leviers avaient des
+// lignes Actions/Impacts, et aucune ne matchait les totaux du levier).
+const round2 = (value) => Math.round(value * 100) / 100;
+function midDate(startISO, endISO, ratio) {
+  const a = new Date(startISO).getTime();
+  const b = new Date(endISO).getTime();
+  return new Date(a + (b - a) * ratio).toISOString().slice(0, 10);
+}
+function actionStatusFor(progress, phase) {
+  if (progress >= 100) return "Terminé";
+  if (phase === 1) {
+    if (progress >= 30) return "Terminé";
+    if (progress > 0) return "En cours";
+    return "À faire";
+  }
+  if (progress >= 70) return "Terminé";
+  if (progress >= 30) return "En cours";
+  return "À faire";
+}
+
 const LEVER_COUNT = 30;
 const LEVER_ROWS = [];
+const ACTION_ROWS = [];
+const IMPACT_ROWS = [];
+// Métadonnées par levier réutilisées par la génération des mouvements RH plus bas (pour construire
+// des mouvements qui convergent vers le fteImpact de CHAQUE levier plutôt que d'être générés
+// indépendamment — voir la section Mouvements).
+const LEVER_META = [];
 for (let i = 0; i < LEVER_COUNT; i++) {
   const code = `AC-${String(i + 1).padStart(3, "0")}`;
   const profile = LEVER_PROFILES[i % LEVER_PROFILES.length];
@@ -327,6 +357,105 @@ for (let i = 0; i < LEVER_COUNT; i++) {
     deps.join(";"),
     `Levier de démo généré (${profile.type.toLowerCase()}, ${geo.country}).`,
   ]);
+
+  // ── Actions + Impacts du levier — construits DIRECTEMENT à partir des mêmes champs que la
+  //    ligne Leviers ci-dessus (capex/opexOneOff/opexRec/netSavings/fteImpact), pour que la somme
+  //    des lignes Impacts reconcilie EXACTEMENT avec le levier, comme le fait
+  //    lib/mockActionMigration.ts (buildSimpleActions/financialImpacts) pour le seed Acme. Chaque
+  //    levier a 2 actions : (1) cadrage/déploiement portant CAPEX + OPEX one-off, (2) réalisation
+  //    des gains portant OPEX récurrent + le gain net (et l'ETP, jamais posé sur une ligne Gain
+  //    quand il s'agit d'une augmentation d'effectif — ici toujours négatif ou nul, cf. fteImpact
+  //    ci-dessus, donc toujours la contrepartie RH directe du gain).
+  const action1Name = `${name} — Cadrage & déploiement`;
+  const action1End = midDate(startDate, endDate, 0.45);
+  const action2Name = `${name} — Réalisation des gains`;
+  const action2Start = midDate(startDate, endDate, 0.5);
+  const action2End = endDate;
+  const action1Status = actionStatusFor(progress, 1);
+  const action2Status = actionStatusFor(progress, 2);
+
+  ACTION_ROWS.push([code, action1Name, owner, startDate, action1End, action1Status]);
+  ACTION_ROWS.push([code, action2Name, owner, action2Start, action2End, action2Status]);
+
+  if (capex > 0) {
+    IMPACT_ROWS.push([
+      code,
+      action1Name,
+      "Coût",
+      "CAPEX",
+      capex,
+      "",
+      "",
+      action1End,
+      "",
+      "",
+      "",
+      profile.cc,
+      profile.pnl,
+      "",
+    ]);
+  }
+  if (opexOneOff > 0) {
+    IMPACT_ROWS.push([
+      code,
+      action1Name,
+      "Coût",
+      "One-off",
+      opexOneOff,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      profile.cc,
+      profile.pnl,
+      "",
+    ]);
+  }
+  if (opexRec > 0) {
+    IMPACT_ROWS.push([
+      code,
+      action2Name,
+      "Coût",
+      "OPEX récurrent",
+      opexRec,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      profile.cc,
+      profile.pnl,
+      "",
+    ]);
+  }
+  // netSavings = savings − opexRec (même convention que lib/leverConsolidate.ts) : la ligne de
+  // gain porte le montant BRUT (netSavings + opexRec), la ligne OPEX récurrent ci-dessus déduisant
+  // le reste — reconstituant exactement `netSavings` une fois consolidé côté import.
+  const grossValue = round2(netSavings + opexRec);
+  if (grossValue > 0) {
+    const savingTypeLabel = profile.pnl === "REV" ? "Augmentation du CA" : "Réduction de coût";
+    IMPACT_ROWS.push([
+      code,
+      action2Name,
+      "Gain",
+      "OPEX récurrent",
+      grossValue,
+      fteImpact !== 0 ? fteImpact : "",
+      savingTypeLabel,
+      "",
+      action2End,
+      "",
+      "",
+      profile.cc,
+      profile.pnl,
+      "",
+    ]);
+  }
+
+  LEVER_META.push({ code, fteImpact, status, progress });
 }
 
 const ACTION_HEADERS = [
@@ -338,35 +467,9 @@ const ACTION_HEADERS = [
   "Statut",
 ];
 
-const ACTION_ROWS = [
-  [
-    "AC-001",
-    "Renégocier contrats fournisseurs classe A",
-    "Isabelle Roy",
-    "2026-02-01",
-    "2026-05-31",
-    "En cours",
-  ],
-  [
-    "AC-001",
-    "Standardiser formats packaging",
-    "Isabelle Roy",
-    "2026-06-01",
-    "2026-09-30",
-    "À faire",
-  ],
-  ["AC-002", "Diagnostic pannes lignes B", "Thomas Petit", "2026-03-15", "2026-05-15", "Terminé"],
-  [
-    "AC-002",
-    "Déployer maintenance préventive",
-    "Thomas Petit",
-    "2026-05-16",
-    "2026-12-31",
-    "En cours",
-  ],
-  ["AC-006", "Sélection des 3 sites cibles", "Ryan Cole", "2026-02-15", "2026-04-30", "Terminé"],
-  ["AC-006", "Migration des flux logistiques", "Ryan Cole", "2026-05-01", "2026-10-15", "En cours"],
-];
+// ACTION_ROWS est désormais généré ci-dessus, DANS la boucle des leviers (une action "Cadrage &
+// déploiement" + une action "Réalisation des gains" par levier), pour que les 30 leviers aient
+// tous un plan d'action au lieu des 3 leviers historiquement couverts.
 
 const IMPACT_HEADERS = [
   "Code Levier",
@@ -385,72 +488,10 @@ const IMPACT_HEADERS = [
   "Commentaire",
 ];
 
-const IMPACT_ROWS = [
-  [
-    "AC-001",
-    "Renégocier contrats fournisseurs classe A",
-    "Gain",
-    "OPEX récurrent",
-    2.2,
-    "",
-    "Réduction de coût",
-    "",
-    "2026-06-01",
-    "Lissé",
-    "",
-    "CC-PROC-001",
-    "COGS",
-    "",
-  ],
-  [
-    "AC-001",
-    "Standardiser formats packaging",
-    "Coût",
-    "One-off",
-    0.1,
-    "",
-    "",
-    "2026-06-01",
-    "",
-    "",
-    "",
-    "CC-PROC-001",
-    "COGS",
-    "",
-  ],
-  [
-    "AC-002",
-    "Déployer maintenance préventive",
-    "Gain",
-    "OPEX récurrent",
-    2.8,
-    "",
-    "Réduction de coût",
-    "",
-    "2026-09-01",
-    "Lissé",
-    "",
-    "CC-OPS-001",
-    "COGS",
-    "",
-  ],
-  [
-    "AC-006",
-    "Migration des flux logistiques",
-    "Gain",
-    "OPEX récurrent",
-    3.4,
-    "-6",
-    "Réduction de coût",
-    "",
-    "2026-11-01",
-    "Lissé",
-    "",
-    "CC-OPS-001",
-    "COGS",
-    "",
-  ],
-];
+// IMPACT_ROWS est désormais généré ci-dessus, DANS la boucle des leviers, directement à partir des
+// champs capex/opexOneOff/opexRec/netSavings/fteImpact de CHAQUE levier (voir financialImpacts()
+// côté lib/mockActionMigration.ts pour la même convention) — la somme des lignes Impacts d'un
+// levier reconcilie donc exactement avec sa propre ligne Leviers, pour les 30 leviers.
 
 const leverWb = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(
@@ -654,10 +695,15 @@ const MOVEMENT_HEADERS = [
   "Commentaire",
 ];
 
-// 20 mouvements — cycle Départ forcé / Transfert entrant / Transfert sortant / Recrutement,
-// référencent des matricules réels de la base ci-dessus (sauf les recrutements, sans matricule
-// existant) et des codes leviers AC-001..AC-030 pour que l'impact RH remonte sur des leviers
-// réellement importés.
+// Mouvements construits PAR LEVIER (à partir de LEVER_META, rempli pendant la génération des 30
+// leviers plus haut) plutôt qu'indépendamment : pour chaque levier dont fteImpact != 0, on génère
+// 1 à 3 mouvements "Départ forcé"/"Attrition" (la seule décroissance nette de fteImpact générée par
+// le pool de leviers ci-dessus — cf. `fteImpact = i % 4 === 0 ? 0 : -(2 + (i % 5))`) dont la somme
+// des ETP reconstitue EXACTEMENT le fteImpact du levier (signe hrEngine.fteEffect : Attrition/
+// Départ forcé = -fte, Transfert = 0 — voir lib/hrEngine.ts). Un levier à fteImpact=0 reçoit un
+// mouvement de transfert neutre (net 0), pour rester référencé sans fausser le total. Avant ce
+// correctif, les mouvements étaient générés indépendamment des leviers (cycle `(i*3) % 30`) et
+// pouvaient s'écarter du fteImpact du levier d'un facteur 4-9x, sans lien de cohérence.
 //
 // Types et statuts DOIVENT rester ceux de la typologie courante (MOVEMENT_TYPES /
 // MOVEMENT_STATUSES dans lib/hrExcel.ts) : l'ancienne typologie 4-types
@@ -665,58 +711,90 @@ const MOVEMENT_HEADERS = [
 // l'import par rétrocompatibilité, mais chaque ligne concernée déclenche un avertissement de
 // conversion — un fichier de démo doit s'importer sans le moindre avertissement (verrouillé par
 // lib/__tests__/demoSetupFlow.test.ts).
-const MOVEMENT_TYPES_POOL = [
-  "Départ forcé",
-  "Transfert entrant",
-  "Transfert sortant",
-  "Recrutement",
-];
 const MOVEMENT_STATUS_POOL = ["Planifié", "À faire", "Réalisé"];
-const MOVEMENT_COUNT = 20;
 const MOVEMENT_ROWS = [];
-for (let i = 0; i < MOVEMENT_COUNT; i++) {
-  const type = MOVEMENT_TYPES_POOL[i % MOVEMENT_TYPES_POOL.length];
-  const status = MOVEMENT_STATUS_POOL[i % MOVEMENT_STATUS_POOL.length];
-  const leverIdx = (i * 3) % LEVER_COUNT;
-  const leverCode = `AC-${String(leverIdx + 1).padStart(3, "0")}`;
-  const isRecruitment = type === "Recrutement";
-  const empRow = isRecruitment ? null : EMPLOYEE_ROWS[(i * 5) % EMPLOYEE_COUNT];
-  const matricule = empRow ? empRow[0] : "";
-  const label = empRow ? empRow[1] : `Poste à recruter (${leverCode})`;
-  const department = empRow ? empRow[2] : EMP_DEPTS[i % EMP_DEPTS.length].dept;
-  const country = empRow ? empRow[6] : EMP_GEOS[i % EMP_GEOS.length].country;
-  const hrOwner = empRow ? empRow[4] : EMP_DEPTS[i % EMP_DEPTS.length].hrOwner;
-  const plannedMonth = 1 + (i % 12);
+let movementSeq = 0;
+let empCursor = 0;
+const nextEmployee = () => {
+  const empRow = EMPLOYEE_ROWS[empCursor % EMPLOYEE_COUNT];
+  empCursor += 1;
+  return empRow;
+};
+const pushMovement = ({ type, fte, leverCode, statusSeed, dateSeed, empRow, commentSuffix }) => {
+  movementSeq += 1;
+  const status = MOVEMENT_STATUS_POOL[statusSeed % MOVEMENT_STATUS_POOL.length];
+  const plannedMonth = 1 + (dateSeed % 12);
   const plannedDate = `2026-${String(plannedMonth).padStart(2, "0")}-15`;
   const actualDate = status === "Réalisé" ? plannedDate : "";
-  const baseSalary = empRow ? empRow[13] : 45000;
+  const baseSalary = empRow[13];
   const salaryImpact =
-    type === "Départ forcé" ? -baseSalary : type === "Recrutement" ? baseSalary : 0;
-  const savings = type === "Départ forcé" ? baseSalary : 0;
-  const cost = 2000 + (i % 6) * 1500;
+    type === "Transfert entrant" || type === "Transfert sortant" ? 0 : -baseSalary;
+  const savings = type === "Transfert entrant" || type === "Transfert sortant" ? 0 : baseSalary;
+  const cost = 2000 + (dateSeed % 6) * 1500;
 
   MOVEMENT_ROWS.push([
-    `MV-${String(i + 1).padStart(3, "0")}`,
-    matricule,
-    label,
+    `MV-${String(movementSeq).padStart(3, "0")}`,
+    empRow[0],
+    empRow[1],
     type,
-    1,
-    department,
-    type === "Transfert entrant" ? EMP_DEPTS[(i + 1) % EMP_DEPTS.length].dept : "",
-    country,
-    hrOwner,
+    fte,
+    empRow[2],
+    type === "Transfert entrant" ? EMP_DEPTS[(dateSeed + 1) % EMP_DEPTS.length].dept : "",
+    empRow[6],
+    empRow[4],
     leverCode,
     plannedDate,
     actualDate,
     status,
     status === "Réalisé" ? "Oui" : "Non",
-    i % 5 === 0 ? "Oui" : "Non",
+    dateSeed % 5 === 0 ? "Oui" : "Non",
     salaryImpact,
     savings,
     cost,
-    `Mouvement de démo généré (${type.toLowerCase()}, lié à ${leverCode}).`,
+    `Mouvement de démo généré (${type.toLowerCase()}, lié à ${leverCode}${commentSuffix}).`,
   ]);
-}
+};
+
+LEVER_META.forEach((lv, i) => {
+  const target = lv.fteImpact;
+  if (target === 0) {
+    // Levier sans impact ETP planifié : un transfert neutre (effet 0) le garde référencé par au
+    // moins un mouvement sans fausser aucun total.
+    const type = i % 2 === 0 ? "Transfert entrant" : "Transfert sortant";
+    pushMovement({
+      type,
+      fte: 1,
+      leverCode: lv.code,
+      statusSeed: i,
+      dateSeed: i,
+      empRow: nextEmployee(),
+      commentSuffix: ", sans impact ETP net",
+    });
+    return;
+  }
+
+  // Répartit |fteImpact| en 1 à 3 mouvements entiers ≥ 1 (jamais plus de mouvements que d'ETP à
+  // couvrir), dont la somme reconstitue exactement |fteImpact|.
+  const magnitude = Math.abs(target);
+  const movementCount = Math.max(1, Math.min(3, magnitude, 1 + (i % 3)));
+  const base = Math.floor(magnitude / movementCount);
+  const remainder = magnitude - base * movementCount;
+
+  for (let k = 0; k < movementCount; k++) {
+    const fte = base + (k < remainder ? 1 : 0);
+    if (fte <= 0) continue;
+    const type = k % 2 === 0 ? "Départ forcé" : "Attrition";
+    pushMovement({
+      type,
+      fte,
+      leverCode: lv.code,
+      statusSeed: i + k,
+      dateSeed: i + k * 2,
+      empRow: nextEmployee(),
+      commentSuffix: `, -${fte} ETP`,
+    });
+  }
+});
 
 const hrWb = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(

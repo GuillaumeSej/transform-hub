@@ -84,6 +84,54 @@ describe("mockActionMigration", () => {
     });
   });
 
+  it("reconciles every migrated lever's impacts to the cent with its own financial fields", () => {
+    // Garde-fou de non-régression : pour CHAQUE levier du seed (pas un exemple isolé), la somme des
+    // impacts d'actions (correctement signés/typés, convention netSavings = savings − opexRec de
+    // lib/leverConsolidate.ts) doit reconstituer exactement capex/opexOneOff/opexRec/netSavings tels
+    // que saisis sur le levier — à la faveur de `alignActionsToLeverFinancials`, qui corrige tout
+    // écart de répartition/arrondi en fin de migration.
+    const round = (value: number) => Math.round(value * 100) / 100;
+    migrated.forEach((lever) => {
+      const actions = lever.actions ?? [];
+      let saving = 0;
+      let capex = 0;
+      let opexOneOff = 0;
+      let opexRec = 0;
+      for (const action of actions) {
+        for (const impact of action.impacts ?? []) {
+          if (impact.type === "saving") saving += impact.amount;
+          else if (impact.nature === "capex") capex += impact.amount;
+          else if (impact.nature === "oneoff") opexOneOff += impact.amount;
+          else if (impact.nature === "opex_rec") opexRec += impact.amount;
+        }
+      }
+      expect(round(saving - opexRec)).toBe(round(lever.netSavings));
+      expect(round(capex)).toBe(round(lever.capex));
+      expect(round(opexOneOff)).toBe(round(lever.opexOneOff));
+      expect(round(opexRec)).toBe(round(lever.opexRec));
+    });
+  });
+
+  it("never folds a positive (recruitment) fteImpact onto a saving impact line", () => {
+    // Un fteImpact positif est un coût (recrutement), jamais un gain financier : il doit être porté
+    // par une ligne de coût (opex_rec), pas par la ligne de savings — voir mockActionMigration.ts.
+    migrated
+      .filter((lever) => lever.fteImpact > 0)
+      .forEach((lever) => {
+        const savingFte = (lever.actions ?? [])
+          .flatMap((action) => action.impacts ?? [])
+          .filter((impact) => impact.type === "saving")
+          .reduce((sum, impact) => sum + (impact.fteCount ?? 0), 0);
+        expect(savingFte).toBe(0);
+
+        const costFte = (lever.actions ?? [])
+          .flatMap((action) => action.impacts ?? [])
+          .filter((impact) => impact.type === "cost" && impact.nature === "opex_rec")
+          .reduce((sum, impact) => sum + (impact.fteCount ?? 0), 0);
+        expect(costFte).toBe(lever.fteImpact);
+      });
+  });
+
   it("promotes legacy sub-lever dependencies to parent levers", () => {
     const source = {
       ...mockData.levers[0],
