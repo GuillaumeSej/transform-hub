@@ -1,4 +1,4 @@
-import type { DependencyType, LifecycleStage, LeverStatus } from "@/types";
+import type { DependencyType, LeverApprovalGate, LifecycleStage, LeverStatus } from "@/types";
 
 /**
  * Source unique des libellés du cycle de vie des leviers (fusion de l'ancien couple status /
@@ -56,6 +56,30 @@ export const STATUS_ORDER: Record<LeverStatus, number> = {
   delivered: 5,
   cancelled: 0,
 };
+
+/** Statut de départ pour chacune des 3 portes de validation (voir `LeverApprovalGate`) — dérivé
+ *  de `STATUS_CYCLE` (l'étape juste avant la cible) plutôt que dupliqué en dur dans
+ *  `lib/leversLogic.ts`. */
+export const PREREQUISITE_STATUS: Record<LeverApprovalGate, LeverStatus> = STATUS_CYCLE.slice(
+  1
+).reduce(
+  (acc, status, i) => {
+    if (status === "qualified" || status === "validated" || status === "in_progress") {
+      acc[status] = STATUS_CYCLE[i];
+    }
+    return acc;
+  },
+  {} as Record<LeverApprovalGate, LeverStatus>
+);
+
+/** Inverse de `PREREQUISITE_STATUS` : la porte à franchir depuis un statut donné, s'il y en a
+ *  une (`idea`/`qualified`/`validated` seulement — `in_progress`/`delivered`/`cancelled` n'ont
+ *  pas de porte suivante). */
+export const GATE_BY_STATUS: Partial<Record<LeverStatus, LeverApprovalGate>> = Object.fromEntries(
+  (Object.entries(PREREQUISITE_STATUS) as [LeverApprovalGate, LeverStatus][]).map(
+    ([gate, prerequisite]) => [prerequisite, gate]
+  )
+);
 
 // ─── Configurable lifecycle helpers ─────────────────────────────────────────
 

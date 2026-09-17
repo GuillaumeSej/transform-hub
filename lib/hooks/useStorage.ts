@@ -27,7 +27,6 @@ import type {
   Employee,
   Lever,
   LeverAction,
-  LeverApprovalStep,
   HierarchyNode,
   ManualAlertInput,
   WorkforceMovement,
@@ -128,9 +127,9 @@ function programSeed(): programDb.ProgramSeed {
  *
  * `currentUser` (optionnel, round "cascade de validation") : la plupart des mutations ci-dessous
  * attribuent encore leurs entrées d'audit à `DEMO_USER` (limitation pré-existante, hors périmètre
- * de ce round) — mais `requestLeverApproval`/`approveLeverApprovalStep`/`rejectLeverApproval` ont
+ * de ce round) — mais `requestLeverApproval`/`approveLeverGate`/`rejectLeverApproval` ont
  * BESOIN du profil réel de l'utilisateur (nom, username, rôles, admin) pour vérifier qui a le
- * droit de franchir quelle étape de la cascade (voir `lib/leversLogic.ts`). Les appelants qui
+ * droit d'agir sur la demande de validation (voir `lib/leversLogic.ts`). Les appelants qui
  * n'utilisent pas ces 3 fonctions peuvent continuer à omettre ce paramètre sans rien changer à
  * leur comportement actuel.
  */
@@ -336,10 +335,11 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     [persistAudit]
   );
 
-  /** Point d'entrée UI de la cascade de validation (voir lib/leversLogic.ts pour la logique
-   *  métier complète) — appelable seulement par le porteur du levier ou un admin, sur un levier
-   *  "qualified". Lève si `currentUser` n'a pas été fourni au hook (voir doc-comment ci-dessus) :
-   *  ce point d'entrée n'a de sens qu'avec un utilisateur réel identifié. */
+  /** Point d'entrée UI de la demande de validation (voir lib/leversLogic.ts pour la logique
+   *  métier complète) — appelable seulement par le porteur du levier ou un admin, sur l'un des
+   *  statuts éligibles (voir `GATE_BY_STATUS`). Lève si `currentUser` n'a pas été fourni au hook
+   *  (voir doc-comment ci-dessus) : ce point d'entrée n'a de sens qu'avec un utilisateur réel
+   *  identifié. */
   const requestLeverApproval = useCallback(
     (id: string) => {
       if (!currentUser)
@@ -356,14 +356,13 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     [persistAudit, currentUser]
   );
 
-  const approveLeverApprovalStep = useCallback(
-    (id: string, step: Extract<LeverApprovalStep, "sponsor" | "cto">) => {
+  const approveLeverGate = useCallback(
+    (id: string) => {
       if (!currentUser)
-        throw new Error("Utilisateur non identifié : impossible d'approuver cette étape");
-      const result = leversLogic.approveLeverApprovalStep(
+        throw new Error("Utilisateur non identifié : impossible d'approuver cette demande");
+      const result = leversLogic.approveLeverGate(
         leversRef.current,
         id,
-        step,
         currentUser,
         programConfig.workstreams
       );
@@ -687,7 +686,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     getLeverById: (id: string) => data.levers.find((l) => l.id === id),
     updateLever,
     requestLeverApproval,
-    approveLeverApprovalStep,
+    approveLeverGate,
     rejectLeverApproval,
     createLever,
     upsertLeverByCode,

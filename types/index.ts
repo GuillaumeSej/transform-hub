@@ -331,25 +331,29 @@ export type Lever = {
    *  besoin de sommer à 100 — voir `lib/workstreamLogic.ts::workstreamDeclaredProgress` pour le
    *  calcul de la moyenne pondérée. Non défini = poids implicite égal entre leviers du workstream. */
   workstreamWeightPct?: number;
-  /** Cascade de validation en cours pour le passage à l'étape "validated" (M3) — porteur du
-   *  levier → sponsor du workstream → CTO, dans cet ordre. Non défini = pas de cascade en cours
-   *  (pas encore soumis, ou déjà validé/refusé). Voir lib/leversLogic.ts::requestLeverApproval /
-   *  approveLeverStep. */
+  /** Demande de validation en cours pour l'une des 3 portes du cycle de vie (M1→M2, M2→M3,
+   *  M3→M4 — voir `LeverApprovalGate`) : le porteur du levier soumet, puis le sponsor du
+   *  workstream OU le CTO l'approuve (un seul des deux suffit, peu importe lequel agit en
+   *  premier — plus de séquence obligatoire à deux étapes). Non défini = pas de demande en cours
+   *  (pas encore soumise, ou déjà approuvée/rejetée). Voir lib/leversLogic.ts::requestLeverApproval /
+   *  approveLeverGate / rejectLeverApproval. */
   approval?: LeverApproval;
 };
 
-/** Étape de la cascade de validation d'un levier — dans l'ordre où elle doit être franchie. */
-export type LeverApprovalStep = "owner" | "sponsor" | "cto";
+/** Les 3 statuts cibles pouvant être protégés par une demande de validation — M4→M5 (delivered)
+ *  reste libre, voir `lib/status-config.ts::STATUS_CYCLE`. */
+export type LeverApprovalGate = "qualified" | "validated" | "in_progress";
 
 export type LeverApproval = {
-  /** Étape actuellement en attente d'approbation. */
-  pendingStep: LeverApprovalStep;
-  ownerApprovedAt?: string;
-  sponsorApprovedAt?: string;
-  ctoApprovedAt?: string;
+  /** Statut que le levier atteindra une fois la demande approuvée. */
+  targetStatus: LeverApprovalGate;
   /** Username de l'utilisateur ayant initié la demande de validation. */
   requestedBy: string;
   requestedAt: string;
+  /** Renseignés une fois approuvé (informatif — l'objet `approval` est vidé juste après). */
+  approvedBy?: string;
+  approvedByRole?: "sponsor" | "cto";
+  approvedAt?: string;
 };
 
 /** Ligne d'impact d'une action — décrit UN effet financier/RH sur UN poste de coût.
@@ -639,8 +643,8 @@ export type AuditEntry = {
     | "created"
     | "validated"
     | "deleted"
-    // Cascade de validation d'un levier (owner → sponsor → cto), voir
-    // lib/leversLogic.ts::requestLeverApproval/approveLeverApprovalStep/rejectLeverApproval.
+    // Demande de validation d'un levier (owner → sponsor ou cto), voir
+    // lib/leversLogic.ts::requestLeverApproval/approveLeverGate/rejectLeverApproval.
     | "approval_requested"
     | "approval_approved"
     | "approval_rejected";

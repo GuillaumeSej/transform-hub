@@ -14,8 +14,8 @@ const ACTION_COLORS: Record<string, string> = {
   completed: "bg-purple-100 text-purple-700",
   validated: "bg-amber-100 text-amber-700",
   commented: "bg-gray-100 text-gray-600",
-  // Cascade de validation (voir lib/leversLogic.ts::requestLeverApproval/
-  // approveLeverApprovalStep/rejectLeverApproval).
+  // Demande de validation (voir lib/leversLogic.ts::requestLeverApproval/
+  // approveLeverGate/rejectLeverApproval).
   approval_requested: "bg-amber-100 text-amber-700",
   approval_approved: "bg-amber-100 text-amber-700",
   approval_rejected: "bg-red-100 text-red-700",
@@ -30,7 +30,7 @@ function actionLabels(t: (key: string, fallback?: string) => string): Record<str
     validated: t("adminHistory.action.validated", "Validation"),
     commented: t("adminHistory.action.commented", "Commentaire"),
     approval_requested: t("adminHistory.action.approvalRequested", "Validation demandée"),
-    approval_approved: t("adminHistory.action.approvalApproved", "Étape validée"),
+    approval_approved: t("adminHistory.action.approvalApproved", "Demande validée"),
     approval_rejected: t("adminHistory.action.approvalRejected", "Validation rejetée"),
   };
 }

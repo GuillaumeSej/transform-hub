@@ -79,27 +79,37 @@ describe("resolveApprovalQueue", () => {
     expect(resolveApprovalQueue(makeData([lever]), user)).toEqual([]);
   });
 
-  it("inclut un levier en attente sponsor quand l'utilisateur sponsorise le workstream parent", () => {
-    const lever = makeLever({
-      ws: "ws1",
-      approval: {
-        pendingStep: "sponsor",
-        requestedBy: "owner1",
-        requestedAt: "2026-01-01",
-      },
-    });
-    const workstreams: Workstream[] = [
-      { id: "ws1", name: "WS1", sponsor: "", sponsorUsername: "user1", color: "#000", target: 0 },
-    ];
-    const user = makeUser({ username: "user1", profiles: [{ role: "sponsor" }] });
-    expect(resolveApprovalQueue(makeData([lever], workstreams), user)).toEqual([lever]);
-  });
+  it.each(["qualified", "validated", "in_progress"] as const)(
+    "inclut un levier en attente (porte '%s') quand l'utilisateur sponsorise le workstream parent",
+    (gate) => {
+      const lever = makeLever({
+        ws: "ws1",
+        approval: {
+          targetStatus: gate,
+          requestedBy: "owner1",
+          requestedAt: "2026-01-01",
+        },
+      });
+      const workstreams: Workstream[] = [
+        {
+          id: "ws1",
+          name: "WS1",
+          sponsor: "",
+          sponsorUsername: "user1",
+          color: "#000",
+          target: 0,
+        },
+      ];
+      const user = makeUser({ username: "user1", profiles: [{ role: "sponsor" }] });
+      expect(resolveApprovalQueue(makeData([lever], workstreams), user)).toEqual([lever]);
+    }
+  );
 
-  it("exclut un levier en attente sponsor pour un sponsor d'un AUTRE workstream", () => {
+  it("exclut un levier en attente pour un sponsor d'un AUTRE workstream", () => {
     const lever = makeLever({
       ws: "ws1",
       approval: {
-        pendingStep: "sponsor",
+        targetStatus: "qualified",
         requestedBy: "owner1",
         requestedAt: "2026-01-01",
       },
@@ -118,11 +128,11 @@ describe("resolveApprovalQueue", () => {
     expect(resolveApprovalQueue(makeData([lever], workstreams), user)).toEqual([]);
   });
 
-  it("inclut un levier en attente cto quand l'utilisateur a le rôle cto sur le programme", () => {
+  it("inclut un levier en attente quand l'utilisateur a le rôle cto sur le programme", () => {
     const lever = makeLever({
       programId: "prog1",
       approval: {
-        pendingStep: "cto",
+        targetStatus: "validated",
         requestedBy: "sponsor1",
         requestedAt: "2026-01-01",
       },
@@ -135,7 +145,7 @@ describe("resolveApprovalQueue", () => {
     const lever = makeLever({
       programId: "prog2",
       approval: {
-        pendingStep: "cto",
+        targetStatus: "in_progress",
         requestedBy: "sponsor1",
         requestedAt: "2026-01-01",
       },
@@ -144,11 +154,11 @@ describe("resolveApprovalQueue", () => {
     expect(resolveApprovalQueue(makeData([lever]), user)).toEqual([lever]);
   });
 
-  it("exclut un levier en attente cto pour un cto scopé à un AUTRE programme", () => {
+  it("exclut un levier en attente pour un cto scopé à un AUTRE programme", () => {
     const lever = makeLever({
       programId: "prog2",
       approval: {
-        pendingStep: "cto",
+        targetStatus: "qualified",
         requestedBy: "sponsor1",
         requestedAt: "2026-01-01",
       },
@@ -157,15 +167,27 @@ describe("resolveApprovalQueue", () => {
     expect(resolveApprovalQueue(makeData([lever]), user)).toEqual([]);
   });
 
-  it("exclut un levier en attente owner (pas dans le périmètre de cette file)", () => {
+  it("exclut un levier en attente pour un utilisateur ni sponsor ni cto", () => {
     const lever = makeLever({
       approval: {
-        pendingStep: "owner",
+        targetStatus: "qualified",
         requestedBy: "sponsor1",
         requestedAt: "2026-01-01",
       },
     });
-    const user = makeUser({ profiles: [{ role: "sponsor" }, { role: "cto" }] });
+    const user = makeUser({ profiles: [{ role: "lever" }] });
     expect(resolveApprovalQueue(makeData([lever]), user)).toEqual([]);
+  });
+
+  it("un admin voit tous les leviers en attente, tous rôles confondus", () => {
+    const lever = makeLever({
+      approval: {
+        targetStatus: "qualified",
+        requestedBy: "owner1",
+        requestedAt: "2026-01-01",
+      },
+    });
+    const user = makeUser({ profiles: [], isCompanyAdmin: true });
+    expect(resolveApprovalQueue(makeData([lever]), user)).toEqual([lever]);
   });
 });

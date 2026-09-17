@@ -47,6 +47,16 @@ const CTO_LIKE_NAV: RoleDefinition["nav"] = [
     label: "nav.leverLibrary",
     labelByProgramType: { strategic: "nav.axes" },
   },
+  // Portes de validation (voir lib/leversLogic.ts::approveLeverGate) : visible pour cto (tous les
+  // programmes) et program_sponsor/program_owner (visibilité restreinte à leurs programmes via
+  // lib/consolidatedProgramAccess.ts, même mécanisme que le reste de cette nav partagée),
+  // réservé au Plan Performance (pas de porte de validation côté Plan Stratégique).
+  {
+    id: "validation",
+    icon: "ShieldCheck",
+    label: "nav.validation",
+    programTypes: ["performance"],
+  },
   { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
   { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
   {
@@ -97,6 +107,12 @@ export const roles: Record<Role, RoleDefinition> = {
         icon: "Target",
         label: "nav.leverPipeline",
         labelByProgramType: { strategic: "nav.axes" },
+      },
+      {
+        id: "validation",
+        icon: "ShieldCheck",
+        label: "nav.validation",
+        programTypes: ["performance"],
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
@@ -333,6 +349,10 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
       // qui lui donnerait "hr-etp" par ailleurs — voir la liste d'accès `cto`/`hr`/`strategic_lead`
       // ci-dessus, à laquelle les admins s'ajoutent.
       { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
+      // Portes de validation (voir CTO_LIKE_NAV ci-dessus) : un admin peut agir sur n'importe
+      // quelle demande en cours (isAnyAdmin, lib/leversLogic.ts::approveLeverGate), doit donc
+      // aussi voir la page dédiée.
+      { id: "validation", icon: "ShieldCheck", label: "nav.validation" },
     ],
   },
   company: {
@@ -343,6 +363,7 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
       { id: "admin-data", icon: "BarChart3", label: "nav.data" },
       { id: "admin-history", icon: "History", label: "nav.history" },
       { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
+      { id: "validation", icon: "ShieldCheck", label: "nav.validation" },
     ],
   },
 };
@@ -404,4 +425,5 @@ export const PAGE_ROUTES: Record<string, string> = {
   "admin-users": "/admin/users",
   "admin-data": "/admin/data",
   "admin-history": "/admin/history",
+  validation: "/validation",
 };
