@@ -505,6 +505,16 @@ export type WorkforceMovement = {
    *  pour les KPI. Non défini si aucune réactualisation. */
   reforecast?: WorkforceMovementSnapshot;
   comment?: string;
+  /** Id du HierarchyNode (maille la plus fine, ex. Centre de coût) — même mécanique que
+   *  `Lever.hierarchyLeafId` : permet de rattacher l'impact financier (`salaryImpact`/`savings`/
+   *  `cost`) d'un mouvement RH à l'arborescence financière configurée par l'entreprise, pour le
+   *  filtrer/ventiler comme un levier. Optionnel — un mouvement sans rattachement fin reste
+   *  affiché normalement (aucun changement pour les entreprises sans arborescence configurée). */
+  hierarchyLeafId?: string;
+  /** Maille la plus fine de l'arborescence géographique configurée pour l'entreprise — même
+   *  mécanique que `Lever.geographyLeafId`. Optionnel, coexiste avec le champ `country` en texte
+   *  libre ci-dessus (conservé tel quel pour compat / repli entreprises sans arborescence). */
+  geographyLeafId?: string;
 };
 
 export type Workforce = {

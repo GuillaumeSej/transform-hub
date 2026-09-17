@@ -478,6 +478,7 @@ const en: Record<string, string> = {
   "finance.pnlLine": "P&L line",
   "finance.baseline": "Baseline",
   "finance.notAllocatable": "Not allocatable",
+  "finance.unallocatedHint": "Financial allocation to be specified",
 
   // ─── operations (Operations Module, STRETCH placeholder) ───────────────────
   "operations.placeholderDescription":

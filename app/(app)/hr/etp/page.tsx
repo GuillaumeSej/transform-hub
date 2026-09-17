@@ -19,7 +19,15 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import { type FilterDef } from "@/components/shared/FilterBar";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
-import type { Employee, WorkforceMovement } from "@/types";
+import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
+import type {
+  Company,
+  Employee,
+  HierarchyLevelDef,
+  HierarchyNode,
+  WorkforceMovement,
+} from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type EtpRow = {
@@ -225,6 +233,90 @@ export default function BaseEtpPage() {
     [wf.movements, data.levers, alertByMovement, t]
   );
 
+  // ─── Arborescences optionnelles (géographie prioritaire, finance en bonus) ─────────────────────
+  // Même pattern défensif que `DashboardPagePerformance.tsx`/`app/(app)/hr/page.tsx` : n'affecte
+  // QUE l'onglet "Suivi des mouvements" (MovementRow porte un `WorkforceMovement`, seul type étendu
+  // de `geographyLeafId`/`hierarchyLeafId` — voir types/index.ts). L'onglet "Base ETP" (EtpRow,
+  // dérivé d'`Employee`) garde son filtre `country` plat inchangé : `Employee` n'a pas ces champs.
+  const [company, setCompany] = useState<Company | null>(null);
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      setCompany(companies.find((c) => c.id === user?.companyId) ?? null);
+    }, user?.companyId ?? null);
+    return unsub;
+  }, [user?.companyId]);
+
+  const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
+  const [geographyHierarchyLevels, setGeographyHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
+  useEffect(() => {
+    setHierarchyLevels(company?.hierarchyLevels ?? []);
+    setGeographyHierarchyLevels(company?.geographyHierarchyLevels ?? []);
+  }, [company]);
+  useEffect(() => {
+    if (!user?.companyId || hierarchyLevels.length === 0) {
+      setHierarchyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setHierarchyNodes, "financial");
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, hierarchyLevels.length]);
+  useEffect(() => {
+    if (!user?.companyId || geographyHierarchyLevels.length === 0) {
+      setGeographyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setGeographyNodes, "geographic");
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, geographyHierarchyLevels.length]);
+
+  const sortedHierarchyLevels = useMemo(
+    () => [...hierarchyLevels].sort((a, b) => a.order - b.order),
+    [hierarchyLevels]
+  );
+  const sortedGeographyHierarchyLevels = useMemo(
+    () => [...geographyHierarchyLevels].sort((a, b) => a.order - b.order),
+    [geographyHierarchyLevels]
+  );
+
+  const geographyFilterDefs: FilterDef<MovementRow>[] = useMemo(
+    () =>
+      sortedGeographyHierarchyLevels.map((level) => ({
+        key: `f_geo_${level.key}`,
+        label: level.label,
+        getValue: (r: MovementRow) => {
+          const path = resolveHierarchyPath(
+            r.movement.geographyLeafId ?? "",
+            geographyNodes,
+            sortedGeographyHierarchyLevels
+          );
+          return path.find((p) => p.levelKey === level.key)?.label ?? "";
+        },
+      })),
+    [sortedGeographyHierarchyLevels, geographyNodes]
+  );
+
+  // Bonus — même principe pour l'arborescence financière (centre de coût / P&L).
+  const hierarchyFilterDefs: FilterDef<MovementRow>[] = useMemo(
+    () =>
+      sortedHierarchyLevels.map((level) => ({
+        key: `f_hierarchy_${level.key}`,
+        label: level.label,
+        getValue: (r: MovementRow) => {
+          const path = resolveHierarchyPath(
+            r.movement.hierarchyLeafId ?? "",
+            hierarchyNodes,
+            sortedHierarchyLevels
+          );
+          return path.find((p) => p.levelKey === level.key)?.label ?? "";
+        },
+      })),
+    [sortedHierarchyLevels, hierarchyNodes]
+  );
+
   const etpFilterDefs: FilterDef<EtpRow>[] = useMemo(
     () => [
       {
@@ -269,7 +361,15 @@ export default function BaseEtpPage() {
         label: t("hr.department", "Département"),
         getValue: (r) => r.department,
       },
-      { key: "f_country", label: t("dashboard.country", "Pays"), getValue: (r) => r.country },
+      ...(geographyFilterDefs.length > 0
+        ? geographyFilterDefs
+        : [
+            {
+              key: "f_country",
+              label: t("dashboard.country", "Pays"),
+              getValue: (r: MovementRow) => r.country,
+            },
+          ]),
       {
         key: "f_function",
         label: t("dashboard.function", "Fonction"),
@@ -302,8 +402,9 @@ export default function BaseEtpPage() {
         label: t("etp.alertLabel", "Alerte"),
         getValue: (r) => alertKindLabel(ALERT_LABELS, r.alertKind),
       },
+      ...hierarchyFilterDefs,
     ],
-    [t, ALERT_LABELS]
+    [t, ALERT_LABELS, geographyFilterDefs, hierarchyFilterDefs]
   );
 
   // Round <n> : passe par le hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts) —
@@ -738,6 +839,7 @@ export default function BaseEtpPage() {
         {movementModal && (
           <MovementForm
             data={data}
+            companyId={user?.companyId}
             initialValues={movementModal.movement}
             submitLabel={
               movementModal.movement

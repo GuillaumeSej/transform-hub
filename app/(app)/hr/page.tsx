@@ -54,12 +54,25 @@ import {
 import { type FilterDef } from "@/components/shared/FilterBar";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
+import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { generateFiscalYears } from "@/lib/fiscalYear";
 import type { MovementAlertKind } from "@/lib/hrEngine";
-import type { MovementStatus, Program, SocialScheme, WorkforceMovement } from "@/types";
-import { subscribePrograms } from "@/lib/firestore/admin";
+import type {
+  Company,
+  HierarchyLevelDef,
+  HierarchyNode,
+  MovementStatus,
+  Program,
+  SocialScheme,
+  WorkforceMovement,
+} from "@/types";
+import {
+  subscribeCompanies,
+  subscribeHierarchyNodes,
+  subscribePrograms,
+} from "@/lib/firestore/admin";
 import { buildMovementTableRows, type HrMovementTableRow } from "@/lib/hrMovementTable";
 import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceLogic";
 import { forcedDeparturesBySocialScheme } from "@/lib/hrSocialPlan";
@@ -203,6 +216,94 @@ export default function HrDashboardPage() {
     setDateToISO(movementDateRange.to);
   }, [movementDateRange.from, movementDateRange.to]);
 
+  // ─── Arborescences optionnelles (géographie prioritaire, finance en bonus) ─────────────────────
+  // Même pattern défensif que `DashboardPagePerformance.tsx`/`app/(app)/levers/page.tsx` : ces
+  // filtres par niveau ne remplacent le filtre plat existant que si l'entreprise a explicitement
+  // configuré l'arborescence correspondante — sinon comportement historique inchangé.
+  const [company, setCompany] = useState<Company | null>(null);
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      setCompany(companies.find((c) => c.id === user?.companyId) ?? null);
+    }, user?.companyId ?? null);
+    return unsub;
+  }, [user?.companyId]);
+
+  const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
+  const [geographyHierarchyLevels, setGeographyHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
+  useEffect(() => {
+    setHierarchyLevels(company?.hierarchyLevels ?? []);
+    setGeographyHierarchyLevels(company?.geographyHierarchyLevels ?? []);
+  }, [company]);
+  useEffect(() => {
+    if (!user?.companyId || hierarchyLevels.length === 0) {
+      setHierarchyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setHierarchyNodes, "financial");
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, hierarchyLevels.length]);
+  useEffect(() => {
+    if (!user?.companyId || geographyHierarchyLevels.length === 0) {
+      setGeographyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setGeographyNodes, "geographic");
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, geographyHierarchyLevels.length]);
+
+  const sortedHierarchyLevels = useMemo(
+    () => [...hierarchyLevels].sort((a, b) => a.order - b.order),
+    [hierarchyLevels]
+  );
+  const sortedGeographyHierarchyLevels = useMemo(
+    () => [...geographyHierarchyLevels].sort((a, b) => a.order - b.order),
+    [geographyHierarchyLevels]
+  );
+
+  // Un filtre par niveau d'arborescence géographique configuré — remplace le filtre unique "Pays"
+  // dès que l'entreprise a activé l'arborescence (même principe que le dashboard exécutif).
+  const geographyFilterDefs: FilterDef<WorkforceMovement>[] = useMemo(
+    () =>
+      sortedGeographyHierarchyLevels.map((level) => ({
+        key: `geo_${level.key}`,
+        label: level.label,
+        getValue: (m: WorkforceMovement) => {
+          const path = resolveHierarchyPath(
+            m.geographyLeafId ?? "",
+            geographyNodes,
+            sortedGeographyHierarchyLevels
+          );
+          return path.find((p) => p.levelKey === level.key)?.label ?? "";
+        },
+      })),
+    [sortedGeographyHierarchyLevels, geographyNodes]
+  );
+
+  // Un filtre par niveau d'arborescence financière configuré (bonus) — uniformément résolu via
+  // `resolveHierarchyPath` : contrairement au dashboard exécutif (leviers), un `WorkforceMovement`
+  // n'a pas d'équivalent `pnlMap` à utiliser en repli pour la maille macro, donc pas de cas
+  // particulier ici.
+  const hierarchyFilterDefs: FilterDef<WorkforceMovement>[] = useMemo(
+    () =>
+      sortedHierarchyLevels.map((level) => ({
+        key: `hierarchy_${level.key}`,
+        label: level.label,
+        getValue: (m: WorkforceMovement) => {
+          const path = resolveHierarchyPath(
+            m.hierarchyLeafId ?? "",
+            hierarchyNodes,
+            sortedHierarchyLevels
+          );
+          return path.find((p) => p.levelKey === level.key)?.label ?? "";
+        },
+      })),
+    [sortedHierarchyLevels, hierarchyNodes]
+  );
+
   // ─── Filtres RH ──────────────────────────────────────────────────────────────────────────────
   const filterDefs: FilterDef<WorkforceMovement>[] = useMemo(
     () => [
@@ -218,11 +319,20 @@ export default function HrDashboardPage() {
         label: t("hr.department", "Département"),
         getValue: (m) => m.department,
       },
-      { key: "country", label: t("dashboard.country", "Pays"), getValue: (m) => m.country },
+      ...(geographyFilterDefs.length > 0
+        ? geographyFilterDefs
+        : [
+            {
+              key: "country",
+              label: t("dashboard.country", "Pays"),
+              getValue: (m: WorkforceMovement) => m.country,
+            },
+          ]),
       { key: "status", label: t("hr.status", "Statut"), getValue: (m) => m.status },
       { key: "hrOwner", label: t("hr.hrOwner", "Owner RH"), getValue: (m) => m.hrOwner },
+      ...hierarchyFilterDefs,
     ],
-    [t]
+    [t, geographyFilterDefs, hierarchyFilterDefs]
   );
   // Round <n> : hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts), remplace un
   // `useState<ActiveFilters>({})` local — même contrat pour `activeFilters`/`onChange`, mais

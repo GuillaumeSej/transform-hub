@@ -10,8 +10,11 @@ import {
   type MovementFinancials,
 } from "@/lib/hrFinancials";
 import { fmtCurr } from "@/lib/engine";
+import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import type {
   BeTrackData,
+  HierarchyLevelDef,
+  HierarchyNode,
   MovementStatus,
   MovementType,
   SocialScheme,
@@ -56,12 +59,18 @@ const DEFAULT_RECRUITMENT_SALARY = 45_000;
  * imposée). */
 export function MovementForm({
   data,
+  companyId,
   initialValues,
   onSubmit,
   onCancel,
   submitLabel,
 }: {
   data: BeTrackData;
+  /** Entreprise courante — si elle a configuré `geographyHierarchyLevels`/`hierarchyLevels`, un
+   *  sélecteur optionnel de rattachement (maille la plus fine) est proposé en plus des champs
+   *  historiques (`country`, etc.), même mécanique que `LeverForm.tsx`. Omis/absent = aucun
+   *  sélecteur affiché (comportement historique inchangé). */
+  companyId?: string | null;
   initialValues?: Partial<MovementFormValues>;
   onSubmit: (values: MovementFormValues) => void;
   onCancel: () => void;
@@ -85,6 +94,83 @@ export function MovementForm({
   const departments = data.workforce.departments;
   const firstEmployee = employees[0];
   const firstLever = data.levers[0];
+
+  // ─── Rattachement hiérarchique optionnel (géographie prioritaire, finance en bonus) ──────────
+  // Même mécanique que `LeverForm.tsx` : un sélecteur de maille la plus fine par domaine, affiché
+  // uniquement si l'entreprise a explicitement configuré ce domaine (sinon rien ne change pour les
+  // entreprises sans arborescence — voir `Company.hierarchyLevels`/`geographyHierarchyLevels`).
+  const [geographyLevels, setGeographyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
+  const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
+  useEffect(() => {
+    if (!companyId) {
+      setGeographyLevels([]);
+      setGeographyNodes([]);
+      setHierarchyLevels([]);
+      setHierarchyNodes([]);
+      return;
+    }
+    let cancelled = false;
+    let unsubGeoNodes: (() => void) | null = null;
+    let unsubHierarchyNodes: (() => void) | null = null;
+    const unsubCompanies = subscribeCompanies((companies) => {
+      if (cancelled) return;
+      const company = companies.find((c) => c.id === companyId);
+      const geoLevels = company?.geographyHierarchyLevels ?? [];
+      const levels = company?.hierarchyLevels ?? [];
+      setGeographyLevels(geoLevels);
+      setHierarchyLevels(levels);
+      unsubGeoNodes?.();
+      unsubHierarchyNodes?.();
+      unsubGeoNodes = null;
+      unsubHierarchyNodes = null;
+      if (geoLevels.length === 0) {
+        setGeographyNodes([]);
+      } else {
+        unsubGeoNodes = subscribeHierarchyNodes(
+          companyId,
+          (nodes) => {
+            if (cancelled) return;
+            setGeographyNodes(nodes);
+          },
+          "geographic"
+        );
+      }
+      if (levels.length === 0) {
+        setHierarchyNodes([]);
+      } else {
+        unsubHierarchyNodes = subscribeHierarchyNodes(
+          companyId,
+          (nodes) => {
+            if (cancelled) return;
+            setHierarchyNodes(nodes);
+          },
+          "financial"
+        );
+      }
+    }, companyId);
+    return () => {
+      cancelled = true;
+      unsubGeoNodes?.();
+      unsubHierarchyNodes?.();
+      unsubCompanies();
+    };
+  }, [companyId]);
+
+  const sortedGeographyLevels = [...geographyLevels].sort((a, b) => a.order - b.order);
+  const finestGeographyLevel = sortedGeographyLevels[sortedGeographyLevels.length - 1];
+  const geographyLeafNodes = finestGeographyLevel
+    ? geographyNodes.filter((n) => n.levelKey === finestGeographyLevel.key)
+    : [];
+  const hasGeographyHierarchy = geographyLeafNodes.length > 0;
+
+  const sortedHierarchyLevels = [...hierarchyLevels].sort((a, b) => a.order - b.order);
+  const finestHierarchyLevel = sortedHierarchyLevels[sortedHierarchyLevels.length - 1];
+  const hierarchyLeafNodes = finestHierarchyLevel
+    ? hierarchyNodes.filter((n) => n.levelKey === finestHierarchyLevel.key)
+    : [];
+  const hasHierarchy = hierarchyLeafNodes.length > 0;
 
   const [values, setValues] = useState<MovementFormValues>({
     empId: firstEmployee?.id ?? null,
@@ -382,6 +468,58 @@ export function MovementForm({
               {countryOptions.map((c) => (
                 <option key={c} value={c}>
                   {c}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        {/* Rattachement géographique optionnel (maille la plus fine configurée) — n'apparaît que
+         *  si l'entreprise a une arborescence géographique, en complément du champ `country` texte
+         *  ci-dessus (jamais en remplacement, pour ne rien casser côté entreprises sans arborescence). */}
+        {hasGeographyHierarchy && (
+          <Field
+            label={translate(
+              "shared.movementForm.geographyLeaf",
+              `${finestGeographyLevel.label} (arborescence géo)`
+            )}
+          >
+            <select
+              className={inputClass}
+              value={values.geographyLeafId ?? ""}
+              onChange={(e) => set("geographyLeafId", e.target.value || undefined)}
+            >
+              <option value="">
+                {translate("shared.movementForm.choosePlaceholder", "— choisir —")}
+              </option>
+              {geographyLeafNodes.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.label} ({n.code})
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        {/* Rattachement financier optionnel (bonus) — même principe que ci-dessus, domaine
+         *  "financial" (centre de coût / P&L) au lieu de "geographic". */}
+        {hasHierarchy && (
+          <Field
+            label={translate(
+              "shared.movementForm.hierarchyLeaf",
+              `${finestHierarchyLevel.label} (arborescence financière)`
+            )}
+          >
+            <select
+              className={inputClass}
+              value={values.hierarchyLeafId ?? ""}
+              onChange={(e) => set("hierarchyLeafId", e.target.value || undefined)}
+            >
+              <option value="">
+                {translate("shared.movementForm.choosePlaceholder", "— choisir —")}
+              </option>
+              {hierarchyLeafNodes.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.label} ({n.code})
                 </option>
               ))}
             </select>

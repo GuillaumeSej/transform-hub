@@ -460,6 +460,7 @@ const de: Record<string, string> = {
   "finance.pnlLine": "GuV-Zeile",
   "finance.baseline": "Baseline",
   "finance.notAllocatable": "Nicht zuordenbar",
+  "finance.unallocatedHint": "Finanzielle Zuordnung noch zu präzisieren",
 
   // ─── operations (Betriebsmodul, STRETCH-Platzhalter) ───────────────────────
   "operations.placeholderDescription":

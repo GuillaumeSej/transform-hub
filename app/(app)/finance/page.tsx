@@ -16,7 +16,11 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import * as engine from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Company, HierarchyNode } from "@/types";
+import type { Company, HierarchyNode, Lever } from "@/types";
+import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import { type FilterDef } from "@/components/shared/FilterBar";
+import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
+import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
 
 /**
  * Module Finance — le compte de résultat configuré (baseline P&L éditable, reforecast, waterfall)
@@ -28,7 +32,6 @@ export default function FinancePage() {
   const { t } = useTranslation();
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
-  const pnlRows = useMemo(() => engine.pnlImpactDetailed(data), [data]);
 
   // Arborescence financière (optionnelle) de l'entreprise — même pattern que le dashboard
   // (app/(app)/dashboard/DashboardPagePerformance.tsx) pour que le widget "Impact P&L par compte"
@@ -52,6 +55,54 @@ export default function FinancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.companyId, hierarchyLevels.length]);
 
+  const sortedHierarchyLevels = useMemo(
+    () => [...hierarchyLevels].sort((a, b) => a.order - b.order),
+    [hierarchyLevels]
+  );
+
+  // Un levier importé via Excel n'a souvent qu'un `pnlMap` (ancien matching par code), pas encore
+  // de `hierarchyLeafId` — même repli que engine.pnlImpactDetailed / le dashboard exécutif.
+  const resolveMacroPnlLabel = (l: Lever): string => {
+    const macroLevel = sortedHierarchyLevels[0];
+    if (!macroLevel) return "";
+    const path = resolveHierarchyPath(
+      l.hierarchyLeafId ?? "",
+      hierarchyNodes,
+      sortedHierarchyLevels
+    );
+    const viaLeaf = path.find((p) => p.levelKey === macroLevel.key)?.label;
+    if (viaLeaf) return viaLeaf;
+    return (
+      hierarchyNodes.find((n) => n.levelKey === macroLevel.key && n.code === l.pnlMap)?.label ?? ""
+    );
+  };
+
+  // Un filtre par niveau d'arborescence financière configuré (Division > Direction > Centre de
+  // coût, etc.) — même principe que `hierarchyFilterDefs` du dashboard exécutif
+  // (app/(app)/dashboard/DashboardPagePerformance.tsx), pour permettre de filtrer les données
+  // financières de cette page par n'importe quel niveau, pas seulement le total consolidé.
+  const hierarchyFilterDefs: FilterDef<Lever>[] = useMemo(
+    () =>
+      sortedHierarchyLevels.map((level, index) => ({
+        key: `hierarchy_${level.key}`,
+        label: level.label,
+        getValue: (l: Lever) => {
+          if (index === 0) return resolveMacroPnlLabel(l);
+          const path = resolveHierarchyPath(
+            l.hierarchyLeafId ?? "",
+            hierarchyNodes,
+            sortedHierarchyLevels
+          );
+          return path.find((p) => p.levelKey === level.key)?.label ?? "";
+        },
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sortedHierarchyLevels, hierarchyNodes]
+  );
+
+  const { activeFilters: pnlHierarchyFilters, setFilters: setPnlHierarchyFilters } =
+    useFilterBarState(hierarchyFilterDefs, { namespace: "pnl" });
+
   // ── Widget "Impact P&L par compte" (déplacé depuis le dashboard Performance) ──
   // Filtres géographiques (cascade Région → Pays → Entité).
   const [pnlFilterGeo, setPnlFilterGeo] = useState("");
@@ -63,8 +114,20 @@ export default function FinancePage() {
     if (pnlFilterGeo) levers = levers.filter((l) => l.geography === pnlFilterGeo);
     if (pnlFilterCountry) levers = levers.filter((l) => l.country === pnlFilterCountry);
     if (pnlFilterEntity) levers = levers.filter((l) => l.entity === pnlFilterEntity);
+    Object.entries(pnlHierarchyFilters).forEach(([key, value]) => {
+      if (!value) return;
+      const def = hierarchyFilterDefs.find((d) => d.key === key);
+      if (def) levers = levers.filter((l) => def.getValue(l) === value);
+    });
     return levers;
-  }, [data, pnlFilterGeo, pnlFilterCountry, pnlFilterEntity]);
+  }, [
+    data,
+    pnlFilterGeo,
+    pnlFilterCountry,
+    pnlFilterEntity,
+    pnlHierarchyFilters,
+    hierarchyFilterDefs,
+  ]);
 
   const pnlGeoOptions = useMemo(() => {
     const vals = new Set<string>();
@@ -134,6 +197,16 @@ export default function FinancePage() {
     [pnlDetailedData]
   );
 
+  // Bucket "Gains non attribués" (engine.UNALLOCATED_ACCOUNT_ID) — n'existe pas dans
+  // `data.pnlAccounts` (référentiel de comptes), donc n'apparaît jamais via la boucle qui itère
+  // sur ce référentiel ci-dessous : on l'affiche séparément, uniquement si plan/réalisé != 0 pour
+  // ne pas polluer l'affichage d'une entreprise où tout est bien attribué.
+  const unallocatedRow = pnlDetailedData.find(
+    (row) => row.accountId === engine.UNALLOCATED_ACCOUNT_ID
+  );
+  const showUnallocatedRow =
+    !!unallocatedRow && (unallocatedRow.plan !== 0 || unallocatedRow.realized !== 0);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -142,6 +215,19 @@ export default function FinancePage() {
           {t("nav.financeModule", "Finance Module")}
         </h1>
       </div>
+
+      {/* Filtres par arborescence financière (Division > Direction > Centre de coût, etc.) —
+          n'apparaît que si l'entreprise a configuré des niveaux ; filtre le widget "Impact P&L
+          par compte" ET le tableau "Compte de résultat configuré" ci-dessous (même donnée
+          filtrée, voir `pnlFilteredLevers`). */}
+      {hierarchyFilterDefs.length > 0 && (
+        <DropdownFilterBar
+          items={data.levers.filter((l) => l.status !== "cancelled")}
+          defs={hierarchyFilterDefs}
+          active={pnlHierarchyFilters}
+          onChange={setPnlHierarchyFilters}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CostEngagedVsUpcomingChart data={data} />
@@ -282,7 +368,7 @@ export default function FinancePage() {
               </thead>
               <tbody>
                 {data.pnlAccounts.map((account) => {
-                  const impact = pnlRows.find((row) => row.accountId === account.id);
+                  const impact = pnlDetailedData.find((row) => row.accountId === account.id);
                   return (
                     <tr key={account.id} className="border-t border-border">
                       <td className="px-3 py-2 font-semibold text-primary">
@@ -301,12 +387,27 @@ export default function FinancePage() {
                     </tr>
                   );
                 })}
+                {showUnallocatedRow && unallocatedRow ? (
+                  <tr className="border-t border-border bg-neutral-50 italic">
+                    <td className="px-3 py-2 font-semibold text-secondary">
+                      {unallocatedRow.accountName}
+                      <span className="ml-2 text-[10px] font-normal text-tertiary">
+                        {t("finance.unallocatedHint", "Rattachement financier à préciser")}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right text-tertiary">—</td>
+                    <td className="px-3 py-2 text-right">{engine.fmtCurr(unallocatedRow.plan)}</td>
+                    <td className="px-3 py-2 text-right">
+                      {engine.fmtCurr(unallocatedRow.realized)}
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
           <div className="space-y-2 sm:hidden">
             {data.pnlAccounts.map((account) => {
-              const impact = pnlRows.find((row) => row.accountId === account.id);
+              const impact = pnlDetailedData.find((row) => row.accountId === account.id);
               return (
                 <div key={account.id} className="rounded-lg border border-border p-3">
                   <div className="font-semibold text-primary">{account.name}</div>
@@ -327,6 +428,30 @@ export default function FinancePage() {
                 </div>
               );
             })}
+            {showUnallocatedRow && unallocatedRow ? (
+              <div className="rounded-lg border border-border bg-neutral-50 p-3 italic">
+                <div className="font-semibold text-secondary">
+                  {unallocatedRow.accountName}
+                  <span className="ml-2 text-[10px] font-normal text-tertiary">
+                    {t("finance.unallocatedHint", "Rattachement financier à préciser")}
+                  </span>
+                </div>
+                <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <dt className="text-tertiary">{t("finance.baseline", "Baseline")}</dt>
+                    <dd>—</dd>
+                  </div>
+                  <div>
+                    <dt className="text-tertiary">{t("chart.pnl.plan", "Plan")}</dt>
+                    <dd>{engine.fmtCurr(unallocatedRow.plan)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-tertiary">{t("levers.realized", "Réalisé")}</dt>
+                    <dd>{engine.fmtCurr(unallocatedRow.realized)}</dd>
+                  </div>
+                </dl>
+              </div>
+            ) : null}
           </div>
         </CardBody>
       </Card>

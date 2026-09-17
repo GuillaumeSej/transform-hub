@@ -510,6 +510,7 @@ const fr: Record<string, string> = {
   "finance.pnlLine": "Ligne P&L",
   "finance.baseline": "Baseline",
   "finance.notAllocatable": "Non imputable",
+  "finance.unallocatedHint": "Rattachement financier à préciser",
 
   // ─── operations (Module Opérations, placeholder STRETCH) ───────────────────
   "operations.placeholderDescription":
