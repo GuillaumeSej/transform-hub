@@ -4,10 +4,44 @@ import {
   getPerformanceProfiles,
   getStrategicProfiles,
   hasRole,
+  isPerformanceRole,
   isReadOnlyUser,
 } from "@/lib/roleProfiles";
 import { resolveConfidentialityClearance } from "@/lib/leversLogic";
 import type { ProfileAssignment } from "@/types";
+
+describe("program_sponsor / program_owner — fondation vue consolidée (nouveaux rôles Plan Performance)", () => {
+  it("are Performance-track roles, not Strategic", () => {
+    expect(isPerformanceRole("program_sponsor")).toBe(true);
+    expect(isPerformanceRole("program_owner")).toBe(true);
+  });
+
+  it("are counted by getPerformanceProfiles like any other Performance role", () => {
+    const user = {
+      profiles: [
+        { role: "program_sponsor" as const, programId: "p1" },
+        { role: "program_owner" as const, programId: "p2" },
+      ],
+    };
+    expect(getPerformanceProfiles(user)).toHaveLength(2);
+    expect(getStrategicProfiles(user)).toHaveLength(0);
+  });
+
+  it("follow the same one-profile-per-program constraint as other Performance roles", () => {
+    expect(() =>
+      assertValidProfiles([
+        { role: "program_sponsor", programId: "p1" },
+        { role: "program_owner", programId: "p1" },
+      ])
+    ).toThrow(/un seul profil/i);
+    expect(() =>
+      assertValidProfiles([
+        { role: "program_sponsor", programId: "p1" },
+        { role: "program_owner", programId: "p2" },
+      ])
+    ).not.toThrow();
+  });
+});
 
 describe("assertValidProfiles — round multi-profils multi-programmes", () => {
   it("allows zero or one profile per track", () => {

@@ -160,12 +160,14 @@ export function ProgramsPanel({
   const [form, setForm] = useState<{
     name: string;
     sponsor: string | undefined;
+    owner: string | undefined;
     type: ProgramType;
     actionPlanEnabled: boolean;
     ambition: string | undefined;
   }>({
     name: "",
     sponsor: undefined,
+    owner: undefined,
     type: "performance",
     actionPlanEnabled: true,
     ambition: undefined,
@@ -202,6 +204,7 @@ export function ProgramsPanel({
     setForm({
       name: "",
       sponsor: undefined,
+      owner: undefined,
       type: "performance",
       actionPlanEnabled: true,
       ambition: undefined,
@@ -215,6 +218,7 @@ export function ProgramsPanel({
     setForm({
       name: p.name,
       sponsor: p.sponsor,
+      owner: p.owner,
       type: resolveProgramType(p),
       actionPlanEnabled: p.actionPlanEnabled ?? true,
       ambition: p.ambition,
@@ -233,7 +237,13 @@ export function ProgramsPanel({
           ...existing,
           name: form.name,
           sponsor: form.sponsor,
-          ambition: form.ambition,
+          owner: form.owner,
+          // L'Ambition n'a de sens que pour un Plan Stratégique (voir le champ dans le formulaire
+          // plus bas, masqué pour un Plan Performance) — ne jamais réécrire une valeur pour un
+          // programme Performance, même si `form.ambition` porte encore une ancienne valeur
+          // chargée par `startEdit` (le patch conserverait sinon une donnée qu'aucun champ ne
+          // permet plus d'éditer).
+          ...(resolveProgramType(existing) === "strategic" ? { ambition: form.ambition } : {}),
           ...(resolveProgramType(existing) === "performance"
             ? { actionPlanEnabled: form.actionPlanEnabled }
             : {}),
@@ -246,7 +256,8 @@ export function ProgramsPanel({
         companyId,
         name: form.name,
         sponsor: form.sponsor,
-        ambition: form.ambition,
+        owner: form.owner,
+        ...(form.type === "strategic" ? { ambition: form.ambition } : {}),
         currency: "€M",
         fyStart: "2026-01",
         fyEnd: "2026-12",
@@ -403,22 +414,34 @@ export function ProgramsPanel({
               label={t("adminProgramsPanel.sponsor", "Sponsor")}
               id="program-sponsor"
             />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-text-secondary">
-              {t("adminProgramsPanel.ambitionLabel", "Ambition")}
-            </label>
-            <input
-              value={form.ambition ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, ambition: e.target.value || undefined }))}
-              className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-              placeholder={t(
-                "adminProgramsPanel.ambitionPlaceholder",
-                "Ex. Devenir leader du marché d'ici 2027"
-              )}
+            <UserPicker
+              users={companyUsers}
+              value={form.owner}
+              onChange={(owner) => setForm((f) => ({ ...f, owner }))}
+              label={t("adminProgramsPanel.owner", "Owner")}
+              id="program-owner"
             />
           </div>
+
+          {/* L'Ambition (vision/accroche 3-5-15) n'a de sens que pour un Plan Stratégique — voir
+              `Program.ambition` (types/index.ts). Retirée du formulaire d'un Plan Performance, qui
+              n'a pas cette notion. */}
+          {form.type === "strategic" && (
+            <div>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("adminProgramsPanel.ambitionLabel", "Ambition")}
+              </label>
+              <input
+                value={form.ambition ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, ambition: e.target.value || undefined }))}
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                placeholder={t(
+                  "adminProgramsPanel.ambitionPlaceholder",
+                  "Ex. Devenir leader du marché d'ici 2027"
+                )}
+              />
+            </div>
+          )}
 
           {form.type === "performance" && (
             <label className="flex cursor-pointer gap-2 rounded-lg border border-border p-3 text-sm hover:bg-bg-surface">

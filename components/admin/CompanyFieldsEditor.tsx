@@ -64,11 +64,16 @@ export const DEFAULT_RISK_THRESHOLDS_FORM: {
  *  toute façon besoin. */
 export const OPERATIONAL_ROLES: { value: Role; label: string }[] = [
   { value: "cto", label: "CTO" },
-  { value: "sponsor", label: "Sponsor" },
+  // Libellé "Workstream Leader" (renommage du libellé affiché — la clé technique `sponsor` reste
+  // inchangée, toujours scopée WORKSTREAM, voir types/index.ts).
+  { value: "sponsor", label: "Workstream Leader" },
   { value: "lever", label: "Lever Owner" },
   { value: "finance", label: "Finance" },
   { value: "hr", label: "HR" },
   { value: "ops", label: "Ops" },
+  // Fondation vue consolidée multi-programmes (voir types/index.ts).
+  { value: "program_sponsor", label: "Program Sponsor" },
+  { value: "program_owner", label: "Program Owner" },
   { value: "strategic_lead", label: "Pilote du plan stratégique" },
   { value: "axis_sponsor", label: "Sponsor d'axe" },
   { value: "chantier_owner", label: "Responsable de chantier" },

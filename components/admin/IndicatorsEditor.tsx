@@ -57,7 +57,7 @@ const RESPONSIBLE_ROLES: { value: Role; shortKey: string; short: string; labelKe
   {
     value: "sponsor",
     shortKey: "roles.sponsor.short",
-    short: "Sponsor",
+    short: "Leader",
     labelKey: "roles.sponsor.label",
   },
   { value: "lever", shortKey: "roles.lever.short", short: "PM", labelKey: "roles.lever.label" },

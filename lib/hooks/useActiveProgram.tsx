@@ -3,8 +3,22 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { subscribePrograms } from "@/lib/firestore/admin";
 import { resolveProgramType } from "@/lib/axisLogic";
+import { getConsolidatedPerformancePrograms } from "@/lib/consolidatedProgramAccess";
 import { useRole } from "@/lib/hooks/useRole";
 import type { Program, ProgramType } from "@/types";
+
+/**
+ * Valeur sentinelle de `activeProgramId`/`setActiveProgramId` qui active le mode "vue consolidée"
+ * (fondation chantier CTO multi-programmes) : au lieu d'un programme unique, les pages consommatrices
+ * (dashboard exécutif, page leviers, dashboard RH) doivent alors agréger TOUS les programmes de
+ * `consolidatedPrograms` ci-dessous plutôt que de lire `activeProgram`. Choisie plutôt qu'un
+ * `id: null` (déjà utilisé pour "aucune sélection restaurée") ou un objet `Program` factice, pour
+ * rester une simple `string` — persistable telle quelle dans le MÊME localStorage que les vrais ids
+ * de programme (voir `storageKey` plus bas), sans schéma de stockage distinct à gérer. Le préfixe
+ * `__`/suffixe `__` évite toute collision avec un id Firestore réel (générés `p${Date.now()}` par
+ * `ProgramsPanel.tsx`, jamais sous cette forme).
+ */
+export const CONSOLIDATED_PROGRAM_ID = "__consolidated__";
 
 /**
  * Contexte global "programme actif" — le programme sélectionné détermine désormais la NATURE des
@@ -24,14 +38,29 @@ import type { Program, ProgramType } from "@/types";
 type ActiveProgramContextValue = {
   /** Tous les programmes visibles par l'utilisateur courant (son entreprise, ou tous si admin). */
   programs: Program[];
-  /** Programme actif résolu, ou null tant qu'aucun programme n'est disponible. */
+  /** Programme actif résolu, ou null tant qu'aucun programme n'est disponible OU que la vue
+   *  consolidée (`isConsolidatedView`) est active — dans ce dernier cas, lire `consolidatedPrograms`
+   *  à la place. */
   activeProgram: Program | null;
+  /** `CONSOLIDATED_PROGRAM_ID` quand la vue consolidée est sélectionnée, l'id d'un programme réel,
+   *  ou `null` tant qu'aucune sélection n'est restaurée. */
   activeProgramId: string | null;
-  /** Type du programme actif — "performance" par défaut (voir `resolveProgramType`). */
+  /** Type du programme actif — "performance" par défaut (voir `resolveProgramType`), y compris en
+   *  vue consolidée (qui ne porte QUE sur les programmes "performance", voir
+   *  `getConsolidatedPerformancePrograms`). */
   programType: ProgramType;
+  /** Sélectionne un programme par id, ou `CONSOLIDATED_PROGRAM_ID` pour activer la vue consolidée. */
   setActiveProgramId: (id: string | null) => void;
   /** true tant que la première réponse Firestore n'est pas arrivée. */
   loading: boolean;
+  /** true quand `CONSOLIDATED_PROGRAM_ID` est sélectionné pour un utilisateur rattaché à une
+   *  entreprise (jamais true pour un admin global, même contexte qu'`activeProgram` ci-dessus). */
+  isConsolidatedView: boolean;
+  /** Programmes "performance" en périmètre de la vue consolidée pour l'utilisateur courant (voir
+   *  `lib/consolidatedProgramAccess.ts::getConsolidatedPerformancePrograms`). Tableau VIDE tant que
+   *  `isConsolidatedView` est `false` — ne pas lire ce champ sans avoir vérifié `isConsolidatedView`
+   *  d'abord, un tableau vide n'y signifie pas "aucun programme accessible". */
+  consolidatedPrograms: Program[];
 };
 
 const ActiveProgramContext = createContext<ActiveProgramContextValue | null>(null);
@@ -97,6 +126,15 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
 
   const loading = firestoreLoading || !restored;
 
+  // Vue consolidée sélectionnée ? Même garde-fou `companyId` qu'`activeProgram` ci-dessous : un
+  // admin global n'a pas de contexte "entreprise" cohérent pour agréger quoi que ce soit.
+  const isConsolidatedView = !!companyId && selectedId === CONSOLIDATED_PROGRAM_ID;
+
+  const consolidatedPrograms = useMemo(() => {
+    if (!isConsolidatedView) return [];
+    return getConsolidatedPerformancePrograms(user, programs);
+  }, [isConsolidatedView, user, programs]);
+
   const activeProgram = useMemo(() => {
     // Un admin global (companyId null) n'a pas de contexte "entreprise" : il ne faut jamais lui
     // attribuer arbitrairement le premier programme d'une entreprise au hasard (voir le
@@ -105,6 +143,12 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
     // un utilisateur normal sans aucun programme).
     if (!companyId) return null;
     if (programs.length === 0) return null;
+    // Vue consolidée : pas de programme unique actif — les pages consommatrices doivent lire
+    // `consolidatedPrograms` à la place. Un simple `programs.find` échouerait silencieusement ici
+    // (aucun programme ne porte l'id sentinelle) et retomberait sur `programs[0]` par le `??`
+    // ci-dessous, ce qui masquerait la vue consolidée derrière un programme arbitraire — d'où ce
+    // retour explicite.
+    if (selectedId === CONSOLIDATED_PROGRAM_ID) return null;
     return programs.find((p) => p.id === selectedId) ?? programs[0];
   }, [companyId, programs, selectedId]);
 
@@ -127,12 +171,14 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
     () => ({
       programs,
       activeProgram,
-      activeProgramId: activeProgram?.id ?? null,
+      activeProgramId: isConsolidatedView ? CONSOLIDATED_PROGRAM_ID : (activeProgram?.id ?? null),
       programType: resolveProgramType(activeProgram),
       setActiveProgramId,
       loading,
+      isConsolidatedView,
+      consolidatedPrograms,
     }),
-    [programs, activeProgram, setActiveProgramId, loading]
+    [programs, activeProgram, setActiveProgramId, loading, isConsolidatedView, consolidatedPrograms]
   );
 
   return <ActiveProgramContext.Provider value={value}>{children}</ActiveProgramContext.Provider>;
