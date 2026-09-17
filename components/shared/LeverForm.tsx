@@ -207,50 +207,31 @@ export function LeverForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyUsers]);
 
-  const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
-  // TOUS les nœuds financiers (pas seulement la maille la plus fine) — nécessaire pour remonter le
-  // chemin complet depuis le centre de coût sélectionné jusqu'à la maille macro (P&L), voir
-  // `macroHierarchyLevel`/`financialMacro` plus bas.
-  const [financialNodes, setFinancialNodes] = useState<HierarchyNode[]>([]);
+  // Round "rattachement financier par action" : le levier ne porte plus de sélecteur
+  // hierarchyLeafId/pnlMap dérivé de l'arborescence financière — ce rattachement se fait
+  // désormais par action/impact (voir `HierarchyLeafSelect` + `ActionForm.tsx`). `hierarchyLevels`
+  // financiers et leurs nœuds ne sont donc plus chargés ici ; seule la hiérarchie GÉOGRAPHIQUE
+  // reste gérée par ce formulaire (champ `geographyLeafId`, inchangé).
   const [geographyLevels, setGeographyLevels] = useState<HierarchyLevelDef[]>([]);
   const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
   const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
 
   useEffect(() => {
     if (!companyId) {
-      setHierarchyLevels([]);
-      setFinancialNodes([]);
       setGeographyLevels([]);
       setGeographyNodes([]);
       setConfidentialityLevels([]);
       return;
     }
     let cancelled = false;
-    let unsubNodes: (() => void) | null = null;
     let unsubGeoNodes: (() => void) | null = null;
     const unsubCompanies = subscribeCompanies((companies) => {
       if (cancelled) return;
       const company = companies.find((c) => c.id === companyId);
-      const levels = company?.hierarchyLevels ?? [];
       const geoLevels = company?.geographyHierarchyLevels ?? [];
-      setHierarchyLevels(levels);
       setGeographyLevels(geoLevels);
       setConfidentialityLevels(company?.confidentialityLevels ?? []);
-      unsubNodes?.();
       unsubGeoNodes?.();
-      unsubNodes = null;
-      if (levels.length === 0) {
-        setFinancialNodes([]);
-      } else {
-        unsubNodes = subscribeHierarchyNodes(
-          companyId,
-          (nodes) => {
-            if (cancelled) return;
-            setFinancialNodes(nodes);
-          },
-          "financial"
-        );
-      }
       if (geoLevels.length === 0) {
         setGeographyNodes([]);
       } else {
@@ -266,46 +247,12 @@ export function LeverForm({
     }, companyId);
     return () => {
       cancelled = true;
-      unsubNodes?.();
       unsubGeoNodes?.();
       unsubCompanies();
     };
   }, [companyId]);
 
-  const hasHierarchy = hierarchyLevels.length > 0;
   const hasGeographyHierarchy = geographyLevels.length > 0;
-
-  const sortedHierarchyLevels = [...hierarchyLevels].sort((a, b) => a.order - b.order);
-  const finestHierarchyLevel = sortedHierarchyLevels[sortedHierarchyLevels.length - 1];
-  // Maille macro = niveau "pnl" explicitement marqué s'il existe (voir `derivePnlAccounts`, qui
-  // identifie le compte P&L de la même façon), sinon le premier niveau (order 0 = "juste sous le
-  // compte P&L", voir doc-comment `HierarchyLevelDef`).
-  const macroHierarchyLevel =
-    hierarchyLevels.find((l) => l.semantic === "pnl") ?? sortedHierarchyLevels[0];
-  const leafNodes = finestHierarchyLevel
-    ? financialNodes.filter((n) => n.levelKey === finestHierarchyLevel.key)
-    : [];
-  const financialChain = resolveHierarchyNodeChain(
-    values.hierarchyLeafId ?? "",
-    financialNodes,
-    hierarchyLevels
-  );
-  const financialMacro = macroHierarchyLevel
-    ? financialChain.find((n) => n.levelKey === macroHierarchyLevel.key)
-    : undefined;
-
-  // Dès qu'un centre de coût est sélectionné (ou changé), on aligne automatiquement `pnlMap` sur
-  // le compte P&L résolu depuis l'arborescence — plus de sélection manuelle indépendante possible
-  // tant qu'une hiérarchie financière est configurée (voir demande "la maille macro est donnée
-  // automatiquement à partir de ce qu'on a sélectionné"). `financialMacro.code` correspond à
-  // l'id du PnlAccount dérivé (voir `derivePnlAccounts`, lib/hierarchyLogic.ts).
-  useEffect(() => {
-    if (!hasHierarchy) return;
-    if (financialMacro && financialMacro.code !== values.pnlMap) {
-      set("pnlMap", financialMacro.code);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHierarchy, financialMacro?.code]);
 
   const sortedGeographyLevels = [...geographyLevels].sort((a, b) => a.order - b.order);
   const geographyChain = resolveHierarchyNodeChain(
@@ -721,58 +668,13 @@ export function LeverForm({
             ))}
           </select>
         </Field>
-        {hasHierarchy ? (
-          <Field label={t("leverForm.costCenter")}>
-            <select
-              className={inputClass}
-              value={values.hierarchyLeafId ?? ""}
-              onChange={(e) => set("hierarchyLeafId", e.target.value || undefined)}
-            >
-              <option value="">{t("leverForm.selectPlaceholder")}</option>
-              {leafNodes.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.label} ({n.code})
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : (
-          <Field label={t("leverForm.costCenter")}>
-            <input
-              className={inputClass}
-              value={values.costCenter}
-              onChange={(e) => set("costCenter", e.target.value)}
-            />
-          </Field>
-        )}
-        {/* Maille macro (compte P&L) : dès qu'une hiérarchie financière est configurée, elle n'est
-         *  plus sélectionnée manuellement — elle est dérivée automatiquement du centre de coût
-         *  choisi ci-dessus via la correspondance de l'arborescence (voir l'effet plus haut qui
-         *  aligne `values.pnlMap` sur `financialMacro`), pour ne jamais diverger silencieusement
-         *  du chemin réel (ex. centre de coût "Procurement" mais compte P&L "R&D" laissé au hasard). */}
-        {hasHierarchy ? (
-          <Field label={t("leverForm.pnlAccount")}>
-            <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
-              {financialMacro?.label ?? "—"}
-            </div>
-          </Field>
-        ) : (
-          <Field label={t("leverForm.pnlAccount")}>
-            <select
-              className={inputClass}
-              value={values.pnlMap}
-              onChange={(e) => set("pnlMap", e.target.value)}
-            >
-              {data.pnlAccounts
-                .filter((p) => p.selectable !== false && !p.computed)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-            </select>
-          </Field>
-        )}
+        {/* Round "rattachement financier par action" : plus de sélecteur centre de coût / compte
+         *  P&L au niveau du levier (ni la maille hiérarchique `hierarchyLeafId`, ni sa dérivation
+         *  automatique vers `pnlMap`) — ce rattachement se fait désormais par action/impact (voir
+         *  `HierarchyLeafSelect` + le tableau des impacts dans `ActionForm.tsx`). `Lever.pnlMap`/
+         *  `Lever.hierarchyLeafId` restent des champs de type (repli legacy dans
+         *  `engine.resolveLeverAccount`) mais ne sont plus éditables depuis ce formulaire, y
+         *  compris en édition d'un levier existant qui en aurait déjà un. */}
       </div>
 
       <SectionTitle>{t("leverForm.sectionStatus")}</SectionTitle>

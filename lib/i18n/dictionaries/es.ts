@@ -1083,6 +1083,7 @@ const es: Record<string, string> = {
   "shared.actionForm.capexDeploymentLabel": "Fecha de compromiso",
   "shared.actionForm.gainDate": "Fecha del ahorro",
   "shared.actionForm.costLine": "Línea de coste",
+  "shared.actionForm.hierarchyCostCenter": "Centro de coste (jerarquía)",
   "shared.actionForm.actionsColumnAria": "Acciones",
   "shared.actionForm.descriptionPlaceholder": "Descripción...",
   "shared.actionForm.opexRecShort": "OPEX rec.",

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { HierarchyLeafSelect } from "@/components/shared/HierarchyLeafSelect";
 import type { ActionImpact, ActionStatus, BeTrackData, LeverAction, SavingType } from "@/types";
 
 const inputClass =
@@ -55,6 +56,7 @@ export type ActionFormValues = Omit<LeverAction, "id">;
  *  la date d'engagement. Un commentaire libre peut expliquer la méthode de calcul. */
 export function ActionForm({
   data,
+  companyId,
   initialValues,
   submitLabel,
   onSubmit,
@@ -62,6 +64,11 @@ export function ActionForm({
   onDelete,
 }: {
   data: BeTrackData;
+  /** Entreprise courante — nécessaire à `HierarchyLeafSelect` pour rattacher chaque ligne
+   *  d'impact à l'arborescence financière (`ActionImpact.hierarchyLeafId`, voir round
+   *  "rattachement financier par action"). Non défini = le champ ne s'affiche jamais avec
+   *  d'options (même comportement que si l'entreprise n'a pas configuré de hiérarchie). */
+  companyId?: string | null;
   initialValues?: Partial<LeverAction>;
   submitLabel?: string;
   onSubmit: (values: ActionFormValues) => void;
@@ -260,6 +267,13 @@ export function ActionForm({
                   </th>
                   <th className="w-[150px] min-w-[150px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
                     {t("shared.actionForm.costLine", "Poste de coût")}
+                  </th>
+                  {/* Round "rattachement financier par action" : rattachement à l'arborescence
+                   *  financière de l'entreprise, à côté du `pnlMap` legacy ci-dessus — voir
+                   *  `HierarchyLeafSelect`, ne s'affiche que si l'entreprise en a configuré une
+                   *  (sinon la cellule reste vide et seul `pnlMap` fait foi). */}
+                  <th className="w-[150px] min-w-[150px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    {t("shared.actionForm.hierarchyCostCenter", "Centre de coût (arborescence)")}
                   </th>
                   <th className="w-[110px] min-w-[110px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
                     {t("leverForm.costCenter", "Centre de coût")}
@@ -513,6 +527,15 @@ export function ActionForm({
                           </option>
                         ))}
                       </select>
+                    </td>
+
+                    <td className="w-[150px] min-w-[150px] px-2 py-1.5 align-top">
+                      <HierarchyLeafSelect
+                        companyId={companyId}
+                        value={imp.hierarchyLeafId}
+                        onChange={(leafId) => updateImpact(idx, { hierarchyLeafId: leafId })}
+                        className={selectClass}
+                      />
                     </td>
 
                     <td className="w-[110px] min-w-[110px] px-2 py-1.5 align-top">

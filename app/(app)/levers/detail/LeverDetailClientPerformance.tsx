@@ -400,6 +400,7 @@ export function LeverDetailClientPerformance() {
         {actionModal && (
           <ActionForm
             data={data}
+            companyId={user?.companyId}
             initialValues={actionModal.action}
             submitLabel={
               actionModal.mode === "edit"
