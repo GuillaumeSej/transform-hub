@@ -64,13 +64,11 @@ export function formatFte(value: number): string {
 export function ChantierStaffingEditor({
   companyId,
   programId,
-  axisId,
   chantierId,
   chantierActions,
 }: {
   companyId: string;
   programId: string;
-  axisId: string;
   chantierId: string;
   /** Leviers du chantier (round 7) — univers du sélecteur optionnel « levier concerné » ci-dessous.
    *  Un staffing transverse au chantier reste possible en laissant le sélecteur vide. */
@@ -148,7 +146,6 @@ export function ChantierStaffingEditor({
         id: newStaffingId(),
         companyId,
         programId,
-        axisId,
         chantierId,
         function: functionDraft,
         fte,

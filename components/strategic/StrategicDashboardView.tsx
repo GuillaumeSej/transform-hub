@@ -341,7 +341,7 @@ export function StrategicDashboardView() {
       axes.map((axis) => ({
         axis,
         total: chantiers
-          .filter((chantier) => chantier.axisId === axis.id)
+          .filter((chantier) => chantier.axisIds.includes(axis.id))
           .reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0),
       })),
     [axes, chantiers]
@@ -430,7 +430,7 @@ export function StrategicDashboardView() {
         .map((axis) => ({
           groupLabel: axis.name,
           options: chantiers
-            .filter((c) => c.axisId === axis.id)
+            .filter((c) => c.axisIds.includes(axis.id))
             .map((c) => ({ value: c.id, label: c.name })),
         }))
         .filter((group) => group.options.length > 0),
@@ -442,7 +442,7 @@ export function StrategicDashboardView() {
   // vue par levier, sans indicateur à résoudre.
   const roadmapOwnerOptions: DropdownOption[] = useMemo(() => {
     const scoped = chantiers.filter((c) => {
-      if (rmAxis && c.axisId !== rmAxis) return false;
+      if (rmAxis && !c.axisIds.includes(rmAxis)) return false;
       if (rmChantier && c.id !== rmChantier) return false;
       return true;
     });
@@ -461,7 +461,8 @@ export function StrategicDashboardView() {
     if (strategic.loading) return;
 
     const chantier = rmChantier ? chantiers.find((c) => c.id === rmChantier) : null;
-    const chantierInvalid = !!rmChantier && (!chantier || (!!rmAxis && chantier.axisId !== rmAxis));
+    const chantierInvalid =
+      !!rmChantier && (!chantier || (!!rmAxis && !chantier.axisIds.includes(rmAxis)));
 
     const validOwners = new Set(roadmapOwnerOptions.map((o) => o.value));
     const ownerInvalid = !!rmOwner && !validOwners.has(rmOwner);
@@ -487,7 +488,7 @@ export function StrategicDashboardView() {
   const roadmapChantiers = useMemo(
     () =>
       chantiers.filter((chantier) => {
-        if (rmAxis && chantier.axisId !== rmAxis) return false;
+        if (rmAxis && !chantier.axisIds.includes(rmAxis)) return false;
         if (rmChantier && chantier.id !== rmChantier) return false;
         if (
           rmOwner &&
@@ -520,13 +521,16 @@ export function StrategicDashboardView() {
   );
 
   // Chantiers regroupés par axe — porté depuis `StrategicAxesView.tsx`, alimente
-  // `renderAxisRoadmapHeader` (légende/liste de chantiers de l'en-tête riche d'axe).
+  // `renderAxisRoadmapHeader` (légende/liste de chantiers de l'en-tête riche d'axe). Round 24 : un
+  // chantier appartenant à plusieurs axes (`axisIds`) est poussé dans le bucket de CHACUN d'eux.
   const chantiersByAxis = useMemo(() => {
     const map = new Map<string, typeof chantiers>();
     for (const chantier of chantiers) {
-      const list = map.get(chantier.axisId);
-      if (list) list.push(chantier);
-      else map.set(chantier.axisId, [chantier]);
+      for (const axisId of chantier.axisIds) {
+        const list = map.get(axisId);
+        if (list) list.push(chantier);
+        else map.set(axisId, [chantier]);
+      }
     }
     return map;
   }, [chantiers]);

@@ -78,12 +78,17 @@ export function StrategicAxesView() {
 
   // Chantiers regroupés par axe, dans l'ordre de `data.chantiers` (déjà trié par le hook) — alimente
   // la section fixe "État des lieux d'avancement des leviers" ci-dessous (`projetBoardGroups`).
+  // Round 24 : un chantier appartient désormais potentiellement à PLUSIEURS axes (`axisIds`) — il
+  // est poussé dans le bucket de CHACUN d'eux (pas seulement le premier), décision produit assumée
+  // (visibilité complète par axe, voir `lib/axisLogic.ts`).
   const chantiersByAxis = useMemo(() => {
     const map = new Map<string, Chantier[]>();
     for (const chantier of data.chantiers) {
-      const list = map.get(chantier.axisId);
-      if (list) list.push(chantier);
-      else map.set(chantier.axisId, [chantier]);
+      for (const axisId of chantier.axisIds) {
+        const list = map.get(axisId);
+        if (list) list.push(chantier);
+        else map.set(axisId, [chantier]);
+      }
     }
     return map;
   }, [data.chantiers]);

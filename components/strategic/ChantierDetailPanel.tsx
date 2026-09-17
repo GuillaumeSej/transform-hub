@@ -1316,18 +1316,26 @@ export function ChantierDetailPanel({
     () => data.chantiers.find((c) => c.id === chantierId),
     [data.chantiers, chantierId]
   );
-  const axis = useMemo(
-    () => (chantier ? data.axes.find((a) => a.id === chantier.axisId) : undefined),
+  // Round 24 : un chantier appartient désormais potentiellement à PLUSIEURS axes (`axisIds`) —
+  // toutes les résolutions ci-dessous, dans l'ordre de `data.axes` (même convention que
+  // `chantiersByAxis` ailleurs dans le code).
+  const chantierAxes = useMemo(
+    () => (chantier ? data.axes.filter((a) => chantier.axisIds.includes(a.id)) : []),
     [data.axes, chantier]
   );
+  // Axe PRIMAIRE (`axisIds[0]`, jamais exposé comme tel à l'utilisateur — voir `types/index.ts`) :
+  // utilisé UNIQUEMENT ici pour la couleur d'accent de la carte "Vue d'ensemble", qui ne peut
+  // structurellement porter qu'une seule couleur (choix de conception non couvert explicitement par
+  // le brief round 24, tranché pour rester cohérent avec les autres usages "primaires" du modèle).
+  const primaryAxis = chantierAxes[0];
 
   /** Couleur d'accent (liséré + fond teinté) de la carte "Vue d'ensemble" ci-dessous — même hex
    *  brut que celui déjà consommé par `TimelineBar` (`hexToRgb`/`withAlpha`), avec repli sur le
    *  même gris neutre que `ProgramRoadmap.tsx` (`FALLBACK_COLOR`) quand l'axe n'a pas de couleur
    *  valide, pour rester cohérent avec le reste de l'appli plutôt que d'inventer un nouveau gris. */
   const axisAccentColor = useMemo(
-    () => (axis?.color && hexToRgb(axis.color) ? axis.color : "#a99e9a"),
-    [axis]
+    () => (primaryAxis?.color && hexToRgb(primaryAxis.color) ? primaryAxis.color : "#a99e9a"),
+    [primaryAxis]
   );
 
   const chantierActions = useMemo(
@@ -1362,14 +1370,16 @@ export function ChantierDetailPanel({
   }, [chantierStaffing]);
 
   // KPI proposables au sélecteur optionnel d'un levier (round 8) — même filtre que `KpiPageClient.tsx`
-  // (`grouped` useMemo, `macro`/`byChantier`) : indicateurs macro de l'AXE du chantier (pas de
-  // `chantierId`) + indicateurs déjà rattachés à CE chantier précis. Jamais un indicateur d'un autre
-  // axe/chantier.
+  // (`grouped` useMemo, `macro`/`byChantier`) : indicateurs macro d'UN DES AXES du chantier (pas de
+  // `chantierId`) + indicateurs déjà rattachés à CE chantier précis. Jamais un indicateur d'un axe
+  // totalement étranger au chantier. Round 24 : un chantier multi-axe propose les macro-KPI de
+  // CHACUN de ses axes (`chantier.axisIds.includes(i.axisId)`), décision produit explicite.
   const chantierAvailableIndicators = useMemo(
     () =>
       chantier
         ? data.indicators.filter(
-            (i) => (i.axisId === chantier.axisId && !i.chantierId) || i.chantierId === chantier.id
+            (i) =>
+              (chantier.axisIds.includes(i.axisId) && !i.chantierId) || i.chantierId === chantier.id
           )
         : [],
     [data.indicators, chantier]
@@ -1834,13 +1844,18 @@ export function ChantierDetailPanel({
                 </div>
               }
               actions={
-                axis && (
-                  <button
-                    onClick={() => navigateAway(`/levers/detail?id=${axis.id}`)}
-                    className="text-xs font-medium text-secondary hover:text-primary hover:underline"
-                  >
-                    {axis.name}
-                  </button>
+                chantierAxes.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {chantierAxes.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => navigateAway(`/levers/detail?id=${a.id}`)}
+                        className="text-xs font-medium text-secondary hover:text-primary hover:underline"
+                      >
+                        {a.name}
+                      </button>
+                    ))}
+                  </div>
                 )
               }
             />
@@ -2018,7 +2033,7 @@ export function ChantierDetailPanel({
                         className="h-full rounded-full"
                         style={{
                           width: `${progressPct}%`,
-                          backgroundColor: axis?.color ?? "var(--bp-warm-taupe)",
+                          backgroundColor: primaryAxis?.color ?? "var(--bp-warm-taupe)",
                         }}
                       />
                     </div>
@@ -2688,7 +2703,6 @@ export function ChantierDetailPanel({
           <ChantierStaffingEditor
             companyId={user?.companyId ?? ""}
             programId={activeProgramId ?? ""}
-            axisId={chantier.axisId}
             chantierId={chantier.id}
             chantierActions={chantierActions}
           />

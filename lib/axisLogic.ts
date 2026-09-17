@@ -1090,8 +1090,8 @@ export function staffingPeriodBuckets(
  *     `chantierId` pointe un chantier qui n'existe plus (référence orpheline), compte comme macro —
  *     dans l'ordre de `indicators` (jamais retrié).
  *  3. Puis, pour ce même axe, ses chantiers dans l'ordre de `chantiers` (jamais retrié) ; pour
- *     chaque chantier dont `axisId === axis.id`, ses indicateurs (`chantierId === chantier.id`)
- *     dans l'ordre de `indicators`.
+ *     chaque chantier dont `axisIds.includes(axis.id)` (un chantier multi-axe apparaît sous CHACUN
+ *     de ses axes), ses indicateurs (`chantierId === chantier.id`) dans l'ordre de `indicators`.
  *  4. Le compteur ne se réinitialise JAMAIS entre deux axes : le premier indicateur du deuxième axe
  *     continue directement après le dernier numéro attribué au premier.
  *
@@ -1125,7 +1125,7 @@ export function numberIndicators(
     }
 
     const byChantier = chantiers
-      .filter((c) => c.axisId === axis.id)
+      .filter((c) => c.axisIds.includes(axis.id))
       .map((chantier) => ({
         chantier,
         indicators: axisIndicators.filter((i) => i.chantierId === chantier.id),
@@ -1192,13 +1192,13 @@ export function sumConsumedBudget(chantierId: string, actions: ChantierAction[])
  * paramètre `unassignedLabel` (module pur, sans accès à `t()`).
  */
 export function resolveChantierOwner(
-  chantier: Pick<Chantier, "pilote" | "sponsorName" | "axisId">,
+  chantier: Pick<Chantier, "pilote" | "sponsorName" | "axisIds">,
   axes: StrategicAxis[],
   unassignedLabel: string
 ): string {
   if (chantier.pilote) return chantier.pilote;
   if (chantier.sponsorName) return chantier.sponsorName;
-  const axis = axes.find((a) => a.id === chantier.axisId);
+  const axis = axes.find((a) => a.id === chantier.axisIds[0]);
   return axis?.owner ?? unassignedLabel;
 }
 
@@ -1317,10 +1317,12 @@ function normalizeRoadmapDeliverables(
  * Ordre de sortie — REPREND la même convention que `numberIndicators` ci-dessus (jamais de tri
  * caché) : les axes dans leur ordre d'apparition dans `axes`, puis pour chaque axe ses chantiers
  * dans l'ordre de `chantiers`, puis pour chaque chantier ses leviers triés par date de début (même
- * tri que `ChantierGantt.tsx`). Un chantier dont l'`axisId` ne référence aucun axe de `axes`, ou un
+ * tri que `ChantierGantt.tsx`). Un chantier dont aucun `axisIds` ne référence un axe de `axes`, ou un
  * levier dont le `chantierId` ne référence aucun chantier de `chantiers`, n'apparaît dans AUCUNE
  * ligne (référence orpheline — même parti pris défensif que `numberIndicators`/`chantierBounds` :
- * pas de ligne inventée avec un axe/chantier `undefined`).
+ * pas de ligne inventée avec un axe/chantier `undefined`). Round 24 : un chantier appartenant à
+ * PLUSIEURS axes produit UN JEU DE LIGNES PAR AXE (une ligne par (axe, levier) plutôt que par
+ * levier seul) — décision produit assumée, pas un bug : la feuille de route reste lue axe par axe.
  */
 export function programRoadmap(
   axes: StrategicAxis[],
@@ -1330,7 +1332,7 @@ export function programRoadmap(
   const rows: ProgramRoadmapRow[] = [];
 
   for (const axis of axes) {
-    const axisChantiers = chantiers.filter((c) => c.axisId === axis.id);
+    const axisChantiers = chantiers.filter((c) => c.axisIds.includes(axis.id));
     for (const chantier of axisChantiers) {
       const chantierActions = actions
         .filter((a) => a.chantierId === chantier.id)

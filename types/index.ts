@@ -784,7 +784,14 @@ export type Chantier = {
   id: string;
   companyId: string;
   programId: string;
-  axisId: string;
+  /** Axes stratégiques auxquels ce chantier appartient (round 24) — un chantier peut désormais
+   *  contribuer à PLUSIEURS axes simultanément. Toujours non-vide : `axisIds[0]` est l'axe
+   *  "primaire" au sens interne uniquement (jamais exposé comme concept nommé à l'utilisateur),
+   *  utilisé seulement là où un axe unique et déterministe est structurellement requis (ex.
+   *  routage d'une notification, repli de propriétaire d'axe). Partout ailleurs, un chantier
+   *  multi-axe doit être traité comme appartenant pleinement à CHACUN de ses axes (voir
+   *  `lib/axisLogic.ts`). */
+  axisIds: string[];
   name: string;
   description?: string;
   /** Référence un `MaturityStageConfig.id` du programme (même référentiel que l'axe). */
@@ -911,10 +918,11 @@ export type ChantierAction = {
   /** Lien optionnel vers un `Indicator` (KPI) de l'axe ou du chantier de ce levier — round 8, statut
    *  round 18 : purement informatif, n'aiguille plus aucun système de suivi (le suivi E0→E4 via
    *  `milestones` ci-dessus s'applique à tous les leviers, avec ou sans KPI rattaché). Liste des KPI
-   *  proposés à un levier donné (décision PO) : indicateurs "macro" de l'axe du chantier
-   *  (`Indicator.axisId === chantier.axisId && !Indicator.chantierId`) + indicateurs déjà rattachés à
-   *  CE chantier précis (`Indicator.chantierId === chantier.id`) — jamais un indicateur d'un autre
-   *  axe/chantier. */
+   *  proposés à un levier donné (décision PO) : indicateurs "macro" d'UN DES axes du chantier
+   *  (round 24 : `chantier.axisIds.includes(Indicator.axisId) && !Indicator.chantierId`, un chantier
+   *  multi-axe propose les macro-KPI de CHACUN de ses axes) + indicateurs déjà rattachés à CE
+   *  chantier précis (`Indicator.chantierId === chantier.id`) — jamais un indicateur d'un axe
+   *  totalement étranger au chantier. */
   indicatorId?: string;
   /** Budget alloué à ce LEVIER (round 12), affiché avec `Program.currency` du programme actif —
    *  pendant de `Chantier.allocatedBudget` mais au niveau du levier plutôt que du chantier (les
@@ -1041,10 +1049,6 @@ export type ChantierStaffing = {
   id: string;
   companyId: string;
   programId: string;
-  /** Dénormalisé depuis le chantier : la page Effectifs agrège par axe sans avoir à recharger ni
-   *  à joindre la collection `chantiers`. Un chantier ne change jamais d'axe dans l'UI actuelle,
-   *  cette copie ne peut donc pas diverger. */
-  axisId: string;
   chantierId: string;
   /** Nom d'équipe/département — voir note de tête de section. Censé correspondre à un
    *  `Employee.department` de la base ETP entreprise, jamais une valeur figée dans ce type. */

@@ -53,14 +53,28 @@ function findAxisColor(axes: StrategicAxis[], axisId: string): string {
 
 /**
  * Pendant de `staffingPeriodBuckets` (lib/axisLogic.ts) pour le mode "axis" (round 22) — MÊME
- * boucle de répartition par période, mais la clé de regroupement est `entry.axisId` plutôt que
- * `entry.function`. Volontairement PAS généricisé dans `staffingPeriodBuckets` lui-même (qui reste
- * inchangé, toujours utilisé tel quel par le mode "period" ci-dessous) : sa forme de sortie
- * (`byFunction`) est nommée pour l'équipe, la renommer en un nom neutre aurait cassé sa lisibilité
- * pour son unique usage restant sans gagner grand-chose — un peu de duplication ciblée plutôt que
- * de génériciser une fonction partagée testée (`lib/__tests__/axisLogic.test.ts`) pour un seul
- * appelant interne à ce fichier. */
-function axisPeriodBuckets(entries: ChantierStaffing[], granularity: Granularity): UnifiedBucket[] {
+ * boucle de répartition par période, mais la clé de regroupement est l'AXE (ou les axes, round 24)
+ * du CHANTIER de la ligne plutôt que `entry.function`. Volontairement PAS généricisé dans
+ * `staffingPeriodBuckets` lui-même (qui reste inchangé, toujours utilisé tel quel par le mode
+ * "period" ci-dessous) : sa forme de sortie (`byFunction`) est nommée pour l'équipe, la renommer en
+ * un nom neutre aurait cassé sa lisibilité pour son unique usage restant sans gagner grand-chose —
+ * un peu de duplication ciblée plutôt que de génériciser une fonction partagée testée
+ * (`lib/__tests__/axisLogic.test.ts`) pour un seul appelant interne à ce fichier.
+ *
+ * Round 24 : `ChantierStaffing.axisId` a été supprimé (dénormalisation retirée avec le passage de
+ * `Chantier.axisId` à `Chantier.axisIds[]`) — la correspondance ligne de staffing → axe(s) se fait
+ * désormais en rejoignant par `entry.chantierId` dans `axisIdsByChantier` (fourni par l'appelant,
+ * voir `EffectifsPageClient.tsx`). Un chantier appartenant à PLUSIEURS axes voit sa ligne de
+ * staffing comptée EN ENTIER sous CHAQUE axe (`bucket.byGroup[axisId]`, une fois par axe, même
+ * principe de visibilité complète que le donut budgétaire) — mais `bucket.totalFte` n'est
+ * incrémenté qu'UNE SEULE FOIS par ligne, hors de la boucle par axe, pour ne jamais gonfler le
+ * total période. Une ligne dont le chantier est introuvable (référence orpheline) ou sans axe
+ * connu n'alimente aucun `byGroup` mais compte tout de même dans `totalFte`. */
+function axisPeriodBuckets(
+  entries: ChantierStaffing[],
+  granularity: Granularity,
+  axisIdsByChantier: Record<string, string[]>
+): UnifiedBucket[] {
   const byPeriod = new Map<string, UnifiedBucket>();
   for (const entry of entries) {
     if (!entry.startDate) continue;
@@ -71,7 +85,10 @@ function axisPeriodBuckets(entries: ChantierStaffing[], granularity: Granularity
       byPeriod.set(period, bucket);
     }
     bucket.totalFte += entry.fte;
-    bucket.byGroup[entry.axisId] = (bucket.byGroup[entry.axisId] ?? 0) + entry.fte;
+    const axisIds = axisIdsByChantier[entry.chantierId] ?? [];
+    for (const axisId of axisIds) {
+      bucket.byGroup[axisId] = (bucket.byGroup[axisId] ?? 0) + entry.fte;
+    }
   }
   return Array.from(byPeriod.values()).sort((a, b) => a.period.localeCompare(b.period));
 }
@@ -118,6 +135,7 @@ export function StaffingPeriodBreakdown({
   fteByDept,
   axes,
   chantierNamesById = {},
+  axisIdsByChantier = {},
 }: {
   staffing: ChantierStaffing[];
   /** Disponible réel par équipe (base ETP entreprise, live). */
@@ -128,6 +146,12 @@ export function StaffingPeriodBreakdown({
   /** `Chantier.id` → nom, pour le détail par chantier du tooltip/panneau épinglé — construit par
    *  l'appelant. Optionnel : un chantier absent de la map retombe sur `effectifs.chantierUnknown`. */
   chantierNamesById?: Record<string, string>;
+  /** `Chantier.id` → `Chantier.axisIds`, round 24 — remplace l'ancien `ChantierStaffing.axisId`
+   *  dénormalisé (supprimé) pour le mode "axis" : construit par l'appelant, typiquement
+   *  `Object.fromEntries(chantiers.map(c => [c.id, c.axisIds]))`. Optionnel : un chantier absent de
+   *  la map (référence orpheline) n'alimente aucun groupe en mode "axis", même parti pris défensif
+   *  que `chantierNamesById`. */
+  axisIdsByChantier?: Record<string, string[]>;
 }) {
   const { t } = useTranslation();
 
@@ -187,8 +211,8 @@ export function StaffingPeriodBreakdown({
   }, [staffing, selectedFunction, selectedChantierId]);
 
   const axisBuckets = useMemo(
-    () => axisPeriodBuckets(axisFilteredStaffing, granularity),
-    [axisFilteredStaffing, granularity]
+    () => axisPeriodBuckets(axisFilteredStaffing, granularity, axisIdsByChantier),
+    [axisFilteredStaffing, granularity, axisIdsByChantier]
   );
 
   /** Axes présents dans `axisBuckets`, dans l'ordre du programme (`axes`), plus les orphelins (id
@@ -235,29 +259,39 @@ export function StaffingPeriodBreakdown({
   );
 
   /** Détail par chantier, par (période, groupe) — round 20 (mode "period") généralisé round 22 au
-   *  mode "axis" (groupe = `entry.axisId`). Filtré sur `axisFilteredStaffing` en mode "axis" pour
-   *  rester cohérent avec les groupes/totaux réellement affichés dans ce mode. */
+   *  mode "axis" (groupe = axe(s) du chantier). Filtré sur `axisFilteredStaffing` en mode "axis"
+   *  pour rester cohérent avec les groupes/totaux réellement affichés dans ce mode.
+   *
+   *  Round 24 : en mode "axis", une ligne est désormais répartie sur CHAQUE axe de son chantier
+   *  (`axisIdsByChantier`, voir `axisPeriodBuckets` ci-dessus) plutôt que sur un `entry.axisId`
+   *  unique — même principe de visibilité complète par axe. */
   const chantierBreakdownByPeriod = useMemo(() => {
     const map = new Map<string, Map<string, Map<string, number>>>();
     const source = mode === "axis" ? axisFilteredStaffing : staffing;
     for (const entry of source) {
       if (!entry.startDate) continue;
       const period = periodLabelForDate(entry.startDate, granularity);
-      const groupKey = mode === "axis" ? entry.axisId : entry.function;
+      const groupKeys =
+        mode === "axis" ? (axisIdsByChantier[entry.chantierId] ?? []) : [entry.function];
       let byGroup = map.get(period);
       if (!byGroup) {
         byGroup = new Map();
         map.set(period, byGroup);
       }
-      let byChantier = byGroup.get(groupKey);
-      if (!byChantier) {
-        byChantier = new Map();
-        byGroup.set(groupKey, byChantier);
+      for (const groupKey of groupKeys) {
+        let byChantier = byGroup.get(groupKey);
+        if (!byChantier) {
+          byChantier = new Map();
+          byGroup.set(groupKey, byChantier);
+        }
+        byChantier.set(
+          entry.chantierId,
+          (byChantier.get(entry.chantierId) ?? 0) + (entry.fte || 0)
+        );
       }
-      byChantier.set(entry.chantierId, (byChantier.get(entry.chantierId) ?? 0) + (entry.fte || 0));
     }
     return map;
-  }, [mode, staffing, axisFilteredStaffing, granularity]);
+  }, [mode, staffing, axisFilteredStaffing, granularity, axisIdsByChantier]);
 
   /** Chantiers de l'équipe sélectionnée (round 21, déplacé ici round 22) — alimente la rangée de
    *  chips "Chantiers :", visible dans les deux modes. Volontairement basée sur `staffing` COMPLET

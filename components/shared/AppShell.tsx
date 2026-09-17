@@ -71,7 +71,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
     const today = new Date().toISOString().slice(0, 10);
     const companyId = user?.companyId ?? null;
-    const axisIdByChantier = new Map(strategic.chantiers.map((c) => [c.id, c.axisId]));
+    // Round 24 : un chantier peut appartenir à plusieurs axes — l'axe PRIMAIRE (`axisIds[0]`) est
+    // utilisé ici pour router la notification vers une seule page d'axe, comportement voulu pour ce
+    // cas précis (pas d'exposition de la notion "primaire" à l'utilisateur, simple choix interne).
+    const axisIdByChantier = new Map(strategic.chantiers.map((c) => [c.id, c.axisIds[0]]));
 
     // 1. Cascades de dépendance entre chantiers — signalement pur (aucune date n'est modifiée),
     //    voir lib/axisLogic.ts. `desc` reprend le message déjà formulé par le moteur (il nomme les

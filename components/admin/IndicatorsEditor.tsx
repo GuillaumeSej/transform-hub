@@ -262,7 +262,7 @@ export function IndicatorsEditor({
   useRegisterUnsavedChanges(`admin:indicators:${programId}`, formDirty);
 
   const axisChantiers = useMemo(
-    () => chantiers.filter((c) => c.axisId === form.axisId),
+    () => chantiers.filter((c) => c.axisIds.includes(form.axisId)),
     [chantiers, form.axisId]
   );
 
@@ -1016,12 +1016,14 @@ export function IndicatorsEditor({
           axes={axes}
           stages={stages}
           confidentialityLevels={confidentialityLevels}
-          initial={{ axisId: form.axisId }}
+          initial={{ axisIds: form.axisId ? [form.axisId] : [] }}
           submitLabel={t("common.add", "Ajouter")}
           onCancel={() => setChantierModalOpen(false)}
           onSubmit={async (values) => {
             const chantier = await createChantier(values);
-            setForm((f) => ({ ...f, axisId: chantier.axisId, chantierId: chantier.id }));
+            // Cette surface (formulaire indicateur) garde un `axisId` scalaire propre — on relit
+            // l'axe PRIMAIRE du chantier nouvellement créé (round 24, voir `types/index.ts`).
+            setForm((f) => ({ ...f, axisId: chantier.axisIds[0], chantierId: chantier.id }));
             setChantierModalOpen(false);
             showToast(t("adminIndicators.chantierCreated", "Chantier créé"), chantier.name);
           }}

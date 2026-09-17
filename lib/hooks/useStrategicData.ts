@@ -83,7 +83,7 @@ export type StrategicData = {
   removeAxis: (id: string) => Promise<void>;
 
   createChantier: (
-    input: Pick<Chantier, "axisId" | "name" | "stage"> &
+    input: Pick<Chantier, "axisIds" | "name" | "stage"> &
       Partial<Pick<Chantier, "description" | "dependencies" | "confidentialityLevel">>
   ) => Promise<Chantier>;
   updateChantier: (id: string, patch: Partial<Chantier>) => Promise<void>;
@@ -127,7 +127,7 @@ export type StrategicData = {
   /** Ajoute une ligne de staffing sur un chantier. Pas d'`updateStaffing` : une ligne n'a que
    *  deux champs signifiants (fonction + ETP), on la corrige en la supprimant/ressaisissant. */
   createStaffing: (
-    input: Pick<ChantierStaffing, "axisId" | "chantierId" | "function" | "fte"> &
+    input: Pick<ChantierStaffing, "chantierId" | "function" | "fte"> &
       Partial<Pick<ChantierStaffing, "note">>
   ) => Promise<ChantierStaffing>;
   removeStaffing: (id: string) => Promise<void>;

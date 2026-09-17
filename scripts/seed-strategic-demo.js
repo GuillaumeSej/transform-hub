@@ -1144,9 +1144,11 @@ const ACTIONS = [
   },
 ];
 
-// Staffing ETP par chantier (ChantierStaffing, round 9) — `axisId` dénormalisé depuis le chantier
-// parent (voir types/index.ts), `actionId` sur ~1/3 des lignes pour illustrer le suivi "ETP par
-// levier" demandé par le PO, les autres restant au niveau chantier seul. `startDate`/`endDate`
+// Staffing ETP par chantier (ChantierStaffing, round 9) — round 24 : plus d'`axisId` dénormalisé
+// (champ retiré du type, voir types/index.ts) : l'axe se dérive désormais de `Chantier.axisIds` via
+// `chantierId` au moment de la lecture, pas stocké ici. `actionId` sur ~1/3 des lignes pour
+// illustrer le suivi "ETP par levier" demandé par le PO, les autres restant au niveau chantier
+// seul. `startDate`/`endDate`
 // étalées sur 2026-2027 pour peupler plusieurs buckets trimestre/semestre/année distincts
 // (`staffingPeriodBuckets`, lib/axisLogic.ts). Pas d'id/companyId/createdAt ici : générés à
 // l'écriture, comme les autres entités de ce script.
@@ -1163,7 +1165,6 @@ const ACTIONS = [
 const STAFFING = [
   {
     chantierId: "CH-lean",
-    axisId: "AX-excop",
     function: "Production",
     fte: 2.0,
     startDate: "2026-02-01",
@@ -1171,7 +1172,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-lean",
-    axisId: "AX-excop",
     function: "Support (IT/Finance/HR)",
     fte: 0.5,
     startDate: "2026-06-01",
@@ -1181,7 +1181,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-lean",
-    axisId: "AX-excop",
     function: "Supply Chain",
     fte: 0.3,
     startDate: "2026-09-01",
@@ -1189,7 +1188,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-supply",
-    axisId: "AX-excop",
     function: "Supply Chain",
     fte: 1.5,
     startDate: "2026-01-15",
@@ -1198,7 +1196,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-supply",
-    axisId: "AX-excop",
     function: "Support (IT/Finance/HR)",
     fte: 0.4,
     startDate: "2026-10-01",
@@ -1206,7 +1203,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-supply",
-    axisId: "AX-excop",
     function: "Supply Chain",
     fte: 1.0,
     startDate: "2026-04-01",
@@ -1214,7 +1210,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-supply",
-    axisId: "AX-excop",
     function: "Supply Chain",
     fte: 0.3,
     startDate: "2026-01-15",
@@ -1223,7 +1218,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-qualite",
-    axisId: "AX-excop",
     function: "Production",
     fte: 0.8,
     startDate: "2026-03-01",
@@ -1231,7 +1225,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-qualite",
-    axisId: "AX-excop",
     function: "Support (IT/Finance/HR)",
     fte: 0.2,
     startDate: "2026-04-01",
@@ -1240,7 +1233,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-data",
-    axisId: "AX-digital",
     function: "R&D / Innovation",
     fte: 3.0,
     startDate: "2026-06-01",
@@ -1249,7 +1241,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-data",
-    axisId: "AX-digital",
     function: "R&D / Innovation",
     fte: 1.2,
     startDate: "2027-01-01",
@@ -1257,7 +1248,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-data",
-    axisId: "AX-digital",
     function: "Support (IT/Finance/HR)",
     fte: 0.5,
     startDate: "2026-06-01",
@@ -1265,7 +1255,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-rpa",
-    axisId: "AX-digital",
     function: "R&D / Innovation",
     fte: 1.0,
     startDate: "2026-01-01",
@@ -1274,7 +1263,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-rpa",
-    axisId: "AX-digital",
     function: "Support (IT/Finance/HR)",
     fte: 0.3,
     startDate: "2026-01-01",
@@ -1283,7 +1271,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-cyber",
-    axisId: "AX-digital",
     function: "R&D / Innovation",
     fte: 2.5,
     startDate: "2026-04-01",
@@ -1292,7 +1279,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-cyber",
-    axisId: "AX-digital",
     function: "Support (IT/Finance/HR)",
     fte: 0.4,
     startDate: "2026-04-01",
@@ -1301,7 +1287,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-omnicanal",
-    axisId: "AX-expclient",
     function: "R&D / Innovation",
     fte: 1.8,
     startDate: "2026-02-01",
@@ -1310,7 +1295,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-omnicanal",
-    axisId: "AX-expclient",
     function: "Commercial & Marketing",
     fte: 1.0,
     startDate: "2026-02-01",
@@ -1318,7 +1302,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-omnicanal",
-    axisId: "AX-expclient",
     function: "Commercial & Marketing",
     fte: 0.6,
     startDate: "2026-12-01",
@@ -1326,7 +1309,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-fidelite",
-    axisId: "AX-expclient",
     function: "Commercial & Marketing",
     fte: 0.5,
     startDate: "2026-05-01",
@@ -1335,7 +1317,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-fidelite",
-    axisId: "AX-expclient",
     function: "Commercial & Marketing",
     fte: 0.7,
     startDate: "2026-05-01",
@@ -1343,7 +1324,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-scia",
-    axisId: "AX-expclient",
     function: "R&D / Innovation",
     fte: 0.4,
     startDate: "2027-01-01",
@@ -1352,7 +1332,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-carbone",
-    axisId: "AX-durable",
     function: "Production",
     fte: 1.2,
     startDate: "2026-01-01",
@@ -1361,7 +1340,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-carbone",
-    axisId: "AX-durable",
     function: "Supply Chain",
     fte: 0.6,
     startDate: "2026-07-01",
@@ -1369,7 +1347,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-emballages",
-    axisId: "AX-durable",
     function: "Production",
     fte: 0.4,
     startDate: "2026-04-01",
@@ -1377,7 +1354,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-succession",
-    axisId: "AX-talents",
     function: "Support (IT/Finance/HR)",
     fte: 1.5,
     startDate: "2026-01-01",
@@ -1386,7 +1362,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-succession",
-    axisId: "AX-talents",
     function: "Support (IT/Finance/HR)",
     fte: 0.3,
     startDate: "2027-01-01",
@@ -1395,7 +1370,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-upskilling",
-    axisId: "AX-talents",
     function: "Support (IT/Finance/HR)",
     fte: 0.8,
     startDate: "2026-03-01",
@@ -1403,7 +1377,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-orga",
-    axisId: "AX-talents",
     function: "Support (IT/Finance/HR)",
     fte: 0.5,
     startDate: "2026-02-01",
@@ -1412,7 +1385,6 @@ const STAFFING = [
   },
   {
     chantierId: "CH-orga",
-    axisId: "AX-talents",
     function: "Support (IT/Finance/HR)",
     fte: 0.2,
     startDate: "2026-02-01",
@@ -1749,7 +1721,10 @@ async function main() {
       id: chantier.id,
       companyId: COMPANY_ID,
       programId: PROGRAM_ID,
-      axisId: chantier.axisId,
+      // Round 24 : `Chantier.axisId` (scalaire) → `Chantier.axisIds` (tableau) — ce script continue
+      // d'assigner un seul axe par chantier de démo, simplement enveloppé dans un tableau à un
+      // élément (aucun chantier de démo multi-axe pour l'instant).
+      axisIds: [chantier.axisId],
       name: chantier.name,
       stage: chantier.stage,
       dependencies: chantier.dependencies ?? [],
@@ -1793,7 +1768,6 @@ async function main() {
       id: staffingId,
       companyId: COMPANY_ID,
       programId: PROGRAM_ID,
-      axisId: s.axisId,
       chantierId: s.chantierId,
       function: s.function,
       fte: s.fte,

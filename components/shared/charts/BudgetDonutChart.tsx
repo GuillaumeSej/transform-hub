@@ -117,6 +117,15 @@ function renderTooltip(
  * `consumedLabel`, tous optionnels, contrat inchangé pour les 3 appelants existants qui ne les
  * fournissent pas. Voir plus bas pour le détail (second anneau, overlay central à deux lignes,
  * légende et tooltip enrichis).
+ *
+ * Round 24 : `total`/`consumedTotal`, tous deux optionnels — par défaut (omis), le total affiché au
+ * centre reste `data.reduce(...)` comme avant, donc les appelants existants (dont le donut de
+ * drill-down par chantier) sont inchangés. À fournir UNIQUEMENT quand `data` est ventilé par axe et
+ * qu'un chantier multi-axe apparaît dans PLUSIEURS parts (son budget est alors affiché en entier
+ * sous chaque axe, par design — voir `EffectifsPageClient.tsx` — donc `data.reduce(...)` compterait
+ * ce chantier plusieurs fois) : l'appelant calcule alors le vrai total dédupliqué une seule fois sur
+ * la liste des chantiers à plat et le passe ici pour l'overlay central uniquement — les parts/légende
+ * elles-mêmes continuent d'utiliser `data` tel quel (répartition par axe volontairement dupliquée).
  */
 export function BudgetDonutChart({
   data,
@@ -125,6 +134,8 @@ export function BudgetDonutChart({
   centerLabel,
   showConsumedRing,
   consumedLabel,
+  total: totalOverride,
+  consumedTotal: consumedTotalOverride,
 }: {
   data: BudgetDonutSlice[];
   formatValue: (value: number) => string;
@@ -142,15 +153,33 @@ export function BudgetDonutChart({
    *  partout où ce mot serait sinon nécessaire. Sans effet si `showConsumedRing` n'est pas activé
    *  et qu'aucune part de `data` ne porte de `consumed`. */
   consumedLabel?: string;
+  /** Round 24 : total affiché au centre de l'anneau, en override de `data.reduce((s, d) =>
+   *  s + d.value, 0)` — voir le doc-comment de la fonction pour le cas d'usage (dédup d'un chantier
+   *  multi-axe compté plusieurs fois dans une ventilation par axe). N'affecte QUE l'overlay central,
+   *  jamais les parts du donut ni la légende (toujours dessinées depuis `data`). */
+  total?: number;
+  /** Round 24 : pendant de `total` ci-dessus pour le total "consommé" (anneau intérieur +
+   *  overlay), en override de `data.reduce((s, d) => s + (d.consumed ?? 0), 0)`. */
+  consumedTotal?: number;
 }): JSX.Element {
   const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
-  const total = data.reduce((sum, d) => sum + (d.value || 0), 0);
+  // Somme brute de `data` — dénominateur des % par part (tooltip + légende) et périmètre réel
+  // dessiné par l'anneau EXTÉRIEUR (`Pie` principal, toujours rendu depuis `data` tel quel, jamais
+  // depuis un total en override) : ces % doivent continuer à représenter "part de CE slice dans la
+  // répartition affichée", qu'elle soit ou non dédupliquée en amont par l'appelant.
+  const sliceTotal = data.reduce((sum, d) => sum + (d.value || 0), 0);
+  const sliceConsumedTotal = data.reduce((sum, d) => sum + (d.consumed || 0), 0);
+  // Round 24 : `total`/`consumedTotal` affichés au centre (et pilotant l'anneau INTÉRIEUR
+  // "consommé/restant") — en override explicite quand fourni (cas d'un chantier multi-axe compté
+  // plusieurs fois dans `data`, voir doc-comment de la fonction), sinon identiques à la somme brute
+  // ci-dessus (comportement historique, tous les autres appelants).
+  const total = totalOverride ?? sliceTotal;
+  const consumedTotal = consumedTotalOverride ?? sliceConsumedTotal;
 
   // Round 16 : anneau intérieur "consommé vs restant" — même périmètre que `total` ci-dessus
   // (somme de `data[].consumed`, absent traité comme 0). Dépassement global : un seul segment
   // rouge plein (rien à montrer comme "restant"), sinon deux segments (consommé foncé / restant
   // clair, mêmes tokens que `BudgetVsActualBar`).
-  const consumedTotal = data.reduce((sum, d) => sum + (d.consumed || 0), 0);
   const overBudget = consumedTotal > total;
   const remaining = Math.max(0, total - consumedTotal);
   const innerRingData = overBudget
@@ -207,7 +236,9 @@ export function BudgetDonutChart({
               </Pie>
             )}
             <Tooltip
-              content={(props) => renderTooltip({ ...props, total, formatValue, consumedLabel })}
+              content={(props) =>
+                renderTooltip({ ...props, total: sliceTotal, formatValue, consumedLabel })
+              }
             />
           </PieChart>
         </ResponsiveContainer>
@@ -261,7 +292,7 @@ export function BudgetDonutChart({
           `onSliceClick` est fourni. */}
       <ul className="flex w-full min-w-0 flex-col gap-1.5 text-[11px]">
         {data.map((entry, i) => {
-          const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
+          const pct = sliceTotal > 0 ? Math.round((entry.value / sliceTotal) * 100) : 0;
           const active = activeIndex === i;
           return (
             <li

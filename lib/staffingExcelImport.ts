@@ -290,7 +290,6 @@ export function validateStaffingImportRows(
       id: matched?.id ?? makeStaffingId(),
       companyId: resolvedCompanyId,
       programId: resolvedProgramId,
-      axisId: chantier.axisId,
       chantierId: chantier.id,
       function: fn,
       fte,
