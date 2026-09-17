@@ -33,7 +33,8 @@ import { Kanban } from "@/components/shared/Kanban";
 import { LeverLibraryTree } from "@/components/shared/LeverLibraryTree";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { type FilterDef } from "@/components/shared/FilterBar";
-import { CollapsibleFilterBar } from "@/components/shared/CollapsibleFilterBar";
+import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
+import { FilterToggleButton, useFilterBarExpanded } from "@/components/shared/CollapsibleFilterBar";
 import { ColumnVisibilityMenu } from "@/components/shared/ColumnVisibilityMenu";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
@@ -468,6 +469,10 @@ export function LeversPagePerformance() {
   // remplace une implémentation ad hoc qui avait un bug (le premier clic sur un bouton de filtre
   // ne produisait aucun effet visible, voir le commentaire du hook pour le détail).
   const { activeFilters, setFilters } = useFilterBarState(filterDefs);
+  const { expanded: filterBarExpanded, toggle: toggleFilterBar } = useFilterBarExpanded(
+    "betrack_leversFilterBar_expanded"
+  );
+  const activeFilterCount = Object.values(activeFilters).filter((v) => v != null).length;
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -784,13 +789,10 @@ export function LeversPagePerformance() {
       <Card className="overflow-visible">
         <CardBody flush>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-            <CollapsibleFilterBar
-              items={programScopedLevers}
-              defs={filterDefs}
-              active={activeFilters}
-              onChange={setFilters}
-              storageKey="betrack_leversFilterBar_expanded"
-              className="min-w-0 flex-1"
+            <FilterToggleButton
+              expanded={filterBarExpanded}
+              onToggle={toggleFilterBar}
+              activeCount={activeFilterCount}
             />
             <ColumnVisibilityMenu
               columns={columns.map((c) => ({ key: c.key, label: c.label }))}
@@ -828,6 +830,19 @@ export function LeversPagePerformance() {
               </button>
             </div>
           </div>
+          {/* Panneau de filtres pleine largeur — sous tout le bandeau d'outils ci-dessus (Filtres /
+              Colonnes / Table-Kanban-Arborescence), pas coincé dans le même conteneur flex qu'eux
+              (voir doc-comment useFilterBarExpanded). */}
+          {filterBarExpanded && (
+            <div className="border-b border-border p-3">
+              <DropdownFilterBar
+                items={programScopedLevers}
+                defs={filterDefs}
+                active={activeFilters}
+                onChange={setFilters}
+              />
+            </div>
+          )}
         </CardBody>
       </Card>
 
