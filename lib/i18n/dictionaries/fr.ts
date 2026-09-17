@@ -41,7 +41,7 @@ const fr: Record<string, string> = {
   "common.optional": "(optionnel)",
 
   // ─── nav ──────────────────────────────────────────────────────────────────
-  "nav.executiveDashboard": "Tableau de bord exécutif",
+  "nav.executiveDashboard": "Pilotage global",
   "nav.leverLibrary": "Bibliothèque des leviers",
   "nav.leverPipeline": "Pipeline des leviers",
   "nav.myLevers": "Mes leviers",
@@ -53,7 +53,7 @@ const fr: Record<string, string> = {
   "nav.operationsModule": "Module Opérations",
   // Plan Stratégique : `nav.axes` relabelle l'item "levers" (même route /levers), `nav.kpi` est
   // un item propre au Plan Stratégique — voir lib/nav-config.ts.
-  "nav.axes": "Axes stratégiques",
+  "nav.axes": "Feuille de route",
   "nav.kpi": "Indicateurs (KPI)",
   "nav.effectifs": "Budget & effectifs mobilisés",
   "nav.indicators": "Indicateurs",
@@ -64,6 +64,7 @@ const fr: Record<string, string> = {
   "nav.data": "Données",
   "nav.history": "Historique",
   "nav.sectionLabel": "Navigation",
+  "nav.sectionReferenceData": "Données de référence",
 
   // ─── roles ────────────────────────────────────────────────────────────────
   "roles.admin.label": "Administrateur",

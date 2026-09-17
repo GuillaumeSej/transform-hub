@@ -18,7 +18,7 @@ const en: Record<string, string> = {
   "common.optional": "(optional)",
 
   // ─── nav ──────────────────────────────────────────────────────────────────
-  "nav.executiveDashboard": "Executive Dashboard",
+  "nav.executiveDashboard": "Global Steering",
   "nav.leverLibrary": "Initiative Library",
   "nav.leverPipeline": "Initiative Pipeline",
   "nav.myLevers": "My Initiatives",
@@ -30,7 +30,7 @@ const en: Record<string, string> = {
   "nav.operationsModule": "Operations Module",
   // Strategic Plan: `nav.axes` relabels the "levers" item (same /levers route), `nav.kpi` is a
   // Strategic-Plan-only item — see lib/nav-config.ts.
-  "nav.axes": "Strategic Axes",
+  "nav.axes": "Roadmap",
   "nav.kpi": "KPIs",
   "nav.effectifs": "Budget & mobilized staffing",
   "nav.indicators": "Indicators",
@@ -41,6 +41,7 @@ const en: Record<string, string> = {
   "nav.data": "Data",
   "nav.history": "History",
   "nav.sectionLabel": "Navigation",
+  "nav.sectionReferenceData": "Reference data",
 
   // ─── roles ────────────────────────────────────────────────────────────────
   "roles.admin.label": "Administrator",

@@ -1113,8 +1113,13 @@ export type NavItem = {
    *  qui n'ont pas de sens sans leviers. */
   programTypes?: ProgramType[];
   /** Surcharge du `label` selon le type de programme actif — ex. l'item "levers" s'intitule
-   *  "Axes stratégiques" quand le programme actif est stratégique (même route, même page). */
+   *  "Feuille de route" quand le programme actif est stratégique (même route, même page). */
   labelByProgramType?: Partial<Record<ProgramType, string>>;
+  /** Regroupement visuel optionnel dans la barre latérale (ex. séparer les données de
+   *  référence du pilotage courant). `undefined` = pas de rupture affichée (comportement
+   *  historique, liste plate). Un séparateur avec libellé apparaît dès que la section change
+   *  d'un item au suivant. */
+  section?: string;
 };
 
 export type RoleDefinition = {

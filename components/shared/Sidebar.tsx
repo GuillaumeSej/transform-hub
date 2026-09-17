@@ -78,31 +78,42 @@ export function Sidebar({
         <div className="px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
           {t("nav.sectionLabel")}
         </div>
-        {nav.map((item) => {
+        {nav.map((item, index) => {
           const Icon = ICON_REGISTRY[item.icon];
           const href = PAGE_ROUTES[item.id] ?? "/dashboard";
           const active = pathname === href || pathname.startsWith(`${href}/`);
+          // Rupture de section optionnelle (ex. séparer "Base ETP", une donnée de référence,
+          // du pilotage courant) — n'affiche un séparateur que si cet item déclare une
+          // `section` différente de l'item précédent ; sans `section` sur aucun item d'un rôle,
+          // la liste reste strictement plate comme avant (comportement historique inchangé).
+          const showSectionDivider = !!item.section && item.section !== nav[index - 1]?.section;
           return (
-            <GuardedLink
-              key={item.id}
-              href={href}
-              onClick={onNavigate}
-              className={cn(
-                "my-0.5 flex items-center gap-2.5 border-l-2 border-transparent px-3 py-2.5 text-[13px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white",
-                active && "border-bp-coral bg-white/[0.08] font-semibold text-white"
+            <div key={item.id}>
+              {showSectionDivider && item.section === "reference" && (
+                <div className="mt-2 border-t border-white/[0.12] px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                  {t("nav.sectionReferenceData")}
+                </div>
               )}
-            >
-              {Icon && <Icon size={15} className="w-4 text-center" />}
-              {/* Libellé alternatif selon le type de programme actif (ex. « Bibliothèque des
-                  leviers » → « Axes stratégiques » sur la même route /levers) — repli sur `label`
-                  quand aucune surcharge n'est définie pour ce type. */}
-              <span>{t(item.labelByProgramType?.[programType] ?? item.label)}</span>
-              {item.badge === "alerts" && alertCount > 0 && (
-                <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
-                  {alertCount}
-                </span>
-              )}
-            </GuardedLink>
+              <GuardedLink
+                href={href}
+                onClick={onNavigate}
+                className={cn(
+                  "my-0.5 flex items-center gap-2.5 border-l-2 border-transparent px-3 py-2.5 text-[13px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white",
+                  active && "border-bp-coral bg-white/[0.08] font-semibold text-white"
+                )}
+              >
+                {Icon && <Icon size={15} className="w-4 text-center" />}
+                {/* Libellé alternatif selon le type de programme actif (ex. « Bibliothèque des
+                    leviers » → « Feuille de route » sur la même route /levers) — repli sur
+                    `label` quand aucune surcharge n'est définie pour ce type. */}
+                <span>{t(item.labelByProgramType?.[programType] ?? item.label)}</span>
+                {item.badge === "alerts" && alertCount > 0 && (
+                  <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
+                    {alertCount}
+                  </span>
+                )}
+              </GuardedLink>
+            </div>
           );
         })}
       </nav>
