@@ -178,6 +178,12 @@ const fr: Record<string, string> = {
   "dashboard.widgets.stageFunnelFull": "Avancement des leviers par étape du cycle de vie",
   "dashboard.widgets.alerts": "Alertes & notifications",
   "dashboard.widgets.noAlerts": "Aucune alerte à traiter",
+  "dashboard.widgets.riskCenter": "Alertes & Dépendances",
+  "risk.summary": "{n} leviers en alerte",
+  "risk.expand": "Afficher le détail",
+  "risk.collapse": "Réduire",
+  "risk.sortByDelay": "Retard décroissant",
+  "risk.sortBySavings": "Savings décroissant",
   "alerts.toProcess": "À traiter",
   "alerts.resolved": "Résolu / vu",
   "alerts.showAll": "Toutes",
@@ -256,6 +262,11 @@ const fr: Record<string, string> = {
   "dashboard.workstream": "Workstream",
   "dashboard.country": "Pays",
   "dashboard.function": "Fonction",
+  // Libellé de la dimension Lever.function dans les widgets du dashboard (Marimekko,
+  // Réalisation des économies, Santé des initiatives, Savings par Pays / ...) : en pratique ce
+  // champ porte une donnée de niveau département, donc affiché "Département" côté UI — la clé
+  // "dashboard.function" reste inchangée pour Employee.func (module effectifs/ETP).
+  "dashboard.leverDepartment": "Département",
   "dashboard.geography": "Géographie",
   "dashboard.tableHeader.leverCount": "Leviers",
   "dashboard.tableHeader.realizedTarget": "Réalisé / Cible",

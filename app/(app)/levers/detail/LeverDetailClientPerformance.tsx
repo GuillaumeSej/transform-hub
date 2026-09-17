@@ -125,10 +125,7 @@ export function LeverDetailClientPerformance() {
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
         {t("leverDetail.notFound", "Levier introuvable.")}{" "}
-        <button
-          onClick={() => router.push("/levers")}
-          className="font-medium text-bp-coral hover:underline"
-        >
+        <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
           {t("leverDetail.backToPipeline", "Retour au pipeline")}
         </button>
       </div>
@@ -144,10 +141,7 @@ export function LeverDetailClientPerformance() {
           "leverDetail.restrictedAccess",
           "Accès restreint — ce levier est classé « {level} », un niveau de confidentialité auquel votre profil n'est pas habilité."
         ).replace("{level}", lever.confidentialityLevel ?? "")}{" "}
-        <button
-          onClick={() => router.push("/levers")}
-          className="font-medium text-bp-coral hover:underline"
-        >
+        <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
           {t("leverDetail.backToPipeline", "Retour au pipeline")}
         </button>
       </div>
@@ -196,7 +190,7 @@ export function LeverDetailClientPerformance() {
   return (
     <div className="animate-fade-up">
       <button
-        onClick={() => router.push("/levers")}
+        onClick={() => router.back()}
         className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:text-primary hover:underline"
       >
         <ArrowLeft size={13} /> Retour au pipeline

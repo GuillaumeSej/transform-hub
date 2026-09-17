@@ -67,10 +67,10 @@ describe("dashboardWidgets — initiative health reorder migration", () => {
     return [...withoutIt, initiativeHealth];
   };
 
-  it("moves initiative-health right after 'alerts'", () => {
+  it("moves initiative-health right after 'risk-center'", () => {
     const before = legacyOrder();
     const after = reorderInitiativeHealthWidget(before, false);
-    const alertsIdx = after.findIndex((w) => w.type === "alerts");
+    const alertsIdx = after.findIndex((w) => w.type === "risk-center");
     const healthIdx = after.findIndex((w) => w.type === "initiative-health");
     expect(healthIdx).toBe(alertsIdx + 1);
     // Aucun widget perdu ni dupliqué
@@ -90,17 +90,17 @@ describe("dashboardWidgets — initiative health reorder migration", () => {
     expect(after).toBe(legacy);
   });
 
-  it("falls back to 'portfolio-funnel' when 'alerts' has been removed", () => {
-    const before = legacyOrder().filter((w) => w.type !== "alerts");
+  it("falls back to 'portfolio-funnel' when 'risk-center' has been removed", () => {
+    const before = legacyOrder().filter((w) => w.type !== "risk-center");
     const after = reorderInitiativeHealthWidget(before, false);
     const funnelIdx = after.findIndex((w) => w.type === "portfolio-funnel");
     const healthIdx = after.findIndex((w) => w.type === "initiative-health");
     expect(healthIdx).toBe(funnelIdx + 1);
   });
 
-  it("does not move initiative-health if neither 'alerts' nor 'portfolio-funnel' is present", () => {
+  it("does not move initiative-health if neither 'risk-center' nor 'portfolio-funnel' is present", () => {
     const before: DashboardWidgetInstance[] = [
-      { instanceId: "pnl", type: "pnl", span: "M" },
+      { instanceId: "bridge", type: "bridge", span: "M" },
       {
         instanceId: "initiative-health",
         type: "initiative-health",
@@ -153,20 +153,20 @@ describe("dashboardWidgets — cycleSpan", () => {
 
 describe("dashboardWidgets — addWidget / removeWidget / setWidgetSpan", () => {
   it("adds a widget not already present, at the end, with its default span", () => {
-    const layout = removeWidget(buildDefaultLayout(), "pnl");
-    const next = addWidget(layout, "pnl");
+    const layout = removeWidget(buildDefaultLayout(), "workstream-table");
+    const next = addWidget(layout, "workstream-table");
     const added = next[next.length - 1];
-    expect(added.type).toBe("pnl");
+    expect(added.type).toBe("workstream-table");
     expect(added.span).toBe("XL");
   });
 
   it("allows adding a duplicate of an already-present type, with a distinct instanceId", () => {
     const layout = buildDefaultLayout();
-    const next = addWidget(layout, "pnl");
+    const next = addWidget(layout, "workstream-table");
     expect(next).toHaveLength(layout.length + 1);
-    const pnlInstances = next.filter((w) => w.type === "pnl");
-    expect(pnlInstances).toHaveLength(2);
-    expect(pnlInstances[0].instanceId).not.toBe(pnlInstances[1].instanceId);
+    const wtInstances = next.filter((w) => w.type === "workstream-table");
+    expect(wtInstances).toHaveLength(2);
+    expect(wtInstances[0].instanceId).not.toBe(wtInstances[1].instanceId);
   });
 
   it("returns the same array reference for an unknown widget type", () => {
@@ -176,17 +176,17 @@ describe("dashboardWidgets — addWidget / removeWidget / setWidgetSpan", () => 
 
   it("removeWidget filters by instanceId", () => {
     const layout = buildDefaultLayout();
-    const next = removeWidget(layout, "alerts");
-    expect(next.some((w) => w.instanceId === "alerts")).toBe(false);
+    const next = removeWidget(layout, "risk-center");
+    expect(next.some((w) => w.instanceId === "risk-center")).toBe(false);
     expect(next).toHaveLength(layout.length - 1);
   });
 
   it("setWidgetSpan updates only the targeted instance", () => {
     const layout = buildDefaultLayout();
-    const next = setWidgetSpan(layout, "pnl", "XL");
-    expect(next.find((w) => w.instanceId === "pnl")?.span).toBe("XL");
-    expect(next.find((w) => w.instanceId === "alerts")?.span).toBe(
-      layout.find((w) => w.instanceId === "alerts")?.span
+    const next = setWidgetSpan(layout, "workstream-table", "L");
+    expect(next.find((w) => w.instanceId === "workstream-table")?.span).toBe("L");
+    expect(next.find((w) => w.instanceId === "risk-center")?.span).toBe(
+      layout.find((w) => w.instanceId === "risk-center")?.span
     );
   });
 });
@@ -202,7 +202,7 @@ describe("dashboardWidgets — configurable widgets (view)", () => {
 
   it("non-configurable widgets have no view field", () => {
     const layout = buildDefaultLayout();
-    expect(layout.find((w) => w.type === "sankey")?.view).toBeUndefined();
+    expect(layout.find((w) => w.type === "bridge")?.view).toBeUndefined();
   });
 
   it("addWidget sets the requested view, or the default when omitted", () => {
@@ -233,14 +233,14 @@ describe("dashboardWidgets — builder générique (customViews)", () => {
       "function-country",
       "workstream-lever",
     ]);
-    const pnl = layout.find((w) => w.type === "pnl")!;
-    expect(pnl.customViews).toHaveLength(1);
-    expect(pnl.view).toBe("account");
+    const workstreamBreakdown = layout.find((w) => w.type === "workstream-breakdown")!;
+    expect(workstreamBreakdown.customViews).toHaveLength(3);
+    expect(workstreamBreakdown.view).toBe("workstream");
   });
 
   it("non-builder widgets have no customViews field", () => {
     const layout = buildDefaultLayout();
-    expect(layout.find((w) => w.type === "sankey")?.customViews).toBeUndefined();
+    expect(layout.find((w) => w.type === "bridge")?.customViews).toBeUndefined();
   });
 
   it("addWidgetWithCustomView creates a fresh instance with exactly the requested view", () => {

@@ -37,18 +37,15 @@ export const SPAN_COL_CLASS: Record<WidgetSpan, string> = {
 
 export type DashboardWidgetType =
   | "stage-funnel"
-  | "alerts"
+  | "risk-center"
   | "s-curve"
   | "bridge"
-  | "sankey"
   | "marimekko"
   | "workstream-breakdown"
   | "geo-breakdown"
   | "workstream-table"
   | "dependencies"
-  | "pnl"
   | "underperformers"
-  | "dependency-alerts"
   | "portfolio-funnel"
   | "savings-trajectory"
   | "initiative-health";
@@ -69,19 +66,16 @@ export const DASHBOARD_TABS: { key: DashboardTab; labelKey: string; icon: string
 export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   "portfolio-funnel": "cockpit",
   "stage-funnel": "cockpit",
-  alerts: "cockpit",
+  "risk-center": "cockpit",
   "savings-trajectory": "trajectory",
   "s-curve": "trajectory",
   bridge: "trajectory",
-  sankey: "portfolio",
   marimekko: "portfolio",
   "workstream-breakdown": "portfolio",
   "geo-breakdown": "portfolio",
   "workstream-table": "portfolio",
   dependencies: "prioritization",
-  pnl: "portfolio",
   underperformers: "prioritization",
-  "dependency-alerts": "prioritization",
   "initiative-health": "prioritization",
 };
 
@@ -175,11 +169,48 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     allowedSpans: ["M", "L", "XL"],
   },
   {
-    type: "alerts",
-    label: "Alerts & Notifications",
-    icon: "Bell",
+    // Positionné juste après portfolio-funnel (au lieu de plus bas dans le registre) : les deux
+    // sont en span "M" et se complètent sur la même ligne de la grille 4 colonnes, ce qui évite un
+    // trou visuel à droite de portfolio-funnel avant que le prochain widget "XL" ne reflow sur la
+    // ligne suivante. Voir le commentaire sur SPAN_COL_CLASS plus haut dans ce fichier.
+    type: "marimekko",
+    label: "Économies prévues",
+    icon: "LayoutGrid",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
+    viewOptions: [
+      { key: "function-country", labelKey: "dashboard.widgetView.functionCountry" },
+      { key: "workstream-lever", labelKey: "dashboard.widgetView.workstreamLever" },
+    ],
+    defaultView: "function-country",
+    // Marimekko = forme à 2 dimensions (primaire × secondaire) — le builder générique impose donc
+    // exactement 2 dimensions choisies par l'utilisateur (voir lib/dashboardPivot.ts).
+    builderDimensionCount: 2,
+    defaultCustomViews: [
+      {
+        id: "function-country",
+        metric: "realizedSavings",
+        dimensions: ["function", "country"],
+        label: "Département × Pays",
+      },
+      {
+        id: "workstream-lever",
+        metric: "realizedSavings",
+        dimensions: ["ws", "lever"],
+        label: "Workstream × Levier",
+      },
+    ],
+  },
+  {
+    // Widget fusionné "Alertes" + "Alertes de dépendances" (Sept 2026) — anciennement deux
+    // widgets séparés toujours pleinement visibles ; regroupés en un seul centre de risque
+    // replié par défaut (résumé compact + bouton d'expansion vers les deux panneaux côte à
+    // côte), pour alléger la page par défaut. Voir `case "risk-center"` côté page dashboard.
+    type: "risk-center",
+    label: "Alertes & Dépendances",
+    icon: "Bell",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
   },
   {
     // Widget "Santé des initiatives" — remonté juste après portfolio-funnel + alerts en Août
@@ -193,7 +224,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     viewOptions: [
       { key: "workstream", labelKey: "dashboard.workstream" },
       { key: "country", labelKey: "dashboard.country" },
-      { key: "function", labelKey: "dashboard.function" },
+      { key: "function", labelKey: "dashboard.leverDepartment" },
     ],
     defaultView: "workstream",
   },
@@ -229,77 +260,40 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     excludeFromDefault: true,
   },
   {
-    type: "sankey",
-    label: "Flux des leviers par étape (Sankey)",
-    icon: "GitBranch",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
-    excludeFromDefault: true,
-  },
-  {
-    type: "marimekko",
-    label: "Économies prévues",
-    icon: "LayoutGrid",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
-    viewOptions: [
-      { key: "function-country", labelKey: "dashboard.widgetView.functionCountry" },
-      { key: "workstream-lever", labelKey: "dashboard.widgetView.workstreamLever" },
-    ],
-    defaultView: "function-country",
-    // Marimekko = forme à 2 dimensions (primaire × secondaire) — le builder générique impose donc
-    // exactement 2 dimensions choisies par l'utilisateur (voir lib/dashboardPivot.ts).
-    builderDimensionCount: 2,
-    defaultCustomViews: [
-      {
-        id: "function-country",
-        metric: "realizedSavings",
-        dimensions: ["function", "country"],
-        label: "Fonction × Pays",
-      },
-      {
-        id: "workstream-lever",
-        metric: "realizedSavings",
-        dimensions: ["ws", "lever"],
-        label: "Workstream × Levier",
-      },
-    ],
-  },
-  {
     type: "workstream-breakdown",
     label: "Réalisation des économies",
     icon: "Columns3",
-    defaultSpan: "M",
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
     viewOptions: [
       { key: "workstream", labelKey: "dashboard.workstream" },
       { key: "country", labelKey: "dashboard.country" },
-      { key: "function", labelKey: "dashboard.function" },
+      { key: "function", labelKey: "dashboard.leverDepartment" },
     ],
     defaultView: "workstream",
     builderDimensionCount: 1,
     defaultCustomViews: [
       { id: "workstream", metric: "realizedSavings", dimensions: ["ws"], label: "Workstream" },
       { id: "country", metric: "realizedSavings", dimensions: ["country"], label: "Pays" },
-      { id: "function", metric: "realizedSavings", dimensions: ["function"], label: "Fonction" },
+      { id: "function", metric: "realizedSavings", dimensions: ["function"], label: "Département" },
     ],
   },
   {
     type: "geo-breakdown",
-    label: "Savings par Pays / Fonction",
+    label: "Savings par Pays / Département",
     icon: "PieChart",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
     excludeFromDefault: true,
     viewOptions: [
       { key: "country", labelKey: "dashboard.country" },
-      { key: "function", labelKey: "dashboard.function" },
+      { key: "function", labelKey: "dashboard.leverDepartment" },
     ],
     defaultView: "country",
     builderDimensionCount: 1,
     defaultCustomViews: [
       { id: "country", metric: "realizedSavings", dimensions: ["country"], label: "Pays" },
-      { id: "function", metric: "realizedSavings", dimensions: ["function"], label: "Fonction" },
+      { id: "function", metric: "realizedSavings", dimensions: ["function"], label: "Département" },
     ],
   },
   {
@@ -323,33 +317,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "TrendingDown",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "dependency-alerts",
-    label: "Alertes de dépendances",
-    icon: "Unlink",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "pnl",
-    label: "Impact P&L par compte",
-    icon: "LineChart",
-    defaultSpan: "XL",
-    allowedSpans: ["M", "L", "XL"],
-    // Pas de viewOptions legacy (ce widget n'avait qu'une seule vue câblée en dur avant ce
-    // changement) — seul builderDimensionCount + defaultCustomViews existent, donc "configurable"
-    // au sens du builder générique mais pas au sens de l'ancien mécanisme viewOptions.
-    builderDimensionCount: 1,
-    defaultCustomViews: [
-      {
-        id: "account",
-        metric: "realizedSavings",
-        dimensions: ["pnlAccount"],
-        label: "Impact réalisé par compte P&L",
-      },
-    ],
-    defaultView: "account",
   },
 ];
 
@@ -668,7 +635,7 @@ export function reorderInitiativeHealthWidget(
   if (reorderAlreadyApplied) return layout;
   const target = layout.find((i) => i.type === "initiative-health");
   if (!target) return layout;
-  const alertsIdx = layout.findIndex((i) => i.type === "alerts");
+  const alertsIdx = layout.findIndex((i) => i.type === "risk-center");
   const anchorIdx =
     alertsIdx >= 0 ? alertsIdx : layout.findIndex((i) => i.type === "portfolio-funnel");
   if (anchorIdx < 0) return layout;

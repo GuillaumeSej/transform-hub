@@ -71,10 +71,8 @@ import { DashboardExportButton } from "@/components/shared/DashboardExportButton
 import { SCurveChart } from "@/components/shared/charts/SCurveChart";
 import { WorkstreamBarChart } from "@/components/shared/charts/WorkstreamBarChart";
 import { GeoDonutChart } from "@/components/shared/charts/GeoDonutChart";
-import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
 import { InitiativeHealthMatrix } from "@/components/shared/charts/InitiativeHealthMatrix";
 import { StageFunnel } from "@/components/shared/charts/StageFunnel";
-import { SankeyChart } from "@/components/shared/charts/SankeyChart";
 import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
 import { QuarterlyBridgeChart } from "@/components/shared/charts/QuarterlyBridgeChart";
 import type { Lever, LeverStatus } from "@/types";
@@ -365,7 +363,11 @@ export function DashboardPagePerformance() {
               getValue: (l: Lever) => l.geography,
             },
           ]),
-      { key: "function", label: t("dashboard.function", "Fonction"), getValue: (l) => l.function },
+      {
+        key: "function",
+        label: t("dashboard.leverDepartment", "Département"),
+        getValue: (l) => l.function,
+      },
       { key: "type", label: "Type", getValue: (l) => l.type },
       ...hierarchyFilterDefs,
     ],
@@ -431,8 +433,34 @@ export function DashboardPagePerformance() {
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
   const [underPage, setUnderPage] = useState(0);
   const [dependencyPage, setDependencyPage] = useState(0);
+
+  // ── Widget fusionné "Alertes & Dépendances" (risk-center) ──────────────────────────────────
+  // Replié par défaut (résumé compact), s'ouvre en 2 panneaux côte à côte (alertes | dépendances).
+  const [riskCenterExpanded, setRiskCenterExpanded] = useState(false);
+  const [alertSortKey, setAlertSortKey] = useState<"delay" | "savings">("delay");
+  const [depsSortKey, setDepsSortKey] = useState<"delay" | "savings">("delay");
+
+  // Proxy de "retard" par alerte : le nombre d'actions en retard du levier lié à `alert.scope`
+  // (voir engine.underperformers/isActionLate) — aucun décompte de jours n'est disponible au
+  // niveau d'une Alert, donc ce compteur sert d'indicateur de priorisation raisonnable. 0 pour un
+  // scope qui ne résout à aucun levier en sous-performance (workstream, scope inconnu, ou levier
+  // sans action en retard).
+  const leverLateActionsById = useMemo(() => {
+    const map = new Map<string, number>();
+    underperformingLevers.forEach((l) => map.set(l.id, l.lateActionsCount));
+    return map;
+  }, [underperformingLevers]);
+
+  const sortedDepAlerts = useMemo(() => {
+    const arr = [...depAlerts];
+    arr.sort((a, b) =>
+      depsSortKey === "savings" ? b.impactEur - a.impactEur : b.delayDays - a.delayDays
+    );
+    return arr;
+  }, [depAlerts, depsSortKey]);
+
   const underPagination = paginateDashboardItems(sortedUnderperformers, underPage, 8);
-  const dependencyPagination = paginateDashboardItems(depAlerts, dependencyPage, 6);
+  const dependencyPagination = paginateDashboardItems(sortedDepAlerts, dependencyPage, 6);
 
   useEffect(() => {
     setUnderPage(0);
@@ -453,6 +481,10 @@ export function DashboardPagePerformance() {
     }
   }, [dependencyPage, dependencyPagination.page]);
 
+  useEffect(() => {
+    setDependencyPage(0);
+  }, [depsSortKey]);
+
   // ── Alertes enrichies (manuelles + auto-générées) ──────────────────────────
   const ALERTS_PER_PAGE = 5;
   const [alertPage, setAlertPage] = useState(0);
@@ -460,6 +492,10 @@ export function DashboardPagePerformance() {
   const [alertShowResolved, setAlertShowResolved] = useState(false);
   const [manualAlertOpen, setManualAlertOpen] = useState(false);
   const { alerts: allAlerts } = useNotifications(visibleData, user);
+
+  useEffect(() => {
+    setAlertPage(0);
+  }, [alertSortKey]);
 
   // Une alerte ne reste affichée que si elle est liée (via un levier, ou via un workstream ayant
   // au moins un levier) à l'ensemble scopé (programme) + filtré courant. Une alerte dont le scope
@@ -495,9 +531,21 @@ export function DashboardPagePerformance() {
     return result;
   }, [scopedAlerts, alertShowResolved, alertTypeFilter]);
 
-  const alertPageCount = Math.max(1, Math.ceil(filteredAlerts.length / ALERTS_PER_PAGE));
+  const sortedFilteredAlerts = useMemo(() => {
+    const arr = [...filteredAlerts];
+    arr.sort((a, b) => {
+      if (alertSortKey === "savings") return (b.impactEur ?? 0) - (a.impactEur ?? 0);
+      // Proxy "Retard" — voir commentaire sur `leverLateActionsById` plus haut.
+      const la = leverLateActionsById.get(a.scope) ?? 0;
+      const lb = leverLateActionsById.get(b.scope) ?? 0;
+      return lb - la;
+    });
+    return arr;
+  }, [filteredAlerts, alertSortKey, leverLateActionsById]);
+
+  const alertPageCount = Math.max(1, Math.ceil(sortedFilteredAlerts.length / ALERTS_PER_PAGE));
   const alertPageClamped = Math.min(alertPage, alertPageCount - 1);
-  const alertsOnPage = filteredAlerts.slice(
+  const alertsOnPage = sortedFilteredAlerts.slice(
     alertPageClamped * ALERTS_PER_PAGE,
     (alertPageClamped + 1) * ALERTS_PER_PAGE
   );
@@ -590,7 +638,6 @@ export function DashboardPagePerformance() {
   const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
   const sCurve = engine.sCurve3(filteredData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
-  const sankeyChrono = engine.sankeyChronology(filteredData);
   const bridge = engine.financialBridge(filteredData, bridgeGranularity);
 
   // Reporte les filtres actuellement actifs sur CE dashboard vers `/levers` (Bibliothèque de
@@ -614,10 +661,6 @@ export function DashboardPagePerformance() {
     goToLevers(param ? { [param]: value } : {});
   };
   const goToStage = (status: LeverStatus) => goToLevers({ f_status: lifecycle.label(status) });
-  const goToStageLabel = (label: string) => {
-    const stage = stages.find((s) => s.label === label);
-    if (stage) goToStage(stage.status);
-  };
   const goToAlert = (alert: (typeof data.alerts)[number]) => {
     if (alert.scope.startsWith("WS-")) {
       const ws = data.workstreams.find((w) => w.id === alert.scope);
@@ -651,6 +694,10 @@ export function DashboardPagePerformance() {
       target,
       realized,
       reforecast: Math.abs(reforecast - target) > 0.05 ? reforecast : undefined,
+      leverBreakdown: {
+        target: levers.map((l) => ({ name: l.name, value: l.netSavings })),
+        realized: levers.map((l) => ({ name: l.name, value: engine.realizedSavings(l) })),
+      },
     };
   });
 
@@ -677,6 +724,10 @@ export function DashboardPagePerformance() {
           target,
           realized,
           reforecast: Math.abs(reforecast - target) > 0.05 ? reforecast : undefined,
+          leverBreakdown: {
+            target: levers.map((l) => ({ name: l.name, value: l.netSavings })),
+            realized: levers.map((l) => ({ name: l.name, value: engine.realizedSavings(l) })),
+          },
         };
       })
       .sort((a, b) => b.target - a.target);
@@ -718,89 +769,6 @@ export function DashboardPagePerformance() {
       dimension === "function" ? engine.byFunction(filteredData) : engine.byCountry(filteredData);
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   };
-  // ── Filtres géographiques du widget P&L (cascade Région → Pays → Entité) ──
-  const [pnlFilterGeo, setPnlFilterGeo] = useState("");
-  const [pnlFilterCountry, setPnlFilterCountry] = useState("");
-  const [pnlFilterEntity, setPnlFilterEntity] = useState("");
-
-  const pnlFilteredLevers = useMemo(() => {
-    let levers = filteredData.levers.filter((l) => l.status !== "cancelled");
-    if (pnlFilterGeo) levers = levers.filter((l) => l.geography === pnlFilterGeo);
-    if (pnlFilterCountry) levers = levers.filter((l) => l.country === pnlFilterCountry);
-    if (pnlFilterEntity) levers = levers.filter((l) => l.entity === pnlFilterEntity);
-    return levers;
-  }, [filteredData, pnlFilterGeo, pnlFilterCountry, pnlFilterEntity]);
-
-  const pnlGeoOptions = useMemo(() => {
-    const vals = new Set<string>();
-    filteredData.levers.forEach((l) => {
-      if (l.geography) vals.add(l.geography);
-    });
-    return Array.from(vals).sort();
-  }, [filteredData]);
-  const pnlCountryOptions = useMemo(() => {
-    const vals = new Set<string>();
-    filteredData.levers
-      .filter((l) => !pnlFilterGeo || l.geography === pnlFilterGeo)
-      .forEach((l) => {
-        if (l.country) vals.add(l.country);
-      });
-    return Array.from(vals).sort();
-  }, [filteredData, pnlFilterGeo]);
-  const pnlEntityOptions = useMemo(() => {
-    const vals = new Set<string>();
-    filteredData.levers
-      .filter((l) => !pnlFilterGeo || l.geography === pnlFilterGeo)
-      .filter((l) => !pnlFilterCountry || l.country === pnlFilterCountry)
-      .forEach((l) => {
-        if (l.entity) vals.add(l.entity);
-      });
-    return Array.from(vals).sort();
-  }, [filteredData, pnlFilterGeo, pnlFilterCountry]);
-
-  const pnlFilteredData = useMemo(
-    () => ({ ...filteredData, levers: pnlFilteredLevers }),
-    [filteredData, pnlFilteredLevers]
-  );
-
-  // ── Filtre temporel P&L (cascade Année → Trimestre → Mois) ──
-  const fyYear = new Date(selectedProgram?.fyStart ?? data.program.fyStart)
-    .getFullYear()
-    .toString();
-  const [pnlYear, setPnlYear] = useState(fyYear);
-  useEffect(() => {
-    if (selectedProgram) setPnlYear(fyYear);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProgram?.id]);
-  const [pnlQuarter, setPnlQuarter] = useState("");
-  const [pnlMonth, setPnlMonth] = useState("");
-
-  const pnlPeriodFilter: engine.PnlPeriodFilter | undefined = useMemo(() => {
-    if (!pnlYear) return undefined;
-    return {
-      year: pnlYear,
-      ...(pnlQuarter ? { quarter: pnlQuarter } : {}),
-      ...(pnlMonth ? { month: pnlMonth } : {}),
-    };
-  }, [pnlYear, pnlQuarter, pnlMonth]);
-
-  const pnlQuarterMonths: string[] = useMemo(() => {
-    if (!pnlQuarter) return engine.MONTH_LABELS;
-    const qIdx = parseInt(pnlQuarter.replace("Q", "")) - 1;
-    return engine.MONTH_LABELS.slice(qIdx * 3, qIdx * 3 + 3);
-  }, [pnlQuarter]);
-
-  const pnlDetailedData = useMemo(
-    () =>
-      engine.pnlImpactDetailed(pnlFilteredData, pnlPeriodFilter, hierarchyNodes, hierarchyLevels),
-    [pnlFilteredData, pnlPeriodFilter, hierarchyNodes, hierarchyLevels]
-  );
-  const pnlData = pnlDetailedData.map((d) => ({
-    account: d.accountName,
-    plan: d.plan,
-    realized: d.realized,
-  }));
-
   // ─── Layout du dashboard (widgets) ────────────────────────────────────────────────────────
   // Personnalisation d'affichage purement locale (localStorage, par navigateur) — voir
   // lib/dashboardWidgets.ts. Le layout par défaut reproduit exactement l'ancien ordre/tailles
@@ -1022,8 +990,6 @@ export function DashboardPagePerformance() {
             <CardHeader title={t("dashboard.widgets.portfolioFunnel")} />
             <CardBody>
               <StageFunnel data={stages} onStageClick={goToStage} />
-              <div className="my-3 border-t border-border" />
-              <SankeyChart data={sankeyChrono} height={260} onNodeClick={goToStageLabel} />
             </CardBody>
           </Card>
         );
@@ -1037,131 +1003,352 @@ export function DashboardPagePerformance() {
             </CardBody>
           </Card>
         );
-      case "alerts":
+      case "risk-center": {
+        // Résumé agrégé (badge replié) : total des alertes non résolues + des cascades de
+        // dépendances en violation — SANS distinguer les deux sources, volontairement (voir
+        // spec produit), juste un compte de risque global + un compte "critique" (rouge/bloquant)
+        // pour la couleur du badge.
+        const totalAtRisk = filteredAlerts.length + depAlerts.length;
+        const criticalCount = alertCounts.red + depAlerts.filter((a) => a.delayDays > 30).length;
+        const depSeverity = (days: number) => {
+          if (days > 30) return { label: t("dep.blocking"), cls: "bg-rag-red-light text-rag-red" };
+          if (days > 7) return { label: t("dep.watch"), cls: "bg-rag-amber-light text-rag-amber" };
+          return { label: t("dep.minor"), cls: "bg-neutral-100 text-secondary" };
+        };
+
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title={t("dashboard.widgets.alerts")}
+              title={t("dashboard.widgets.riskCenter")}
               actions={
                 <div className="flex items-center gap-2">
-                  {/* Compteurs par sévérité (cliquables pour filtrer, avec tooltip) */}
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                      criticalCount > 0
+                        ? "bg-rag-red-light text-rag-red"
+                        : totalAtRisk > 0
+                          ? "bg-rag-amber-light text-rag-amber"
+                          : "bg-neutral-100 text-secondary"
+                    }`}
+                  >
+                    {t("risk.summary", `${totalAtRisk} leviers en alerte`).replace(
+                      "{n}",
+                      String(totalAtRisk)
+                    )}
+                  </span>
                   <button
-                    onClick={() => setManualAlertOpen(true)}
-                    className="rounded-sm border border-border px-2 py-0.5 text-[10.5px] font-semibold text-secondary transition hover:border-black hover:text-primary"
+                    onClick={() => setRiskCenterExpanded((v) => !v)}
+                    title={riskCenterExpanded ? t("risk.collapse") : t("risk.expand")}
+                    className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100"
                   >
-                    + Alerte manuelle
-                  </button>
-                  {(["red", "amber", "green", "blue"] as const).map((type) => {
-                    const count = alertCounts[type];
-                    if (count === 0) return null;
-                    const isActive = alertTypeFilter === type;
-                    const colors: Record<string, string> = {
-                      red: isActive ? "bg-rag-red text-white" : "bg-rag-red-light text-rag-red",
-                      amber: isActive
-                        ? "bg-rag-amber text-white"
-                        : "bg-rag-amber-light text-rag-amber",
-                      green: isActive
-                        ? "bg-rag-green-dark text-white"
-                        : "bg-rag-green-light text-rag-green-dark",
-                      blue: isActive
-                        ? "bg-info-blue text-white"
-                        : "bg-info-blue-light text-info-blue",
-                    };
-                    return (
-                      <Tooltip key={type} text={t(`alerts.tooltip.${type}`)} position="bottom">
-                        <button
-                          onClick={() =>
-                            setAlertTypeFilter((prev) => (prev === type ? "all" : type))
-                          }
-                          className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold transition ${colors[type]}`}
-                        >
-                          {count}
-                        </button>
-                      </Tooltip>
-                    );
-                  })}
-                  {/* Toggle résolu / à traiter */}
-                  <select
-                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
-                    value={alertShowResolved ? "all" : "todo"}
-                    onChange={(e) => {
-                      setAlertShowResolved(e.target.value === "all");
-                      setAlertPage(0);
-                    }}
-                  >
-                    <option value="todo">{t("alerts.toProcess")}</option>
-                    <option value="all">{t("alerts.showAll")}</option>
-                  </select>
-                  {/* Bouton tout résoudre */}
-                  <button
-                    onClick={markAllResolved}
-                    className="rounded-sm px-1.5 py-0.5 text-[10px] font-semibold text-tertiary transition hover:bg-neutral-100 hover:text-primary"
-                    title={t("alerts.markAllResolved")}
-                  >
-                    ✓ {t("alerts.markAllResolved")}
+                    {riskCenterExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
                 </div>
               }
             />
-            <CardBody>
-              {alertsOnPage.length === 0 ? (
-                <p className="py-6 text-center text-sm text-tertiary">
-                  {t("dashboard.widgets.noAlerts")}
-                </p>
-              ) : (
-                <>
-                  {alertsOnPage.map((a) => (
-                    <AlertItem
-                      key={a.id}
-                      alert={a}
-                      onClick={() => goToAlert(a)}
-                      onToggleResolved={() => toggleAlertResolved(a.id)}
-                      scopeLabel={resolveScopeLabel(a.scope)}
-                      tooltips={{
-                        severity: t(`alerts.tooltip.severity.${a.type}`),
-                        impact: t("alerts.tooltip.impact"),
-                        auto: t("alerts.tooltip.auto"),
-                      }}
-                    />
-                  ))}
-                  {/* Pagination */}
-                  {alertPageCount > 1 && (
-                    <div className="flex items-center justify-center gap-3 pt-3 mt-2 border-t border-border">
+            {riskCenterExpanded && (
+              <CardBody>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {/* ── Panneau gauche : Alertes ─────────────────────────────────────────── */}
+                  <div className="min-w-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
                       <button
-                        onClick={() => setAlertPage((p) => Math.max(0, p - 1))}
-                        disabled={alertPageClamped === 0}
-                        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+                        onClick={() => setManualAlertOpen(true)}
+                        className="rounded-sm border border-border px-2 py-0.5 text-[10.5px] font-semibold text-secondary transition hover:border-black hover:text-primary"
                       >
-                        <ChevronLeft size={14} />
+                        + Alerte manuelle
                       </button>
-                      <span className="text-[11px] font-semibold text-secondary">
-                        {t("alerts.page", `Page ${alertPageClamped + 1} / ${alertPageCount}`)
-                          .replace("{current}", String(alertPageClamped + 1))
-                          .replace("{total}", String(alertPageCount))}
-                      </span>
-                      <button
-                        onClick={() => setAlertPage((p) => Math.min(alertPageCount - 1, p + 1))}
-                        disabled={alertPageClamped >= alertPageCount - 1}
-                        className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+                      {(["red", "amber", "green", "blue"] as const).map((type) => {
+                        const count = alertCounts[type];
+                        if (count === 0) return null;
+                        const isActive = alertTypeFilter === type;
+                        const colors: Record<string, string> = {
+                          red: isActive ? "bg-rag-red text-white" : "bg-rag-red-light text-rag-red",
+                          amber: isActive
+                            ? "bg-rag-amber text-white"
+                            : "bg-rag-amber-light text-rag-amber",
+                          green: isActive
+                            ? "bg-rag-green-dark text-white"
+                            : "bg-rag-green-light text-rag-green-dark",
+                          blue: isActive
+                            ? "bg-info-blue text-white"
+                            : "bg-info-blue-light text-info-blue",
+                        };
+                        return (
+                          <Tooltip key={type} text={t(`alerts.tooltip.${type}`)} position="bottom">
+                            <button
+                              onClick={() =>
+                                setAlertTypeFilter((prev) => (prev === type ? "all" : type))
+                              }
+                              className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold transition ${colors[type]}`}
+                            >
+                              {count}
+                            </button>
+                          </Tooltip>
+                        );
+                      })}
+                      <select
+                        className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
+                        value={alertShowResolved ? "all" : "todo"}
+                        onChange={(e) => {
+                          setAlertShowResolved(e.target.value === "all");
+                          setAlertPage(0);
+                        }}
                       >
-                        <ChevronRight size={14} />
+                        <option value="todo">{t("alerts.toProcess")}</option>
+                        <option value="all">{t("alerts.showAll")}</option>
+                      </select>
+                      <select
+                        className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
+                        value={alertSortKey}
+                        onChange={(e) => setAlertSortKey(e.target.value as "delay" | "savings")}
+                      >
+                        <option value="delay">{t("risk.sortByDelay")}</option>
+                        <option value="savings">{t("risk.sortBySavings")}</option>
+                      </select>
+                      <button
+                        onClick={markAllResolved}
+                        className="ml-auto rounded-sm px-1.5 py-0.5 text-[10px] font-semibold text-tertiary transition hover:bg-neutral-100 hover:text-primary"
+                        title={t("alerts.markAllResolved")}
+                      >
+                        ✓ {t("alerts.markAllResolved")}
                       </button>
                     </div>
-                  )}
-                </>
-              )}
-            </CardBody>
-            <ManualAlertForm
-              open={manualAlertOpen}
-              onOpenChange={setManualAlertOpen}
-              data={visibleData}
-              onSubmit={(input) => {
-                if (user) data.createManualAlert(input, user);
-              }}
-            />
+                    {alertsOnPage.length === 0 ? (
+                      <p className="py-6 text-center text-sm text-tertiary">
+                        {t("dashboard.widgets.noAlerts")}
+                      </p>
+                    ) : (
+                      <>
+                        {alertsOnPage.map((a) => (
+                          <AlertItem
+                            key={a.id}
+                            alert={a}
+                            onClick={() => goToAlert(a)}
+                            onToggleResolved={() => toggleAlertResolved(a.id)}
+                            scopeLabel={resolveScopeLabel(a.scope)}
+                            tooltips={{
+                              severity: t(`alerts.tooltip.severity.${a.type}`),
+                              impact: t("alerts.tooltip.impact"),
+                              auto: t("alerts.tooltip.auto"),
+                            }}
+                          />
+                        ))}
+                        {alertPageCount > 1 && (
+                          <div className="flex items-center justify-center gap-3 pt-3 mt-2 border-t border-border">
+                            <button
+                              onClick={() => setAlertPage((p) => Math.max(0, p - 1))}
+                              disabled={alertPageClamped === 0}
+                              className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+                            >
+                              <ChevronLeft size={14} />
+                            </button>
+                            <span className="text-[11px] font-semibold text-secondary">
+                              {t("alerts.page", `Page ${alertPageClamped + 1} / ${alertPageCount}`)
+                                .replace("{current}", String(alertPageClamped + 1))
+                                .replace("{total}", String(alertPageCount))}
+                            </span>
+                            <button
+                              onClick={() =>
+                                setAlertPage((p) => Math.min(alertPageCount - 1, p + 1))
+                              }
+                              disabled={alertPageClamped >= alertPageCount - 1}
+                              className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+                            >
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    <ManualAlertForm
+                      open={manualAlertOpen}
+                      onOpenChange={setManualAlertOpen}
+                      data={visibleData}
+                      onSubmit={(input) => {
+                        if (user) data.createManualAlert(input, user);
+                      }}
+                    />
+                  </div>
+
+                  {/* ── Panneau droit : Alertes de dépendances ──────────────────────────── */}
+                  <div className="min-w-0 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="text-[10.5px] font-semibold text-tertiary">
+                        {depAlerts.length} alerte{depAlerts.length !== 1 ? "s" : ""}
+                      </span>
+                      <select
+                        className="ml-auto rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
+                        value={depsSortKey}
+                        onChange={(e) => setDepsSortKey(e.target.value as "delay" | "savings")}
+                      >
+                        <option value="delay">{t("risk.sortByDelay")}</option>
+                        <option value="savings">{t("risk.sortBySavings")}</option>
+                      </select>
+                    </div>
+                    {depAlerts.length === 0 ? (
+                      <p className="py-6 text-center text-sm text-tertiary">
+                        {t("dashboard.widgets.noDependencyAlerts")}
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex flex-col gap-3">
+                          {dependencyPagination.items.map((a, i) => {
+                            const sev = depSeverity(a.delayDays);
+                            const meta = DEPENDENCY_TYPE_META[a.type];
+                            return (
+                              <div
+                                key={`${a.sourceId}-${a.targetId}-${i}`}
+                                onClick={() => {
+                                  router.push(`/levers/detail?id=${a.sourceId}`);
+                                }}
+                                className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
+                              >
+                                <div className="mb-2 flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                                      {t("dashboard.dependency.planningRule", "Règle de planning")}
+                                    </div>
+                                    <div className="mt-1 text-[11px] font-semibold text-primary">
+                                      {a.type === "FS" &&
+                                        t(
+                                          "dashboard.dependency.rule.fs",
+                                          "La cible doit finir avant le début de la source"
+                                        )}
+                                      {a.type === "SF" &&
+                                        t(
+                                          "dashboard.dependency.rule.sf",
+                                          "La cible doit démarrer avant la fin de la source"
+                                        )}
+                                      {a.type === "SS" &&
+                                        t(
+                                          "dashboard.dependency.rule.ss",
+                                          "Les deux éléments doivent démarrer ensemble"
+                                        )}
+                                      {a.type === "FF" &&
+                                        t(
+                                          "dashboard.dependency.rule.ff",
+                                          "Les deux éléments doivent finir ensemble"
+                                        )}
+                                    </div>
+                                  </div>
+                                  <DependencyTypeBadge type={a.type} />
+                                </div>
+                                {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
+                                  mobile (les deux blocs côte à côte débordaient sous ~480px), côte à
+                                  côte avec flèche dès sm. min-w-0 partout : sans lui, flex-1 refuse de
+                                  rétrécir sous la largeur du contenu et pousse hors de la carte. */}
+                                {meta.directional ? (
+                                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
+                                    <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                                        {t("dep.blocker")}
+                                      </div>
+                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                        {a.targetName}
+                                      </div>
+                                      <div className="mt-0.5 text-[10px] text-secondary">
+                                        {meta.targetMilestone} : {a.targetDate}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
+                                      <ArrowDown size={14} className="sm:hidden" />
+                                      <ArrowRight size={14} className="hidden sm:block" />
+                                      <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
+                                        {a.type}
+                                      </span>
+                                    </div>
+                                    <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                        {t("dep.blocked")}
+                                      </div>
+                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                        {a.sourceName}
+                                      </div>
+                                      <div className="mt-0.5 text-[10px] text-secondary">
+                                        {meta.sourceMilestone} : {a.sourceDate}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
+                                  <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
+                                    <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                        {t("dep.atRisk")}
+                                      </div>
+                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                        {a.sourceName}
+                                      </div>
+                                      <div className="mt-0.5 text-[10px] text-secondary">
+                                        {meta.sourceMilestone} : {a.sourceDate}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
+                                      <ArrowUpDown size={10} />
+                                      {a.type}
+                                    </div>
+                                    <div className="bg-bp-coral/[0.03] p-2">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                        {t("dep.atRisk")}
+                                      </div>
+                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                        {a.targetName}
+                                      </div>
+                                      <div className="mt-0.5 text-[10px] text-secondary">
+                                        {meta.targetMilestone} : {a.targetDate}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
+                                  que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
+                                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+                                  <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
+                                    {sev.label}
+                                  </span>
+                                  <span className="text-secondary">
+                                    {a.delayDays}{" "}
+                                    {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
+                                  </span>
+                                  {a.impactEur > 0 && (
+                                    <span className="ml-auto font-bold text-bp-coral">
+                                      {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {dependencyPagination.pageCount > 1 && (
+                          <DashboardPager
+                            page={dependencyPagination.page}
+                            pageCount={dependencyPagination.pageCount}
+                            onPrevious={() =>
+                              setDependencyPage(Math.max(0, dependencyPagination.page - 1))
+                            }
+                            onNext={() =>
+                              setDependencyPage(
+                                Math.min(
+                                  dependencyPagination.pageCount - 1,
+                                  dependencyPagination.page + 1
+                                )
+                              )
+                            }
+                            label={t("alerts.page")}
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </CardBody>
+            )}
           </Card>
         );
+      }
       case "savings-trajectory":
         return renderWidgetShell(
           instance,
@@ -1299,16 +1486,6 @@ export function DashboardPagePerformance() {
             </CardBody>
           </Card>
         );
-      case "sankey":
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader title={t("dashboard.widgets.sankey")} />
-            <CardBody>
-              <SankeyChart data={sankeyChrono} height={340} onNodeClick={goToStageLabel} />
-            </CardBody>
-          </Card>
-        );
       case "marimekko": {
         // Les deux vues historiques ("function-country" / "workstream-project") gardent le calcul
         // exact d'origine (engine.marimekko2D) pour zéro régression visuelle ; toute vue construite
@@ -1411,7 +1588,6 @@ export function DashboardPagePerformance() {
                 data={barData}
                 labelTarget={t("chart.bar.target")}
                 labelRealized={t("chart.bar.realized")}
-                labelReforecast={t("chart.bar.reforecast")}
               />
             </CardBody>
           </Card>
@@ -1569,131 +1745,6 @@ export function DashboardPagePerformance() {
             </CardBody>
           </Card>
         );
-      case "pnl": {
-        const activeView = resolveActiveCustomView(instance);
-        const views = resolveCustomViews(instance);
-        const isLegacy = activeView?.id === "account";
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader
-              title={
-                activeView && !isLegacy
-                  ? describeCustomView(activeView, hierarchyLevels)
-                  : t("dashboard.widgets.pnl")
-              }
-              actions={
-                <div className="flex items-center gap-2">
-                  {views.length > 1 && activeView && (
-                    <DimensionToggle
-                      options={views.map((v) => ({
-                        value: v.id,
-                        label: describeCustomView(v, hierarchyLevels),
-                      }))}
-                      value={activeView.id}
-                      onChange={(next) =>
-                        updateLayout(setWidgetView(layout, instance.instanceId, next))
-                      }
-                    />
-                  )}
-                  <select
-                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                    value={pnlFilterGeo}
-                    onChange={(e) => {
-                      setPnlFilterGeo(e.target.value);
-                      setPnlFilterCountry("");
-                      setPnlFilterEntity("");
-                    }}
-                  >
-                    <option value="">{t("pnl.allRegions")}</option>
-                    {pnlGeoOptions.map((g) => (
-                      <option key={g} value={g}>
-                        {g}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                    value={pnlFilterCountry}
-                    onChange={(e) => {
-                      setPnlFilterCountry(e.target.value);
-                      setPnlFilterEntity("");
-                    }}
-                  >
-                    <option value="">{t("pnl.allCountries")}</option>
-                    {pnlCountryOptions.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                    value={pnlFilterEntity}
-                    onChange={(e) => setPnlFilterEntity(e.target.value)}
-                  >
-                    <option value="">{t("pnl.allEntities")}</option>
-                    {pnlEntityOptions.map((ent) => (
-                      <option key={ent} value={ent}>
-                        {ent}
-                      </option>
-                    ))}
-                  </select>
-                  {/* Filtres temporels : Année → Trimestre → Mois */}
-                  <span className="mx-1 text-[10px] text-tertiary">|</span>
-                  <select
-                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                    value={pnlYear}
-                    onChange={(e) => {
-                      setPnlYear(e.target.value);
-                      setPnlQuarter("");
-                      setPnlMonth("");
-                    }}
-                  >
-                    <option value={fyYear}>{fyYear}</option>
-                  </select>
-                  <select
-                    className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                    value={pnlQuarter}
-                    onChange={(e) => {
-                      setPnlQuarter(e.target.value);
-                      setPnlMonth("");
-                    }}
-                  >
-                    <option value="">{t("pnl.allQuarters")}</option>
-                    {["Q1", "Q2", "Q3", "Q4"].map((q) => (
-                      <option key={q} value={q}>
-                        {q}
-                      </option>
-                    ))}
-                  </select>
-                  {pnlQuarter && (
-                    <select
-                      className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                      value={pnlMonth}
-                      onChange={(e) => setPnlMonth(e.target.value)}
-                    >
-                      <option value="">{t("pnl.allMonths")}</option>
-                      {pnlQuarterMonths.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              }
-            />
-            <CardBody>
-              <PnlBarChart
-                data={pnlData}
-                labelPlan={t("chart.pnl.plan")}
-                labelRealized={t("chart.pnl.realized")}
-              />
-            </CardBody>
-          </Card>
-        );
-      }
       case "underperformers":
         return renderWidgetShell(
           instance,
@@ -1788,185 +1839,6 @@ export function DashboardPagePerformance() {
           </Card>
         );
 
-      case "dependency-alerts": {
-        const depSeverity = (days: number) => {
-          if (days > 30) return { label: t("dep.blocking"), cls: "bg-rag-red-light text-rag-red" };
-          if (days > 7) return { label: t("dep.watch"), cls: "bg-rag-amber-light text-rag-amber" };
-          return { label: t("dep.minor"), cls: "bg-neutral-100 text-secondary" };
-        };
-
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader
-              title={t("dashboard.widgets.dependencyAlerts")}
-              actions={
-                <span className="text-[10.5px] font-semibold text-tertiary">
-                  {depAlerts.length} alerte{depAlerts.length !== 1 ? "s" : ""}
-                </span>
-              }
-            />
-            <CardBody>
-              {depAlerts.length === 0 ? (
-                <p className="py-6 text-center text-sm text-tertiary">
-                  {t("dashboard.widgets.noDependencyAlerts")}
-                </p>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-3">
-                    {dependencyPagination.items.map((a, i) => {
-                      const sev = depSeverity(a.delayDays);
-                      const meta = DEPENDENCY_TYPE_META[a.type];
-                      return (
-                        <div
-                          key={`${a.sourceId}-${a.targetId}-${i}`}
-                          onClick={() => {
-                            router.push(`/levers/detail?id=${a.sourceId}`);
-                          }}
-                          className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
-                        >
-                          <div className="mb-2 flex items-start justify-between gap-2">
-                            <div>
-                              <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
-                                {t("dashboard.dependency.planningRule", "Règle de planning")}
-                              </div>
-                              <div className="mt-1 text-[11px] font-semibold text-primary">
-                                {a.type === "FS" &&
-                                  t(
-                                    "dashboard.dependency.rule.fs",
-                                    "La cible doit finir avant le début de la source"
-                                  )}
-                                {a.type === "SF" &&
-                                  t(
-                                    "dashboard.dependency.rule.sf",
-                                    "La cible doit démarrer avant la fin de la source"
-                                  )}
-                                {a.type === "SS" &&
-                                  t(
-                                    "dashboard.dependency.rule.ss",
-                                    "Les deux éléments doivent démarrer ensemble"
-                                  )}
-                                {a.type === "FF" &&
-                                  t(
-                                    "dashboard.dependency.rule.ff",
-                                    "Les deux éléments doivent finir ensemble"
-                                  )}
-                              </div>
-                            </div>
-                            <DependencyTypeBadge type={a.type} />
-                          </div>
-                          {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
-                            mobile (les deux blocs côte à côte débordaient sous ~480px), côte à
-                            côte avec flèche dès sm. min-w-0 partout : sans lui, flex-1 refuse de
-                            rétrécir sous la largeur du contenu et pousse hors de la carte. */}
-                          {meta.directional ? (
-                            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
-                              <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                                  {t("dep.blocker")}
-                                </div>
-                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                  {a.targetName}
-                                </div>
-                                <div className="mt-0.5 text-[10px] text-secondary">
-                                  {meta.targetMilestone} : {a.targetDate}
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
-                                <ArrowDown size={14} className="sm:hidden" />
-                                <ArrowRight size={14} className="hidden sm:block" />
-                                <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
-                                  {a.type}
-                                </span>
-                              </div>
-                              <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                  {t("dep.blocked")}
-                                </div>
-                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                  {a.sourceName}
-                                </div>
-                                <div className="mt-0.5 text-[10px] text-secondary">
-                                  {meta.sourceMilestone} : {a.sourceDate}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
-                            <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
-                              <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                  {t("dep.atRisk")}
-                                </div>
-                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                  {a.sourceName}
-                                </div>
-                                <div className="mt-0.5 text-[10px] text-secondary">
-                                  {meta.sourceMilestone} : {a.sourceDate}
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
-                                <ArrowUpDown size={10} />
-                                {a.type}
-                              </div>
-                              <div className="bg-bp-coral/[0.03] p-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                  {t("dep.atRisk")}
-                                </div>
-                                <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                  {a.targetName}
-                                </div>
-                                <div className="mt-0.5 text-[10px] text-secondary">
-                                  {meta.targetMilestone} : {a.targetDate}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
-                            que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
-                          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
-                            <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
-                              {sev.label}
-                            </span>
-                            <span className="text-secondary">
-                              {a.delayDays}{" "}
-                              {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
-                            </span>
-                            {a.impactEur > 0 && (
-                              <span className="ml-auto font-bold text-bp-coral">
-                                {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {dependencyPagination.pageCount > 1 && (
-                    <DashboardPager
-                      page={dependencyPagination.page}
-                      pageCount={dependencyPagination.pageCount}
-                      onPrevious={() =>
-                        setDependencyPage(Math.max(0, dependencyPagination.page - 1))
-                      }
-                      onNext={() =>
-                        setDependencyPage(
-                          Math.min(
-                            dependencyPagination.pageCount - 1,
-                            dependencyPagination.page + 1
-                          )
-                        )
-                      }
-                      label={t("alerts.page")}
-                    />
-                  )}
-                </>
-              )}
-            </CardBody>
-          </Card>
-        );
-      }
-
       case "initiative-health": {
         const dimension = (
           instance.view === "country" || instance.view === "function" ? instance.view : "workstream"
@@ -1988,7 +1860,7 @@ export function DashboardPagePerformance() {
                   options={[
                     { value: "workstream", label: t("dashboard.workstream") },
                     { value: "country", label: t("dashboard.country") },
-                    { value: "function", label: t("dashboard.function") },
+                    { value: "function", label: t("dashboard.leverDepartment") },
                   ]}
                   value={dimension}
                   onChange={(next) =>
