@@ -26,6 +26,31 @@ const DEFAULT_RISK_THRESHOLDS_KEUR: Record<RiskLevel, string> = {
   low: "0",
 };
 
+/** Délais par défaut (jours), mêmes valeurs que DEFAULT_RISK_THRESHOLDS (lib/engine.ts) — le
+ *  critère délai est traité exactement comme le seuil financier ci-dessus : toujours pré-rempli
+ *  d'une vraie valeur par défaut, jamais présenté comme "optionnel" (round "délai pas optionnel",
+ *  suite à la confusion que ça créait par rapport au seuil financier voisin). */
+const DEFAULT_RISK_DELAY_DAYS: Record<RiskLevel, string> = {
+  critical: "7",
+  high: "15",
+  medium: "30",
+  low: "60",
+};
+
+/** Seuils de risque par défaut, pré-remplis avec seuil ET délai — utilisé comme valeur initiale de
+ *  `DEFAULT_COMPANY_FORM.riskThresholds` pour qu'une entreprise nouvellement créée les persiste
+ *  d'emblée (voir doc-comment de `CompanyFormState.riskThresholds` plus bas) au lieu de rester
+ *  `undefined` tant qu'un admin n'a pas ouvert "Paramètres avancés" pour y toucher. */
+export const DEFAULT_RISK_THRESHOLDS_FORM: {
+  level: RiskLevel;
+  minAmount: string;
+  delayDays: string;
+}[] = (["critical", "high", "medium", "low"] as const).map((level) => ({
+  level,
+  minAmount: DEFAULT_RISK_THRESHOLDS_KEUR[level],
+  delayDays: DEFAULT_RISK_DELAY_DAYS[level],
+}));
+
 export const OPERATIONAL_ROLES: { value: Role; label: string }[] = [
   { value: "cto", label: "CTO" },
   { value: "sponsor", label: "Sponsor" },
@@ -47,10 +72,10 @@ export type CompanyFormState = {
   directions: string[];
   roleClearance: Partial<Record<Role, string[]>>;
   /** Seuils de risque par niveau, saisis en €K (voir Company.riskThresholds — stocké en € brut,
-   *  conversion à la charge de qui branche la sauvegarde). `delayDays` : délai optionnel en jours
-   *  (ancienneté de la plus vieille alerte ouverte du scope) qui fait aussi basculer le niveau de
-   *  risque, en plus du montant. Non défini = valeurs par défaut affichées
-   *  (DEFAULT_RISK_THRESHOLDS_KEUR), pas de contrainte de délai. */
+   *  conversion à la charge de qui branche la sauvegarde). `delayDays` (ancienneté en jours de la
+   *  plus vieille alerte ouverte du scope) fait aussi basculer le niveau de risque, en plus du
+   *  montant — même statut que `minAmount` : toujours pré-rempli d'une vraie valeur par défaut
+   *  (voir DEFAULT_RISK_THRESHOLDS_FORM), jamais laissé vide/"optionnel" par défaut. */
   riskThresholds?: { level: RiskLevel; minAmount: string; delayDays: string }[];
 };
 
@@ -62,7 +87,7 @@ export const DEFAULT_COMPANY_FORM: CompanyFormState = {
   confidentialityLevels: [],
   directions: [],
   roleClearance: {},
-  riskThresholds: undefined,
+  riskThresholds: DEFAULT_RISK_THRESHOLDS_FORM,
 };
 
 /**
@@ -125,7 +150,8 @@ export function CompanyFieldsEditor({
   };
 
   const riskDelayFor = (level: RiskLevel): string => {
-    return value.riskThresholds?.find((t) => t.level === level)?.delayDays ?? "";
+    const found = value.riskThresholds?.find((t) => t.level === level);
+    return found ? found.delayDays : DEFAULT_RISK_DELAY_DAYS[level];
   };
 
   const setRiskThreshold = (
@@ -213,7 +239,7 @@ export function CompanyFieldsEditor({
                     {t("adminCompanyFields.colThreshold", "Seuil (€K)")}
                   </th>
                   <th className="px-3 py-2 text-left font-semibold text-text-secondary">
-                    {t("adminCompanyFields.colDelay", "Délai (jours) — optionnel")}
+                    {t("adminCompanyFields.colDelay", "Délai (jours)")}
                   </th>
                 </tr>
               </thead>
@@ -236,10 +262,6 @@ export function CompanyFieldsEditor({
                         min="0"
                         value={riskDelayFor(r.value)}
                         onChange={(e) => setRiskThreshold(r.value, { delayDays: e.target.value })}
-                        placeholder={t(
-                          "adminCompanyFields.colDelayPlaceholder",
-                          "Aucune contrainte"
-                        )}
                         className="w-40 rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-bp-coral"
                       />
                     </td>

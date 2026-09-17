@@ -375,10 +375,10 @@ export const DEFAULT_RISK_THRESHOLDS: {
   minAmount: number;
   delayDays?: number;
 }[] = [
-  { level: "critical", minAmount: 500_000 },
-  { level: "high", minAmount: 200_000 },
-  { level: "medium", minAmount: 50_000 },
-  { level: "low", minAmount: 0 },
+  { level: "critical", minAmount: 500_000, delayDays: 7 },
+  { level: "high", minAmount: 200_000, delayDays: 15 },
+  { level: "medium", minAmount: 50_000, delayDays: 30 },
+  { level: "low", minAmount: 0, delayDays: 60 },
 ];
 
 /** Rang de sévérité d'un RiskLevel, du plus élevé au plus faible — sert à comparer/combiner deux

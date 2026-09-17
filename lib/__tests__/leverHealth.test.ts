@@ -44,7 +44,10 @@ function alert(overrides: Partial<Alert> = {}): Alert {
   return {
     id: "A1",
     type: "amber",
-    ts: "2026-01-01",
+    // Fraîche par défaut (pas de date fixe passée) pour ne pas déclencher, par accident, le
+    // critère de délai des seuils de risque par défaut (voir DEFAULT_RISK_THRESHOLDS,
+    // lib/engine.ts) dans les tests qui ne testent QUE le critère de montant.
+    ts: new Date().toISOString().slice(0, 10),
     scope: "L1",
     title: "Alert",
     desc: "Description",

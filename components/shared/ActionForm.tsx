@@ -205,7 +205,7 @@ export function ActionForm({
         </div>
         <div className="max-h-[60vh] overflow-y-auto rounded-md border border-border">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1620px] border-collapse text-xs">
+            <table className="w-full min-w-[1650px] border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border bg-neutral-50">
                   <th className="sticky left-0 z-10 w-[90px] min-w-[90px] bg-neutral-50 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
@@ -226,8 +226,8 @@ export function ActionForm({
                   <th className="w-[130px] min-w-[130px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
                     {t("shared.actionForm.savingType", "Type de gain")}
                   </th>
-                  <th className="w-[190px] min-w-[190px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("shared.actionForm.capexDate", "CAPEX (comptabilisation)")}
+                  <th className="w-[220px] min-w-[220px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
+                    {t("shared.actionForm.capexDate", "CAPEX — mode & dates")}
                   </th>
                   <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
                     {t("shared.actionForm.gainDate", "Date gain")}
@@ -306,11 +306,11 @@ export function ActionForm({
                         {imp.type === "cost" ? (
                           <>
                             <option value="capex">{t("leverForm.capex", "CAPEX")}</option>
-                            <option value="opex_rec">
-                              {t("shared.actionForm.opexRecShort", "OPEX réc.")}
-                            </option>
                             <option value="oneoff">
-                              {t("shared.actionForm.oneOff", "One-off")}
+                              {t("shared.actionForm.oneOffCost", "OPEX one-off")}
+                            </option>
+                            <option value="opex_rec">
+                              {t("shared.actionForm.opexRecCost", "OPEX récurrent")}
                             </option>
                           </>
                         ) : (
@@ -375,9 +375,9 @@ export function ActionForm({
                       )}
                     </td>
 
-                    <td className="w-[190px] min-w-[190px] px-2 py-1.5 align-top">
+                    <td className="w-[220px] min-w-[220px] px-2 py-1.5 align-top">
                       {imp.nature === "capex" ? (
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1.5">
                           <select
                             className={selectClass}
                             value={imp.capexAllocationMode ?? "one_shot"}
@@ -390,51 +390,65 @@ export function ActionForm({
                             }
                             title={t(
                               "shared.actionForm.capexAllocationModeTitle",
-                              "Mode de comptabilisation du CAPEX"
+                              "Mode de comptabilisation du CAPEX : engagé en une fois à une date précise, ou étalé sur une période"
                             )}
                           >
                             <option value="one_shot">
-                              {t("shared.actionForm.capexOneShot", "One shot")}
+                              {t("shared.actionForm.capexOneShot", "One shot — une seule date")}
                             </option>
                             <option value="smoothed">
-                              {t("shared.actionForm.capexSmoothed", "Lissé")}
+                              {t("shared.actionForm.capexSmoothed", "Lissé — sur une période")}
                             </option>
                           </select>
                           {imp.capexAllocationMode === "smoothed" && (
+                            <label className="block">
+                              <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
+                                {t("shared.actionForm.capexStartDateLabel", "Début période")}
+                              </span>
+                              <input
+                                className={inputClass}
+                                type="date"
+                                value={imp.capexStartDate ?? ""}
+                                onChange={(e) =>
+                                  updateImpact(idx, {
+                                    capexStartDate: e.target.value || undefined,
+                                  })
+                                }
+                                title={t(
+                                  "shared.actionForm.capexStartDateTitle",
+                                  "Début de la période de lissage"
+                                )}
+                              />
+                            </label>
+                          )}
+                          <label className="block">
+                            <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
+                              {imp.capexAllocationMode === "smoothed"
+                                ? t("shared.actionForm.capexEndDateLabel", "Fin période")
+                                : t("shared.actionForm.capexDeploymentLabel", "Date d'engagement")}
+                            </span>
                             <input
                               className={inputClass}
                               type="date"
-                              value={imp.capexStartDate ?? ""}
+                              value={imp.capexDeploymentDate ?? ""}
                               onChange={(e) =>
-                                updateImpact(idx, { capexStartDate: e.target.value || undefined })
+                                updateImpact(idx, {
+                                  capexDeploymentDate: e.target.value || undefined,
+                                })
                               }
-                              title={t(
-                                "shared.actionForm.capexStartDateTitle",
-                                "Début de la période de lissage"
-                              )}
+                              title={
+                                imp.capexAllocationMode === "smoothed"
+                                  ? t(
+                                      "shared.actionForm.capexEndDateTitle",
+                                      "Fin de la période de lissage"
+                                    )
+                                  : t(
+                                      "shared.actionForm.capexDeploymentTitle",
+                                      "Date à laquelle le CAPEX est engagé à 100%"
+                                    )
+                              }
                             />
-                          )}
-                          <input
-                            className={inputClass}
-                            type="date"
-                            value={imp.capexDeploymentDate ?? ""}
-                            onChange={(e) =>
-                              updateImpact(idx, {
-                                capexDeploymentDate: e.target.value || undefined,
-                              })
-                            }
-                            title={
-                              imp.capexAllocationMode === "smoothed"
-                                ? t(
-                                    "shared.actionForm.capexEndDateTitle",
-                                    "Fin de la période de lissage"
-                                  )
-                                : t(
-                                    "shared.actionForm.capexDeploymentTitle",
-                                    "Date à laquelle le CAPEX est engagé à 100%"
-                                  )
-                            }
-                          />
+                          </label>
                         </div>
                       ) : (
                         <span className="text-tertiary">—</span>
