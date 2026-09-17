@@ -5,9 +5,10 @@ import { LineChart } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import {
-  CapexOpexBreakdownChart,
+  CostByHierarchyChart,
   CostCommitmentTimelineChart,
   CostEngagedVsUpcomingChart,
+  InvestVsSavingsChart,
   OpexRecurrentChart,
 } from "@/components/finance/FinanceCostCharts";
 import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
@@ -144,7 +145,16 @@ export default function FinancePage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CostEngagedVsUpcomingChart data={data} />
-        <CapexOpexBreakdownChart data={data} />
+        <CostByHierarchyChart
+          data={data}
+          hierarchyLevels={hierarchyLevels}
+          hierarchyNodes={hierarchyNodes}
+        />
+      </div>
+
+      <InvestVsSavingsChart data={data} />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CostCommitmentTimelineChart data={data} />
         <OpexRecurrentChart data={data} />
       </div>

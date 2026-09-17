@@ -1,13 +1,29 @@
 import { describe, it, expect } from "vitest";
 import {
   bucketCostsByPeriod,
+  bucketInvestVsSavingsByPeriod,
   bucketRecurrentOpexByPeriod,
+  bucketSavingsByPeriod,
+  costRowsForPeriod,
+  costsByHierarchyNode,
   flattenCostImpacts,
+  groupCostsByWorkstream,
+  investCostRowsBySegment,
   isCostEngaged,
+  isInvestNature,
+  recurrentOpexRowsForPeriod,
+  sortedHierarchyLevels,
   splitByNature,
   splitEngagedVsUpcoming,
 } from "@/lib/financeCosts";
-import type { ActionImpact, BeTrackData, Lever, LeverAction } from "@/types";
+import type {
+  ActionImpact,
+  BeTrackData,
+  HierarchyNode,
+  Lever,
+  LeverAction,
+  Workstream,
+} from "@/types";
 
 const baseLever: Lever = {
   id: "L001",
@@ -206,6 +222,23 @@ describe("financeCosts — splitEngagedVsUpcoming / splitByNature", () => {
     expect(split).toEqual({ engaged: 3, upcoming: 4, total: 7 });
   });
 
+  it("excludes opex_rec (Invest-only scope, round finance-charts-v2)", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        action({
+          status: "done",
+          impacts: [
+            impact({ id: "c1", nature: "oneoff", amount: 3 }),
+            impact({ id: "c2", nature: "opex_rec", amount: 100 }),
+          ],
+        }),
+      ],
+    };
+    const split = splitEngagedVsUpcoming(makeData([lever]), TODAY);
+    expect(split).toEqual({ engaged: 3, upcoming: 0, total: 3 });
+  });
+
   it("splits by nature: capex / opex_rec / oneoff", () => {
     const lever = {
       ...baseLever,
@@ -282,5 +315,271 @@ describe("financeCosts — bucketRecurrentOpexByPeriod", () => {
     };
     const points = bucketRecurrentOpexByPeriod(makeData([lever]), "year");
     expect(points).toEqual([{ period: "2026", sortKey: "2026", delta: 1.5, cumulative: 1.5 }]);
+  });
+});
+
+describe("financeCosts — isInvestNature", () => {
+  it("true for capex/oneoff, false for opex_rec", () => {
+    expect(isInvestNature("capex")).toBe(true);
+    expect(isInvestNature("oneoff")).toBe(true);
+    expect(isInvestNature("opex_rec")).toBe(false);
+  });
+});
+
+describe("financeCosts — investCostRowsBySegment", () => {
+  it("returns only Invest rows (excludes opex_rec) matching the engaged flag", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        action({
+          status: "done",
+          impacts: [
+            impact({ id: "c1", nature: "oneoff", amount: 3 }),
+            impact({ id: "c2", nature: "opex_rec", amount: 9 }),
+          ],
+        }),
+        action({
+          status: "todo",
+          impacts: [impact({ id: "c3", nature: "oneoff", amount: 4 })],
+        }),
+      ],
+    };
+    const data = makeData([lever]);
+    const engaged = investCostRowsBySegment(data, true, TODAY);
+    const upcoming = investCostRowsBySegment(data, false, TODAY);
+    expect(engaged.map((r) => r.impact.id)).toEqual(["c1"]);
+    expect(upcoming.map((r) => r.impact.id)).toEqual(["c3"]);
+  });
+});
+
+describe("financeCosts — bucketCostsByPeriod with natureFilter", () => {
+  it("excludes opex_rec when filtered to Invest (isInvestNature)", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        action({
+          start: "2026-02-01",
+          impacts: [
+            impact({ id: "c1", nature: "capex", amount: 3, capexDeploymentDate: "2026-02-15" }),
+            impact({ id: "c2", nature: "opex_rec", amount: 100 }),
+          ],
+        }),
+      ],
+    };
+    const points = bucketCostsByPeriod(makeData([lever]), "month", isInvestNature);
+    expect(points).toEqual([{ period: "Feb 2026", sortKey: "2026-01", delta: 3, cumulative: 3 }]);
+  });
+});
+
+describe("financeCosts — costRowsForPeriod", () => {
+  it("returns lever/amount rows attributed to the clicked period, prorating smoothed CAPEX", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        action({
+          impacts: [
+            impact({
+              id: "c1",
+              nature: "capex",
+              amount: 6,
+              capexAllocationMode: "smoothed",
+              capexStartDate: "2026-01-01",
+              capexDeploymentDate: "2026-03-01",
+            }),
+          ],
+        }),
+      ],
+    };
+    const data = makeData([lever]);
+    const rows = costRowsForPeriod(data, "month", "2026-01", isInvestNature);
+    expect(rows).toEqual([{ lever, amount: 2 }]);
+  });
+});
+
+describe("financeCosts — recurrentOpexRowsForPeriod", () => {
+  it("returns only opex_rec rows started in the given period", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        action({
+          start: "2026-03-05",
+          impacts: [impact({ id: "c1", nature: "opex_rec", amount: 1.2 })],
+        }),
+      ],
+    };
+    const data = makeData([lever]);
+    const rows = recurrentOpexRowsForPeriod(data, "year", "2026");
+    expect(rows).toEqual([{ lever, amount: 1.2 }]);
+    expect(recurrentOpexRowsForPeriod(data, "year", "2027")).toEqual([]);
+  });
+});
+
+describe("financeCosts — bucketSavingsByPeriod", () => {
+  it("buckets savings on gainDate when present, else the action's start date", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        action({
+          start: "2026-01-10",
+          impacts: [
+            impact({ id: "s1", type: "saving", amount: 5, gainDate: "2026-06-01" }),
+            impact({ id: "s2", type: "saving", amount: 2 }),
+          ],
+        }),
+      ],
+    };
+    const points = bucketSavingsByPeriod(makeData([lever]), "quarter");
+    expect(points).toEqual([
+      { period: "Q1 2026", sortKey: "2026-Q1", delta: 2, cumulative: 2 },
+      { period: "Q2 2026", sortKey: "2026-Q2", delta: 5, cumulative: 7 },
+    ]);
+  });
+});
+
+describe("financeCosts — bucketInvestVsSavingsByPeriod", () => {
+  it("combines Invest cost, gross savings and started recurrent OPEX per period", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        action({
+          start: "2026-01-05",
+          impacts: [
+            impact({ id: "c1", nature: "capex", amount: 4, capexDeploymentDate: "2026-01-20" }),
+            impact({ id: "c2", nature: "opex_rec", amount: 1 }),
+            impact({ id: "s1", type: "saving", amount: 3, gainDate: "2026-01-25" }),
+          ],
+        }),
+      ],
+    };
+    const points = bucketInvestVsSavingsByPeriod(makeData([lever]), "year");
+    expect(points).toEqual([
+      {
+        period: "2026",
+        sortKey: "2026",
+        investCost: 4,
+        grossSavings: 3,
+        opexRecStarted: 1,
+        netSavings: 2,
+      },
+    ]);
+  });
+});
+
+describe("financeCosts — groupCostsByWorkstream", () => {
+  it("groups by workstream then lever, sorted by amount descending", () => {
+    const leverA = { ...baseLever, id: "L001", code: "L001", name: "Lever A", ws: "WS-01" };
+    const leverB = { ...baseLever, id: "L002", code: "L002", name: "Lever B", ws: "WS-02" };
+    const workstreams: Workstream[] = [
+      { id: "WS-01", name: "Workstream Un", sponsor: "S", color: "#111", target: 10 },
+      { id: "WS-02", name: "Workstream Deux", sponsor: "S", color: "#222", target: 10 },
+    ];
+    const groups = groupCostsByWorkstream(
+      [
+        { lever: leverA, amount: 2 },
+        { lever: leverA, amount: 1 },
+        { lever: leverB, amount: 5 },
+      ],
+      workstreams
+    );
+    expect(groups).toEqual([
+      {
+        wsId: "WS-02",
+        wsName: "Workstream Deux",
+        color: "#222",
+        amount: 5,
+        levers: [{ leverId: "L002", leverCode: "L002", leverName: "Lever B", amount: 5 }],
+      },
+      {
+        wsId: "WS-01",
+        wsName: "Workstream Un",
+        color: "#111",
+        amount: 3,
+        levers: [{ leverId: "L001", leverCode: "L001", leverName: "Lever A", amount: 3 }],
+      },
+    ]);
+  });
+});
+
+describe("financeCosts — sortedHierarchyLevels / costsByHierarchyNode", () => {
+  const levels = [
+    { key: "cost_center", label: "Centre de coût", order: 1 },
+    { key: "bu", label: "Business Unit", order: 0 },
+  ];
+
+  it("sorts levels by order ascending", () => {
+    expect(sortedHierarchyLevels(levels).map((l) => l.key)).toEqual(["bu", "cost_center"]);
+  });
+
+  it("aggregates cost amounts per node, resolving the ancestor chain from the lever's leaf node", () => {
+    const nodes: HierarchyNode[] = [
+      {
+        id: "bu1",
+        companyId: "c1",
+        levelKey: "bu",
+        code: "BU1",
+        label: "BU Industrie",
+        parentId: null,
+      },
+      {
+        id: "cc1",
+        companyId: "c1",
+        levelKey: "cost_center",
+        code: "CC1",
+        label: "CC Achats",
+        parentId: "bu1",
+      },
+      {
+        id: "cc2",
+        companyId: "c1",
+        levelKey: "cost_center",
+        code: "CC2",
+        label: "CC Logistique",
+        parentId: "bu1",
+      },
+    ];
+    const leverCC1 = { ...baseLever, id: "L001", hierarchyLeafId: "cc1" };
+    const leverCC2 = { ...baseLever, id: "L002", hierarchyLeafId: "cc2" };
+    const data = makeData([leverCC1, leverCC2]);
+    data.levers[0].actions = [
+      action({ impacts: [impact({ id: "c1", nature: "oneoff", amount: 4 })] }),
+    ];
+    data.levers[1].actions = [
+      action({ impacts: [impact({ id: "c2", nature: "oneoff", amount: 6 })] }),
+    ];
+
+    // Niveau macro (BU) : les deux leviers remontent au même nœud "bu1".
+    const buSlices = costsByHierarchyNode(data, nodes, "bu", null);
+    expect(buSlices).toHaveLength(1);
+    expect(buSlices[0].node.id).toBe("bu1");
+    expect(buSlices[0].amount).toBe(10);
+    expect(buSlices[0].hasChildren).toBe(true);
+
+    // Niveau fin (cost center), sous le nœud BU cliqué.
+    const ccSlices = costsByHierarchyNode(data, nodes, "cost_center", "bu1");
+    expect(
+      ccSlices.map((s) => ({ id: s.node.id, amount: s.amount, hasChildren: s.hasChildren }))
+    ).toEqual([
+      { id: "cc2", amount: 6, hasChildren: false },
+      { id: "cc1", amount: 4, hasChildren: false },
+    ]);
+  });
+
+  it("ignores levers without hierarchyLeafId (no fallback 'unassigned' slice)", () => {
+    const nodes: HierarchyNode[] = [
+      {
+        id: "bu1",
+        companyId: "c1",
+        levelKey: "bu",
+        code: "BU1",
+        label: "BU Industrie",
+        parentId: null,
+      },
+    ];
+    const lever = { ...baseLever, id: "L001", hierarchyLeafId: undefined };
+    const data = makeData([lever]);
+    data.levers[0].actions = [
+      action({ impacts: [impact({ id: "c1", nature: "oneoff", amount: 4 })] }),
+    ];
+    expect(costsByHierarchyNode(data, nodes, "bu", null)).toEqual([]);
   });
 });
