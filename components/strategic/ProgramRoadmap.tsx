@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
 import { isProjetLate, programRoadmap, type ProgramRoadmapRow } from "@/lib/axisLogic";
+import { Tooltip } from "@/components/shared/Tooltip";
 import {
   formatTimelineDay,
   timelineColumns,
@@ -109,10 +110,11 @@ function deliverableMarkerColor(status: ProjetKanbanStatus | undefined): string 
 // — ce composant affiche l'ensemble du programme (potentiellement plusieurs dizaines de leviers)
 // alors que ceux-là se bornent à un seul axe/chantier.
 const LEVIER_BAR_HEIGHT = 30;
-// Round 18 (polish) : +8 par rapport au round 17 (18 → 26) pour accompagner l'agrandissement des
-// losanges de livrable ci-dessous (11 → 17) — sans cette marge en plus, le losange plus grand
-// débordait visuellement de sa piste dédiée vers la barre de levier au-dessus.
-const DELIVERABLE_MARKER_LANE_HEIGHT = 26;
+// Round 25 (retour PO) : les losanges de livrable sont désormais posés DIRECTEMENT sur la barre du
+// levier (même centre vertical qu'elle) plutôt que dans une piste séparée en dessous — la piste
+// dédiée `DELIVERABLE_MARKER_LANE_HEIGHT` (et la hauteur de ligne conditionnelle qui l'accompagnait,
+// `trackHeight = hasDeliverables ? ... : LEVIER_BAR_HEIGHT`) disparaît donc : chaque ligne mesure
+// simplement `LEVIER_BAR_HEIGHT`, qu'elle ait des livrables ou non.
 
 type ChantierGroup = { chantier: Chantier; rows: ProgramRoadmapRow[] };
 type AxisGroup = { axis: StrategicAxis; chantierGroups: ChantierGroup[] };
@@ -333,13 +335,15 @@ export function ProgramRoadmap({
                         {chantierGroup.rows.map((row) => {
                           const startPct = pctOf(row.start);
                           const widthPct = Math.max(1.2, pctOf(row.end) - startPct);
-                          const hasDeliverables = row.deliverables.length > 0;
-                          const trackHeight = hasDeliverables
-                            ? LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT
-                            : LEVIER_BAR_HEIGHT;
                           // Round 20, point 3 : icône d'alerte discrète juste après la barre d'un
                           // levier en retard (`isProjetLate`, lib/axisLogic.ts).
                           const levierLate = isProjetLate(row.action, row.progressPct);
+                          // Round 25 : position "juste après la fin de la barre" partagée par le
+                          // pourcentage d'avancement ET le triangle "en retard" — regroupés dans un
+                          // même repère (voir bloc `absolute` ci-dessous) pour qu'ils ne se
+                          // chevauchent jamais entre eux, plutôt que deux éléments positionnés
+                          // indépendamment au même endroit.
+                          const afterBarLeftPct = Math.min(startPct + widthPct, 95);
 
                           return (
                             <div
@@ -371,7 +375,10 @@ export function ProgramRoadmap({
                                 </div>
                               </div>
 
-                              <div className="relative flex-1" style={{ height: trackHeight }}>
+                              <div
+                                className="relative flex-1"
+                                style={{ height: LEVIER_BAR_HEIGHT }}
+                              >
                                 <TimelineGridColumns columns={columns} />
 
                                 <TimelineBar
@@ -394,35 +401,67 @@ export function ProgramRoadmap({
                                   label={row.action.name}
                                   labelClassName="min-w-0 flex-1 truncate text-[9.5px] font-semibold"
                                   inlineMinWidthPct={10}
-                                  trailing={
-                                    <span className="shrink-0 text-[9.5px] font-bold">
-                                      {row.progressPct}%
-                                    </span>
-                                  }
                                 />
 
-                                {/* Icône d'alerte discrète juste après la barre — PAS un contour
-                                  rouge complet (demande PO explicite, voir plan round 20). */}
-                                {levierLate && (
-                                  <span
-                                    className="absolute -translate-y-1/2 text-rag-red"
-                                    style={{
-                                      left: `${Math.min(startPct + widthPct, 95)}%`,
-                                      top: LEVIER_BAR_HEIGHT / 2,
-                                      marginLeft: 4,
-                                    }}
-                                    title={l.late}
-                                  >
-                                    <TriangleAlert size={12} aria-hidden />
+                                {/* Round 25 (retour PO) : le "N%" vivait auparavant EN `trailing`
+                                    DANS la barre — texte peint sur son propre remplissage, ce qui
+                                    entrait en collision avec les losanges de livrable désormais posés
+                                    sur la barre (voir plus bas). Déplacé ICI, à côté de la barre —
+                                    même mécanique de positionnement que le triangle "en retard"
+                                    ci-dessous — pour que la surface de la barre reste entièrement
+                                    libre. */}
+                                <div
+                                  className="pointer-events-none absolute flex -translate-y-1/2 items-center gap-1"
+                                  style={{
+                                    left: `${afterBarLeftPct}%`,
+                                    top: LEVIER_BAR_HEIGHT / 2,
+                                    marginLeft: 4,
+                                  }}
+                                >
+                                  <span className="whitespace-nowrap text-[9.5px] font-bold text-secondary">
+                                    {row.progressPct}%
                                   </span>
-                                )}
+                                  {/* Round 25 (retour PO) : l'icône d'alerte "en retard" n'avait
+                                      qu'un `title` HTML natif (pas de survol stylé, pas de nom de
+                                      levier dans le message) et n'était pas cliquable. Remplacée par
+                                      le `Tooltip` partagé (même patron que `tooltipText` de la barre
+                                      ci-dessus) et rendue cliquable — même destination
+                                      (`onProjetClick`) que la barre et le libellé de la ligne. PAS
+                                      de contour rouge complet (demande PO explicite, voir plan round
+                                      20). */}
+                                  {levierLate && (
+                                    <Tooltip
+                                      text={`${row.action.name} · ${l.late}`}
+                                      className="pointer-events-auto"
+                                    >
+                                      <button
+                                        type="button"
+                                        disabled={!onProjetClick}
+                                        onClick={
+                                          onProjetClick
+                                            ? () => onProjetClick(row.chantier.id, row.action.id)
+                                            : undefined
+                                        }
+                                        aria-label={`${row.action.name} · ${l.late}`}
+                                        className={`flex text-rag-red ${onProjetClick ? "cursor-pointer hover:brightness-110" : ""}`}
+                                      >
+                                        <TriangleAlert size={12} aria-hidden />
+                                      </button>
+                                    </Tooltip>
+                                  )}
+                                </div>
 
+                                {/* Round 25 (retour PO) : losanges de livrable posés DIRECTEMENT sur
+                                    la barre du levier (même centre vertical qu'elle, `top =
+                                    LEVIER_BAR_HEIGHT / 2`) — plus dans une piste séparée en dessous.
+                                    Le "N%" ci-dessus a été déplacé hors de la barre précisément pour
+                                    que cette surface reste libre de texte et que les losanges
+                                    puissent s'y poser sans collision. */}
                                 {row.deliverables.map((deliverable) => (
                                   <TimelineMarker
                                     key={deliverable.id}
                                     leftPct={pctOf(deliverable.dueDate!)}
-                                    top={LEVIER_BAR_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT / 2}
-                                    size={9}
+                                    top={LEVIER_BAR_HEIGHT / 2}
                                     color={deliverableMarkerColor(deliverable.status)}
                                     onClick={
                                       onProjetClick

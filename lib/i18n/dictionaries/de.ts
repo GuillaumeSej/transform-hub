@@ -1639,11 +1639,11 @@ const de: Record<string, string> = {
   "staffingPeriod.title": "VZÄ-Verteilung",
   "staffingPeriod.subtitle":
     "VZÄ, die den Vorhaben des Programms zugeordnet sind, {mode}, {scope}.",
-  "staffingPeriod.subtitle.modeTeam": "nach Team",
+  "staffingPeriod.subtitle.modeTeam": "nach Abteilung",
   "staffingPeriod.subtitle.modeAxis": "nach Achse",
   "staffingPeriod.subtitle.scopeAll": "über den gesamten Zeitraum",
   "staffingPeriod.subtitle.scopePeriod": "für {period}",
-  "staffingPeriod.mode.period": "Periode",
+  "staffingPeriod.mode.period": "Abteilung",
   "staffingPeriod.mode.axis": "Achse",
   "staffingPeriod.granularity.quarterly": "Quartal",
   "staffingPeriod.granularity.semiannual": "Halbjahr",

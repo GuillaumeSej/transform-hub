@@ -1635,11 +1635,11 @@ const es: Record<string, string> = {
   // antigua tarjeta "Reparto por eje" de EffectifsPageClient.tsx) ───────────────────────────
   "staffingPeriod.title": "Reparto de ETC",
   "staffingPeriod.subtitle": "ETC asignados a los proyectos del programa, {mode}, {scope}.",
-  "staffingPeriod.subtitle.modeTeam": "por equipo",
+  "staffingPeriod.subtitle.modeTeam": "por departamento",
   "staffingPeriod.subtitle.modeAxis": "por eje",
   "staffingPeriod.subtitle.scopeAll": "en todo el periodo",
   "staffingPeriod.subtitle.scopePeriod": "para {period}",
-  "staffingPeriod.mode.period": "Periodo",
+  "staffingPeriod.mode.period": "Departamento",
   "staffingPeriod.mode.axis": "Eje",
   "staffingPeriod.granularity.quarterly": "Trimestre",
   "staffingPeriod.granularity.semiannual": "Semestre",

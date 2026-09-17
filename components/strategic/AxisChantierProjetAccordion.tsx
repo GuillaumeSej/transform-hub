@@ -54,6 +54,7 @@ export function AxisChantierProjetAccordion({
   chantiers,
   chantierActions,
   onProjetClick,
+  onDeliverableClick,
 }: {
   /** Ordre d'apparition = numérotation "Axe {n}" (même convention que la section "Avancement" de
    *  `StrategicAxesView.tsx` : position 1-based dans ce tableau, jamais retriée). */
@@ -63,6 +64,12 @@ export function AxisChantierProjetAccordion({
   /** Clic sur un projet (ou, sans `focusActionId`, sur un chantier) — ouvre le panneau chantier de
    *  l'appelant, même contrat que `openChantierPanel` de `StrategicAxesView.tsx`. */
   onProjetClick: (chantierId: string, focusActionId?: string) => void;
+  /** Clic sur UN livrable précis (round <n>) — contrat SÉPARÉ de `onProjetClick` ci-dessus plutôt
+   *  qu'un 3e paramètre optionnel sur celui-ci : les deux gestes sont sémantiquement distincts
+   *  ("ouvre le panneau sur ce projet" vs. "ouvre le panneau ET la modale de CE livrable précis"),
+   *  et l'appelant (`StrategicAxesView.tsx`) doit de toute façon distinguer les deux pour poser le
+   *  bon état d'ouverture du panneau (`ChantierDetailPanel`'s `initialOpenDeliverable`). */
+  onDeliverableClick: (chantierId: string, actionId: string, deliverableId: string) => void;
 }) {
   const { t } = useTranslation();
   const [expandedAxisIds, setExpandedAxisIds] = useState<Set<string>>(new Set());
@@ -175,39 +182,72 @@ export function AxisChantierProjetAccordion({
                               </p>
                             ) : (
                               projets.map((action) => (
-                                <button
+                                // Round <n> : DIV cliquable (pas `<button>`) — les livrables
+                                // ci-dessous sont désormais eux-mêmes des `<button>` individuels
+                                // (voir plus bas), et un `<button>` imbriqué dans un autre
+                                // `<button>` est du HTML invalide (le navigateur "referme" le
+                                // parent au premier `<button>` enfant rencontré, cassant le clic
+                                // sur la carte). `role="button"`/`tabIndex`/`onKeyDown` reproduisent
+                                // le comportement clavier qu'un vrai `<button>` offrait gratuitement.
+                                <div
                                   key={action.id}
-                                  type="button"
+                                  role="button"
+                                  tabIndex={0}
                                   onClick={() => onProjetClick(chantier.id, action.id)}
-                                  className="flex w-full flex-col items-start gap-1.5 rounded-md border border-border bg-white px-2.5 py-1.5 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black"
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      onProjetClick(chantier.id, action.id);
+                                    }
+                                  }}
+                                  className="flex w-full cursor-pointer flex-col items-start gap-1.5 rounded-md border border-border bg-white px-2.5 py-1.5 text-left transition hover:-translate-y-px hover:border-black hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-black"
                                 >
                                   <span className="w-full truncate text-[11.5px] font-medium text-primary">
                                     {action.name}
                                   </span>
-                                  {/* Livrables compacts (round 24, Phase 4) : pastilles de statut,
-                                      même code couleur que la timeline fusionnée de
+                                  {/* Livrables (round 24, Phase 4 ; round <n> : pastille anonyme →
+                                      étiquette nommée individuellement cliquable) — même code
+                                      couleur de statut que la timeline fusionnée de
                                       `ChantierDetailPanel.tsx`/le Gantt programme
                                       (`ProgramRoadmap.tsx`) — pas le `TimelineMarker` lui-même
                                       (conçu pour un positionnement temporel en %, hors sujet dans
-                                      une simple liste). */}
+                                      une simple liste). Chaque étiquette ouvre directement LA
+                                      modale de CE livrable (`onDeliverableClick`), pas seulement
+                                      le projet — `e.stopPropagation()` empêche le clic de
+                                      remonter au conteneur de la carte projet ci-dessus (qui
+                                      ouvrirait sinon le panneau SANS cibler le livrable). */}
                                   {action.deliverables && action.deliverables.length > 0 && (
                                     <span className="flex flex-wrap items-center gap-1">
                                       {action.deliverables.map((deliverable) => (
-                                        <span
+                                        <button
                                           key={deliverable.id}
-                                          aria-hidden
-                                          title={deliverable.label}
-                                          className="h-2 w-2 shrink-0 rounded-full"
-                                          style={{
-                                            backgroundColor: deliverableStatusColor(
-                                              deliverable.status
-                                            ),
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onDeliverableClick(
+                                              chantier.id,
+                                              action.id,
+                                              deliverable.id
+                                            );
                                           }}
-                                        />
+                                          title={deliverable.label}
+                                          className="inline-flex max-w-[10rem] items-center gap-1 rounded-full border border-border bg-neutral-50 px-1.5 py-0.5 text-[10px] font-medium text-secondary transition hover:border-black hover:bg-white focus:outline-none focus:ring-2 focus:ring-black"
+                                        >
+                                          <span
+                                            aria-hidden
+                                            className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                            style={{
+                                              backgroundColor: deliverableStatusColor(
+                                                deliverable.status
+                                              ),
+                                            }}
+                                          />
+                                          <span className="truncate">{deliverable.label}</span>
+                                        </button>
                                       ))}
                                     </span>
                                   )}
-                                </button>
+                                </div>
                               ))
                             )}
                           </div>

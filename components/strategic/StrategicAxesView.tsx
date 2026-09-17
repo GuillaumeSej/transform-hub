@@ -198,6 +198,20 @@ export function StrategicAxesView() {
     router.push(`/levers?${params.toString()}`, { scroll: false });
   };
 
+  /** Clic sur UN livrable précis de l'accordéon "Vue par axe" (round <n>,
+   *  `AxisChantierProjetAccordion.tsx`'s `onDeliverableClick`) — ouvre le panneau chantier
+   *  EXACTEMENT comme `openChantierPanel(chantierId, actionId)` ci-dessus, plus l'état local qui
+   *  fait apparaître directement la modale de CE livrable (`ChantierDetailPanel`'s
+   *  `initialOpenDeliverable`, voir son propre doc-comment). */
+  const openChantierPanelOnDeliverable = (
+    chantierId: string,
+    actionId: string,
+    deliverableId: string
+  ) => {
+    setInitialOpenDeliverable({ actionId, deliverableId });
+    openChantierPanel(chantierId, actionId);
+  };
+
   /** Ferme le panneau chantier — `router.replace` (pas `push`) pour ne pas empiler une entrée
    *  d'historique par fermeture, cohérent avec `openChantierPanel` ci-dessus. */
   const closeChantierPanel = () => {
@@ -205,6 +219,10 @@ export function StrategicAxesView() {
     params.delete("chantier");
     params.delete("action");
     const qs = params.toString();
+    // Remis à zéro à la fermeture (round <n>) — voir le doc-comment de `initialOpenDeliverable` :
+    // une réouverture ultérieure du MÊME chantier via `openChantierId` seul (pas depuis l'accordéon)
+    // ne doit pas rouvrir à tort la modale de ce livrable.
+    setInitialOpenDeliverable(undefined);
     // `{ scroll: false }` (round 20) : même raison que `openChantierPanel` ci-dessus.
     router.replace(qs ? `/levers?${qs}` : "/levers", { scroll: false });
   };
@@ -214,6 +232,18 @@ export function StrategicAxesView() {
   const openChantierEntity = openChantierId
     ? data.chantiers.find((c) => c.id === openChantierId)
     : undefined;
+
+  /** Livrable ciblé à l'ouverture du panneau chantier (round <n>) — sourcé UNIQUEMENT par un clic
+   *  sur une étiquette de livrable de l'accordéon "Vue par axe" (`AxisChantierProjetAccordion.tsx`,
+   *  `onDeliverableClick` ci-dessous). Volontairement PAS dans l'URL (contrairement à
+   *  `chantier`/`action` ci-dessus) : un livrable n'a pas d'existence adressable indépendante côté
+   *  route de cette page (seul `ChantierAction` a droit à `?action=`), et cette cible n'a de sens
+   *  qu'au moment précis du clic — un état local suffit, remis à zéro à chaque fermeture du panneau
+   *  (`closeChantierPanel` ci-dessous) pour qu'une réouverture ultérieure du MÊME chantier via
+   *  `openChantierId` seul ne rouvre pas à tort la modale de ce livrable. */
+  const [initialOpenDeliverable, setInitialOpenDeliverable] = useState<
+    { actionId: string; deliverableId: string } | undefined
+  >(undefined);
 
   /**
    * Écrit les entités validées par `StrategicImportButton` (round 4, point 3) — la librairie
@@ -424,6 +454,7 @@ export function StrategicAxesView() {
               chantiers={data.chantiers}
               chantierActions={data.chantierActions}
               onProjetClick={openChantierPanel}
+              onDeliverableClick={openChantierPanelOnDeliverable}
             />
           </div>
         </div>
@@ -444,6 +475,7 @@ export function StrategicAxesView() {
           <ChantierDetailPanel
             chantierId={openChantierId}
             focusActionId={focusActionId}
+            initialOpenDeliverable={initialOpenDeliverable}
             onClose={closeChantierPanel}
           />
         )}

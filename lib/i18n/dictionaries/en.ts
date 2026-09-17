@@ -1637,11 +1637,11 @@ const en: Record<string, string> = {
   // "Split by axis" card of EffectifsPageClient.tsx) ────────────────────────────────────────
   "staffingPeriod.title": "FTE breakdown",
   "staffingPeriod.subtitle": "FTEs assigned to programme workstreams, {mode}, {scope}.",
-  "staffingPeriod.subtitle.modeTeam": "by team",
+  "staffingPeriod.subtitle.modeTeam": "by department",
   "staffingPeriod.subtitle.modeAxis": "by axis",
   "staffingPeriod.subtitle.scopeAll": "across the whole timeline",
   "staffingPeriod.subtitle.scopePeriod": "for {period}",
-  "staffingPeriod.mode.period": "Period",
+  "staffingPeriod.mode.period": "Department",
   "staffingPeriod.mode.axis": "Axis",
   "staffingPeriod.granularity.quarterly": "Quarter",
   "staffingPeriod.granularity.semiannual": "Half-year",

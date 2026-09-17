@@ -316,13 +316,16 @@ export function TimelineGridColumns({ columns }: { columns: TimelineColumn[] }) 
  *  - `"solid"` (item fin type action/phase) : remplissage opaque, texte lisible calculé
  *    automatiquement (`readableTextColor`). Le contenu n'est affiché QUE si la barre est assez
  *    large (`inlineMinWidthPct`), sinon le libellé est rabattu juste à droite de la barre.
- *    Round 19 : quand `progressPct` est fourni EN PLUS de `variant="solid"` (feuille de route
- *    programme, `ProgramRoadmap.tsx`), le remplissage devient à DEUX TONS de la MÊME couleur — une
- *    base claire (`withAlpha(color, 0.22)`) sur toute la largeur de la barre (la durée) PLUS une
- *    surcouche soutenue (`withAlpha(color, 0.9)`, même opacité que l'ancien remplissage plein) sur
- *    `progressPct`% à gauche (l'avancement) — plutôt qu'un remplissage plat. Volontairement PAS de
- *    sémantique rouge/ambre/vert : juste deux teintes de la couleur de l'axe, façon jauge "avancement
- *    dans une durée". STRICTEMENT additif/gated sur `progressPct !== undefined` : un
+ *    Round 25 (retour PO — "double barre") : quand `progressPct` est fourni EN PLUS de
+ *    `variant="solid"` (feuille de route programme, `ProgramRoadmap.tsx`), le remplissage n'est PLUS
+ *    à deux tons de la MÊME couleur (round 19 — deux opacités de la même teinte avec un bord net à
+ *    leur jonction, relu comme "deux barres empilées" par le PO même après une première tentative de
+ *    correction). Remplacé par une piste/jauge classique : un fond NEUTRE gris clair
+ *    (`bg-neutral-100`, même piste que `ProgressBar.tsx`) sur toute la largeur de la barre (la durée)
+ *    PLUS un remplissage plein d'UNE SEULE opacité (`withAlpha(color, 0.9)`) sur `progressPct`% à
+ *    gauche (l'avancement) — piste et remplissage se distinguent par la TEINTE (gris neutre vs
+ *    couleur d'axe), plus par deux opacités de la même couleur, donc plus de bord "même hue des deux
+ *    côtés" qui lise comme un doublon. STRICTEMENT additif/gated sur `progressPct !== undefined` : un
  *    `variant="solid"` SANS `progressPct` (actions de `ChantierGantt.tsx`) garde son rendu plat
  *    historique à l'identique.
  *
@@ -384,10 +387,10 @@ export function TimelineBar({
   // d'identité de l'appelant.
   const isBracket = variant === "bracket";
   const inline = !isBracket && width >= inlineMinWidthPct;
-  // Round 19 : rendu à deux tons — voir doc-comment de `TimelineBar` ci-dessus. Gated sur les DEUX
-  // conditions : un `variant="solid"` sans `progressPct` (actions de `ChantierGantt.tsx`) doit
-  // rester inchangé.
-  const solidTwoTone = variant === "solid" && progressPct !== undefined;
+  // Round 25 : piste neutre + remplissage plein — voir doc-comment de `TimelineBar` ci-dessus. Gated
+  // sur les DEUX conditions : un `variant="solid"` sans `progressPct` (actions de
+  // `ChantierGantt.tsx`) doit rester inchangé.
+  const solidWithTrack = variant === "solid" && progressPct !== undefined;
   return (
     <Tooltip
       text={tooltipText}
@@ -410,31 +413,32 @@ export function TimelineBar({
             : undefined
         }
         className={`relative w-full overflow-hidden ${roundedClassName} ${variant === "outline" ? "border" : ""} ${
+          solidWithTrack ? "bg-neutral-100" : ""
+        } ${
           onClick
             ? "cursor-pointer transition hover:brightness-110 hover:ring-2 hover:ring-bp-coral/40"
             : ""
         } ${ringed ? "ring-1 ring-rag-amber" : ""}`}
         style={{
           height,
-          backgroundColor:
-            variant === "solid"
-              ? withAlpha(color, solidTwoTone ? 0.22 : 0.9)
+          backgroundColor: solidWithTrack
+            ? undefined
+            : variant === "solid"
+              ? withAlpha(color, 0.9)
               : isBracket
                 ? withAlpha(color, 0.85)
                 : withAlpha(color, 0.16),
           borderColor: variant === "outline" ? withAlpha(color, 0.65) : undefined,
           color: variant === "solid" ? readableTextColor(color) : undefined,
-          // Round 19 : sur la base claire du rendu à deux tons, un texte blanc câblé pour la teinte
-          // PLEINE (la majorité des couleurs d'axe réelles sont sombres/saturées — voir
-          // `COLOR_CHOICES` de `AxisForm.tsx` — donc reçoivent du texte blanc via `readableTextColor`)
-          // perdrait tout contraste : la base claire (0.22) d'une couleur sombre reste un ton PÂLE.
-          // Un halo sombre derrière les glyphes règle ça sans recalculer une couleur par zone (le
-          // libellé chevauche les deux tons selon `progressPct`) — gated au seul cas concerné (deux
-          // tons ET texte blanc), donc sans effet sur les couleurs d'axe claires (texte déjà sombre,
-          // lisible sur les deux tons sans aide) ni sur le remplissage plat historique.
+          // Round 25 : le libellé (nom du projet) peut chevaucher la piste neutre ET le remplissage
+          // coloré selon `progressPct` — un halo sombre autour des glyphes (pas juste un décalage
+          // dans une direction) garde le texte blanc lisible sur les DEUX fonds, y compris la piste
+          // neutre très claire où un simple `text-shadow` décalé serait insuffisant. Gated au seul
+          // cas concerné (piste+remplissage ET texte blanc), sans effet sur les couleurs d'axe
+          // claires (texte déjà sombre) ni sur le remplissage plat historique.
           textShadow:
-            solidTwoTone && readableTextColor(color) === "#ffffff"
-              ? "0 1px 2px rgba(0, 0, 0, 0.55)"
+            solidWithTrack && readableTextColor(color) === "#ffffff"
+              ? "-1px -1px 1.5px rgba(0,0,0,0.65), 1px -1px 1.5px rgba(0,0,0,0.65), -1px 1px 1.5px rgba(0,0,0,0.65), 1px 1px 1.5px rgba(0,0,0,0.65)"
               : undefined,
         }}
       >
@@ -445,7 +449,7 @@ export function TimelineBar({
             style={{ width: `${progressPct}%`, backgroundColor: withAlpha(color, 0.42) }}
           />
         )}
-        {solidTwoTone && (
+        {solidWithTrack && (
           <div
             aria-hidden
             className="absolute inset-y-0 left-0"
@@ -475,21 +479,21 @@ export function TimelineBar({
 }
 
 /**
- * UN repère ponctuel (petit point plein), positionné en pourcentage sur la piste temporelle —
+ * UN repère ponctuel (petit losange plein), positionné en pourcentage sur la piste temporelle —
  * pendant de `TimelineBar` pour un événement DATÉ mais SANS durée (ex. l'échéance d'un livrable), là
  * où `TimelineBar` suppose toujours une plage `left`→`left+width`. Primitive pure : ne connaît que
  * le positionnement/la couleur, l'appelant décide de la sémantique (couleur par statut, etc.).
  *
- * Round 24 (Phase 3, fix D) : forme changée de losange (carré pivoté 45°) à simple point rond — le
- * losange, jugé trop imposant/visuellement incohérent avec le reste de la charte (qui privilégie
- * des pastilles rondes pour toute identité axe/chantier ailleurs dans cette même fonctionnalité),
- * cède la place à un petit disque plein `rounded-full`, taille par défaut réduite en conséquence
- * (12 → 9).
+ * Round 25 (retour PO) : forme revenue à un losange (carré pivoté 45°) — le disque rond du round 24
+ * se lisait comme n'importe quel autre point de la charte (axes, statuts…) et se distinguait mal des
+ * livrables. Mais NETTEMENT plus petit que l'ancien losange pré-round-24 (~17px) : `ProgramRoadmap.tsx`
+ * le pose désormais directement SUR la barre du projet (plus dans une piste séparée en dessous), un
+ * gros losange y aurait davantage débordé/gêné le clic sur la barre elle-même.
  */
 export function TimelineMarker({
   leftPct,
   top,
-  size = 9,
+  size = 10,
   color,
   onClick,
   ariaLabel,
@@ -520,7 +524,7 @@ export function TimelineMarker({
               }
             : undefined
         }
-        className={`rounded-full border border-white shadow-sm ${
+        className={`rounded-[1.5px] border border-white shadow-sm ${
           onClick
             ? "cursor-pointer transition hover:brightness-110 hover:ring-2 hover:ring-bp-coral/40"
             : ""
@@ -529,7 +533,10 @@ export function TimelineMarker({
           width: size,
           height: size,
           backgroundColor: color,
-          transform: "translate(-50%, -50%)",
+          // `-50%, -50%` centre le losange sur `(leftPct, top)` avant la rotation ; `rotate(45deg)`
+          // transforme le carré en losange APRÈS ce centrage, dans le même repère (donc toujours
+          // centré sur le point visé, pas décalé par la rotation).
+          transform: "translate(-50%, -50%) rotate(45deg)",
         }}
       />
     </Tooltip>

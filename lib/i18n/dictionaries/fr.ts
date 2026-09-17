@@ -1732,11 +1732,11 @@ const fr: Record<string, string> = {
   // toggle "Période"/"Axe" et selon qu'une période est épinglée (voir les clés .subtitle.* ci-
   // dessous), pour répondre explicitement à "ça représente quoi, ce nombre d'ETP ?".
   "staffingPeriod.subtitle": "ETP affectés aux chantiers du programme, {mode}, {scope}.",
-  "staffingPeriod.subtitle.modeTeam": "par équipe",
+  "staffingPeriod.subtitle.modeTeam": "par département",
   "staffingPeriod.subtitle.modeAxis": "par axe",
   "staffingPeriod.subtitle.scopeAll": "sur l'ensemble de la période",
   "staffingPeriod.subtitle.scopePeriod": "pour {period}",
-  "staffingPeriod.mode.period": "Période",
+  "staffingPeriod.mode.period": "Département",
   "staffingPeriod.mode.axis": "Axe",
   "staffingPeriod.granularity.quarterly": "Trimestre",
   "staffingPeriod.granularity.semiannual": "Semestre",

@@ -1272,6 +1272,7 @@ function ChantierActionForm({
 export function ChantierDetailPanel({
   chantierId,
   focusActionId = "",
+  initialOpenDeliverable,
   onClose,
 }: {
   /** Id du chantier affiché — remplace l'ancien `?id=…` de la route dédiée. */
@@ -1279,6 +1280,14 @@ export function ChantierDetailPanel({
   /** Action à mettre en évidence à l'ouverture (ex. venant d'un clic sur le Gantt) — remplace
    *  l'ancien `?action=…`. */
   focusActionId?: string;
+  /** Livrable précis à ouvrir DIRECTEMENT dans sa propre modale (`DeliverableDetailModal`) dès
+   *  l'arrivée sur ce panneau (round <n>) — sourcé depuis un clic sur un livrable de l'accordéon
+   *  "Vue par axe" (`AxisChantierProjetAccordion.tsx`, via `StrategicAxesView.tsx`), qui vise un
+   *  livrable précis plutôt qu'un simple levier entier (`focusActionId` ci-dessus). Pendant externe
+   *  du state interne `openDeliverable` déjà alimenté depuis l'onglet "Timeline" (clic sur un
+   *  losange) — voir l'effet qui l'initialise plus bas, même mécanique de prop "fraîche" que
+   *  `focusActionId`. */
+  initialOpenDeliverable?: { actionId: string; deliverableId: string };
   /** Ferme le panneau (typiquement : retire `?chantier=`/`&action=` de l'URL de la page appelante).
    *  Appelé par tout ce qui, sur l'ancienne route, naviguait AILLEURS (lien retour, suppression) —
    *  voir `navigateAway` ci-dessous pour le cas où il faut en plus une VRAIE navigation. */
@@ -1474,6 +1483,21 @@ export function ChantierDetailPanel({
     deliverableId: string;
   } | null>(null);
   const [addDeliverableOpen, setAddDeliverableOpen] = useState(false);
+
+  // Ouverture initiale ciblée sur UN livrable (`initialOpenDeliverable`, prop externe) — même
+  // mécanique que l'effet sur `focusActionId` plus bas : keyé sur les valeurs PRIMITIVES de la prop
+  // (pas l'objet lui-même, recréé à chaque rendu de l'appelant) pour ne se déclencher qu'à un
+  // changement de livrable ciblé réel, jamais à chaque rendu — sans quoi cet effet raflerait la main
+  // à chaque fermeture manuelle de la modale par l'utilisateur (`setOpenDeliverable(null)` serait
+  // immédiatement écrasé). Une prop FRAÎCHE (ex. un second clic, depuis l'accordéon, sur un autre
+  // livrable pendant que le panneau reste monté) prime toujours sur une fermeture manuelle
+  // précédente, même parti pris que `focusActionId`.
+  useEffect(() => {
+    if (initialOpenDeliverable) {
+      setOpenDeliverable(initialOpenDeliverable);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOpenDeliverable?.actionId, initialOpenDeliverable?.deliverableId]);
 
   // ── Onglet "Timeline" (ex-"Progression", fusionné avec l'ex-onglet "Timeline" dédié aux phases
   // de livrables — round <n>, deux vues calendaires disjointes jugées peu lisibles) — une barre par
