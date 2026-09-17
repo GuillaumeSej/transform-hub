@@ -100,7 +100,7 @@ describe("dashboardWidgets — initiative health reorder migration", () => {
 
   it("does not move initiative-health if neither 'alerts' nor 'portfolio-funnel' is present", () => {
     const before: DashboardWidgetInstance[] = [
-      { instanceId: "pnl", type: "pnl", span: "M" },
+      { instanceId: "sankey", type: "sankey", span: "M" },
       {
         instanceId: "initiative-health",
         type: "initiative-health",
@@ -153,20 +153,20 @@ describe("dashboardWidgets — cycleSpan", () => {
 
 describe("dashboardWidgets — addWidget / removeWidget / setWidgetSpan", () => {
   it("adds a widget not already present, at the end, with its default span", () => {
-    const layout = removeWidget(buildDefaultLayout(), "pnl");
-    const next = addWidget(layout, "pnl");
+    const layout = removeWidget(buildDefaultLayout(), "workstream-table");
+    const next = addWidget(layout, "workstream-table");
     const added = next[next.length - 1];
-    expect(added.type).toBe("pnl");
+    expect(added.type).toBe("workstream-table");
     expect(added.span).toBe("XL");
   });
 
   it("allows adding a duplicate of an already-present type, with a distinct instanceId", () => {
     const layout = buildDefaultLayout();
-    const next = addWidget(layout, "pnl");
+    const next = addWidget(layout, "workstream-table");
     expect(next).toHaveLength(layout.length + 1);
-    const pnlInstances = next.filter((w) => w.type === "pnl");
-    expect(pnlInstances).toHaveLength(2);
-    expect(pnlInstances[0].instanceId).not.toBe(pnlInstances[1].instanceId);
+    const wtInstances = next.filter((w) => w.type === "workstream-table");
+    expect(wtInstances).toHaveLength(2);
+    expect(wtInstances[0].instanceId).not.toBe(wtInstances[1].instanceId);
   });
 
   it("returns the same array reference for an unknown widget type", () => {
@@ -183,8 +183,8 @@ describe("dashboardWidgets — addWidget / removeWidget / setWidgetSpan", () => 
 
   it("setWidgetSpan updates only the targeted instance", () => {
     const layout = buildDefaultLayout();
-    const next = setWidgetSpan(layout, "pnl", "XL");
-    expect(next.find((w) => w.instanceId === "pnl")?.span).toBe("XL");
+    const next = setWidgetSpan(layout, "workstream-table", "L");
+    expect(next.find((w) => w.instanceId === "workstream-table")?.span).toBe("L");
     expect(next.find((w) => w.instanceId === "alerts")?.span).toBe(
       layout.find((w) => w.instanceId === "alerts")?.span
     );
@@ -233,9 +233,9 @@ describe("dashboardWidgets — builder générique (customViews)", () => {
       "function-country",
       "workstream-lever",
     ]);
-    const pnl = layout.find((w) => w.type === "pnl")!;
-    expect(pnl.customViews).toHaveLength(1);
-    expect(pnl.view).toBe("account");
+    const workstreamBreakdown = layout.find((w) => w.type === "workstream-breakdown")!;
+    expect(workstreamBreakdown.customViews).toHaveLength(3);
+    expect(workstreamBreakdown.view).toBe("workstream");
   });
 
   it("non-builder widgets have no customViews field", () => {

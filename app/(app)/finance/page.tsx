@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LineChart } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -10,9 +10,12 @@ import {
   CostEngagedVsUpcomingChart,
   OpexRecurrentChart,
 } from "@/components/finance/FinanceCostCharts";
+import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
+import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import * as engine from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import type { Company, HierarchyNode } from "@/types";
 
 /**
  * Module Finance — le compte de résultat configuré (baseline P&L éditable, reforecast, waterfall)
@@ -25,6 +28,110 @@ export default function FinancePage() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
   const pnlRows = useMemo(() => engine.pnlImpactDetailed(data), [data]);
+
+  // Arborescence financière (optionnelle) de l'entreprise — même pattern que le dashboard
+  // (app/(app)/dashboard/DashboardPagePerformance.tsx) pour que le widget "Impact P&L par compte"
+  // ci-dessous fasse foi sur les mêmes comptes que le tableau "Compte de résultat configuré".
+  const [company, setCompany] = useState<Company | null>(null);
+  useEffect(() => {
+    const unsub = subscribeCompanies((companies) => {
+      setCompany(companies.find((c) => c.id === user?.companyId) ?? null);
+    }, user?.companyId ?? null);
+    return unsub;
+  }, [user?.companyId]);
+  const hierarchyLevels = useMemo(() => company?.hierarchyLevels ?? [], [company]);
+  const [hierarchyNodes, setHierarchyNodes] = useState<HierarchyNode[]>([]);
+  useEffect(() => {
+    if (!user?.companyId || hierarchyLevels.length === 0) {
+      setHierarchyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setHierarchyNodes, "financial");
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, hierarchyLevels.length]);
+
+  // ── Widget "Impact P&L par compte" (déplacé depuis le dashboard Performance) ──
+  // Filtres géographiques (cascade Région → Pays → Entité).
+  const [pnlFilterGeo, setPnlFilterGeo] = useState("");
+  const [pnlFilterCountry, setPnlFilterCountry] = useState("");
+  const [pnlFilterEntity, setPnlFilterEntity] = useState("");
+
+  const pnlFilteredLevers = useMemo(() => {
+    let levers = data.levers.filter((l) => l.status !== "cancelled");
+    if (pnlFilterGeo) levers = levers.filter((l) => l.geography === pnlFilterGeo);
+    if (pnlFilterCountry) levers = levers.filter((l) => l.country === pnlFilterCountry);
+    if (pnlFilterEntity) levers = levers.filter((l) => l.entity === pnlFilterEntity);
+    return levers;
+  }, [data, pnlFilterGeo, pnlFilterCountry, pnlFilterEntity]);
+
+  const pnlGeoOptions = useMemo(() => {
+    const vals = new Set<string>();
+    data.levers.forEach((l) => {
+      if (l.geography) vals.add(l.geography);
+    });
+    return Array.from(vals).sort();
+  }, [data]);
+  const pnlCountryOptions = useMemo(() => {
+    const vals = new Set<string>();
+    data.levers
+      .filter((l) => !pnlFilterGeo || l.geography === pnlFilterGeo)
+      .forEach((l) => {
+        if (l.country) vals.add(l.country);
+      });
+    return Array.from(vals).sort();
+  }, [data, pnlFilterGeo]);
+  const pnlEntityOptions = useMemo(() => {
+    const vals = new Set<string>();
+    data.levers
+      .filter((l) => !pnlFilterGeo || l.geography === pnlFilterGeo)
+      .filter((l) => !pnlFilterCountry || l.country === pnlFilterCountry)
+      .forEach((l) => {
+        if (l.entity) vals.add(l.entity);
+      });
+    return Array.from(vals).sort();
+  }, [data, pnlFilterGeo, pnlFilterCountry]);
+
+  const pnlFilteredData = useMemo(
+    () => ({ ...data, levers: pnlFilteredLevers }),
+    [data, pnlFilteredLevers]
+  );
+
+  // Filtre temporel (cascade Année → Trimestre → Mois).
+  const fyYear = new Date(data.program.fyStart).getFullYear().toString();
+  const [pnlYear, setPnlYear] = useState(fyYear);
+  const [pnlQuarter, setPnlQuarter] = useState("");
+  const [pnlMonth, setPnlMonth] = useState("");
+
+  const pnlPeriodFilter: engine.PnlPeriodFilter | undefined = useMemo(() => {
+    if (!pnlYear) return undefined;
+    return {
+      year: pnlYear,
+      ...(pnlQuarter ? { quarter: pnlQuarter } : {}),
+      ...(pnlMonth ? { month: pnlMonth } : {}),
+    };
+  }, [pnlYear, pnlQuarter, pnlMonth]);
+
+  const pnlQuarterMonths: string[] = useMemo(() => {
+    if (!pnlQuarter) return engine.MONTH_LABELS;
+    const qIdx = parseInt(pnlQuarter.replace("Q", "")) - 1;
+    return engine.MONTH_LABELS.slice(qIdx * 3, qIdx * 3 + 3);
+  }, [pnlQuarter]);
+
+  const pnlDetailedData = useMemo(
+    () =>
+      engine.pnlImpactDetailed(pnlFilteredData, pnlPeriodFilter, hierarchyNodes, hierarchyLevels),
+    [pnlFilteredData, pnlPeriodFilter, hierarchyNodes, hierarchyLevels]
+  );
+  const pnlData = useMemo(
+    () =>
+      pnlDetailedData.map((d) => ({
+        account: d.accountName,
+        plan: d.plan,
+        realized: d.realized,
+      })),
+    [pnlDetailedData]
+  );
 
   return (
     <div className="space-y-6">
@@ -41,6 +148,108 @@ export default function FinancePage() {
         <CostCommitmentTimelineChart data={data} />
         <OpexRecurrentChart data={data} />
       </div>
+
+      <Card className="mb-0">
+        <CardHeader
+          title={t("dashboard.widgets.pnl")}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                value={pnlFilterGeo}
+                onChange={(e) => {
+                  setPnlFilterGeo(e.target.value);
+                  setPnlFilterCountry("");
+                  setPnlFilterEntity("");
+                }}
+              >
+                <option value="">{t("pnl.allRegions")}</option>
+                {pnlGeoOptions.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                value={pnlFilterCountry}
+                onChange={(e) => {
+                  setPnlFilterCountry(e.target.value);
+                  setPnlFilterEntity("");
+                }}
+              >
+                <option value="">{t("pnl.allCountries")}</option>
+                {pnlCountryOptions.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                value={pnlFilterEntity}
+                onChange={(e) => setPnlFilterEntity(e.target.value)}
+              >
+                <option value="">{t("pnl.allEntities")}</option>
+                {pnlEntityOptions.map((ent) => (
+                  <option key={ent} value={ent}>
+                    {ent}
+                  </option>
+                ))}
+              </select>
+              {/* Filtres temporels : Année → Trimestre → Mois */}
+              <span className="mx-1 text-[10px] text-tertiary">|</span>
+              <select
+                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                value={pnlYear}
+                onChange={(e) => {
+                  setPnlYear(e.target.value);
+                  setPnlQuarter("");
+                  setPnlMonth("");
+                }}
+              >
+                <option value={fyYear}>{fyYear}</option>
+              </select>
+              <select
+                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                value={pnlQuarter}
+                onChange={(e) => {
+                  setPnlQuarter(e.target.value);
+                  setPnlMonth("");
+                }}
+              >
+                <option value="">{t("pnl.allQuarters")}</option>
+                {["Q1", "Q2", "Q3", "Q4"].map((q) => (
+                  <option key={q} value={q}>
+                    {q}
+                  </option>
+                ))}
+              </select>
+              {pnlQuarter && (
+                <select
+                  className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
+                  value={pnlMonth}
+                  onChange={(e) => setPnlMonth(e.target.value)}
+                >
+                  <option value="">{t("pnl.allMonths")}</option>
+                  {pnlQuarterMonths.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          }
+        />
+        <CardBody>
+          <PnlBarChart
+            data={pnlData}
+            labelPlan={t("chart.pnl.plan")}
+            labelRealized={t("chart.pnl.realized")}
+          />
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title={t("finance.pnlConfiguredTitle", "Compte de résultat configuré")} />

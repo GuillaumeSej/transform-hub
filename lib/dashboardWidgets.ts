@@ -46,7 +46,6 @@ export type DashboardWidgetType =
   | "geo-breakdown"
   | "workstream-table"
   | "dependencies"
-  | "pnl"
   | "underperformers"
   | "dependency-alerts"
   | "portfolio-funnel"
@@ -79,7 +78,6 @@ export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   "geo-breakdown": "portfolio",
   "workstream-table": "portfolio",
   dependencies: "prioritization",
-  pnl: "portfolio",
   underperformers: "prioritization",
   "dependency-alerts": "prioritization",
   "initiative-health": "prioritization",
@@ -330,26 +328,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     icon: "Unlink",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "pnl",
-    label: "Impact P&L par compte",
-    icon: "LineChart",
-    defaultSpan: "XL",
-    allowedSpans: ["M", "L", "XL"],
-    // Pas de viewOptions legacy (ce widget n'avait qu'une seule vue câblée en dur avant ce
-    // changement) — seul builderDimensionCount + defaultCustomViews existent, donc "configurable"
-    // au sens du builder générique mais pas au sens de l'ancien mécanisme viewOptions.
-    builderDimensionCount: 1,
-    defaultCustomViews: [
-      {
-        id: "account",
-        metric: "realizedSavings",
-        dimensions: ["pnlAccount"],
-        label: "Impact réalisé par compte P&L",
-      },
-    ],
-    defaultView: "account",
   },
 ];
 
