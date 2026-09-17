@@ -80,7 +80,29 @@ export function JCurveChart({
           tickLine={false}
           tickFormatter={(v) => `€${v}M`}
         />
-        <Tooltip formatter={(value) => `€${Number(value).toFixed(2)}M`} />
+        <Tooltip
+          content={({ active, label, payload }) => {
+            if (!active || !payload) return null;
+            // planPositive/planNegative (juste au-dessus) ne sont que la série "plan" scindée en
+            // deux pour colorer les aires vert/rouge — un détail de rendu, pas une donnée à
+            // afficher : on les exclut du tooltip par dataKey plutôt que de compter sur
+            // `legendType="none"`, qui ne masque que la légende, pas le tooltip.
+            const entries = payload.filter(
+              (entry) => entry.dataKey !== "planPositive" && entry.dataKey !== "planNegative"
+            );
+            if (entries.length === 0) return null;
+            return (
+              <div className="rounded-md border border-border bg-white px-3 py-2 text-xs shadow-lg">
+                <div className="mb-1 font-semibold text-primary">{label}</div>
+                {entries.map((entry) => (
+                  <div key={String(entry.dataKey)} style={{ color: entry.color }}>
+                    {entry.name} : €{Number(entry.value).toFixed(2)}M
+                  </div>
+                ))}
+              </div>
+            );
+          }}
+        />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         {/* Zone verte (au-dessus de 0) */}
         <Area
