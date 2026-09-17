@@ -400,9 +400,11 @@ describe("leversLogic — enriched action consolidation", () => {
     expect(result.action.deliveredDate).toBeDefined();
     expect(result.changedLever?.progress).toBe(100);
     expect(result.changedLever?.status).toBe("delivered");
+    // netSavings = savings − opexRec (lib/leverConsolidate.ts) : le CAPEX (1) ne réduit plus
+    // netSavings, il reste calculé/consolidé à part (KPI "CAPEX & coûts one-off").
     expect(result.changedLever?.reforecast).toEqual({
       grossSavings: 3,
-      netSavings: 2,
+      netSavings: 3,
       capex: 1,
       opexOneOff: 0,
       opexRec: 0,

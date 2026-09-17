@@ -989,9 +989,13 @@ export const mockData: BeTrackData = {
       capex: 0.0,
       fteImpact: -1,
       popImpacted: "",
+      // lockedPlan.netSavings relevé à 1.59 (>= netSavings réalisé 1.45) : un plan initial figé ne
+      // peut pas être inférieur au réalisé final d'un levier livré (voir data/mockData.ts::L014
+      // pour le même correctif — la valeur précédente, 1.22, était un artefact de saisie manuelle
+      // impossible en usage réel, le flux normal verrouillant lockedPlan dès le gel du plan).
       lockedPlan: {
-        grossSavings: 1.31,
-        netSavings: 1.22,
+        grossSavings: 1.61,
+        netSavings: 1.59,
         opexOneOff: 0.05,
         opexRec: 0.02,
         capex: 0,
@@ -1483,7 +1487,12 @@ export const mockData: BeTrackData = {
       capex: 0.0,
       fteImpact: -8,
       popImpacted: "",
-      lockedPlan: { grossSavings: 1.13, netSavings: 0.96, opexOneOff: 0.22, opexRec: 0, capex: 0 },
+      // lockedPlan.netSavings relevé à 1.15 (>= netSavings réalisé 1.1) : un plan initial figé ne
+      // peut pas être inférieur au réalisé final d'un levier livré — la valeur précédente (0.96)
+      // était un artefact de saisie manuelle du mock (netSavings 1.1 > lockedPlan 0.96 > reforecast
+      // 0.89), impossible en usage réel via l'app puisque le flux normal verrouille lockedPlan dès
+      // le gel du plan.
+      lockedPlan: { grossSavings: 1.32, netSavings: 1.15, opexOneOff: 0.22, opexRec: 0, capex: 0 },
       reforecast: { grossSavings: 1.05, netSavings: 0.89, opexOneOff: 0.2, opexRec: 0, capex: 0 },
       dependencies: [],
       description: "Réorganisation top management & spans of control.",

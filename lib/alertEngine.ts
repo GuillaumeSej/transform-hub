@@ -3,8 +3,8 @@ import { underperformers, dependencyAlerts } from "@/lib/engine";
 
 /**
  * Générateur d'alertes automatiques — fonction pure qui analyse les données du programme
- * et produit des alertes structurées pour les leviers en retard, en dépassement de coûts,
- * avec savings réduits, ou récemment avancés à M4/M5.
+ * et produit des alertes structurées pour les leviers en retard, en dépassement de coûts
+ * (CAPEX/one-off ou OPEX récurrent), ou avec savings réduits.
  *
  * Les alertes auto sont fusionnées avec les alertes manuelles (data.alerts) et dédupliquées
  * par scope (une alerte manuelle sur un levier a priorité sur l'auto-générée pour ce levier).
