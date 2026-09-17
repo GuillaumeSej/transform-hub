@@ -1,4 +1,5 @@
 import type {
+  ActionImpact,
   ActionStatus,
   Alert,
   BeTrackData,
@@ -199,6 +200,13 @@ function dateMatchesPeriod(dateStr: string | undefined, filter: PnlPeriodFilter)
   return true;
 }
 
+/** Sentinelle pour les montants dont le rattachement P&L n'a pas (encore) été précisé : à la
+ *  création d'un levier, il n'y a plus de rattachement à un compte P&L par défaut (ça se fait au
+ *  niveau de chaque action/impact, via `ActionImpact.hierarchyLeafId`) — tant qu'un impact n'a pas
+ *  de rattachement fin, son montant apparaît dans ce bucket plutôt que d'être arbitrairement
+ *  rattaché à un compte. */
+export const UNALLOCATED_ACCOUNT_ID = "__unallocated__";
+
 /** Impact P&L détaillé : plan vs réalisé par compte, ventilé par période.
  *
  *  - **Plan** : pour chaque levier/sous-levier, `lockedPlan.netSavings ?? netSavings` est
@@ -212,12 +220,14 @@ function dateMatchesPeriod(dateStr: string | undefined, filter: PnlPeriodFilter)
  *  Comptes P&L : si `hierarchyLevels` contient un niveau `semantic === "pnl"` avec des
  *  `hierarchyNodes` (domaine "financial") configurés pour ce niveau, ce sont CES nœuds qui
  *  font foi pour la liste des comptes — TOUS apparaissent dans le résultat (même sans aucun
- *  levier dessus, à plan=0/realized=0), et chaque levier est rattaché à son compte en
- *  remontant `lever.hierarchyLeafId` jusqu'à ce niveau macro (voir `resolveHierarchyPath`).
- *  Un levier sans `hierarchyLeafId` (donnée pas encore migrée) retombe sur l'ancien matching
- *  par `lever.pnlMap` / `impact.pnlMap` pour lui seul. Si aucune arborescence financière avec
- *  un niveau "pnl" n'est configurée, le comportement est identique à avant (aucun changement
- *  pour les entreprises sans arborescence). */
+ *  levier dessus, à plan=0/realized=0). Le rattachement de chaque montant suit cet ordre de
+ *  priorité : 1) rattachement fin de CET impact (`ActionImpact.hierarchyLeafId`, voir
+ *  `resolveImpactAccount`) ; 2) repli sur le rattachement du levier porteur (`hierarchyLeafId`,
+ *  compat ascendante/legacy) ; 3) repli sur l'ancien système sans arborescence
+ *  (`impact.pnlMap || lever.pnlMap`) ; 4) si toujours rien, le bucket `UNALLOCATED_ACCOUNT_ID`
+ *  ("Gains non attribués"). Si aucune arborescence financière avec un niveau "pnl" n'est
+ *  configurée, le comportement est identique à avant (aucun changement pour les entreprises sans
+ *  arborescence). */
 export function pnlImpactDetailed(
   data: BeTrackData,
   periodFilter?: PnlPeriodFilter,
@@ -260,6 +270,18 @@ export function pnlImpactDetailed(
     return path.find((entry) => entry.levelKey === pnlLevel!.key)?.code;
   };
 
+  // Même mécanique que `resolveLeverAccount`, appliquée au rattachement fin de CET impact
+  // (`ActionImpact.hierarchyLeafId`) — résolution prioritaire, voir doc-comment ci-dessus.
+  const resolveImpactAccount = (impact: ActionImpact): string | undefined => {
+    if (!useHierarchy || !impact.hierarchyLeafId) return undefined;
+    const path = resolveHierarchyPath(
+      impact.hierarchyLeafId,
+      financialNodes,
+      hierarchyLevels ?? []
+    );
+    return path.find((entry) => entry.levelKey === pnlLevel!.key)?.code;
+  };
+
   for (const lever of active) {
     const hierarchyAccount = resolveLeverAccount(lever);
     const actionImpacts = (lever.actions ?? []).flatMap((action) =>
@@ -267,7 +289,11 @@ export function pnlImpactDetailed(
     );
     if (actionImpacts.length > 0) {
       for (const { action, impact } of actionImpacts) {
-        const account = hierarchyAccount ?? (impact.pnlMap || lever.pnlMap);
+        const account =
+          resolveImpactAccount(impact) ??
+          hierarchyAccount ??
+          (impact.pnlMap || lever.pnlMap) ??
+          UNALLOCATED_ACCOUNT_ID;
         const signedAmount = impact.type === "saving" ? impact.amount : -impact.amount;
         if (!periodFilter || dateMatchesPeriod(action.end, periodFilter)) {
           addPlan(account, signedAmount);
@@ -283,7 +309,7 @@ export function pnlImpactDetailed(
     }
 
     // Levier sans impacts d'action détaillés : traité comme un bloc unique.
-    const account = hierarchyAccount ?? lever.pnlMap;
+    const account = hierarchyAccount ?? lever.pnlMap ?? UNALLOCATED_ACCOUNT_ID;
     const planAmount = lever.lockedPlan?.netSavings ?? lever.netSavings;
     const planDate = lever.end;
     if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) {
@@ -301,9 +327,11 @@ export function pnlImpactDetailed(
     .map(([id, vals]) => ({
       accountId: id,
       accountName:
-        (useHierarchy ? pnlNodes.find((node) => node.code === id)?.label : undefined) ??
-        data.pnlAccounts.find((a) => a.id === id)?.name ??
-        id,
+        id === UNALLOCATED_ACCOUNT_ID
+          ? "Gains non attribués"
+          : ((useHierarchy ? pnlNodes.find((node) => node.code === id)?.label : undefined) ??
+            data.pnlAccounts.find((a) => a.id === id)?.name ??
+            id),
       plan: Math.round(vals.plan * 10) / 10,
       realized: Math.round(vals.realized * 10) / 10,
     }))
