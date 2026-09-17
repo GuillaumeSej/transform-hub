@@ -583,46 +583,6 @@ const en: Record<string, string> = {
   "hr.commentPlaceholder": "Add a comment",
 
   // ─── adminCompanyDb ─────────────────────────────────────────────────────────
-  "adminCompanyDb.title": "Database — {name}",
-  "adminCompanyDb.resetSectionTitle": "Reset this company",
-  "adminCompanyDb.resetBodyPrefix": "Deletes the initiatives and financial hierarchy for",
-  "adminCompanyDb.resetBodySuffix":
-    "only — other companies are not affected. This action is irreversible.",
-  "adminCompanyDb.resetButton": "Reset {name}",
-  "adminCompanyDb.dangerZoneTitle": "Danger zone — all companies",
-  "adminCompanyDb.dangerZoneBodyPrefix":
-    "Resets all demo data (initiatives, comments, audit trail, headcount) for",
-  "adminCompanyDb.dangerZoneBodySuffix":
-    ", with no exceptions. Reserved for demo/test environments.",
-  "adminCompanyDb.allCompanies": "all companies",
-  "adminCompanyDb.resetAllButton": "Reset all demo data",
-  "adminCompanyDb.scopedModalTitle": "Reset {name}?",
-  "adminCompanyDb.deleting": "Deleting…",
-  "adminCompanyDb.confirmDelete": "Confirm deletion",
-  "adminCompanyDb.calculatingImpact": "Calculating impact…",
-  "adminCompanyDb.irreversibleWord": "irreversible",
-  "adminCompanyDb.scopedIntroPrefix": "This action is",
-  "adminCompanyDb.scopedIntroMiddle": "and will delete, for",
-  "adminCompanyDb.scopedIntroSuffix": "only:",
-  "adminCompanyDb.leverCount": "{n} initiative(s)",
-  "adminCompanyDb.commentThreadCount": "{n} comment thread(s) linked to these initiatives",
-  "adminCompanyDb.auditEntryCount": "{n} history entry(ies) linked to these initiatives",
-  "adminCompanyDb.allHierarchyNodes": "all financial hierarchy nodes for this company",
-  "adminCompanyDb.unaffectedNote":
-    "Data from other companies, as well as audit/comment entries not linked to an initiative of {name}, are not affected.",
-  "adminCompanyDb.globalModalTitle": "Reset all demo data?",
-  "adminCompanyDb.resetAllConfirm": "Reset everything",
-  "adminCompanyDb.globalBodyPrefix": "All changes made during this session, for",
-  "adminCompanyDb.globalBodySuffix":
-    "(initiatives, comments, audit trail, headcount), will be permanently lost and replaced with the initial demo data set.",
-  "adminCompanyDb.toastErrorTitle": "Error",
-  "adminCompanyDb.toastPlanError": "Could not calculate the reset impact.",
-  "adminCompanyDb.toastResetSuccessTitle": "Data reset",
-  "adminCompanyDb.toastScopedSuccessBody":
-    "The initiatives and hierarchy for {name} have been deleted.",
-  "adminCompanyDb.toastGlobalSuccessBody":
-    "All companies have been restored to the initial demo data set.",
-  "adminCompanyDb.toastResetFailBody": "The reset failed — see the console for details.",
 
   // ─── adminProgramsPanel ─────────────────────────────────────────────────────
   "adminProgramsPanel.title": "Program Management",
@@ -642,6 +602,7 @@ const en: Record<string, string> = {
     "Enables the Action Plan tab (Kanban/Gantt) on this program's levers. Add-on module enabled per the client's subscribed options — unchecked, this program's levers won't show that tab.",
 
   // ─── shared ───────────────────────────────────────────────────────────────
+  "shared.leverCount": "{n} lever(s)",
   "shared.appShell.mobileNavLabel": "Main navigation",
   "shared.appShell.strategicDependencyTitle": "Dependency at risk · {chantier}",
   "shared.appShell.strategicIndicatorTitle": "Indicator at risk · {name}",
@@ -763,7 +724,6 @@ const en: Record<string, string> = {
   "adminCompanies.tab.geoHierarchy": "Geographic hierarchy",
   "adminCompanies.tab.programs": "Programs",
   "adminCompanies.tab.dataHistory": "Data & History",
-  "adminCompanies.tab.database": "Database",
   "adminCompanies.backToList": "Back to company list",
   "adminCompanies.noneSelected": "No company selected.",
   "adminCompanies.notFound": "Company not found ({id}).",

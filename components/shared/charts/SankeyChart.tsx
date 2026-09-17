@@ -133,7 +133,7 @@ export function SankeyChart({
       >
         <Tooltip
           formatter={(value) => [
-            t("adminCompanyDb.leverCount", "{n} levier(s)").replace("{n}", String(value)),
+            t("shared.leverCount", "{n} levier(s)").replace("{n}", String(value)),
             "",
           ]}
         />

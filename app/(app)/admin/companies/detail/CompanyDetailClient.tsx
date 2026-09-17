@@ -10,7 +10,6 @@ import {
   Users,
   Network,
   Globe2,
-  Database,
   BarChart3,
   FolderKanban,
   SlidersHorizontal,
@@ -29,7 +28,6 @@ import { HierarchyEditor } from "@/components/admin/HierarchyEditor";
 import { ProgramsPanel } from "@/components/admin/ProgramsPanel";
 import { ProgramConfigEditor } from "@/components/admin/ProgramConfigEditor";
 import { CompanyDataHistoryPanel } from "@/components/admin/CompanyDataHistoryPanel";
-import { CompanyDatabasePanel } from "@/components/admin/CompanyDatabasePanel";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type TabId =
@@ -39,8 +37,7 @@ type TabId =
   | "financial-hierarchy"
   | "geographic-hierarchy"
   | "projects"
-  | "data"
-  | "database";
+  | "data";
 
 const TAB_IDS: TabId[] = [
   "settings",
@@ -50,7 +47,6 @@ const TAB_IDS: TabId[] = [
   "geographic-hierarchy",
   "projects",
   "data",
-  "database",
 ];
 
 /** Un `?tab=` d'URL est une donnée non fiable : on ne l'accepte que s'il désigne un onglet réel. */
@@ -91,7 +87,6 @@ function companyDetailTabs(
       label: t("adminCompanies.tab.dataHistory", "Données & Historique"),
       icon: BarChart3,
     },
-    { id: "database", label: t("adminCompanies.tab.database", "Base de données"), icon: Database },
   ];
 }
 
@@ -348,7 +343,6 @@ export default function CompanyDetailClient() {
             <ProgramsPanel companyId={company.id} initialManagedProgramId={urlManageProgram} />
           )}
           {tab === "data" && <CompanyDataHistoryPanel company={company} />}
-          {tab === "database" && <CompanyDatabasePanel company={company} />}
         </div>
       )}
     </div>

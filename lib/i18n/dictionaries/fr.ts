@@ -617,46 +617,6 @@ const fr: Record<string, string> = {
   "hr.commentPlaceholder": "Ajouter un commentaire",
 
   // ─── adminCompanyDb (Admin > Entreprises > Base de données) ────────────────
-  "adminCompanyDb.title": "Base de données — {name}",
-  "adminCompanyDb.resetSectionTitle": "Réinitialiser cette entreprise",
-  "adminCompanyDb.resetBodyPrefix": "Supprime les leviers et la hiérarchie financière de",
-  "adminCompanyDb.resetBodySuffix":
-    "uniquement — les autres entreprises ne sont pas affectées. Action irréversible.",
-  "adminCompanyDb.resetButton": "Réinitialiser {name}",
-  "adminCompanyDb.dangerZoneTitle": "Zone de danger — toutes les entreprises",
-  "adminCompanyDb.dangerZoneBodyPrefix":
-    "Réinitialise l'intégralité des données de démonstration (leviers, commentaires, audit, effectifs) pour",
-  "adminCompanyDb.dangerZoneBodySuffix":
-    ", sans distinction. À réserver aux environnements de démo/test.",
-  "adminCompanyDb.allCompanies": "toutes les entreprises",
-  "adminCompanyDb.resetAllButton": "Réinitialiser toutes les données de démo",
-  "adminCompanyDb.scopedModalTitle": "Réinitialiser {name} ?",
-  "adminCompanyDb.deleting": "Suppression…",
-  "adminCompanyDb.confirmDelete": "Confirmer la suppression",
-  "adminCompanyDb.calculatingImpact": "Calcul de l'impact en cours…",
-  "adminCompanyDb.irreversibleWord": "irréversible",
-  "adminCompanyDb.scopedIntroPrefix": "Cette action est",
-  "adminCompanyDb.scopedIntroMiddle": "et supprimera, pour",
-  "adminCompanyDb.scopedIntroSuffix": "uniquement :",
-  "adminCompanyDb.leverCount": "{n} levier(s)",
-  "adminCompanyDb.commentThreadCount": "{n} fil(s) de commentaires liés à ces leviers",
-  "adminCompanyDb.auditEntryCount": "{n} entrée(s) d'historique liées à ces leviers",
-  "adminCompanyDb.allHierarchyNodes": "tous les nœuds de hiérarchie financière de cette entreprise",
-  "adminCompanyDb.unaffectedNote":
-    "Les données des autres entreprises, ainsi que les entrées d'audit/commentaires non rattachées à un levier de {name}, ne sont pas affectées.",
-  "adminCompanyDb.globalModalTitle": "Réinitialiser toutes les données de démo ?",
-  "adminCompanyDb.resetAllConfirm": "Réinitialiser tout",
-  "adminCompanyDb.globalBodyPrefix": "Toutes les modifications effectuées dans cette session, pour",
-  "adminCompanyDb.globalBodySuffix":
-    "(leviers, commentaires, audit, effectifs), seront définitivement perdues et remplacées par le jeu de données de démo initial.",
-  "adminCompanyDb.toastErrorTitle": "Erreur",
-  "adminCompanyDb.toastPlanError": "Impossible de calculer l'impact du reset.",
-  "adminCompanyDb.toastResetSuccessTitle": "Données réinitialisées",
-  "adminCompanyDb.toastScopedSuccessBody":
-    "Les leviers et la hiérarchie de {name} ont été supprimés.",
-  "adminCompanyDb.toastGlobalSuccessBody":
-    "Toutes les entreprises sont revenues au jeu de données de démo initial.",
-  "adminCompanyDb.toastResetFailBody": "Le reset a échoué, voir la console pour le détail.",
 
   // ─── adminProgramsPanel (Admin > Entreprises > Programmes) ─────────────────
   "adminProgramsPanel.title": "Gestion des Programmes",
@@ -676,6 +636,7 @@ const fr: Record<string, string> = {
     "Active l'onglet Plan d'action (Kanban/Gantt) sur les leviers de ce programme. Module additionnel activable selon les options souscrites par le client — décoché, les leviers de ce programme n'affichent pas cet onglet.",
 
   // ─── shared (composants partagés) ──────────────────────────────────────────
+  "shared.leverCount": "{n} levier(s)",
   "shared.appShell.mobileNavLabel": "Navigation principale",
   "shared.appShell.strategicDependencyTitle": "Dépendance à risque · {chantier}",
   "shared.appShell.strategicIndicatorTitle": "Indicateur à risque · {name}",
@@ -797,7 +758,6 @@ const fr: Record<string, string> = {
   "adminCompanies.tab.geoHierarchy": "Arborescence géographique",
   "adminCompanies.tab.programs": "Programmes",
   "adminCompanies.tab.dataHistory": "Données & Historique",
-  "adminCompanies.tab.database": "Base de données",
   "adminCompanies.backToList": "Retour à la liste des entreprises",
   "adminCompanies.noneSelected": "Aucune entreprise sélectionnée.",
   "adminCompanies.notFound": "Entreprise introuvable ({id}).",

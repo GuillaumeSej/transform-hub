@@ -243,8 +243,7 @@ type LeversSeed = {
 
 /** Purge TOUS les leviers (et sous-leviers résiduels d'un ancien schéma) de TOUTES les
  * entreprises et réécrit le seed fourni. Utilitaire explicite (dev/ops — reset complet d'un
- * environnement, jamais un reset "démo" ciblé : voir `lib/companyResetLogic.ts` +
- * `lib/firestore/companyReset.ts` pour le reset scopé à UNE entreprise) — plus AUCUN call site
+ * environnement, jamais un reset "démo" ciblé) — plus AUCUN call site
  * automatique ne doit l'invoquer (voir lib/hooks/useStorage.ts : l'ancien
  * `ensureLeversSeeded`, qui déclenchait cette purge globale comme simple effet de bord d'un
  * chargement de page dès que `SCHEMA_VERSION` changeait, a été supprimé — c'était le bug le
