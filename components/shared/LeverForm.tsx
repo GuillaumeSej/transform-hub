@@ -122,6 +122,7 @@ export function LeverForm({
   onSubmit,
   onCancel,
   submitLabel,
+  canEditWorkstreamWeight = false,
 }: {
   data: BeTrackData;
   /** Résolution des libellés de statut selon le référentiel de l'entreprise (facultatif, retombe
@@ -135,6 +136,16 @@ export function LeverForm({
   onSubmit: (values: LeverFormValues) => void;
   onCancel: () => void;
   submitLabel?: string;
+  /** Round <n> (fondations RBAC déclaratives) — `Lever.workstreamWeightPct` (poids du levier dans
+   *  l'avancement déclaratif de son workstream, voir `lib/workstreamLogic.ts`) n'est éditable que
+   *  par le pilote du workstream. Aucun rôle "pilote de workstream" explicite n'existe dans le
+   *  RBAC actuel (`lib/roleProfiles.ts`/`useRole`) : l'appelant calcule ce booléen avec le contrôle
+   *  le plus proche disponible (même check que l'édition du levier lui-même, potentiellement
+   *  affiné avec `Workstream.sponsorUsername` — voir les call sites). Défaut `false` : le champ
+   *  reste caché (comportement historique inchangé) tant que l'appelant ne l'autorise pas
+   *  explicitement, y compris à la création (où le pilote du workstream n'a pas encore de raison
+   *  d'intervenir — le champ se règle ensuite depuis la fiche détail). */
+  canEditWorkstreamWeight?: boolean;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState<LeverFormValues>({
@@ -422,6 +433,27 @@ export function LeverForm({
             ))}
           </select>
         </Field>
+        {canEditWorkstreamWeight && (
+          <Field
+            label={t("leverForm.workstreamWeightPct", "Poids dans l'avancement du workstream (%)")}
+          >
+            <input
+              className={inputClass}
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={values.workstreamWeightPct ?? ""}
+              onChange={(e) =>
+                set(
+                  "workstreamWeightPct",
+                  e.target.value === "" ? undefined : Number(e.target.value)
+                )
+              }
+              placeholder={t("leverForm.workstreamWeightPctPlaceholder", "Poids implicite")}
+            />
+          </Field>
+        )}
         {projects.length > 0 ? (
           <Field label={t("leverForm.project")} required={projects.length > 1}>
             {projects.length > 1 ? (

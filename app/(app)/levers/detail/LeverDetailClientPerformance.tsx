@@ -109,6 +109,23 @@ export function LeverDetailClientPerformance() {
   useEffect(() => {
     if (requestedTab) setTab(requestedTab);
   }, [requestedTab, searchParams]);
+
+  // Round <n> (arborescence Workstream→Type→Levier→Action, `components/shared/LeverLibraryTree.tsx`)
+  // : `?action=<id>` cible une action précise de CE levier — bascule sur l'onglet "Plan d'action"
+  // et ouvre directement le formulaire d'édition de cette action (même geste que le clic sur une
+  // carte Kanban/barre de Gantt, `openActionForEdit` ci-dessous), pour que le lien "amène bien sur
+  // la fiche action" plutôt que sur le seul onglet. Un utilisateur en lecture seule n'ouvre jamais
+  // le formulaire (celui-ci reste pleinement éditable, voir le doc-comment d'`openActionForEdit`) :
+  // le paramètre est alors ignoré, l'onglet "Plan d'action" reste consultable tel quel.
+  const focusActionId = searchParams.get("action");
+  useEffect(() => {
+    if (!focusActionId || !lever || readOnly) return;
+    const target = (lever.actions ?? []).find((a) => a.id === focusActionId);
+    if (!target) return;
+    setTab("plan");
+    setActionModal({ mode: "edit", action: target });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusActionId, lever?.id]);
   const allDependencyAlerts = useMemo(() => engine.dependencyAlerts(data), [data]);
   const alerts = useMemo(() => generateAlerts(data), [data]);
 
@@ -328,6 +345,13 @@ export function LeverDetailClientPerformance() {
           lifecycle={lifecycle}
           companyId={user?.companyId}
           initialValues={lever}
+          // Round <n> (fondations RBAC déclaratives) : `workstreamWeightPct` devrait être réservé
+          // au pilote du workstream, mais aucun rôle "pilote de workstream" explicite n'existe dans
+          // le RBAC actuel (voir doc-comment du prop dans LeverForm.tsx) — on retombe donc sur le
+          // même contrôle que l'édition du levier lui-même (`!readOnly`, même gate que le bouton
+          // "Modifier le levier" ci-dessus), choix assumé et documenté ici plutôt qu'inventer un
+          // rôle qui n'existe pas.
+          canEditWorkstreamWeight={!readOnly}
           submitLabel={t("leverDetail.saveChanges", "Enregistrer les modifications")}
           onCancel={() => setEditOpen(false)}
           onSubmit={(values: LeverFormValues) => {

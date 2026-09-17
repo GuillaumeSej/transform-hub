@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LayoutGrid, Plus, Table2, TriangleAlert } from "lucide-react";
+import { LayoutGrid, ListTree, Plus, Table2, TriangleAlert } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
@@ -30,6 +30,7 @@ import { StageBadge } from "@/components/shared/StageBadge";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
 import { Kanban } from "@/components/shared/Kanban";
+import { LeverLibraryTree } from "@/components/shared/LeverLibraryTree";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { type FilterDef } from "@/components/shared/FilterBar";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
@@ -67,10 +68,14 @@ export function LeversPagePerformance() {
   const { showToast } = useToast();
   const searchParams = useSearchParams();
   const requestedView = searchParams.get("view");
-  const [view, setView] = useState<"table" | "kanban">(
-    requestedView === "kanban" ? "kanban" : "table"
+  const [view, setView] = useState<"table" | "kanban" | "tree">(
+    requestedView === "kanban" ? "kanban" : requestedView === "tree" ? "tree" : "table"
   );
-  useEffect(() => setView(requestedView === "kanban" ? "kanban" : "table"), [requestedView]);
+  useEffect(
+    () =>
+      setView(requestedView === "kanban" ? "kanban" : requestedView === "tree" ? "tree" : "table"),
+    [requestedView]
+  );
   const [newLeverOpen, setNewLeverOpen] = useState(false);
 
   // Arborescence financière (optionnelle) de l'entreprise courante — n'affiche des colonnes
@@ -723,6 +728,15 @@ export function LeversPagePerformance() {
               >
                 <LayoutGrid size={13} /> {t("levers.kanban")}
               </button>
+              <button
+                onClick={() => {
+                  setView("tree");
+                  setParam("view", "tree");
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${view === "tree" ? "bg-black text-white" : "bg-white text-secondary"}`}
+              >
+                <ListTree size={13} /> {t("levers.tree", "Arborescence")}
+              </button>
             </div>
           </div>
         </CardBody>
@@ -738,12 +752,34 @@ export function LeversPagePerformance() {
           defaultSort={{ key: "risk", direction: "desc" }}
           readOnly={readOnly}
         />
-      ) : (
+      ) : view === "kanban" ? (
         <Kanban
           levers={filteredLevers}
+          progressLevers={programScopedLevers}
+          workstreams={data.workstreams}
           onCardClick={(id) => router.push(`/levers/detail?id=${id}`)}
           stageOrder={lifecycle.activeCycle}
           stageLabel={lifecycle.shortLabel}
+        />
+      ) : (
+        <LeverLibraryTree
+          levers={filteredLevers}
+          progressLevers={programScopedLevers}
+          workstreams={data.workstreams}
+          onTypeClick={(type) => {
+            // Bascule sur la vue Table filtrée par Type (`f_type`, voir `filterDefs` ci-dessus) —
+            // pas de route dédiée "par type", ce filtre existant est la vue équivalente la plus
+            // proche (voir le rapport de livraison de cette fonctionnalité).
+            const next = new URLSearchParams(searchParams.toString());
+            next.set("view", "table");
+            next.set("f_type", type);
+            setView("table");
+            router.replace(`/levers?${next.toString()}`);
+          }}
+          onLeverClick={(leverId) => router.push(`/levers/detail?id=${leverId}`)}
+          onActionClick={(leverId, actionId) =>
+            router.push(`/levers/detail?id=${leverId}&tab=plan&action=${actionId}`)
+          }
         />
       )}
     </div>

@@ -3,24 +3,25 @@
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/shared/Avatar";
 import { ProgressBar } from "@/components/shared/ProgressBar";
+import { DeclaredProgressBadge } from "@/components/shared/DeclaredProgressBadge";
 import { fmtCurr } from "@/lib/engine";
 import { STATUS_CYCLE, STATUS_LABEL } from "@/lib/status-config";
+import { workstreamDeclaredProgress } from "@/lib/workstreamLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Lever, LeverStatus } from "@/types";
+import type { Lever, LeverStatus, Workstream } from "@/types";
 
-/** Vue kanban du pipeline de leviers par statut — porté depuis `.kanban`/`.kcard` du prototype legacy.
- * `stageOrder`/`stageLabel` permettent de refléter le référentiel de cycle de vie de l'entreprise
- * (via `useLifecycleLabels`) ; par défaut, retombe sur le cycle et les libellés codés en dur. */
-export function Kanban({
+/** Grille de colonnes par statut (le corps historique du Kanban, round <n> : extrait de `Kanban`
+ *  ci-dessous pour être répété une fois par swimlane workstream sans dupliquer le rendu carte). */
+function StatusColumns({
   levers,
   onCardClick,
-  stageOrder = STATUS_CYCLE,
-  stageLabel = (status: LeverStatus) => STATUS_LABEL[status],
+  stageOrder,
+  stageLabel,
 }: {
   levers: Lever[];
   onCardClick: (id: string) => void;
-  stageOrder?: LeverStatus[];
-  stageLabel?: (status: LeverStatus) => string;
+  stageOrder: LeverStatus[];
+  stageLabel: (status: LeverStatus) => string;
 }) {
   const { t } = useTranslation();
   const COLUMNS: { status: LeverStatus; label: string }[] = stageOrder.map((status) => ({
@@ -76,6 +77,117 @@ export function Kanban({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Vue kanban du pipeline de leviers par statut — porté depuis `.kanban`/`.kcard` du prototype legacy.
+ * `stageOrder`/`stageLabel` permettent de refléter le référentiel de cycle de vie de l'entreprise
+ * (via `useLifecycleLabels`) ; par défaut, retombe sur le cycle et les libellés codés en dur.
+ *
+ * Round <n> (fondations RBAC déclaratives) : swimlanes par workstream, une section par workstream
+ * (couleur + nom, même langage visuel que les sections d'axe de `StrategicAxesView.tsx`) contenant
+ * la même grille de colonnes par statut qu'avant ce round — pas de refonte du pipeline lui-même,
+ * juste un regroupement visuel supplémentaire. `workstreams` est optionnel : omis (ou vide), le
+ * comportement historique (une seule grille plate, sans swimlane) est préservé à l'identique —
+ * défaut rétro-compatible pour tout appelant qui ne l'a pas encore branché. */
+export function Kanban({
+  levers,
+  onCardClick,
+  stageOrder = STATUS_CYCLE,
+  stageLabel = (status: LeverStatus) => STATUS_LABEL[status],
+  workstreams = [],
+  /** Univers de leviers sur lequel calculer le badge % d'avancement déclaratif de chaque
+   *  swimlane (`workstreamDeclaredProgress`) — volontairement DISTINCT de `levers` (les cartes
+   *  affichées, potentiellement déjà filtrées par la barre de filtres de la page) : l'avancement
+   *  déclaratif d'un workstream doit refléter TOUS ses leviers, pas seulement ceux qui matchent le
+   *  filtre courant. Défaut = `levers`, pour les appelants qui n'ont qu'un seul ensemble sous la main. */
+  progressLevers = levers,
+}: {
+  levers: Lever[];
+  onCardClick: (id: string) => void;
+  stageOrder?: LeverStatus[];
+  stageLabel?: (status: LeverStatus) => string;
+  workstreams?: Workstream[];
+  progressLevers?: Lever[];
+}) {
+  const { t } = useTranslation();
+
+  if (workstreams.length === 0) {
+    return (
+      <StatusColumns
+        levers={levers}
+        onCardClick={onCardClick}
+        stageOrder={stageOrder}
+        stageLabel={stageLabel}
+      />
+    );
+  }
+
+  // Un levier dont `ws` ne correspond à AUCUN workstream connu (donnée legacy/désynchronisée) reste
+  // visible plutôt que silencieusement perdu — regroupé dans une swimlane "Autres" en fin de liste.
+  const knownIds = new Set(workstreams.map((w) => w.id));
+  const otherLevers = levers.filter((l) => !knownIds.has(l.ws));
+
+  return (
+    <div className="space-y-4">
+      {workstreams.map((ws) => {
+        const wsLevers = levers.filter((l) => l.ws === ws.id);
+        const declaredPct = workstreamDeclaredProgress(progressLevers, ws.id);
+        return (
+          <div key={ws.id} className="overflow-hidden rounded-lg border border-border bg-white">
+            <div
+              className="flex flex-wrap items-center gap-2 border-b border-border bg-neutral-50 px-3.5 py-2.5"
+              style={{ borderLeft: `4px solid ${ws.color ?? "var(--bp-warm-taupe)"}` }}
+            >
+              <span
+                aria-hidden
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: ws.color ?? "var(--bp-warm-taupe)" }}
+              />
+              <span className="text-[12.5px] font-bold text-primary">{ws.name}</span>
+              <span className="rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
+                {wsLevers.length}
+              </span>
+              <DeclaredProgressBadge pct={declaredPct} className="ml-auto" />
+            </div>
+            <div className="p-3">
+              {wsLevers.length === 0 ? (
+                <p className="py-4 text-center text-[11px] text-tertiary">
+                  {t("shared.kanban.noItems", "Aucun")}
+                </p>
+              ) : (
+                <StatusColumns
+                  levers={wsLevers}
+                  onCardClick={onCardClick}
+                  stageOrder={stageOrder}
+                  stageLabel={stageLabel}
+                />
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {otherLevers.length > 0 && (
+        <div className="overflow-hidden rounded-lg border border-border bg-white">
+          <div className="flex items-center gap-2 border-b border-border bg-neutral-50 px-3.5 py-2.5">
+            <span className="text-[12.5px] font-bold text-primary">
+              {t("shared.kanban.otherWorkstream", "Autres")}
+            </span>
+            <span className="rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
+              {otherLevers.length}
+            </span>
+          </div>
+          <div className="p-3">
+            <StatusColumns
+              levers={otherLevers}
+              onCardClick={onCardClick}
+              stageOrder={stageOrder}
+              stageLabel={stageLabel}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
