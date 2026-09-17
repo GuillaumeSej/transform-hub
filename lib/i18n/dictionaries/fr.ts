@@ -401,6 +401,7 @@ const fr: Record<string, string> = {
   // ─── leverDetail (page détail levier) ──────────────────────────────────────
   "leverDetail.tab.plan": "Plan d'action",
   "leverDetail.tab.collab": "Collaboration",
+  "leverDetail.loading": "Chargement…",
   "leverDetail.notFound": "Levier introuvable.",
   "leverDetail.backToPipeline": "Retour au pipeline",
   "leverDetail.restrictedAccess":

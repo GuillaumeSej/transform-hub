@@ -369,6 +369,7 @@ const en: Record<string, string> = {
   // ─── leverDetail (initiative detail page) ──────────────────────────────────
   "leverDetail.tab.plan": "Action plan",
   "leverDetail.tab.collab": "Collaboration",
+  "leverDetail.loading": "Loading…",
   "leverDetail.notFound": "Initiative not found.",
   "leverDetail.backToPipeline": "Back to pipeline",
   "leverDetail.restrictedAccess":

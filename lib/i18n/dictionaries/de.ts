@@ -351,6 +351,7 @@ const de: Record<string, string> = {
   // ─── leverDetail (Hebel-Detailseite) ────────────────────────────────────────
   "leverDetail.tab.plan": "Aktionsplan",
   "leverDetail.tab.collab": "Zusammenarbeit",
+  "leverDetail.loading": "Wird geladen…",
   "leverDetail.notFound": "Hebel nicht gefunden.",
   "leverDetail.backToPipeline": "Zurück zur Pipeline",
   "leverDetail.restrictedAccess":

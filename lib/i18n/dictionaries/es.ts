@@ -349,6 +349,7 @@ const es: Record<string, string> = {
   // ─── leverDetail (página de detalle de palanca) ────────────────────────────
   "leverDetail.tab.plan": "Plan de acción",
   "leverDetail.tab.collab": "Colaboración",
+  "leverDetail.loading": "Cargando…",
   "leverDetail.notFound": "Palanca no encontrada.",
   "leverDetail.backToPipeline": "Volver al pipeline",
   "leverDetail.restrictedAccess":

@@ -133,6 +133,11 @@ export function useBeTrackData(companyId?: string | null) {
   // (`ensure*Seeded`) qui écrivaient `data/mockData.ts` dans les documents Firestore de N'IMPORTE
   // QUELLE entreprise comme simple effet de bord d'un chargement de page.
   const [levers, setLevers] = useState<Lever[]>([]);
+  // true dès la première réponse Firestore de subscribeLevers (succès ou vide) — même pattern
+  // que `usePerformanceProgramSelector`'s `loaded`. Permet aux pages de distinguer "pas encore
+  // chargé" de "vraiment inexistant" et d'éviter un flash "Levier introuvable" juste après la
+  // création d'un levier, le temps que la page de détail reçoive sa propre souscription.
+  const [leversLoaded, setLeversLoaded] = useState(false);
   const [programConfig, setProgramConfig] = useState<programDb.ProgramSeed>(() =>
     emptyProgramConfig()
   );
@@ -194,7 +199,11 @@ export function useBeTrackData(companyId?: string | null) {
       if (cancelled) return;
 
       unsubscribers.push(
-        leversDb.subscribeLevers((l) => !cancelled && setLevers(l), companyId),
+        leversDb.subscribeLevers((l) => {
+          if (cancelled) return;
+          setLevers(l);
+          setLeversLoaded(true);
+        }, companyId),
         leversDb.subscribeComments((c) => !cancelled && setComments(c), companyId),
         leversDb.subscribeAuditLog((a) => !cancelled && setAudit(a), companyId),
         workforceDb.subscribeEmployees((e) => !cancelled && setEmployees(e), companyId),
@@ -601,6 +610,10 @@ export function useBeTrackData(companyId?: string | null) {
 
   return {
     ...data,
+    // true dès la première réponse Firestore de subscribeLevers — voir le commentaire sur
+    // useState ci-dessus. Les consommateurs (ex. LeverDetailClientPerformance) l'utilisent pour
+    // distinguer "en cours de chargement" de "levier introuvable".
+    leversLoaded,
     getComments: (leverId: string) => comments[leverId] ?? [],
     getLeverById: (id: string) => data.levers.find((l) => l.id === id),
     updateLever,

@@ -145,6 +145,17 @@ export function LeverDetailClientPerformance() {
   );
 
   if (!lever) {
+    // Tant que la souscription Firestore des leviers n'a pas encore répondu (ex. juste après la
+    // création d'un levier, le temps que cette page charge ses propres données), on ne sait pas
+    // encore si le levier existe — afficher un état de chargement plutôt qu'une fausse erreur
+    // "introuvable" qui flashait à chaque navigation. Voir lib/hooks/useStorage.ts::leversLoaded.
+    if (!data.leversLoaded) {
+      return (
+        <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
+          {t("leverDetail.loading", "Chargement…")}
+        </div>
+      );
+    }
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
         {t("leverDetail.notFound", "Levier introuvable.")}{" "}
