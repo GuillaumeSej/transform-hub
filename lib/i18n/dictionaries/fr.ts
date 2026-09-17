@@ -411,6 +411,19 @@ const fr: Record<string, string> = {
   "leverDetail.autoStageHint":
     "Cette étape est atteinte automatiquement quand le plan d'action est à 100 %",
   "leverDetail.moveToStage": "Passer en « {stage} »",
+  "leverDetail.approval.stageHint":
+    "Cette étape nécessite la cascade de validation (porteur → sponsor → CTO), voir ci-dessous",
+  "leverDetail.approval.submitHint":
+    "Ce levier est prêt pour la cascade de validation (porteur → sponsor → CTO).",
+  "leverDetail.approval.submit": "Soumettre pour validation",
+  "leverDetail.approval.requested": "Demande de validation envoyée",
+  "leverDetail.approval.pendingSponsor": "En attente de validation du sponsor",
+  "leverDetail.approval.pendingCto": "En attente de validation du CTO",
+  "leverDetail.approval.approve": "Approuver",
+  "leverDetail.approval.approved": "Étape approuvée",
+  "leverDetail.approval.reject": "Rejeter",
+  "leverDetail.approval.rejected": "Demande de validation rejetée",
+  "leverDetail.approval.error": "Action impossible",
   "leverDetail.actionsPlannedHint":
     "Des actions sont planifiées sur ce levier — il peut passer en « {stage} ».",
   "leverDetail.saveChanges": "Enregistrer les modifications",
@@ -734,6 +747,9 @@ const fr: Record<string, string> = {
   "adminHistory.action.completed": "Achèvement",
   "adminHistory.action.validated": "Validation",
   "adminHistory.action.commented": "Commentaire",
+  "adminHistory.action.approvalRequested": "Validation demandée",
+  "adminHistory.action.approvalApproved": "Étape validée",
+  "adminHistory.action.approvalRejected": "Validation rejetée",
   "adminHistory.title": "Historique des Modifications",
   "adminHistory.searchPlaceholder": "Rechercher...",
   "adminHistory.allActions": "Toutes les actions",

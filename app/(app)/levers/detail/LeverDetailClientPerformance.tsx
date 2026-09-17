@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { subscribeCompanies, subscribePrograms } from "@/lib/firestore/admin";
-import { canUserViewLever } from "@/lib/leversLogic";
+import {
+  canUserViewLever,
+  isLeverCtoOf,
+  isLeverOwnedBy,
+  isLeverSponsoredBy,
+} from "@/lib/leversLogic";
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,7 +26,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
-import { isReadOnlyUser } from "@/lib/roleProfiles";
+import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
 import type { CascadeResult } from "@/lib/engine";
@@ -62,7 +67,7 @@ export function LeverDetailClientPerformance() {
   const { t } = useTranslation();
   const { user } = useRole();
   const readOnly = isReadOnlyUser(user);
-  const data = useBeTrackData(user?.companyId ?? null);
+  const data = useBeTrackData(user?.companyId ?? null, user);
   const [roleClearance, setRoleClearance] = useState<Company["roleClearance"]>();
   const [riskThresholds, setRiskThresholds] = useState<Company["riskThresholds"]>();
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -191,6 +196,19 @@ export function LeverDetailClientPerformance() {
   }
 
   const ws = data.workstreams.find((w) => w.id === lever.ws);
+  // Round "cascade de validation" : l'utilisateur courant a-t-il le droit d'agir (approuver ou
+  // rejeter) sur l'étape actuellement en attente de la cascade ? Même résolution du sponsor du
+  // workstream que `canUserViewLever`/`isLeverSponsoredBy` ailleurs dans ce fichier.
+  const canActOnPendingApproval =
+    !!lever.approval &&
+    !!user &&
+    (isAnyAdmin(user) ||
+      (lever.approval.pendingStep === "sponsor" &&
+        isLeverSponsoredBy(lever, ws?.sponsorUsername, user)) ||
+      (lever.approval.pendingStep === "cto" && isLeverCtoOf(lever, user)));
+  // Idem pour le bouton "Soumettre pour validation" (voir requestLeverApproval) : seul le
+  // porteur du levier ou un admin peut initier la cascade.
+  const canSubmitApproval = !!user && (isAnyAdmin(user) || isLeverOwnedBy(lever, user));
   const real = engine.realizedSavings(lever);
   const realFte = engine.realizedFte(lever);
   const lockedPlanDisplay = engine.displayedLockedPlanNet(lever);
@@ -279,6 +297,11 @@ export function LeverDetailClientPerformance() {
               const isCurrent = lever.status === s;
               const isPast = STATUS_ORDER[lever.status] > STATUS_ORDER[s];
               const isAuto = s === "delivered";
+              // Round "cascade de validation" : le passage à "validated" (M3) ne se déclenche
+              // plus par un clic direct sur l'étape du stepper — il passe désormais par la
+              // cascade porteur → sponsor → CTO (voir le bandeau juste en dessous du stepper).
+              const isCascadeGated = s === "validated";
+              const isBlocked = isAuto || isCascadeGated;
               return (
                 <div
                   key={s}
@@ -286,7 +309,7 @@ export function LeverDetailClientPerformance() {
                 >
                   <button
                     onClick={() => {
-                      if (isAuto || isCurrent || readOnly) return;
+                      if (isBlocked || isCurrent || readOnly) return;
                       data.updateLever(lever.id, { status: s });
                       showToast(
                         t("leverDetail.statusUpdated", "Niveau mis à jour"),
@@ -294,17 +317,22 @@ export function LeverDetailClientPerformance() {
                         "success"
                       );
                     }}
-                    disabled={isAuto || readOnly}
+                    disabled={isBlocked || readOnly}
                     title={
                       isAuto
                         ? t(
                             "leverDetail.autoStageHint",
                             "Cette étape est atteinte automatiquement quand le plan d'action est à 100 %"
                           )
-                        : t("leverDetail.moveToStage", "Passer en « {stage} »").replace(
-                            "{stage}",
-                            lifecycle.shortLabel(s)
-                          )
+                        : isCascadeGated
+                          ? t(
+                              "leverDetail.approval.stageHint",
+                              "Cette étape nécessite la cascade de validation (porteur → sponsor → CTO), voir ci-dessous"
+                            )
+                          : t("leverDetail.moveToStage", "Passer en « {stage} »").replace(
+                              "{stage}",
+                              lifecycle.shortLabel(s)
+                            )
                     }
                     className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 transition ${
                       isCurrent
@@ -312,7 +340,7 @@ export function LeverDetailClientPerformance() {
                         : isPast
                           ? "border-rag-green bg-rag-green-light text-rag-green-dark"
                           : "border-border bg-neutral-50 text-secondary"
-                    } ${isAuto ? "cursor-not-allowed opacity-80" : "hover:border-black"}`}
+                    } ${isBlocked ? "cursor-not-allowed opacity-80" : "hover:border-black"}`}
                   >
                     <span className="text-[13px] font-bold">{i + 1}</span>
                     <span className="w-full text-center text-[10px] font-semibold uppercase tracking-wide">
@@ -326,6 +354,99 @@ export function LeverDetailClientPerformance() {
               );
             })}
           </div>
+          {!readOnly && lever.status === "qualified" && !lever.approval && canSubmitApproval && (
+            <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
+              <span className="flex items-center gap-1.5 text-xs text-info-blue">
+                <Send size={13} />{" "}
+                {t(
+                  "leverDetail.approval.submitHint",
+                  "Ce levier est prêt pour la cascade de validation (porteur → sponsor → CTO)."
+                )}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  try {
+                    data.requestLeverApproval(lever.id);
+                    showToast(
+                      t("leverDetail.approval.requested", "Demande de validation envoyée"),
+                      lever.name,
+                      "success"
+                    );
+                  } catch (err) {
+                    showToast(
+                      t("leverDetail.approval.error", "Action impossible"),
+                      err instanceof Error ? err.message : String(err),
+                      "error"
+                    );
+                  }
+                }}
+              >
+                {t("leverDetail.approval.submit", "Soumettre pour validation")}
+              </Button>
+            </div>
+          )}
+          {lever.approval && (
+            <div className="mt-2.5 rounded-md bg-info-blue-light px-3 py-2">
+              <div className="flex items-center gap-1.5 text-xs text-info-blue">
+                <Info size={13} />
+                {lever.approval.pendingStep === "sponsor"
+                  ? t("leverDetail.approval.pendingSponsor", "En attente de validation du sponsor")
+                  : t("leverDetail.approval.pendingCto", "En attente de validation du CTO")}
+              </div>
+              {!readOnly && canActOnPendingApproval && (
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      const step = lever.approval?.pendingStep;
+                      if (step !== "sponsor" && step !== "cto") return;
+                      try {
+                        data.approveLeverApprovalStep(lever.id, step);
+                        showToast(
+                          t("leverDetail.approval.approved", "Étape approuvée"),
+                          lever.name,
+                          "success"
+                        );
+                      } catch (err) {
+                        showToast(
+                          t("leverDetail.approval.error", "Action impossible"),
+                          err instanceof Error ? err.message : String(err),
+                          "error"
+                        );
+                      }
+                    }}
+                  >
+                    {t("leverDetail.approval.approve", "Approuver")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      try {
+                        data.rejectLeverApproval(lever.id);
+                        showToast(
+                          t("leverDetail.approval.rejected", "Demande de validation rejetée"),
+                          lever.name,
+                          "success"
+                        );
+                      } catch (err) {
+                        showToast(
+                          t("leverDetail.approval.error", "Action impossible"),
+                          err instanceof Error ? err.message : String(err),
+                          "error"
+                        );
+                      }
+                    }}
+                  >
+                    {t("leverDetail.approval.reject", "Rejeter")}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
           {!readOnly && hasAnyActions && STATUS_ORDER[lever.status] < STATUS_ORDER.in_progress && (
             <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">
               <span className="flex items-center gap-1.5 text-xs text-info-blue">

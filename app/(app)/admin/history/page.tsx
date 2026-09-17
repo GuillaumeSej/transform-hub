@@ -14,6 +14,11 @@ const ACTION_COLORS: Record<string, string> = {
   completed: "bg-purple-100 text-purple-700",
   validated: "bg-amber-100 text-amber-700",
   commented: "bg-gray-100 text-gray-600",
+  // Cascade de validation (voir lib/leversLogic.ts::requestLeverApproval/
+  // approveLeverApprovalStep/rejectLeverApproval).
+  approval_requested: "bg-amber-100 text-amber-700",
+  approval_approved: "bg-amber-100 text-amber-700",
+  approval_rejected: "bg-red-100 text-red-700",
 };
 
 function actionLabels(t: (key: string, fallback?: string) => string): Record<string, string> {
@@ -24,6 +29,9 @@ function actionLabels(t: (key: string, fallback?: string) => string): Record<str
     completed: t("adminHistory.action.completed", "Achèvement"),
     validated: t("adminHistory.action.validated", "Validation"),
     commented: t("adminHistory.action.commented", "Commentaire"),
+    approval_requested: t("adminHistory.action.approvalRequested", "Validation demandée"),
+    approval_approved: t("adminHistory.action.approvalApproved", "Étape validée"),
+    approval_rejected: t("adminHistory.action.approvalRejected", "Validation rejetée"),
   };
 }
 
@@ -122,6 +130,9 @@ export default function AdminHistoryPage() {
           <option value="completed">{ACTION_LABELS.completed}</option>
           <option value="validated">{ACTION_LABELS.validated}</option>
           <option value="commented">{ACTION_LABELS.commented}</option>
+          <option value="approval_requested">{ACTION_LABELS.approval_requested}</option>
+          <option value="approval_approved">{ACTION_LABELS.approval_approved}</option>
+          <option value="approval_rejected">{ACTION_LABELS.approval_rejected}</option>
         </select>
         <select
           value={entityFilter}

@@ -379,6 +379,19 @@ const en: Record<string, string> = {
   "leverDetail.autoStageHint":
     "This stage is reached automatically when the action plan is at 100%",
   "leverDetail.moveToStage": 'Move to "{stage}"',
+  "leverDetail.approval.stageHint":
+    "This stage requires the approval cascade (owner → sponsor → CTO), see below",
+  "leverDetail.approval.submitHint":
+    "This lever is ready for the approval cascade (owner → sponsor → CTO).",
+  "leverDetail.approval.submit": "Submit for approval",
+  "leverDetail.approval.requested": "Approval request sent",
+  "leverDetail.approval.pendingSponsor": "Pending sponsor approval",
+  "leverDetail.approval.pendingCto": "Pending CTO approval",
+  "leverDetail.approval.approve": "Approve",
+  "leverDetail.approval.approved": "Step approved",
+  "leverDetail.approval.reject": "Reject",
+  "leverDetail.approval.rejected": "Approval request rejected",
+  "leverDetail.approval.error": "Action not allowed",
   "leverDetail.actionsPlannedHint":
     'Actions are planned on this initiative — it can move to "{stage}".',
   "leverDetail.saveChanges": "Save changes",
@@ -700,6 +713,9 @@ const en: Record<string, string> = {
   "adminHistory.action.completed": "Completion",
   "adminHistory.action.validated": "Validation",
   "adminHistory.action.commented": "Comment",
+  "adminHistory.action.approvalRequested": "Approval requested",
+  "adminHistory.action.approvalApproved": "Step approved",
+  "adminHistory.action.approvalRejected": "Approval rejected",
   "adminHistory.title": "Change History",
   "adminHistory.searchPlaceholder": "Search...",
   "adminHistory.allActions": "All actions",

@@ -27,6 +27,7 @@ import type {
   Employee,
   Lever,
   LeverAction,
+  LeverApprovalStep,
   HierarchyNode,
   ManualAlertInput,
   WorkforceMovement,
@@ -124,8 +125,16 @@ function programSeed(): programDb.ProgramSeed {
  * synchrone immédiat) puis persiste dans Firestore en tâche de fond. La config programme
  * (program + workstreams), dernier périmètre historiquement en localStorage, a été migrée —
  * voir lib/firestore/programConfig.ts.
+ *
+ * `currentUser` (optionnel, round "cascade de validation") : la plupart des mutations ci-dessous
+ * attribuent encore leurs entrées d'audit à `DEMO_USER` (limitation pré-existante, hors périmètre
+ * de ce round) — mais `requestLeverApproval`/`approveLeverApprovalStep`/`rejectLeverApproval` ont
+ * BESOIN du profil réel de l'utilisateur (nom, username, rôles, admin) pour vérifier qui a le
+ * droit de franchir quelle étape de la cascade (voir `lib/leversLogic.ts`). Les appelants qui
+ * n'utilisent pas ces 3 fonctions peuvent continuer à omettre ce paramètre sans rien changer à
+ * leur comportement actuel.
  */
-export function useBeTrackData(companyId?: string | null) {
+export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser | null) {
   // État initial VIDE — aucune donnée mock/démo n'est injectée ici : une entreprise démarre sans
   // leviers/programme/commentaires/audit tant que sa souscription Firestore n'a pas répondu (ou
   // tant qu'elle n'a rien créé elle-même). Voir lib/firestore/levers.ts, programConfig.ts,
@@ -325,6 +334,66 @@ export function useBeTrackData(companyId?: string | null) {
       return result.lever;
     },
     [persistAudit]
+  );
+
+  /** Point d'entrée UI de la cascade de validation (voir lib/leversLogic.ts pour la logique
+   *  métier complète) — appelable seulement par le porteur du levier ou un admin, sur un levier
+   *  "qualified". Lève si `currentUser` n'a pas été fourni au hook (voir doc-comment ci-dessus) :
+   *  ce point d'entrée n'a de sens qu'avec un utilisateur réel identifié. */
+  const requestLeverApproval = useCallback(
+    (id: string) => {
+      if (!currentUser)
+        throw new Error(
+          "Utilisateur non identifié : impossible de soumettre la demande de validation"
+        );
+      const result = leversLogic.requestLeverApproval(leversRef.current, id, currentUser);
+      leversRef.current = result.levers;
+      setLevers(result.levers);
+      persistAudit(result.auditEntries);
+      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      return result.lever;
+    },
+    [persistAudit, currentUser]
+  );
+
+  const approveLeverApprovalStep = useCallback(
+    (id: string, step: Extract<LeverApprovalStep, "sponsor" | "cto">) => {
+      if (!currentUser)
+        throw new Error("Utilisateur non identifié : impossible d'approuver cette étape");
+      const result = leversLogic.approveLeverApprovalStep(
+        leversRef.current,
+        id,
+        step,
+        currentUser,
+        programConfig.workstreams
+      );
+      leversRef.current = result.levers;
+      setLevers(result.levers);
+      persistAudit(result.auditEntries);
+      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      return result.lever;
+    },
+    [persistAudit, currentUser, programConfig.workstreams]
+  );
+
+  const rejectLeverApproval = useCallback(
+    (id: string, reason?: string) => {
+      if (!currentUser)
+        throw new Error("Utilisateur non identifié : impossible de rejeter cette demande");
+      const result = leversLogic.rejectLeverApproval(
+        leversRef.current,
+        id,
+        currentUser,
+        reason,
+        programConfig.workstreams
+      );
+      leversRef.current = result.levers;
+      setLevers(result.levers);
+      persistAudit(result.auditEntries);
+      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      return result.lever;
+    },
+    [persistAudit, currentUser, programConfig.workstreams]
   );
 
   const createLever = useCallback(
@@ -617,6 +686,9 @@ export function useBeTrackData(companyId?: string | null) {
     getComments: (leverId: string) => comments[leverId] ?? [],
     getLeverById: (id: string) => data.levers.find((l) => l.id === id),
     updateLever,
+    requestLeverApproval,
+    approveLeverApprovalStep,
+    rejectLeverApproval,
     createLever,
     upsertLeverByCode,
     importLevers,

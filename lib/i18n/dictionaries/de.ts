@@ -361,6 +361,19 @@ const de: Record<string, string> = {
   "leverDetail.autoStageHint":
     "Diese Stufe wird automatisch erreicht, wenn der Aktionsplan bei 100 % liegt",
   "leverDetail.moveToStage": "Zu „{stage}“ wechseln",
+  "leverDetail.approval.stageHint":
+    "Diese Stufe erfordert die Freigabekaskade (Verantwortlicher → Sponsor → CTO), siehe unten",
+  "leverDetail.approval.submitHint":
+    "Dieser Hebel ist bereit für die Freigabekaskade (Verantwortlicher → Sponsor → CTO).",
+  "leverDetail.approval.submit": "Zur Freigabe einreichen",
+  "leverDetail.approval.requested": "Freigabeanfrage gesendet",
+  "leverDetail.approval.pendingSponsor": "Freigabe durch Sponsor ausstehend",
+  "leverDetail.approval.pendingCto": "Freigabe durch CTO ausstehend",
+  "leverDetail.approval.approve": "Freigeben",
+  "leverDetail.approval.approved": "Stufe freigegeben",
+  "leverDetail.approval.reject": "Ablehnen",
+  "leverDetail.approval.rejected": "Freigabeanfrage abgelehnt",
+  "leverDetail.approval.error": "Aktion nicht erlaubt",
   "leverDetail.actionsPlannedHint":
     "Für diesen Hebel sind Maßnahmen geplant — er kann zu „{stage}“ wechseln.",
   "leverDetail.saveChanges": "Änderungen speichern",
@@ -683,6 +696,9 @@ const de: Record<string, string> = {
   "adminHistory.action.completed": "Abschluss",
   "adminHistory.action.validated": "Validierung",
   "adminHistory.action.commented": "Kommentar",
+  "adminHistory.action.approvalRequested": "Freigabe angefragt",
+  "adminHistory.action.approvalApproved": "Stufe freigegeben",
+  "adminHistory.action.approvalRejected": "Freigabe abgelehnt",
   "adminHistory.title": "Änderungsverlauf",
   "adminHistory.searchPlaceholder": "Suchen...",
   "adminHistory.allActions": "Alle Aktionen",

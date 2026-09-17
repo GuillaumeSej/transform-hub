@@ -359,6 +359,19 @@ const es: Record<string, string> = {
   "leverDetail.autoStageHint":
     "Esta etapa se alcanza automáticamente cuando el plan de acción está al 100 %",
   "leverDetail.moveToStage": "Pasar a «{stage}»",
+  "leverDetail.approval.stageHint":
+    "Esta etapa requiere la cascada de validación (responsable → patrocinador → CTO), ver más abajo",
+  "leverDetail.approval.submitHint":
+    "Esta palanca está lista para la cascada de validación (responsable → patrocinador → CTO).",
+  "leverDetail.approval.submit": "Enviar para validación",
+  "leverDetail.approval.requested": "Solicitud de validación enviada",
+  "leverDetail.approval.pendingSponsor": "Pendiente de validación del patrocinador",
+  "leverDetail.approval.pendingCto": "Pendiente de validación del CTO",
+  "leverDetail.approval.approve": "Aprobar",
+  "leverDetail.approval.approved": "Etapa aprobada",
+  "leverDetail.approval.reject": "Rechazar",
+  "leverDetail.approval.rejected": "Solicitud de validación rechazada",
+  "leverDetail.approval.error": "Acción no permitida",
   "leverDetail.actionsPlannedHint":
     "Hay acciones planificadas en esta palanca — puede pasar a «{stage}».",
   "leverDetail.saveChanges": "Guardar los cambios",
@@ -684,6 +697,9 @@ const es: Record<string, string> = {
   "adminHistory.action.completed": "Finalización",
   "adminHistory.action.validated": "Validación",
   "adminHistory.action.commented": "Comentario",
+  "adminHistory.action.approvalRequested": "Validación solicitada",
+  "adminHistory.action.approvalApproved": "Etapa validada",
+  "adminHistory.action.approvalRejected": "Validación rechazada",
   "adminHistory.title": "Historial de Modificaciones",
   "adminHistory.searchPlaceholder": "Buscar...",
   "adminHistory.allActions": "Todas las acciones",
