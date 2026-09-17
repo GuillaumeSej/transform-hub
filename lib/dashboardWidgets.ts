@@ -37,7 +37,7 @@ export const SPAN_COL_CLASS: Record<WidgetSpan, string> = {
 
 export type DashboardWidgetType =
   | "stage-funnel"
-  | "alerts"
+  | "risk-center"
   | "s-curve"
   | "bridge"
   | "sankey"
@@ -48,7 +48,6 @@ export type DashboardWidgetType =
   | "dependencies"
   | "pnl"
   | "underperformers"
-  | "dependency-alerts"
   | "portfolio-funnel"
   | "savings-trajectory"
   | "initiative-health";
@@ -69,7 +68,7 @@ export const DASHBOARD_TABS: { key: DashboardTab; labelKey: string; icon: string
 export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   "portfolio-funnel": "cockpit",
   "stage-funnel": "cockpit",
-  alerts: "cockpit",
+  "risk-center": "cockpit",
   "savings-trajectory": "trajectory",
   "s-curve": "trajectory",
   bridge: "trajectory",
@@ -81,7 +80,6 @@ export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   dependencies: "prioritization",
   pnl: "portfolio",
   underperformers: "prioritization",
-  "dependency-alerts": "prioritization",
   "initiative-health": "prioritization",
 };
 
@@ -175,11 +173,15 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     allowedSpans: ["M", "L", "XL"],
   },
   {
-    type: "alerts",
-    label: "Alerts & Notifications",
+    // Widget fusionné "Alertes" + "Alertes de dépendances" (Sept 2026) — anciennement deux
+    // widgets séparés toujours pleinement visibles ; regroupés en un seul centre de risque
+    // replié par défaut (résumé compact + bouton d'expansion vers les deux panneaux côte à
+    // côte), pour alléger la page par défaut. Voir `case "risk-center"` côté page dashboard.
+    type: "risk-center",
+    label: "Alertes & Dépendances",
     icon: "Bell",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
   },
   {
     // Widget "Santé des initiatives" — remonté juste après portfolio-funnel + alerts en Août
@@ -321,13 +323,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     type: "underperformers",
     label: "Leviers sous-performants",
     icon: "TrendingDown",
-    defaultSpan: "M",
-    allowedSpans: ["M", "L", "XL"],
-  },
-  {
-    type: "dependency-alerts",
-    label: "Alertes de dépendances",
-    icon: "Unlink",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],
   },
@@ -668,7 +663,7 @@ export function reorderInitiativeHealthWidget(
   if (reorderAlreadyApplied) return layout;
   const target = layout.find((i) => i.type === "initiative-health");
   if (!target) return layout;
-  const alertsIdx = layout.findIndex((i) => i.type === "alerts");
+  const alertsIdx = layout.findIndex((i) => i.type === "risk-center");
   const anchorIdx =
     alertsIdx >= 0 ? alertsIdx : layout.findIndex((i) => i.type === "portfolio-funnel");
   if (anchorIdx < 0) return layout;

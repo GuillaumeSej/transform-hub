@@ -67,10 +67,10 @@ describe("dashboardWidgets — initiative health reorder migration", () => {
     return [...withoutIt, initiativeHealth];
   };
 
-  it("moves initiative-health right after 'alerts'", () => {
+  it("moves initiative-health right after 'risk-center'", () => {
     const before = legacyOrder();
     const after = reorderInitiativeHealthWidget(before, false);
-    const alertsIdx = after.findIndex((w) => w.type === "alerts");
+    const alertsIdx = after.findIndex((w) => w.type === "risk-center");
     const healthIdx = after.findIndex((w) => w.type === "initiative-health");
     expect(healthIdx).toBe(alertsIdx + 1);
     // Aucun widget perdu ni dupliqué
@@ -90,15 +90,15 @@ describe("dashboardWidgets — initiative health reorder migration", () => {
     expect(after).toBe(legacy);
   });
 
-  it("falls back to 'portfolio-funnel' when 'alerts' has been removed", () => {
-    const before = legacyOrder().filter((w) => w.type !== "alerts");
+  it("falls back to 'portfolio-funnel' when 'risk-center' has been removed", () => {
+    const before = legacyOrder().filter((w) => w.type !== "risk-center");
     const after = reorderInitiativeHealthWidget(before, false);
     const funnelIdx = after.findIndex((w) => w.type === "portfolio-funnel");
     const healthIdx = after.findIndex((w) => w.type === "initiative-health");
     expect(healthIdx).toBe(funnelIdx + 1);
   });
 
-  it("does not move initiative-health if neither 'alerts' nor 'portfolio-funnel' is present", () => {
+  it("does not move initiative-health if neither 'risk-center' nor 'portfolio-funnel' is present", () => {
     const before: DashboardWidgetInstance[] = [
       { instanceId: "pnl", type: "pnl", span: "M" },
       {
@@ -176,8 +176,8 @@ describe("dashboardWidgets — addWidget / removeWidget / setWidgetSpan", () => 
 
   it("removeWidget filters by instanceId", () => {
     const layout = buildDefaultLayout();
-    const next = removeWidget(layout, "alerts");
-    expect(next.some((w) => w.instanceId === "alerts")).toBe(false);
+    const next = removeWidget(layout, "risk-center");
+    expect(next.some((w) => w.instanceId === "risk-center")).toBe(false);
     expect(next).toHaveLength(layout.length - 1);
   });
 
@@ -185,8 +185,8 @@ describe("dashboardWidgets — addWidget / removeWidget / setWidgetSpan", () => 
     const layout = buildDefaultLayout();
     const next = setWidgetSpan(layout, "pnl", "XL");
     expect(next.find((w) => w.instanceId === "pnl")?.span).toBe("XL");
-    expect(next.find((w) => w.instanceId === "alerts")?.span).toBe(
-      layout.find((w) => w.instanceId === "alerts")?.span
+    expect(next.find((w) => w.instanceId === "risk-center")?.span).toBe(
+      layout.find((w) => w.instanceId === "risk-center")?.span
     );
   });
 });
