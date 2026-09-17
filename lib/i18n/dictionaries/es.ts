@@ -565,47 +565,6 @@ const es: Record<string, string> = {
   "hr.commentPlaceholder": "Añadir un comentario",
 
   // ─── adminCompanyDb ─────────────────────────────────────────────────────────
-  "adminCompanyDb.title": "Base de datos — {name}",
-  "adminCompanyDb.resetSectionTitle": "Restablecer esta empresa",
-  "adminCompanyDb.resetBodyPrefix": "Elimina las palancas y la jerarquía financiera de",
-  "adminCompanyDb.resetBodySuffix":
-    "únicamente — las demás empresas no se ven afectadas. Acción irreversible.",
-  "adminCompanyDb.resetButton": "Restablecer {name}",
-  "adminCompanyDb.dangerZoneTitle": "Zona de peligro — todas las empresas",
-  "adminCompanyDb.dangerZoneBodyPrefix":
-    "Restablece la totalidad de los datos de demostración (palancas, comentarios, auditoría, plantilla) para",
-  "adminCompanyDb.dangerZoneBodySuffix":
-    ", sin distinción. Reservado para entornos de demo/prueba.",
-  "adminCompanyDb.allCompanies": "todas las empresas",
-  "adminCompanyDb.resetAllButton": "Restablecer todos los datos de demo",
-  "adminCompanyDb.scopedModalTitle": "¿Restablecer {name}?",
-  "adminCompanyDb.deleting": "Eliminando…",
-  "adminCompanyDb.confirmDelete": "Confirmar eliminación",
-  "adminCompanyDb.calculatingImpact": "Calculando el impacto…",
-  "adminCompanyDb.irreversibleWord": "irreversible",
-  "adminCompanyDb.scopedIntroPrefix": "Esta acción es",
-  "adminCompanyDb.scopedIntroMiddle": "y eliminará, solo para",
-  "adminCompanyDb.scopedIntroSuffix": "lo siguiente:",
-  "adminCompanyDb.leverCount": "{n} palanca(s)",
-  "adminCompanyDb.commentThreadCount": "{n} hilo(s) de comentarios vinculados a estas palancas",
-  "adminCompanyDb.auditEntryCount": "{n} entrada(s) de historial vinculadas a estas palancas",
-  "adminCompanyDb.allHierarchyNodes": "todos los nodos de jerarquía financiera de esta empresa",
-  "adminCompanyDb.unaffectedNote":
-    "Los datos de otras empresas, así como las entradas de auditoría/comentarios no vinculadas a una palanca de {name}, no se ven afectados.",
-  "adminCompanyDb.globalModalTitle": "¿Restablecer todos los datos de demo?",
-  "adminCompanyDb.resetAllConfirm": "Restablecer todo",
-  "adminCompanyDb.globalBodyPrefix": "Todos los cambios realizados durante esta sesión, para",
-  "adminCompanyDb.globalBodySuffix":
-    "(palancas, comentarios, auditoría, plantilla), se perderán definitivamente y se sustituirán por el conjunto de datos de demo inicial.",
-  "adminCompanyDb.toastErrorTitle": "Error",
-  "adminCompanyDb.toastPlanError": "No se pudo calcular el impacto del restablecimiento.",
-  "adminCompanyDb.toastResetSuccessTitle": "Datos restablecidos",
-  "adminCompanyDb.toastScopedSuccessBody":
-    "Las palancas y la jerarquía de {name} se han eliminado.",
-  "adminCompanyDb.toastGlobalSuccessBody":
-    "Todas las empresas se han restablecido al conjunto de datos de demo inicial.",
-  "adminCompanyDb.toastResetFailBody":
-    "El restablecimiento ha fallado; consulte la consola para más detalles.",
 
   // ─── adminProgramsPanel ─────────────────────────────────────────────────────
   "adminProgramsPanel.title": "Gestión de Programas",
@@ -625,6 +584,7 @@ const es: Record<string, string> = {
     "Activa la pestaña Plan de acción (Kanban/Gantt) en los palancas de este programa. Módulo adicional activable según las opciones contratadas por el cliente — desmarcado, las palancas de este programa no muestran esta pestaña.",
 
   // ─── shared ───────────────────────────────────────────────────────────────
+  "shared.leverCount": "{n} palanca(s)",
   "shared.appShell.mobileNavLabel": "Navegación principal",
   "shared.appShell.strategicDependencyTitle": "Dependencia en riesgo · {chantier}",
   "shared.appShell.strategicIndicatorTitle": "Indicador en riesgo · {name}",
@@ -747,7 +707,6 @@ const es: Record<string, string> = {
   "adminCompanies.tab.geoHierarchy": "Jerarquía geográfica",
   "adminCompanies.tab.programs": "Programas",
   "adminCompanies.tab.dataHistory": "Datos e Historial",
-  "adminCompanies.tab.database": "Base de datos",
   "adminCompanies.backToList": "Volver a la lista de empresas",
   "adminCompanies.noneSelected": "Ninguna empresa seleccionada.",
   "adminCompanies.notFound": "Empresa no encontrada ({id}).",

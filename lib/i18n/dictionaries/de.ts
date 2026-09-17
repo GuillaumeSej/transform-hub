@@ -568,45 +568,6 @@ const de: Record<string, string> = {
   "hr.commentPlaceholder": "Kommentar hinzufügen",
 
   // ─── adminCompanyDb ─────────────────────────────────────────────────────────
-  "adminCompanyDb.title": "Datenbank — {name}",
-  "adminCompanyDb.resetSectionTitle": "Dieses Unternehmen zurücksetzen",
-  "adminCompanyDb.resetBodyPrefix": "Löscht die Hebel und die Finanzhierarchie für",
-  "adminCompanyDb.resetBodySuffix":
-    "— andere Unternehmen sind nicht betroffen. Diese Aktion ist unwiderruflich.",
-  "adminCompanyDb.resetButton": "{name} zurücksetzen",
-  "adminCompanyDb.dangerZoneTitle": "Gefahrenzone — alle Unternehmen",
-  "adminCompanyDb.dangerZoneBodyPrefix":
-    "Setzt alle Demodaten (Hebel, Kommentare, Historie, Personalbestand) zurück, für",
-  "adminCompanyDb.dangerZoneBodySuffix": ", ohne Ausnahme. Nur für Demo-/Testumgebungen.",
-  "adminCompanyDb.allCompanies": "alle Unternehmen",
-  "adminCompanyDb.resetAllButton": "Alle Demodaten zurücksetzen",
-  "adminCompanyDb.scopedModalTitle": "{name} zurücksetzen?",
-  "adminCompanyDb.deleting": "Wird gelöscht…",
-  "adminCompanyDb.confirmDelete": "Löschen bestätigen",
-  "adminCompanyDb.calculatingImpact": "Auswirkung wird berechnet…",
-  "adminCompanyDb.irreversibleWord": "unwiderruflich",
-  "adminCompanyDb.scopedIntroPrefix": "Diese Aktion ist",
-  "adminCompanyDb.scopedIntroMiddle": "und löscht ausschließlich für",
-  "adminCompanyDb.scopedIntroSuffix": "Folgendes:",
-  "adminCompanyDb.leverCount": "{n} Hebel",
-  "adminCompanyDb.commentThreadCount": "{n} Kommentarthread(s) zu diesen Hebeln",
-  "adminCompanyDb.auditEntryCount": "{n} Historieneintrag/-einträge zu diesen Hebeln",
-  "adminCompanyDb.allHierarchyNodes": "alle Finanzhierarchie-Knoten dieses Unternehmens",
-  "adminCompanyDb.unaffectedNote":
-    "Daten anderer Unternehmen sowie Audit-/Kommentareinträge, die keinem Hebel von {name} zugeordnet sind, sind nicht betroffen.",
-  "adminCompanyDb.globalModalTitle": "Alle Demodaten zurücksetzen?",
-  "adminCompanyDb.resetAllConfirm": "Alles zurücksetzen",
-  "adminCompanyDb.globalBodyPrefix": "Alle in dieser Sitzung vorgenommenen Änderungen werden für",
-  "adminCompanyDb.globalBodySuffix":
-    "(Hebel, Kommentare, Historie, Personalbestand) endgültig gelöscht und durch den ursprünglichen Demodatensatz ersetzt.",
-  "adminCompanyDb.toastErrorTitle": "Fehler",
-  "adminCompanyDb.toastPlanError": "Die Auswirkung des Resets konnte nicht berechnet werden.",
-  "adminCompanyDb.toastResetSuccessTitle": "Daten zurückgesetzt",
-  "adminCompanyDb.toastScopedSuccessBody":
-    "Die Hebel und die Hierarchie von {name} wurden gelöscht.",
-  "adminCompanyDb.toastGlobalSuccessBody":
-    "Alle Unternehmen wurden auf den ursprünglichen Demodatensatz zurückgesetzt.",
-  "adminCompanyDb.toastResetFailBody": "Der Reset ist fehlgeschlagen — Details siehe Konsole.",
 
   // ─── adminProgramsPanel ─────────────────────────────────────────────────────
   "adminProgramsPanel.title": "Programmverwaltung",
@@ -626,6 +587,7 @@ const de: Record<string, string> = {
     "Aktiviert den Tab Aktionsplan (Kanban/Gantt) für die Hebel dieses Programms. Zusatzmodul, das je nach den vom Kunden gebuchten Optionen aktivierbar ist — deaktiviert, zeigen die Hebel dieses Programms diesen Tab nicht an.",
 
   // ─── shared ───────────────────────────────────────────────────────────────
+  "shared.leverCount": "{n} Hebel",
   "shared.appShell.mobileNavLabel": "Hauptnavigation",
   "shared.appShell.strategicDependencyTitle": "Abhängigkeit gefährdet · {chantier}",
   "shared.appShell.strategicIndicatorTitle": "Indikator gefährdet · {name}",
@@ -746,7 +708,6 @@ const de: Record<string, string> = {
   "adminCompanies.tab.geoHierarchy": "Geografische Hierarchie",
   "adminCompanies.tab.programs": "Programme",
   "adminCompanies.tab.dataHistory": "Daten & Verlauf",
-  "adminCompanies.tab.database": "Datenbank",
   "adminCompanies.backToList": "Zurück zur Unternehmensliste",
   "adminCompanies.noneSelected": "Kein Unternehmen ausgewählt.",
   "adminCompanies.notFound": "Unternehmen nicht gefunden ({id}).",
