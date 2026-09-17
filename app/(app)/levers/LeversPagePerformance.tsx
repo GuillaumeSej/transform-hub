@@ -8,6 +8,7 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { usePerformanceProgramSelector } from "@/lib/hooks/usePerformanceProgramSelector";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
@@ -33,7 +34,8 @@ import { Kanban } from "@/components/shared/Kanban";
 import { LeverLibraryTree } from "@/components/shared/LeverLibraryTree";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { type FilterDef } from "@/components/shared/FilterBar";
-import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
+import { CollapsibleFilterBar } from "@/components/shared/CollapsibleFilterBar";
+import { ColumnVisibilityMenu } from "@/components/shared/ColumnVisibilityMenu";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
 import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
@@ -66,6 +68,11 @@ export function LeversPagePerformance() {
     loaded: programsLoaded,
   } = usePerformanceProgramSelector(user?.companyId);
   const lifecycle = useLifecycleLabels(selectedProgramId);
+  // Vue consolidée multi-programmes (fondation chantier CTO, voir lib/hooks/useActiveProgram.tsx) :
+  // quand active, la page doit agréger les leviers de TOUS les `consolidatedPrograms` plutôt que de
+  // rester scopée au seul `selectedProgramId` du sélecteur local ci-dessus (qui continue de piloter
+  // le référentiel de cycle de vie affiché — simplification assumée, cf. plus bas).
+  const { isConsolidatedView, consolidatedPrograms } = useActiveProgram();
   const { t } = useTranslation();
   const router = useRouter();
   const { showToast } = useToast();
@@ -80,6 +87,50 @@ export function LeversPagePerformance() {
     [requestedView]
   );
   const [newLeverOpen, setNewLeverOpen] = useState(false);
+
+  // Sélecteur de colonnes visibles (Tâche 3) — PAR UTILISATEUR (pas par profil), persisté en
+  // localStorage sous `betrack_levers_columns_${username}`. Liste NOIRE (clés masquées) plutôt que
+  // liste blanche : le standard actuel (toutes les colonnes) reste le comportement par défaut pour
+  // qui n'a jamais touché au sélecteur, et une colonne standard ajoutée plus tard (ex. "Programme"
+  // ci-dessus, qui n'apparaît que conditionnellement) reste visible par défaut même pour un
+  // utilisateur ayant déjà une préférence enregistrée.
+  const [hiddenColumnKeys, setHiddenColumnKeys] = useState<Set<string>>(new Set());
+  const columnsStorageKey = user?.username ? `betrack_levers_columns_${user.username}` : null;
+
+  useEffect(() => {
+    if (!columnsStorageKey) {
+      setHiddenColumnKeys(new Set());
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(columnsStorageKey);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      setHiddenColumnKeys(
+        new Set(
+          Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : []
+        )
+      );
+    } catch {
+      // Stockage indisponible ou valeur corrompue — repli sur le standard (aucune colonne masquée).
+      setHiddenColumnKeys(new Set());
+    }
+  }, [columnsStorageKey]);
+
+  const toggleColumn = (key: string) => {
+    setHiddenColumnKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      if (columnsStorageKey) {
+        try {
+          window.localStorage.setItem(columnsStorageKey, JSON.stringify(Array.from(next)));
+        } catch {
+          // Le choix reste effectif pour la session en cours via le state React, sans persistance.
+        }
+      }
+      return next;
+    });
+  };
 
   // Arborescence financière (optionnelle) de l'entreprise courante — n'affiche des colonnes
   // supplémentaires que si l'entreprise a explicitement configuré des hierarchyLevels ; sinon la
@@ -186,16 +237,50 @@ export function LeversPagePerformance() {
     () => new Set(performancePrograms.map((p) => p.id)),
     [performancePrograms]
   );
-  const programScopedLevers = useMemo(
-    () =>
-      scopedLevers.filter(
-        (l) =>
-          !l.programId ||
-          l.programId === selectedProgramId ||
-          !performanceProgramIds.has(l.programId)
-      ),
-    [scopedLevers, selectedProgramId, performanceProgramIds]
+  // Vue consolidée : combine les leviers de TOUS les programmes du périmètre consolidé de
+  // l'utilisateur (voir getConsolidatedPerformancePrograms), au lieu du seul programme actif —
+  // un levier dont le `programId` ne correspond à AUCUN programme consolidé (ou n'en a pas) est
+  // exclu, contrairement au repli mono-programme ci-dessous (pas de notion de "programme non
+  // scopé" pertinente ici, la vue consolidée EST le scope).
+  const consolidatedProgramIds = useMemo(
+    () => new Set(consolidatedPrograms.map((p) => p.id)),
+    [consolidatedPrograms]
   );
+  const programScopedLevers = useMemo(() => {
+    if (isConsolidatedView) {
+      return scopedLevers.filter((l) => !!l.programId && consolidatedProgramIds.has(l.programId));
+    }
+    return scopedLevers.filter(
+      (l) =>
+        !l.programId || l.programId === selectedProgramId || !performanceProgramIds.has(l.programId)
+    );
+  }, [
+    scopedLevers,
+    selectedProgramId,
+    performanceProgramIds,
+    isConsolidatedView,
+    consolidatedProgramIds,
+  ]);
+
+  // Colonne/filtre "Programme" (Tâche 1, vue consolidée) : résout le nom du programme d'un levier
+  // via `programs` (liste complète de l'entreprise, déjà chargée par usePerformanceProgramSelector
+  // plus haut — pas seulement les Performance, un levier legacy peut en théorie pointer vers un
+  // programme d'un autre type). N'est affichée/proposée que si le jeu de leviers actuellement
+  // affiché couvre RÉELLEMENT plus d'un programme — en mono-programme (cas normal hors vue
+  // consolidée) cette colonne n'apporterait aucune information, cf. demande.
+  const programNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of programs) map.set(p.id, p.name);
+    return map;
+  }, [programs]);
+  const programLabel = (l: Lever): string =>
+    l.programId ? (programNameById.get(l.programId) ?? l.programId) : "";
+  const showProgramColumn = useMemo(() => {
+    const ids = new Set(
+      programScopedLevers.map((l) => l.programId).filter((id): id is string => !!id)
+    );
+    return ids.size > 1;
+  }, [programScopedLevers]);
 
   // Leviers avec au moins une contrainte de dépendance violée (colonne ⚠ + filtre)
   const alertedLeverIds = useMemo(() => {
@@ -270,6 +355,15 @@ export function LeversPagePerformance() {
   // partageable/actualisable, comme les anciens filtres ws/status/risk.
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
+      ...(showProgramColumn
+        ? [
+            {
+              key: "f_program",
+              label: t("levers.filter.program", "Programme"),
+              getValue: programLabel,
+            },
+          ]
+        : []),
       { key: "f_type", label: "Type", getValue: (l) => l.type },
       {
         key: "f_ws",
@@ -367,6 +461,8 @@ export function LeversPagePerformance() {
       riskThresholds,
       hierarchyFilterDefs,
       geographyFilterDefs,
+      showProgramColumn,
+      programNameById,
     ]
   );
 
@@ -505,6 +601,20 @@ export function LeversPagePerformance() {
     },
     { key: "type", label: "Type", mobile: "hide", width: "100px" },
     { key: "wsName", label: t("leverForm.workstream"), mobile: "hide", width: "150px" },
+    // Colonne "Programme" (Tâche 1, vue consolidée) : uniquement quand le jeu de leviers affiché
+    // couvre réellement plus d'un programme (voir showProgramColumn plus haut) — sans objet en
+    // mono-programme.
+    ...(showProgramColumn
+      ? [
+          {
+            key: "programId" as const,
+            label: t("levers.filter.program", "Programme"),
+            mobile: "hide" as const,
+            width: "150px",
+            render: (r: LeverRow) => <span>{programLabel(r) || "—"}</span>,
+          },
+        ]
+      : []),
     // ── Responsabilité ──
     {
       key: "owner",
@@ -630,6 +740,9 @@ export function LeversPagePerformance() {
     },
   ];
 
+  // Colonnes réellement rendues, une fois les préférences utilisateur (Tâche 3) appliquées.
+  const visibleColumns = columns.filter((c) => !hiddenColumnKeys.has(c.key));
+
   // Entreprise sans aucun Plan Performance : pas de programme sur lequel scoper la table, donc
   // rien à afficher (même repli que le dashboard exécutif, voir DashboardPagePerformance).
   if (programsLoaded && performancePrograms.length === 0) {
@@ -708,11 +821,18 @@ export function LeversPagePerformance() {
       <Card>
         <CardBody flush>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-            <DropdownFilterBar
+            <CollapsibleFilterBar
               items={programScopedLevers}
               defs={filterDefs}
               active={activeFilters}
               onChange={setFilters}
+              storageKey="betrack_leversFilterBar_expanded"
+              className="min-w-0 flex-1"
+            />
+            <ColumnVisibilityMenu
+              columns={columns.map((c) => ({ key: c.key, label: c.label }))}
+              hiddenKeys={hiddenColumnKeys}
+              onToggle={toggleColumn}
             />
 
             <div className="ml-auto flex overflow-hidden rounded-md border border-border">
@@ -751,7 +871,7 @@ export function LeversPagePerformance() {
       {view === "table" ? (
         <EditableTable
           data={rows}
-          columns={columns}
+          columns={visibleColumns}
           onCellUpdate={handleCellUpdate}
           onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
           searchPlaceholder={t("levers.searchPlaceholder")}
