@@ -398,7 +398,6 @@ export type LeverAction = {
   ownerInit?: string;
   start: string; // ISO date
   end: string; // ISO date
-  cost: number; // €K — legacy, conservé pour compat
   status: ActionStatus;
   deliveredDate?: string; // date de passage en "done"
   /** Lignes d'impact financier (tableau embarqué). Chaque ligne porte son propre

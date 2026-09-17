@@ -336,7 +336,6 @@ const ACTION_HEADERS = [
   "Date début",
   "Date fin",
   "Statut",
-  "Coût (€K)",
 ];
 
 const ACTION_ROWS = [
@@ -347,7 +346,6 @@ const ACTION_ROWS = [
     "2026-02-01",
     "2026-05-31",
     "En cours",
-    15,
   ],
   [
     "AC-001",
@@ -356,17 +354,8 @@ const ACTION_ROWS = [
     "2026-06-01",
     "2026-09-30",
     "À faire",
-    20,
   ],
-  [
-    "AC-002",
-    "Diagnostic pannes lignes B",
-    "Thomas Petit",
-    "2026-03-15",
-    "2026-05-15",
-    "Terminé",
-    10,
-  ],
+  ["AC-002", "Diagnostic pannes lignes B", "Thomas Petit", "2026-03-15", "2026-05-15", "Terminé"],
   [
     "AC-002",
     "Déployer maintenance préventive",
@@ -374,26 +363,9 @@ const ACTION_ROWS = [
     "2026-05-16",
     "2026-12-31",
     "En cours",
-    30,
   ],
-  [
-    "AC-006",
-    "Sélection des 3 sites cibles",
-    "Ryan Cole",
-    "2026-02-15",
-    "2026-04-30",
-    "Terminé",
-    25,
-  ],
-  [
-    "AC-006",
-    "Migration des flux logistiques",
-    "Ryan Cole",
-    "2026-05-01",
-    "2026-10-15",
-    "En cours",
-    45,
-  ],
+  ["AC-006", "Sélection des 3 sites cibles", "Ryan Cole", "2026-02-15", "2026-04-30", "Terminé"],
+  ["AC-006", "Migration des flux logistiques", "Ryan Cole", "2026-05-01", "2026-10-15", "En cours"],
 ];
 
 const IMPACT_HEADERS = [

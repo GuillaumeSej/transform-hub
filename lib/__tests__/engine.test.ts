@@ -325,8 +325,8 @@ describe("engine — actionProgress", () => {
 
   it("averages by status weight", () => {
     const actions = [
-      { id: "a1", name: "A1", start: "", end: "", cost: 0, status: "done" as const },
-      { id: "a2", name: "A2", start: "", end: "", cost: 0, status: "todo" as const },
+      { id: "a1", name: "A1", start: "", end: "", status: "done" as const },
+      { id: "a2", name: "A2", start: "", end: "", status: "todo" as const },
     ];
     expect(actionProgress(actions)).toBe(50);
   });
@@ -341,7 +341,6 @@ describe("engine — isActionLate", () => {
       name: "A1",
       start: "2026-01-01",
       end: "2026-02-01",
-      cost: 0,
       status: "done" as const,
     };
     expect(isActionLate(action, today)).toBe(false);
@@ -353,7 +352,6 @@ describe("engine — isActionLate", () => {
       name: "A1",
       start: "2026-01-01",
       end: "2026-02-01",
-      cost: 0,
       status: "todo" as const,
     };
     expect(isActionLate(action, today)).toBe(true);
@@ -365,7 +363,6 @@ describe("engine — isActionLate", () => {
       name: "A1",
       start: "2026-01-01",
       end: "2026-12-31",
-      cost: 0,
       status: "in_progress" as const,
     };
     expect(isActionLate(action, today)).toBe(false);
@@ -377,7 +374,6 @@ describe("engine — isActionLate", () => {
       name: "A1",
       start: "2026-01-01",
       end: "2027-01-01", // in the future
-      cost: 0,
       status: "delayed" as const,
     };
     expect(isActionLate(action, today)).toBe(true);
@@ -389,7 +385,6 @@ describe("engine — isActionLate", () => {
       name: "A1",
       start: "2000-01-01",
       end: "2000-02-01",
-      cost: 0,
       status: "todo" as const,
     };
     expect(isActionLate(pastAction)).toBe(true);
@@ -404,8 +399,8 @@ describe("engine — underperformers (retard levier dérivé UNIQUEMENT du retar
       ...baseLever,
       status: "in_progress",
       actions: [
-        { id: "a1", name: "A1", start: "2026-01-01", end: "2026-02-01", cost: 0, status: "todo" },
-        { id: "a2", name: "A2", start: "2026-01-01", end: "2026-12-31", cost: 0, status: "done" },
+        { id: "a1", name: "A1", start: "2026-01-01", end: "2026-02-01", status: "todo" },
+        { id: "a2", name: "A2", start: "2026-01-01", end: "2026-12-31", status: "done" },
       ],
     };
     const data = makeData({ levers: [lever] });
@@ -427,7 +422,6 @@ describe("engine — underperformers (retard levier dérivé UNIQUEMENT du retar
           name: "A1",
           start: "2026-01-01",
           end: "2026-12-31", // not yet due
-          cost: 0,
           status: "in_progress",
         },
       ],
@@ -458,8 +452,8 @@ describe("engine — recomputeLeverProgress", () => {
       ...baseLever,
       progress: 0,
       actions: [
-        { id: "a1", name: "A1", start: "", end: "", cost: 0, status: "done" as const },
-        { id: "a2", name: "A2", start: "", end: "", cost: 0, status: "done" as const },
+        { id: "a1", name: "A1", start: "", end: "", status: "done" as const },
+        { id: "a2", name: "A2", start: "", end: "", status: "done" as const },
       ],
     };
     expect(recomputeLeverProgress(lever)).toBe(100);
@@ -914,7 +908,6 @@ describe("engine — pnlImpactDetailed from action impacts", () => {
               end: "2026-02-28",
               deliveredDate: "2026-02-15",
               status: "done",
-              cost: 50,
               impacts: [
                 {
                   id: "I1",
@@ -932,7 +925,6 @@ describe("engine — pnlImpactDetailed from action impacts", () => {
               start: "2026-02-01",
               end: "2026-03-31",
               status: "todo",
-              cost: 0,
               impacts: [
                 {
                   id: "I2",

@@ -250,7 +250,6 @@ describe("leverExcelImport — validateLeverImportRows", () => {
           name: "Ancienne action",
           start: "2026-01-01",
           end: "2026-02-01",
-          cost: 0,
           status: "todo",
           impacts: [],
         },

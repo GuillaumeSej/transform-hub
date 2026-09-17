@@ -571,6 +571,16 @@ export function isActionLate(action: LeverAction, today: Date = new Date()): boo
   return new Date(action.end).getTime() < today.getTime();
 }
 
+/** Impact financier net (€M) d'une action = somme signée de ses lignes `impacts` (gain positif,
+ *  coût négatif) — seule source de vérité pour la valeur € d'une action, partagée par la courbe
+ *  en J, l'onglet Impact et le Kanban du plan d'action. Sans ligne d'impact, l'action vaut 0. */
+export function actionNetImpact(action: LeverAction): number {
+  return (action.impacts ?? []).reduce(
+    (sum, impact) => sum + (impact.type === "saving" ? impact.amount : -impact.amount),
+    0
+  );
+}
+
 /** Progression d'un plan d'action : moyenne pondérée par statut des actions (done=100, in_progress=50). */
 export function actionProgress(actions: LeverAction[]): number {
   if (actions.length === 0) return 0;

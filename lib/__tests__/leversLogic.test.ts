@@ -398,7 +398,6 @@ describe("leversLogic — enriched action consolidation", () => {
         start: "2026-01-01",
         end: "2026-03-31",
         status: "done",
-        cost: 0,
         impacts: [
           {
             id: "I-COST",
@@ -445,7 +444,6 @@ describe("leversLogic — enriched action consolidation", () => {
           start: "2026-01-01",
           end: "2026-02-01",
           status: "done" as const,
-          cost: 0,
           impacts: [
             {
               id: "I1",
@@ -462,7 +460,6 @@ describe("leversLogic — enriched action consolidation", () => {
           start: "2026-02-01",
           end: "2026-06-01",
           status: "todo" as const,
-          cost: 0,
           impacts: [
             {
               id: "I2",
@@ -491,7 +488,6 @@ describe("leversLogic — enriched action consolidation", () => {
           end: "2026-02-01",
           status: "done" as const,
           deliveredDate: "2026-02-01",
-          cost: 0,
           impacts: [
             {
               id: "I1",
