@@ -43,6 +43,10 @@ import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types
 
 type LeverRow = Lever & {
   realized: number;
+  /** Progression affichée — `engine.displayedProgressPct(l)` (réalisé net / réactualisé net),
+   *  PAS le champ brut `progress` hérité de `Lever` (moyenne pondérée du statut des actions,
+   *  toujours utilisé par les automatismes de cycle de vie, plus par l'affichage). */
+  progressPct: number;
   wsName: string;
   statusLabel: string;
   costCenterLabel: string;
@@ -497,6 +501,7 @@ export function LeversPagePerformance() {
       risk: riskAssessment.level,
       riskReason: riskAssessment.reason,
       realized: engine.realizedSavings(l),
+      progressPct: engine.displayedProgressPct(l),
       wsName: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       statusLabel: lifecycle.label(l.status),
       costCenterLabel: (() => {
@@ -641,11 +646,11 @@ export function LeversPagePerformance() {
       render: (r) => r.realized.toFixed(1),
     },
     {
-      key: "progress",
+      key: "progressPct",
       label: "Avancement",
       mobile: "secondary",
       width: "120px",
-      render: (r) => <ProgressBar pct={r.progress} />,
+      render: (r) => <ProgressBar pct={r.progressPct} />,
     },
     {
       key: "fteImpact",

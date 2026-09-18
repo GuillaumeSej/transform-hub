@@ -363,6 +363,25 @@ export function updateLever(
     delete guardedPatch.status;
   }
 
+  // Garde anti-régression (impératif métier) : une fois une étape du cycle M1→M5 franchie, on ne
+  // peut plus JAMAIS revenir en arrière (ex. cliquer "Identifié" sur un levier déjà en M3 depuis
+  // le stepper de la fiche détail — voir `LeverDetailClientPerformance.tsx`, dont le seul garde-fou
+  // était visuel, aucune protection côté données). `STATUS_ORDER` place "cancelled" hors cycle
+  // (valeur 0) : l'abandon/la réactivation d'un levier annulé restent volontairement exclus de
+  // cette règle (ce n'est pas une régression de maturité, c'est un branchement à part). S'applique
+  // à TOUT appelant de `updateLever` (pas seulement le stepper), y compris `approveLeverGate`
+  // (qui ne fait de toute façon jamais régresser un statut).
+  if (
+    guardedPatch.status &&
+    guardedPatch.status !== before.status &&
+    before.status !== "cancelled" &&
+    guardedPatch.status !== "cancelled" &&
+    STATUS_ORDER[guardedPatch.status] < STATUS_ORDER[before.status]
+  ) {
+    if (guardedPatch === patch) guardedPatch = { ...patch };
+    delete guardedPatch.status;
+  }
+
   // Une fois le plan initial figé (L3+), les chiffres bruts ne sont plus modifiables par cette
   // voie — seule la réactualisation (patch.reforecast) l'est encore.
   const safePatch = before.lockedPlan

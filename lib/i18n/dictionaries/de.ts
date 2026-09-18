@@ -378,6 +378,7 @@ const de: Record<string, string> = {
   "leverDetail.statusUpdated": "Stufe aktualisiert",
   "leverDetail.autoStageHint":
     "Diese Stufe wird automatisch erreicht, wenn der Aktionsplan bei 100 % liegt",
+  "leverDetail.pastStageHint": "Stufe bereits erreicht — kein Zurückgehen möglich",
   "leverDetail.moveToStage": "Zu „{stage}“ wechseln",
   "leverDetail.approval.stageHint":
     "Diese Stufe erfordert einen Freigabeantrag (Verantwortlicher → Sponsor oder CTO), siehe unten",

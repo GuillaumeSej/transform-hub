@@ -3,6 +3,7 @@ import {
   realizedSavings,
   displayedLockedPlanNet,
   displayedReforecastNet,
+  displayedProgressPct,
   realizedFte,
   worstRisk,
   stageCounts,
@@ -144,7 +145,7 @@ describe("engine — realizedSavings", () => {
     expect(realizedSavings(lever)).toBe(0);
   });
 
-  it("sums the net (saving − cost) impacts of 'done' actions only — an in_progress action contributes nothing", () => {
+  it("sums gross savings minus CAPEX of 'done' actions only — an in_progress action contributes nothing", () => {
     const lever = {
       ...baseLever,
       actions: [
@@ -152,7 +153,7 @@ describe("engine — realizedSavings", () => {
           id: "A1",
           impacts: [
             { id: "I1", label: "Gain", type: "saving", nature: "opex_rec", amount: 10 },
-            { id: "I2", label: "Coût", type: "cost", nature: "opex_rec", amount: 2 },
+            { id: "I2", label: "Coût CAPEX", type: "cost", nature: "capex", amount: 2 },
           ],
         }),
         {
@@ -174,6 +175,23 @@ describe("engine — realizedSavings", () => {
       ],
     };
     expect(realizedSavings(lever)).toBe(8);
+  });
+
+  it("never deducts OPEX one-off or OPEX récurrent from the realized net — CAPEX is the only cost that counts", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        realizedAction(0, {
+          id: "A1",
+          impacts: [
+            { id: "I1", label: "Gain", type: "saving", nature: "opex_rec", amount: 10 },
+            { id: "I2", label: "OPEX one-off", type: "cost", nature: "oneoff", amount: 50 },
+            { id: "I3", label: "OPEX récurrent", type: "cost", nature: "opex_rec", amount: 3 },
+          ],
+        }),
+      ],
+    };
+    expect(realizedSavings(lever)).toBe(10);
   });
 
   it("rounds to 2 decimals", () => {
@@ -222,6 +240,51 @@ describe("engine — displayedReforecastNet (cohérence avec la courbe en S 'Ré
       reforecast: { grossSavings: 11, netSavings: 7, opexOneOff: 1, opexRec: 0.5, capex: 2 },
     };
     expect(displayedReforecastNet(lever)).toEqual({ value: 7, isReforecast: true });
+  });
+});
+
+describe("engine — displayedProgressPct (réalisé net / réactualisé net — SEULE formule de progression affichée)", () => {
+  it("returns 0 when there is no reforecast/plan to divide by", () => {
+    const lever = {
+      ...baseLever,
+      netSavings: 0,
+      lockedPlan: undefined,
+      reforecast: undefined,
+      actions: [],
+    };
+    expect(displayedProgressPct(lever)).toBe(0);
+  });
+
+  it("returns 0 (never a negative %) when realized is negative relative to the reforecast", () => {
+    const lever = {
+      ...baseLever,
+      netSavings: 10,
+      reforecast: { grossSavings: 10, netSavings: 10, opexOneOff: 0, opexRec: 0, capex: 0 },
+      actions: [realizedAction(-5)],
+    };
+    expect(displayedProgressPct(lever)).toBe(0);
+  });
+
+  it("returns the rounded percentage once the ratio turns positive", () => {
+    const lever = {
+      ...baseLever,
+      netSavings: 10,
+      reforecast: { grossSavings: 10, netSavings: 10, opexOneOff: 0, opexRec: 0, capex: 0 },
+      actions: [realizedAction(4)],
+    };
+    expect(displayedProgressPct(lever)).toBe(40);
+  });
+
+  it("is NOT the raw lever.progress field (which no longer drives the displayed percentage)", () => {
+    const lever = {
+      ...baseLever,
+      progress: 90,
+      netSavings: 10,
+      reforecast: { grossSavings: 10, netSavings: 10, opexOneOff: 0, opexRec: 0, capex: 0 },
+      actions: [] as Lever["actions"],
+    };
+    expect(displayedProgressPct(lever)).toBe(0);
+    expect(lever.progress).toBe(90);
   });
 });
 
