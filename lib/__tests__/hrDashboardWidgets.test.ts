@@ -13,6 +13,7 @@ import {
   getHrWidgetDef,
   resolveHrCustomViews,
   resolveHrActiveCustomView,
+  migrateFteWidgetsToFullWidth,
   type HrWidgetInstance,
 } from "@/lib/hrDashboardWidgets";
 
@@ -189,6 +190,49 @@ describe("hrDashboardWidgets — builder générique (customViews)", () => {
     const waterfall = layout.find((w) => w.type === "fte-waterfall")!;
     expect(resolveHrCustomViews(waterfall)).toEqual([]);
     expect(resolveHrActiveCustomView(waterfall)).toBeUndefined();
+  });
+});
+
+describe("hrDashboardWidgets — fte full-width migration", () => {
+  /** Helper : produit un layout hypothétique où fte-waterfall/fte-execution-status sont encore à
+   *  leur ancien span par défaut "M", reproduisant l'état des layouts persistés avant Sept 2026
+   *  (avant le passage en pleine largeur). */
+  const legacyMSpans = (): HrWidgetInstance[] =>
+    buildHrDefaultLayout().map((w) =>
+      w.type === "fte-waterfall" || w.type === "fte-execution-status"
+        ? { ...w, span: "M" as const }
+        : w
+    );
+
+  it("promotes both widgets from 'M' to 'XL' once", () => {
+    const before = legacyMSpans();
+    const after = migrateFteWidgetsToFullWidth(before, false);
+    expect(after.find((w) => w.type === "fte-waterfall")?.span).toBe("XL");
+    expect(after.find((w) => w.type === "fte-execution-status")?.span).toBe("XL");
+    // Aucun widget perdu ni dupliqué.
+    expect(after).toHaveLength(before.length);
+  });
+
+  it("is a no-op when the migration has already been applied", () => {
+    const before = legacyMSpans();
+    expect(migrateFteWidgetsToFullWidth(before, true)).toBe(before);
+  });
+
+  it("does not override a span the user already changed away from the old default 'M'", () => {
+    const before = legacyMSpans().map((w) =>
+      w.type === "fte-waterfall" ? { ...w, span: "L" as const } : w
+    );
+    const after = migrateFteWidgetsToFullWidth(before, false);
+    expect(after.find((w) => w.type === "fte-waterfall")?.span).toBe("L");
+    expect(after.find((w) => w.type === "fte-execution-status")?.span).toBe("XL");
+  });
+
+  it("leaves other widgets' spans untouched", () => {
+    const before = legacyMSpans();
+    const after = migrateFteWidgetsToFullWidth(before, false);
+    expect(after.find((w) => w.type === "staff-cost-waterfall")?.span).toBe(
+      before.find((w) => w.type === "staff-cost-waterfall")?.span
+    );
   });
 });
 
