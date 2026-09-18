@@ -53,7 +53,8 @@ export type HrWidgetType =
   | "hr-owner-actions"
   | "pse-summary"
   | "department-table"
-  | "movements-table";
+  | "movements-table"
+  | "movements-merged";
 
 /** Une configuration de vue construite par l'utilisateur pour un widget RH du builder générique
  *  (voir `lib/hrDashboardPivot.ts` pour `HR_METRIC_REGISTRY`/`HR_DIMENSION_REGISTRY`) — une seule
@@ -207,6 +208,18 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     type: "movements-table",
     label: "Synthèse des mouvements",
     icon: "ListChecks",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+  },
+  {
+    // Nouveau (round 4 clarté dashboard RH) — fusion à l'essai de "department-breakdown" et
+    // "movement-rhythm" derrière une bascule de mode, positionné en DERNIER pour apparaître tout en
+    // bas du layout par défaut, sous les deux widgets d'origine qu'il ne remplace pas — voir
+    // `components/shared/charts/MovementBreakdownMergedChart.tsx` et
+    // `migrateMovementsMergedWidget` plus bas pour les layouts déjà personnalisés.
+    type: "movements-merged",
+    label: "Mouvements — vue combinée (proposition)",
+    icon: "FlaskConical",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
   },
@@ -430,6 +443,36 @@ export function migrateFteWidgetsToFullWidth(
   );
 }
 
+/** Clé séparée pour la migration one-shot qui ajoute `movements-merged` en fin de layout persisté
+ *  (Sept 2026 — round 4 clarté dashboard RH). Même convention que `HR_GOODUELLE_MIGRATION_KEY` /
+ *  `HR_FTE_FULL_WIDTH_MIGRATION_KEY` ci-dessus et que
+ *  `INITIATIVE_HEALTH_MIGRATION_KEY`/`INITIATIVE_HEALTH_REORDER_KEY` côté dashboard exécutif
+ *  (`lib/dashboardWidgets.ts::migrateInitiativeHealthWidget`). */
+const HR_MOVEMENTS_MERGED_MIGRATION_KEY = "betrack_hr_dashboard_movements_merged_migration_v1";
+
+/** Ajoute une instance de `movements-merged` en FIN de layout persisté antérieur à ce widget, une
+ *  seule fois — idempotent (contrôlé par `HR_MOVEMENTS_MERGED_MIGRATION_KEY`, voir
+ *  `loadHrDashboardLayout`), non destructif : si l'utilisateur supprime ensuite ce widget, il ne
+ *  réapparaît pas au chargement suivant. Même logique que `migrateInitiativeHealthWidget` côté
+ *  dashboard exécutif et `migrateHrGooduelleWidgets` plus haut dans ce fichier. */
+export function migrateMovementsMergedWidget(
+  layout: HrWidgetInstance[],
+  migrationAlreadyApplied: boolean
+): HrWidgetInstance[] {
+  if (migrationAlreadyApplied) return layout;
+  if (layout.some((w) => w.type === "movements-merged")) return layout;
+  const def = getHrWidgetDef("movements-merged");
+  if (!def) return layout;
+  return [
+    ...layout,
+    {
+      instanceId: "movements-merged",
+      type: "movements-merged",
+      span: def.defaultSpan,
+    },
+  ];
+}
+
 const isBrowser = () => typeof window !== "undefined";
 
 function isValidHrInstance(value: unknown): value is HrWidgetInstance {
@@ -481,27 +524,34 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
     if (!raw) {
       window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
       window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
+      window.localStorage.setItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY, "1");
       return buildHrDefaultLayout();
     }
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidHrInstance)) {
       window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
       window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
+      window.localStorage.setItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY, "1");
       return buildHrDefaultLayout();
     }
     const migrationAlreadyApplied = window.localStorage.getItem(HR_GOODUELLE_MIGRATION_KEY) === "1";
     const fteFullWidthAlreadyApplied =
       window.localStorage.getItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY) === "1";
+    const movementsMergedAlreadyApplied =
+      window.localStorage.getItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY) === "1";
     const sanitized = (parsed as HrWidgetInstance[]).map(sanitizeHrInstance);
-    // Chaîne les deux migrations : ajout des widgets Gooduelle (si absents), puis passage en
-    // pleine largeur de fte-waterfall/fte-execution-status (si encore à leur ancien span "M").
+    // Chaîne les trois migrations : ajout des widgets Gooduelle (si absents), puis passage en
+    // pleine largeur de fte-waterfall/fte-execution-status (si encore à leur ancien span "M"),
+    // puis ajout de movements-merged en fin de layout (si absent).
     const gooduelleMigrated = migrateHrGooduelleWidgets(sanitized, migrationAlreadyApplied);
-    const migrated = migrateFteWidgetsToFullWidth(gooduelleMigrated, fteFullWidthAlreadyApplied);
-    if (!migrationAlreadyApplied || !fteFullWidthAlreadyApplied) {
+    const fteMigrated = migrateFteWidgetsToFullWidth(gooduelleMigrated, fteFullWidthAlreadyApplied);
+    const migrated = migrateMovementsMergedWidget(fteMigrated, movementsMergedAlreadyApplied);
+    if (!migrationAlreadyApplied || !fteFullWidthAlreadyApplied || !movementsMergedAlreadyApplied) {
       window.localStorage.setItem(HR_LAYOUT_KEY, JSON.stringify(migrated));
     }
     window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
     window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
+    window.localStorage.setItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY, "1");
     return migrated;
   } catch {
     return buildHrDefaultLayout();
@@ -514,6 +564,7 @@ export function saveHrDashboardLayout(layout: HrWidgetInstance[]): void {
     window.localStorage.setItem(HR_LAYOUT_KEY, JSON.stringify(layout));
     window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
     window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
+    window.localStorage.setItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY, "1");
   } catch (err) {
     console.error(
       "[betrack storage] échec d'écriture localStorage pour le layout dashboard RH :",

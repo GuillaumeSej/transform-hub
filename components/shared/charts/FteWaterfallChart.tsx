@@ -169,6 +169,7 @@ export function FteWaterfallChart({
           tickFormatter={(v) => fmt(Number(v) + offset)}
         />
         <Tooltip
+          cursor={false}
           content={({ active, payload }) => {
             const d = payload?.[1]?.payload as WaterfallDatum | undefined;
             if (!active || !d) return null;
@@ -206,6 +207,13 @@ export function FteWaterfallChart({
             if (label) onBarClick?.(label);
           }}
           cursor={onBarClick ? "pointer" : undefined}
+          // Le highlight par défaut de Recharts (cursor du Tooltip désactivé ci-dessus + cette
+          // forme active) pouvait couvrir toute la hauteur du plot (0→domainMax) au lieu de la
+          // seule barre survolée/cliquée — incohérence visuelle "parfois tout le graphe, parfois
+          // juste un bout" selon où le pointeur atterrissait (y compris sur la barre `base`
+          // invisible). On désactive la forme active par défaut : la couleur par `<Cell>`, le
+          // curseur pointer et la bulle de valeur au-dessus de la barre suffisent comme affordance.
+          activeBar={false}
         >
           {data.map((d) => (
             <Cell

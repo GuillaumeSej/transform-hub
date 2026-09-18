@@ -248,16 +248,21 @@ export function fteBridge(
   return buckets;
 }
 
-/** Décomposition d'un bucket par levier (pour le drill-down au clic sur la waterfall). */
+/** Décomposition d'un bucket par levier (pour le drill-down au clic sur la waterfall).
+ *  `valueOf` détermine la grandeur affichée par levier — par défaut le delta ETP, mais la
+ *  waterfall masse salariale (même mécanisme de drill, mêmes mouvements) passe un accesseur
+ *  sommant `salaryImpact` en €M à la place. */
 export function bucketByLever(
   bucket: FteBridgeBucket,
-  levers: Lever[]
+  levers: Lever[],
+  valueOf: (movements: WorkforceMovement[]) => number = (movements) =>
+    Math.round(movements.reduce((s, m) => s + fteEffect(m), 0) * 10) / 10
 ): {
   leverId: string;
   leverCode: string;
   leverName: string;
   movements: WorkforceMovement[];
-  fte: number;
+  value: number;
 }[] {
   const byLever = new Map<string, WorkforceMovement[]>();
   for (const m of bucket.movements) {
@@ -270,7 +275,7 @@ export function bucketByLever(
       leverCode: lever?.code ?? leverId,
       leverName: lever?.name ?? leverId,
       movements,
-      fte: Math.round(movements.reduce((s, m) => s + fteEffect(m), 0) * 10) / 10,
+      value: valueOf(movements),
     };
   });
 }

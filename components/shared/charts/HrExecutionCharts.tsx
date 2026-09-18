@@ -13,6 +13,7 @@ import {
 import type { ExecutionImpactRow, MovementExecutionStatus } from "@/lib/hrExecution";
 import { EXECUTION_LABELS } from "@/lib/hrExecution";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import type { WorkforceMovement } from "@/types";
 
 const STATUS_COLORS: Record<MovementExecutionStatus, string> = {
   realized: "#421799",
@@ -40,7 +41,13 @@ export function ExecutionStatusChart({
   data: ExecutionImpactRow[];
   mode: "fte" | "salary";
   height?: number;
-  onBarClick?: (dimensionValue: string, status: MovementExecutionStatus) => void;
+  /** Clic sur un segment (dimension × statut) — ouvre le détail des mouvements de cette cellule
+   *  (voir `MovementDrilldownModal`, câblé dans `app/(app)/hr/page.tsx`). */
+  onBarClick?: (
+    dimensionValue: string,
+    status: MovementExecutionStatus,
+    movements: WorkforceMovement[]
+  ) => void;
 }) {
   const { t } = useTranslation();
 
@@ -119,8 +126,8 @@ export function ExecutionStatusChart({
             stackId="status"
             fill={STATUS_COLORS[status]}
             onClick={(entry) => {
-              const label = (entry as { label?: string })?.label;
-              if (label) onBarClick?.(label, status);
+              const row = (entry as { meta?: ExecutionImpactRow })?.meta;
+              if (row) onBarClick?.(row.label, status, row[status].movements);
             }}
             cursor={onBarClick ? "pointer" : undefined}
           />

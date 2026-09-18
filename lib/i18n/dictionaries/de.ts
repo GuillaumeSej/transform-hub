@@ -551,6 +551,11 @@ const de: Record<string, string> = {
   "hr.progress": "Fortschritt",
   "hr.vsTarget": "vs. Ziel",
   "hr.widget.movementsTable": "Zusammenfassung der Bewegungen",
+  "hr.widget.movementsMerged": "Bewegungen — kombinierte Ansicht (Vorschlag)",
+  "hr.widget.movementsMergedHint":
+    "Vorschlag zur Prüfung (fasst die 2 Ansichten oben zusammen, gleiche Daten) — interne Umschaltung zum Vergleich, bevor entschieden wird, ob die eine, die andere oder beide behalten werden.",
+  "hr.widget.movementsMerged.modeDimension": "Nach Dimension",
+  "hr.widget.movementsMerged.modePeriod": "Nach Periode",
   "hr.movementsSearchPlaceholder": "Bewegung, Programm, Verantwortlichen suchen...",
   "hr.readOnlyHint": "Nur lesend — die Bearbeitung ist den Rollen HR und CTO vorbehalten.",
   "hr.confidential": "Vertraulich",

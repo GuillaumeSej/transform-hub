@@ -37,7 +37,15 @@ export function classifyMovementAction(
   return classifyMovementExecution(movement, today, dueSoonDays) as MovementActionStatus;
 }
 
-export type ExecutionImpactCell = { volume: number; net: number; count: number };
+export type ExecutionImpactCell = {
+  volume: number;
+  net: number;
+  count: number;
+  /** Mouvements derrière ce statut — alimente le drill-down au clic sur une barre/segment
+   *  (`ExecutionStatusChart` + `MovementDrilldownModal`), même pattern que
+   *  `movementStatusByType`'s `movementsByStatus` ci-dessous. */
+  movements: WorkforceMovement[];
+};
 export type ExecutionImpactRow = {
   key: string;
   label: string;
@@ -47,7 +55,7 @@ export type ExecutionImpactRow = {
   later: ExecutionImpactCell;
   abandoned: ExecutionImpactCell;
 };
-const emptyCell = (): ExecutionImpactCell => ({ volume: 0, net: 0, count: 0 });
+const emptyCell = (): ExecutionImpactCell => ({ volume: 0, net: 0, count: 0, movements: [] });
 
 function dimensionLabel(
   movement: WorkforceMovement,
@@ -92,6 +100,7 @@ export function executionByDimension(
     row[status].volume += value;
     row[status].net += value;
     row[status].count += 1;
+    row[status].movements.push(movement);
     rows.set(key, row);
   }
   return Array.from(rows.values()).sort(

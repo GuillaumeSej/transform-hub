@@ -567,6 +567,11 @@ const en: Record<string, string> = {
   "hr.progress": "Progress",
   "hr.vsTarget": "vs target",
   "hr.widget.movementsTable": "Movements summary",
+  "hr.widget.movementsMerged": "Movements — combined view (proposal)",
+  "hr.widget.movementsMergedHint":
+    "Proposal under review (merges the 2 views above, same data) — internal toggle to compare before deciding whether to keep one, the other, or both.",
+  "hr.widget.movementsMerged.modeDimension": "By dimension",
+  "hr.widget.movementsMerged.modePeriod": "By period",
   "hr.movementsSearchPlaceholder": "Search a movement, program, owner...",
   "hr.readOnlyHint": "Read-only — editing is reserved to HR and CTO roles.",
   "hr.confidential": "Confidential",

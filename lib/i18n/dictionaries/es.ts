@@ -548,6 +548,11 @@ const es: Record<string, string> = {
   "hr.progress": "Avance",
   "hr.vsTarget": "vs objetivo",
   "hr.widget.movementsTable": "Síntesis de los movimientos",
+  "hr.widget.movementsMerged": "Movimientos — vista combinada (propuesta)",
+  "hr.widget.movementsMergedHint":
+    "Propuesta en evaluación (agrupa las 2 vistas anteriores, mismos datos) — bascula interna para comparar antes de decidir conservar una, la otra, o ambas.",
+  "hr.widget.movementsMerged.modeDimension": "Por dimensión",
+  "hr.widget.movementsMerged.modePeriod": "Por periodo",
   "hr.movementsSearchPlaceholder": "Buscar un movimiento, programa, responsable...",
   "hr.readOnlyHint": "Solo lectura — la edición está reservada a los roles RRHH y CTO.",
   "hr.confidential": "Confidencial",

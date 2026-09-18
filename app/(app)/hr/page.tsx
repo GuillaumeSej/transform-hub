@@ -44,6 +44,7 @@ import {
   FteWaterfallLegend,
 } from "@/components/shared/charts/FteWaterfallChart";
 import { DepartmentMovementsChart } from "@/components/shared/charts/HrBreakdownCharts";
+import { MovementBreakdownMergedChart } from "@/components/shared/charts/MovementBreakdownMergedChart";
 import { ExecutionStatusChart } from "@/components/shared/charts/HrExecutionCharts";
 import { MovementStatusMatrix } from "@/components/shared/charts/MovementStatusMatrix";
 import { ForcedDepartureStatusChart } from "@/components/shared/charts/ForcedDepartureStatusChart";
@@ -87,7 +88,6 @@ import {
   ownerActionSummary,
   salaryExecutionByDimension,
   type ExecutionDimension,
-  type MovementExecutionStatus,
 } from "@/lib/hrExecution";
 import {
   HR_METRIC_REGISTRY,
@@ -161,6 +161,10 @@ export default function HrDashboardPage() {
   const { isConsolidatedView, consolidatedPrograms } = useActiveProgram();
   const [granularity, setGranularity] = useState<"month" | "quarter" | "year">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
+  // Quelle waterfall a déclenché le drill (ETP ou masse salariale) — les deux graphiques
+  // partagent le même mécanisme de drill (même bucket/mouvements sous-jacents via `bridge`,
+  // voir `drill`/`drillBucketMovements` ci-dessous), seule la grandeur affichée par levier change.
+  const [drillKind, setDrillKind] = useState<"fte" | "salary">("fte");
   // Drill-down générique pour les 3 graphiques agrégés sans vue de détail (item 3-5, round <n>) —
   // voir `components/shared/MovementDrilldownModal.tsx`. Un seul état partagé : chaque graphique
   // fournit son propre titre + la liste des `WorkforceMovement[]` déjà calculée derrière la
@@ -620,9 +624,21 @@ export default function HrDashboardPage() {
 
   const drill = useMemo(() => {
     if (!drillBucket) return [];
+    // La waterfall masse salariale n'a pas ses propres buckets `movements` (`salary` vient de
+    // `hr.salaryBridge`, sans le détail des mouvements) — mais `bridge` et `salary` partagent
+    // exactement les mêmes labels de bucket (même granularité/plage), donc on retrouve toujours
+    // les mouvements via `bridge`. Seule la grandeur affichée par levier change avec `drillKind`.
     const bucket = bridge.find((b) => b.label === drillBucket);
-    return bucket ? hr.bucketByLever(bucket, data.levers) : [];
-  }, [drillBucket, bridge, data.levers]);
+    if (!bucket) return [];
+    return drillKind === "salary"
+      ? hr.bucketByLever(
+          bucket,
+          data.levers,
+          (movements) =>
+            Math.round((movements.reduce((s, m) => s + m.salaryImpact, 0) / 1_000_000) * 100) / 100
+        )
+      : hr.bucketByLever(bucket, data.levers);
+  }, [drillBucket, drillKind, bridge, data.levers]);
   // Mouvements bruts du bucket en cours de drill (avant regroupement par levier) — alimente le
   // lien "Voir dans la Base ETP" du modal ci-dessous (item 2 : réutilise le même mécanisme unique
   // `etpMovementDeepLink` que la matrice de statut et `MovementDrilldownModal`).
@@ -636,28 +652,6 @@ export default function HrDashboardPage() {
   const goToEtp = (params: Record<string, string>) => {
     const qs = new URLSearchParams(params).toString();
     router.push(`/hr/etp${qs ? `?${qs}` : ""}`);
-  };
-  const goToExecution = (
-    value: string,
-    dimension: ExecutionDimension,
-    status: MovementExecutionStatus
-  ) => {
-    const dimensionParam =
-      dimension === "function" ? "f_function" : dimension === "country" ? "f_country" : "f_program";
-    const dimensionValue =
-      dimension === "program"
-        ? (programs.find((program) => program.name === value)?.id ?? value)
-        : value;
-    const executionValue =
-      status === "realized"
-        ? `${EXECUTION_LABELS.realized},${EXECUTION_LABELS.toValidate}`
-        : EXECUTION_LABELS[status];
-    const params = new URLSearchParams({
-      tab: "mouvements",
-      [dimensionParam]: dimensionValue,
-      f_execution: executionValue,
-    });
-    router.push(`/hr/etp?${params.toString()}`);
   };
   // ─── Layout du Dashboard RH (widgets) ───────────────────────────────────────────────────────
   // Personnalisation d'affichage purement locale (localStorage, par navigateur, clé DISTINCTE du
@@ -882,7 +876,10 @@ export default function HrDashboardPage() {
                 buckets={bridge}
                 baseline={wf.totalFTE}
                 target={target}
-                onBarClick={(label) => setDrillBucket(label)}
+                onBarClick={(label) => {
+                  setDrillKind("fte");
+                  setDrillBucket(label);
+                }}
               />
               <FteWaterfallLegend />
             </CardBody>
@@ -943,6 +940,10 @@ export default function HrDashboardPage() {
                 unit="€M"
                 decimals={1}
                 targetLabel={t("hr.landingPlan", "Atterrissage plan")}
+                onBarClick={(label) => {
+                  setDrillKind("salary");
+                  setDrillBucket(label);
+                }}
               />
               <FteWaterfallLegend
                 downLabel={t("hr.savingsLabel", "Économies")}
@@ -979,7 +980,14 @@ export default function HrDashboardPage() {
               <ExecutionStatusChart
                 data={rows}
                 mode="salary"
-                onBarClick={(value, status) => goToExecution(value, dimension, status)}
+                onBarClick={(value, status, movements) =>
+                  setDrilldownModal({
+                    title: t("hr.drilldown.dimensionStatusTitle", "Mouvements — {label} · {status}")
+                      .replace("{label}", value)
+                      .replace("{status}", EXECUTION_LABELS[status]),
+                    movements,
+                  })
+                }
               />
             </CardBody>
           </Card>
@@ -1394,6 +1402,33 @@ export default function HrDashboardPage() {
             </CardBody>
           </Card>
         );
+      case "movements-merged": {
+        const programLabels = Object.fromEntries(
+          programs.map((program) => [program.id, program.name])
+        );
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title={t("hr.widget.movementsMerged", "Mouvements — vue combinée (proposition)")}
+            />
+            <CardBody>
+              <MovementBreakdownMergedChart
+                movements={filteredMovements}
+                programLabels={programLabels}
+                dateRange={dateRange}
+                onDrilldown={(title, movements) => setDrilldownModal({ title, movements })}
+              />
+              <p className="mt-2 text-[11px] text-tertiary">
+                {t(
+                  "hr.widget.movementsMergedHint",
+                  "Proposition à l'étude (regroupe les 2 vues dimension/période ci-dessus, mêmes données) — bascule interne pour comparer avant de décider de garder l'une, l'autre, ou les deux."
+                )}
+              </p>
+            </CardBody>
+          </Card>
+        );
+      }
       default:
         return null;
     }
@@ -1997,7 +2032,10 @@ export default function HrDashboardPage() {
       <Modal
         open={drillBucket !== null}
         onOpenChange={(open) => !open && setDrillBucket(null)}
-        title={t("hr.drillTitle", "Mouvements {prefix} {bucket} — décomposition par levier")
+        title={(drillKind === "salary"
+          ? t("hr.drillTitleSalary", "Masse salariale {prefix} {bucket} — décomposition par levier")
+          : t("hr.drillTitle", "Mouvements {prefix} {bucket} — décomposition par levier")
+        )
           .replace(
             "{prefix}",
             granularity === "month"
@@ -2046,8 +2084,8 @@ export default function HrDashboardPage() {
                       {entry.leverName}
                     </button>
                     <span className={`text-sm font-bold text-primary`}>
-                      {entry.fte > 0 ? "+" : ""}
-                      {entry.fte} ETP
+                      {entry.value > 0 ? "+" : ""}
+                      {entry.value} {drillKind === "salary" ? "€M" : "ETP"}
                     </span>
                   </div>
                   {lever && (

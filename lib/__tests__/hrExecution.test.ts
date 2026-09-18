@@ -103,6 +103,23 @@ describe("execution aggregations", () => {
       rows[0].later.volume;
     expect(chartTotal).toBeCloseTo((-80000 + 50000) / 1_000_000);
   });
+
+  it("retains the movements behind each dimension/status cell for drill-down", () => {
+    const rows = salaryExecutionByDimension(
+      [
+        movement({ id: "M1", function: "Finance", status: "À faire", plannedDate: "2026-06-01" }),
+        movement({ id: "M2", function: "Finance", status: "À faire", plannedDate: "2026-06-05" }),
+        movement({ id: "M3", function: "Finance", status: "Abandonné" }),
+      ],
+      "function",
+      programs,
+      "2026-06-22"
+    );
+    const finance = rows.find((row) => row.label === "Finance")!;
+    expect(finance.overdue.movements.map((m) => m.id).sort()).toEqual(["M1", "M2"]);
+    expect(finance.abandoned.movements.map((m) => m.id)).toEqual(["M3"]);
+    expect(finance.dueSoon.movements).toEqual([]);
+  });
 });
 
 describe("ownerActionSummary", () => {

@@ -14,6 +14,7 @@ import {
   resolveHrCustomViews,
   resolveHrActiveCustomView,
   migrateFteWidgetsToFullWidth,
+  migrateMovementsMergedWidget,
   type HrWidgetInstance,
 } from "@/lib/hrDashboardWidgets";
 
@@ -233,6 +234,41 @@ describe("hrDashboardWidgets — fte full-width migration", () => {
     expect(after.find((w) => w.type === "staff-cost-waterfall")?.span).toBe(
       before.find((w) => w.type === "staff-cost-waterfall")?.span
     );
+  });
+});
+
+describe("hrDashboardWidgets — movements-merged migration", () => {
+  /** Layout hypothétique antérieur à l'introduction de movements-merged (Sept 2026, round 4
+   *  clarté dashboard RH). */
+  const legacyLayout = (): HrWidgetInstance[] =>
+    buildHrDefaultLayout().filter((w) => w.type !== "movements-merged");
+
+  it("appends movements-merged at the end, with its default span, once", () => {
+    const before = legacyLayout();
+    const after = migrateMovementsMergedWidget(before, false);
+    expect(after).toHaveLength(before.length + 1);
+    const added = after[after.length - 1];
+    expect(added.type).toBe("movements-merged");
+    expect(added.span).toBe(getHrWidgetDef("movements-merged")?.defaultSpan);
+  });
+
+  it("is a no-op when the migration has already been applied", () => {
+    const before = legacyLayout();
+    expect(migrateMovementsMergedWidget(before, true)).toBe(before);
+  });
+
+  it("does not duplicate the widget if it is already present", () => {
+    const before = buildHrDefaultLayout();
+    expect(before.some((w) => w.type === "movements-merged")).toBe(true);
+    const after = migrateMovementsMergedWidget(before, false);
+    expect(after).toBe(before);
+    expect(after.filter((w) => w.type === "movements-merged")).toHaveLength(1);
+  });
+
+  it("leaves other widgets untouched", () => {
+    const before = legacyLayout();
+    const after = migrateMovementsMergedWidget(before, false);
+    expect(after.slice(0, before.length)).toEqual(before);
   });
 });
 

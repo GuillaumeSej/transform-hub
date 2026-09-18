@@ -600,6 +600,11 @@ const fr: Record<string, string> = {
   "hr.progress": "Avancement",
   "hr.vsTarget": "vs cible",
   "hr.widget.movementsTable": "Synthèse des mouvements",
+  "hr.widget.movementsMerged": "Mouvements — vue combinée (proposition)",
+  "hr.widget.movementsMergedHint":
+    "Proposition à l'étude (regroupe les 2 vues dimension/période ci-dessus, mêmes données) — bascule interne pour comparer avant de décider de garder l'une, l'autre, ou les deux.",
+  "hr.widget.movementsMerged.modeDimension": "Par dimension",
+  "hr.widget.movementsMerged.modePeriod": "Par période",
   "hr.movementsSearchPlaceholder": "Rechercher un mouvement, programme, owner...",
   "hr.readOnlyHint": "Lecture seule — l'édition est réservée aux rôles RH et CTO.",
   "hr.confidential": "Confidentiel",
