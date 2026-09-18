@@ -43,10 +43,15 @@ import type { BeTrackData, HierarchyLevelDef, HierarchyNode } from "@/types";
  *  Inspirés des patterns déjà en place côté RH (`HrBreakdownCharts.tsx`, sélecteur
  *  mois/trimestre/année) et dashboard exécutif (`QuarterlyBridgeChart`, `BudgetDonutChart`). */
 
-/** #1 — Coûts Invest (CAPEX + OPEX one-off) déjà engagés vs à venir, cliquable. */
+/** #1 — Coûts Invest (CAPEX + OPEX one-off) déjà engagés vs à venir. Même logique de drill-down
+ *  en place que `CostByHierarchyChart` ci-dessous : un premier clic (engagé/à venir) redessine LE
+ *  MÊME donut en répartition par chantier (workstream), avec un bouton retour ; un second clic sur
+ *  un chantier ouvre `CostDrilldownModal` directement sur SES leviers/actions (`initialWsId`), sans
+ *  repasser par la liste des chantiers que le donut vient déjà de montrer. */
 export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
   const { t } = useTranslation();
   const [segment, setSegment] = useState<"engaged" | "upcoming" | null>(null);
+  const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
 
   const split = useMemo(() => {
     const engagedRows = investCostRowsBySegment(data, true).map((r) => ({
@@ -70,6 +75,8 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
 
   const engagedLabel = t("finance.chart.engaged", "Déjà engagé");
   const upcomingLabel = t("finance.chart.upcoming", "À venir");
+  const segmentLabel = segment === "engaged" ? engagedLabel : upcomingLabel;
+  const segmentAmount = segment === "engaged" ? split.engaged : split.upcoming;
 
   return (
     <Card>
@@ -85,44 +92,63 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
             </span>
           </span>
         }
+        actions={
+          segment ? (
+            <button
+              type="button"
+              onClick={() => setSegment(null)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-secondary hover:text-primary"
+            >
+              <ChevronLeft size={14} />
+              {engagedLabel} / {upcomingLabel}
+            </button>
+          ) : undefined
+        }
       />
       <CardBody>
         {split.total === 0 ? (
           <EmptyState />
         ) : (
           <>
-            {/* Retour visuel "cette part a été cliquée" (contrairement au donut hiérarchie
-                ci-dessous, celui-ci ne se redessine jamais — 2 catégories plates, rien où
-                descendre) : sans cette ligne, un clic ouvrant la modale pouvait sembler inerte
-                puisque le widget lui-même ne changeait visuellement en rien. `BudgetDonutChart`
-                n'expose pas de prop pour mettre en évidence une part précise depuis l'extérieur
-                (seul son survol interne pilote `activeShape`) — fix scopé à ce composant plutôt
-                que d'étendre le composant partagé, réutilisé par 3+ appelants. */}
             {segment && (
               <p className="mb-2 text-[12px] font-semibold text-primary">
-                {segment === "engaged" ? engagedLabel : upcomingLabel} ·{" "}
-                {engine.fmtCurr(segment === "engaged" ? split.engaged : split.upcoming)}
+                {segmentLabel} · {engine.fmtCurr(segmentAmount)}
               </p>
             )}
-            <BudgetDonutChart
-              data={[
-                { name: engagedLabel, value: split.engaged },
-                { name: upcomingLabel, value: split.upcoming },
-              ]}
-              formatValue={(v) => engine.fmtCurr(v)}
-              centerLabel={t("finance.chart.totalCost", "Coût total")}
-              onSliceClick={(name) => setSegment(name === engagedLabel ? "engaged" : "upcoming")}
-            />
+            {!segment ? (
+              <BudgetDonutChart
+                data={[
+                  { name: engagedLabel, value: split.engaged },
+                  { name: upcomingLabel, value: split.upcoming },
+                ]}
+                formatValue={(v) => engine.fmtCurr(v)}
+                centerLabel={t("finance.chart.totalCost", "Coût total")}
+                onSliceClick={(name) => setSegment(name === engagedLabel ? "engaged" : "upcoming")}
+              />
+            ) : groups.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <BudgetDonutChart
+                data={groups.map((g) => ({ name: g.wsName, value: g.amount }))}
+                formatValue={(v) => engine.fmtCurr(v)}
+                centerLabel={t("finance.chart.byWorkstream", "Par chantier")}
+                onSliceClick={(name) => {
+                  const group = groups.find((g) => g.wsName === name);
+                  if (group) setSelectedWsId(group.wsId);
+                }}
+              />
+            )}
           </>
         )}
       </CardBody>
       <CostDrilldownModal
-        open={segment !== null}
+        open={selectedWsId !== null}
         onOpenChange={(open) => {
-          if (!open) setSegment(null);
+          if (!open) setSelectedWsId(null);
         }}
-        title={segment === "engaged" ? engagedLabel : upcomingLabel}
+        title={segmentLabel}
         groups={groups}
+        initialWsId={selectedWsId}
         formatValue={(v) => engine.fmtCurr(v)}
       />
     </Card>

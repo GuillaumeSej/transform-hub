@@ -1926,6 +1926,7 @@ const fr: Record<string, string> = {
 
   // ─── finance charts (drill-down + refonte coûts/savings) ───────────────────
   "finance.chart.engagedTitle": "Coûts engagés vs à venir",
+  "finance.chart.byWorkstream": "Par chantier",
   "finance.chart.timelineTitle": "Engagement des coûts dans le temps (Invest)",
   "finance.chart.timelineSubtitle":
     "CAPEX + OPEX one-off — voir le graphique Coût d'investissement vs Savings pour la comparaison aux gains",

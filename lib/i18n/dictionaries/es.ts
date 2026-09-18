@@ -1820,6 +1820,7 @@ const es: Record<string, string> = {
 
   // ─── gráficos de finanzas (drill-down + rediseño costes/savings) ───────────
   "finance.chart.engagedTitle": "Costes comprometidos vs futuros",
+  "finance.chart.byWorkstream": "Por workstream",
   "finance.chart.timelineTitle": "Compromiso de costes en el tiempo (Invest)",
   "finance.chart.timelineSubtitle":
     "CAPEX + OPEX puntual — ver el gráfico Coste de inversión vs Savings para la comparación con las ganancias",

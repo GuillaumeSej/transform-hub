@@ -1817,6 +1817,7 @@ const en: Record<string, string> = {
 
   // ─── finance charts (drill-down + cost/savings rework) ─────────────────────
   "finance.chart.engagedTitle": "Committed vs upcoming costs",
+  "finance.chart.byWorkstream": "By workstream",
   "finance.chart.timelineTitle": "Cost commitment over time (Invest)",
   "finance.chart.timelineSubtitle":
     "CAPEX + one-off OPEX — see the Investment cost vs Savings chart for the comparison with gains",

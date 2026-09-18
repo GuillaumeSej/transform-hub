@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/shared/Modal";
@@ -23,16 +23,29 @@ export function CostDrilldownModal({
   title,
   groups,
   formatValue,
+  initialWsId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   groups: WorkstreamCostGroup[];
   formatValue: (value: number) => string;
+  /** Workstream déjà choisi par l'appelant (ex. part de donut cliquée en amont) — la modale
+   *  s'ouvre directement sur la sous-vue liste des leviers de CE workstream au lieu de la liste
+   *  des workstreams, sans empêcher de revenir en arrière voir les autres via le bouton retour. */
+  initialWsId?: string | null;
 }) {
   const { t } = useTranslation();
   const router = useRouter();
   const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
+
+  // Pré-sélectionne le workstream fourni par l'appelant à CHAQUE ouverture (pas seulement au
+  // montage) — `open` est le seul déclencheur pertinent, `initialWsId` peut changer d'une
+  // ouverture à l'autre sans que la modale ne soit démontée entre deux.
+  useEffect(() => {
+    if (open) setSelectedWsId(initialWsId ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const selectedGroup = useMemo(
     () => groups.find((g) => g.wsId === selectedWsId) ?? null,

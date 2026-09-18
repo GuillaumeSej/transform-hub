@@ -1827,6 +1827,7 @@ const de: Record<string, string> = {
 
   // ─── Finanz-Charts (Drilldown + Neugestaltung Kosten/Savings) ──────────────
   "finance.chart.engagedTitle": "Gebundene vs. anstehende Kosten",
+  "finance.chart.byWorkstream": "Nach Workstream",
   "finance.chart.timelineTitle": "Kostenbindung im Zeitverlauf (Invest)",
   "finance.chart.timelineSubtitle":
     "CAPEX + einmaliger OPEX — siehe Diagramm Investitionskosten vs. Savings für den Vergleich mit den Gewinnen",
