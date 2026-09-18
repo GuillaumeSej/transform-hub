@@ -115,6 +115,19 @@ const LEVIER_BAR_HEIGHT = 30;
 // dédiée `DELIVERABLE_MARKER_LANE_HEIGHT` (et la hauteur de ligne conditionnelle qui l'accompagnait,
 // `trackHeight = hasDeliverables ? ... : LEVIER_BAR_HEIGHT`) disparaît donc : chaque ligne mesure
 // simplement `LEVIER_BAR_HEIGHT`, qu'elle ait des livrables ou non.
+//
+// Round 26 (retour PO — "le 24% est en dessous du losange") : l'échéance d'un livrable tombe très
+// souvent près (ou pile) de la date de fin du levier, donc le losange atterrit quasiment à la même
+// position horizontale que le "N%"/triangle "en retard" posés juste après la barre — et comme les
+// DEUX étaient centrés verticalement sur la même barre (`top = LEVIER_BAR_HEIGHT / 2`), ils se
+// chevauchaient. Plutôt que de compter sur un agrandissement pour éviter la collision, le "N%"/
+// triangle est déplacé dans une bande verticale dédiée AU-DESSUS de la barre (jamais partagée avec
+// les losanges, qui restent centrés sur la barre) : collision impossible par construction, quelle
+// que soit la coïncidence horizontale. `LEVIER_LABEL_HEIGHT` réserve cette bande DANS le conteneur
+// de la ligne (plutôt qu'un `top` négatif qui déborderait du conteneur) : la ligne mesure désormais
+// `LEVIER_LABEL_HEIGHT + LEVIER_BAR_HEIGHT`, la barre est décalée de `LEVIER_LABEL_HEIGHT` vers le
+// bas — pas de recadrage/chevauchement avec la ligne précédente.
+const LEVIER_LABEL_HEIGHT = 14;
 
 type ChantierGroup = { chantier: Chantier; rows: ProgramRoadmapRow[] };
 type AxisGroup = { axis: StrategicAxis; chantierGroups: ChantierGroup[] };
@@ -396,14 +409,14 @@ export function ProgramRoadmap({
 
                               <div
                                 className="relative flex-1"
-                                style={{ height: LEVIER_BAR_HEIGHT }}
+                                style={{ height: LEVIER_LABEL_HEIGHT + LEVIER_BAR_HEIGHT }}
                               >
                                 <TimelineGridColumns columns={columns} />
 
                                 <TimelineBar
                                   left={startPct}
                                   width={widthPct}
-                                  top={0}
+                                  top={LEVIER_LABEL_HEIGHT}
                                   height={LEVIER_BAR_HEIGHT}
                                   color={axisColor}
                                   variant="solid"
@@ -425,15 +438,21 @@ export function ProgramRoadmap({
                                 {/* Round 25 (retour PO) : le "N%" vivait auparavant EN `trailing`
                                     DANS la barre — texte peint sur son propre remplissage, ce qui
                                     entrait en collision avec les losanges de livrable désormais posés
-                                    sur la barre (voir plus bas). Déplacé ICI, à côté de la barre —
-                                    même mécanique de positionnement que le triangle "en retard"
-                                    ci-dessous — pour que la surface de la barre reste entièrement
-                                    libre. */}
+                                    sur la barre (voir plus bas). Déplacé à côté de la barre — même
+                                    mécanique de positionnement que le triangle "en retard" ci-dessous.
+                                    Round 26 (retour PO — "le 24% est en dessous du losange") : centré
+                                    sur la barre, ce bloc retombait dans la MÊME bande verticale que
+                                    les losanges de livrable dès que l'échéance d'un livrable coïncidait
+                                    horizontalement avec la fin du levier (cas fréquent). Remonté dans
+                                    la bande `LEVIER_LABEL_HEIGHT` réservée AU-DESSUS de la barre — les
+                                    losanges restent centrés sur la barre elle-même — donc plus aucune
+                                    collision possible, par construction. */}
                                 <div
-                                  className="pointer-events-none absolute flex -translate-y-1/2 items-center gap-1"
+                                  className="pointer-events-none absolute flex items-center gap-1"
                                   style={{
                                     left: `${afterBarLeftPct}%`,
-                                    top: LEVIER_BAR_HEIGHT / 2,
+                                    top: 0,
+                                    height: LEVIER_LABEL_HEIGHT,
                                     marginLeft: 4,
                                   }}
                                 >
@@ -471,16 +490,16 @@ export function ProgramRoadmap({
                                 </div>
 
                                 {/* Round 25 (retour PO) : losanges de livrable posés DIRECTEMENT sur
-                                    la barre du levier (même centre vertical qu'elle, `top =
-                                    LEVIER_BAR_HEIGHT / 2`) — plus dans une piste séparée en dessous.
-                                    Le "N%" ci-dessus a été déplacé hors de la barre précisément pour
-                                    que cette surface reste libre de texte et que les losanges
-                                    puissent s'y poser sans collision. */}
+                                    la barre du levier (même centre vertical qu'elle) — plus dans une
+                                    piste séparée en dessous. Round 26 : le centre vertical de la barre
+                                    est désormais décalé de `LEVIER_LABEL_HEIGHT` (la bande du "N%"
+                                    ci-dessus) — `top` en tient compte pour rester centré SUR la barre,
+                                    qui reste la bande dédiée aux losanges (jamais celle du "N%"). */}
                                 {row.deliverables.map((deliverable) => (
                                   <TimelineMarker
                                     key={deliverable.id}
                                     leftPct={pctOf(deliverable.dueDate!)}
-                                    top={LEVIER_BAR_HEIGHT / 2}
+                                    top={LEVIER_LABEL_HEIGHT + LEVIER_BAR_HEIGHT / 2}
                                     color={deliverableMarkerColor(deliverable.status)}
                                     onClick={
                                       rowClickable

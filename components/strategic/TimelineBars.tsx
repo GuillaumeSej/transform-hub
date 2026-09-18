@@ -430,16 +430,6 @@ export function TimelineBar({
                 : withAlpha(color, 0.16),
           borderColor: variant === "outline" ? withAlpha(color, 0.65) : undefined,
           color: variant === "solid" ? readableTextColor(color) : undefined,
-          // Round 25 : le libellé (nom du projet) peut chevaucher la piste neutre ET le remplissage
-          // coloré selon `progressPct` — un halo sombre autour des glyphes (pas juste un décalage
-          // dans une direction) garde le texte blanc lisible sur les DEUX fonds, y compris la piste
-          // neutre très claire où un simple `text-shadow` décalé serait insuffisant. Gated au seul
-          // cas concerné (piste+remplissage ET texte blanc), sans effet sur les couleurs d'axe
-          // claires (texte déjà sombre) ni sur le remplissage plat historique.
-          textShadow:
-            solidWithTrack && readableTextColor(color) === "#ffffff"
-              ? "-1px -1px 1.5px rgba(0,0,0,0.65), 1px -1px 1.5px rgba(0,0,0,0.65), -1px 1px 1.5px rgba(0,0,0,0.65), 1px 1px 1.5px rgba(0,0,0,0.65)"
-              : undefined,
         }}
       >
         {variant === "outline" && progressPct !== undefined && (
@@ -459,7 +449,21 @@ export function TimelineBar({
         {inline && (
           <div className="relative flex h-full items-center gap-1 px-1.5">
             {icon}
-            <span className={labelClassName ?? "min-w-0 flex-1 truncate text-[10px] font-semibold"}>
+            <span
+              className={`${labelClassName ?? "min-w-0 flex-1 truncate text-[10px] font-semibold"} ${
+                // Round 26 (retour PO — halo texte "pas propre") : le libellé (nom du projet) peut
+                // chevaucher la piste neutre ET le remplissage coloré selon `progressPct`. round 25
+                // réglait ça avec un halo `text-shadow` 4 directions, jugé sale par le PO. Remplacé
+                // par une "puce" de fond semi-opaque juste derrière le texte (même patron que la
+                // pastille "aujourd'hui" plus haut dans ce fichier, `bg-neutral-700`/`rounded-sm`) :
+                // le texte blanc reste lisible sur les DEUX fonds sans aucun effet ombre/glow. Gated
+                // au seul cas concerné (piste+remplissage ET texte blanc), sans effet sur les
+                // couleurs d'axe claires (texte déjà sombre) ni sur le remplissage plat historique.
+                solidWithTrack && readableTextColor(color) === "#ffffff"
+                  ? "rounded-sm bg-black/35 px-1"
+                  : ""
+              }`}
+            >
               {label}
             </span>
             {trailing}
@@ -489,11 +493,17 @@ export function TimelineBar({
  * livrables. Mais NETTEMENT plus petit que l'ancien losange pré-round-24 (~17px) : `ProgramRoadmap.tsx`
  * le pose désormais directement SUR la barre du projet (plus dans une piste séparée en dessous), un
  * gros losange y aurait davantage débordé/gêné le clic sur la barre elle-même.
+ *
+ * Round 26 (retour PO — "le 24% n'est pas assez gros [...] le losange") : légèrement agrandi
+ * (10px → 12px) pour rester visible/cliquable facilement, sans revenir vers l'ancien gabarit
+ * oversized (~17px) que round 25 a justement corrigé. Le vrai correctif à la collision avec le "N%"
+ * est côté `ProgramRoadmap.tsx` (le libellé change de bande verticale), cet agrandissement n'est
+ * qu'un ajustement complémentaire.
  */
 export function TimelineMarker({
   leftPct,
   top,
-  size = 10,
+  size = 12,
   color,
   onClick,
   ariaLabel,
