@@ -21,7 +21,11 @@ export function leverToExcelRow(
    *  change. Absent = référentiel par défaut (`DEFAULT_LIFECYCLE_STAGES`), déjà celui réellement
    *  affiché pour toute entreprise sans personnalisation — voir `lib/leverExcelImport.ts` pour le
    *  mapping inverse, qui accepte ce même libellé au ré-import. */
-  lifecycleStages: LifecycleStage[] = DEFAULT_LIFECYCLE_STAGES
+  lifecycleStages: LifecycleStage[] = DEFAULT_LIFECYCLE_STAGES,
+  /** Programmes de l'entreprise, pour résoudre la colonne "Programme" (voir
+   *  `lib/leverExcelImport.ts` — obligatoire au ré-import dès que l'entreprise a plusieurs
+   *  programmes). Absent = la colonne écrit l'id brut du programme. */
+  programs: { id: string; name: string }[] = []
 ): Record<string, string | number> {
   const ws = data.workstreams.find((w) => w.id === lever.ws);
   const pnl = data.pnlAccounts.find((p) => p.id === lever.pnlMap);
@@ -30,6 +34,7 @@ export function leverToExcelRow(
     "Type de levier": lever.type,
     "Nom du levier": lever.name,
     Workstream: ws?.name ?? lever.ws,
+    Programme: programs.find((p) => p.id === lever.programId)?.name ?? lever.programId ?? "",
     Owner: lever.owner,
     "Owner (initiales)": lever.ownerInit,
     Sponsor: lever.sponsor,
