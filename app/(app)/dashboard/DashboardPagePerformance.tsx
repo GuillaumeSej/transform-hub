@@ -13,7 +13,6 @@ import {
   ChevronUp,
   CircleCheck,
   GripVertical,
-  Info,
   LayoutGrid,
   Maximize2,
   Plus,
@@ -34,7 +33,6 @@ import {
 } from "@/lib/firestore/admin";
 import type { Company, HierarchyLevelDef, HierarchyNode, Program } from "@/types";
 import * as engine from "@/lib/engine";
-import { hrProgramSummary } from "@/lib/hrProgramSummary";
 import {
   METRIC_REGISTRY,
   getAvailableDimensions,
@@ -311,51 +309,9 @@ export function DashboardPagePerformance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.companyId, geographyHierarchyLevels.length]);
 
-  const sortedHierarchyLevels = useMemo(
-    () => [...hierarchyLevels].sort((a, b) => a.order - b.order),
-    [hierarchyLevels]
-  );
   const sortedGeographyHierarchyLevels = useMemo(
     () => [...geographyHierarchyLevels].sort((a, b) => a.order - b.order),
     [geographyHierarchyLevels]
-  );
-
-  // Un levier importé via Excel n'a souvent qu'un `pnlMap` (ancien matching par code), pas encore
-  // de `hierarchyLeafId` — même repli que engine.pnlImpactDetailed / app/(app)/levers/page.tsx.
-  const resolveMacroPnlLabel = (l: Lever): string => {
-    const macroLevel = sortedHierarchyLevels[0];
-    if (!macroLevel) return "";
-    const path = resolveHierarchyPath(
-      l.hierarchyLeafId ?? "",
-      hierarchyNodes,
-      sortedHierarchyLevels
-    );
-    const viaLeaf = path.find((p) => p.levelKey === macroLevel.key)?.label;
-    if (viaLeaf) return viaLeaf;
-    return (
-      hierarchyNodes.find((n) => n.levelKey === macroLevel.key && n.code === l.pnlMap)?.label ?? ""
-    );
-  };
-
-  // Un filtre par niveau d'arborescence financière configuré — mêmes principes que la géographie
-  // ci-dessous (voir aussi hierarchyFilterDefs de app/(app)/levers/page.tsx).
-  const hierarchyFilterDefs: FilterDef<Lever>[] = useMemo(
-    () =>
-      sortedHierarchyLevels.map((level, index) => ({
-        key: `hierarchy_${level.key}`,
-        label: level.label,
-        getValue: (l: Lever) => {
-          if (index === 0) return resolveMacroPnlLabel(l);
-          const path = resolveHierarchyPath(
-            l.hierarchyLeafId ?? "",
-            hierarchyNodes,
-            sortedHierarchyLevels
-          );
-          return path.find((p) => p.levelKey === level.key)?.label ?? "";
-        },
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sortedHierarchyLevels, hierarchyNodes]
   );
 
   // Un filtre par niveau d'arborescence géographique configuré — remplace le filtre unique
@@ -406,9 +362,8 @@ export function DashboardPagePerformance() {
         getValue: (l) => l.function,
       },
       { key: "type", label: "Type", getValue: (l) => l.type },
-      ...hierarchyFilterDefs,
     ],
-    [data.workstreams, lifecycle, geographyFilterDefs, hierarchyFilterDefs, t]
+    [data.workstreams, lifecycle, geographyFilterDefs, t]
   );
 
   // Round <n> : hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts) — remplace
@@ -443,15 +398,6 @@ export function DashboardPagePerformance() {
   }, [visibleData, filteredLevers]);
 
   const summary = engine.programSummary(filteredData);
-  // ETP RH (réalisé/cible) — même source que le KPI "Impact ETP" du Dashboard RH
-  // (`app/(app)/hr/page.tsx`), pour le widget de réconciliation ETP ci-dessous (audit #3). Pas
-  // scopée au programme sélectionné : `data.workforce.movements` est déjà company-wide, même
-  // périmètre que `summary.suppressionsPlanned/Realized` juste au-dessus (dérivé de
-  // `filteredData.workforce.movements`, lui-même identique à `data.workforce.movements`).
-  const hrEtpSummary = useMemo(
-    () => hrProgramSummary(data.workforce.movements).fte,
-    [data.workforce.movements]
-  );
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
 
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
@@ -2038,62 +1984,6 @@ export function DashboardPagePerformance() {
           )}
           onClick={() => router.push("/hr")}
         />
-      </div>
-
-      {/* Widget de réconciliation ETP — audit #3 : les 3 chiffres "ETP" ci-dessus/du Dashboard RH
-          ne se recoupent jamais visuellement (pages différentes) ; ce bandeau compact les affiche
-          côte à côte en UN seul endroit pour qu'un program lead ne les prenne jamais pour la même
-          mesure. Ne force PAS ces chiffres à coïncider (métiers légitimement différents) — clarifie
-          seulement leur nature respective. */}
-      <div className="mb-4 rounded-lg border border-border bg-white p-4 shadow-sm">
-        <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-secondary">
-          {t("dashboard.etpReconciliation.title", "Réconciliation ETP — 3 mesures, 3 périmètres")}
-          <Tooltip
-            text={t(
-              "dashboard.etpReconciliation.tooltip",
-              "Ces 3 chiffres mesurent des choses différentes et ne sont pas censés être égaux : planification des leviers, suivi RH réel, et départs forcés (sous-ensemble du suivi RH)."
-            )}
-          >
-            <Info size={12} className="shrink-0 text-tertiary" />
-          </Tooltip>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-md bg-neutral-50 px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-              {t("dashboard.etpReconciliation.leverPlan", "ETP leviers (planifié)")}
-            </div>
-            <div className="mt-0.5 text-lg font-bold text-primary">{summary.fteImpact}</div>
-            <div className="mt-0.5 text-[10.5px] text-tertiary">
-              {t(
-                "dashboard.etpReconciliation.leverPlanHint",
-                "Estimation à la création/mise à jour du levier"
-              )}
-            </div>
-          </div>
-          <div className="rounded-md bg-neutral-50 px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-              {t("dashboard.etpReconciliation.hrTracked", "ETP RH (réalisé / cible)")}
-            </div>
-            <div className="mt-0.5 text-lg font-bold text-primary">
-              {hrEtpSummary.realized} / {hrEtpSummary.target}
-            </div>
-            <div className="mt-0.5 text-[10.5px] text-tertiary">
-              {t("dashboard.etpReconciliation.hrTrackedHint", "Tous mouvements RH suivis")}
-            </div>
-          </div>
-          <div className="rounded-md bg-neutral-50 px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-              {t("dashboard.etpReconciliation.suppressions", "Postes supprimés (réalisé / cible)")}
-            </div>
-            <div className="mt-0.5 text-lg font-bold text-primary">
-              {engine.fmtInt(summary.suppressionsRealized)} /{" "}
-              {engine.fmtInt(summary.suppressionsPlanned)}
-            </div>
-            <div className="mt-0.5 text-[10.5px] text-tertiary">
-              {t("dashboard.etpReconciliation.suppressionsHint", "Départs forcés uniquement")}
-            </div>
-          </div>
-        </div>
       </div>
 
       {editMode && (
