@@ -77,7 +77,7 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
         title={
           <span className="flex flex-col gap-0.5">
             <span>{t("finance.chart.engagedTitle", "Coûts engagés vs à venir")}</span>
-            <span className="text-[10.5px] font-normal text-tertiary">
+            <span className="text-[9.5px] font-normal text-tertiary">
               {t(
                 "finance.chart.engagedSubtitle",
                 'Périmètre Invest (CAPEX + OPEX one-off), OPEX récurrent exclu — à ne pas comparer directement au total "Répartition par centre de coût / P&L", qui inclut aussi l\'OPEX récurrent. "Déjà engagé" (date/statut déjà passé) est une notion différente du CAPEX "Réalisé" du KPI Pilotage global (pondéré par la progression % du levier) : les deux chiffres ne sont pas censés coïncider.'
@@ -90,15 +90,30 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
         {split.total === 0 ? (
           <EmptyState />
         ) : (
-          <BudgetDonutChart
-            data={[
-              { name: engagedLabel, value: split.engaged },
-              { name: upcomingLabel, value: split.upcoming },
-            ]}
-            formatValue={(v) => engine.fmtCurr(v)}
-            centerLabel={t("finance.chart.totalCost", "Coût total")}
-            onSliceClick={(name) => setSegment(name === engagedLabel ? "engaged" : "upcoming")}
-          />
+          <>
+            {/* Retour visuel "cette part a été cliquée" (contrairement au donut hiérarchie
+                ci-dessous, celui-ci ne se redessine jamais — 2 catégories plates, rien où
+                descendre) : sans cette ligne, un clic ouvrant la modale pouvait sembler inerte
+                puisque le widget lui-même ne changeait visuellement en rien. `BudgetDonutChart`
+                n'expose pas de prop pour mettre en évidence une part précise depuis l'extérieur
+                (seul son survol interne pilote `activeShape`) — fix scopé à ce composant plutôt
+                que d'étendre le composant partagé, réutilisé par 3+ appelants. */}
+            {segment && (
+              <p className="mb-2 text-[12px] font-semibold text-primary">
+                {segment === "engaged" ? engagedLabel : upcomingLabel} ·{" "}
+                {engine.fmtCurr(segment === "engaged" ? split.engaged : split.upcoming)}
+              </p>
+            )}
+            <BudgetDonutChart
+              data={[
+                { name: engagedLabel, value: split.engaged },
+                { name: upcomingLabel, value: split.upcoming },
+              ]}
+              formatValue={(v) => engine.fmtCurr(v)}
+              centerLabel={t("finance.chart.totalCost", "Coût total")}
+              onSliceClick={(name) => setSegment(name === engagedLabel ? "engaged" : "upcoming")}
+            />
+          </>
         )}
       </CardBody>
       <CostDrilldownModal
