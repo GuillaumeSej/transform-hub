@@ -403,6 +403,9 @@ const fr: Record<string, string> = {
   "leverForm.lockedPlanNotice": "Plan initial figé au passage en «",
   "leverForm.lockedPlanNoticeEnd":
     "» — lecture seule. Utilisez la réactualisation (onglet Impact du levier) pour ajuster la projection.",
+  "leverForm.sectionInitialImpact": "Impact initial (business case)",
+  "leverForm.initialImpactSupersededNotice":
+    "Ce levier a désormais un plan d'actions chiffré : l'impact initial est mis de côté, les montants ci-dessus (et l'ETP) sont recalculés depuis les impacts des actions. Ajoutez/modifiez des impacts depuis l'onglet Actions de la fiche du levier.",
   "leverForm.grossSavings": "Impact brut estimé",
   "leverForm.netSavings": "Impact net estimé",
   "leverForm.capex": "CAPEX",

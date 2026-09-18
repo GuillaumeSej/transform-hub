@@ -334,6 +334,22 @@ export function LeverForm({
 
   const set = <K extends keyof LeverFormValues>(key: K, value: LeverFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
+  const num = (v: string) => (v === "" ? 0 : Number(v));
+
+  // Dès que le levier a au moins une action chiffrée (impacts renseignés), le business case
+  // initial saisi ci-dessous est mis de côté : `consolidateLeverFromActions` (appelé à chaque
+  // création/édition d'action, voir `leversLogic.ts::recomputeLeverProgress`) recalcule alors
+  // `grossSavings`/`netSavings`/`capex`/`opexOneOff`/`opexRec`/`fteImpact` depuis les lignes
+  // d'impact des actions et écrase ces champs — ce formulaire ne doit donc plus les rendre
+  // éditables à ce stade (ils redeviendraient faux dès la prochaine action modifiée), seulement
+  // les afficher en lecture seule avec un message expliquant le bascule. Même logique que
+  // `leverConsolidate.ts::hasActionImpacts`, dupliquée ici pour éviter de typer `values`
+  // (`LeverFormValues`, un `Omit<Lever, ...>`) en `Lever` complet juste pour cet appel.
+  const hasCostedActions = (values.actions ?? []).some((a) => (a.impacts ?? []).length > 0);
+  // Une fois le plan initial figé (passage à "validated"/L3, voir `leversLogic.ts::applyPlanLock`),
+  // le business case initial ci-dessous n'est plus éditable manuellement — mêmes montants que le
+  // snapshot `lockedPlan` (édition possible d'un tout nouveau levier uniquement).
+  const isLocked = Boolean((initialValues as Lever | undefined)?.lockedPlan);
 
   return (
     <form
@@ -713,11 +729,87 @@ export function LeverForm({
         </Field>
       </div>
 
-      {/* Section "Impact financier"/"Impact RH" (progression, savings/CAPEX/OPEX, ETP) retirée du
-       *  formulaire : ces valeurs ne sont plus saisies à la main, seulement consolidées depuis le
-       *  plan d'action du levier (voir `consolidateLeverFromActions`/`engine.recomputeLeverProgress`,
-       *  appelés à chaque création/édition d'action) — un levier créé ici démarre donc à 0 partout
-       *  et se peuple au fur et à mesure que ses actions sont ajoutées. */}
+      <SectionTitle>{t("leverForm.sectionInitialImpact")}</SectionTitle>
+      {hasCostedActions ? (
+        // Dès qu'une action chiffrée existe, le business case initial est consolidé depuis le
+        // plan d'action (voir `consolidateLeverFromActions`) et n'est plus éditable ici — édition
+        // désormais via "+ Action" sur la fiche détail du levier.
+        <p className="mb-3 rounded-sm border border-border bg-neutral-50 px-2.5 py-2 text-[11px] text-secondary">
+          {t("leverForm.initialImpactSupersededNotice")}
+        </p>
+      ) : (
+        <>
+          {isLocked && (
+            <p className="mb-3 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+              {t("leverForm.lockedPlanNotice")}{" "}
+              {lifecycle ? lifecycle.label("validated") : STATUS_LABEL.validated}{" "}
+              {t("leverForm.lockedPlanNoticeEnd")}
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+            <Field label={t("leverForm.grossSavings")}>
+              <input
+                type="number"
+                step="0.1"
+                disabled={isLocked}
+                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
+                value={values.grossSavings}
+                onChange={(e) => set("grossSavings", num(e.target.value))}
+              />
+            </Field>
+            <Field label={t("leverForm.netSavings")}>
+              <input
+                type="number"
+                step="0.1"
+                disabled={isLocked}
+                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
+                value={values.netSavings}
+                onChange={(e) => set("netSavings", num(e.target.value))}
+              />
+            </Field>
+            <Field label={t("leverForm.fteImpact")}>
+              <input
+                type="number"
+                step="0.1"
+                disabled={isLocked}
+                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
+                value={values.fteImpact}
+                onChange={(e) => set("fteImpact", num(e.target.value))}
+              />
+            </Field>
+            <Field label={t("leverForm.capex")}>
+              <input
+                type="number"
+                step="0.1"
+                disabled={isLocked}
+                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
+                value={values.capex}
+                onChange={(e) => set("capex", num(e.target.value))}
+              />
+            </Field>
+            <Field label={t("leverForm.opexOneOff")}>
+              <input
+                type="number"
+                step="0.1"
+                disabled={isLocked}
+                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
+                value={values.opexOneOff}
+                onChange={(e) => set("opexOneOff", num(e.target.value))}
+              />
+            </Field>
+            <Field label={t("leverForm.opexRec")}>
+              <input
+                type="number"
+                step="0.1"
+                disabled={isLocked}
+                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
+                value={values.opexRec}
+                onChange={(e) => set("opexRec", num(e.target.value))}
+              />
+            </Field>
+          </div>
+        </>
+      )}
 
       <SectionTitle>{t("leverForm.sectionHr")}</SectionTitle>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

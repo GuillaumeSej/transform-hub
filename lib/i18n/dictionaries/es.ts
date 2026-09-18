@@ -351,6 +351,9 @@ const es: Record<string, string> = {
   "leverForm.lockedPlanNotice": "Plan inicial bloqueado al pasar a «",
   "leverForm.lockedPlanNoticeEnd":
     "» — solo lectura. Utilice la reactualización (pestaña Impacto de la palanca) para ajustar la proyección.",
+  "leverForm.sectionInitialImpact": "Impacto inicial (business case)",
+  "leverForm.initialImpactSupersededNotice":
+    "Esta palanca ya tiene un plan de acciones cuantificado: el impacto inicial queda en segundo plano, los importes de arriba (y ETC) se recalculan a partir de los impactos de las acciones. Añada/edite impactos desde la pestaña Acciones de la palanca.",
   "leverForm.grossSavings": "Impacto bruto estimado",
   "leverForm.netSavings": "Impacto neto estimado",
   "leverForm.capex": "CAPEX",

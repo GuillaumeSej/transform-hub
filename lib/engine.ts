@@ -25,17 +25,40 @@ import type { LeverStatus } from "@/types";
  * Fonctions pures : prennent les données en paramètre plutôt que de lire un état global mutable.
  */
 
-export function realizedSavings(lever: Lever): number {
-  if (lever.status === "cancelled") return 0;
-  return Math.round(lever.netSavings * (lever.progress / 100) * 100) / 100;
+/** Somme des impacts des actions "done" d'un levier — SEULE source du "Réalisé" : une action
+ *  encore "in_progress" ne contribue à rien tant qu'elle n'est pas passée "done" (contrairement à
+ *  l'ancien calcul `netSavings × progression %`, qui créditait par anticipation une partie du
+ *  business case initial avant toute livraison effective). Retourne 0 pour un levier sans action
+ *  chiffrée : son business case initial (voir `LeverForm`, section "Impact initial") définit le
+ *  planifié, pas le réalisé, tant qu'il n'a pas été ventilé en plan d'action. Même filtre `net`
+ *  (savings − coûts) que `leverConsolidate.ts::actionNetAmount`, dupliqué ici plutôt qu'importé
+ *  pour éviter un cycle d'import (`leverConsolidate.ts` importe déjà `MONTH_LABELS` d'ici). */
+function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): number {
+  let total = 0;
+  for (const action of lever.actions ?? []) {
+    if (action.status !== "done") continue;
+    for (const imp of action.impacts ?? []) {
+      if (pick === "fte") {
+        if (imp.fteCount) total += imp.fteCount;
+      } else if (pick === "gross") {
+        if (imp.type === "saving") total += imp.amount;
+      } else {
+        total += imp.type === "saving" ? imp.amount : -imp.amount;
+      }
+    }
+  }
+  return pick === "fte" ? total : Math.round(total * 100) / 100;
 }
 
-/** Équivalent BRUT (avant déduction des coûts) de `realizedSavings` — repli utilisé pour un
- *  levier sans plan d'action chiffré (saisie manuelle), qui n'a pas de plan d'action pour dériver
- *  un "gains bruts réalisés" via `leverConsolidate.leverGrossRealizedToDate`. */
+export function realizedSavings(lever: Lever): number {
+  if (lever.status === "cancelled") return 0;
+  return doneActionImpactsTotal(lever, "net");
+}
+
+/** Équivalent BRUT (avant déduction des coûts) de `realizedSavings`. */
 export function realizedGrossSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
-  return Math.round(lever.grossSavings * (lever.progress / 100) * 100) / 100;
+  return doneActionImpactsTotal(lever, "gross");
 }
 
 /** Valeur "Plan initial" affichée pour un levier : le snapshot figé s'il existe, sinon la valeur
@@ -60,7 +83,7 @@ export function displayedReforecastNet(lever: Lever): { value: number; isReforec
 
 export function realizedFte(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
-  return Math.round(lever.fteImpact * (lever.progress / 100) * 10) / 10;
+  return Math.round(doneActionImpactsTotal(lever, "fte") * 10) / 10;
 }
 
 export function worstRisk(levers: Lever[]): RiskLevel {

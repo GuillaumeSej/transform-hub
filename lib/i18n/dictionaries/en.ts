@@ -371,6 +371,9 @@ const en: Record<string, string> = {
   "leverForm.lockedPlanNotice": "Baseline plan locked upon moving to «",
   "leverForm.lockedPlanNoticeEnd":
     "» — read-only. Use the re-forecast (Impact tab on the initiative) to adjust the projection.",
+  "leverForm.sectionInitialImpact": "Initial impact (business case)",
+  "leverForm.initialImpactSupersededNotice":
+    "This lever now has a costed action plan: the initial impact is set aside, the amounts above (and FTE) are recalculated from the actions' impacts. Add/edit impacts from the lever's Actions tab.",
   "leverForm.grossSavings": "Estimated gross impact",
   "leverForm.netSavings": "Estimated net impact",
   "leverForm.capex": "CAPEX",

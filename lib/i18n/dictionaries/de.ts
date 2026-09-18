@@ -353,6 +353,9 @@ const de: Record<string, string> = {
   "leverForm.lockedPlanNotice": "Ursprungsplan gesperrt seit Übergang zu «",
   "leverForm.lockedPlanNoticeEnd":
     "» — nur Lesezugriff. Nutzen Sie die Neuprognose (Tab „Impact“ des Hebels), um die Projektion anzupassen.",
+  "leverForm.sectionInitialImpact": "Anfänglicher Impact (Business Case)",
+  "leverForm.initialImpactSupersededNotice":
+    "Dieser Hebel hat jetzt einen bezifferten Aktionsplan: Der anfängliche Impact wird beiseitegelegt, die obigen Beträge (und VZÄ) werden aus den Auswirkungen der Aktionen neu berechnet. Auswirkungen im Reiter „Aktionen“ des Hebels hinzufügen/bearbeiten.",
   "leverForm.grossSavings": "Geschätzte Bruttowirkung",
   "leverForm.netSavings": "Geschätzte Nettowirkung",
   "leverForm.capex": "CAPEX",
