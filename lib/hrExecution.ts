@@ -146,6 +146,9 @@ export type MovementStatusByTypeRow = {
   dueSoon: number;
   later: number;
   abandoned: number;
+  /** Mouvements derrière chaque compteur de statut — alimente le drill-down au clic sur une barre
+   *  (`MovementStatusByTypeChart` + `MovementDrilldownModal`). */
+  movementsByStatus: Record<MovementExecutionStatus, WorkforceMovement[]>;
 };
 const MOVEMENT_TYPE_ORDER: WorkforceMovement["type"][] = [
   "Recrutement",
@@ -154,6 +157,13 @@ const MOVEMENT_TYPE_ORDER: WorkforceMovement["type"][] = [
   "Transfert entrant",
   "Transfert sortant",
 ];
+const emptyMovementsByStatus = (): Record<MovementExecutionStatus, WorkforceMovement[]> => ({
+  realized: [],
+  overdue: [],
+  dueSoon: [],
+  later: [],
+  abandoned: [],
+});
 
 export function movementStatusByType(
   movements: WorkforceMovement[],
@@ -163,13 +173,24 @@ export function movementStatusByType(
   const rows = new Map(
     MOVEMENT_TYPE_ORDER.map((type) => [
       type,
-      { type, realized: 0, overdue: 0, dueSoon: 0, later: 0, abandoned: 0 },
+      {
+        type,
+        realized: 0,
+        overdue: 0,
+        dueSoon: 0,
+        later: 0,
+        abandoned: 0,
+        movementsByStatus: emptyMovementsByStatus(),
+      },
     ])
   );
   for (const movement of movements) {
     if (filters.department && movement.department !== filters.department) continue;
     if (filters.country && movement.country !== filters.country) continue;
-    rows.get(movement.type)![classifyMovementExecution(movement, today)] += 1;
+    const status = classifyMovementExecution(movement, today);
+    const row = rows.get(movement.type)!;
+    row[status] += 1;
+    row.movementsByStatus[status].push(movement);
   }
   return MOVEMENT_TYPE_ORDER.map((type) => rows.get(type)!).sort((a, b) => {
     const totalA = a.realized + a.overdue + a.dueSoon + a.later + a.abandoned;

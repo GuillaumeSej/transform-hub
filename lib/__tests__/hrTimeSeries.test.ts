@@ -232,6 +232,30 @@ describe("hrTimeSeries — movementRhythmSeries", () => {
     expect(mar.cumulNet).toBe(-3);
   });
 
+  it("retains the active movements per bucket for drill-down (mirrors fteBridge's convention)", () => {
+    const range = { from: "2026-01-01", to: "2026-12-31" };
+    const buckets = movementRhythmSeries(
+      [
+        makeMovement({ id: "M1", type: "Départ forcé", plannedDate: "2026-02-01" }),
+        makeMovement({ id: "M2", type: "Recrutement", plannedDate: "2026-02-15" }),
+        makeMovement({ id: "M3", type: "Attrition", plannedDate: "2026-03-10" }),
+        makeMovement({
+          id: "M4",
+          type: "Recrutement",
+          status: "Abandonné",
+          plannedDate: "2026-02-20",
+        }),
+      ],
+      "month",
+      range
+    );
+    const feb = buckets.find((b) => b.label.startsWith("févr."))!;
+    const mar = buckets.find((b) => b.label.startsWith("mars"))!;
+    // M4 est abandonné (isActiveMovement === false) : il ne doit PAS apparaître dans le bucket.
+    expect(feb.movements.map((m) => m.id).sort()).toEqual(["M1", "M2"]);
+    expect(mar.movements.map((m) => m.id)).toEqual(["M3"]);
+  });
+
   it("uses the algebraic sum of all visible bars as period net", () => {
     const range = { from: "2026-01-01", to: "2026-12-31" };
     const buckets = movementRhythmSeries(
@@ -291,6 +315,7 @@ describe("hrTimeSeries — movementRhythmAxisDomains", () => {
         },
         net: -2,
         cumulNet: -2,
+        movements: [],
       },
     ]);
     // Pile positive +3 et négative -4, puis marge/arrondi lisible → ±5.
@@ -312,6 +337,7 @@ describe("hrTimeSeries — movementRhythmAxisDomains", () => {
         },
         net: 0,
         cumulNet: -16.1,
+        movements: [],
       },
     ]);
     expect(domains.cumulative).toEqual([-20, 20]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Plus, TriangleAlert, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
@@ -123,6 +123,55 @@ export default function BaseEtpPage() {
   const [movementModal, setMovementModal] = useState<{ movement?: WorkforceMovement } | null>(null);
 
   const wf = data.workforce;
+
+  // ─── Deep-link "voir ce(s) mouvement(s) précis" (mécanisme unique, voir lib/hrMovementLink.ts)
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+  // Point d'entrée UNIQUE réutilisé par la matrice de statut, le drill-down de la waterfall ETP et
+  // `MovementDrilldownModal` (voir app/(app)/hr/page.tsx) : `?movementIds=id1,id2,...` restreint
+  // l'onglet "Suivi des mouvements" à EXACTEMENT ces mouvements, à la place des filtres normaux du
+  // `useFilterBarState` "mov_" ci-dessous (volontairement un état LOCAL, pas un `FilterDef` : un id
+  // de mouvement n'est pas une valeur de dimension comme les autres). Avec un seul id, ouvre en
+  // plus directement la modale d'édition de ce mouvement pour atteindre le détail complet en un
+  // clic (réutilise le `MovementForm` déjà câblé sur le clic d'une ligne du tableau ci-dessous).
+  const movementIdsParam = searchParams.get("movementIds");
+  const [highlightedMovementIds, setHighlightedMovementIds] = useState<string[] | null>(null);
+  // Évite de rouvrir la modale d'édition à chaque re-render une fois le lien déjà appliqué (ex. si
+  // l'utilisateur ferme la modale manuellement) — mémorise la valeur brute du paramètre déjà
+  // traitée. Attend que `wf.movements` soit peuplé (chargement Firestore asynchrone) avant de
+  // considérer un id unique comme "appliqué".
+  const appliedDeepLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!movementIdsParam) {
+      setHighlightedMovementIds(null);
+      appliedDeepLinkRef.current = null;
+      return;
+    }
+    const ids = Array.from(
+      new Set(
+        movementIdsParam
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean)
+      )
+    );
+    setHighlightedMovementIds(ids.length > 0 ? ids : null);
+    if (appliedDeepLinkRef.current === movementIdsParam) return;
+    if (ids.length === 1) {
+      if (wf.movements.length === 0) return; // pas encore chargé — réessaie au prochain effet
+      const target = wf.movements.find((m) => m.id === ids[0]);
+      if (target) setMovementModal({ movement: target });
+      appliedDeepLinkRef.current = movementIdsParam;
+    } else if (ids.length > 1) {
+      appliedDeepLinkRef.current = movementIdsParam;
+    }
+  }, [movementIdsParam, wf.movements]);
+
+  const clearHighlightedMovements = () => {
+    setHighlightedMovementIds(null);
+    appliedDeepLinkRef.current = null;
+    router.replace("/hr/etp?tab=mouvements");
+  };
+
   const alerts = useMemo(() => hr.movementAlerts(wf, data.levers), [wf, data.levers]);
   const alertByMovement = useMemo(() => {
     const map = new Map<string, hr.MovementAlertKind>();
@@ -431,16 +480,21 @@ export default function BaseEtpPage() {
     [employeeRows, etpActiveFilters, etpFilterDefs]
   );
 
-  const filteredMovements = useMemo(
-    () =>
-      movementRows.filter((row) =>
-        Object.entries(movementActiveFilters).every(([key, value]) => {
-          const def = movementFilterDefs.find((d) => d.key === key);
-          return !def || value == null || def.getValue(row) === value;
-        })
-      ),
-    [movementRows, movementActiveFilters, movementFilterDefs]
-  );
+  const filteredMovements = useMemo(() => {
+    // Deep-link actif (voir plus haut) : affiche EXACTEMENT les mouvements demandés, sans tenir
+    // compte des filtres normaux de la barre (état volontairement prioritaire — voir
+    // `clearHighlightedMovements` pour en sortir).
+    if (highlightedMovementIds) {
+      const idSet = new Set(highlightedMovementIds);
+      return movementRows.filter((row) => idSet.has(row.id));
+    }
+    return movementRows.filter((row) =>
+      Object.entries(movementActiveFilters).every(([key, value]) => {
+        const def = movementFilterDefs.find((d) => d.key === key);
+        return !def || value == null || def.getValue(row) === value;
+      })
+    );
+  }, [movementRows, movementActiveFilters, movementFilterDefs, highlightedMovementIds]);
 
   const toValidateCount = alerts.filter((a) => a.kind === "toValidate").length;
   const plannedCount = wf.movements.filter((m) => m.status !== "Réalisé").length;
@@ -806,14 +860,32 @@ export default function BaseEtpPage() {
 
       {tab === "mouvements" && (
         <>
-          <div className="mb-3.5 rounded-md border border-border bg-white p-3">
-            <DropdownFilterBar
-              items={movementRows}
-              defs={movementFilterDefs}
-              active={movementActiveFilters}
-              onChange={setMovementFilters}
-            />
-          </div>
+          {highlightedMovementIds ? (
+            <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3 rounded-md border border-bp-coral/40 bg-bp-coral/[0.04] px-3 py-2.5">
+              <span className="text-[12.5px] text-primary">
+                {t(
+                  "etp.deepLink.filteredHint",
+                  "Affichage filtré sur {n} mouvement(s) sélectionné(s) depuis le dashboard."
+                ).replace("{n}", String(highlightedMovementIds.length))}
+              </span>
+              <button
+                type="button"
+                onClick={clearHighlightedMovements}
+                className="shrink-0 rounded-sm border border-border-strong bg-white px-2.5 py-1 text-[11px] font-semibold text-secondary transition hover:border-black hover:text-primary"
+              >
+                {t("etp.deepLink.reset", "Réinitialiser")}
+              </button>
+            </div>
+          ) : (
+            <div className="mb-3.5 rounded-md border border-border bg-white p-3">
+              <DropdownFilterBar
+                items={movementRows}
+                defs={movementFilterDefs}
+                active={movementActiveFilters}
+                onChange={setMovementFilters}
+              />
+            </div>
+          )}
           <EditableTable
             data={filteredMovements}
             columns={movementColumns}

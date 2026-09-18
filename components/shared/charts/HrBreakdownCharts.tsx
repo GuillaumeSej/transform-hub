@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import type { MovementBreakdownRow, MovementRealizationRow } from "@/lib/hrEngine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import type { WorkforceMovement } from "@/types";
 
 // Palette catégorielle validée (dataviz, tous checks PASS sur surface claire).
 export const HR_CATEGORICAL = ["#FF3C47", "#421799", "#320300", "#FFB1B5", "#421799", "#A99E9A"];
@@ -30,9 +31,13 @@ const COLOR_NEUTRAL = "#806659"; // transferts (entrants + sortants)
 export function DepartmentMovementsChart({
   data,
   height = 260,
+  onBarClick,
 }: {
   data: MovementBreakdownRow[];
   height?: number;
+  /** Clic sur une barre (n'importe lequel des 5 types) — ouvre le détail des mouvements de cette
+   *  ligne (voir `MovementDrilldownModal`, câblé dans `app/(app)/hr/page.tsx`). */
+  onBarClick?: (label: string, movements: WorkforceMovement[]) => void;
 }) {
   const { t } = useTranslation();
   const netPeriodLabel = t("chart.movementType.netPeriod", "Net période");
@@ -45,7 +50,13 @@ export function DepartmentMovementsChart({
     "Transferts entrants": d.transfertEntrants,
     "Transferts sortants": -d.transfertSortants,
     Net: d.net,
+    movements: d.movements,
   }));
+
+  const handleBarClick = (payload: unknown) => {
+    const row = payload as { dimension?: string; movements?: WorkforceMovement[] } | undefined;
+    if (row?.dimension && onBarClick) onBarClick(row.dimension, row.movements ?? []);
+  };
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -74,6 +85,8 @@ export function DepartmentMovementsChart({
           stackId="mouv"
           fill={COLOR_UP}
           radius={[3, 3, 0, 0]}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="Attrition"
@@ -81,6 +94,8 @@ export function DepartmentMovementsChart({
           stackId="mouv"
           fill="#FFB1B5"
           radius={[0, 0, 3, 3]}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="Départs forcés"
@@ -88,6 +103,8 @@ export function DepartmentMovementsChart({
           stackId="mouv"
           fill={COLOR_DOWN}
           radius={[0, 0, 3, 3]}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="Transferts entrants"
@@ -95,6 +112,8 @@ export function DepartmentMovementsChart({
           stackId="mouv"
           fill="#A99E9A"
           radius={[3, 3, 0, 0]}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="Transferts sortants"
@@ -102,6 +121,8 @@ export function DepartmentMovementsChart({
           stackId="mouv"
           fill={COLOR_NEUTRAL}
           radius={[0, 0, 3, 3]}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Line
           type="monotone"

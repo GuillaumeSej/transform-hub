@@ -30,7 +30,7 @@ import type {
 } from "@/lib/hrTimeSeries";
 import { movementRhythmAxisDomains } from "@/lib/hrTimeSeries";
 import type { FteBridgeSummary } from "@/lib/hrEngine";
-import type { MovementType } from "@/types";
+import type { MovementType, WorkforceMovement } from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /** Palette 5-types alignée sur les tokens dataviz BeTrack / BearingPoint : famille rouge,
@@ -332,9 +332,13 @@ export function NetEconomyChart({
 export function MovementRhythmChart({
   buckets,
   height = 340,
+  onBarClick,
 }: {
   buckets: MovementRhythmBucket[];
   height?: number;
+  /** Clic sur une barre (n'importe lequel des 5 types) — ouvre le détail des mouvements de la
+   *  période (voir `MovementDrilldownModal`, câblé dans `app/(app)/hr/page.tsx`). */
+  onBarClick?: (label: string, movements: WorkforceMovement[]) => void;
 }) {
   const { t } = useTranslation();
 
@@ -356,8 +360,13 @@ export function MovementRhythmChart({
     "Transfert sortant": b.byType["Transfert sortant"],
     net: b.net,
     cumulNet: b.cumulNet,
+    movements: b.movements,
   }));
   const axisDomains = movementRhythmAxisDomains(buckets);
+  const handleBarClick = (payload: unknown) => {
+    const row = payload as { label?: string; movements?: WorkforceMovement[] } | undefined;
+    if (row?.label && onBarClick) onBarClick(row.label, row.movements ?? []);
+  };
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -411,6 +420,8 @@ export function MovementRhythmChart({
           stackId="mouv"
           fill={TYPE_COLORS["Recrutement"]}
           name={t("chart.movementType.recruitments", "Recrutements")}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           yAxisId="period"
@@ -418,6 +429,8 @@ export function MovementRhythmChart({
           stackId="mouv"
           fill={TYPE_COLORS["Attrition"]}
           name={t("chart.movementType.attrition", "Attrition")}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="Départ forcé"
@@ -425,6 +438,8 @@ export function MovementRhythmChart({
           stackId="mouv"
           fill={TYPE_COLORS["Départ forcé"]}
           name={t("chart.movementType.forcedDepartures", "Départs forcés")}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="Transfert entrant"
@@ -432,6 +447,8 @@ export function MovementRhythmChart({
           stackId="mouv"
           fill={TYPE_COLORS["Transfert entrant"]}
           name={t("chart.movementType.transfersIn", "Transferts entrants")}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="Transfert sortant"
@@ -439,6 +456,8 @@ export function MovementRhythmChart({
           stackId="mouv"
           fill={TYPE_COLORS["Transfert sortant"]}
           name={t("chart.movementType.transfersOut", "Transferts sortants")}
+          onClick={handleBarClick}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Line
           yAxisId="period"

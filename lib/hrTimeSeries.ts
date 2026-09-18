@@ -284,6 +284,10 @@ export type MovementRhythmBucket = {
   net: number;
   /** Cumul net depuis le début de la plage. */
   cumulNet: number;
+  /** Mouvements actifs de la période (même granularité que `FteBridgeBucket.movements` de
+   *  `lib/hrEngine.ts`, dont ce bucket reprend la convention) — alimente le drill-down au clic sur
+   *  une barre (`MovementRhythmChart` + `MovementDrilldownModal`). */
+  movements: WorkforceMovement[];
 };
 
 export type MovementRhythmAxisDomains = {
@@ -356,7 +360,11 @@ export function movementRhythmSeries(
   });
 
   const map = new Map<string, Record<MovementType, number>>();
-  for (const b of buckets) map.set(b.key, emptyByType());
+  const movementsByBucket = new Map<string, WorkforceMovement[]>();
+  for (const b of buckets) {
+    map.set(b.key, emptyByType());
+    movementsByBucket.set(b.key, []);
+  }
 
   for (const m of movements) {
     if (!isActiveMovement(m)) continue;
@@ -370,6 +378,7 @@ export function movementRhythmSeries(
     else if (m.type === "Attrition" || m.type === "Départ forcé") cell[m.type] -= targetFte;
     else if (m.type === "Transfert entrant") cell[m.type] += targetFte;
     else if (m.type === "Transfert sortant") cell[m.type] -= targetFte;
+    movementsByBucket.get(b.key)!.push(m);
   }
 
   let cumul = 0;
@@ -388,6 +397,7 @@ export function movementRhythmSeries(
       byType,
       net: Math.round(net * 10) / 10,
       cumulNet: Math.round(cumul * 10) / 10,
+      movements: movementsByBucket.get(b.key)!,
     };
   });
 }

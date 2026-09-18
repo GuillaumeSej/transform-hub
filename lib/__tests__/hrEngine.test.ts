@@ -441,6 +441,32 @@ describe("hrEngine — movementBreakdownByDimension", () => {
     expect(rows[0]).toMatchObject({ label: "Transformation 2026", recrutements: 2 });
   });
 
+  it("retains the underlying movements per row for drill-down (country/program dimension)", () => {
+    const recruitment = makeMovement({ id: "M1", type: "Recrutement", country: "France", fte: 2 });
+    const attrition = makeMovement({ id: "M2", type: "Attrition", country: "France", fte: 1 });
+    const rows = movementBreakdownByDimension([recruitment, attrition], "country");
+    expect(rows[0].movements.map((m) => m.id).sort()).toEqual(["M1", "M2"]);
+  });
+
+  it(
+    "retains the underlying movements per row for drill-down (department dimension) — a " +
+      "transfer appears in BOTH the source and destination rows' movements",
+    () => {
+      const transfer = makeMovement({
+        id: "M1",
+        type: "Transfert entrant",
+        department: "IT",
+        toDepartment: "HR",
+        fte: 2,
+      });
+      const rows = movementBreakdownByDimension([transfer], "department");
+      const it = rows.find((r) => r.label === "IT")!;
+      const hrRow = rows.find((r) => r.label === "HR")!;
+      expect(it.movements.map((m) => m.id)).toEqual(["M1"]);
+      expect(hrRow.movements.map((m) => m.id)).toEqual(["M1"]);
+    }
+  );
+
   it("keeps zero-net transfers visible in the ETP bridge with counts", () => {
     const summary = fteBridgeSummary(
       makeWorkforce({

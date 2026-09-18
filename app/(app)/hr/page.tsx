@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowUpRight,
   ChevronDown,
   ChevronUp,
   GripVertical,
@@ -28,11 +29,13 @@ import {
   socialCostSeries,
 } from "@/lib/hrTimeSeries";
 import { hrProgramSummary, targetFteFromBaseline } from "@/lib/hrProgramSummary";
+import { etpMovementDeepLink } from "@/lib/hrMovementLink";
 import { fmtCurr } from "@/lib/engine";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { HrKPICard } from "@/components/shared/HrKPICard";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Modal } from "@/components/shared/Modal";
+import { MovementDrilldownModal } from "@/components/shared/MovementDrilldownModal";
 import { Button } from "@/components/shared/Button";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { DashboardExportButton } from "@/components/shared/DashboardExportButton";
@@ -158,6 +161,14 @@ export default function HrDashboardPage() {
   const { isConsolidatedView, consolidatedPrograms } = useActiveProgram();
   const [granularity, setGranularity] = useState<"month" | "quarter" | "year">("quarter");
   const [drillBucket, setDrillBucket] = useState<string | null>(null);
+  // Drill-down générique pour les 3 graphiques agrégés sans vue de détail (item 3-5, round <n>) —
+  // voir `components/shared/MovementDrilldownModal.tsx`. Un seul état partagé : chaque graphique
+  // fournit son propre titre + la liste des `WorkforceMovement[]` déjà calculée derrière la
+  // barre/segment cliqué (pas de recalcul ici).
+  const [drilldownModal, setDrilldownModal] = useState<{
+    title: string;
+    movements: WorkforceMovement[];
+  } | null>(null);
 
   // ─── Sélecteur de programme (source unique = collection Firestore multi-programmes) ─────
   // Le dashboard RH s'abonne à la même collection `programs` que le dashboard exécutif (voir
@@ -612,6 +623,13 @@ export default function HrDashboardPage() {
     const bucket = bridge.find((b) => b.label === drillBucket);
     return bucket ? hr.bucketByLever(bucket, data.levers) : [];
   }, [drillBucket, bridge, data.levers]);
+  // Mouvements bruts du bucket en cours de drill (avant regroupement par levier) — alimente le
+  // lien "Voir dans la Base ETP" du modal ci-dessous (item 2 : réutilise le même mécanisme unique
+  // `etpMovementDeepLink` que la matrice de statut et `MovementDrilldownModal`).
+  const drillBucketMovements = useMemo(() => {
+    if (!drillBucket) return [];
+    return bridge.find((b) => b.label === drillBucket)?.movements ?? [];
+  }, [drillBucket, bridge]);
 
   const realizedMovements = filteredMovements.filter((m) => m.status === "Réalisé").length;
 
@@ -898,11 +916,7 @@ export default function HrDashboardPage() {
                   const lever = data.levers.find((item) => item.id === leverId);
                   return lever ? `${lever.code} · ${lever.name}` : leverId;
                 }}
-                onMovementClick={(movementId) =>
-                  router.push(
-                    `/hr/etp?tab=mouvements&f_movementId=${encodeURIComponent(movementId)}`
-                  )
-                }
+                onMovementClick={(movementId) => router.push(etpMovementDeepLink([movementId]))}
               />
             </CardBody>
           </Card>
@@ -1057,7 +1071,18 @@ export default function HrDashboardPage() {
               actions={timeControls}
             />
             <CardBody>
-              <MovementRhythmChart buckets={rhythmSeries} />
+              <MovementRhythmChart
+                buckets={rhythmSeries}
+                onBarClick={(label, movements) =>
+                  setDrilldownModal({
+                    title: t("hr.drilldown.periodTitle", "Mouvements — {label}").replace(
+                      "{label}",
+                      label
+                    ),
+                    movements,
+                  })
+                }
+              />
               <p className="mt-2 text-[11px] text-tertiary">
                 {t(
                   "hr.widget.movementRhythmHint",
@@ -1116,7 +1141,17 @@ export default function HrDashboardPage() {
               }
             />
             <CardBody>
-              <MovementStatusByTypeChart data={rows} />
+              <MovementStatusByTypeChart
+                data={rows}
+                onBarClick={(type, status, movements) =>
+                  setDrilldownModal({
+                    title: t("hr.drilldown.typeStatusTitle", "Mouvements — {type} · {status}")
+                      .replace("{type}", type)
+                      .replace("{status}", EXECUTION_LABELS[status]),
+                    movements,
+                  })
+                }
+              />
             </CardBody>
           </Card>
         );
@@ -1162,7 +1197,18 @@ export default function HrDashboardPage() {
               }
             />
             <CardBody>
-              <DepartmentMovementsChart data={rows} />
+              <DepartmentMovementsChart
+                data={rows}
+                onBarClick={(label, movements) =>
+                  setDrilldownModal({
+                    title: t("hr.drilldown.dimensionTitle", "Mouvements — {label}").replace(
+                      "{label}",
+                      label
+                    ),
+                    movements,
+                  })
+                }
+              />
             </CardBody>
           </Card>
         );
@@ -1967,6 +2013,23 @@ export default function HrDashboardPage() {
           </p>
         ) : (
           <div className="space-y-3">
+            {drillBucketMovements.length >= 2 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const ids = drillBucketMovements.map((m) => m.id);
+                  setDrillBucket(null);
+                  router.push(etpMovementDeepLink(ids));
+                }}
+                className="inline-flex w-fit items-center gap-1.5 rounded-md border border-bp-coral/40 bg-bp-coral/5 px-3 py-1.5 text-[12px] font-semibold text-bp-coral transition hover:border-bp-coral hover:bg-bp-coral/10"
+              >
+                {t("hr.drillSeeInEtp", "Voir ces {n} mouvements dans la Base ETP").replace(
+                  "{n}",
+                  String(drillBucketMovements.length)
+                )}
+                <ArrowUpRight size={13} />
+              </button>
+            )}
             {drill.map((entry) => {
               const lever = data.levers.find((l) => l.id === entry.leverId);
               return (
@@ -2012,6 +2075,16 @@ export default function HrDashboardPage() {
           </div>
         )}
       </Modal>
+
+      {/* Drill-down générique — "Mouvements prévus par {dimension}", "Statut des mouvements par
+          type" et "Détail mensuel des mouvements" (item 3-5, round <n>) : un seul état partagé,
+          voir `drilldownModal` ci-dessus. */}
+      <MovementDrilldownModal
+        open={drilldownModal !== null}
+        onOpenChange={(open) => !open && setDrilldownModal(null)}
+        title={drilldownModal?.title ?? ""}
+        movements={drilldownModal?.movements ?? []}
+      />
     </div>
   );
 }
