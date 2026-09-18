@@ -59,6 +59,13 @@ export function PnlBarChart({
     remaining: Math.max(0, Math.round((d.plan - d.realized) * 10) / 10),
   }));
   const hasNegativeValues = chartData.some((d) => d.plan < 0 || d.realized < 0);
+  // Largeur de l'axe Y adaptée aux libellés RÉELS (au lieu d'une largeur fixe de 140px pensée pour
+  // le pire cas à 18 caractères) : la plupart des comptes P&L sont bien plus courts, ce qui
+  // laissait un grand vide entre les libellés (alignés à droite, donc collés à ce vide) et le
+  // début des barres. ~6px/caractère à fontSize 10, plafonné à 140px (troncature `TruncatedYTick`
+  // toujours à 18 caractères) et jamais sous 56px.
+  const longestLabelLen = Math.max(4, ...chartData.map((d) => d.account.length));
+  const yAxisWidth = Math.min(140, Math.max(56, longestLabelLen * 6 + 16));
 
   return (
     <ResponsiveContainer width="100%" height={Math.max(200, data.length * 36 + 40)}>
@@ -82,7 +89,7 @@ export function PnlBarChart({
           tick={TruncatedYTick}
           axisLine={false}
           tickLine={false}
-          width={140}
+          width={yAxisWidth}
         />
         <Tooltip formatter={(value) => `€${Number(value).toFixed(1)}M`} />
         <Legend wrapperStyle={{ fontSize: 11 }} />

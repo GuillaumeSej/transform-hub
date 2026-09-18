@@ -9,8 +9,8 @@ import type { WorkstreamCostGroup } from "@/lib/financeCosts";
 
 /**
  * Modal de drill-down commune aux graphiques cliquables du module Finance
- * (`CostEngagedVsUpcomingChart`, `CostByHierarchyChart`, `CostCommitmentTimelineChart`,
- * `OpexRecurrentChart`) : montant total du segment/de la période cliquée → décomposition par
+ * (`CostEngagedVsUpcomingChart`, `CostByHierarchyChart`, `CostCommitmentTimelineChart`) : montant
+ * total du segment/de la période cliquée → décomposition par
  * workstream (`Lever.ws`) → sous-vue liste des leviers de ce workstream → clic sur un levier =
  * navigation vers sa fiche détail (`/levers/detail?id=...`).
  *

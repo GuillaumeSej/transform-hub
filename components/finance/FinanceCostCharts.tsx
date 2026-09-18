@@ -5,9 +5,11 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Bar,
   CartesianGrid,
+  Cell,
   ComposedChart,
   Legend,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -22,21 +24,19 @@ import * as engine from "@/lib/engine";
 import {
   bucketCostsByPeriod,
   bucketInvestVsSavingsByPeriod,
-  bucketRecurrentOpexByPeriod,
   costRowsForPeriod,
   costsByHierarchyNode,
   groupCostsByWorkstream,
   investCostRowsBySegment,
   isInvestNature,
   leversWithUndetailedCosts,
-  recurrentOpexRowsForPeriod,
   sortedHierarchyLevels,
   type FinanceGranularity,
   type HierarchyCostSlice,
 } from "@/lib/financeCosts";
 import type { BeTrackData, HierarchyLevelDef, HierarchyNode } from "@/types";
 
-/** 5 graphiques de suivi des coûts du module Finance — TOUTES les données proviennent de
+/** 4 graphiques de suivi des coûts du module Finance — TOUTES les données proviennent de
  *  `data.levers[].actions[].impacts[]` via `lib/financeCosts.ts` (aucune donnée en dur). CAPEX +
  *  OPEX one-off ("Invest") sont distingués de l'OPEX récurrent partout où c'est pertinent (a/d),
  *  et chaque graphique cliquable ouvre `CostDrilldownModal` (workstream → levier → fiche levier).
@@ -387,9 +387,18 @@ function HierarchyLevelBreadcrumb({
   );
 }
 
-/** #4 — "Coût d'investissement vs Savings" : compare, sur une fenêtre temporelle choisie, les coûts
- *  d'investissement (CAPEX + OPEX one-off) aux gains — barres empilées gains nets + OPEX récurrent
- *  démarré (= gains bruts), tooltip détaillé au survol. */
+// Palette de marque (voir app/globals.css — "la marque interdit vert/orange/bleu") : le résultat
+// net d'une période négative (investissement pas encore compensé) est en rouge BearingPoint,
+// positif (gains nets > investissement de la période) en taupe foncé — jamais en vert littéral,
+// même si le graphique "économie positive/négative" qui a inspiré cette maquette en utilisait.
+const COLOR_NEGATIVE = "#FF3C47";
+const COLOR_POSITIVE = "#806659";
+const COLOR_CUMULATIVE = "#0a0a0a";
+
+/** #4 — "Coût d'investissement vs Savings" : une barre signée par période (négative tant que le
+ *  CAPEX/OPEX one-off de la période domine, positive dès que les gains nets le dépassent) + une
+ *  courbe de cumul qui matérialise le breakeven (le point où elle repasse au-dessus de 0),
+ *  tooltip détaillé au survol (décomposition investCost/grossSavings/opexRecStarted/netSavings). */
 export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
   const { t } = useTranslation();
   const [granularity, setGranularity] = useState<FinanceGranularity>("quarter");
@@ -418,27 +427,50 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
                 tickLine={false}
                 tickFormatter={(v) => `€${v}M`}
               />
+              <ReferenceLine y={0} stroke="rgba(0,0,0,0.2)" />
               <Tooltip content={<InvestVsSavingsTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar
-                dataKey="investCost"
-                name={t("finance.chart.investCost", "Coût d'investissement")}
-                fill="#806659"
-                radius={[3, 3, 0, 0]}
+              <Legend
+                wrapperStyle={{ fontSize: 11 }}
+                content={() => (
+                  <div className="mb-1 flex flex-wrap items-center justify-end gap-4 text-[11px] text-secondary">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-[1.5px]"
+                        style={{ background: COLOR_POSITIVE }}
+                      />
+                      {t("finance.chart.netPositive", "Économie positive")}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-[1.5px]"
+                        style={{ background: COLOR_NEGATIVE }}
+                      />
+                      {t("finance.chart.netNegative", "Économie négative")}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className="inline-block h-0 w-4 border-t-2"
+                        style={{ borderColor: COLOR_CUMULATIVE }}
+                      />
+                      {t("finance.chart.netCumulative", "Cumul net")}
+                    </span>
+                  </div>
+                )}
               />
-              <Bar
-                dataKey="netSavings"
-                name={t("finance.chart.netSavings", "Gains nets")}
-                stackId="savings"
-                fill="#FF3C47"
-                radius={[0, 0, 0, 0]}
-              />
-              <Bar
-                dataKey="opexRecStarted"
-                name={t("finance.chart.opexRecRunRate", "OPEX récurrent démarré")}
-                stackId="savings"
-                fill="#991D1F"
-                radius={[3, 3, 0, 0]}
+              <Bar dataKey="netPeriodResult" radius={[3, 3, 3, 3]} isAnimationActive={false}>
+                {points.map((p) => (
+                  <Cell
+                    key={p.sortKey}
+                    fill={p.netPeriodResult >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}
+                  />
+                ))}
+              </Bar>
+              <Line
+                type="monotone"
+                dataKey="netCumulative"
+                stroke={COLOR_CUMULATIVE}
+                strokeWidth={2}
+                dot={{ r: 3 }}
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -455,6 +487,8 @@ type InvestVsSavingsTooltipPayload = {
     grossSavings: number;
     opexRecStarted: number;
     netSavings: number;
+    netPeriodResult: number;
+    netCumulative: number;
   };
 }[];
 
@@ -472,91 +506,26 @@ function InvestVsSavingsTooltip({
     <div className="rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
       <p className="text-[12px] font-semibold text-primary">{d.period}</p>
       <p className="mt-1 text-[12px] text-secondary">
-        {t("finance.chart.investCost", "Coût d'investissement")} : {engine.fmtCurr(d.investCost)}
-      </p>
-      <p className="mt-0.5 text-[12px] text-secondary">
         {t("finance.chart.grossSavings", "Gains bruts")} : {engine.fmtCurr(d.grossSavings)}
       </p>
       <p className="mt-0.5 text-[12px] text-secondary">
         − {t("finance.chart.opexRecRunRate", "OPEX récurrent démarré")} :{" "}
         {engine.fmtCurr(d.opexRecStarted)}
       </p>
-      <p className="mt-0.5 text-[12px] font-semibold text-primary">
+      <p className="mt-0.5 text-[12px] text-secondary">
         = {t("finance.chart.netSavings", "Gains nets")} : {engine.fmtCurr(d.netSavings)}
       </p>
+      <p className="mt-0.5 text-[12px] text-secondary">
+        − {t("finance.chart.investCost", "Coût d'investissement")} : {engine.fmtCurr(d.investCost)}
+      </p>
+      <p className="mt-0.5 text-[12px] font-semibold text-primary">
+        = {t("finance.chart.netPeriodResult", "Résultat net de la période")} :{" "}
+        {engine.fmtCurr(d.netPeriodResult)}
+      </p>
+      <p className="mt-0.5 text-[12px] text-tertiary">
+        {t("finance.chart.netCumulative", "Cumul net")} : {engine.fmtCurr(d.netCumulative)}
+      </p>
     </div>
-  );
-}
-
-/** #5 — Vue dédiée OPEX récurrent, run-rate par période de démarrage de l'action, barre cliquable
- *  (drill-down par workstream/levier). */
-export function OpexRecurrentChart({ data }: { data: BeTrackData }) {
-  const { t } = useTranslation();
-  const [granularity, setGranularity] = useState<FinanceGranularity>("year");
-  const points = useMemo(() => bucketRecurrentOpexByPeriod(data, granularity), [data, granularity]);
-  const [selectedPeriod, setSelectedPeriod] = useState<{ key: string; label: string } | null>(null);
-
-  const groups = useMemo(() => {
-    if (!selectedPeriod) return [];
-    const rows = recurrentOpexRowsForPeriod(data, granularity, selectedPeriod.key);
-    return groupCostsByWorkstream(rows, data.workstreams);
-  }, [selectedPeriod, data, granularity]);
-
-  return (
-    <Card>
-      <CardHeader
-        title={t("finance.chart.opexRecTitle", "OPEX récurrent par période")}
-        actions={<GranularityToggle value={granularity} onChange={setGranularity} />}
-      />
-      <CardBody>
-        {points.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <>
-            <ResponsiveContainer width="100%" height={220}>
-              <ComposedChart data={points} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-                <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => `€${v}M`}
-                />
-                <Tooltip formatter={(value) => `€${value}M`} />
-                <Bar
-                  dataKey="delta"
-                  name={t("finance.chart.opexRecRunRate", "OPEX récurrent démarré")}
-                  fill="#991D1F"
-                  radius={[3, 3, 0, 0]}
-                  cursor="pointer"
-                  onClick={(entry) => {
-                    const p = entry as unknown as { sortKey?: string; period?: string };
-                    if (p.sortKey)
-                      setSelectedPeriod({ key: p.sortKey, label: p.period ?? p.sortKey });
-                  }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-            <p className="mt-2 text-[11px] text-tertiary">
-              {t(
-                "finance.chart.opexRecHint",
-                "Chaque ligne OPEX récurrent est affichée sur sa période de démarrage — le modèle actuel n'a pas de date de fin dédiée pour l'OPEX récurrent, donc le montant n'est pas reconduit automatiquement sur les périodes suivantes."
-              )}
-            </p>
-          </>
-        )}
-      </CardBody>
-      <CostDrilldownModal
-        open={selectedPeriod !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedPeriod(null);
-        }}
-        title={selectedPeriod?.label ?? ""}
-        groups={groups}
-        formatValue={(v) => engine.fmtCurr(v)}
-      />
-    </Card>
   );
 }
 
