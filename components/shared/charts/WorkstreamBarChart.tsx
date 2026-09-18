@@ -320,6 +320,12 @@ export function WorkstreamBarChart({
             tickLine={false}
             tick={CategoryTick}
             height={48}
+            // `interval={0}` : force l'affichage de TOUS les ticks. Sans lui, Recharts estime
+            // automatiquement quels libellés se chevauchent (sur la largeur du texte à 1 ligne,
+            // pas sur le rendu réel à 2 lignes de `CategoryTick`) et en masque certains — ce calcul
+            // dépend du nombre de barres, donc un ou plusieurs titres de colonne disparaissaient au
+            // hasard selon le filtre actif.
+            interval={0}
           />
           <YAxis
             tick={{ fontSize: 11 }}
