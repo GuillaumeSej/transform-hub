@@ -33,10 +33,14 @@ export function hasActionImpacts(lever: Lever): boolean {
 /** Consolide les KPIs d'un levier depuis ses actions (si elles ont des impacts).
  *  Retourne undefined si le levier n'a pas d'actions avec impacts (= saisie manuelle).
  *
- *  `netSavings = savings − opexRec` : les montants saisis (savings comme opexRec) sont déjà des
- *  montants annuels par construction dès la saisie (formulaire d'impact d'action), il n'y a donc
- *  aucune pondération temporelle à appliquer. `capex` et `opexOneOff` sont calculés/consolidés à
- *  part (KPI "CAPEX & coûts one-off") mais ne rentrent plus dans `netSavings`. */
+ *  `netSavings = savings − capex` (règle métier explicite, alignée sur le "Réalisé" — voir
+ *  `actionNetAmount`/`engine.doneActionImpactsTotal`) : NI l'OPEX one-off NI l'OPEX récurrent ne
+ *  réduisent le "net", pour que "Plan initial"/"Réactualisé" et "Réalisé à date" restent
+ *  strictement comparables (même définition de "net" partout — c'est ce qui permet à
+ *  `engine.displayedProgressPct` de diviser l'un par l'autre sans mélanger deux bases de coût
+ *  différentes). `opexOneOff`/`opexRec` restent calculés/consolidés à part (KPI dédiés) mais
+ *  n'entrent plus dans `netSavings`. Les montants saisis sont déjà des montants annuels par
+ *  construction (formulaire d'impact d'action) : aucune pondération temporelle à appliquer. */
 export function consolidateLeverFromActions(lever: Lever): Partial<Lever> | undefined {
   const actions = lever.actions ?? [];
   if (!actions.some((a) => (a.impacts ?? []).length > 0)) return undefined;
@@ -49,7 +53,7 @@ export function consolidateLeverFromActions(lever: Lever): Partial<Lever> | unde
 
   return {
     grossSavings: Math.round(savings * 100) / 100,
-    netSavings: Math.round((savings - opexRec) * 100) / 100,
+    netSavings: Math.round((savings - capex) * 100) / 100,
     capex: Math.round(capex * 100) / 100,
     opexOneOff: Math.round(opexOneOff * 100) / 100,
     opexRec: Math.round(opexRec * 100) / 100,

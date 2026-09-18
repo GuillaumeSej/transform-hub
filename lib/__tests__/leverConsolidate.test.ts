@@ -65,29 +65,35 @@ function impact(overrides: Partial<ActionImpact>): ActionImpact {
   };
 }
 
-describe("leverConsolidate — consolidateLeverFromActions (netSavings = savings − opexRec)", () => {
+describe("leverConsolidate — consolidateLeverFromActions (netSavings = savings − capex)", () => {
   it("returns undefined when no action has impacts (manual entry lever)", () => {
     expect(consolidateLeverFromActions({ ...baseLever, actions: [] })).toBeUndefined();
   });
 
-  it("netSavings is savings minus recurring OPEX, with no temporal weighting", () => {
+  it("netSavings is savings minus CAPEX, with no temporal weighting", () => {
     const lever: Lever = {
       ...baseLever,
       actions: [
         action({
           impacts: [
             impact({ id: "s1", type: "saving", amount: 10 }),
-            impact({ id: "c1", type: "cost", nature: "opex_rec", amount: 2 }),
+            impact({
+              id: "c1",
+              type: "cost",
+              nature: "capex",
+              amount: 2,
+              capexDeploymentDate: "2026-01-01",
+            }),
           ],
         }),
       ],
     };
     const result = consolidateLeverFromActions(lever);
     expect(result?.netSavings).toBe(8); // 10 - 2
-    expect(result?.opexRec).toBe(2);
+    expect(result?.capex).toBe(2);
   });
 
-  it("one-off and capex costs never affect netSavings, only opexRec does", () => {
+  it("one-off and recurring OPEX costs never affect netSavings, only CAPEX does", () => {
     const lever: Lever = {
       ...baseLever,
       actions: [
@@ -96,8 +102,27 @@ describe("leverConsolidate — consolidateLeverFromActions (netSavings = savings
           impacts: [
             impact({ id: "s1", type: "saving", amount: 10 }),
             impact({ id: "c1", type: "cost", nature: "oneoff", amount: 2 }),
+            impact({ id: "c2", type: "cost", nature: "opex_rec", amount: 1 }),
+          ],
+        }),
+      ],
+    };
+    const result = consolidateLeverFromActions(lever);
+    expect(result?.netSavings).toBe(10); // 10 - 0 (oneoff/opexRec excluded)
+    expect(result?.opexOneOff).toBe(2);
+    expect(result?.opexRec).toBe(1);
+  });
+
+  it("sums capex across multiple actions, face-value, no annualization", () => {
+    const lever: Lever = {
+      ...baseLever,
+      actions: [
+        action({
+          id: "A1",
+          end: "2026-01-01",
+          impacts: [
             impact({
-              id: "c2",
+              id: "c1",
               type: "cost",
               nature: "capex",
               amount: 1,
@@ -105,34 +130,25 @@ describe("leverConsolidate — consolidateLeverFromActions (netSavings = savings
             }),
           ],
         }),
-      ],
-    };
-    const result = consolidateLeverFromActions(lever);
-    expect(result?.netSavings).toBe(10); // 10 - 0 (capex/oneoff excluded)
-    expect(result?.capex).toBe(1);
-    expect(result?.opexOneOff).toBe(2);
-  });
-
-  it("sums opex_rec across multiple actions, face-value, no annualization", () => {
-    const lever: Lever = {
-      ...baseLever,
-      actions: [
-        action({
-          id: "A1",
-          end: "2026-01-01",
-          impacts: [impact({ id: "c1", type: "cost", nature: "opex_rec", amount: 1 })],
-        }),
         action({
           id: "A2",
           end: "2027-01-01",
-          impacts: [impact({ id: "c2", type: "cost", nature: "opex_rec", amount: 3 })],
+          impacts: [
+            impact({
+              id: "c2",
+              type: "cost",
+              nature: "capex",
+              amount: 3,
+              capexDeploymentDate: "2027-01-01",
+            }),
+          ],
         }),
       ],
     };
     const result = consolidateLeverFromActions(lever);
     // netSavings = 0 (no savings) - (1 + 3) = -4
     expect(result?.netSavings).toBe(-4);
-    expect(result?.opexRec).toBe(4);
+    expect(result?.capex).toBe(4);
   });
 });
 
@@ -193,12 +209,11 @@ describe("leverConsolidate — leverJCurve (Réalisé à date)", () => {
     expect(lastActual(points)).toBe(10);
   });
 
-  it("100% progress, no CAPEX — realized (gross savings, OPEX récurrent excluded) diverges by design from netSavings (gross savings − opexRec)", () => {
-    // Deux formules "net" volontairement différentes (règle métier explicite) : le "Réalisé" de la
-    // courbe en J (actionNetAmount) ne déduit QUE le CAPEX des gains bruts, jamais l'OPEX (one-off
-    // ni récurrent) — alors que le "Plan initial"/"Réactualisé" de `consolidateLeverFromActions`
-    // (netSavings) déduit l'OPEX récurrent, jamais le CAPEX. Elles ne sont donc plus censées
-    // coïncider dès qu'un OPEX récurrent est présent, comme ici.
+  it("100% progress, OPEX récurrent présent mais sans CAPEX — Plan (netSavings) et Réalisé (courbe en J) coïncident désormais, les deux ignorant l'OPEX récurrent", () => {
+    // "Réalisé" (courbe en J, actionNetAmount) et "Plan initial"/"Réactualisé"
+    // (consolidateLeverFromActions.netSavings) partagent maintenant EXACTEMENT la même définition
+    // de "net" (règle métier explicite : gains bruts − CAPEX uniquement, jamais l'OPEX one-off ni
+    // récurrent) — ils ne peuvent donc plus diverger, contrairement à avant cet alignement.
     const lever: Lever = {
       ...baseLever,
       start: "2026-01-01",
@@ -225,9 +240,8 @@ describe("leverConsolidate — leverJCurve (Réalisé à date)", () => {
     };
     const points = leverJCurve(lever, "2026-01-01", "2026-12-31");
     const consolidated = consolidateLeverFromActions(lever);
-    // netSavings = (10 + 6) - 2 (opexRec) = 14.
-    expect(consolidated?.netSavings).toBe(14);
-    // Réalisé = 10 + 6, aucun CAPEX à déduire (l'OPEX récurrent de 2 n'entre pas dans ce calcul).
+    // netSavings = (10 + 6) - 0 (pas de CAPEX, l'OPEX récurrent de 2 n'entre pas dans ce calcul).
+    expect(consolidated?.netSavings).toBe(16);
     expect(lastActual(points)).toBe(16);
   });
 
@@ -284,13 +298,13 @@ describe("leverConsolidate — resolveLockedPlanNet", () => {
         action({
           impacts: [
             impact({ id: "s1", type: "saving", amount: 20 }),
-            impact({ id: "c1", type: "cost", nature: "opex_rec", amount: 5 }),
+            impact({ id: "c1", type: "cost", nature: "capex", amount: 5 }),
           ],
         }),
       ],
       lockedPlan: { grossSavings: 3, netSavings: 3, opexOneOff: 0, opexRec: 0, capex: 3 },
     };
-    // netSavings consolidé attendu = 20 - 5 = 15, pas les 3 figés par erreur.
+    // netSavings consolidé attendu = 20 - 5 (capex) = 15, pas les 3 figés par erreur.
     expect(resolveLockedPlanNet(lever)).toEqual({ value: 15, isLocked: true });
   });
 });
