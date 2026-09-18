@@ -163,18 +163,36 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     type: "portfolio-funnel",
     label: "Avancement des leviers",
     icon: "Layers",
-    defaultSpan: "M",
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
   },
   {
-    // Positionné juste après portfolio-funnel (au lieu de plus bas dans le registre) : les deux
-    // sont en span "M" et se complètent sur la même ligne de la grille 4 colonnes, ce qui évite un
-    // trou visuel à droite de portfolio-funnel avant que le prochain widget "XL" ne reflow sur la
-    // ligne suivante. Voir le commentaire sur SPAN_COL_CLASS plus haut dans ce fichier.
+    // Widget "Santé des initiatives" — remonté juste après portfolio-funnel + alerts en Août
+    // 2026 pour rester au niveau du cockpit d'entrée (voir buildDefaultLayout). Le picker
+    // "Ajouter un widget" applique automatiquement le même ordre.
+    type: "initiative-health",
+    label: "Santé des initiatives",
+    icon: "LayoutGrid",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+    viewOptions: [
+      { key: "workstream", labelKey: "dashboard.workstream" },
+      { key: "country", labelKey: "dashboard.country" },
+      { key: "function", labelKey: "dashboard.leverDepartment" },
+    ],
+    defaultView: "workstream",
+  },
+  {
+    // Positionné juste après initiative-health et avant savings-trajectory (au lieu de juste après
+    // portfolio-funnel) : forme avec ces deux widgets (et workstream-breakdown plus bas) une
+    // section "économies" contiguë en pleine largeur — Avancement des leviers -> Santé des
+    // initiatives -> Économies prévues -> Trajectoire des économies -> Réalisation des économies —
+    // au lieu d'un pairage en span "M" avec portfolio-funnel. En span "XL" pour rester cohérent
+    // avec ses voisins pleine largeur (sinon une ligne à moitié vide entre deux widgets "XL").
     type: "marimekko",
     label: "Économies prévues",
     icon: "LayoutGrid",
-    defaultSpan: "M",
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
     viewOptions: [
       { key: "function-country", labelKey: "dashboard.widgetView.functionCountry" },
@@ -198,22 +216,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
         label: "Workstream × Levier",
       },
     ],
-  },
-  {
-    // Widget "Santé des initiatives" — remonté juste après portfolio-funnel + alerts en Août
-    // 2026 pour rester au niveau du cockpit d'entrée (voir buildDefaultLayout). Le picker
-    // "Ajouter un widget" applique automatiquement le même ordre.
-    type: "initiative-health",
-    label: "Santé des initiatives",
-    icon: "LayoutGrid",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-    viewOptions: [
-      { key: "workstream", labelKey: "dashboard.workstream" },
-      { key: "country", labelKey: "dashboard.country" },
-      { key: "function", labelKey: "dashboard.leverDepartment" },
-    ],
-    defaultView: "workstream",
   },
   {
     type: "stage-funnel",
@@ -530,6 +532,10 @@ const INITIATIVE_HEALTH_MIGRATION_KEY = "betrack_dashboard_migration_initiative_
 /** Clé pour la migration one-shot qui remonte `initiative-health` en position 3 (après
  *  `alerts`). Voir `reorderInitiativeHealthWidget`. */
 const INITIATIVE_HEALTH_REORDER_KEY = "betrack_dashboard_initiative_health_reorder_v1";
+/** Clé pour la migration one-shot qui bascule `portfolio-funnel`/`marimekko` en span "XL" et
+ *  repositionne `marimekko` juste après `initiative-health` (Sept 2026 — section "économies").
+ *  Voir `migrateEconomiesSectionLayout`. */
+const ECONOMIES_SECTION_MIGRATION_KEY = "betrack_dashboard_migration_economies_section_v1";
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -646,6 +652,65 @@ export function reorderInitiativeHealthWidget(
   return [...without.slice(0, insertAfter + 1), target, ...without.slice(insertAfter + 1)];
 }
 
+/** Bascule un widget en span "XL" s'il est encore en "M" — ne touche pas aux autres spans (un
+ *  span choisi manuellement par l'utilisateur, ex. "L", n'est jamais écrasé). Utilisé par
+ *  `migrateEconomiesSectionLayout` pour `portfolio-funnel` et `marimekko`. */
+function widenIfM(instance: DashboardWidgetInstance): DashboardWidgetInstance {
+  return instance.span === "M" ? { ...instance, span: "XL" } : instance;
+}
+
+/**
+ * Bascule `portfolio-funnel` et `marimekko` en span "XL" et repositionne `marimekko` juste après
+ * `initiative-health`, pour aligner les layouts persistés sur le nouveau regroupement "section
+ * économies" du registre (Sept 2026) : Avancement des leviers -> Santé des initiatives ->
+ * Économies prévues -> Trajectoire des économies -> Réalisation des économies (voir
+ * DASHBOARD_WIDGET_REGISTRY et son commentaire sur `marimekko`).
+ *
+ * Idempotente (contrôlée par une clé localStorage séparée), non destructive :
+ *   - Ne touche `portfolio-funnel` que s'il est encore en span "M".
+ *   - Ne touche `marimekko` que s'il est présent ; son span n'est élargi que s'il est encore "M".
+ *   - Si `initiative-health` est présent, repositionne `marimekko` juste après.
+ *   - Sinon (utilisateur ayant supprimé `initiative-health`), repositionne `marimekko` juste avant
+ *     `savings-trajectory` si présent.
+ *   - Si ni l'un ni l'autre n'est présent, laisse la position de `marimekko` inchangée (corrige
+ *     uniquement son span).
+ *   - Aucune autre instance (ordre ou span) n'est modifiée.
+ */
+export function migrateEconomiesSectionLayout(
+  layout: DashboardWidgetInstance[],
+  migrationAlreadyApplied: boolean
+): DashboardWidgetInstance[] {
+  if (migrationAlreadyApplied) return layout;
+
+  const withFunnelSpan = layout.map((i) => (i.type === "portfolio-funnel" ? widenIfM(i) : i));
+
+  const marimekko = withFunnelSpan.find((i) => i.type === "marimekko");
+  if (!marimekko) return withFunnelSpan;
+
+  const spanFixed = widenIfM(marimekko);
+  const withoutMarimekko = withFunnelSpan.filter((i) => i !== marimekko);
+
+  const healthIdx = withoutMarimekko.findIndex((i) => i.type === "initiative-health");
+  if (healthIdx >= 0) {
+    return [
+      ...withoutMarimekko.slice(0, healthIdx + 1),
+      spanFixed,
+      ...withoutMarimekko.slice(healthIdx + 1),
+    ];
+  }
+
+  const trajectoryIdx = withoutMarimekko.findIndex((i) => i.type === "savings-trajectory");
+  if (trajectoryIdx >= 0) {
+    return [
+      ...withoutMarimekko.slice(0, trajectoryIdx),
+      spanFixed,
+      ...withoutMarimekko.slice(trajectoryIdx),
+    ];
+  }
+
+  return withFunnelSpan.map((i) => (i === marimekko ? spanFixed : i));
+}
+
 /** Charge le layout personnalisé depuis localStorage. Retombe sur le layout par défaut si absent,
  * corrompu, ou si son contenu ne correspond plus au registre actuel (ex. widget renommé/retiré).
  * `customViews` de chaque instance est en plus assaini (voir `sanitizeInstance`) — un layout
@@ -658,29 +723,36 @@ export function loadDashboardLayout(): DashboardWidgetInstance[] {
     if (!raw) {
       window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
       window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
+      window.localStorage.setItem(ECONOMIES_SECTION_MIGRATION_KEY, "1");
       return buildDefaultLayout();
     }
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidInstance)) {
       window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
       window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
+      window.localStorage.setItem(ECONOMIES_SECTION_MIGRATION_KEY, "1");
       return buildDefaultLayout();
     }
     const migrationAlreadyApplied =
       window.localStorage.getItem(INITIATIVE_HEALTH_MIGRATION_KEY) === "1";
     const reorderAlreadyApplied =
       window.localStorage.getItem(INITIATIVE_HEALTH_REORDER_KEY) === "1";
-    // Chaîne les deux migrations : ajout du widget (si absent), puis remontée en position 3.
+    const economiesSectionAlreadyApplied =
+      window.localStorage.getItem(ECONOMIES_SECTION_MIGRATION_KEY) === "1";
+    // Chaîne les migrations : ajout du widget (si absent), remontée en position 3, puis
+    // regroupement de la section "économies" (span + repositionnement de marimekko).
     const added = migrateInitiativeHealthWidget(
       (parsed as DashboardWidgetInstance[]).map(sanitizeInstance).map(migrateSpan),
       migrationAlreadyApplied
     );
-    const migrated = reorderInitiativeHealthWidget(added, reorderAlreadyApplied);
-    if (!migrationAlreadyApplied || !reorderAlreadyApplied) {
+    const reordered = reorderInitiativeHealthWidget(added, reorderAlreadyApplied);
+    const migrated = migrateEconomiesSectionLayout(reordered, economiesSectionAlreadyApplied);
+    if (!migrationAlreadyApplied || !reorderAlreadyApplied || !economiesSectionAlreadyApplied) {
       window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(migrated));
     }
     window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
     window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
+    window.localStorage.setItem(ECONOMIES_SECTION_MIGRATION_KEY, "1");
     return migrated;
   } catch {
     return buildDefaultLayout();
@@ -693,6 +765,7 @@ export function saveDashboardLayout(layout: DashboardWidgetInstance[]): void {
     window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
     window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
     window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
+    window.localStorage.setItem(ECONOMIES_SECTION_MIGRATION_KEY, "1");
   } catch (err) {
     console.error(
       "[betrack storage] échec d'écriture localStorage pour le layout dashboard :",
