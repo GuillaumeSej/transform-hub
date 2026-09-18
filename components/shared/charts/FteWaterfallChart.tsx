@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Cell,
+  LabelList,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -107,9 +108,56 @@ export function FteWaterfallChart({
   const domainMax = Math.max(...values) + pad - offset;
   const data: WaterfallDatum[] = raw.map((d) => ({ ...d, base: d.base - offset }));
 
+  // Bulle de valeur affichée au-dessus de chaque barre (round 4 RH dashboard clarity) : la
+  // valeur du delta n'était visible qu'au survol (Tooltip), pas assez lisible en un coup d'œil.
+  // Rendu SVG custom (même convention que `renderRemainingLabels` dans WorkstreamBarChart.tsx) :
+  // un <LabelList content={...}> plutôt qu'un simple `label` string, pour pouvoir dessiner un
+  // pastille colorée + texte. Le clic sur la bulle doit déclencher le même drill-down que le
+  // clic sur la barre : un <g> SVG peut intercepter le pointeur avant qu'il n'atteigne la barre
+  // sous-jacente, donc on lui donne son propre onClick plutôt que de compter sur un click-through.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderDeltaBubble = (props: any) => {
+    const { x = 0, y = 0, width = 0, index } = props;
+    const d = data[index];
+    if (!d) return null;
+    const text = `${d.delta > 0 ? "+" : ""}${fmt(d.delta)}`;
+    const fill = d.delta < 0 ? COLOR_DOWN : d.delta > 0 ? COLOR_UP : "rgba(0,0,0,0.45)";
+    const bubbleWidth = Math.max(text.length * 6.5 + 12, 28);
+    const bubbleHeight = 16;
+    const cx = x + width / 2;
+    const cy = y - bubbleHeight / 2 - 4;
+    return (
+      <g
+        onClick={() => onBarClick?.(d.label)}
+        style={{ cursor: onBarClick ? "pointer" : undefined }}
+      >
+        <rect
+          x={cx - bubbleWidth / 2}
+          y={cy - bubbleHeight / 2}
+          width={bubbleWidth}
+          height={bubbleHeight}
+          rx={8}
+          ry={8}
+          fill={fill}
+        />
+        <text
+          x={cx}
+          y={cy + 1}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={10}
+          fontWeight={600}
+          fill="#fff"
+        >
+          {text}
+        </text>
+      </g>
+    );
+  };
+
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={data} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
+      <ComposedChart data={data} margin={{ top: 22, right: 8, left: 4, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <YAxis
@@ -165,6 +213,7 @@ export function FteWaterfallChart({
               fill={d.delta < 0 ? COLOR_DOWN : d.delta > 0 ? COLOR_UP : "rgba(0,0,0,0.12)"}
             />
           ))}
+          <LabelList dataKey="height" content={renderDeltaBubble} />
         </Bar>
         <ReferenceLine
           y={baseline - offset}
