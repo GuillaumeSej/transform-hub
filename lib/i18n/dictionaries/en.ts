@@ -396,6 +396,7 @@ const en: Record<string, string> = {
   "leverDetail.statusUpdated": "Stage updated",
   "leverDetail.autoStageHint":
     "This stage is reached automatically when the action plan is at 100%",
+  "leverDetail.pastStageHint": "Stage already reached — cannot move backward",
   "leverDetail.moveToStage": 'Move to "{stage}"',
   "leverDetail.approval.stageHint":
     "This stage requires an approval request (owner → sponsor or CTO), see below",

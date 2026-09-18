@@ -18,7 +18,14 @@ import { subscribeCompanies } from "@/lib/firestore/admin";
 import { canUserViewLever } from "@/lib/leversLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
-type Row = Lever & { realized: number; wsName: string; statusLabel: string };
+type Row = Lever & {
+  realized: number;
+  /** `engine.displayedProgressPct(l)` (réalisé net / réactualisé net) — PAS le champ brut
+   *  `progress` hérité de `Lever`, voir même doc-comment dans LeversPagePerformance.tsx. */
+  progressPct: number;
+  wsName: string;
+  statusLabel: string;
+};
 
 /**
  * Dashboard du Workstream Sponsor, avec un bandeau d'indicateurs de suivi au-dessus. Un
@@ -73,6 +80,7 @@ export default function WorkstreamsPage() {
   const rows: Row[] = visibleLevers.map((l) => ({
     ...l,
     realized: engine.realizedSavings(l),
+    progressPct: engine.displayedProgressPct(l),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
     statusLabel: lifecycle.label(l.status),
   }));
@@ -107,7 +115,7 @@ export default function WorkstreamsPage() {
       align: "right",
       render: (r) => r.realized.toFixed(1),
     },
-    { key: "progress", label: "Progress", render: (r) => <ProgressBar pct={r.progress} /> },
+    { key: "progressPct", label: "Progress", render: (r) => <ProgressBar pct={r.progressPct} /> },
     {
       key: "risk",
       label: t("leverForm.risk", "Risque"),

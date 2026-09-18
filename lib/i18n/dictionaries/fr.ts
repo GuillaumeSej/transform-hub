@@ -428,6 +428,7 @@ const fr: Record<string, string> = {
   "leverDetail.statusUpdated": "Niveau mis à jour",
   "leverDetail.autoStageHint":
     "Cette étape est atteinte automatiquement quand le plan d'action est à 100 %",
+  "leverDetail.pastStageHint": "Étape déjà franchie — impossible de revenir en arrière",
   "leverDetail.moveToStage": "Passer en « {stage} »",
   "leverDetail.approval.stageHint":
     "Cette étape nécessite une demande de validation (porteur → sponsor ou CTO), voir ci-dessous",

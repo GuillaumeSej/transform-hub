@@ -193,7 +193,12 @@ describe("leverConsolidate — leverJCurve (Réalisé à date)", () => {
     expect(lastActual(points)).toBe(10);
   });
 
-  it("100% progress — realized equals the full consolidated plan", () => {
+  it("100% progress, no CAPEX — realized (gross savings, OPEX récurrent excluded) diverges by design from netSavings (gross savings − opexRec)", () => {
+    // Deux formules "net" volontairement différentes (règle métier explicite) : le "Réalisé" de la
+    // courbe en J (actionNetAmount) ne déduit QUE le CAPEX des gains bruts, jamais l'OPEX (one-off
+    // ni récurrent) — alors que le "Plan initial"/"Réactualisé" de `consolidateLeverFromActions`
+    // (netSavings) déduit l'OPEX récurrent, jamais le CAPEX. Elles ne sont donc plus censées
+    // coïncider dès qu'un OPEX récurrent est présent, comme ici.
     const lever: Lever = {
       ...baseLever,
       start: "2026-01-01",
@@ -220,9 +225,35 @@ describe("leverConsolidate — leverJCurve (Réalisé à date)", () => {
     };
     const points = leverJCurve(lever, "2026-01-01", "2026-12-31");
     const consolidated = consolidateLeverFromActions(lever);
-    // netSavings = (10 + 6) - 2 = 14, toutes les actions étant "done".
+    // netSavings = (10 + 6) - 2 (opexRec) = 14.
     expect(consolidated?.netSavings).toBe(14);
-    expect(lastActual(points)).toBe(14);
+    // Réalisé = 10 + 6, aucun CAPEX à déduire (l'OPEX récurrent de 2 n'entre pas dans ce calcul).
+    expect(lastActual(points)).toBe(16);
+  });
+
+  it("realized deducts CAPEX from gross savings, never OPEX one-off nor OPEX récurrent", () => {
+    const lever: Lever = {
+      ...baseLever,
+      start: "2026-01-01",
+      end: "2026-03-31",
+      actions: [
+        action({
+          id: "A1",
+          end: "2026-01-15",
+          deliveredDate: "2026-01-15",
+          status: "done",
+          impacts: [
+            impact({ id: "s1", type: "saving", amount: 10 }),
+            impact({ id: "c1", type: "cost", nature: "capex", amount: 3 }),
+            impact({ id: "c2", type: "cost", nature: "oneoff", amount: 50 }),
+            impact({ id: "c3", type: "cost", nature: "opex_rec", amount: 2 }),
+          ],
+        }),
+      ],
+    };
+    const points = leverJCurve(lever, "2026-01-01", "2026-12-31");
+    // 10 (saving) - 3 (capex) = 7 — l'OPEX one-off (50) et l'OPEX récurrent (2) sont ignorés.
+    expect(lastActual(points)).toBe(7);
   });
 });
 

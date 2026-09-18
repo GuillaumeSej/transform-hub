@@ -30,9 +30,12 @@ import type { LeverStatus } from "@/types";
  *  l'ancien calcul `netSavings × progression %`, qui créditait par anticipation une partie du
  *  business case initial avant toute livraison effective). Retourne 0 pour un levier sans action
  *  chiffrée : son business case initial (voir `LeverForm`, section "Impact initial") définit le
- *  planifié, pas le réalisé, tant qu'il n'a pas été ventilé en plan d'action. Même filtre `net`
- *  (savings − coûts) que `leverConsolidate.ts::actionNetAmount`, dupliqué ici plutôt qu'importé
- *  pour éviter un cycle d'import (`leverConsolidate.ts` importe déjà `MONTH_LABELS` d'ici). */
+ *  planifié, pas le réalisé, tant qu'il n'a pas été ventilé en plan d'action.
+ *  `pick === "net"` : gains bruts − CAPEX UNIQUEMENT (règle métier explicite, ni OPEX one-off ni
+ *  OPEX récurrent ne réduisent le "Réalisé" — un levier livré avec seulement un coût OPEX one-off
+ *  affichait à tort un réalisé négatif avant ce correctif). Même filtre que
+ *  `leverConsolidate.ts::actionNetAmount`, dupliqué ici plutôt qu'importé pour éviter un cycle
+ *  d'import (`leverConsolidate.ts` importe déjà `MONTH_LABELS` d'ici). */
 function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): number {
   let total = 0;
   for (const action of lever.actions ?? []) {
@@ -42,8 +45,10 @@ function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): nu
         if (imp.fteCount) total += imp.fteCount;
       } else if (pick === "gross") {
         if (imp.type === "saving") total += imp.amount;
-      } else {
-        total += imp.type === "saving" ? imp.amount : -imp.amount;
+      } else if (imp.type === "saving") {
+        total += imp.amount;
+      } else if (imp.nature === "capex") {
+        total -= imp.amount;
       }
     }
   }
@@ -79,6 +84,22 @@ export function displayedLockedPlanNet(lever: Lever): { value: number; isLocked:
 export function displayedReforecastNet(lever: Lever): { value: number; isReforecast: boolean } {
   if (lever.reforecast) return { value: lever.reforecast.netSavings, isReforecast: true };
   return { value: lever.lockedPlan?.netSavings ?? lever.netSavings, isReforecast: false };
+}
+
+/** Progression % affichée d'un levier — SEULE et UNIQUE formule utilisée partout où une
+ *  "progression" de levier est montrée à l'utilisateur (bandeau Overview de la fiche détail,
+ *  liste des leviers, page Workstreams) : `réalisé net à date / réactualisé net`, jamais le champ
+ *  brut `lever.progress` (moyenne pondérée du statut des actions — sert encore aux automatismes de
+ *  cycle de vie et de retard, `recomputeLeverProgress`/`scheduleGap`, mais plus à l'affichage).
+ *  Si le ratio est négatif (réalisé négatif, ou réactualisé négatif), on affiche 0 % plutôt qu'un
+ *  pourcentage négatif dénué de sens — dès qu'il redevient positif, le vrai pourcentage s'affiche
+ *  (pas de plafond à 100 : un levier qui dépasse sa cible réactualisée peut légitimement afficher
+ *  plus, les composants d'affichage (`RadialProgress`/`ProgressBar`) clampent déjà visuellement). */
+export function displayedProgressPct(lever: Lever): number {
+  const reforecast = displayedReforecastNet(lever).value;
+  if (!reforecast) return 0;
+  const pct = (realizedSavings(lever) / reforecast) * 100;
+  return pct > 0 ? Math.round(pct) : 0;
 }
 
 export function realizedFte(lever: Lever): number {

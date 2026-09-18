@@ -66,11 +66,16 @@ export type JCurvePoint = {
   actual: number | null; // cumulatif réalisé (null si futur)
 };
 
-/** Calcule le montant net (savings − coûts) d'une action. */
+/** Calcule le montant net d'une action : gains bruts − CAPEX uniquement (règle métier explicite —
+ *  ni l'OPEX one-off ni l'OPEX récurrent ne réduisent ce "net", contrairement à un calcul naïf qui
+ *  soustrairait tous les impacts `type==="cost"` sans distinguer leur `nature`). Root cause d'un
+ *  bug remonté : un levier avec seulement un impact OPEX one-off sur une action livrée affichait un
+ *  "Réalisé à date (net)" négatif — l'OPEX one-off ne doit JAMAIS apparaître dans ce calcul. */
 function actionNetAmount(action: LeverAction): number {
   let net = 0;
   for (const imp of action.impacts ?? []) {
-    net += imp.type === "saving" ? imp.amount : -imp.amount;
+    if (imp.type === "saving") net += imp.amount;
+    else if (imp.nature === "capex") net -= imp.amount;
   }
   return net;
 }

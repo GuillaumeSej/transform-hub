@@ -379,6 +379,33 @@ describe("leversLogic — updateLever (status change & plan lock triggering)", (
     const result = updateLever(levers, "L001", { owner: "New Owner" }, "user");
     expect(result.lever.cancelledAtStage).toBe("validated");
   });
+
+  it.each(["qualified", "validated", "in_progress", "delivered"] as const)(
+    // Reproduit le bug remonté : le stepper de la fiche détail laissait cliquer "Identifié" (M1)
+    // depuis n'importe quelle étape plus avancée — "idea" n'est ni gated (GATED_STATUSES) ni auto
+    // (delivered), donc AVANT ce correctif rien ne bloquait cette régression à ce niveau.
+    "silently ignores a regressive status patch from '%s' back to 'idea' (M1) — a lever never moves backward in the M1→M5 cycle",
+    (fromStatus) => {
+      const levers = [makeLever(fromStatus)];
+      const result = updateLever(levers, "L001", { status: "idea", owner: "New Owner" }, "user");
+      // Le champ status est ignoré silencieusement...
+      expect(result.lever.status).toBe(fromStatus);
+      // ...mais les autres champs légitimes du même patch s'appliquent quand même.
+      expect(result.lever.owner).toBe("New Owner");
+    }
+  );
+
+  it("still allows cancelling from any active status (cancellation is not a cycle regression)", () => {
+    const levers = [makeLever("in_progress")];
+    const result = updateLever(levers, "L001", { status: "cancelled" }, "user");
+    expect(result.lever.status).toBe("cancelled");
+  });
+
+  it("still allows reactivating a cancelled lever (not treated as a cycle regression either)", () => {
+    const levers = [makeLever("cancelled", { cancelledAtStage: "validated" })];
+    const result = updateLever(levers, "L001", { status: "idea" }, "user");
+    expect(result.lever.status).toBe("idea");
+  });
 });
 
 describe("leversLogic — enriched action consolidation", () => {

@@ -390,7 +390,11 @@ export function LeverDetailClientPerformance() {
               // stepper — il passe désormais par une demande de validation (porteur → sponsor OU
               // CTO, voir le bandeau juste en dessous du stepper).
               const isCascadeGated = s === "qualified" || s === "validated" || s === "in_progress";
-              const isBlocked = isAuto || isCascadeGated;
+              // Impératif métier : une étape déjà franchie (isPast) n'est plus cliquable — on ne
+              // peut jamais revenir en arrière dans le cycle M1→M5 (garde-fou dupliqué côté données
+              // dans `leversLogic.ts::updateLever`, qui ignore silencieusement un `status` en
+              // régression quel que soit l'appelant — celui-ci n'est qu'un confort visuel/UX).
+              const isBlocked = isAuto || isCascadeGated || isPast;
               return (
                 <div
                   key={s}
@@ -418,10 +422,15 @@ export function LeverDetailClientPerformance() {
                               "leverDetail.approval.stageHint",
                               "Cette étape nécessite une demande de validation (porteur → sponsor ou CTO), voir ci-dessous"
                             )
-                          : t("leverDetail.moveToStage", "Passer en « {stage} »").replace(
-                              "{stage}",
-                              lifecycle.shortLabel(s)
-                            )
+                          : isPast
+                            ? t(
+                                "leverDetail.pastStageHint",
+                                "Étape déjà franchie — impossible de revenir en arrière"
+                              )
+                            : t("leverDetail.moveToStage", "Passer en « {stage} »").replace(
+                                "{stage}",
+                                lifecycle.shortLabel(s)
+                              )
                     }
                     className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md border px-2 py-2 transition ${
                       isCurrent
@@ -819,7 +828,7 @@ export function LeverDetailClientPerformance() {
             {/* ── 1. Bandeau exécutif ─────────────────────────────────────── */}
             <div className="mb-6 flex flex-wrap items-center gap-6 rounded-lg border border-border bg-neutral-50 p-4">
               <RadialProgress
-                pct={lever.progress}
+                pct={engine.displayedProgressPct(lever)}
                 size={140}
                 strokeWidth={12}
                 label={t("leverDetail.progressLabel", "Progression")}
