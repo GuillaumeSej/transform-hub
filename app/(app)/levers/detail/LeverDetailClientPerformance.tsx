@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { subscribeCompanies, subscribePrograms } from "@/lib/firestore/admin";
 import {
@@ -107,8 +107,37 @@ export function LeverDetailClientPerformance() {
   const [actionView, setActionView] = useState<"kanban" | "gantt">("kanban");
   const [cascadeProposal, setCascadeProposal] = useState<CascadeProposal | null>(null);
   const [depsModalOpen, setDepsModalOpen] = useState(false);
+  const [pendingGateApproval, setPendingGateApproval] = useState(false);
 
   const lever = data.getLeverById(id);
+
+  // Garde-fou (M4/M5 sans mouvements RH liés) : M5 "Réalisé" est atteint AUTOMATIQUEMENT à 100 %
+  // du plan d'action (voir lib/leversLogic.ts::recomputeLeverProgress), donc il n'y a pas de clic
+  // "changer de statut" à intercepter avant coup comme pour M4 — on détecte plutôt la transition
+  // (statut précédent ≠ delivered, nouveau statut = delivered) et on avertit juste après, de façon
+  // non bloquante, si l'ETP visé est non nul et qu'aucun mouvement RH n'est rattaché au levier.
+  const prevLeverStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!lever) return;
+    const previousStatus = prevLeverStatusRef.current;
+    prevLeverStatusRef.current = lever.status;
+    if (previousStatus && previousStatus !== "delivered" && lever.status === "delivered") {
+      const recon = reconcileLeverMovements(lever, data.workforce.movements, 0);
+      if (recon.leverFteImpact !== 0 && recon.hasNoMovements) {
+        showToast(
+          t("leverDetail.deliveredEtpWarning.title", "Levier passé « Réalisé » — ETP à vérifier"),
+          t(
+            "leverDetail.deliveredEtpWarning.body",
+            "{lever} vise {fte} ETP mais aucun mouvement RH n'y est rattaché."
+          )
+            .replace("{lever}", lever.name)
+            .replace("{fte}", String(recon.leverFteImpact)),
+          "default"
+        );
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lever?.status]);
   const actionPlanEnabled =
     programs.find((p) => p.id === lever?.programId)?.actionPlanEnabled ?? true;
   // Détail levier scopé au programme DU levier — le cycle de vie est désormais une config par
@@ -249,6 +278,20 @@ export function LeverDetailClientPerformance() {
   // ici comme `real`/`realGross` plus haut — un hook ne peut pas être ajouté après les `return`
   // conditionnels de `!lever`/`!canView` déjà passés à ce point de la fonction.
   const movementReconciliation = reconcileLeverMovements(lever, data.workforce.movements, realFte);
+  function runApproveGate() {
+    try {
+      data.approveLeverGate(lever!.id);
+      showToast(t("leverDetail.approval.approved", "Demande approuvée"), lever!.name, "success");
+    } catch (err) {
+      showToast(
+        t("leverDetail.approval.error", "Action impossible"),
+        err instanceof Error ? err.message : String(err),
+        "error"
+      );
+    } finally {
+      setPendingGateApproval(false);
+    }
+  }
   const leverFteForBadge = consolidatedKPIs?.fteImpact ?? lever.fteImpact;
   // Garde-fou générique (audit issue #6) : un ETP visé positif ("postes créés") sans qu'aucun
   // texte du levier (description, libellés d'impacts d'actions) ne mentionne un recrutement est
@@ -456,20 +499,18 @@ export function LeverDetailClientPerformance() {
                     variant="primary"
                     size="sm"
                     onClick={() => {
-                      try {
-                        data.approveLeverGate(lever.id);
-                        showToast(
-                          t("leverDetail.approval.approved", "Demande approuvée"),
-                          lever.name,
-                          "success"
-                        );
-                      } catch (err) {
-                        showToast(
-                          t("leverDetail.approval.error", "Action impossible"),
-                          err instanceof Error ? err.message : String(err),
-                          "error"
-                        );
+                      // Garde-fou : passage en "Exécuté" (M4) avec un ETP visé non nul mais
+                      // aucun mouvement RH rattaché — confirmation douce (non bloquante, juste
+                      // une double vérification) avant d'approuver, plutôt qu'un silence total.
+                      if (
+                        lever.approval?.targetStatus === "in_progress" &&
+                        movementReconciliation.leverFteImpact !== 0 &&
+                        movementReconciliation.hasNoMovements
+                      ) {
+                        setPendingGateApproval(true);
+                        return;
                       }
+                      runApproveGate();
                     }}
                   >
                     {t("leverDetail.approval.approve", "Approuver")}
@@ -612,6 +653,30 @@ export function LeverDetailClientPerformance() {
           onChange={(next) => data.updateLever(lever.id, { dependencies: next })}
           excludeIds={[lever.id]}
         />
+      </Modal>
+
+      <Modal
+        open={pendingGateApproval}
+        onOpenChange={(open) => !open && setPendingGateApproval(false)}
+        title={t("leverDetail.approval.etpWarningTitle", "ETP non couvert par un mouvement RH")}
+        maxWidth="480px"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setPendingGateApproval(false)}>
+              {t("leverDetail.approval.etpWarningCancel", "Annuler")}
+            </Button>
+            <Button variant="primary" onClick={runApproveGate}>
+              {t("leverDetail.approval.etpWarningConfirm", "Approuver quand même")}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-secondary">
+          {t(
+            "leverDetail.approval.etpWarningBody",
+            "Ce levier vise {fte} ETP mais aucun mouvement RH ne lui est rattaché. Vous pouvez approuver quand même, mais pensez à rattacher les mouvements correspondants dans la Base ETP."
+          ).replace("{fte}", String(movementReconciliation.leverFteImpact))}
+        </p>
       </Modal>
 
       <Modal

@@ -8,6 +8,7 @@ import {
   fteBridgeSummary,
   fteEffect,
   ftePositionsByDimension,
+  movementAlerts,
   movementBreakdownByDimension,
   movementRealizationByDimension,
   movementsByCountry,
@@ -19,6 +20,44 @@ import {
   targetFTE,
 } from "@/lib/hrEngine";
 import type { Lever, Workforce, WorkforceMovement } from "@/types";
+
+function makeLever(overrides: Partial<Lever>): Lever {
+  return {
+    id: "L001",
+    code: "L001",
+    programId: "p1",
+    type: "Sourcing",
+    name: "Test Lever",
+    ws: "WS-01",
+    owner: "Test Owner",
+    ownerInit: "TO",
+    sponsor: "Test Sponsor",
+    sponsorInit: "TS",
+    geography: "Europe",
+    country: "France",
+    entity: "Entity A",
+    function: "Procurement",
+    costCenter: "CC01",
+    pnlMap: "COGS",
+    start: "2026-01-01",
+    end: "2026-12-31",
+    status: "in_progress",
+    progress: 50,
+    risk: "low",
+    grossSavings: 1,
+    netSavings: 1,
+    opexOneOff: 0,
+    opexRec: 0,
+    capex: 0,
+    fteImpact: -4,
+    popImpacted: "",
+    dependencies: [],
+    description: "",
+    createdAt: "2026-01-01",
+    lastUpdate: "2026-01-01",
+    ...overrides,
+  };
+}
 
 function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement {
   return {
@@ -541,5 +580,54 @@ describe("hrEngine — realizedSalarySavings", () => {
       ],
     });
     expect(realizedSalarySavings(wf)).toBe(80000);
+  });
+});
+
+describe("hrEngine — movementAlerts (garde-fou signe/montant)", () => {
+  it("flags a movement whose direction contradicts its lever's targeted fteImpact", () => {
+    const lever = makeLever({ id: "L001", code: "L001", fteImpact: -6 }); // levier de réduction
+    const movement = makeMovement({
+      id: "M1",
+      leverId: "L001",
+      type: "Recrutement", // effet positif, contraire au levier
+      status: "Réalisé",
+      plannedDate: "2026-03-01",
+      actualDate: "2026-03-01",
+      hrValidated: true,
+    });
+    const alerts = movementAlerts(makeWorkforce({ movements: [movement] }), [lever], "2026-06-01");
+    const flagged = alerts.find((a) => a.movement.id === "M1" && a.kind === "leverMismatch");
+    expect(flagged).toBeDefined();
+    expect(flagged?.message).toContain("sens");
+  });
+
+  it("does not flag a movement whose direction matches its lever's targeted fteImpact", () => {
+    const lever = makeLever({ id: "L001", code: "L001", fteImpact: -6 });
+    const movement = makeMovement({
+      id: "M1",
+      leverId: "L001",
+      type: "Départ forcé", // effet négatif, cohérent avec le levier
+      status: "Réalisé",
+      plannedDate: "2026-03-01",
+      actualDate: "2026-03-01",
+      hrValidated: true,
+    });
+    const alerts = movementAlerts(makeWorkforce({ movements: [movement] }), [lever], "2026-06-01");
+    expect(alerts.some((a) => a.movement.id === "M1")).toBe(false);
+  });
+
+  it("does not flag a movement linked to a lever with zero fteImpact (no direction to contradict)", () => {
+    const lever = makeLever({ id: "L001", code: "L001", fteImpact: 0 });
+    const movement = makeMovement({
+      id: "M1",
+      leverId: "L001",
+      type: "Recrutement",
+      status: "Réalisé",
+      plannedDate: "2026-03-01",
+      actualDate: "2026-03-01",
+      hrValidated: true,
+    });
+    const alerts = movementAlerts(makeWorkforce({ movements: [movement] }), [lever], "2026-06-01");
+    expect(alerts.some((a) => a.movement.id === "M1")).toBe(false);
   });
 });

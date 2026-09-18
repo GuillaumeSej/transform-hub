@@ -900,6 +900,23 @@ export function movementAlerts(
         });
       }
     }
+
+    // Garde-fou montant/signe (au-delà des dates/statuts ci-dessus) : un mouvement dont le sens
+    // (fteEffect — Recrutement/Transfert entrant = positif, Attrition/Départ forcé/Transfert
+    // sortant = négatif) contredit le sens global de l'ETP visé par son levier — ex. un
+    // recrutement rattaché à un levier de réduction d'effectif, constaté sur l'audit ACME/ICES
+    // (ORG-001, AC-030). S'applique que le mouvement soit déjà réalisé ou non : un mouvement
+    // réalisé au sens contraire est tout aussi suspect, sinon plus.
+    if (lever && lever.fteImpact !== 0) {
+      const effect = fteEffect(m);
+      if (effect !== 0 && Math.sign(effect) !== Math.sign(lever.fteImpact)) {
+        alerts.push({
+          movement: m,
+          kind: "leverMismatch",
+          message: `${m.label} — sens (${effect > 0 ? "+" : ""}${effect} ETP) contraire à l'impact visé du levier ${lever.code} (${lever.fteImpact > 0 ? "+" : ""}${lever.fteImpact} ETP)`,
+        });
+      }
+    }
   }
 
   const KIND_PRIORITY: Record<MovementAlertKind, number> = {
