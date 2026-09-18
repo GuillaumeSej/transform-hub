@@ -104,14 +104,19 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     type: "fte-waterfall",
     label: "Trajectoire ETP",
     icon: "Waypoints",
-    defaultSpan: "M",
+    // Pleine largeur par défaut (Sept 2026) : empilé au-dessus de fte-execution-status plutôt que
+    // côte à côte — voir `migrateFteWidgetsToFullWidth` plus bas pour la migration des layouts
+    // persistés antérieurs à ce changement.
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
   },
   {
     type: "fte-execution-status",
     label: "Statut des mouvements",
     icon: "LayoutGrid",
-    defaultSpan: "M",
+    // Pleine largeur par défaut (Sept 2026), sous fte-waterfall — voir
+    // `migrateFteWidgetsToFullWidth` plus bas.
+    defaultSpan: "XL",
     allowedSpans: ["M", "L", "XL"],
     defaultView: "function",
   },
@@ -397,6 +402,34 @@ export function migrateHrGooduelleWidgets(
   return [...filtered, ...toAdd];
 }
 
+/** Clé séparée pour la migration one-shot du passage en pleine largeur de `fte-waterfall` /
+ *  `fte-execution-status` (Sept 2026). Voir `migrateFteWidgetsToFullWidth` ci-dessous — même
+ *  convention de clé de migration versionnée que `HR_GOODUELLE_MIGRATION_KEY` ci-dessus et que
+ *  `INITIATIVE_HEALTH_MIGRATION_KEY`/`INITIATIVE_HEALTH_REORDER_KEY` côté dashboard exécutif
+ *  (`lib/dashboardWidgets.ts`). */
+const HR_FTE_FULL_WIDTH_MIGRATION_KEY = "betrack_hr_dashboard_fte_full_width_migration_v1";
+
+const FTE_FULL_WIDTH_TYPES: HrWidgetType[] = ["fte-waterfall", "fte-execution-status"];
+
+/** Étend `fte-waterfall` et `fte-execution-status` en pleine largeur ("XL") dans les layouts
+ *  persistés antérieurs à ce changement — objectif : les empiler l'un sous l'autre en pleine
+ *  largeur plutôt que côte à côte (tous deux étaient en "M" par défaut). Migration one-shot,
+ *  idempotente (contrôlée par `HR_FTE_FULL_WIDTH_MIGRATION_KEY`, voir `loadHrDashboardLayout`),
+ *  non destructive : si l'utilisateur a déjà redimensionné l'un des deux widgets vers une taille
+ *  différente de l'ancien span par défaut "M" (ex. déjà mis en "L" ou "XL" manuellement), ce choix
+ *  explicite est respecté et n'est pas écrasé — seules les instances encore à leur ancien span par
+ *  défaut "M" sont converties. Même logique que `migrateInitiativeHealthWidget` côté dashboard
+ *  exécutif (`lib/dashboardWidgets.ts`). */
+export function migrateFteWidgetsToFullWidth(
+  layout: HrWidgetInstance[],
+  migrationAlreadyApplied: boolean
+): HrWidgetInstance[] {
+  if (migrationAlreadyApplied) return layout;
+  return layout.map((w) =>
+    FTE_FULL_WIDTH_TYPES.includes(w.type) && w.span === "M" ? { ...w, span: "XL" } : w
+  );
+}
+
 const isBrowser = () => typeof window !== "undefined";
 
 function isValidHrInstance(value: unknown): value is HrWidgetInstance {
@@ -447,20 +480,28 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
     const raw = window.localStorage.getItem(HR_LAYOUT_KEY);
     if (!raw) {
       window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+      window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
       return buildHrDefaultLayout();
     }
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidHrInstance)) {
       window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+      window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
       return buildHrDefaultLayout();
     }
     const migrationAlreadyApplied = window.localStorage.getItem(HR_GOODUELLE_MIGRATION_KEY) === "1";
+    const fteFullWidthAlreadyApplied =
+      window.localStorage.getItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY) === "1";
     const sanitized = (parsed as HrWidgetInstance[]).map(sanitizeHrInstance);
-    const migrated = migrateHrGooduelleWidgets(sanitized, migrationAlreadyApplied);
-    if (!migrationAlreadyApplied) {
+    // Chaîne les deux migrations : ajout des widgets Gooduelle (si absents), puis passage en
+    // pleine largeur de fte-waterfall/fte-execution-status (si encore à leur ancien span "M").
+    const gooduelleMigrated = migrateHrGooduelleWidgets(sanitized, migrationAlreadyApplied);
+    const migrated = migrateFteWidgetsToFullWidth(gooduelleMigrated, fteFullWidthAlreadyApplied);
+    if (!migrationAlreadyApplied || !fteFullWidthAlreadyApplied) {
       window.localStorage.setItem(HR_LAYOUT_KEY, JSON.stringify(migrated));
     }
     window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+    window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
     return migrated;
   } catch {
     return buildHrDefaultLayout();
@@ -472,6 +513,7 @@ export function saveHrDashboardLayout(layout: HrWidgetInstance[]): void {
   try {
     window.localStorage.setItem(HR_LAYOUT_KEY, JSON.stringify(layout));
     window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
+    window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
   } catch (err) {
     console.error(
       "[betrack storage] échec d'écriture localStorage pour le layout dashboard RH :",

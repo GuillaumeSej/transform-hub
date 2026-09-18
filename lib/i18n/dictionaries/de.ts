@@ -46,6 +46,7 @@ const de: Record<string, string> = {
   "validation.requestedBy": "Beantragt von",
   "validation.requestedAt": "Beantragt am",
   "nav.sectionLabel": "Navigation",
+  "nav.sectionDecision": "Entscheidung",
   "nav.sectionReferenceData": "Referenzdaten",
 
   // ─── roles ────────────────────────────────────────────────────────────────

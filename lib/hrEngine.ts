@@ -556,6 +556,11 @@ export type MovementBreakdownDimension = "department" | "country" | "program";
 export type MovementBreakdownRow = Omit<DepartmentMovements, "department"> & {
   key: string;
   label: string;
+  /** Mouvements contribuant à cette ligne (dédupliqués) — alimente le drill-down au clic sur une
+   *  barre (`DepartmentMovementsChart` + `MovementDrilldownModal`). Un transfert peut apparaître
+   *  dans les deux lignes qu'il traverse (département source ET département cible), à l'image du
+   *  reste de l'agrégation ci-dessous. */
+  movements: WorkforceMovement[];
 };
 
 /** Ventilation prévue des cinq types de mouvements par département ou pays. */
@@ -578,6 +583,7 @@ export function movementBreakdownByDimension(
         exits: 0,
         transferts: 0,
         net: 0,
+        movements: [],
       });
     }
     return rows.get(key)!;
@@ -597,6 +603,7 @@ export function movementBreakdownByDimension(
       if (movement.type === "Départ forcé") row.forcedDepartures += movement.fte;
       if (movement.type === "Transfert entrant") row.transfertEntrants += movement.fte;
       if (movement.type === "Transfert sortant") row.transfertSortants += movement.fte;
+      row.movements.push(movement);
     } else {
       const source = ensure(movement.department);
       if (movement.type === "Recrutement") source.recrutements += movement.fte;
@@ -605,9 +612,12 @@ export function movementBreakdownByDimension(
       if (movement.type === "Transfert entrant" || movement.type === "Transfert sortant") {
         source.transfertSortants += movement.fte;
         if (movement.toDepartment && movement.toDepartment !== movement.department) {
-          ensure(movement.toDepartment).transfertEntrants += movement.fte;
+          const target = ensure(movement.toDepartment);
+          target.transfertEntrants += movement.fte;
+          target.movements.push(movement);
         }
       }
+      source.movements.push(movement);
     }
   }
   return Array.from(rows.values()).map((row) => {

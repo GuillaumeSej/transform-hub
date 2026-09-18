@@ -137,4 +137,20 @@ describe("ownerActionSummary", () => {
     expect(rows.find((row) => row.type === "Départ forcé")?.overdue).toBe(0);
     expect(rows).toHaveLength(5);
   });
+
+  it("retains the movements behind each (type, status) cell for drill-down", () => {
+    const rows = movementStatusByType(
+      [
+        movement({ id: "M1", type: "Recrutement", status: "Réalisé" }),
+        movement({ id: "M2", type: "Recrutement", status: "Réalisé" }),
+        movement({ id: "M3", type: "Recrutement", status: "Abandonné" }),
+      ],
+      {},
+      "2026-06-22"
+    );
+    const recrutement = rows.find((row) => row.type === "Recrutement")!;
+    expect(recrutement.movementsByStatus.realized.map((m) => m.id).sort()).toEqual(["M1", "M2"]);
+    expect(recrutement.movementsByStatus.abandoned.map((m) => m.id)).toEqual(["M3"]);
+    expect(recrutement.movementsByStatus.overdue).toEqual([]);
+  });
 });

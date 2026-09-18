@@ -10,17 +10,30 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { MovementStatusByTypeRow } from "@/lib/hrExecution";
+import type { MovementExecutionStatus, MovementStatusByTypeRow } from "@/lib/hrExecution";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import type { WorkforceMovement } from "@/types";
 
 export function MovementStatusByTypeChart({
   data,
   height = 280,
+  onBarClick,
 }: {
   data: MovementStatusByTypeRow[];
   height?: number;
+  /** Clic sur un segment (type × statut) — ouvre le détail des mouvements de cette cellule (voir
+   *  `MovementDrilldownModal`, câblé dans `app/(app)/hr/page.tsx`). */
+  onBarClick?: (
+    type: WorkforceMovement["type"],
+    status: MovementExecutionStatus,
+    movements: WorkforceMovement[]
+  ) => void;
 }) {
   const { t } = useTranslation();
+  const handleClick = (status: MovementExecutionStatus) => (payload: unknown) => {
+    const row = payload as MovementStatusByTypeRow | undefined;
+    if (row && onBarClick) onBarClick(row.type, status, row.movementsByStatus[status]);
+  };
   return (
     <ResponsiveContainer width="100%" height={Math.max(height, data.length * 42 + 70)}>
       <BarChart data={data} layout="vertical" margin={{ top: 6, right: 14, left: 10, bottom: 16 }}>
@@ -55,30 +68,40 @@ export function MovementStatusByTypeChart({
           name={t("chart.bar.realized", "Réalisé")}
           stackId="status"
           fill="#421799"
+          onClick={handleClick("realized")}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="overdue"
           name={t("hr.alert.overdue", "En retard")}
           stackId="status"
           fill="#FF3C47"
+          onClick={handleClick("overdue")}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="dueSoon"
           name={t("shared.hrOwnerActionTable.dueSoon", "À venir < 90 j")}
           stackId="status"
           fill="#FFB1B5"
+          onClick={handleClick("dueSoon")}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="later"
           name={t("shared.hrOwnerActionTable.later", "À venir > 90 j")}
           stackId="status"
           fill="#A99E9A"
+          onClick={handleClick("later")}
+          cursor={onBarClick ? "pointer" : undefined}
         />
         <Bar
           dataKey="abandoned"
           name={t("dashboard.widgets.healthCancelled", "Abandonné")}
           stackId="status"
           fill="#806659"
+          onClick={handleClick("abandoned")}
+          cursor={onBarClick ? "pointer" : undefined}
         />
       </BarChart>
     </ResponsiveContainer>

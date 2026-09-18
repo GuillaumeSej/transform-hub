@@ -15,6 +15,7 @@ import {
   resolveActiveCustomView,
   migrateInitiativeHealthWidget,
   reorderInitiativeHealthWidget,
+  migrateEconomiesSectionLayout,
   type DashboardWidgetInstance,
 } from "@/lib/dashboardWidgets";
 
@@ -110,6 +111,75 @@ describe("dashboardWidgets — initiative health reorder migration", () => {
     ];
     const after = reorderInitiativeHealthWidget(before, false);
     expect(after).toBe(before);
+  });
+});
+
+describe("dashboardWidgets — economies section migration", () => {
+  /** Helper : produit un layout hypothétique reproduisant l'état persisté avant Sept 2026 —
+   *  `portfolio-funnel` et `marimekko` en span "M", `marimekko` juste après `portfolio-funnel`
+   *  (avant que `initiative-health` ne soit inséré entre les deux). */
+  const legacyEconomiesLayout = (): DashboardWidgetInstance[] => {
+    const layout = buildDefaultLayout();
+    const marimekko = layout.find((w) => w.type === "marimekko")!;
+    const withoutMarimekko = layout
+      .filter((w) => w.type !== "marimekko")
+      .map((w) => (w.type === "portfolio-funnel" ? { ...w, span: "M" as const } : w));
+    const funnelIdx = withoutMarimekko.findIndex((w) => w.type === "portfolio-funnel");
+    return [
+      ...withoutMarimekko.slice(0, funnelIdx + 1),
+      { ...marimekko, span: "M" as const },
+      ...withoutMarimekko.slice(funnelIdx + 1),
+    ];
+  };
+
+  it("widens portfolio-funnel and marimekko to XL and repositions marimekko after initiative-health", () => {
+    const before = legacyEconomiesLayout();
+    const after = migrateEconomiesSectionLayout(before, false);
+    expect(after.find((w) => w.type === "portfolio-funnel")?.span).toBe("XL");
+    expect(after.find((w) => w.type === "marimekko")?.span).toBe("XL");
+    const healthIdx = after.findIndex((w) => w.type === "initiative-health");
+    const marimekkoIdx = after.findIndex((w) => w.type === "marimekko");
+    expect(marimekkoIdx).toBe(healthIdx + 1);
+    // Aucun widget perdu ni dupliqué
+    expect(after).toHaveLength(before.length);
+  });
+
+  it("is a no-op when the migration has already been applied", () => {
+    const before = legacyEconomiesLayout();
+    expect(migrateEconomiesSectionLayout(before, true)).toBe(before);
+  });
+
+  it("does not override a manually-chosen span other than M", () => {
+    const before = legacyEconomiesLayout().map((w) =>
+      w.type === "portfolio-funnel" ? { ...w, span: "L" as const } : w
+    );
+    const after = migrateEconomiesSectionLayout(before, false);
+    expect(after.find((w) => w.type === "portfolio-funnel")?.span).toBe("L");
+  });
+
+  it("falls back to positioning marimekko before savings-trajectory when initiative-health is absent", () => {
+    const before = legacyEconomiesLayout().filter((w) => w.type !== "initiative-health");
+    const after = migrateEconomiesSectionLayout(before, false);
+    const trajectoryIdx = after.findIndex((w) => w.type === "savings-trajectory");
+    const marimekkoIdx = after.findIndex((w) => w.type === "marimekko");
+    expect(marimekkoIdx).toBe(trajectoryIdx - 1);
+  });
+
+  it("leaves marimekko's position unchanged (span-only fix) when neither anchor is present", () => {
+    const before: DashboardWidgetInstance[] = [
+      { instanceId: "bridge", type: "bridge", span: "M" },
+      { instanceId: "marimekko", type: "marimekko", span: "M", view: "function-country" },
+    ];
+    const after = migrateEconomiesSectionLayout(before, false);
+    expect(after.map((w) => w.type)).toEqual(["bridge", "marimekko"]);
+    expect(after.find((w) => w.type === "marimekko")?.span).toBe("XL");
+  });
+
+  it("returns the layout unchanged (aside from the funnel span fix) when marimekko is absent", () => {
+    const before = legacyEconomiesLayout().filter((w) => w.type !== "marimekko");
+    const after = migrateEconomiesSectionLayout(before, false);
+    expect(after.find((w) => w.type === "portfolio-funnel")?.span).toBe("XL");
+    expect(after.find((w) => w.type === "marimekko")).toBeUndefined();
   });
 });
 

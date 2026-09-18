@@ -47,16 +47,6 @@ const CTO_LIKE_NAV: RoleDefinition["nav"] = [
     label: "nav.leverLibrary",
     labelByProgramType: { strategic: "nav.axes" },
   },
-  // Portes de validation (voir lib/leversLogic.ts::approveLeverGate) : visible pour cto (tous les
-  // programmes) et program_sponsor/program_owner (visibilité restreinte à leurs programmes via
-  // lib/consolidatedProgramAccess.ts, même mécanisme que le reste de cette nav partagée),
-  // réservé au Plan Performance (pas de porte de validation côté Plan Stratégique).
-  {
-    id: "validation",
-    icon: "ShieldCheck",
-    label: "nav.validation",
-    programTypes: ["performance"],
-  },
   { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
   { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
   {
@@ -66,6 +56,20 @@ const CTO_LIKE_NAV: RoleDefinition["nav"] = [
     programTypes: ["performance"],
   },
   { id: "hr", icon: "Users", label: "nav.hrDashboard", programTypes: ["performance"] },
+  // Portes de validation (voir lib/leversLogic.ts::approveLeverGate) : visible pour cto (tous les
+  // programmes) et program_sponsor/program_owner (visibilité restreinte à leurs programmes via
+  // lib/consolidatedProgramAccess.ts, même mécanisme que le reste de cette nav partagée),
+  // réservé au Plan Performance (pas de porte de validation côté Plan Stratégique). `section:
+  // "decision"` regroupe l'item sous son propre séparateur, entre le pilotage courant (items sans
+  // section) et les données de référence (`section: "reference"`, ex. "hr-etp" ci-dessous) — voir
+  // Sidebar.tsx / SECTION_LABEL_KEYS.
+  {
+    id: "validation",
+    icon: "ShieldCheck",
+    label: "nav.validation",
+    programTypes: ["performance"],
+    section: "decision",
+  },
   // Round 13 : plus de `programTypes` sur "hr-etp" — la base ETP est scopée ENTREPRISE, pas
   // programme (voir lib/hooks/useCompanyDepartments.ts), donc visible que le programme actif
   // soit Performance ou Stratégique (contrairement à "hr" ci-dessus, le dashboard RH complet,
@@ -108,14 +112,15 @@ export const roles: Record<Role, RoleDefinition> = {
         label: "nav.leverPipeline",
         labelByProgramType: { strategic: "nav.axes" },
       },
+      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
+      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
       {
         id: "validation",
         icon: "ShieldCheck",
         label: "nav.validation",
         programTypes: ["performance"],
+        section: "decision",
       },
-      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
-      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
   lever: {
@@ -345,14 +350,15 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
     short: "roles.admin.short",
     nav: [
       { id: "admin-companies", icon: "Building2", label: "nav.companies" },
+      // Portes de validation (voir CTO_LIKE_NAV ci-dessus) : un admin peut agir sur n'importe
+      // quelle demande en cours (isAnyAdmin, lib/leversLogic.ts::approveLeverGate), doit donc
+      // aussi voir la page dédiée. `section: "decision"` — voir le commentaire identique sur
+      // CTO_LIKE_NAV ci-dessus.
+      { id: "validation", icon: "ShieldCheck", label: "nav.validation", section: "decision" },
       // Round 13 : un admin global n'a pas forcément de profil métier (Performance/Stratégique)
       // qui lui donnerait "hr-etp" par ailleurs — voir la liste d'accès `cto`/`hr`/`strategic_lead`
       // ci-dessus, à laquelle les admins s'ajoutent.
       { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
-      // Portes de validation (voir CTO_LIKE_NAV ci-dessus) : un admin peut agir sur n'importe
-      // quelle demande en cours (isAnyAdmin, lib/leversLogic.ts::approveLeverGate), doit donc
-      // aussi voir la page dédiée.
-      { id: "validation", icon: "ShieldCheck", label: "nav.validation" },
     ],
   },
   company: {
@@ -362,8 +368,8 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
       { id: "admin-users", icon: "Users", label: "nav.users" },
       { id: "admin-data", icon: "BarChart3", label: "nav.data" },
       { id: "admin-history", icon: "History", label: "nav.history" },
+      { id: "validation", icon: "ShieldCheck", label: "nav.validation", section: "decision" },
       { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
-      { id: "validation", icon: "ShieldCheck", label: "nav.validation" },
     ],
   },
 };
