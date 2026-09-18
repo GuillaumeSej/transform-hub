@@ -162,8 +162,8 @@ describe("mockActionMigration", () => {
   });
 
   it("preserves each parent lever net savings after consolidating migrated actions", () => {
-    // netSavings = savings − opexRec (voir lib/leverConsolidate.ts) : le CAPEX et l'OPEX one-off
-    // ne rentrent plus dans le calcul, seul l'OPEX récurrent est déduit des savings.
+    // netSavings = savings − capex (voir lib/leverConsolidate.ts) : l'OPEX one-off et l'OPEX
+    // récurrent ne rentrent plus dans le calcul, seul le CAPEX est déduit des savings.
     const round = (value: number) => Math.round(value * 100) / 100;
     migrated.forEach((lever) => {
       const net = (lever.actions ?? []).reduce(
@@ -171,7 +171,7 @@ describe("mockActionMigration", () => {
           sum +
           (action.impacts ?? []).reduce((actionSum, impact) => {
             if (impact.type === "saving") return actionSum + impact.amount;
-            if (impact.nature === "opex_rec") return actionSum - impact.amount;
+            if (impact.nature === "capex") return actionSum - impact.amount;
             return actionSum;
           }, 0),
         0
@@ -182,7 +182,7 @@ describe("mockActionMigration", () => {
 
   it("reconciles every migrated lever's impacts to the cent with its own financial fields", () => {
     // Garde-fou de non-régression : pour CHAQUE levier (pas un exemple isolé), la somme des
-    // impacts d'actions (correctement signés/typés, convention netSavings = savings − opexRec de
+    // impacts d'actions (correctement signés/typés, convention netSavings = savings − capex de
     // lib/leverConsolidate.ts) doit reconstituer exactement capex/opexOneOff/opexRec/netSavings tels
     // que saisis sur le levier — à la faveur de `alignActionsToLeverFinancials`, qui corrige tout
     // écart de répartition/arrondi en fin de migration.
@@ -201,7 +201,7 @@ describe("mockActionMigration", () => {
           else if (impact.nature === "opex_rec") opexRec += impact.amount;
         }
       }
-      expect(round(saving - opexRec)).toBe(round(lever.netSavings));
+      expect(round(saving - capex)).toBe(round(lever.netSavings));
       expect(round(capex)).toBe(round(lever.capex));
       expect(round(opexOneOff)).toBe(round(lever.opexOneOff));
       expect(round(opexRec)).toBe(round(lever.opexRec));
