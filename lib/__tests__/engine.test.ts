@@ -32,9 +32,28 @@ import type {
   HierarchyLevelDef,
   HierarchyNode,
   Lever,
+  LeverAction,
   Program,
   LeverStatus,
 } from "@/types";
+
+/** Action "done" avec un unique impact "saving" de `netAmount` — fixture pour les tests de
+ *  `realizedSavings`/agrégations dérivées, depuis que le "Réalisé" est calculé uniquement à
+ *  partir des impacts des actions livrées (`done`), plus jamais de `netSavings × progress%`. */
+function realizedAction(netAmount: number, overrides: Partial<LeverAction> = {}): LeverAction {
+  return {
+    id: "A1",
+    name: "Action réalisée (test)",
+    start: "2026-01-01",
+    end: "2026-06-01",
+    status: "done",
+    deliveredDate: "2026-06-01",
+    impacts: [
+      { id: "I1", label: "Impact test", type: "saving", nature: "opex_rec", amount: netAmount },
+    ],
+    ...overrides,
+  };
+}
 
 const baseLever: Lever = {
   id: "L001",
@@ -120,14 +139,46 @@ describe("engine — realizedSavings", () => {
     expect(realizedSavings(lever)).toBe(0);
   });
 
-  it("computes netSavings × progress%", () => {
-    const lever = { ...baseLever, netSavings: 10, progress: 40 };
-    expect(realizedSavings(lever)).toBe(4);
+  it("returns 0 for a lever without costed actions, regardless of progress% (business case initial pas encore ventilé en plan d'action)", () => {
+    const lever = { ...baseLever, netSavings: 10, progress: 40, actions: [] };
+    expect(realizedSavings(lever)).toBe(0);
+  });
+
+  it("sums the net (saving − cost) impacts of 'done' actions only — an in_progress action contributes nothing", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        realizedAction(0, {
+          id: "A1",
+          impacts: [
+            { id: "I1", label: "Gain", type: "saving", nature: "opex_rec", amount: 10 },
+            { id: "I2", label: "Coût", type: "cost", nature: "opex_rec", amount: 2 },
+          ],
+        }),
+        {
+          id: "A2",
+          name: "Action pas encore livrée",
+          start: "2026-01-01",
+          end: "2026-06-01",
+          status: "in_progress" as const,
+          impacts: [
+            {
+              id: "I3",
+              label: "Gain futur",
+              type: "saving" as const,
+              nature: "opex_rec" as const,
+              amount: 100,
+            },
+          ],
+        },
+      ],
+    };
+    expect(realizedSavings(lever)).toBe(8);
   });
 
   it("rounds to 2 decimals", () => {
-    const lever = { ...baseLever, netSavings: 3.33, progress: 33 };
-    expect(realizedSavings(lever)).toBe(1.1);
+    const lever = { ...baseLever, actions: [realizedAction(3.333)] };
+    expect(realizedSavings(lever)).toBe(3.33);
   });
 });
 
@@ -180,8 +231,47 @@ describe("engine — realizedFte", () => {
     expect(realizedFte(lever)).toBe(0);
   });
 
-  it("computes fteImpact × progress%", () => {
-    const lever = { ...baseLever, fteImpact: -10, progress: 60 };
+  it("returns 0 for a lever without costed actions, regardless of progress%", () => {
+    const lever = { ...baseLever, fteImpact: -10, progress: 60, actions: [] };
+    expect(realizedFte(lever)).toBe(0);
+  });
+
+  it("sums fteCount of 'done' action impacts only", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        realizedAction(0, {
+          id: "A1",
+          impacts: [
+            {
+              id: "I1",
+              label: "Suppression postes",
+              type: "saving",
+              nature: "opex_rec",
+              amount: 1,
+              fteCount: -6,
+            },
+          ],
+        }),
+        {
+          id: "A2",
+          name: "Action pas encore livrée",
+          start: "2026-01-01",
+          end: "2026-06-01",
+          status: "in_progress" as const,
+          impacts: [
+            {
+              id: "I2",
+              label: "ETP futur",
+              type: "saving" as const,
+              nature: "opex_rec" as const,
+              amount: 1,
+              fteCount: -100,
+            },
+          ],
+        },
+      ],
+    };
     expect(realizedFte(lever)).toBe(-6);
   });
 });
@@ -492,9 +582,14 @@ describe("engine — byGeo / byFunction / pnlImpact", () => {
   it("aggregates by geography", () => {
     const data = makeData({
       levers: [
-        { ...baseLever, geography: "Europe", netSavings: 5, progress: 100 },
-        { ...baseLever, id: "L002", geography: "Europe", netSavings: 3, progress: 100 },
-        { ...baseLever, id: "L003", geography: "APAC", netSavings: 2, progress: 100 },
+        { ...baseLever, geography: "Europe", actions: [realizedAction(5, { id: "A1" })] },
+        {
+          ...baseLever,
+          id: "L002",
+          geography: "Europe",
+          actions: [realizedAction(3, { id: "A1" })],
+        },
+        { ...baseLever, id: "L003", geography: "APAC", actions: [realizedAction(2, { id: "A1" })] },
       ],
     });
     const geo = byGeo(data);
@@ -505,8 +600,8 @@ describe("engine — byGeo / byFunction / pnlImpact", () => {
   it("aggregates by function", () => {
     const data = makeData({
       levers: [
-        { ...baseLever, function: "IT", netSavings: 4, progress: 100 },
-        { ...baseLever, id: "L002", function: "HR", netSavings: 6, progress: 100 },
+        { ...baseLever, function: "IT", actions: [realizedAction(4, { id: "A1" })] },
+        { ...baseLever, id: "L002", function: "HR", actions: [realizedAction(6, { id: "A1" })] },
       ],
     });
     const fn = byFunction(data);
@@ -517,8 +612,8 @@ describe("engine — byGeo / byFunction / pnlImpact", () => {
   it("aggregates pnl impact", () => {
     const data = makeData({
       levers: [
-        { ...baseLever, pnlMap: "PNL01", progress: 100 },
-        { ...baseLever, id: "L002", pnlMap: "PNL01", progress: 50 },
+        { ...baseLever, pnlMap: "PNL01", actions: [realizedAction(5, { id: "A1" })] },
+        { ...baseLever, id: "L002", pnlMap: "PNL01", actions: [realizedAction(2, { id: "A1" })] },
       ],
     });
     const pnl = pnlImpact(data);
@@ -576,9 +671,14 @@ describe("engine — byCountry / byProgram", () => {
   it("aggregates by country", () => {
     const data = makeData({
       levers: [
-        { ...baseLever, country: "France", netSavings: 5, progress: 100 },
-        { ...baseLever, id: "L002", country: "France", netSavings: 3, progress: 100 },
-        { ...baseLever, id: "L003", country: "Germany", netSavings: 2, progress: 100 },
+        { ...baseLever, country: "France", actions: [realizedAction(5, { id: "A1" })] },
+        { ...baseLever, id: "L002", country: "France", actions: [realizedAction(3, { id: "A1" })] },
+        {
+          ...baseLever,
+          id: "L003",
+          country: "Germany",
+          actions: [realizedAction(2, { id: "A1" })],
+        },
       ],
     });
     const result = byCountry(data);
@@ -603,7 +703,7 @@ describe("engine — byCountry / byProgram", () => {
     ];
     const data = makeData({
       levers: [
-        { ...baseLever, programId: "p1", netSavings: 5, progress: 100 },
+        { ...baseLever, programId: "p1", actions: [realizedAction(5, { id: "A1" })] },
         // `programId` est désormais obligatoire au niveau du type (voir types/index.ts) ; on
         // simule ici un levier orphelin/legacy (programme supprimé après coup, ou donnée
         // antérieure à ce champ) via un "escape hatch" de typage délibéré, pour continuer à
@@ -612,8 +712,7 @@ describe("engine — byCountry / byProgram", () => {
           ...baseLever,
           id: "L002",
           programId: undefined,
-          netSavings: 3,
-          progress: 100,
+          actions: [realizedAction(3, { id: "A1" })],
         } as unknown as Lever,
       ],
     });

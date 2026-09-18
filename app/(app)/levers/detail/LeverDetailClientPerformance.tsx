@@ -247,20 +247,17 @@ export function LeverDetailClientPerformance() {
   // porteur du levier ou un admin peut initier une demande.
   const canSubmitApproval = !!user && (isAnyAdmin(user) || isLeverOwnedBy(lever, user));
   // Réalisé à date : aligné sur la courbe en J (somme bottom-up des actions "done" à leur
-  // deliveredDate, voir `leverJCurve`) quand le levier a des actions chiffrées, plutôt que
-  // l'estimation "netSavings figé × progression %" (`engine.realizedSavings`) — cette dernière
-  // crédite à 50% les actions encore "in_progress" (voir `engine.actionProgress`), ce que la
-  // courbe en J et la timeline des actions ignorent tant qu'une action n'est pas "done". C'était
-  // la source de l'écart Overview vs courbe en J / timeline des actions signalé par le métier :
-  // on ne garde l'estimation par progression que pour les leviers sans actions chiffrées (saisie
-  // manuelle), qui n'ont ni courbe en J ni timeline pour servir de référence.
+  // deliveredDate, voir `leverJCurve`) quand le levier a des actions chiffrées. `engine.realizedSavings`
+  // (repli utilisé quand `jCurveActualToDate` est indisponible — vue non consolidée, ou levier sans
+  // action chiffrée) calcule strictement la même chose (somme des impacts nets des actions "done",
+  // 0 pour un levier sans action chiffrée) : les deux ne peuvent plus diverger — le "Réalisé" n'est
+  // JAMAIS estimé depuis la progression % du levier, uniquement depuis son plan d'actions.
   const jCurveActualToDate = consolidatedKPIs
     ? [...jCurveData].reverse().find((p) => p.actual !== null)?.actual
     : undefined;
   const real = jCurveActualToDate ?? engine.realizedSavings(lever);
   // Gains BRUTS réalisés à date (avant déduction des coûts) — même périmètre que `real` (net) :
-  // pour un levier piloté par actions, somme des impacts "saving" des actions "done" ; sinon
-  // repli sur l'estimation grossSavings × progression, comme `real` le fait pour `netSavings`.
+  // somme des impacts "saving" des actions "done" (0 pour un levier sans action chiffrée).
   const realGross = consolidatedKPIs
     ? leverGrossRealizedToDate(lever)
     : engine.realizedGrossSavings(lever);
