@@ -9,7 +9,6 @@ import {
   CostCommitmentTimelineChart,
   CostEngagedVsUpcomingChart,
   InvestVsSavingsChart,
-  OpexRecurrentChart,
 } from "@/components/finance/FinanceCostCharts";
 import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
@@ -17,7 +16,7 @@ import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import * as engine from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Company, HierarchyNode, Lever } from "@/types";
+import type { Company, HierarchyLevelDef, HierarchyNode, Lever } from "@/types";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { type FilterDef } from "@/components/shared/FilterBar";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
@@ -56,53 +55,91 @@ export default function FinancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.companyId, hierarchyLevels.length]);
 
-  const sortedHierarchyLevels = useMemo(
-    () => [...hierarchyLevels].sort((a, b) => a.order - b.order),
-    [hierarchyLevels]
+  // Arborescence géographique (optionnelle) — même pattern que le dashboard exécutif
+  // (app/(app)/dashboard/DashboardPagePerformance.tsx) : un filtre par niveau configuré, utile
+  // pour isoler les coûts/savings d'une région/pays/entité. Contrairement à l'arborescence
+  // FINANCIÈRE (P&L/centre de coût, ci-dessus) qui ne sert plus qu'à résoudre les comptes P&L
+  // eux-mêmes (voir `pnlImpactDetailed`/`CostByHierarchyChart`), pas à filtrer la page — un retour
+  // métier a signalé ce filtre financier comme peu utile en pratique, retiré ci-dessous.
+  const [geographyHierarchyLevels, setGeographyHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
+  const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
+  useEffect(() => {
+    setGeographyHierarchyLevels(company?.geographyHierarchyLevels ?? []);
+  }, [company]);
+  useEffect(() => {
+    if (!user?.companyId || geographyHierarchyLevels.length === 0) {
+      setGeographyNodes([]);
+      return;
+    }
+    const unsub = subscribeHierarchyNodes(user.companyId, setGeographyNodes, "geographic");
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.companyId, geographyHierarchyLevels.length]);
+  const sortedGeographyHierarchyLevels = useMemo(
+    () => [...geographyHierarchyLevels].sort((a, b) => a.order - b.order),
+    [geographyHierarchyLevels]
   );
-
-  // Un levier importé via Excel n'a souvent qu'un `pnlMap` (ancien matching par code), pas encore
-  // de `hierarchyLeafId` — même repli que engine.pnlImpactDetailed / le dashboard exécutif.
-  const resolveMacroPnlLabel = (l: Lever): string => {
-    const macroLevel = sortedHierarchyLevels[0];
-    if (!macroLevel) return "";
-    const path = resolveHierarchyPath(
-      l.hierarchyLeafId ?? "",
-      hierarchyNodes,
-      sortedHierarchyLevels
-    );
-    const viaLeaf = path.find((p) => p.levelKey === macroLevel.key)?.label;
-    if (viaLeaf) return viaLeaf;
-    return (
-      hierarchyNodes.find((n) => n.levelKey === macroLevel.key && n.code === l.pnlMap)?.label ?? ""
-    );
-  };
-
-  // Un filtre par niveau d'arborescence financière configuré (Division > Direction > Centre de
-  // coût, etc.) — même principe que `hierarchyFilterDefs` du dashboard exécutif
-  // (app/(app)/dashboard/DashboardPagePerformance.tsx), pour permettre de filtrer les données
-  // financières de cette page par n'importe quel niveau, pas seulement le total consolidé.
-  const hierarchyFilterDefs: FilterDef<Lever>[] = useMemo(
+  const geographyFilterDefs: FilterDef<Lever>[] = useMemo(
     () =>
-      sortedHierarchyLevels.map((level, index) => ({
-        key: `hierarchy_${level.key}`,
+      sortedGeographyHierarchyLevels.map((level) => ({
+        key: `geo_${level.key}`,
         label: level.label,
         getValue: (l: Lever) => {
-          if (index === 0) return resolveMacroPnlLabel(l);
           const path = resolveHierarchyPath(
-            l.hierarchyLeafId ?? "",
-            hierarchyNodes,
-            sortedHierarchyLevels
+            l.geographyLeafId ?? "",
+            geographyNodes,
+            sortedGeographyHierarchyLevels
           );
           return path.find((p) => p.levelKey === level.key)?.label ?? "";
         },
       })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sortedHierarchyLevels, hierarchyNodes]
+    [sortedGeographyHierarchyLevels, geographyNodes]
   );
 
-  const { activeFilters: pnlHierarchyFilters, setFilters: setPnlHierarchyFilters } =
-    useFilterBarState(hierarchyFilterDefs, { namespace: "pnl" });
+  // Filtres globaux de la page Finance : géographie (arborescence si configurée, sinon champ
+  // simple), département (fonction) et workstream — appliqués à TOUS les graphiques de la page
+  // (voir `filteredData` ci-dessous), pas seulement au widget "Impact P&L par compte".
+  const filterDefs: FilterDef<Lever>[] = useMemo(
+    () => [
+      ...(geographyFilterDefs.length > 0
+        ? geographyFilterDefs
+        : [
+            {
+              key: "geography",
+              label: t("dashboard.geography", "Géographie"),
+              getValue: (l: Lever) => l.geography,
+            },
+          ]),
+      {
+        key: "function",
+        label: t("dashboard.leverDepartment", "Département"),
+        getValue: (l: Lever) => l.function,
+      },
+      {
+        key: "ws",
+        label: "Workstream",
+        getValue: (l: Lever) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
+      },
+    ],
+    [geographyFilterDefs, data.workstreams, t]
+  );
+
+  const { activeFilters: financeFilters, setFilters: setFinanceFilters } = useFilterBarState(
+    filterDefs,
+    { namespace: "finance" }
+  );
+
+  const filteredLevers = useMemo(() => {
+    let levers = data.levers.filter((l) => l.status !== "cancelled");
+    Object.entries(financeFilters).forEach(([key, value]) => {
+      if (!value) return;
+      const def = filterDefs.find((d) => d.key === key);
+      if (def) levers = levers.filter((l) => def.getValue(l) === value);
+    });
+    return levers;
+  }, [data, financeFilters, filterDefs]);
+
+  const filteredData = useMemo(() => ({ ...data, levers: filteredLevers }), [data, filteredLevers]);
 
   // ── Widget "Impact P&L par compte" (déplacé depuis le dashboard Performance) ──
   // Filtres géographiques (cascade Région → Pays → Entité).
@@ -110,25 +147,16 @@ export default function FinancePage() {
   const [pnlFilterCountry, setPnlFilterCountry] = useState("");
   const [pnlFilterEntity, setPnlFilterEntity] = useState("");
 
+  // Repart des leviers déjà filtrés par les filtres globaux de la page (géographie/département/
+  // workstream, voir `filteredLevers` ci-dessus) — cette cascade géo locale au widget reste pour
+  // affiner encore par pays/entité, sans dupliquer le filtre région déjà couvert globalement.
   const pnlFilteredLevers = useMemo(() => {
-    let levers = data.levers.filter((l) => l.status !== "cancelled");
+    let levers = filteredLevers;
     if (pnlFilterGeo) levers = levers.filter((l) => l.geography === pnlFilterGeo);
     if (pnlFilterCountry) levers = levers.filter((l) => l.country === pnlFilterCountry);
     if (pnlFilterEntity) levers = levers.filter((l) => l.entity === pnlFilterEntity);
-    Object.entries(pnlHierarchyFilters).forEach(([key, value]) => {
-      if (!value) return;
-      const def = hierarchyFilterDefs.find((d) => d.key === key);
-      if (def) levers = levers.filter((l) => def.getValue(l) === value);
-    });
     return levers;
-  }, [
-    data,
-    pnlFilterGeo,
-    pnlFilterCountry,
-    pnlFilterEntity,
-    pnlHierarchyFilters,
-    hierarchyFilterDefs,
-  ]);
+  }, [filteredLevers, pnlFilterGeo, pnlFilterCountry, pnlFilterEntity]);
 
   const pnlGeoOptions = useMemo(() => {
     const vals = new Set<string>();
@@ -246,34 +274,28 @@ export default function FinancePage() {
         </h1>
       </div>
 
-      {/* Filtres par arborescence financière (Division > Direction > Centre de coût, etc.) —
-          n'apparaît que si l'entreprise a configuré des niveaux ; filtre le widget "Impact P&L
-          par compte" ET le tableau "Compte de résultat configuré" ci-dessous (même donnée
-          filtrée, voir `pnlFilteredLevers`). */}
-      {hierarchyFilterDefs.length > 0 && (
-        <DropdownFilterBar
-          items={data.levers.filter((l) => l.status !== "cancelled")}
-          defs={hierarchyFilterDefs}
-          active={pnlHierarchyFilters}
-          onChange={setPnlHierarchyFilters}
-        />
-      )}
+      {/* Filtres globaux de la page (géographie/département/workstream) — s'appliquent à tous les
+          graphiques ci-dessous ET au widget "Impact P&L par compte"/tableau "Compte de résultat
+          configuré" (voir `filteredData`/`pnlFilteredLevers`). */}
+      <DropdownFilterBar
+        items={data.levers.filter((l) => l.status !== "cancelled")}
+        defs={filterDefs}
+        active={financeFilters}
+        onChange={setFinanceFilters}
+      />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CostEngagedVsUpcomingChart data={data} />
+        <CostEngagedVsUpcomingChart data={filteredData} />
         <CostByHierarchyChart
-          data={data}
+          data={filteredData}
           hierarchyLevels={hierarchyLevels}
           hierarchyNodes={hierarchyNodes}
         />
       </div>
 
-      <InvestVsSavingsChart data={data} />
+      <InvestVsSavingsChart data={filteredData} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CostCommitmentTimelineChart data={data} />
-        <OpexRecurrentChart data={data} />
-      </div>
+      <CostCommitmentTimelineChart data={filteredData} />
 
       <Card className="mb-0">
         <CardHeader

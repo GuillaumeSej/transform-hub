@@ -328,10 +328,10 @@ export function costRowsForPeriod(
 }
 
 /** Coûts OPEX récurrents (run-rate annuel) par période, à partir de la date de début de l'action
- *  qui les porte — alimente `OpexRecurrentChart`. Simplification assumée : un OPEX récurrent n'a
- *  pas de date de fin dans le modèle actuel (voir ActionImpact), donc chaque ligne est affichée
- *  une seule fois, sur la période de démarrage de son action — pas répétée automatiquement sur
- *  les périodes suivantes. */
+ *  qui les porte — alimente `bucketInvestVsSavingsByPeriod` (champ `opexRecStarted`). Simplification
+ *  assumée : un OPEX récurrent n'a pas de date de fin dans le modèle actuel (voir ActionImpact),
+ *  donc chaque ligne est affichée une seule fois, sur la période de démarrage de son action — pas
+ *  répétée automatiquement sur les périodes suivantes. */
 export function bucketRecurrentOpexByPeriod(
   data: BeTrackData,
   granularity: FinanceGranularity = "quarter"
@@ -344,19 +344,6 @@ export function bucketRecurrentOpexByPeriod(
     byPeriod.set(key, (byPeriod.get(key) ?? 0) + impact.amount);
   }
   return pointsFromPeriodAmounts(byPeriod);
-}
-
-/** Détail des lignes d'OPEX récurrent démarrées sur UNE période donnée — pendant "détail" de
- *  `bucketRecurrentOpexByPeriod`, pour le drill-down au clic sur la barre d'`OpexRecurrentChart`. */
-export function recurrentOpexRowsForPeriod(
-  data: BeTrackData,
-  granularity: FinanceGranularity,
-  periodKey: string
-): { lever: Lever; amount: number }[] {
-  return flattenCostImpacts(data)
-    .filter(({ impact }) => impact.nature === "opex_rec")
-    .filter(({ action }) => periodSortKey(new Date(action.start), granularity) === periodKey)
-    .map(({ lever, impact }) => ({ lever, amount: impact.amount }));
 }
 
 /** Gains bruts (tous les impacts `type==="saving"`) par période — même principe non-répété que
@@ -388,12 +375,23 @@ export type InvestVsSavingsPoint = {
   opexRecStarted: number;
   /** `grossSavings - opexRecStarted`. */
   netSavings: number;
+  /** Résultat net de LA période, capex inclus : `netSavings - investCost`. Négatif tant que
+   *  l'investissement domine (pas encore de gains, ou gains encore faibles), positif dès que les
+   *  gains nets dépassent l'investissement de la période — c'est la valeur affichée en barre
+   *  (positive/négative) du graphique. */
+  netPeriodResult: number;
+  /** Cumul de `netPeriodResult` depuis le début de la fenêtre affichée — la courbe de breakeven :
+   *  le point où elle repasse au-dessus de 0 est le mois/trimestre de retour sur investissement. */
+  netCumulative: number;
 };
 
 /** Compare, période par période, les coûts d'investissement (CAPEX + OPEX one-off, intégrés à
  *  leurs dates réelles) aux gains — bruts et nets de l'OPEX récurrent démarré sur la même période.
- *  Alimente le nouveau graphique "Coûts (Invest) vs Savings" (barres empilées gains nets + OPEX
- *  récurrent, comparées à la barre coûts Invest, tooltip détaillé au survol). */
+ *  Alimente le graphique "Coût d'investissement vs Savings" : une barre signée par période
+ *  (`netPeriodResult`, négative tant que l'investissement domine, positive dès que les gains nets
+ *  le dépassent) + une courbe de cumul (`netCumulative`) qui matérialise le breakeven — le point où
+ *  elle repasse au-dessus de 0. Tooltip détaillé au survol (décomposition investCost/grossSavings/
+ *  opexRecStarted/netSavings). */
 export function bucketInvestVsSavingsByPeriod(
   data: BeTrackData,
   granularity: FinanceGranularity = "quarter"
@@ -425,15 +423,21 @@ export function bucketInvestVsSavingsByPeriod(
   });
 
   const sortedKeys = Array.from(byKey.keys()).sort();
+  let cumulative = 0;
   return sortedKeys.map((key) => {
     const v = byKey.get(key)!;
+    const netSavings = round2(v.grossSavings - v.opexRecStarted);
+    const netPeriodResult = round2(netSavings - v.investCost);
+    cumulative = round2(cumulative + netPeriodResult);
     return {
       period: periodLabel(key, granularityHintFromKey(key)),
       sortKey: key,
       investCost: round2(v.investCost),
       grossSavings: round2(v.grossSavings),
       opexRecStarted: round2(v.opexRecStarted),
-      netSavings: round2(v.grossSavings - v.opexRecStarted),
+      netSavings,
+      netPeriodResult,
+      netCumulative: cumulative,
     };
   });
 }

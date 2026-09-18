@@ -11,7 +11,6 @@ import {
   investCostRowsBySegment,
   isCostEngaged,
   isInvestNature,
-  recurrentOpexRowsForPeriod,
   sortedHierarchyLevels,
   splitByNature,
   splitEngagedVsUpcoming,
@@ -395,24 +394,6 @@ describe("financeCosts — costRowsForPeriod", () => {
   });
 });
 
-describe("financeCosts — recurrentOpexRowsForPeriod", () => {
-  it("returns only opex_rec rows started in the given period", () => {
-    const lever = {
-      ...baseLever,
-      actions: [
-        action({
-          start: "2026-03-05",
-          impacts: [impact({ id: "c1", nature: "opex_rec", amount: 1.2 })],
-        }),
-      ],
-    };
-    const data = makeData([lever]);
-    const rows = recurrentOpexRowsForPeriod(data, "year", "2026");
-    expect(rows).toEqual([{ lever, amount: 1.2 }]);
-    expect(recurrentOpexRowsForPeriod(data, "year", "2027")).toEqual([]);
-  });
-});
-
 describe("financeCosts — bucketSavingsByPeriod", () => {
   it("buckets savings on gainDate when present, else the action's start date", () => {
     const lever = {
@@ -459,8 +440,38 @@ describe("financeCosts — bucketInvestVsSavingsByPeriod", () => {
         grossSavings: 3,
         opexRecStarted: 1,
         netSavings: 2,
+        netPeriodResult: -2,
+        netCumulative: -2,
       },
     ]);
+  });
+
+  it("accumulates netPeriodResult across periods into netCumulative, crossing 0 at breakeven", () => {
+    const lever = {
+      ...baseLever,
+      actions: [
+        action({
+          id: "A1",
+          start: "2026-01-05",
+          impacts: [
+            impact({ id: "c1", nature: "capex", amount: 10, capexDeploymentDate: "2026-01-20" }),
+          ],
+        }),
+        action({
+          id: "A2",
+          start: "2027-01-05",
+          impacts: [impact({ id: "s1", type: "saving", amount: 6, gainDate: "2027-01-25" })],
+        }),
+        action({
+          id: "A3",
+          start: "2028-01-05",
+          impacts: [impact({ id: "s2", type: "saving", amount: 6, gainDate: "2028-01-25" })],
+        }),
+      ],
+    };
+    const points = bucketInvestVsSavingsByPeriod(makeData([lever]), "year");
+    expect(points.map((p) => p.netPeriodResult)).toEqual([-10, 6, 6]);
+    expect(points.map((p) => p.netCumulative)).toEqual([-10, -4, 2]);
   });
 });
 
