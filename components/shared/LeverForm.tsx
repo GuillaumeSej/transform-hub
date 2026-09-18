@@ -777,7 +777,10 @@ export function LeverForm({
                 onChange={(e) => set("fteImpact", num(e.target.value))}
               />
             </Field>
-            <Field label={t("leverForm.capex")}>
+            {/* "leverForm.capex" est une clé partagée avec le select "nature" d'ActionForm (où un
+             *  suffixe d'unité serait hors de propos, ex. option de dropdown) — l'unité est donc
+             *  ajoutée ici en local plutôt que dans la traduction elle-même. */}
+            <Field label={`${t("leverForm.capex")} (€M)`}>
               <input
                 type="number"
                 step="0.1"
@@ -811,23 +814,13 @@ export function LeverForm({
         </>
       )}
 
-      <SectionTitle>{t("leverForm.sectionHr")}</SectionTitle>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label={t("leverForm.popImpacted")}>
-          <select
-            className={inputClass}
-            value={values.popImpacted}
-            onChange={(e) => set("popImpacted", e.target.value)}
-          >
-            <option value="">{t("leverForm.ownerNone", "Aucun")}</option>
-            {data.workstreams.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
+      {/* Section "Impact RH" (population impactée = quel workstream/département) retirée du
+       *  formulaire de création : tant que le plan d'actions chiffré n'existe pas encore, on ne
+       *  sait pas précisément QUEL workstream/département est affecté par l'impact RH — cette
+       *  information n'a de sens qu'au niveau des actions/impacts (voir `ActionImpact`), pas au
+       *  niveau du business case initial du levier. `popImpacted` reste un champ de type
+       *  (`LeverFormValues`/`Lever`) pour la compat des données existantes, mais n'est plus édité
+       *  ici. */}
 
       <SectionTitle>{t("leverForm.sectionDescription")}</SectionTitle>
       <textarea
