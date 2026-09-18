@@ -404,8 +404,7 @@ export function DashboardPagePerformance() {
   const [dependencyPage, setDependencyPage] = useState(0);
 
   // ── Widget fusionné "Alertes & Dépendances" (risk-center) ──────────────────────────────────
-  // Replié par défaut (résumé compact), s'ouvre en 2 panneaux côte à côte (alertes | dépendances).
-  const [riskCenterExpanded, setRiskCenterExpanded] = useState(false);
+  // Toujours affiché en 2 panneaux côte à côte (alertes | dépendances), chacun titré.
   const [alertSortKey, setAlertSortKey] = useState<"delay" | "savings">("delay");
   const [depsSortKey, setDepsSortKey] = useState<"delay" | "savings">("delay");
 
@@ -1006,345 +1005,333 @@ export function DashboardPagePerformance() {
             <CardHeader
               title={t("dashboard.widgets.riskCenter")}
               actions={
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                      criticalCount > 0
-                        ? "bg-rag-red-light text-rag-red"
-                        : totalAtRisk > 0
-                          ? "bg-rag-amber-light text-rag-amber"
-                          : "bg-neutral-100 text-secondary"
-                    }`}
-                  >
-                    {t("risk.summary", `${totalAtRisk} leviers en alerte`).replace(
-                      "{n}",
-                      String(totalAtRisk)
-                    )}
-                  </span>
-                  <button
-                    onClick={() => setRiskCenterExpanded((v) => !v)}
-                    title={riskCenterExpanded ? t("risk.collapse") : t("risk.expand")}
-                    className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100"
-                  >
-                    {riskCenterExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </button>
-                </div>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                    criticalCount > 0
+                      ? "bg-rag-red-light text-rag-red"
+                      : totalAtRisk > 0
+                        ? "bg-rag-amber-light text-rag-amber"
+                        : "bg-neutral-100 text-secondary"
+                  }`}
+                >
+                  {t("risk.summary", `${totalAtRisk} leviers en alerte`).replace(
+                    "{n}",
+                    String(totalAtRisk)
+                  )}
+                </span>
               }
             />
-            {riskCenterExpanded && (
-              <CardBody>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  {/* ── Panneau gauche : Alertes ─────────────────────────────────────────── */}
-                  <div className="min-w-0">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      {!readOnly && (
-                        <button
-                          onClick={() => setManualAlertOpen(true)}
-                          className="rounded-sm border border-border px-2 py-0.5 text-[10.5px] font-semibold text-secondary transition hover:border-black hover:text-primary"
-                        >
-                          + Alerte manuelle
-                        </button>
-                      )}
-                      {(["red", "amber", "green", "blue"] as const).map((type) => {
-                        const count = alertCounts[type];
-                        if (count === 0) return null;
-                        const isActive = alertTypeFilter === type;
-                        const colors: Record<string, string> = {
-                          red: isActive ? "bg-rag-red text-white" : "bg-rag-red-light text-rag-red",
-                          amber: isActive
-                            ? "bg-rag-amber text-white"
-                            : "bg-rag-amber-light text-rag-amber",
-                          green: isActive
-                            ? "bg-rag-green-dark text-white"
-                            : "bg-rag-green-light text-rag-green-dark",
-                          blue: isActive
-                            ? "bg-info-blue text-white"
-                            : "bg-info-blue-light text-info-blue",
-                        };
-                        return (
-                          <Tooltip key={type} text={t(`alerts.tooltip.${type}`)} position="bottom">
-                            <button
-                              onClick={() =>
-                                setAlertTypeFilter((prev) => (prev === type ? "all" : type))
-                              }
-                              className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold transition ${colors[type]}`}
-                            >
-                              {count}
-                            </button>
-                          </Tooltip>
-                        );
-                      })}
-                      <select
-                        className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
-                        value={alertShowResolved ? "all" : "todo"}
-                        onChange={(e) => {
-                          setAlertShowResolved(e.target.value === "all");
-                          setAlertPage(0);
-                        }}
-                      >
-                        <option value="todo">{t("alerts.toProcess")}</option>
-                        <option value="all">{t("alerts.showAll")}</option>
-                      </select>
-                      <select
-                        className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
-                        value={alertSortKey}
-                        onChange={(e) => setAlertSortKey(e.target.value as "delay" | "savings")}
-                      >
-                        <option value="delay">{t("risk.sortByDelay")}</option>
-                        <option value="savings">{t("risk.sortBySavings")}</option>
-                      </select>
-                      {!readOnly && (
-                        <button
-                          onClick={markAllResolved}
-                          className="ml-auto rounded-sm px-1.5 py-0.5 text-[10px] font-semibold text-tertiary transition hover:bg-neutral-100 hover:text-primary"
-                          title={t("alerts.markAllResolved")}
-                        >
-                          ✓ {t("alerts.markAllResolved")}
-                        </button>
-                      )}
-                    </div>
-                    {alertsOnPage.length === 0 ? (
-                      <p className="py-6 text-center text-sm text-tertiary">
-                        {t("dashboard.widgets.noAlerts")}
-                      </p>
-                    ) : (
-                      <>
-                        <div className="max-h-[420px] min-h-[420px] overflow-y-auto pr-1">
-                          {alertsOnPage.map((a) => (
-                            <AlertItem
-                              key={a.id}
-                              alert={a}
-                              onClick={() => goToAlert(a)}
-                              onToggleResolved={
-                                readOnly ? undefined : () => toggleAlertResolved(a.id)
-                              }
-                              scopeLabel={resolveScopeLabel(a.scope)}
-                              tooltips={{
-                                severity: t(`alerts.tooltip.severity.${a.type}`),
-                                impact: t("alerts.tooltip.impact"),
-                                auto: t("alerts.tooltip.auto"),
-                              }}
-                            />
-                          ))}
-                        </div>
-                        {alertPageCount > 1 && (
-                          <div className="flex items-center justify-center gap-3 pt-3 mt-2 border-t border-border">
-                            <button
-                              onClick={() => setAlertPage((p) => Math.max(0, p - 1))}
-                              disabled={alertPageClamped === 0}
-                              className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
-                            >
-                              <ChevronLeft size={14} />
-                            </button>
-                            <span className="text-[11px] font-semibold text-secondary">
-                              {t("alerts.page", `Page ${alertPageClamped + 1} / ${alertPageCount}`)
-                                .replace("{current}", String(alertPageClamped + 1))
-                                .replace("{total}", String(alertPageCount))}
-                            </span>
-                            <button
-                              onClick={() =>
-                                setAlertPage((p) => Math.min(alertPageCount - 1, p + 1))
-                              }
-                              disabled={alertPageClamped >= alertPageCount - 1}
-                              className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
-                            >
-                              <ChevronRight size={14} />
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
-                    <ManualAlertForm
-                      open={manualAlertOpen}
-                      onOpenChange={setManualAlertOpen}
-                      data={visibleData}
-                      onSubmit={(input) => {
-                        if (user) data.createManualAlert(input, user);
-                      }}
-                    />
+            <CardBody>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {/* ── Panneau gauche : Alertes ─────────────────────────────────────────── */}
+                <div className="min-w-0">
+                  <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-primary">
+                    {t("dashboard.widgets.riskCenter.alertsPanel", "Alertes")}
                   </div>
-
-                  {/* ── Panneau droit : Alertes de dépendances ──────────────────────────── */}
-                  <div className="min-w-0 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className="text-[10.5px] font-semibold text-tertiary">
-                        {depAlerts.length} alerte{depAlerts.length !== 1 ? "s" : ""}
-                      </span>
-                      <select
-                        className="ml-auto rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
-                        value={depsSortKey}
-                        onChange={(e) => setDepsSortKey(e.target.value as "delay" | "savings")}
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    {!readOnly && (
+                      <button
+                        onClick={() => setManualAlertOpen(true)}
+                        className="rounded-sm border border-border px-2 py-0.5 text-[10.5px] font-semibold text-secondary transition hover:border-black hover:text-primary"
                       >
-                        <option value="delay">{t("risk.sortByDelay")}</option>
-                        <option value="savings">{t("risk.sortBySavings")}</option>
-                      </select>
-                    </div>
-                    {depAlerts.length === 0 ? (
-                      <p className="py-6 text-center text-sm text-tertiary">
-                        {t("dashboard.widgets.noDependencyAlerts")}
-                      </p>
-                    ) : (
-                      <>
-                        <div className="max-h-[420px] min-h-[420px] overflow-y-auto pr-1">
-                          <div className="flex flex-col gap-3">
-                            {dependencyPagination.items.map((a, i) => {
-                              const sev = depSeverity(a.delayDays);
-                              const meta = DEPENDENCY_TYPE_META[a.type];
-                              return (
-                                <div
-                                  key={`${a.sourceId}-${a.targetId}-${i}`}
-                                  onClick={() => {
-                                    router.push(`/levers/detail?id=${a.sourceId}`);
-                                  }}
-                                  className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
-                                >
-                                  <div className="mb-2 flex items-start justify-between gap-2">
-                                    <div>
-                                      <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
-                                        {t(
-                                          "dashboard.dependency.planningRule",
-                                          "Règle de planning"
-                                        )}
-                                      </div>
-                                      <div className="mt-1 text-[11px] font-semibold text-primary">
-                                        {a.type === "FS" &&
-                                          t(
-                                            "dashboard.dependency.rule.fs",
-                                            "La cible doit finir avant le début de la source"
-                                          )}
-                                        {a.type === "SF" &&
-                                          t(
-                                            "dashboard.dependency.rule.sf",
-                                            "La cible doit démarrer avant la fin de la source"
-                                          )}
-                                        {a.type === "SS" &&
-                                          t(
-                                            "dashboard.dependency.rule.ss",
-                                            "Les deux éléments doivent démarrer ensemble"
-                                          )}
-                                        {a.type === "FF" &&
-                                          t(
-                                            "dashboard.dependency.rule.ff",
-                                            "Les deux éléments doivent finir ensemble"
-                                          )}
-                                      </div>
+                        + Alerte manuelle
+                      </button>
+                    )}
+                    {(["red", "amber", "green", "blue"] as const).map((type) => {
+                      const count = alertCounts[type];
+                      if (count === 0) return null;
+                      const isActive = alertTypeFilter === type;
+                      const colors: Record<string, string> = {
+                        red: isActive ? "bg-rag-red text-white" : "bg-rag-red-light text-rag-red",
+                        amber: isActive
+                          ? "bg-rag-amber text-white"
+                          : "bg-rag-amber-light text-rag-amber",
+                        green: isActive
+                          ? "bg-rag-green-dark text-white"
+                          : "bg-rag-green-light text-rag-green-dark",
+                        blue: isActive
+                          ? "bg-info-blue text-white"
+                          : "bg-info-blue-light text-info-blue",
+                      };
+                      return (
+                        <Tooltip key={type} text={t(`alerts.tooltip.${type}`)} position="bottom">
+                          <button
+                            onClick={() =>
+                              setAlertTypeFilter((prev) => (prev === type ? "all" : type))
+                            }
+                            className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold transition ${colors[type]}`}
+                          >
+                            {count}
+                          </button>
+                        </Tooltip>
+                      );
+                    })}
+                    <select
+                      className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
+                      value={alertShowResolved ? "all" : "todo"}
+                      onChange={(e) => {
+                        setAlertShowResolved(e.target.value === "all");
+                        setAlertPage(0);
+                      }}
+                    >
+                      <option value="todo">{t("alerts.toProcess")}</option>
+                      <option value="all">{t("alerts.showAll")}</option>
+                    </select>
+                    <select
+                      className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
+                      value={alertSortKey}
+                      onChange={(e) => setAlertSortKey(e.target.value as "delay" | "savings")}
+                    >
+                      <option value="delay">{t("risk.sortByDelay")}</option>
+                      <option value="savings">{t("risk.sortBySavings")}</option>
+                    </select>
+                    {!readOnly && (
+                      <button
+                        onClick={markAllResolved}
+                        className="ml-auto rounded-sm px-1.5 py-0.5 text-[10px] font-semibold text-tertiary transition hover:bg-neutral-100 hover:text-primary"
+                        title={t("alerts.markAllResolved")}
+                      >
+                        ✓ {t("alerts.markAllResolved")}
+                      </button>
+                    )}
+                  </div>
+                  {alertsOnPage.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-tertiary">
+                      {t("dashboard.widgets.noAlerts")}
+                    </p>
+                  ) : (
+                    <>
+                      <div className="max-h-[420px] min-h-[420px] overflow-y-auto pr-1">
+                        {alertsOnPage.map((a) => (
+                          <AlertItem
+                            key={a.id}
+                            alert={a}
+                            onClick={() => goToAlert(a)}
+                            onToggleResolved={
+                              readOnly ? undefined : () => toggleAlertResolved(a.id)
+                            }
+                            scopeLabel={resolveScopeLabel(a.scope)}
+                            tooltips={{
+                              severity: t(`alerts.tooltip.severity.${a.type}`),
+                              impact: t("alerts.tooltip.impact"),
+                              auto: t("alerts.tooltip.auto"),
+                            }}
+                          />
+                        ))}
+                      </div>
+                      {alertPageCount > 1 && (
+                        <div className="flex items-center justify-center gap-3 pt-3 mt-2 border-t border-border">
+                          <button
+                            onClick={() => setAlertPage((p) => Math.max(0, p - 1))}
+                            disabled={alertPageClamped === 0}
+                            className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+                          >
+                            <ChevronLeft size={14} />
+                          </button>
+                          <span className="text-[11px] font-semibold text-secondary">
+                            {t("alerts.page", `Page ${alertPageClamped + 1} / ${alertPageCount}`)
+                              .replace("{current}", String(alertPageClamped + 1))
+                              .replace("{total}", String(alertPageCount))}
+                          </span>
+                          <button
+                            onClick={() => setAlertPage((p) => Math.min(alertPageCount - 1, p + 1))}
+                            disabled={alertPageClamped >= alertPageCount - 1}
+                            className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
+                          >
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <ManualAlertForm
+                    open={manualAlertOpen}
+                    onOpenChange={setManualAlertOpen}
+                    data={visibleData}
+                    onSubmit={(input) => {
+                      if (user) data.createManualAlert(input, user);
+                    }}
+                  />
+                </div>
+
+                {/* ── Panneau droit : Alertes de dépendances ──────────────────────────── */}
+                <div className="min-w-0 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+                  <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-primary">
+                    {t("dashboard.widgets.riskCenter.dependenciesPanel", "Dépendances")}
+                  </div>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="text-[10.5px] font-semibold text-tertiary">
+                      {depAlerts.length} alerte{depAlerts.length !== 1 ? "s" : ""}
+                    </span>
+                    <select
+                      className="ml-auto rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
+                      value={depsSortKey}
+                      onChange={(e) => setDepsSortKey(e.target.value as "delay" | "savings")}
+                    >
+                      <option value="delay">{t("risk.sortByDelay")}</option>
+                      <option value="savings">{t("risk.sortBySavings")}</option>
+                    </select>
+                  </div>
+                  {depAlerts.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-tertiary">
+                      {t("dashboard.widgets.noDependencyAlerts")}
+                    </p>
+                  ) : (
+                    <>
+                      <div className="max-h-[420px] min-h-[420px] overflow-y-auto pr-1">
+                        <div className="flex flex-col gap-3">
+                          {dependencyPagination.items.map((a, i) => {
+                            const sev = depSeverity(a.delayDays);
+                            const meta = DEPENDENCY_TYPE_META[a.type];
+                            return (
+                              <div
+                                key={`${a.sourceId}-${a.targetId}-${i}`}
+                                onClick={() => {
+                                  router.push(`/levers/detail?id=${a.sourceId}`);
+                                }}
+                                className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
+                              >
+                                <div className="mb-2 flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                                      {t("dashboard.dependency.planningRule", "Règle de planning")}
                                     </div>
-                                    <DependencyTypeBadge type={a.type} />
+                                    <div className="mt-1 text-[11px] font-semibold text-primary">
+                                      {a.type === "FS" &&
+                                        t(
+                                          "dashboard.dependency.rule.fs",
+                                          "La cible doit finir avant le début de la source"
+                                        )}
+                                      {a.type === "SF" &&
+                                        t(
+                                          "dashboard.dependency.rule.sf",
+                                          "La cible doit démarrer avant la fin de la source"
+                                        )}
+                                      {a.type === "SS" &&
+                                        t(
+                                          "dashboard.dependency.rule.ss",
+                                          "Les deux éléments doivent démarrer ensemble"
+                                        )}
+                                      {a.type === "FF" &&
+                                        t(
+                                          "dashboard.dependency.rule.ff",
+                                          "Les deux éléments doivent finir ensemble"
+                                        )}
+                                    </div>
                                   </div>
-                                  {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
+                                  <DependencyTypeBadge type={a.type} />
+                                </div>
+                                {/* Layout directionnel (FS, SF) : empilé avec connecteur vertical sur
                                   mobile (les deux blocs côte à côte débordaient sous ~480px), côte à
                                   côte avec flèche dès sm. min-w-0 partout : sans lui, flex-1 refuse de
                                   rétrécir sous la largeur du contenu et pousse hors de la carte. */}
-                                  {meta.directional ? (
-                                    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
-                                      <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
-                                        <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                                          {t("dep.blocker")}
-                                        </div>
-                                        <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                          {a.targetName}
-                                        </div>
-                                        <div className="mt-0.5 text-[10px] text-secondary">
-                                          {meta.targetMilestone} : {a.targetDate}
-                                        </div>
+                                {meta.directional ? (
+                                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
+                                    <div className="flex min-w-0 flex-1 flex-col rounded-md border border-border bg-neutral-50 p-2">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                                        {t("dep.blocker")}
                                       </div>
-                                      <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
-                                        <ArrowDown size={14} className="sm:hidden" />
-                                        <ArrowRight size={14} className="hidden sm:block" />
-                                        <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
-                                          {a.type}
-                                        </span>
+                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                        {a.targetName}
                                       </div>
-                                      <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
-                                        <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                          {t("dep.blocked")}
-                                        </div>
-                                        <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                          {a.sourceName}
-                                        </div>
-                                        <div className="mt-0.5 text-[10px] text-secondary">
-                                          {meta.sourceMilestone} : {a.sourceDate}
-                                        </div>
+                                      <div className="mt-0.5 text-[10px] text-secondary">
+                                        {meta.targetMilestone} : {a.targetDate}
                                       </div>
                                     </div>
-                                  ) : (
-                                    /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
-                                    <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
-                                      <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
-                                        <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                          {t("dep.atRisk")}
-                                        </div>
-                                        <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                          {a.sourceName}
-                                        </div>
-                                        <div className="mt-0.5 text-[10px] text-secondary">
-                                          {meta.sourceMilestone} : {a.sourceDate}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
-                                        <ArrowUpDown size={10} />
+                                    <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
+                                      <ArrowDown size={14} className="sm:hidden" />
+                                      <ArrowRight size={14} className="hidden sm:block" />
+                                      <span className="text-[8px] font-semibold uppercase sm:mt-0.5">
                                         {a.type}
+                                      </span>
+                                    </div>
+                                    <div className="flex min-w-0 flex-1 flex-col rounded-md border-2 border-bp-coral/25 bg-bp-coral/[0.03] p-2">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                        {t("dep.blocked")}
                                       </div>
-                                      <div className="bg-bp-coral/[0.03] p-2">
-                                        <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
-                                          {t("dep.atRisk")}
-                                        </div>
-                                        <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
-                                          {a.targetName}
-                                        </div>
-                                        <div className="mt-0.5 text-[10px] text-secondary">
-                                          {meta.targetMilestone} : {a.targetDate}
-                                        </div>
+                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                        {a.sourceName}
+                                      </div>
+                                      <div className="mt-0.5 text-[10px] text-secondary">
+                                        {meta.sourceMilestone} : {a.sourceDate}
                                       </div>
                                     </div>
-                                  )}
-                                  {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
-                                  que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
-                                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
-                                    <span
-                                      className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}
-                                    >
-                                      {sev.label}
-                                    </span>
-                                    <span className="text-secondary">
-                                      {a.delayDays}{" "}
-                                      {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
-                                    </span>
-                                    {a.impactEur > 0 && (
-                                      <span className="ml-auto font-bold text-bp-coral">
-                                        {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
-                                      </span>
-                                    )}
                                   </div>
+                                ) : (
+                                  /* Layout symétrique (SS, FF) : empilé, les 2 leviers en style "à risque" */
+                                  <div className="overflow-hidden rounded-md border-2 border-bp-coral/25">
+                                    <div className="border-b border-bp-coral/15 bg-bp-coral/[0.03] p-2">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                        {t("dep.atRisk")}
+                                      </div>
+                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                        {a.sourceName}
+                                      </div>
+                                      <div className="mt-0.5 text-[10px] text-secondary">
+                                        {meta.sourceMilestone} : {a.sourceDate}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
+                                      <ArrowUpDown size={10} />
+                                      {a.type}
+                                    </div>
+                                    <div className="bg-bp-coral/[0.03] p-2">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wide text-bp-coral">
+                                        {t("dep.atRisk")}
+                                      </div>
+                                      <div className="mt-0.5 truncate text-[11px] font-bold text-primary">
+                                        {a.targetName}
+                                      </div>
+                                      <div className="mt-0.5 text-[10px] text-secondary">
+                                        {meta.targetMilestone} : {a.targetDate}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                {/* Barre de pied : sévérité + retard + type + impact € — flex-wrap pour
+                                  que l'impact € passe à la ligne au lieu de déborder sur mobile. */}
+                                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+                                  <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>
+                                    {sev.label}
+                                  </span>
+                                  <span className="text-secondary">
+                                    {a.delayDays}{" "}
+                                    {meta.directional ? t("dep.delayDays") : t("dep.offsetDays")}
+                                  </span>
+                                  {a.impactEur > 0 && (
+                                    <span className="ml-auto font-bold text-bp-coral">
+                                      {engine.fmtCurr(a.impactEur)} {t("dep.atRisk")}
+                                    </span>
+                                  )}
                                 </div>
-                              );
-                            })}
-                          </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                        {dependencyPagination.pageCount > 1 && (
-                          <DashboardPager
-                            page={dependencyPagination.page}
-                            pageCount={dependencyPagination.pageCount}
-                            onPrevious={() =>
-                              setDependencyPage(Math.max(0, dependencyPagination.page - 1))
-                            }
-                            onNext={() =>
-                              setDependencyPage(
-                                Math.min(
-                                  dependencyPagination.pageCount - 1,
-                                  dependencyPagination.page + 1
-                                )
+                      </div>
+                      {dependencyPagination.pageCount > 1 && (
+                        <DashboardPager
+                          page={dependencyPagination.page}
+                          pageCount={dependencyPagination.pageCount}
+                          onPrevious={() =>
+                            setDependencyPage(Math.max(0, dependencyPagination.page - 1))
+                          }
+                          onNext={() =>
+                            setDependencyPage(
+                              Math.min(
+                                dependencyPagination.pageCount - 1,
+                                dependencyPagination.page + 1
                               )
-                            }
-                            label={t("alerts.page")}
-                          />
-                        )}
-                      </>
-                    )}
-                  </div>
+                            )
+                          }
+                          label={t("alerts.page")}
+                        />
+                      )}
+                    </>
+                  )}
                 </div>
-              </CardBody>
-            )}
+              </div>
+            </CardBody>
           </Card>
         );
       }
