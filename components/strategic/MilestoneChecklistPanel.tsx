@@ -9,21 +9,31 @@ import type { AuthUser, MilestoneChecklistItem, MilestoneId } from "@/types";
 
 /**
  * Panneau de check-list du jalon COURANT d'un chantier (round 5) — pièce centrale de la méthode
- * E0→E4. Le CONTENU des items (libellés, sections, quels items sont automatiques) vient de
+ * E0→E4. Le CONTENU des items (libellés, quels items sont automatiques) vient de
  * `MILESTONE_CHECKLISTS` (lib/milestoneChecklist.ts, en dur) ; seules les RÉPONSES manuelles sont
  * portées par `items` (le contenu stocké côté chantier, voir `Chantier.milestones`).
+ *
+ * Round 26 : rendu en UNE liste plate et NON groupée — l'ancien regroupement visuel en 3 sections
+ * lettrées A/B/C (avec en-tête "Préalable"/"Réalisation"/"Conclusion") a été retiré ; tous les items
+ * d'un jalon (manuels et automatiques) s'affichent désormais à la suite, dans l'ordre de
+ * `MILESTONE_CHECKLISTS`, sans distinction visuelle de groupe (un item `auto` reste identifiable
+ * par sa présentation en lecture seule, comme avant). Le verrou de passage est aussi devenu plus
+ * strict ce round : voir `canPassMilestone` (lib/axisLogic.ts), qui exige maintenant que CHAQUE
+ * item soit à 100 (le bouton "Valider le jalon" ci-dessous reste désactivé + le message d'aide
+ * listant les items manquants reste affiché tant que ce n'est pas le cas).
  *
  * Les items `auto` (voir `ChecklistItemDef.auto`) ne sont JAMAIS lus depuis `items` — leur valeur
  * est TOUJOURS le calcul live fourni par l'appelant via `autoFlags` (résultat de
  * `resolveMilestoneAutoFlags`, qui a besoin de `allChantiers`/`allActions`, hors de portée ici) :
  * une valeur automatique stockée serait de toute façon obsolète dès qu'une des données sous-jacentes
- * (dépendances, effort, oranges du jalon précédent) change.
+ * (dépendances, effort) change.
  *
  * Round 12 : le feu discret à 3 niveaux (`ChecklistFlag`) est remplacé par un pourcentage déclaré
  * `MilestoneChecklistItem.progressPct` (0-100, `undefined` = pas encore déclaré). L'indicateur
  * visuel reste à 3 teintes (même esprit qu'avant, saisie plus fine) via le même bucketing partout :
  * `undefined` → neutre, `0` → rouge, `100` → vert, toute valeur strictement entre les deux → un
- * unique ton orange (jamais de dégradé).
+ * unique ton orange (jamais de dégradé) — ce ton orange reste affiché tel quel round 26, seule sa
+ * conséquence sur `canPassMilestone` a changé (il bloque désormais, comme le rouge).
  */
 
 const INPUT_CLASS =
@@ -48,8 +58,6 @@ const BUCKET_INPUT_CLASS: Record<ProgressBucket, string> = {
   amber: "border-rag-amber bg-rag-amber-light text-rag-amber",
   green: "border-rag-green bg-rag-green-light text-rag-green-dark",
 };
-
-const SECTIONS: Array<"A" | "B" | "C"> = ["A", "B", "C"];
 
 /**
  * Reconstruit un item PROPRE — jamais de clé à `undefined` (piège `saveChantier` : le document est
@@ -127,152 +135,141 @@ export function MilestoneChecklistPanel({
 
   const { canPass, reasons } = canPassMilestone(milestoneId, mergedItems);
 
-  const groups = SECTIONS.map((section) => ({
-    section,
-    defs: defs.filter((d) => d.section === section),
-  })).filter((g) => g.defs.length > 0);
-
   return (
     <div className="space-y-5">
-      {groups.map((group) => (
-        <div key={group.section} className="space-y-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-            {group.section} · {t(`strategicChantierDetail.milestones.section.${group.section}`)}
-          </div>
-
-          {group.defs.map((def) => {
-            if (def.auto) {
-              const pct = autoFlags[def.itemId];
-              const bucket = progressBucket(pct);
-              return (
-                <div
-                  key={def.itemId}
-                  className="flex items-center gap-2 text-[12.5px] text-secondary"
-                >
-                  <span
-                    className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${BUCKET_DOT_CLASS[bucket]}`}
-                  />
-                  <span className="flex-1">{t(def.i18nKey)}</span>
-                  <span className="shrink-0 text-[10.5px] text-tertiary">
-                    {t("strategicChantierDetail.milestones.actionPlan.autoResolvedHint")}
-                  </span>
-                </div>
-              );
-            }
-
-            const stored = findStored(def.itemId);
-            const pct = stored?.progressPct;
+      <div className="space-y-3">
+        {defs.map((def) => {
+          if (def.auto) {
+            const pct = autoFlags[def.itemId];
             const bucket = progressBucket(pct);
-            const isPartial = bucket === "amber";
-
-            const patchActionPlan = (
-              fieldPatch: Partial<NonNullable<MilestoneChecklistItem["actionPlan"]>>
-            ) =>
-              patchManualItem(def.itemId, {
-                actionPlan: {
-                  description: stored?.actionPlan?.description ?? "",
-                  ...stored?.actionPlan,
-                  ...fieldPatch,
-                },
-              });
-
-            const handlePctChange = (raw: string) => {
-              if (raw.trim() === "") {
-                patchManualItem(def.itemId, { progressPct: undefined });
-                return;
-              }
-              const parsed = Number(raw);
-              if (Number.isNaN(parsed)) return;
-              patchManualItem(def.itemId, { progressPct: Math.max(0, Math.min(100, parsed)) });
-            };
-
             return (
-              <div key={def.itemId} className="space-y-2">
-                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-                  <span className="text-[12.5px] font-medium text-primary sm:flex-1">
-                    {t(def.i18nKey)}
-                  </span>
-                  <div className="flex items-center gap-2 sm:w-56 sm:shrink-0">
-                    <span
-                      aria-hidden
-                      className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${BUCKET_DOT_CLASS[bucket]}`}
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={5}
-                      inputMode="numeric"
-                      value={pct ?? ""}
-                      onChange={(e) => handlePctChange(e.target.value)}
-                      placeholder="—"
-                      aria-label={t(
-                        "strategicChantierDetail.milestones.actionPlan.progressAriaLabel"
-                      )}
-                      className={`w-20 flex-1 rounded-md border-2 px-2 py-1.5 text-center text-[12.5px] font-semibold outline-none transition focus:border-bp-coral ${BUCKET_INPUT_CLASS[bucket]}`}
-                    />
-                    <span className="shrink-0 text-[11px] text-tertiary">%</span>
-                  </div>
-                </div>
-
-                {isPartial && (
-                  <div className="space-y-2 rounded-md border border-rag-amber-light bg-rag-amber-light/20 p-3">
-                    <div>
-                      <label className="text-xs font-medium text-text-secondary">
-                        {t("strategicChantierDetail.milestones.actionPlan.description")}
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={stored?.actionPlan?.description ?? ""}
-                        onChange={(e) => patchActionPlan({ description: e.target.value })}
-                        className={INPUT_CLASS}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                      <div className="sm:flex-1">
-                        <UserPicker
-                          users={users}
-                          value={stored?.actionPlan?.owner}
-                          onChange={(username) => patchActionPlan({ owner: username })}
-                          label={t("strategicChantierDetail.milestones.actionPlan.owner")}
-                          id={`milestone-owner-${def.itemId}`}
-                        />
-                      </div>
-                      <div>
-                        <label
-                          className="text-xs font-medium text-text-secondary"
-                          htmlFor={`milestone-due-${def.itemId}`}
-                        >
-                          {t("strategicChantierDetail.milestones.actionPlan.dueDate")}
-                        </label>
-                        <input
-                          id={`milestone-due-${def.itemId}`}
-                          type="date"
-                          value={stored?.actionPlan?.dueDate ?? ""}
-                          onChange={(e) => patchActionPlan({ dueDate: e.target.value })}
-                          className={SMALL_INPUT_CLASS}
-                        />
-                      </div>
-                    </div>
-                    <label className="flex items-center gap-1.5 text-[11.5px] font-medium text-secondary">
-                      <input
-                        type="checkbox"
-                        checked={stored?.resolved ?? false}
-                        onChange={(e) =>
-                          patchManualItem(def.itemId, {
-                            resolved: e.target.checked,
-                          })
-                        }
-                      />
-                      {t("strategicChantierDetail.milestones.actionPlan.markResolved")}
-                    </label>
-                  </div>
-                )}
+              <div
+                key={def.itemId}
+                className="flex items-center gap-2 text-[12.5px] text-secondary"
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${BUCKET_DOT_CLASS[bucket]}`}
+                />
+                <span className="flex-1">{t(def.i18nKey)}</span>
+                <span className="shrink-0 text-[10.5px] text-tertiary">
+                  {t("strategicChantierDetail.milestones.actionPlan.autoResolvedHint")}
+                </span>
               </div>
             );
-          })}
-        </div>
-      ))}
+          }
+
+          const stored = findStored(def.itemId);
+          const pct = stored?.progressPct;
+          const bucket = progressBucket(pct);
+          const isPartial = bucket === "amber";
+
+          const patchActionPlan = (
+            fieldPatch: Partial<NonNullable<MilestoneChecklistItem["actionPlan"]>>
+          ) =>
+            patchManualItem(def.itemId, {
+              actionPlan: {
+                description: stored?.actionPlan?.description ?? "",
+                ...stored?.actionPlan,
+                ...fieldPatch,
+              },
+            });
+
+          const handlePctChange = (raw: string) => {
+            if (raw.trim() === "") {
+              patchManualItem(def.itemId, { progressPct: undefined });
+              return;
+            }
+            const parsed = Number(raw);
+            if (Number.isNaN(parsed)) return;
+            patchManualItem(def.itemId, { progressPct: Math.max(0, Math.min(100, parsed)) });
+          };
+
+          return (
+            <div key={def.itemId} className="space-y-2">
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                <span className="text-[12.5px] font-medium text-primary sm:flex-1">
+                  {t(def.i18nKey)}
+                </span>
+                <div className="flex items-center gap-2 sm:w-56 sm:shrink-0">
+                  <span
+                    aria-hidden
+                    className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${BUCKET_DOT_CLASS[bucket]}`}
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={5}
+                    inputMode="numeric"
+                    value={pct ?? ""}
+                    onChange={(e) => handlePctChange(e.target.value)}
+                    placeholder="—"
+                    aria-label={t(
+                      "strategicChantierDetail.milestones.actionPlan.progressAriaLabel"
+                    )}
+                    className={`w-20 flex-1 rounded-md border-2 px-2 py-1.5 text-center text-[12.5px] font-semibold outline-none transition focus:border-bp-coral ${BUCKET_INPUT_CLASS[bucket]}`}
+                  />
+                  <span className="shrink-0 text-[11px] text-tertiary">%</span>
+                </div>
+              </div>
+
+              {isPartial && (
+                <div className="space-y-2 rounded-md border border-rag-amber-light bg-rag-amber-light/20 p-3">
+                  <div>
+                    <label className="text-xs font-medium text-text-secondary">
+                      {t("strategicChantierDetail.milestones.actionPlan.description")}
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={stored?.actionPlan?.description ?? ""}
+                      onChange={(e) => patchActionPlan({ description: e.target.value })}
+                      className={INPUT_CLASS}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <div className="sm:flex-1">
+                      <UserPicker
+                        users={users}
+                        value={stored?.actionPlan?.owner}
+                        onChange={(username) => patchActionPlan({ owner: username })}
+                        label={t("strategicChantierDetail.milestones.actionPlan.owner")}
+                        id={`milestone-owner-${def.itemId}`}
+                      />
+                    </div>
+                    <div>
+                      <label
+                        className="text-xs font-medium text-text-secondary"
+                        htmlFor={`milestone-due-${def.itemId}`}
+                      >
+                        {t("strategicChantierDetail.milestones.actionPlan.dueDate")}
+                      </label>
+                      <input
+                        id={`milestone-due-${def.itemId}`}
+                        type="date"
+                        value={stored?.actionPlan?.dueDate ?? ""}
+                        onChange={(e) => patchActionPlan({ dueDate: e.target.value })}
+                        className={SMALL_INPUT_CLASS}
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11.5px] font-medium text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={stored?.resolved ?? false}
+                      onChange={(e) =>
+                        patchManualItem(def.itemId, {
+                          resolved: e.target.checked,
+                        })
+                      }
+                    />
+                    {t("strategicChantierDetail.milestones.actionPlan.markResolved")}
+                  </label>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       <div className="border-t border-border pt-3">
         <Button variant="primary" size="sm" onClick={onValidateMilestone} disabled={!canPass}>

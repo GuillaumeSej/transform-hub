@@ -1826,8 +1826,9 @@ export function ChantierDetailPanel({
     <div>
       <div className="mb-4 flex items-center justify-between gap-2">
         <button
+          type="button"
           onClick={onClose}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-bp-coral hover:underline"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm font-medium text-secondary transition hover:border-bp-coral hover:text-bp-coral"
         >
           <ArrowLeft size={14} /> {t("strategicChantierDetail.back")}
         </button>

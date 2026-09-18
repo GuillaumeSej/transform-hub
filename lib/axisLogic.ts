@@ -1,5 +1,5 @@
 import { daysBetween } from "@/lib/dateUtils";
-import { MILESTONE_ORDER, MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
+import { MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
 import {
   getStrategicProfile,
   getStrategicProfiles,
@@ -760,13 +760,13 @@ export function displayMilestoneId(id: MilestoneId): string {
  *
  * Round 12 : ENCODAGE de sortie changé de `ChecklistFlag` ("green"/"red", jamais "orange" pour un
  * item auto) à un NOMBRE — `100` où l'ancien code renvoyait "green", `0` où il renvoyait "red" —
- * pour s'aligner sur `MilestoneChecklistItem.progressPct`, qui remplace le feu discret. Les
- * conditions sous-jacentes des trois règles sont INCHANGÉES, sauf `previousOranges` qui doit
- * retraduire la notion d'"orange non soldé" : le feu discret ayant disparu du modèle, l'équivalent
- * est désormais un item manuel dont le `progressPct` déclaré est STRICTEMENT compris entre 0 et
- * 100 (ni "à l'arrêt", ni "fait") et qui n'est pas `resolved` — un item non répondu (`progressPct
- * === undefined`) n'est PAS considéré ici (il bloque déjà `canPassMilestone` en amont, ce n'est
- * pas à cet item auto de le re-signaler).
+ * pour s'aligner sur `MilestoneChecklistItem.progressPct`, qui remplace le feu discret.
+ *
+ * Round 26 : le tag `auto: "previousOranges"` (et sa branche de calcul) a été RETIRÉ — il
+ * opérationnalisait le report d'un item orange non soldé du jalon précédent, une notion devenue
+ * logiquement vide maintenant que `canPassMilestone` exige que TOUS les items du jalon courant
+ * soient à 100 pour passer au suivant (plus jamais d'item partiel "laissé derrière"). `MILESTONE_
+ * CHECKLISTS` ne définit donc plus d'entrée `previousOranges` sur E1→E4.
  *
  * Round 7 : retargetée du chantier vers le LEVIER (`ChantierAction`) — le suivi E0→E4 vit
  * désormais par levier (voir `ChantierAction.milestones`), un chantier regroupant plusieurs
@@ -776,12 +776,9 @@ export function displayMilestoneId(id: MilestoneId): string {
  * pourquoi tous les leviers d'un même chantier affichent la MÊME valeur pour ces deux items,
  * intentionnellement.
  *
- * Les trois tags `auto` correspondent chacun à une règle de la note PMO du PO, rendue automatique
- * plutôt que posée comme une question (voir le commentaire de `ChecklistItemDef` pour le détail de
- * chaque règle) :
- *  - `previousOranges` : `100` si tous les items à progression partielle du jalon PRÉCÉDENT du
- *    LEVIER sont soldés (`resolved === true`), `100` aussi s'il n'y en avait aucun (vacuously) —
- *    `0` sinon. N'apparaît jamais sur E0 (pas de jalon précédent dans `MILESTONE_ORDER`).
+ * Les deux tags `auto` restants correspondent chacun à une règle de la note PMO du PO, rendue
+ * automatique plutôt que posée comme une question (voir le commentaire de `ChecklistItemDef` pour
+ * le détail de chaque règle) :
  *  - `dependencyAlert` : `0` si le CHANTIER PARENT du levier est le côté BLOQUÉ (`sourceId`)
  *    d'au moins une alerte de `chantierDependencyAlerts` — `100` sinon (y compris si le chantier
  *    parent est introuvable, ou si l'alerte existe mais bloque un AUTRE chantier).
@@ -801,19 +798,6 @@ export function resolveMilestoneAutoFlags(
     if (!item.auto) continue;
 
     switch (item.auto) {
-      case "previousOranges": {
-        const index = MILESTONE_ORDER.indexOf(milestoneId);
-        const previousMilestone = index > 0 ? MILESTONE_ORDER[index - 1] : undefined;
-        const previousItems = previousMilestone
-          ? (action.milestones?.checklists?.[previousMilestone] ?? [])
-          : [];
-        const hasUnresolvedPartial = previousItems.some(
-          (i) =>
-            i.progressPct !== undefined && i.progressPct > 0 && i.progressPct < 100 && !i.resolved
-        );
-        flags[item.itemId] = hasUnresolvedPartial ? 0 : 100;
-        break;
-      }
       case "dependencyAlert": {
         const alerts = chantierDependencyAlerts(allChantiers, allActions);
         const isAffected = parentChantier
@@ -843,14 +827,17 @@ export function resolveMilestoneAutoFlags(
  * déjà fusionnés par l'appelant — cette fonction ne sait pas distinguer les deux) ?
  *
  * **Contrairement à `canStartAction` (round 4, purement informatif — rien n'empêche réellement une
- * action bloquée de démarrer), ce verrou est réel** : correspond à la règle explicite de la note
- * PMO du PO ("un rouge = pas de passage"), retraduite en round 12 pour le modèle déclaratif
- * `progressPct` (0-100) : `canPass` est faux si un item quelconque a `progressPct === 0`
- * (équivalent de l'ancien rouge), ou si un item n'a encore aucune valeur déclarée (`progressPct
- * === undefined`, pas répondu) — toute valeur STRICTEMENT positive, aussi faible soit-elle,
- * n'empêche PAS de passer (c'est l'équivalent de l'ancien vert ET de l'ancien orange, qui
- * passaient déjà tous les deux : seul le rouge bloquait). Ne lève jamais d'exception ; une
- * check-list vide renvoie `canPass: true`.
+ * action bloquée de démarrer), ce verrou est réel.**
+ *
+ * Round 26 : règle DURCIE — `canPass` exige désormais que CHAQUE item de la check-list soit
+ * intégralement à `progressPct === 100` (remplace l'ancienne tolérance round 12, qui laissait
+ * passer toute valeur strictement positive, l'ancien "orange", et ne bloquait que sur `0` ou sur
+ * une valeur non déclarée). Il n'y a donc plus d'état intermédiaire non-bloquant pour le jalon
+ * COURANT : soit un item est fait (100), soit il bloque, qu'il soit à 0, à une valeur partielle, ou
+ * pas encore répondu (`undefined`). C'est ce nouveau "tout à 100" qui rend l'ancien verrou
+ * `auto: "previousOranges"` (retiré round 26, voir `resolveMilestoneAutoFlags`) logiquement
+ * superflu : plus aucun item partiel ne peut jamais être "laissé derrière" par un jalon déjà validé.
+ * Ne lève jamais d'exception ; une check-list vide renvoie `canPass: true`.
  */
 export function canPassMilestone(
   milestoneId: MilestoneId,
@@ -861,8 +848,8 @@ export function canPassMilestone(
   for (const item of items) {
     if (item.progressPct === undefined) {
       reasons.push(`Item non répondu (${displayMilestoneId(milestoneId)}, ${item.itemId})`);
-    } else if (item.progressPct === 0) {
-      reasons.push(`Item bloquant en rouge (${displayMilestoneId(milestoneId)}, ${item.itemId})`);
+    } else if (item.progressPct !== 100) {
+      reasons.push(`Item pas encore complet (${displayMilestoneId(milestoneId)}, ${item.itemId})`);
     }
   }
 

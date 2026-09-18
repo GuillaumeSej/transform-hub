@@ -1036,72 +1036,15 @@ describe("canStartAction", () => {
 // ─── Jalons E0→E4 (round 5) ─────────────────────────────────────────────────────────────────────
 
 // Round 7 : `resolveMilestoneAutoFlags` est retargetée sur un LEVIER (`ChantierAction`) plutôt que
-// sur le chantier lui-même — `previousOranges` lit désormais les checklists du levier, tandis que
-// `dependencyAlert`/`effortComplete` restent des signaux CHANTIER résolus via le chantier parent
-// (`action.chantierId`). D'où le montage systématique chantier parent + levier ci-dessous.
+// sur le chantier lui-même — `dependencyAlert`/`effortComplete` restent des signaux CHANTIER
+// résolus via le chantier parent (`action.chantierId`). D'où le montage systématique chantier
+// parent + levier ci-dessous.
+//
+// Round 26 : `auto: "previousOranges"` (et ses tests dédiés) a été RETIRÉ avec le report d'orange
+// d'un jalon à l'autre — `canPassMilestone` exige désormais que tous les items du jalon courant
+// soient à 100, ce qui rend ce mécanisme logiquement vide (voir son commentaire de tête,
+// lib/axisLogic.ts). Seuls `dependencyAlert` et `effortComplete` restent testés ici.
 describe("resolveMilestoneAutoFlags", () => {
-  // Round 12 : encodage numérique (100/0) au lieu du feu discret "green"/"red" — voir le
-  // commentaire de tête de la fonction. "previousOranges" retraduit l'ancien orange en une valeur
-  // manuelle STRICTEMENT entre 0 et 100 (ni 0 ni 100) non `resolved`.
-  it("resolves 'previousOranges' to 100 when the previous milestone has no unresolved partial item", () => {
-    // Aucun item à progression partielle du tout sur E0 (juste un item à 100) → vacuously 100
-    // pour l'item auto de E1.
-    const chantier = makeChantier("CH1");
-    const action = {
-      ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
-      milestones: {
-        currentMilestone: "E1" as const,
-        passedMilestones: ["E0" as const],
-        checklists: { E0: [{ itemId: "E0-B1", progressPct: 100 }] },
-      },
-    };
-    const flags = resolveMilestoneAutoFlags("E1", action, [chantier], [action]);
-    expect(flags["E1-A1"]).toBe(100);
-  });
-
-  it("resolves 'previousOranges' to 0 when the previous milestone has an unresolved partial item", () => {
-    const chantier = makeChantier("CH1");
-    const action = {
-      ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
-      milestones: {
-        currentMilestone: "E1" as const,
-        passedMilestones: ["E0" as const],
-        checklists: {
-          E0: [{ itemId: "E0-B1", progressPct: 50, resolved: false }],
-        },
-      },
-    };
-    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe(0);
-  });
-
-  it("resolves 'previousOranges' to 100 once the partial item is marked resolved", () => {
-    const chantier = makeChantier("CH1");
-    const action = {
-      ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
-      milestones: {
-        currentMilestone: "E1" as const,
-        passedMilestones: ["E0" as const],
-        checklists: {
-          E0: [{ itemId: "E0-B1", progressPct: 50, resolved: true }],
-        },
-      },
-    };
-    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe(100);
-  });
-
-  it("does not treat an unanswered previous item (progressPct undefined) as an unresolved partial", () => {
-    const chantier = makeChantier("CH1");
-    const action = {
-      ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
-      milestones: {
-        currentMilestone: "E1" as const,
-        passedMilestones: ["E0" as const],
-        checklists: { E0: [{ itemId: "E0-B1" }] },
-      },
-    };
-    expect(resolveMilestoneAutoFlags("E1", action, [chantier], [action])["E1-A1"]).toBe(100);
-  });
-
   it("resolves 'dependencyAlert' to 100 when the parent chantier is not the blocked side of any alert", () => {
     const chantier = makeChantier("CH1");
     const action = makeAction("CH1", "2026-01-01", "2026-01-31", "A1");
@@ -1178,6 +1121,9 @@ describe("progressBucket", () => {
   });
 });
 
+// Round 26 : règle DURCIE — `canPass` exige maintenant que CHAQUE item soit exactement à 100 (plus
+// de tolérance pour une valeur partielle "orange", qui passait avant ce round). Voir le commentaire
+// de tête de `canPassMilestone` (lib/axisLogic.ts).
 describe("canPassMilestone", () => {
   it("allows passing when every item is at 100", () => {
     const items: MilestoneChecklistItem[] = [
@@ -1187,16 +1133,19 @@ describe("canPassMilestone", () => {
     expect(canPassMilestone("E0", items)).toEqual({ canPass: true, reasons: [] });
   });
 
-  it("allows passing with a non-blocking partial (former 'orange') item, even a very small positive value", () => {
+  it("blocks when any item has a partial value (former non-blocking 'orange'), even a very high one", () => {
     const items: MilestoneChecklistItem[] = [
       { itemId: "E0-A1", progressPct: 100 },
-      { itemId: "E0-A2", progressPct: 50, actionPlan: { description: "Plan" } },
+      { itemId: "E0-A2", progressPct: 99, actionPlan: { description: "Plan" } },
     ];
-    expect(canPassMilestone("E0", items).canPass).toBe(true);
+    const result = canPassMilestone("E0", items);
+    expect(result.canPass).toBe(false);
+    expect(result.reasons).toHaveLength(1);
+    expect(result.reasons[0]).toContain("E0-A2");
 
-    // N'importe quelle valeur strictement positive passe, même infime (pas de seuil caché).
+    // Même une valeur partielle infime bloque désormais, plus de seuil "assez positif pour passer".
     const barelyStarted: MilestoneChecklistItem[] = [{ itemId: "E0-A1", progressPct: 1 }];
-    expect(canPassMilestone("E0", barelyStarted)).toEqual({ canPass: true, reasons: [] });
+    expect(canPassMilestone("E0", barelyStarted).canPass).toBe(false);
   });
 
   it("blocks when any item is at 0 (former red), with a reason", () => {
@@ -1268,9 +1217,10 @@ describe("milestoneProgressPct", () => {
   // Round 12 : remplissage fin à l'intérieur du jalon courant, au lieu du calcul par paliers de 20 ;
   // round 19 : ce crédit partiel est désormais mis à l'échelle du poids VARIABLE du jalon courant.
   it("blends full credit for passed milestones with partial credit from the current milestone's declared items", () => {
-    // E1 a 6 items (MILESTONE_CHECKLISTS.E1) : E1-A1 (auto), E1-B1/B2/B3 (manuels), E1-C-effort
-    // (auto), E1-C2 (manuel). Ici seuls B1/B2/B3 sont déclarés (100/50/0), les deux auto et C2
-    // restent non répondus → comptent pour 0 (pas d'`autoValues` fourni, mode dégradé documenté).
+    // E1 a 5 items depuis round 26 (MILESTONE_CHECKLISTS.E1, l'ancien item auto "previousOranges"
+    // E1-A1 a été retiré) : E1-B1/B2/B3 (manuels), E1-C-effort (auto), E1-C2 (manuel). Ici seuls
+    // B1/B2/B3 sont déclarés (100/50/0), C-effort et C2 restent non répondus → comptent pour 0 (pas
+    // d'`autoValues` fourni, mode dégradé documenté).
     const entity = {
       milestones: {
         currentMilestone: "E1" as const,
@@ -1284,7 +1234,7 @@ describe("milestoneProgressPct", () => {
         },
       },
     };
-    // 10 (E0 passé) + 10 (poids E1) * ((100+50+0+0+0+0)/6) / 100 = 10 + 2.5 = 12.5 → arrondi à 13.
+    // 10 (E0 passé) + 10 (poids E1) * ((100+50+0+0+0)/5) / 100 = 10 + 3 = 13.
     expect(milestoneProgressPct(entity)).toBe(13);
   });
 
@@ -1302,9 +1252,9 @@ describe("milestoneProgressPct", () => {
         },
       },
     };
-    // Mêmes items manuels que le test précédent, mais les deux auto (E1-A1, E1-C-effort) sont
-    // maintenant fournis à 100 : (100+50+0+0+100+100)/6 = 58.33 → 10 + 10*58.33/100 = 15.83 → 16.
-    expect(milestoneProgressPct(entity, { "E1-A1": 100, "E1-C-effort": 100 })).toBe(16);
+    // Mêmes items manuels que le test précédent, mais le seul item auto restant de E1
+    // (E1-C-effort) est maintenant fourni à 100 : (100+50+0+100+0)/5 = 50 → 10 + 10*50/100 = 15.
+    expect(milestoneProgressPct(entity, { "E1-C-effort": 100 })).toBe(15);
   });
 
   it("lets a manually-declared progressPct on an auto item win over autoValues (residual/legacy case)", () => {
@@ -1313,13 +1263,14 @@ describe("milestoneProgressPct", () => {
         currentMilestone: "E1" as const,
         passedMilestones: ["E0" as const],
         checklists: {
-          E1: [{ itemId: "E1-A1", progressPct: 0 }],
+          E1: [{ itemId: "E1-C-effort", progressPct: 0 }],
         },
       },
     };
-    // E1-A1 est marqué `auto` mais porte déjà une valeur manuelle (0) : elle prime sur
-    // autoValues["E1-A1"] = 100. Les 5 autres items de E1 restent à 0 (non répondus) → moyenne 0.
-    expect(milestoneProgressPct(entity, { "E1-A1": 100 })).toBe(10);
+    // E1-C-effort est marqué `auto` mais porte déjà une valeur manuelle (0) : elle prime sur
+    // autoValues["E1-C-effort"] = 100. Les 4 autres items de E1 restent à 0 (non répondus) →
+    // moyenne 0.
+    expect(milestoneProgressPct(entity, { "E1-C-effort": 100 })).toBe(10);
   });
 });
 
@@ -1911,13 +1862,13 @@ describe("programRoadmap", () => {
 
     // Même calcul que `milestoneProgressPct` (+ `resolveMilestoneAutoFlags` pour les items auto du
     // jalon courant E2) : 2 jalons validés (E0=10, E1=10, round 19 poids variable) = 20, plus le
-    // crédit partiel du jalon courant (E2, poids 15 : son unique item auto "E2-A1" vaut 100 par
-    // vacuité — aucun item à progression partielle sur E1 — les 3 items manuels valent 0, moyenne
-    // 25 → 15*25/100 = 3.75). Valeur de référence tirée du calcul réel plutôt que reconstituée à la
-    // main (la check-list E2 exacte, avec ses items auto/manuels, est définie dans
+    // crédit partiel du jalon courant (E2, poids 15). Round 26 : E2 n'a plus d'item automatique du
+    // tout (son unique item auto "previousOranges" a été retiré) — ses 3 items sont tous manuels et
+    // aucun n'est répondu ici, moyenne 0 → 15*0/100 = 0. Valeur de référence tirée du calcul réel
+    // plutôt que reconstituée à la main (la check-list E2 exacte est définie dans
     // `lib/milestoneChecklist.ts`).
-    expect(rows[0].progressPct).toBe(24);
-    expect(rows[1].progressPct).toBe(24);
+    expect(rows[0].progressPct).toBe(20);
+    expect(rows[1].progressPct).toBe(20);
   });
 
   it("keeps only deliverables with a declared dueDate, and normalizes legacy string deliverables defensively", () => {

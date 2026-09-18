@@ -869,11 +869,18 @@ export type ChantierEffort = {
  *  passage dans `MILESTONE_ORDER` (voir `lib/milestoneChecklist.ts`). */
 export type MilestoneId = "E0" | "E1" | "E2" | "E3" | "E4";
 
-/** Réponse à UN item de check-list d'un jalon donné (le contenu de l'item — libellé, section,
- *  caractère automatique — est en dur dans `lib/milestoneChecklist.ts`, seule la réponse est
- *  persistée ici). Un item orange est non-bloquant pour le jalon COURANT mais doit être `resolved`
- *  avant que le jalon SUIVANT ne puisse lui-même passer (voir l'item automatique
- *  `auto: "previousOranges"`). */
+/** Réponse à UN item de check-list d'un jalon donné (le contenu de l'item — libellé, caractère
+ *  automatique — est en dur dans `lib/milestoneChecklist.ts`, seule la réponse est persistée ici).
+ *  Round 26 : `canPassMilestone` (lib/axisLogic.ts) exige que TOUS les items d'un jalon soient à
+ *  `progressPct === 100` pour passer au jalon suivant — il n'y a donc plus d'état "orange" reporté
+ *  d'un jalon à l'autre (l'ancien item automatique `auto: "previousOranges"` qui portait ce report
+ *  a été retiré, voir `lib/milestoneChecklist.ts`). `progressPct` garde néanmoins sa plage 0-100
+ *  (plutôt que d'être réduit à un simple booléen) pour minimiser l'impact sur les documents déjà
+ *  persistés et sur le reste du code (`milestoneProgressPct`, l'affichage par pastille 3 teintes,
+ *  etc.) qui continue de s'appuyer dessus — une valeur strictement entre 0 et 100 reste affichée en
+ *  "orange" (`progressBucket`) et reste saisissable avec un plan d'action, mais elle BLOQUE
+ *  désormais `canPassMilestone` exactement comme `0`, elle n'est plus "non-bloquante pour le jalon
+ *  courant". */
 export type MilestoneChecklistItem = {
   /** Référence un `ChecklistItemDef.itemId` de `lib/milestoneChecklist.ts` (ex. "E0-A1"). */
   itemId: string;
@@ -883,18 +890,18 @@ export type MilestoneChecklistItem = {
    *  (100 ou 0, jamais de valeur intermédiaire) et jamais stocké tel quel — cette clé, sur un item
    *  auto, ne reflète donc qu'une éventuelle valeur manuelle résiduelle antérieure. Absent = pas
    *  encore déclaré (un item manuel sans `progressPct` bloque `canPassMilestone`, au même titre
-   *  qu'un item à 0 — voir son commentaire) ; distinct de `0`, qui signifie "déclaré, à l'arrêt".
-   *  Une valeur strictement entre 0 et 100 est l'équivalent de l'ancien feu orange : non-bloquante
-   *  pour le jalon COURANT mais doit être `resolved` avant que le jalon SUIVANT ne puisse lui-même
-   *  passer (voir l'item automatique `auto: "previousOranges"`). */
+   *  qu'un item à 0 ou à toute valeur `!== 100` — voir son commentaire) ; distinct de `0`, qui
+   *  signifie "déclaré, à l'arrêt". Round 26 : `canPassMilestone` exige `=== 100` pour CHAQUE item,
+   *  voir le commentaire de tête du type. */
   progressPct?: number;
   /** Pertinent seulement quand `progressPct` est strictement entre 0 et 100 (équivalent de l'ancien
    *  `flag === "orange"`) — plan d'action daté et attribué (piège `saveChantier` : omettre cette
    *  clé plutôt que d'y mettre `undefined` quand elle est vide). */
   actionPlan?: { description: string; owner?: string; dueDate?: string };
-  /** Un item à progression partielle (0 < progressPct < 100) peut être soldé plus tard sans changer
-   *  sa valeur — c'est ce booléen (et non la valeur elle-même) qui alimente le verrou automatique
-   *  du jalon suivant. */
+  /** Un item à progression partielle (0 < progressPct < 100) peut être marqué "soldé" sans changer
+   *  sa valeur — purement déclaratif depuis round 26 (n'alimente plus aucun verrou automatique,
+   *  l'ancien report `auto: "previousOranges"` ayant été retiré ; conservé comme simple indicateur
+   *  "plan d'action pris en charge" sur la fiche). */
   resolved?: boolean;
 };
 
