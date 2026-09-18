@@ -15,7 +15,10 @@ const STYLE: Record<MovementExecutionStatus, string> = {
 /** Icône affichée DANS chaque tuile pour que le statut se lise sans survol : un triangle
  * d'alerte pour le retard, une horloge pour l'échéance proche (< 90 j) vs un calendrier pour
  * l'échéance lointaine (> 90 j) — deux pictos volontairement distincts bien que les deux statuts
- * soient tous deux « à venir » — un check pour le réalisé, un interdit pour l'abandonné. */
+ * soient tous deux « à venir » — un check pour le réalisé, un interdit pour l'abandonné.
+ * Volontairement petite et fine (9px, trait 1.5) plutôt qu'un gros picto centré façon badge —
+ * la tuile doit d'abord se lire comme une pastille de couleur (scan rapide), l'icône n'étant
+ * qu'un repère fin pour lever l'ambiguïté sans dépendre du survol. */
 const ICON: Record<MovementExecutionStatus, LucideIcon> = {
   realized: Check,
   overdue: TriangleAlert,
@@ -24,14 +27,16 @@ const ICON: Record<MovementExecutionStatus, LucideIcon> = {
   abandoned: Ban,
 };
 /** Couleur d'icône par statut, câblée en dur (pas de helper de luminance partagé hors de
- * `components/strategic`) : blanc sur les 3 fonds sombres (violet/rouge/brun), teinte sombre sur
- * les 2 fonds clairs (rose pâle/gris moyen) pour rester lisible. */
+ * `components/strategic`) : blanc semi-transparent sur les 3 fonds sombres (violet/rouge/brun),
+ * teinte sombre semi-transparente sur les 2 fonds clairs (rose pâle/gris moyen) — l'opacité
+ * réduite (vs. un blanc/noir plein) évite l'effet "pictogramme app mobile" et laisse la couleur
+ * de fond porter l'essentiel de la lecture. */
 const ICON_COLOR: Record<MovementExecutionStatus, string> = {
-  realized: "text-white",
-  overdue: "text-white",
-  dueSoon: "text-[#1f1512]",
-  later: "text-[#1f1512]",
-  abandoned: "text-white",
+  realized: "text-white/80",
+  overdue: "text-white/80",
+  dueSoon: "text-[#1f1512]/60",
+  later: "text-[#1f1512]/60",
+  abandoned: "text-white/80",
 };
 const ORDER: MovementExecutionStatus[] = ["overdue", "dueSoon", "later", "realized", "abandoned"];
 
@@ -58,18 +63,18 @@ export function MovementStatusMatrix({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-max items-end gap-3">
+        <div className="flex min-w-max items-end gap-2">
           {groups.map((group) => {
             const cells = [...group.cells].sort(
               (a, b) => ORDER.indexOf(a.execution) - ORDER.indexOf(b.execution)
             );
             return (
-              <div key={group.key} className="w-[144px] shrink-0">
+              <div key={group.key} className="w-[104px] shrink-0">
                 <div
                   className="flex items-end rounded-sm border border-sky-100 bg-sky-50 p-1.5"
-                  style={{ minHeight: `${maxRows * 34 + 12}px` }}
+                  style={{ minHeight: `${maxRows * 25 + 12}px` }}
                 >
-                  <div className="grid w-full grid-cols-4 gap-1.5">
+                  <div className="grid w-full grid-cols-4 gap-1">
                     {cells.map(({ movement, execution }) => {
                       const StatusIcon = ICON[execution];
                       return (
@@ -77,14 +82,14 @@ export function MovementStatusMatrix({
                           key={movement.id}
                           type="button"
                           onClick={() => onMovementClick(movement.id)}
-                          className={`flex h-[28px] items-center justify-center rounded-[3px] transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-black ${STYLE[execution]}`}
+                          className={`flex h-[21px] items-center justify-center rounded-[2px] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-black ${STYLE[execution]}`}
                           title={`${movement.label} · ${movement.type}\n${EXECUTION_LABELS[execution]} · ${movement.fte} ETP\n${t("shared.movementStatusMatrix.initiativeLabel", "Initiative")} : ${getInitiativeLabel?.(movement.leverId) ?? movement.leverId}\n${t("etp.filter.hrOwnerMovement", "RH Owner")} : ${movement.hrOwner}\n${t("etp.column.plannedDate", "Date prévue")} : ${movement.plannedDate}`}
                           aria-label={`${movement.label} ${EXECUTION_LABELS[execution]}`}
                         >
                           <StatusIcon
                             aria-hidden
-                            size={14}
-                            strokeWidth={2.5}
+                            size={9}
+                            strokeWidth={1.75}
                             className={ICON_COLOR[execution]}
                           />
                         </button>
