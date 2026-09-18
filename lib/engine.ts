@@ -1235,12 +1235,18 @@ function periodLabel(sortKey: string, granularity: TimeGranularity): string {
 
 /** Économies réalisées par mois ou par trimestre (date de fin du levier), cumulées jusqu'à la
  * cible du programme — sert au graphique en pont de l'Executive Dashboard, dans les deux
- * granularités proposées par le sélecteur mois/trimestre. */
+ * granularités proposées par le sélecteur mois/trimestre.
+ *
+ * Plafonné à la période en cours (comme la courbe "Réalisé" de `sCurve3`, voir son `currentMonthIdx`)
+ * : un levier dont la date de fin est dans le futur n'a, par définition, rien de réalisé à ce jour,
+ * même s'il a déjà de la progression — sans ce plafond, son montant apparaissait dans une période
+ * future et gonflait le cumul final du bridge au-delà de ce qu'affiche la S-Curve au même instant. */
 export function financialBridge(
   data: BeTrackData,
   granularity: TimeGranularity = "quarter"
 ): QuarterBridge[] {
-  const active = data.levers.filter((l) => l.status !== "cancelled");
+  const now = new Date();
+  const active = data.levers.filter((l) => l.status !== "cancelled" && new Date(l.end) <= now);
   const byPeriod = new Map<string, number>();
   active.forEach((l) => {
     const d = new Date(l.end);
