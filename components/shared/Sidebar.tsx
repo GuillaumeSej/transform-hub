@@ -11,6 +11,15 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
+/** Clé de traduction du libellé de séparateur pour chaque valeur de `NavItem.section` (voir
+ *  types/index.ts) — `"decision"` (ex. "validation", entre le pilotage courant et les données de
+ *  référence) et `"reference"` (ex. "hr-etp"/"admin-history", données de référence). Repli sur la
+ *  valeur brute de `section` si une nouvelle valeur venait à être ajoutée sans entrée ici. */
+const SECTION_LABEL_KEYS: Record<string, string> = {
+  decision: "nav.sectionDecision",
+  reference: "nav.sectionReferenceData",
+};
+
 /** Sidebar noire fixe — brand BearingPoint : wordmark officiel blanc sur noir, item actif
  * marqué par un filet rouge (accent graphique) avec texte blanc (jamais de texte coloré).
  *
@@ -89,9 +98,9 @@ export function Sidebar({
           const showSectionDivider = !!item.section && item.section !== nav[index - 1]?.section;
           return (
             <div key={item.id}>
-              {showSectionDivider && item.section === "reference" && (
+              {showSectionDivider && item.section && (
                 <div className="mt-2 border-t border-white/[0.12] px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
-                  {t("nav.sectionReferenceData")}
+                  {t(SECTION_LABEL_KEYS[item.section] ?? item.section)}
                 </div>
               )}
               <GuardedLink
