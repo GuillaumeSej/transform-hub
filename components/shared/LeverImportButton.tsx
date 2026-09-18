@@ -122,7 +122,6 @@ export function LeverImportButton({
         "2026-01-15",
         "2026-04-30",
         "En cours",
-        15,
       ],
     ];
     const actionsSheet = XLSX.utils.aoa_to_sheet([[...ACTION_IMPORT_HEADERS], ...actionsExample]);

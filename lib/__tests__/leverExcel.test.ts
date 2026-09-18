@@ -242,3 +242,35 @@ describe("leverExcel — leverToExcelRow (Statut)", () => {
     expect(preview.toUpsert[0].status).toBe("in_progress");
   });
 });
+
+describe("leverExcel — full export -> re-import round trip", () => {
+  /** Régression : `leverToExcelRow` n'écrivait pas la colonne "Programme", alors que
+   *  `validateLeverImportRows` la rend obligatoire dès que l'entreprise a plusieurs programmes —
+   *  "Exporter Excel" puis "Importer" sur le même fichier rejetait donc 100% des lignes. Ce test
+   *  passe directement la ligne EXPORTÉE (spread de `leverToExcelRow`, sans reconstruire la feuille
+   *  champ par champ comme les tests ci-dessus) pour que toute colonne future omise à l'export
+   *  fasse échouer ce test plutôt qu'être masquée par une fixture manuelle. */
+  it("re-imports its own export with zero errors when the company has several programs", () => {
+    const lever = { ...baseLever, programId: "p1" };
+    const data = makeData();
+    const exportedRow = leverToExcelRow(lever, data, noAlerts, undefined, undefined, [
+      { id: "p1", name: "Programme Perf" },
+      { id: "p2", name: "Programme Strat" },
+    ]);
+    expect(exportedRow["Programme"]).toBe("Programme Perf");
+
+    const sheets: LeverImportRawSheets = { leviers: [exportedRow], actions: [], impacts: [] };
+    const preview = validateLeverImportRows(
+      sheets,
+      { levers: [], workstreams, pnlAccounts },
+      "c1",
+      [
+        { id: "p1", name: "Programme Perf" },
+        { id: "p2", name: "Programme Strat" },
+      ]
+    );
+
+    expect(preview.errors).toEqual([]);
+    expect(preview.toUpsert[0].programId).toBe("p1");
+  });
+});

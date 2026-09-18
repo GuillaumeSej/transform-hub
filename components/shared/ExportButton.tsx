@@ -19,18 +19,25 @@ import type { BeTrackData, Company } from "@/types";
 export function ExportButton({
   data,
   riskThresholds,
+  programs = [],
 }: {
   data: BeTrackData;
   /** Seuils de risque de l'entreprise courante (voir engine.computeLeverRisk) — seuils par défaut
    *  si non fournis. */
   riskThresholds?: Company["riskThresholds"];
+  /** Programmes de l'entreprise, pour résoudre la colonne "Programme" de l'export — voir
+   *  `lib/leverExcel.ts`. Sans elle, la colonne serait absente et le fichier ré-exporté
+   *  deviendrait non ré-importable dès que l'entreprise a plusieurs programmes. */
+  programs?: { id: string; name: string }[];
 }) {
   const { showToast } = useToast();
   const { t } = useTranslation();
   const alerts = useMemo(() => generateAlerts(data), [data]);
 
   const exportExcel = (d: BeTrackData) => {
-    const rows = d.levers.map((l) => leverToExcelRow(l, d, alerts, riskThresholds));
+    const rows = d.levers.map((l) =>
+      leverToExcelRow(l, d, alerts, riskThresholds, undefined, programs)
+    );
     const sheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "Leviers");

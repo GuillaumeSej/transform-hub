@@ -744,7 +744,7 @@ export function LeversPagePerformance() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Export/import Excel : outils de bureau, sans objet sur téléphone. */}
           <span className="hidden items-center gap-2 sm:inline-flex">
-            <ExportButton data={data} />
+            <ExportButton data={data} programs={programs} />
             <LeverImportButton
               data={data}
               companyId={user?.companyId}
