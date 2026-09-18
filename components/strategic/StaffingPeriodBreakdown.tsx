@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import {
   Bar,
@@ -15,6 +15,7 @@ import {
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
+import { StaffingDetailModal } from "@/components/strategic/StaffingDetailModal";
 import { hexToRgb } from "@/components/strategic/TimelineBars";
 import { hexForDepartment, periodLabelForDate, staffingPeriodBuckets } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -117,9 +118,15 @@ function axisPeriodBuckets(
  *   filtre (toutes les équipes toujours affichées, simplement estompées — comportement historique).
  * - La rangée de chips "Chantiers :" (round 21, auparavant sur `EffectifsPageClient.tsx`) vit
  *   maintenant ici, visible dans les deux modes dès qu'une équipe est sélectionnée.
- * - Épingler une période (clic sur son libellé) fait apparaître un panneau de détail PERSISTANT
- *   sous le graphique (round 22, demande PO : le détail par chantier n'était visible qu'au survol)
- *   — additif, l'info-bulle au survol reste inchangée par ailleurs.
+ * - Épingler une période (clic sur son libellé) reste possible (chip "Période : X", % d'utilisation
+ *   affiché sur le libellé, sous-titre dynamique) mais round 26 (demande PO : le survol — "aperçu
+ *   commercial, 1 ETP, marketing…" — ne permettait ni de lire confortablement ni de copier-coller
+ *   les lignes derrière une barre) REMPLACE l'ancien panneau de détail persistant inline (prose non
+ *   copiable) par `StaffingDetailModal`, un vrai tableau HTML — voir `detailScope`. La même modale
+ *   s'ouvre aussi au clic sur une entrée de légende / un segment de barre (équipe OU axe selon
+ *   `mode` — round 26 généralise aussi CE clic, qui ne faisait auparavant rien du tout en mode
+ *   "axis", voir `selectGroupInActiveMode`). L'info-bulle au survol reste elle inchangée (aperçu
+ *   rapide), additive à la modale.
  * - Le sous-titre est désormais dynamique (round 22, PO : "ça représente quoi le nombre d'ETP dans
  *   la répartition par axe ?") : il précise explicitement le regroupement (équipe/axe) et le
  *   périmètre temporel (toute la période / une période épinglée).
@@ -136,6 +143,7 @@ export function StaffingPeriodBreakdown({
   axes,
   chantierNamesById = {},
   axisIdsByChantier = {},
+  actionNamesById = {},
 }: {
   staffing: ChantierStaffing[];
   /** Disponible réel par équipe (base ETP entreprise, live). */
@@ -152,20 +160,42 @@ export function StaffingPeriodBreakdown({
    *  la map (référence orpheline) n'alimente aucun groupe en mode "axis", même parti pris défensif
    *  que `chantierNamesById`. */
   axisIdsByChantier?: Record<string, string[]>;
+  /** `ChantierAction.id` → nom, round 26 — colonne "Levier" de `StaffingDetailModal`
+   *  (`ChantierStaffing.actionId`, optionnel). Construit par l'appelant, typiquement
+   *  `Object.fromEntries(chantierActions.map(a => [a.id, a.name]))`. Optionnel, même parti pris
+   *  défensif que `chantierNamesById` : un levier absent de la map retombe sur "—". */
+  actionNamesById?: Record<string, string>;
 }) {
   const { t } = useTranslation();
 
   const [mode, setMode] = useState<ViewMode>("period");
   const [granularity, setGranularity] = useState<Granularity>("quarterly");
   const [selectedFunction, setSelectedFunctionState] = useState<string | null>(null);
+  /** Axe actuellement sélectionné par clic (légende OU segment de barre) en mode "axis" — round 26,
+   *  pendant de `selectedFunction` pour ce mode. Volontairement un état SÉPARÉ plutôt qu'une
+   *  réutilisation de `selectedFunction` : `selectedFunction` porte une sémantique de
+   *  cross-filtering (préfiltre `axisFilteredStaffing` par ÉQUIPE, y compris en mode "axis", voir
+   *  plus bas) qui n'a rien à voir avec "quel axe a-t-on cliqué DANS ce mode" — les deux filtres
+   *  sont orthogonaux et coexistent (sélectionner une équipe PUIS cliquer un axe montre la
+   *  répartition de cette équipe, avec cet axe mis en évidence). */
+  const [selectedAxisId, setSelectedAxisIdState] = useState<string | null>(null);
   const [selectedChantierId, setSelectedChantierId] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
   /** Groupe actuellement survolé (segment de barre OU entrée de légende) — clé d'équipe ou d'axe
-   *  selon `mode`. Distinct de `selectedFunction` (le clic, qui filtre le mode "axis") : le tooltip
-   *  privilégie le survol, et ne retombe sur `selectedFunction` qu'en mode "period" (une équipe
-   *  sélectionnée n'a pas de sens comme "groupe survolé" en mode "axis", dont les groupes sont des
-   *  axes). */
+   *  selon `mode`. Distinct de `selectedGroupKey` (le clic) : le tooltip privilégie le survol, et
+   *  ne retombe sur la sélection cliquée que hors survol (voir `selectedGroupKey` plus bas). */
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
+  /** Détail "exploitable" ouvert par clic (round 26, demande PO : le survol ne permet ni de lire
+   *  confortablement ni de copier-coller) — soit une période (clic sur son libellé, TOUS les
+   *  groupes de cette période), soit un groupe (clic sur une entrée de légende ou un segment de
+   *  barre, équipe OU axe selon `mode`, TOUTES les périodes de ce groupe). `null` = modale fermée.
+   *  Snapshot pris AU CLIC plutôt que dérivé en continu de `selectedPeriod`/`selectedGroupKey` —
+   *  même parti pris que `CostDrilldownModal.initialWsId` : la modale ne doit pas se vider
+   *  silencieusement si l'utilisateur désélectionne ensuite le filtre correspondant ailleurs sur la
+   *  carte pendant qu'elle reste ouverte. */
+  const [detailScope, setDetailScope] = useState<
+    { kind: "period"; period: string } | { kind: "group"; groupKey: string } | null
+  >(null);
 
   /** Sélectionne (ou désélectionne) une équipe. Contrairement à l'ancien `selectFunction` de
    *  `EffectifsPageClient.tsx` (qui ne purgeait `selectedChantierId` que sur désélection complète),
@@ -176,6 +206,32 @@ export function StaffingPeriodBreakdown({
     setSelectedFunctionState(fn);
     setSelectedChantierId(null);
   };
+
+  /** Sélectionne (ou désélectionne) un axe — mode "axis" uniquement, voir `selectedAxisId`. */
+  const selectAxis = (id: string | null) => setSelectedAxisIdState(id);
+
+  /** Généralise le clic légende/segment de barre aux DEUX modes (round 26 — auparavant gated à
+   *  `mode === "period"`, ce qui rendait le mode "axis" entièrement non cliquable). Ouvre aussi le
+   *  détail exploitable (`detailScope`) sur ce groupe quand la sélection s'ACTIVE ; la désactive
+   *  (referme la modale) quand elle se désactive, pour ne jamais laisser une modale ouverte sur un
+   *  groupe qu'on vient de désélectionner sur le graphique lui-même. */
+  const selectGroupInActiveMode = (key: string) => {
+    if (mode === "axis") {
+      const next = selectedAxisId === key ? null : key;
+      selectAxis(next);
+      setDetailScope(next ? { kind: "group", groupKey: next } : null);
+    } else {
+      const next = selectedFunction === key ? null : key;
+      selectFunction(next);
+      setDetailScope(next ? { kind: "group", groupKey: next } : null);
+    }
+  };
+
+  /** Clé du groupe couramment SÉLECTIONNÉ (clic, pas survol) dans le mode actif — équipe en mode
+   *  "period", axe en mode "axis". Unifie `selectedFunction`/`selectedAxisId` pour tout le reste du
+   *  composant (mise en évidence légende/barres, ligne "par chantier" du tooltip et du panneau
+   *  épinglé), qui n'a ainsi plus besoin de brancher sur `mode` à chaque endroit. */
+  const selectedGroupKey = mode === "axis" ? selectedAxisId : selectedFunction;
 
   const undatedCount = useMemo(() => staffing.filter((e) => !e.startDate).length, [staffing]);
 
@@ -357,6 +413,82 @@ export function StaffingPeriodBreakdown({
     );
   }
 
+  /** Noms d'axe(s) du chantier d'une ligne de staffing, pour la colonne "Axe(s)" de
+   *  `StaffingDetailModal` — pertinent dans les deux modes (en mode "period", ça montre à quel(s)
+   *  axe(s) appartient le chantier d'une équipe ; en mode "axis", ça confirme le multi-axe éventuel
+   *  du chantier). "—" quand le chantier n'est rattaché à aucun axe connu. `useCallback` uniquement
+   *  pour pouvoir figurer comme dépendance stable de `detailRows` (`useMemo`) ci-dessous. */
+  const axisNamesForChantier = useCallback(
+    (chantierId: string): string => {
+      const ids = axisIdsByChantier[chantierId] ?? [];
+      if (ids.length === 0) return "—";
+      return ids.map((id) => findAxisName(axes, t, id)).join(", ");
+    },
+    [axisIdsByChantier, axes, t]
+  );
+
+  /** Lignes `ChantierStaffing` BRUTES (pas agrégées par chantier, contrairement à
+   *  `chantierBreakdownByPeriod`) derrière le `detailScope` couramment ouvert — alimente
+   *  `StaffingDetailModal`, round 26. Une modale "période" reprend la même source que le graphique
+   *  actif (`axisFilteredStaffing` en mode "axis", `staffing` complet en mode "period", même
+   *  cohérence que `chantierBreakdownByPeriod`) ; une modale "groupe" (équipe ou axe cliqué)
+   *  n'est, elle, PAS bornée à une période — voir le doc-comment de `detailScope`. */
+  const detailRows = useMemo(() => {
+    if (!detailScope) return [];
+    let entries: ChantierStaffing[];
+    if (detailScope.kind === "period") {
+      const source = mode === "axis" ? axisFilteredStaffing : staffing;
+      entries = source.filter(
+        (e) => e.startDate && periodLabelForDate(e.startDate, granularity) === detailScope.period
+      );
+    } else if (mode === "axis") {
+      entries = axisFilteredStaffing.filter((e) =>
+        (axisIdsByChantier[e.chantierId] ?? []).includes(detailScope.groupKey)
+      );
+    } else {
+      entries = staffing.filter((e) => e.function === detailScope.groupKey);
+    }
+    return entries
+      .map((e) => ({
+        id: e.id,
+        chantierName: chantierNamesById[e.chantierId] ?? t("effectifs.chantierUnknown"),
+        function: e.function,
+        axisNames: axisNamesForChantier(e.chantierId),
+        fte: e.fte || 0,
+        periodLabel: e.startDate
+          ? `${e.startDate} → ${e.endDate ?? "…"}`
+          : t("staffingPeriod.detailModal.undated"),
+        lever: e.actionId ? (actionNamesById[e.actionId] ?? "—") : "—",
+        note: e.note ?? "—",
+      }))
+      .sort((a, b) => b.fte - a.fte);
+  }, [
+    detailScope,
+    mode,
+    axisFilteredStaffing,
+    staffing,
+    granularity,
+    axisIdsByChantier,
+    chantierNamesById,
+    actionNamesById,
+    axisNamesForChantier,
+    t,
+  ]);
+
+  const detailTotalFte = useMemo(
+    () => detailRows.reduce((sum, row) => sum + row.fte, 0),
+    [detailRows]
+  );
+
+  const detailModalTitle = !detailScope
+    ? ""
+    : detailScope.kind === "period"
+      ? t("staffingPeriod.pinnedDetail.title").replace("{period}", detailScope.period)
+      : t("staffingPeriod.detailModal.groupTitle").replace(
+          "{group}",
+          mode === "axis" ? findAxisName(axes, t, detailScope.groupKey) : detailScope.groupKey
+        );
+
   return (
     <Card className="mb-0">
       <CardHeader
@@ -366,6 +498,11 @@ export function StaffingPeriodBreakdown({
             {selectedFunction && (
               <Button variant="ghost" size="sm" onClick={() => selectFunction(null)}>
                 {t("effectifs.allFunctions")}
+              </Button>
+            )}
+            {selectedAxisId && (
+              <Button variant="ghost" size="sm" onClick={() => selectAxis(null)}>
+                {t("staffingPeriod.allAxes")}
               </Button>
             )}
             {/* Toggle "Période" / "Axe" (round 22) — même look que le toggle de granularité
@@ -430,7 +567,7 @@ export function StaffingPeriodBreakdown({
 
         {/* Chips "Filtré sur"/"Période" (round 20-21, déplacées ici round 22 — la carte "Répartition
             par axe" qu'elles reliaient visuellement a disparu, fusionnée dans cette même carte). */}
-        {(selectedFunction || selectedPeriod) && (
+        {(selectedFunction || selectedAxisId || selectedPeriod) && (
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             {selectedFunction && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-[12px] font-semibold text-primary">
@@ -439,6 +576,19 @@ export function StaffingPeriodBreakdown({
                   type="button"
                   aria-label={t("effectifs.allFunctions")}
                   onClick={() => selectFunction(null)}
+                  className="flex items-center justify-center rounded-full p-0.5 text-secondary transition hover:bg-neutral-200 hover:text-primary"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+            {selectedAxisId && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-[12px] font-semibold text-primary">
+                {t("effectifs.filteredOn").replace("{fn}", findAxisName(axes, t, selectedAxisId))}
+                <button
+                  type="button"
+                  aria-label={t("staffingPeriod.allAxes")}
+                  onClick={() => selectAxis(null)}
                   className="flex items-center justify-center rounded-full p-0.5 text-secondary transition hover:bg-neutral-200 hover:text-primary"
                 >
                   <X size={12} />
@@ -498,7 +648,8 @@ export function StaffingPeriodBreakdown({
           <>
             {/* % d'utilisation (mode "period" uniquement, voir doc-comment de `totalAvailable`) ou
                 total ETP (mode "axis") au-dessus du graphique, par période — cliquable pour épingler
-                (round 21). */}
+                (round 21) ET ouvrir le détail exploitable de cette période (round 26, voir
+                `detailScope`). */}
             <div className="mb-2 flex flex-wrap gap-2">
               {activeBuckets.map((bucket) => {
                 const pct = mode === "period" ? pctUtilizedFor(bucket.totalFte) : null;
@@ -508,7 +659,11 @@ export function StaffingPeriodBreakdown({
                     key={bucket.period}
                     type="button"
                     aria-pressed={isSelected}
-                    onClick={() => setSelectedPeriod(isSelected ? null : bucket.period)}
+                    onClick={() => {
+                      const next = isSelected ? null : bucket.period;
+                      setSelectedPeriod(next);
+                      setDetailScope(next ? { kind: "period", period: next } : null);
+                    }}
                     className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-semibold transition ${
                       isSelected
                         ? "bg-black text-white"
@@ -544,8 +699,7 @@ export function StaffingPeriodBreakdown({
                     const bucket = activeBuckets.find((b) => b.period === period);
                     if (!bucket) return null;
                     const pctUtilized = mode === "period" ? pctUtilizedFor(bucket.totalFte) : null;
-                    const activeGroup =
-                      hoveredGroup ?? (mode === "period" ? selectedFunction : null);
+                    const activeGroup = hoveredGroup ?? selectedGroupKey;
                     return (
                       <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
                         <p className="mb-1 font-bold text-primary">{period}</p>
@@ -566,13 +720,12 @@ export function StaffingPeriodBreakdown({
                   wrapperStyle={{
                     fontSize: 11,
                     paddingBottom: 8,
-                    cursor: mode === "period" ? "pointer" : undefined,
+                    cursor: "pointer",
                   }}
                   onClick={(entry) => {
-                    if (mode !== "period") return;
-                    const fn = typeof entry?.value === "string" ? entry.value : undefined;
-                    if (!fn) return;
-                    selectFunction(selectedFunction === fn ? null : fn);
+                    const key = typeof entry?.value === "string" ? entry.value : undefined;
+                    if (!key) return;
+                    selectGroupInActiveMode(key);
                   }}
                   onMouseEnter={(entry) => {
                     const key = typeof entry?.value === "string" ? entry.value : undefined;
@@ -585,7 +738,7 @@ export function StaffingPeriodBreakdown({
                     return (
                       <span
                         style={{
-                          fontWeight: mode === "period" && selectedFunction === key ? 700 : 400,
+                          fontWeight: selectedGroupKey === key ? 700 : 400,
                         }}
                         className="text-primary"
                       >
@@ -601,61 +754,15 @@ export function StaffingPeriodBreakdown({
                     name={s.key}
                     stackId="etp"
                     fill={s.color}
-                    fillOpacity={
-                      mode === "period" && selectedFunction && selectedFunction !== s.key ? 0.35 : 1
-                    }
-                    cursor={mode === "period" ? "pointer" : undefined}
-                    onClick={() => {
-                      if (mode === "period")
-                        selectFunction(selectedFunction === s.key ? null : s.key);
-                    }}
+                    fillOpacity={selectedGroupKey && selectedGroupKey !== s.key ? 0.35 : 1}
+                    cursor="pointer"
+                    onClick={() => selectGroupInActiveMode(s.key)}
                     onMouseEnter={() => setHoveredGroup(s.key)}
                     onMouseLeave={() => setHoveredGroup(null)}
                   />
                 ))}
               </BarChart>
             </ResponsiveContainer>
-
-            {/* Panneau de détail PERSISTANT pour la période épinglée (round 22, demande PO) —
-                additif : l'info-bulle au survol ci-dessus reste inchangée. Bucket synthétique à 0
-                si la période épinglée n'a plus de correspondance dans le mode/filtre courant (ex.
-                période épinglée en mode "period" sans aucune donnée pour l'équipe sélectionnée en
-                mode "axis") plutôt que de masquer silencieusement le panneau. */}
-            {selectedPeriod &&
-              (() => {
-                const bucket: UnifiedBucket =
-                  activeBuckets.find((b) => b.period === selectedPeriod) ??
-                  ({ period: selectedPeriod, totalFte: 0, byGroup: {} } satisfies UnifiedBucket);
-                const pct = mode === "period" ? pctUtilizedFor(bucket.totalFte) : null;
-                const activeGroup = hoveredGroup ?? (mode === "period" ? selectedFunction : null);
-                return (
-                  <div className="mt-3 rounded-md border border-border bg-neutral-50 p-3 text-[12px]">
-                    <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <p className="font-bold text-primary">
-                        {t("staffingPeriod.pinnedDetail.title").replace("{period}", selectedPeriod)}
-                      </p>
-                      <button
-                        type="button"
-                        aria-label={t("effectifs.filteredOnPeriod").replace(
-                          "{period}",
-                          selectedPeriod
-                        )}
-                        onClick={() => setSelectedPeriod(null)}
-                        className="flex items-center justify-center rounded-full p-0.5 text-secondary transition hover:bg-neutral-200 hover:text-primary"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                    {renderGroupRows(bucket)}
-                    <p className="mt-1 border-t border-border pt-1 font-bold text-primary">
-                      {formatFte(bucket.totalFte)} {t("staffing.fteUnit")}
-                      {pct !== null &&
-                        ` · ${t("staffingPeriod.utilization").replace("{pct}", String(pct))}`}
-                    </p>
-                    {renderChantierRows(selectedPeriod, activeGroup)}
-                  </div>
-                );
-              })()}
           </>
         )}
         {undatedCount > 0 && (
@@ -664,6 +771,20 @@ export function StaffingPeriodBreakdown({
           </p>
         )}
       </CardBody>
+
+      {/* Détail exploitable (round 26, demande PO) — REMPLACE l'ancien panneau "période épinglée"
+          inline (rows en prose, non copiables) : un vrai tableau HTML, ouvert par clic sur une
+          période (toutes les lignes de cette période) ou sur une entrée de légende/segment de barre
+          (toutes les lignes de ce groupe, équipe ou axe selon `mode`) — voir `detailScope`. */}
+      <StaffingDetailModal
+        open={detailScope !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailScope(null);
+        }}
+        title={detailModalTitle}
+        rows={detailRows}
+        totalFte={detailTotalFte}
+      />
     </Card>
   );
 }

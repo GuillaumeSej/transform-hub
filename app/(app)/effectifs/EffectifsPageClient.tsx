@@ -3,14 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Users } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import {
   BudgetDonutChart,
   type BudgetDonutSlice,
 } from "@/components/shared/charts/BudgetDonutChart";
 import { KPICard } from "@/components/shared/KPICard";
-import { Modal } from "@/components/shared/Modal";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
@@ -102,6 +101,40 @@ function Bar({ pct, fn, highlighted = false }: { pct: number; fn: string; highli
   );
 }
 
+/** Repère "à quel niveau du drill-down budgétaire suis-je ?" pour le donut « Budget financier
+ *  alloué » ci-dessous (round 26) — même patron que `HierarchyLevelBreadcrumb` du module Finance
+ *  (`components/finance/FinanceCostCharts.tsx`.`CostByHierarchyChart`), simplifié à 3 niveaux FIXES
+ *  (axe → chantier → projet) plutôt que dérivé d'une config `HierarchyLevelDef[]` — cette page n'a
+ *  pas besoin de la généralité d'une arborescence configurable, la profondeur est toujours 3.
+ *  Purement informatif : le drill-down se fait toujours en cliquant une part du donut ou via le
+ *  bouton retour du `CardHeader`. */
+function BudgetDrillBreadcrumb({ currentIndex }: { currentIndex: number }) {
+  const { t } = useTranslation();
+  const levels = [
+    t("effectifs.moneyBudget.levelAxis"),
+    t("effectifs.moneyBudget.levelChantier"),
+    t("effectifs.moneyBudget.levelProjet"),
+  ];
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-1">
+      {levels.map((label, index) => (
+        <span key={label} className="flex items-center gap-1">
+          {index > 0 && <ChevronRight size={12} className="text-tertiary" />}
+          <span
+            className={
+              index === currentIndex
+                ? "rounded-full bg-black px-2 py-0.5 text-[10.5px] font-semibold text-white"
+                : "rounded-full px-2 py-0.5 text-[10.5px] font-medium text-tertiary"
+            }
+          >
+            {label}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function EffectifsPageClient() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -122,26 +155,36 @@ export function EffectifsPageClient() {
   } = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const { fteByDept, loading: departmentsLoading } = useCompanyDepartments(user?.companyId ?? null);
 
-  /** Axe dont le drill-down budgétaire PAR CHANTIER (round 13) est actuellement ouvert — `null` =
-   *  modale fermée. Le donut « Répartition par axe » de la section budget financier s'arrêtait au
-   *  niveau de l'axe (round 12), jugé "trop grossier" par le PO : cliquer une part ouvre désormais
-   *  un second donut, un slice par chantier de cet axe. */
-  const [budgetDrilldownAxisId, setBudgetDrilldownAxisId] = useState<string | null>(null);
+  /** État du drill-down EN PLACE du donut « Budget financier alloué » (round 26 — remplace le
+   *  drill-down par MODALE de round 13/25 : le même donut se redessine désormais d'un niveau à
+   *  l'autre, comme `CostByHierarchyChart` du module Finance, plutôt que d'ouvrir une seconde vue
+   *  superposée). Chemin de 0 à 2 entrées, PROFONDEUR FIXE à 3 niveaux (axe → chantier → projet,
+   *  contrairement à `CostByHierarchyChart` dont la profondeur est configurable) :
+   *   - `[]`                  → le donut affiche les AXES (niveau 1, comme avant) ;
+   *   - `[axe]`                → le donut redessine EN PLACE les CHANTIERS de cet axe ;
+   *   - `[axe, chantier]`      → le donut redessine EN PLACE les PROJETS (`ChantierAction`, alias
+   *     « levier ») de ce chantier ; cliquer un projet NE POUSSE PAS de 3e entrée, il navigue
+   *     directement vers sa fiche (voir `moneyBudgetSection` plus bas) — la profondeur du chemin
+   *     reste donc toujours ≤ 2.
+   *  Chaque entrée porte `id` (pour retrouver l'entité) ET `label` (le nom déjà résolu, affiché tel
+   *  quel par le bouton retour du `CardHeader` — même contrat que `drillPath` dans
+   *  `CostByHierarchyChart`, simplifié ici sans `levelKey`/`parentId` puisque l'ordre des niveaux
+   *  est fixe et connu d'avance). */
+  const [budgetDrillPath, setBudgetDrillPath] = useState<{ id: string; label: string }[]>([]);
 
-  /** Round 25 (RBAC) : pour `axis_sponsor`, `axes` ne contient déjà plus que SON/SES propre(s)
-   *  axe(s) (scoping du hook) — le donut « Répartition par axe » de `moneyBudgetSection` n'a donc
-   *  plus rien d'informatif à montrer EN PREMIER pour ce rôle (une seule part à 100%, ou quelques
-   *  parts qui lui appartiennent toutes déjà). Plutôt que de le faire cliquer sur sa propre part
-   *  pour atteindre le drill-down « Répartition par chantier » — mécanisme déjà construit pour les
-   *  autres rôles, voir `budgetDrilldownModal` plus bas —, on ouvre directement ce drill-down sur
-   *  son premier axe dès que la liste (scopée) est connue. Le garde `budgetDrilldownAxisId === null`
-   *  ne redéclenche jamais l'ouverture après une fermeture manuelle (l'utilisateur peut refermer la
-   *  modale et rester sur la page). */
+  /** Round 25 (RBAC), porté round 26 sur le nouveau `budgetDrillPath` : pour `axis_sponsor`, `axes`
+   *  ne contient déjà plus que SON/SES propre(s) axe(s) (scoping du hook) — le donut « Répartition
+   *  par axe » n'a donc plus rien d'informatif à montrer EN PREMIER pour ce rôle (une seule part à
+   *  100%, ou quelques parts qui lui appartiennent toutes déjà). Plutôt que de le faire cliquer sur
+   *  sa propre part pour descendre au niveau chantier — mécanisme déjà construit pour les autres
+   *  rôles, voir `moneyBudgetSection` plus bas —, on descend directement à ce niveau sur son
+   *  premier axe dès que la liste (scopée) est connue. Le garde `budgetDrillPath.length === 0` est
+   *  la transposition exacte de l'ancien `budgetDrilldownAxisId === null`. */
   useEffect(() => {
-    if (strategicRole === "axis_sponsor" && axes.length > 0 && budgetDrilldownAxisId === null) {
-      setBudgetDrilldownAxisId(axes[0].id);
+    if (strategicRole === "axis_sponsor" && axes.length > 0 && budgetDrillPath.length === 0) {
+      setBudgetDrillPath([{ id: axes[0].id, label: axes[0].name }]);
     }
-  }, [strategicRole, axes, budgetDrilldownAxisId]);
+  }, [strategicRole, axes, budgetDrillPath]);
 
   const globalTotals = useMemo(() => totalsByFunction(staffing), [staffing]);
   const totalFte = useMemo(() => staffing.reduce((sum, e) => sum + (e.fte || 0), 0), [staffing]);
@@ -190,6 +233,13 @@ export function EffectifsPageClient() {
   const axisIdsByChantier = useMemo(
     () => Object.fromEntries(chantiers.map((c) => [c.id, c.axisIds])),
     [chantiers]
+  );
+
+  /** `ChantierAction.id` → nom, round 26 — colonne "Levier" de `StaffingDetailModal` (modale de
+   *  détail exploitable ouverte depuis `StaffingPeriodBreakdown`, voir son doc-comment). */
+  const actionNamesById = useMemo(
+    () => Object.fromEntries(chantierActions.map((a) => [a.id, a.name])),
+    [chantierActions]
   );
 
   // ── Budget FINANCIER alloué (round 12) ─────────────────────────────────────────────────────
@@ -267,33 +317,60 @@ export function EffectifsPageClient() {
   );
 
   /** `BudgetDonutChart.onSliceClick` ne renvoie que le NOM de la part cliquée (contrat du
-   *  composant, inchangé) — ce lookup retrouve l'axe correspondant pour ouvrir son drill-down. */
+   *  composant, inchangé) — ce lookup retrouve l'axe correspondant, niveau 1 du drill-down. */
   const axisByName = useMemo(() => new Map(axes.map((a) => [a.name, a] as const)), [axes]);
 
-  /** Parts du donut de drill-down (round 13) : un slice par chantier de l'axe actuellement ouvert
-   *  (`budgetDrilldownAxisId`), en excluant les chantiers sans `allocatedBudget` renseigné — même
-   *  convention d'exclusion que le donut de répartition par levier de `AxisKanban` (round 12).
-   *  `null` tant qu'aucune modale n'est ouverte. */
-  const budgetDrilldownSlices: BudgetDonutSlice[] | null = useMemo(() => {
-    if (!budgetDrilldownAxisId) return null;
-    return chantiers
-      .filter((c) => c.axisIds.includes(budgetDrilldownAxisId) && c.allocatedBudget !== undefined)
-      .map((c) => ({ name: c.name, value: c.allocatedBudget ?? 0 }));
-  }, [budgetDrilldownAxisId, chantiers]);
+  /** Axe/chantier actuellement ouverts dans le drill-down EN PLACE (round 26) — dérivés de
+   *  `budgetDrillPath`, `null` tant que le niveau correspondant n'est pas atteint. */
+  const budgetDrillAxisId = budgetDrillPath[0]?.id ?? null;
+  const budgetDrillChantierId = budgetDrillPath[1]?.id ?? null;
 
-  /** `BudgetDonutChart.onSliceClick` du second donut (par chantier) ne renvoie lui aussi que le
-   *  NOM de la part cliquée — ce lookup, restreint aux chantiers de l'axe actuellement ouvert dans
-   *  la modale, retrouve l'`id` du chantier pour naviguer vers sa fiche (round 14). */
+  /** Round 26 : parts du donut UNIFIÉ pour le niveau COURANT du drill-down EN PLACE — le même
+   *  donut redessine tour à tour les axes (`unifiedBudgetSlices`, niveau 1, ci-dessus), les
+   *  chantiers de l'axe ouvert, puis les projets (`ChantierAction`, alias « levier ») du chantier
+   *  ouvert. Même convention d'exclusion des entités sans budget renseigné que round 13
+   *  (`budgetDrilldownSlices`, retiré). */
+  const budgetDrillSlices: BudgetDonutSlice[] = useMemo(() => {
+    if (budgetDrillChantierId) {
+      return chantierActions
+        .filter((a) => a.chantierId === budgetDrillChantierId && a.budget !== undefined)
+        .map((a) => ({ name: a.name, value: a.budget ?? 0 }));
+    }
+    if (budgetDrillAxisId) {
+      return chantiers
+        .filter((c) => c.axisIds.includes(budgetDrillAxisId) && c.allocatedBudget !== undefined)
+        .map((c) => ({ name: c.name, value: c.allocatedBudget ?? 0 }));
+    }
+    return unifiedBudgetSlices;
+  }, [budgetDrillChantierId, budgetDrillAxisId, chantierActions, chantiers, unifiedBudgetSlices]);
+
+  /** `BudgetDonutChart.onSliceClick` du niveau CHANTIER (un axe est sélectionné, niveau projet pas
+   *  encore atteint) ne renvoie lui aussi que le NOM de la part cliquée — ce lookup, restreint aux
+   *  chantiers de l'axe ouvert, retrouve l'`id` du chantier pour pousser l'entrée suivante du
+   *  chemin de drill-down (round 14, porté round 26). */
   const drilldownChantierByName = useMemo(() => {
-    if (!budgetDrilldownAxisId) return new Map<string, string>();
+    if (!budgetDrillAxisId || budgetDrillChantierId) return new Map<string, string>();
     return new Map(
       chantiers
-        .filter((c) => c.axisIds.includes(budgetDrilldownAxisId))
+        .filter((c) => c.axisIds.includes(budgetDrillAxisId))
         .map((c) => [c.name, c.id] as const)
     );
-  }, [budgetDrilldownAxisId, chantiers]);
+  }, [budgetDrillAxisId, budgetDrillChantierId, chantiers]);
 
-  const budgetDrilldownAxis = axes.find((a) => a.id === budgetDrilldownAxisId) ?? null;
+  /** `BudgetDonutChart.onSliceClick` du niveau PROJET (un chantier est sélectionné) — retrouve
+   *  l'id du projet (`ChantierAction`, alias « levier ») cliqué pour naviguer vers sa fiche. Round
+   *  26 : même mécanisme `?chantier=&action=` que `StrategicAxesView.openChantierPanel`/
+   *  `StrategicDashboardView.openChantierPanel` (recherché et réutilisé tel quel, cette page n'a
+   *  pas son propre panneau chantier) — déclenché ici vers `/levers`, comme le faisait déjà le
+   *  clic chantier de round 14 ci-dessous. */
+  const drilldownProjetByName = useMemo(() => {
+    if (!budgetDrillChantierId) return new Map<string, string>();
+    return new Map(
+      chantierActions
+        .filter((a) => a.chantierId === budgetDrillChantierId)
+        .map((a) => [a.name, a.id] as const)
+    );
+  }, [budgetDrillChantierId, chantierActions]);
 
   // Bouton d'import Excel + lien base ETP : rendus directement dans l'en-tête (réutilisé par
   // toutes les branches de retour ci-dessous) plutôt que dans une variable de toolbar séparée.
@@ -374,74 +451,94 @@ export function EffectifsPageClient() {
   // par axe ont été retirées — le SEUL `BudgetDonutChart` ci-dessous porte maintenant la
   // répartition par axe ET le consommé (anneau intérieur `showConsumedRing`, alimenté par
   // `unifiedBudgetSlices`), avec le même comportement de clic (`onSliceClick`) qu'avant.
+  //
+  // Round 26 : drill-down EN PLACE à 3 niveaux (axe → chantier → projet), même patron que
+  // `CostByHierarchyChart` (module Finance) — remplace le drill-down par MODALE de round 13/25
+  // (`budgetDrilldownModal`, retiré). `showConsumedRing`/`total`/`consumedTotal` restent réservés
+  // au niveau 1 (axes) : les niveaux chantier/projet reprennent le rendu simple (pas d'anneau
+  // consommé) qu'avait déjà la modale de round 13 pour ces mêmes données — aucune information
+  // perdue, le bouton retour du `CardHeader` affiche en plus le nom de l'entité qu'on quitte
+  // (round 13 l'affichait déjà en tête de la modale via `budgetDrilldownAxis.name`).
   const moneyBudgetSection = (
     <Card className="mb-0">
-      <CardHeader title={t("effectifs.moneyBudget.title")} />
+      <CardHeader
+        title={t("effectifs.moneyBudget.title")}
+        actions={
+          budgetDrillPath.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setBudgetDrillPath((p) => p.slice(0, -1))}
+              className="flex items-center gap-1 text-[11px] font-semibold text-secondary hover:text-primary"
+            >
+              <ChevronLeft size={14} />
+              {budgetDrillPath[budgetDrillPath.length - 1]?.label}
+            </button>
+          ) : undefined
+        }
+      />
       <CardBody>
         {totalAllocatedBudget === 0 ? (
           <p className="text-sm text-text-secondary">{t("effectifs.moneyBudget.empty")}</p>
         ) : (
           <div>
-            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-secondary">
-              {t("effectifs.moneyBudget.byAxisTitle")}
-            </h3>
-            <BudgetDonutChart
-              data={unifiedBudgetSlices}
-              formatValue={formatAllocatedBudget}
-              centerLabel={t("effectifs.moneyBudget.centerLabelConsumed")}
-              showConsumedRing
-              consumedLabel={t("effectifs.moneyBudget.consumedTooltipSuffix")}
-              // Round 24 : `unifiedBudgetSlices` compte un chantier multi-axe une fois PAR axe
-              // auquel il appartient (voir `budgetByAxisWithConsumed`) — le total/consommé affiché
-              // au centre doit rester le vrai total PROGRAMME (chaque chantier une seule fois),
-              // donc calculé séparément ici plutôt que dérivé de `data.reduce(...)`.
-              total={totalAllocatedBudget}
-              consumedTotal={totalConsumedBudgetDeduped}
-              onSliceClick={(name) => {
-                const axis = axisByName.get(name);
-                if (axis) setBudgetDrilldownAxisId(axis.id);
-              }}
-            />
+            <BudgetDrillBreadcrumb currentIndex={budgetDrillPath.length} />
+            {budgetDrillSlices.length === 0 ? (
+              <p className="py-6 text-center text-[12px] text-tertiary">
+                {budgetDrillPath.length >= 2
+                  ? t("effectifs.moneyBudget.byProjetEmpty")
+                  : t("effectifs.moneyBudget.byChantierEmpty")}
+              </p>
+            ) : (
+              <BudgetDonutChart
+                data={budgetDrillSlices}
+                formatValue={formatAllocatedBudget}
+                centerLabel={
+                  budgetDrillPath.length === 0
+                    ? t("effectifs.moneyBudget.centerLabelConsumed")
+                    : t("effectifs.moneyBudget.centerLabel")
+                }
+                showConsumedRing={budgetDrillPath.length === 0}
+                consumedLabel={t("effectifs.moneyBudget.consumedTooltipSuffix")}
+                // Round 24 : `unifiedBudgetSlices` compte un chantier multi-axe une fois PAR axe
+                // auquel il appartient (voir `budgetByAxisWithConsumed`) — le total/consommé affiché
+                // au centre doit rester le vrai total PROGRAMME (chaque chantier une seule fois),
+                // donc calculé séparément ici plutôt que dérivé de `data.reduce(...)`. Uniquement au
+                // niveau 1 (axes) : `BudgetDonutChart` retombe sur `data.reduce(...)` sinon, correct
+                // pour les niveaux chantier/projet (pas de double-comptage à ces niveaux).
+                total={budgetDrillPath.length === 0 ? totalAllocatedBudget : undefined}
+                consumedTotal={
+                  budgetDrillPath.length === 0 ? totalConsumedBudgetDeduped : undefined
+                }
+                onSliceClick={(name) => {
+                  // Niveau 3 (un chantier est déjà ouvert) : la part cliquée est un PROJET — navigue
+                  // vers sa fiche (round 14, porté round 26) plutôt que de pousser un 4e niveau.
+                  if (budgetDrillChantierId) {
+                    const actionId = drilldownProjetByName.get(name);
+                    if (actionId) {
+                      router.push(`/levers?chantier=${budgetDrillChantierId}&action=${actionId}`);
+                    }
+                    return;
+                  }
+                  // Niveau 2 (un axe est déjà ouvert) : la part cliquée est un CHANTIER — descend au
+                  // niveau projet (round 13, désormais EN PLACE plutôt que dans une modale).
+                  if (budgetDrillAxisId) {
+                    const chantierId = drilldownChantierByName.get(name);
+                    if (chantierId) {
+                      setBudgetDrillPath((p) => [...p, { id: chantierId, label: name }]);
+                    }
+                    return;
+                  }
+                  // Niveau 1 (aucun axe ouvert) : la part cliquée est un AXE — descend au niveau
+                  // chantier.
+                  const axis = axisByName.get(name);
+                  if (axis) setBudgetDrillPath([{ id: axis.id, label: axis.name }]);
+                }}
+              />
+            )}
           </div>
         )}
       </CardBody>
     </Card>
-  );
-
-  // Drill-down (round 13) : budget de l'axe cliqué ci-dessus, ventilé PAR CHANTIER. Round 14 (PO) :
-  // ce second donut gagne à son tour un `onSliceClick` — la page Effectifs n'a pas de panneau
-  // chantier propre, donc un clic ici navigue vers `/levers?chantier=<id>` (même contrat que
-  // `StrategicAxesView.openChantierPanel`/`StrategicDashboardView`) pour ouvrir la fiche chantier
-  // sur la page Axes stratégiques. Le donut de PREMIER niveau (par axe, ci-dessus) garde lui son
-  // comportement actuel (ouvrir cette modale) — inchangé.
-  const budgetDrilldownModal = (
-    <Modal
-      open={!!budgetDrilldownAxisId}
-      onOpenChange={(open) => {
-        if (!open) setBudgetDrilldownAxisId(null);
-      }}
-      title={t("effectifs.moneyBudget.byChantierModalTitle")}
-      maxWidth="560px"
-    >
-      {budgetDrilldownAxis && (
-        <p className="mb-3 text-[12px] font-semibold text-primary">{budgetDrilldownAxis.name}</p>
-      )}
-      {budgetDrilldownSlices && budgetDrilldownSlices.length > 0 ? (
-        <BudgetDonutChart
-          data={budgetDrilldownSlices}
-          formatValue={formatAllocatedBudget}
-          centerLabel={t("effectifs.moneyBudget.centerLabel")}
-          onSliceClick={(name) => {
-            const chantierId = drilldownChantierByName.get(name);
-            if (chantierId) router.push(`/levers?chantier=${chantierId}`);
-          }}
-        />
-      ) : (
-        <p className="py-6 text-center text-[12px] text-tertiary">
-          {t("effectifs.moneyBudget.byChantierEmpty")}
-        </p>
-      )}
-    </Modal>
   );
 
   // Section besoin vs disponible : indépendante de la présence de lignes de staffing (une équipe
@@ -503,7 +600,6 @@ export function EffectifsPageClient() {
         {header}
         <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
         {moneyBudgetSection}
-        {budgetDrilldownModal}
         {needVsAvailableSection}
         <Card>
           <CardBody>
@@ -520,7 +616,6 @@ export function EffectifsPageClient() {
       {header}
       <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
       {moneyBudgetSection}
-      {budgetDrilldownModal}
       {needVsAvailableSection}
 
       <KPICard
@@ -541,6 +636,7 @@ export function EffectifsPageClient() {
         axes={axes}
         chantierNamesById={chantierNamesById}
         axisIdsByChantier={axisIdsByChantier}
+        actionNamesById={actionNamesById}
       />
     </div>
   );

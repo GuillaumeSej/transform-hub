@@ -1332,7 +1332,7 @@ const es: Record<string, string> = {
 
   // ─── Plan Estratégico — ficha de proyecto dedicada (ronda 4) ───────────────
   "strategicChantierDetail.title": "Ficha de proyecto",
-  "strategicChantierDetail.back": "← Volver al eje",
+  "strategicChantierDetail.back": "Volver al eje",
   "strategicChantierDetail.notFound": "Proyecto no encontrado.",
   "strategicChantierDetail.successCriteria": "Criterios de éxito",
   "strategicChantierDetail.sponsor": "Patrocinador",
@@ -1433,10 +1433,6 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Hito superado",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Hito actual",
 
-  "strategicChantierDetail.milestones.section.A": "Requisitos previos",
-  "strategicChantierDetail.milestones.section.B": "Ejecución",
-  "strategicChantierDetail.milestones.section.C": "Cierre",
-
   // Ronda 12: porcentaje declarado (0-100) en lugar de un semáforo de 3 niveles.
   "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
     "Avance declarado, en porcentaje",
@@ -1446,7 +1442,7 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.dueDate": "Fecha límite",
   "strategicChantierDetail.milestones.actionPlan.validate": "Validar el hito",
   "strategicChantierDetail.milestones.actionPlan.missingHint":
-    "Resuelva los elementos en rojo y responda a todos los elementos para validar el hito.",
+    "Todos los elementos deben estar al 100 % para validar el hito.",
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Calculado automáticamente.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Marcar como resuelto",
 
@@ -1456,7 +1452,6 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.item.E0_B2": "Objetivos y alcance formalizados",
   "strategicChantierDetail.milestones.item.E0_C1": "Organización y presupuesto validados",
 
-  "strategicChantierDetail.milestones.item.E1_A1": "Elementos naranjas del hito anterior resueltos",
   "strategicChantierDetail.milestones.item.E1_B1": "Varias opciones comparadas",
   "strategicChantierDetail.milestones.item.E1_B2": "Objetivo elegido y riesgos aceptados",
   "strategicChantierDetail.milestones.item.E1_B3":
@@ -1465,18 +1460,15 @@ const es: Record<string, string> = {
     "Cuadro de esfuerzo del chantier completado",
   "strategicChantierDetail.milestones.item.E1_C2": "Plan de estudio validado",
 
-  "strategicChantierDetail.milestones.item.E2_A1": "Elementos naranjas del hito anterior resueltos",
   "strategicChantierDetail.milestones.item.E2_B1":
     "Solución validada (necesidades, técnica, cambio)",
   "strategicChantierDetail.milestones.item.E2_B2": "Todos los recursos de despliegue asignados",
   "strategicChantierDetail.milestones.item.E2_B3": "Plan de transferencia definido",
 
-  "strategicChantierDetail.milestones.item.E3_A1": "Elementos naranjas del hito anterior resueltos",
   "strategicChantierDetail.milestones.item.E3_B1": "Resultados conformes a los objetivos",
   "strategicChantierDetail.milestones.item.E3_B2": "Transferencia operativa realizada",
   "strategicChantierDetail.milestones.item.E3_B3": "Fecha de cierre de los retos (E4) fijada",
 
-  "strategicChantierDetail.milestones.item.E4_A1": "Elementos naranjas del hito anterior resueltos",
   "strategicChantierDetail.milestones.item.E4_B1": "Plan de acción E3 realizado",
   "strategicChantierDetail.milestones.item.E4_B2":
     "Retos alcanzados (o análisis de causas presentado)",
@@ -1633,11 +1625,14 @@ const es: Record<string, string> = {
   "effectifs.needVsAvailable.overAllocated":
     "La necesidad declarada supera la disponibilidad real de este equipo.",
   "effectifs.moneyBudget.title": "Presupuesto financiero asignado",
-  "effectifs.moneyBudget.byAxisTitle": "Reparto por eje",
   "effectifs.moneyBudget.empty": "No hay presupuesto asignado en este programa.",
   "effectifs.moneyBudget.centerLabel": "Total",
-  "effectifs.moneyBudget.byChantierModalTitle": "Reparto del presupuesto por proyecto",
   "effectifs.moneyBudget.byChantierEmpty": "Ningún proyecto con presupuesto asignado en este eje.",
+  "effectifs.moneyBudget.byProjetEmpty":
+    "Ninguna palanca con presupuesto asignada en este proyecto.",
+  "effectifs.moneyBudget.levelAxis": "Eje",
+  "effectifs.moneyBudget.levelChantier": "Proyecto",
+  "effectifs.moneyBudget.levelProjet": "Palanca",
   "effectifs.moneyBudget.centerLabelConsumed": "Consumido / asignado",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consumido",
 
@@ -1651,6 +1646,7 @@ const es: Record<string, string> = {
   "staffingPeriod.subtitle.scopePeriod": "para {period}",
   "staffingPeriod.mode.period": "Departamento",
   "staffingPeriod.mode.axis": "Eje",
+  "staffingPeriod.allAxes": "Todos los ejes",
   "staffingPeriod.granularity.quarterly": "Trimestre",
   "staffingPeriod.granularity.semiannual": "Semestre",
   "staffingPeriod.granularity.annual": "Año",
@@ -1660,6 +1656,13 @@ const es: Record<string, string> = {
   "staffingPeriod.utilization": "{pct}% de utilización",
   "staffingPeriod.byChantier": "Por proyecto:",
   "staffingPeriod.pinnedDetail.title": "Detalle — {period}",
+  "staffingPeriod.detailModal.groupTitle": "Detalle — {group}",
+  "staffingPeriod.detailModal.empty": "Ninguna línea de asignación para esta selección.",
+  "staffingPeriod.detailModal.rowsCount": "{n} línea(s) de asignación",
+  "staffingPeriod.detailModal.columnAxis": "Eje(s)",
+  "staffingPeriod.detailModal.columnPeriod": "Periodo",
+  "staffingPeriod.detailModal.columnLever": "Palanca",
+  "staffingPeriod.detailModal.undated": "Sin fecha",
 
   // ─── Importación Excel de personal movilizado (ronda 7 — StaffingImportButton.tsx) ───────
   "staffingImport.templateButton": "Descargar la plantilla",

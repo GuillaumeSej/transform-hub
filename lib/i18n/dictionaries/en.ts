@@ -1344,7 +1344,7 @@ const en: Record<string, string> = {
 
   // ─── Strategic Plan — dedicated workstream detail page (round 4) ───────────
   "strategicChantierDetail.title": "Workstream sheet",
-  "strategicChantierDetail.back": "← Back to axis",
+  "strategicChantierDetail.back": "Back to axis",
   "strategicChantierDetail.notFound": "Workstream not found.",
   "strategicChantierDetail.successCriteria": "Success criteria",
   "strategicChantierDetail.sponsor": "Sponsor",
@@ -1441,10 +1441,6 @@ const en: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Milestone passed",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Current milestone",
 
-  "strategicChantierDetail.milestones.section.A": "Prerequisites",
-  "strategicChantierDetail.milestones.section.B": "Execution",
-  "strategicChantierDetail.milestones.section.C": "Closure",
-
   // Round 12: declared percentage input (0-100) instead of a 3-level flag.
   "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
     "Declared progress, as a percentage",
@@ -1454,7 +1450,7 @@ const en: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.dueDate": "Due date",
   "strategicChantierDetail.milestones.actionPlan.validate": "Validate milestone",
   "strategicChantierDetail.milestones.actionPlan.missingHint":
-    "Resolve red items and answer every item to validate the milestone.",
+    "Every item must be at 100% to validate the milestone.",
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Computed automatically.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Mark as resolved",
 
@@ -1464,7 +1460,6 @@ const en: Record<string, string> = {
   "strategicChantierDetail.milestones.item.E0_B2": "Objectives and scope formalized",
   "strategicChantierDetail.milestones.item.E0_C1": "Organization and budget approved",
 
-  "strategicChantierDetail.milestones.item.E1_A1": "Previous milestone's oranges resolved",
   "strategicChantierDetail.milestones.item.E1_B1": "Several options compared",
   "strategicChantierDetail.milestones.item.E1_B2": "Objective chosen and risks accepted",
   "strategicChantierDetail.milestones.item.E1_B3":
@@ -1472,17 +1467,14 @@ const en: Record<string, string> = {
   "strategicChantierDetail.milestones.item.E1_C_effort": "Chantier effort grid filled in",
   "strategicChantierDetail.milestones.item.E1_C2": "Study plan approved",
 
-  "strategicChantierDetail.milestones.item.E2_A1": "Previous milestone's oranges resolved",
   "strategicChantierDetail.milestones.item.E2_B1": "Solution validated (needs, technical, change)",
   "strategicChantierDetail.milestones.item.E2_B2": "All deployment resources assigned",
   "strategicChantierDetail.milestones.item.E2_B3": "Handover plan defined",
 
-  "strategicChantierDetail.milestones.item.E3_A1": "Previous milestone's oranges resolved",
   "strategicChantierDetail.milestones.item.E3_B1": "Results match objectives",
   "strategicChantierDetail.milestones.item.E3_B2": "Operational handover completed",
   "strategicChantierDetail.milestones.item.E3_B3": "Stakes closure date (E4) set",
 
-  "strategicChantierDetail.milestones.item.E4_A1": "Previous milestone's oranges resolved",
   "strategicChantierDetail.milestones.item.E4_B1": "E3 action plan carried out",
   "strategicChantierDetail.milestones.item.E4_B2":
     "Stakes achieved (or root-cause analysis presented)",
@@ -1635,11 +1627,13 @@ const en: Record<string, string> = {
   "effectifs.needVsAvailable.overAllocated":
     "Declared need exceeds this team's actual availability.",
   "effectifs.moneyBudget.title": "Allocated financial budget",
-  "effectifs.moneyBudget.byAxisTitle": "Split by axis",
   "effectifs.moneyBudget.empty": "No budget allocated on this programme.",
   "effectifs.moneyBudget.centerLabel": "Total",
-  "effectifs.moneyBudget.byChantierModalTitle": "Budget breakdown by workstream",
   "effectifs.moneyBudget.byChantierEmpty": "No workstream with a budget set on this axis.",
+  "effectifs.moneyBudget.byProjetEmpty": "No initiative with a budget set on this workstream.",
+  "effectifs.moneyBudget.levelAxis": "Axis",
+  "effectifs.moneyBudget.levelChantier": "Workstream",
+  "effectifs.moneyBudget.levelProjet": "Initiative",
   "effectifs.moneyBudget.centerLabelConsumed": "Consumed / allocated",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consumed",
 
@@ -1653,6 +1647,7 @@ const en: Record<string, string> = {
   "staffingPeriod.subtitle.scopePeriod": "for {period}",
   "staffingPeriod.mode.period": "Department",
   "staffingPeriod.mode.axis": "Axis",
+  "staffingPeriod.allAxes": "All axes",
   "staffingPeriod.granularity.quarterly": "Quarter",
   "staffingPeriod.granularity.semiannual": "Half-year",
   "staffingPeriod.granularity.annual": "Year",
@@ -1661,6 +1656,13 @@ const en: Record<string, string> = {
   "staffingPeriod.utilization": "{pct}% utilization",
   "staffingPeriod.byChantier": "By workstream:",
   "staffingPeriod.pinnedDetail.title": "Detail — {period}",
+  "staffingPeriod.detailModal.groupTitle": "Detail — {group}",
+  "staffingPeriod.detailModal.empty": "No staffing line for this selection.",
+  "staffingPeriod.detailModal.rowsCount": "{n} staffing line(s)",
+  "staffingPeriod.detailModal.columnAxis": "Axis(es)",
+  "staffingPeriod.detailModal.columnPeriod": "Period",
+  "staffingPeriod.detailModal.columnLever": "Lever",
+  "staffingPeriod.detailModal.undated": "Undated",
 
   // ─── Staffing Excel import (round 7 — StaffingImportButton.tsx) ───────────────────────────
   "staffingImport.templateButton": "Download the template",

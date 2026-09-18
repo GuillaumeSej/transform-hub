@@ -1416,7 +1416,7 @@ const fr: Record<string, string> = {
   // l'instant qu'un squelette de sections vides, remplies par les workstreams parallèles suivants
   // (prérequis, RACI, grille d'effort, assemblage final — voir plan round 4, point 9).
   "strategicChantierDetail.title": "Fiche chantier",
-  "strategicChantierDetail.back": "← Retour à l'axe",
+  "strategicChantierDetail.back": "Retour à l'axe",
   "strategicChantierDetail.notFound": "Chantier introuvable.",
   "strategicChantierDetail.successCriteria": "Critères de succès",
   "strategicChantierDetail.sponsor": "Sponsor",
@@ -1523,10 +1523,6 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Jalon franchi",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Jalon courant",
 
-  "strategicChantierDetail.milestones.section.A": "Préalable",
-  "strategicChantierDetail.milestones.section.B": "Réalisation",
-  "strategicChantierDetail.milestones.section.C": "Conclusion",
-
   // Round 12 : saisie par pourcentage déclaré (0-100) plutôt que par feu à 3 niveaux.
   "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
     "Avancement déclaré, en pourcentage",
@@ -1536,7 +1532,7 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.dueDate": "Échéance",
   "strategicChantierDetail.milestones.actionPlan.validate": "Valider le jalon",
   "strategicChantierDetail.milestones.actionPlan.missingHint":
-    "Résolvez les items rouges et répondez à tous les items pour valider le jalon.",
+    "Tous les items doivent être à 100 % pour valider le jalon.",
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Calculé automatiquement.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Marquer comme soldé",
 
@@ -1546,7 +1542,6 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.item.E0_B2": "Objectifs et périmètre formalisés",
   "strategicChantierDetail.milestones.item.E0_C1": "Organisation et budget validés",
 
-  "strategicChantierDetail.milestones.item.E1_A1": "Oranges du jalon précédent soldés",
   "strategicChantierDetail.milestones.item.E1_B1": "Plusieurs options comparées",
   "strategicChantierDetail.milestones.item.E1_B2": "Objectif choisi et risques acceptés",
   "strategicChantierDetail.milestones.item.E1_B3":
@@ -1554,18 +1549,15 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.item.E1_C_effort": "Grille d'effort du chantier renseignée",
   "strategicChantierDetail.milestones.item.E1_C2": "Plan d'étude validé",
 
-  "strategicChantierDetail.milestones.item.E2_A1": "Oranges du jalon précédent soldés",
   "strategicChantierDetail.milestones.item.E2_B1":
     "Solution validée (besoins, technique, changement)",
   "strategicChantierDetail.milestones.item.E2_B2": "Ressources de déploiement toutes attribuées",
   "strategicChantierDetail.milestones.item.E2_B3": "Plan de transfert défini",
 
-  "strategicChantierDetail.milestones.item.E3_A1": "Oranges du jalon précédent soldés",
   "strategicChantierDetail.milestones.item.E3_B1": "Résultats conformes aux objectifs",
   "strategicChantierDetail.milestones.item.E3_B2": "Transfert opérationnel réalisé",
   "strategicChantierDetail.milestones.item.E3_B3": "Date de bouclage des enjeux (E4) fixée",
 
-  "strategicChantierDetail.milestones.item.E4_A1": "Oranges du jalon précédent soldés",
   "strategicChantierDetail.milestones.item.E4_B1": "Plan d'action E3 réalisé",
   "strategicChantierDetail.milestones.item.E4_B2":
     "Enjeux atteints (ou analyse des causes présentée)",
@@ -1727,12 +1719,17 @@ const fr: Record<string, string> = {
   "effectifs.needVsAvailable.overAllocated":
     "Besoin déclaré supérieur au disponible réel de cette équipe.",
   "effectifs.moneyBudget.title": "Budget financier alloué",
-  "effectifs.moneyBudget.byAxisTitle": "Répartition par axe",
   "effectifs.moneyBudget.empty": "Aucun budget alloué sur ce programme.",
-  // Drill-down par chantier (round 13) — cliquer une part du donut "Répartition par axe" ci-dessus.
+  // Drill-down EN PLACE à 3 niveaux (round 13, converti round 26) — cliquer une part du donut
+  // descend d'un niveau (axe → chantier → projet) ; cliquer un projet navigue vers sa fiche.
   "effectifs.moneyBudget.centerLabel": "Total",
-  "effectifs.moneyBudget.byChantierModalTitle": "Répartition du budget par chantier",
   "effectifs.moneyBudget.byChantierEmpty": "Aucun chantier avec budget renseigné sur cet axe.",
+  // Round 26 : niveau projet (feuille du drill-down) vide, et libellés du repère de niveau
+  // (`BudgetDrillBreadcrumb`) affiché au-dessus du donut.
+  "effectifs.moneyBudget.byProjetEmpty": "Aucun projet avec budget renseigné sur ce chantier.",
+  "effectifs.moneyBudget.levelAxis": "Axe",
+  "effectifs.moneyBudget.levelChantier": "Chantier",
+  "effectifs.moneyBudget.levelProjet": "Projet",
   // Round 16 (PO : fusion en un seul donut) — libellé central du donut unifié (distinct de
   // `centerLabel` ci-dessus, toujours utilisé tel quel par la modale de drill-down par chantier) et
   // mot "consommé" injecté dans la légende/le tooltip de l'anneau intérieur.
@@ -1752,6 +1749,7 @@ const fr: Record<string, string> = {
   "staffingPeriod.subtitle.scopePeriod": "pour {period}",
   "staffingPeriod.mode.period": "Département",
   "staffingPeriod.mode.axis": "Axe",
+  "staffingPeriod.allAxes": "Tous les axes",
   "staffingPeriod.granularity.quarterly": "Trimestre",
   "staffingPeriod.granularity.semiannual": "Semestre",
   "staffingPeriod.granularity.annual": "Année",
@@ -1763,6 +1761,16 @@ const fr: Record<string, string> = {
   // Round 22 : panneau de détail persistant pour une période épinglée (additif — la clé
   // "effectifs.filteredOnPeriod" reste utilisée telle quelle pour la chip de réinitialisation).
   "staffingPeriod.pinnedDetail.title": "Détail — {period}",
+  // Round 26 : modale de détail exploitable (`StaffingDetailModal`) ouverte au clic sur une
+  // période, ou sur une entrée de légende/segment de barre (équipe ou axe selon `mode`) —
+  // remplace l'ancien panneau "période épinglée" inline (prose non copiable).
+  "staffingPeriod.detailModal.groupTitle": "Détail — {group}",
+  "staffingPeriod.detailModal.empty": "Aucune ligne de staffing pour cette sélection.",
+  "staffingPeriod.detailModal.rowsCount": "{n} ligne(s) de staffing",
+  "staffingPeriod.detailModal.columnAxis": "Axe(s)",
+  "staffingPeriod.detailModal.columnPeriod": "Période",
+  "staffingPeriod.detailModal.columnLever": "Levier",
+  "staffingPeriod.detailModal.undated": "Non daté",
 
   // ─── Import Excel des effectifs (round 7 — StaffingImportButton.tsx) ──────────────────────
   "staffingImport.templateButton": "Télécharger le modèle",

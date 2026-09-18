@@ -1334,7 +1334,7 @@ const de: Record<string, string> = {
 
   // ─── Strategieplan — eigene Vorhaben-Detailseite (Runde 4) ─────────────────
   "strategicChantierDetail.title": "Vorhabenblatt",
-  "strategicChantierDetail.back": "← Zurück zur Achse",
+  "strategicChantierDetail.back": "Zurück zur Achse",
   "strategicChantierDetail.notFound": "Vorhaben nicht gefunden.",
   "strategicChantierDetail.successCriteria": "Erfolgskriterien",
   "strategicChantierDetail.sponsor": "Sponsor",
@@ -1435,10 +1435,6 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.stepper.passedLabel": "Meilenstein erreicht",
   "strategicChantierDetail.milestones.stepper.currentLabel": "Aktueller Meilenstein",
 
-  "strategicChantierDetail.milestones.section.A": "Voraussetzungen",
-  "strategicChantierDetail.milestones.section.B": "Umsetzung",
-  "strategicChantierDetail.milestones.section.C": "Abschluss",
-
   // Runde 12: deklarierter Prozentsatz (0-100) statt einer Ampel mit 3 Stufen.
   "strategicChantierDetail.milestones.actionPlan.progressAriaLabel":
     "Deklarierter Fortschritt, in Prozent",
@@ -1448,7 +1444,7 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.dueDate": "Fälligkeitsdatum",
   "strategicChantierDetail.milestones.actionPlan.validate": "Meilenstein validieren",
   "strategicChantierDetail.milestones.actionPlan.missingHint":
-    "Lösen Sie rote Punkte und beantworten Sie alle Punkte, um den Meilenstein zu validieren.",
+    "Alle Punkte müssen bei 100 % liegen, um den Meilenstein zu validieren.",
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Automatisch berechnet.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Als erledigt markieren",
 
@@ -1458,8 +1454,6 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.item.E0_B2": "Ziele und Umfang formalisiert",
   "strategicChantierDetail.milestones.item.E0_C1": "Organisation und Budget genehmigt",
 
-  "strategicChantierDetail.milestones.item.E1_A1":
-    "Offene Punkte des vorherigen Meilensteins gelöst",
   "strategicChantierDetail.milestones.item.E1_B1": "Mehrere Optionen verglichen",
   "strategicChantierDetail.milestones.item.E1_B2": "Ziel gewählt und Risiken akzeptiert",
   "strategicChantierDetail.milestones.item.E1_B3":
@@ -1467,20 +1461,14 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.item.E1_C_effort": "Aufwandsraster des Chantiers ausgefüllt",
   "strategicChantierDetail.milestones.item.E1_C2": "Studienplan genehmigt",
 
-  "strategicChantierDetail.milestones.item.E2_A1":
-    "Offene Punkte des vorherigen Meilensteins gelöst",
   "strategicChantierDetail.milestones.item.E2_B1": "Lösung validiert (Bedarf, Technik, Change)",
   "strategicChantierDetail.milestones.item.E2_B2": "Alle Umsetzungsressourcen zugewiesen",
   "strategicChantierDetail.milestones.item.E2_B3": "Übergabeplan definiert",
 
-  "strategicChantierDetail.milestones.item.E3_A1":
-    "Offene Punkte des vorherigen Meilensteins gelöst",
   "strategicChantierDetail.milestones.item.E3_B1": "Ergebnisse entsprechen den Zielen",
   "strategicChantierDetail.milestones.item.E3_B2": "Operative Übergabe abgeschlossen",
   "strategicChantierDetail.milestones.item.E3_B3": "Abschlussdatum der Themen (E4) festgelegt",
 
-  "strategicChantierDetail.milestones.item.E4_A1":
-    "Offene Punkte des vorherigen Meilensteins gelöst",
   "strategicChantierDetail.milestones.item.E4_B1": "Aktionsplan E3 umgesetzt",
   "strategicChantierDetail.milestones.item.E4_B2":
     "Themen erreicht (oder Ursachenanalyse vorgelegt)",
@@ -1637,10 +1625,12 @@ const de: Record<string, string> = {
   "effectifs.needVsAvailable.overAllocated":
     "Der gemeldete Bedarf übersteigt die tatsächliche Verfügbarkeit dieses Teams.",
   "effectifs.moneyBudget.title": "Zugewiesenes Finanzbudget",
-  "effectifs.moneyBudget.byAxisTitle": "Verteilung nach Achse",
   "effectifs.moneyBudget.empty": "Für dieses Programm ist kein Budget zugewiesen.",
   "effectifs.moneyBudget.centerLabel": "Gesamt",
-  "effectifs.moneyBudget.byChantierModalTitle": "Budgetverteilung nach Vorhaben",
+  "effectifs.moneyBudget.byProjetEmpty": "Kein Hebel mit zugewiesenem Budget in diesem Vorhaben.",
+  "effectifs.moneyBudget.levelAxis": "Achse",
+  "effectifs.moneyBudget.levelChantier": "Vorhaben",
+  "effectifs.moneyBudget.levelProjet": "Hebel",
   "effectifs.moneyBudget.byChantierEmpty":
     "Kein Vorhaben mit zugewiesenem Budget auf dieser Achse.",
   "effectifs.moneyBudget.centerLabelConsumed": "Verbraucht / zugewiesen",
@@ -1657,6 +1647,7 @@ const de: Record<string, string> = {
   "staffingPeriod.subtitle.scopePeriod": "für {period}",
   "staffingPeriod.mode.period": "Abteilung",
   "staffingPeriod.mode.axis": "Achse",
+  "staffingPeriod.allAxes": "Alle Achsen",
   "staffingPeriod.granularity.quarterly": "Quartal",
   "staffingPeriod.granularity.semiannual": "Halbjahr",
   "staffingPeriod.granularity.annual": "Jahr",
@@ -1666,6 +1657,13 @@ const de: Record<string, string> = {
   "staffingPeriod.utilization": "{pct}% Auslastung",
   "staffingPeriod.byChantier": "Nach Vorhaben:",
   "staffingPeriod.pinnedDetail.title": "Detail — {period}",
+  "staffingPeriod.detailModal.groupTitle": "Detail — {group}",
+  "staffingPeriod.detailModal.empty": "Keine Staffing-Zeile für diese Auswahl.",
+  "staffingPeriod.detailModal.rowsCount": "{n} Staffing-Zeile(n)",
+  "staffingPeriod.detailModal.columnAxis": "Achse(n)",
+  "staffingPeriod.detailModal.columnPeriod": "Zeitraum",
+  "staffingPeriod.detailModal.columnLever": "Hebel",
+  "staffingPeriod.detailModal.undated": "Undatiert",
 
   // ─── Excel-Import des Personaleinsatzes (Runde 7 — StaffingImportButton.tsx) ──────────────
   "staffingImport.templateButton": "Vorlage herunterladen",
