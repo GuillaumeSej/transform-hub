@@ -169,10 +169,17 @@ async function main() {
     process.exit(1);
   }
 
-  const { initializeApp } = require("firebase-admin/app");
+  const { setupFirebaseCliAdc } = require("./lib/firebaseCliAdc");
+  const usedCliAdc = setupFirebaseCliAdc();
+  if (usedCliAdc) console.log("(Authentification via la session `firebase login` existante.)\n");
+
+  const { initializeApp, applicationDefault } = require("firebase-admin/app");
   const { getFirestore } = require("firebase-admin/firestore");
 
-  const app = initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
+  const app = initializeApp({
+    ...(usedCliAdc ? { credential: applicationDefault() } : {}),
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  });
   const db = getFirestore(app);
 
   const leversSnap = await db.collection("levers").get();

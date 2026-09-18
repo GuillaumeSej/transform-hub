@@ -140,10 +140,17 @@ async function main() {
     process.exit(1);
   }
 
-  const { initializeApp } = require("firebase-admin/app");
+  const { setupFirebaseCliAdc } = require("./lib/firebaseCliAdc");
+  const usedCliAdc = setupFirebaseCliAdc();
+  if (usedCliAdc) console.log("(Authentification via la session `firebase login` existante.)\n");
+
+  const { initializeApp, applicationDefault } = require("firebase-admin/app");
   const { getFirestore } = require("firebase-admin/firestore");
 
-  const app = initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
+  const app = initializeApp({
+    ...(usedCliAdc ? { credential: applicationDefault() } : {}),
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  });
   const db = getFirestore(app);
 
   const snap = await db.collection("levers").where("companyId", "==", ACME_COMPANY_ID).get();
@@ -155,19 +162,19 @@ async function main() {
 
   for (const docSnap of snap.docs) {
     const lever = { id: docSnap.id, ...docSnap.data() };
-    if (!hasActionImpacts(lever) || lever.status === "cancelled") continue;
+    if (lever.status === "cancelled") continue;
 
     const pctBefore = displayedProgressPct(lever);
     if (pctBefore > 0 && pctBefore < 100) continue; // déjà un exemple de progression partielle
 
     const actions = [...(lever.actions ?? [])];
     const { start, end } = pickWindow(lever);
-    let newAction;
+    const newActions = [];
 
     if (pctBefore >= 100) {
       const realized = realizedSavings(lever);
       const gain = round2(Math.max(0.1, realized * 0.4));
-      newAction = {
+      newActions.push({
         id: `AC-${lever.id}-SEED-PARTIAL`,
         name: "Extension du périmètre (phase complémentaire)",
         start,
@@ -185,11 +192,13 @@ async function main() {
             entity: lever.entity,
           },
         ],
-      };
-    } else {
+      });
+    } else if (hasActionImpacts(lever)) {
+      // Des actions chiffrées existent déjà (aucune "done" pour l'instant, d'où 0%) : une seule
+      // action "done" suffit à faire décoller le réalisé sans toucher au reste du plan.
       const planned = sumPlannedSavings(lever);
       const gain = round2(Math.max(0.1, planned * 0.3 || 0.1));
-      newAction = {
+      newActions.push({
         id: `AC-${lever.id}-SEED-PARTIAL`,
         name: "Premier jalon livré",
         start: lever.start,
@@ -208,11 +217,64 @@ async function main() {
             entity: lever.entity,
           },
         ],
-      };
+      });
+    } else if (lever.status === "in_progress") {
+      // Injection d'un plan d'actions synthétique réservée aux leviers "in_progress" — un levier
+      // encore "idea"/"qualified"/"validated" n'a business-parlant pas encore de plan d'action
+      // exécuté (une action "done" y serait incohérente avec son étape de cycle de vie), un
+      // "delivered"/"cancelled" n'est pas concerné par cette recette (branché ailleurs/déjà réglé).
+      // Levier 100% saisie manuelle (aucune action) : le business case initial n'existe que sur
+      // `lever.netSavings` — on le ventile en 2 actions (35% déjà livré, 65% encore à faire) pour
+      // matérialiser un plan d'actions chiffré ET une progression partielle en un seul geste.
+      const target = round2(Math.max(0.3, lever.netSavings || 0.3));
+      const doneGain = round2(target * 0.35);
+      const pendingGain = round2(target - doneGain);
+      newActions.push(
+        {
+          id: `AC-${lever.id}-SEED-DONE`,
+          name: "Premier jalon livré",
+          start: lever.start,
+          end: start,
+          status: "done",
+          deliveredDate: start,
+          impacts: [
+            {
+              id: `IMP-${lever.id}-SEED-DONE`,
+              label: "Gain déjà réalisé",
+              type: "saving",
+              nature: "opex_rec",
+              amount: doneGain,
+              pnlMap: lever.pnlMap,
+              costCenter: lever.costCenter,
+              entity: lever.entity,
+            },
+          ],
+        },
+        {
+          id: `AC-${lever.id}-SEED-PENDING`,
+          name: "Poursuite du déploiement",
+          start,
+          end,
+          status: "todo",
+          impacts: [
+            {
+              id: `IMP-${lever.id}-SEED-PENDING`,
+              label: "Gain restant à réaliser",
+              type: "saving",
+              nature: "opex_rec",
+              amount: pendingGain,
+              pnlMap: lever.pnlMap,
+              costCenter: lever.costCenter,
+              entity: lever.entity,
+            },
+          ],
+        }
+      );
     }
 
-    const nextLever = { ...lever, actions: [...actions, newAction] };
-    const pctAfter = displayedProgressPct(nextLever);
+    if (newActions.length === 0) continue; // pas de recette applicable (idea/qualified/validated)
+
+    const nextLever = { ...lever, actions: [...actions, ...newActions] };
     const consolidatedAfter = consolidatedNetSavings(nextLever);
 
     const patch = { actions: nextLever.actions };
@@ -224,10 +286,15 @@ async function main() {
     } else {
       patch.netSavings = consolidatedAfter;
     }
+    // Aperçu calculé APRÈS application du patch (reforecast/netSavings inclus) — sans ça,
+    // displayedProgressPct(nextLever) relit l'ancien `lever.reforecast`, resté figé dans
+    // `nextLever` puisque seul `actions` y avait été mis à jour, et affiche un % inchangé.
+    const pctAfter = displayedProgressPct({ ...nextLever, ...patch });
 
+    const actionsSummary = newActions.map((a) => `"${a.name}" (${a.status})`).join(", ");
     console.log(
       `[${apply ? "SEED" : "DRY"}] levers/${lever.id} (code="${lever.code}", "${lever.name}") : ` +
-        `progression ${pctBefore}% -> ${pctAfter}% (action "${newAction.name}" ajoutée, statut ${newAction.status})`
+        `progression ${pctBefore}% -> ${pctAfter}% (${newActions.length} action(s) ajoutée(s) : ${actionsSummary})`
     );
     adjusted++;
     if (apply) {
