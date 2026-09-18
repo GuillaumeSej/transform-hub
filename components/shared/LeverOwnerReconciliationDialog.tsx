@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CheckCheck } from "lucide-react";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import {
@@ -110,6 +111,28 @@ export function LeverOwnerReconciliationDialog({
 
   const allDecided = items.every((item) => item.decision !== undefined);
 
+  // "Oui partout" : n'accepte QUE les correspondances univoques ("unique") pas encore décidées —
+  // les cas "homonyms"/"none" exigent un choix explicite (candidats ambigus ou compte à choisir à
+  // la main), jamais présumés en masse. Idempotent : rejouable sans écraser une décision déjà
+  // prise manuellement (y compris un "Non" -> sélecteur manuel resté ouvert).
+  const acceptableCount = items.filter(
+    (item) => item.match.kind === "unique" && item.decision === undefined
+  ).length;
+
+  const acceptAllUnique = () => {
+    setItems((current) =>
+      current.map((item) =>
+        item.match.kind === "unique" && item.decision === undefined
+          ? {
+              ...item,
+              decision: candidatesToOwnerFields(item.match.candidate),
+              manualPickerOpen: false,
+            }
+          : item
+      )
+    );
+  };
+
   const handleConfirm = () => {
     const decisions = new Map<string, OwnerReconciliationDecision>();
     items.forEach((item) => {
@@ -166,6 +189,17 @@ export function LeverOwnerReconciliationDialog({
           "Les leviers doivent être rattachés à un compte utilisateur réel. Confirmez ou choisissez le compte pour chacun des leviers ci-dessous."
         )}
       </p>
+      {acceptableCount > 0 && (
+        <div className="mb-3">
+          <Button type="button" variant="outline" onClick={acceptAllUnique}>
+            <CheckCheck size={13} />
+            {t(
+              "shared.leverOwnerReconciliation.acceptAllButton",
+              "Répondre Oui partout ({n} correspondance(s) évidente(s))"
+            ).replace("{n}", String(acceptableCount))}
+          </Button>
+        </div>
+      )}
       <div className="max-h-[420px] space-y-3 overflow-y-auto">
         {items.map((item, index) => {
           const { row, match, decision, manualPickerOpen } = item;
