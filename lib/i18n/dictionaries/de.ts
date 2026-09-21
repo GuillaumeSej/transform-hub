@@ -1270,6 +1270,8 @@ const de: Record<string, string> = {
   // Achsen-Detailblatt
   "strategicAxes.back": "Zurück zu den Achsen",
   "strategicAxes.notFound": "Achse nicht gefunden.",
+  "strategicAxes.sponsor": "Achsen-Sponsor",
+  "strategicAxes.sponsorShort": "Sponsor",
   "strategicAxes.owner": "Verantwortlich",
   "strategicAxes.editAxis": "Achse bearbeiten",
   "strategicAxes.editAxisModalTitle": "Achse bearbeiten",
@@ -1773,6 +1775,9 @@ const de: Record<string, string> = {
   "effectifs.needVsAvailable.needed": "Gemeldeter Bedarf",
   "effectifs.needVsAvailable.available": "Verfügbar",
   "effectifs.needVsAvailable.seriesTitle": "Verlauf pro Periode (durchschnittliche VZÄ)",
+  "effectifs.needVsAvailable.headline":
+    "Mobilisiert {mobilised} VZÄ · Bedarf {needed} · Staffing {pct}",
+  "effectifs.needVsAvailable.periodCol": "Periode",
   "effectifs.needVsAvailable.totalRow": "Gesamt",
   "effectifs.needVsAvailable.staffingLine": "Staffing-%",
   "staffingPeriod.periodModal.filters": "Nach Kategorie filtern",

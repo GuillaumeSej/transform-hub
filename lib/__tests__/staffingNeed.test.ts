@@ -35,8 +35,17 @@ describe("staffingNeed", () => {
     const p = periodBoundsForDate("2026-01-15", "quarterly");
     const m = needMetrics([e(2, "2026-01-01", "2026-03-31")], 10, p, "2026-02-14");
     expect(m.needed).toBeCloseTo(2, 5);
-    expect(m.mobilised).toBeCloseTo(2 * (45 / 90), 5);
-    expect(m.staffingPct).toBe(50);
+    expect(m.mobilised).toBeCloseTo(2, 5);
+    expect(m.staffingPct).toBe(100);
+    const m2 = needMetrics(
+      [e(2, "2026-01-01", "2026-03-31"), e(2, "2026-03-01", "2026-03-31")],
+      10,
+      p,
+      "2026-02-14"
+    );
+    expect(m2.mobilised).toBeCloseTo(2, 5);
+    expect(m2.needed).toBeCloseTo(2 + 2 * (31 / 90), 5);
+    expect(m2.staffingPct).toBe(Math.round((2 / m2.needed) * 100));
     expect(needMetrics([], 10, p, "2026-02-14").staffingPct).toBeNull();
   });
   it("série continue selon granularité", () => {

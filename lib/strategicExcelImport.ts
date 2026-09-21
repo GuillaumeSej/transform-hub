@@ -89,6 +89,7 @@ export const STRATEGIC_AXIS_IMPORT_HEADERS = [
   "Owner",
   "Couleur",
   "Étape de maturité",
+  "Sponsor de l'axe",
 ] as const;
 
 export const STRATEGIC_CHANTIER_IMPORT_HEADERS = [
@@ -461,6 +462,7 @@ export function validateStrategicImportRows(
       stage,
       ...(str(row["Description"]) ? { description: str(row["Description"]) } : {}),
       ...(str(row["Owner"]) ? { owner: str(row["Owner"]) } : {}),
+      ...(str(row["Sponsor de l'axe"]) ? { sponsorName: str(row["Sponsor de l'axe"]) } : {}),
       ...(str(row["Couleur"]) ? { color: str(row["Couleur"]) } : {}),
       createdAt: nowDate(),
       lastUpdate: nowDate(),
@@ -1019,6 +1021,7 @@ export const STRATEGIC_AXIS_EXAMPLE_ROW = [
   "Marie Lefèvre",
   "#320300",
   "Planifié",
+  "Isabelle Roy",
 ];
 
 export const STRATEGIC_CHANTIER_EXAMPLE_ROWS = [

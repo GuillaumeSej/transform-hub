@@ -24,10 +24,12 @@ import {
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
 import {
+  axisSponsorLabel,
   computeIndicatorDelta,
   latestMeasurement,
   numberIndicators,
   resolveIndicatorOwner,
+  resolveUserFullName,
 } from "@/lib/axisLogic";
 import {
   canFillIndicatorValue,
@@ -559,6 +561,7 @@ export function KpiPageClient() {
   } = useActiveProgram();
   const {
     axes,
+    users: companyUsers,
     chantiers,
     chantierActions,
     indicators,
@@ -993,6 +996,7 @@ export function KpiPageClient() {
                 macro={macro}
                 byChantier={byChantier}
                 renderCard={renderCard}
+                users={companyUsers}
               />
             ))}
             {orphans.length > 0 && (
@@ -1015,7 +1019,9 @@ function AxisSection({
   macro,
   byChantier,
   renderCard,
+  users,
 }: {
+  users?: AuthUser[];
   axis: StrategicAxis;
   macro: Indicator[];
   byChantier: { chantier: Chantier; indicators: Indicator[] }[];
@@ -1027,7 +1033,16 @@ function AxisSection({
     <section className="space-y-3">
       <div className="flex flex-wrap items-baseline gap-2 border-b border-border pb-1.5">
         <h2 className="text-sm font-bold uppercase tracking-wide text-text-primary">{axis.name}</h2>
-        {axis.owner && <span className="text-xs text-text-secondary">{axis.owner}</span>}
+        {axis.owner && (
+          <span className="text-xs text-text-secondary">
+            {resolveUserFullName(axis.owner, users)}
+          </span>
+        )}
+        {axis.sponsorName && (
+          <span className="text-xs text-text-secondary">
+            {t("strategicAxes.sponsorShort", "Sponsor")} : {axisSponsorLabel(axis, users)}
+          </span>
+        )}
       </div>
 
       {macro.length > 0 && (

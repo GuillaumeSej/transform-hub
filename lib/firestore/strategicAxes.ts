@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { onListenerError } from "@/lib/firestore/listenerError";
+import { stripUndefined } from "@/lib/strategicApprovals";
 import type { StrategicAxis } from "@/types";
 
 /**
@@ -46,7 +47,8 @@ export function subscribeStrategicAxes(
 }
 
 export async function saveStrategicAxis(axis: StrategicAxis): Promise<void> {
-  await setDoc(doc(strategicAxesCol(), axis.id), axis);
+  // Purge des `undefined` (ex. sponsorName retiré) : Firestore les refuse dans `setDoc`.
+  await setDoc(doc(strategicAxesCol(), axis.id), stripUndefined(axis));
 }
 
 export async function deleteStrategicAxis(id: string): Promise<void> {

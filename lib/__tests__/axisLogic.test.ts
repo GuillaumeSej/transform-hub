@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  axesSponsoredBy,
+  axisDecisionMakers,
+  axisSponsorLabel,
+  resolveUserFullName,
   approveMilestoneGate,
   axisProgressPct,
   projetMilestoneCounts,
@@ -2421,5 +2425,38 @@ describe("axisProgressPct / projetMilestoneCounts", () => {
     expect(projetMilestoneCounts(mk("p", "C", ["E0"])).passed).toBe(1);
     expect(projetMilestoneCounts({}).passed).toBe(0);
     expect(projetMilestoneCounts({}).total).toBeGreaterThan(0);
+  });
+});
+
+describe("sponsor d'axe", () => {
+  const users = [{ username: "u1", name: "Ursule Un" }];
+  it("resolveUserFullName / axisSponsorLabel : nom complet, repli brut, undefined", () => {
+    expect(resolveUserFullName("u1", users)).toBe("Ursule Un");
+    expect(resolveUserFullName("inconnu", users)).toBe("inconnu");
+    expect(resolveUserFullName(undefined, users)).toBeUndefined();
+    expect(axisSponsorLabel({ sponsorName: "u1" }, users)).toBe("Ursule Un");
+    expect(axisSponsorLabel({}, users)).toBeUndefined();
+  });
+  it("axisDecisionMakers : sponsor puis owner, dédoublonnés", () => {
+    expect(axisDecisionMakers({ owner: "o", sponsorName: "s" })).toEqual(["s", "o"]);
+    expect(axisDecisionMakers({ owner: "x", sponsorName: "x" })).toEqual(["x"]);
+    expect(axisDecisionMakers({})).toEqual([]);
+  });
+  it("axesSponsoredBy + scope axis_sponsor via sponsorName", () => {
+    const axes = [
+      { id: "A1", sponsorName: "u1" },
+      { id: "A2", owner: "u1" },
+      { id: "A3", owner: "z" },
+    ] as StrategicAxis[];
+    expect(axesSponsoredBy(axes, "u1").map((a) => a.id)).toEqual(["A1"]);
+    const scope = resolveStrategicOwnershipScope(
+      { username: "u1", profiles: [{ role: "axis_sponsor" }] },
+      "p1",
+      axes,
+      [],
+      []
+    );
+    expect(scope.mode).toBe("scoped");
+    if (scope.mode === "scoped") expect(Array.from(scope.axisIds).sort()).toEqual(["A1", "A2"]);
   });
 });

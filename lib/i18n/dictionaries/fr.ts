@@ -1340,6 +1340,8 @@ const fr: Record<string, string> = {
   // Fiche détail d'un axe
   "strategicAxes.back": "Retour aux axes",
   "strategicAxes.notFound": "Axe introuvable.",
+  "strategicAxes.sponsor": "Sponsor de l'axe",
+  "strategicAxes.sponsorShort": "Sponsor",
   "strategicAxes.owner": "Responsable",
   "strategicAxes.editAxis": "Modifier l'axe",
   "strategicAxes.editAxisModalTitle": "Modifier l'axe",
@@ -1894,6 +1896,9 @@ const fr: Record<string, string> = {
   "effectifs.needVsAvailable.needed": "Besoin déclaré",
   "effectifs.needVsAvailable.available": "Disponible",
   "effectifs.needVsAvailable.seriesTitle": "Évolution par période (ETP moyens)",
+  "effectifs.needVsAvailable.headline":
+    "Mobilisé {mobilised} ETP · Besoin {needed} · Staffing {pct}",
+  "effectifs.needVsAvailable.periodCol": "Période",
   "effectifs.needVsAvailable.totalRow": "Total",
   "effectifs.needVsAvailable.staffingLine": "% de staffing",
   "staffingPeriod.periodModal.filters": "Filtrer par catégorie",

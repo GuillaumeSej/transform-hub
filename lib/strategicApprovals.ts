@@ -1,4 +1,5 @@
 import {
+  axisDecisionMakers,
   computeIndicatorStatus,
   displayMilestoneId,
   isStrategicLeadOf,
@@ -153,8 +154,10 @@ function chantierOfTarget(
 function axisOwners(axisIds: string[], axes: StrategicAxis[]): string[] {
   const out: string[] = [];
   for (const id of axisIds) {
-    const owner = axes.find((a) => a.id === id)?.owner;
-    if (owner && !out.includes(owner)) out.push(owner);
+    const axis = axes.find((a) => a.id === id);
+    if (!axis) continue;
+    // Sponsor d'axe ET responsable d'axe peuvent tous deux décider (sponsor en premier).
+    for (const u of axisDecisionMakers(axis)) if (!out.includes(u)) out.push(u);
   }
   return out;
 }

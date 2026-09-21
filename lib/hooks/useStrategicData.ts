@@ -126,7 +126,12 @@ export type StrategicData = {
   // ── Mutations ──────────────────────────────────────────────────────────────────────────────
   createAxis: (
     input: Pick<StrategicAxis, "name" | "stage"> &
-      Partial<Pick<StrategicAxis, "description" | "owner" | "color" | "confidentialityLevel">>
+      Partial<
+        Pick<
+          StrategicAxis,
+          "description" | "owner" | "sponsorName" | "color" | "confidentialityLevel"
+        >
+      >
   ) => Promise<StrategicAxis>;
   updateAxis: (id: string, patch: Partial<StrategicAxis>) => Promise<void>;
   removeAxis: (id: string) => Promise<void>;

@@ -1267,6 +1267,8 @@ const es: Record<string, string> = {
   // Ficha de detalle de un eje
   "strategicAxes.back": "Volver a los ejes",
   "strategicAxes.notFound": "Eje no encontrado.",
+  "strategicAxes.sponsor": "Patrocinador del eje",
+  "strategicAxes.sponsorShort": "Patrocinador",
   "strategicAxes.owner": "Responsable",
   "strategicAxes.editAxis": "Editar el eje",
   "strategicAxes.editAxisModalTitle": "Editar el eje",
@@ -1772,6 +1774,9 @@ const es: Record<string, string> = {
   "effectifs.needVsAvailable.needed": "Necesidad declarada",
   "effectifs.needVsAvailable.available": "Disponible",
   "effectifs.needVsAvailable.seriesTitle": "Evolución por período (ETC medios)",
+  "effectifs.needVsAvailable.headline":
+    "Movilizado {mobilised} ETC · Necesidad {needed} · Staffing {pct}",
+  "effectifs.needVsAvailable.periodCol": "Período",
   "effectifs.needVsAvailable.totalRow": "Total",
   "effectifs.needVsAvailable.staffingLine": "% de staffing",
   "staffingPeriod.periodModal.filters": "Filtrar por categoría",

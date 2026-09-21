@@ -2,7 +2,12 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
-import { isProjetLate, programRoadmap, type ProgramRoadmapRow } from "@/lib/axisLogic";
+import {
+  axisSponsorLabel,
+  isProjetLate,
+  programRoadmap,
+  type ProgramRoadmapRow,
+} from "@/lib/axisLogic";
 import { Tooltip } from "@/components/shared/Tooltip";
 import {
   formatTimelineDay,
@@ -163,7 +168,10 @@ export function ProgramRoadmap({
   renderAxisHeader,
   labels,
   clickableActionIds = "all",
+  users,
 }: {
+  /** Pour afficher le nom complet du sponsor d'axe dans l'en-tête par défaut. */
+  users?: { username: string; name: string }[];
   axes: StrategicAxis[];
   chantiers: Chantier[];
   /** Tous les leviers du programme actif (toutes les actions, pas filtrées par axe/chantier — voir
@@ -300,6 +308,11 @@ export function ProgramRoadmap({
                       <span className="truncate text-[11.5px] font-bold uppercase tracking-wide text-primary">
                         {axisGroup.axis.name}
                       </span>
+                      {axisGroup.axis.sponsorName && (
+                        <span className="truncate text-[10.5px] text-tertiary">
+                          · Sponsor : {axisSponsorLabel(axisGroup.axis, users)}
+                        </span>
+                      )}
                     </div>
                   )}
 

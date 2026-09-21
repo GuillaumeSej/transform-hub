@@ -332,7 +332,7 @@ export function resolveStrategicRoleForProgram(
 /**
  * Périmètre de visibilité "propriétaire nommé" (round 25) — QUI voit QUOI dans le Plan
  * Stratégique, pour les 3 rôles à ownership nominatif (voir le plan, section RBAC) :
- *  - `axis_sponsor` : uniquement le(s) axe(s) dont il est `StrategicAxis.owner`, plus tout ce qui
+ *  - `axis_sponsor` : uniquement le(s) axe(s) dont il est `StrategicAxis.sponsorName` (sponsor d'axe) ou `StrategicAxis.owner`, plus tout ce qui
  *    en dépend (chantiers de ces axes, et — voir `indicators` de `useStrategicData.ts` — les
  *    indicateurs macro de ces axes et chantier-scopés de ces chantiers).
  *  - `chantier_owner` : uniquement le(s) chantier(s) dont il est `Chantier.pilote`. Les axes
@@ -400,7 +400,11 @@ export function resolveStrategicOwnershipScope(
   const role = resolveStrategicRoleForProgram(user, programId);
 
   if (role === "axis_sponsor") {
-    const axisIds = new Set(axes.filter((a) => a.owner === user.username).map((a) => a.id));
+    const axisIds = new Set(
+      axes
+        .filter((a) => a.sponsorName === user.username || a.owner === user.username)
+        .map((a) => a.id)
+    );
     const chantierIds = new Set(
       chantiers.filter((c) => c.axisIds.some((id) => axisIds.has(id))).map((c) => c.id)
     );
@@ -1781,4 +1785,36 @@ export function programRoadmapBounds(
     if (!end || row.end > end) end = row.end;
   }
   return start && end ? { start, end } : undefined;
+}
+
+// ─── Sponsor d'axe ─────────────────────────────────────────────────────────────────────────────
+
+/** Nom complet d'un utilisateur résolu par username ; repli défensif sur la valeur brute (texte
+ *  libre historique ou utilisateur retiré de l'entreprise). `undefined` si aucun username. */
+export function resolveUserFullName(
+  username: string | undefined | null,
+  users: Pick<AuthUser, "username" | "name">[] | undefined
+): string | undefined {
+  if (!username) return undefined;
+  return users?.find((u) => u.username === username)?.name || username;
+}
+
+/** Nom complet du sponsor d'un axe, ou `undefined` si l'axe n'a pas de sponsor. */
+export function axisSponsorLabel(
+  axis: Pick<StrategicAxis, "sponsorName"> | null | undefined,
+  users: Pick<AuthUser, "username" | "name">[] | undefined
+): string | undefined {
+  return resolveUserFullName(axis?.sponsorName, users);
+}
+
+/** Sponsor ET responsable d'un axe : pilotes de décision (validation des demandes d'axe). */
+export function axisDecisionMakers(axis: Pick<StrategicAxis, "owner" | "sponsorName">): string[] {
+  const out: string[] = [];
+  for (const u of [axis.sponsorName, axis.owner]) if (u && !out.includes(u)) out.push(u);
+  return out;
+}
+
+/** Axes dont l'utilisateur est sponsor (rôle `axis_sponsor` relié à son/ses axe(s)). */
+export function axesSponsoredBy(axes: StrategicAxis[], username: string): StrategicAxis[] {
+  return axes.filter((a) => a.sponsorName === username);
 }

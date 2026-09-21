@@ -20,7 +20,6 @@ import {
   BudgetDonutChart,
   type BudgetDonutSlice,
 } from "@/components/shared/charts/BudgetDonutChart";
-import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import {
@@ -85,19 +84,6 @@ import type { ChantierStaffing } from "@/types";
  * garde `programType` en bas de fichier + `programTypes: ["strategic"]` dans `lib/nav-config.ts`).
  * Seule la base ETP (`Employee`, via `useCompanyDepartments`) est PARTAGÉE entre les deux plans.
  */
-
-/** Somme des ETP par équipe sur un lot de lignes, restreinte aux équipes réellement mobilisées et
- *  triée par volume décroissant (le classement EST l'information : on lit d'abord l'équipe la plus
- *  sollicitée). */
-function totalsByFunction(entries: ChantierStaffing[]): { fn: string; fte: number }[] {
-  const map = new Map<string, number>();
-  for (const entry of entries) {
-    map.set(entry.function, (map.get(entry.function) ?? 0) + (entry.fte || 0));
-  }
-  return Array.from(map.entries())
-    .map(([fn, fte]) => ({ fn, fte }))
-    .sort((a, b) => b.fte - a.fte);
-}
 
 /** Granularité du sélecteur de période du widget besoin/disponible ci-dessous — round <n>. Même
  *  triplet trimestre/semestre/année que `StaffingPeriodBreakdown.tsx` (`Granularity`, non exporté),
@@ -226,9 +212,6 @@ export function EffectifsPageClient() {
     }
   }, [strategicRole, axes, budgetDrillPath]);
 
-  const globalTotals = useMemo(() => totalsByFunction(staffing), [staffing]);
-  const totalFte = useMemo(() => staffing.reduce((sum, e) => sum + (e.fte || 0), 0), [staffing]);
-
   /** Sélecteur de période du widget besoin/disponible (round <n>) — voir `periodBoundsForDate` (lib/staffingNeed.ts)
    *  ci-dessus. Par défaut le trimestre courant, cohérent avec le défaut de
    *  `StaffingPeriodBreakdown.tsx` (`granularity` initialisée à `"quarterly"`). État PUREMENT LOCAL
@@ -244,8 +227,7 @@ export function EffectifsPageClient() {
 
   /** Lignes de staffing dont la plage `startDate`/`endDate` recoupe la période courante
    *  (`needPeriod`, voir `overlapsPeriod` ci-dessus) — remplace round <n> l'ancien calcul TOUT-TEMPS
-   *  (`globalTotals`, toujours utilisé tel quel par le KPI "ETP mobilisés au total" et sa barre de
-   *  répartition ci-dessous, hors périmètre de ce correctif) pour le côté "besoin" du widget
+   *  (ancien total tout-temps, tuile désormais fusionnée dans ce bloc) pour le côté "besoin" du widget
    *  besoin/disponible SEUL. */
   const staffingInNeedPeriod = useMemo(
     () => staffing.filter((entry) => overlapsPeriod(entry, needPeriod)),
@@ -311,17 +293,6 @@ export function EffectifsPageClient() {
   const [needDetailScope, setNeedDetailScope] = useState<
     { kind: "need"; fn: string } | { kind: "available"; fn: string } | null
   >(null);
-
-  /** Segments colorés (un par équipe mobilisée) pour la barre de la tuile « Total ETP » — même
-   *  couleur par équipe que partout ailleurs sur cette page (`colorForDepartment`). */
-  const totalFteBarSegments = useMemo(
-    () =>
-      globalTotals.map(({ fn, fte }) => ({
-        pct: totalFte > 0 ? (fte / totalFte) * 100 : 0,
-        className: colorForDepartment(fn),
-      })),
-    [globalTotals, totalFte]
-  );
 
   const chantierNames = useMemo(() => new Map(chantiers.map((c) => [c.id, c.name])), [chantiers]);
 
@@ -760,22 +731,19 @@ export function EffectifsPageClient() {
                   {t("effectifs.needVsAvailable.seriesTitle")}
                 </p>
                 <p className="text-[12px] text-secondary">
-                  {t("effectifs.needVsAvailable.totalRow")} {needPeriod.label} :{" "}
-                  <strong className="text-primary">{formatFte(needTotalMetrics.needed)}</strong>{" "}
-                  {t("effectifs.needVsAvailable.needed").toLowerCase()} ·{" "}
-                  <strong className="text-primary">{formatFte(needTotalMetrics.mobilised)}</strong>{" "}
-                  {t("effectifs.needVsAvailable.mobilised").toLowerCase()} ·{" "}
-                  <strong className="text-primary">{formatFte(needTotalMetrics.available)}</strong>{" "}
-                  {t("effectifs.needVsAvailable.available").toLowerCase()} ·{" "}
-                  <strong className="text-primary">
-                    {needTotalMetrics.staffingPct !== null
-                      ? `${needTotalMetrics.staffingPct}%`
-                      : "—"}
-                  </strong>{" "}
-                  {t("effectifs.needVsAvailable.staffingPct").toLowerCase()}
+                  {needPeriod.label} :{" "}
+                  {t("effectifs.needVsAvailable.headline")
+                    .replace("{mobilised}", formatFte(needTotalMetrics.mobilised))
+                    .replace("{needed}", formatFte(needTotalMetrics.needed))
+                    .replace(
+                      "{pct}",
+                      needTotalMetrics.staffingPct !== null
+                        ? `${needTotalMetrics.staffingPct} %`
+                        : "—"
+                    )}
                 </p>
               </div>
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={280}>
                 <ComposedChart
                   data={needSeriesData.map((m) => ({
                     period: m.label,
@@ -784,7 +752,7 @@ export function EffectifsPageClient() {
                     mobilised: Number(m.mobilised.toFixed(2)),
                     staffingPct: m.staffingPct,
                   }))}
-                  margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
+                  margin={{ top: 8, right: 12, left: 4, bottom: 8 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
                   <XAxis
@@ -850,6 +818,45 @@ export function EffectifsPageClient() {
                   />
                 </ComposedChart>
               </ResponsiveContainer>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[420px] text-[11.5px]">
+                  <thead>
+                    <tr className="border-b border-border text-left text-tertiary">
+                      <th className="py-1 pr-3 font-semibold">
+                        {t("effectifs.needVsAvailable.periodCol")}
+                      </th>
+                      <th className="px-2 py-1 text-right font-semibold">
+                        {t("effectifs.needVsAvailable.needed")}
+                      </th>
+                      <th className="px-2 py-1 text-right font-semibold">
+                        {t("effectifs.needVsAvailable.available")}
+                      </th>
+                      <th className="px-2 py-1 text-right font-semibold">
+                        {t("effectifs.needVsAvailable.mobilised")}
+                      </th>
+                      <th className="py-1 pl-2 text-right font-semibold">
+                        {t("effectifs.needVsAvailable.staffingLine")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {needSeriesData.map((m) => (
+                      <tr
+                        key={m.label}
+                        className={`border-b border-border/50 ${m.label === needPeriod.label ? "bg-neutral-50 font-semibold" : ""}`}
+                      >
+                        <td className="py-1 pr-3 text-primary">{m.label}</td>
+                        <td className="px-2 py-1 text-right">{formatFte(m.needed)}</td>
+                        <td className="px-2 py-1 text-right">{formatFte(m.available)}</td>
+                        <td className="px-2 py-1 text-right">{formatFte(m.mobilised)}</td>
+                        <td className="py-1 pl-2 text-right">
+                          {m.staffingPct !== null ? `${m.staffingPct} %` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
           {needVsAvailable.length === 0 ? (
@@ -1018,14 +1025,6 @@ export function EffectifsPageClient() {
       <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
       {moneyBudgetSection}
       {needVsAvailableSection}
-
-      <KPICard
-        label={t("effectifs.kpi.totalFte")}
-        value={`${formatFte(totalFte)} ${t("staffing.fteUnit")}`}
-        icon={Users}
-        sub={t("effectifs.kpi.totalFteSub")}
-        barSegments={totalFteBarSegments}
-      />
 
       {/* ── 1. Répartition des ETP, par période ET par axe (round 7, fusionné round 22 — voir le
           doc-comment de `StaffingPeriodBreakdown.tsx` : le composant porte désormais lui-même tout

@@ -1282,6 +1282,8 @@ const en: Record<string, string> = {
   // Axis detail sheet
   "strategicAxes.back": "Back to axes",
   "strategicAxes.notFound": "Axis not found.",
+  "strategicAxes.sponsor": "Axis sponsor",
+  "strategicAxes.sponsorShort": "Sponsor",
   "strategicAxes.owner": "Owner",
   "strategicAxes.editAxis": "Edit axis",
   "strategicAxes.editAxisModalTitle": "Edit axis",
@@ -1772,6 +1774,9 @@ const en: Record<string, string> = {
   "effectifs.needVsAvailable.needed": "Declared need",
   "effectifs.needVsAvailable.available": "Available",
   "effectifs.needVsAvailable.seriesTitle": "Trend by period (average FTE)",
+  "effectifs.needVsAvailable.headline":
+    "Mobilised {mobilised} FTE · Need {needed} · Staffing {pct}",
+  "effectifs.needVsAvailable.periodCol": "Period",
   "effectifs.needVsAvailable.totalRow": "Total",
   "effectifs.needVsAvailable.staffingLine": "Staffing %",
   "staffingPeriod.periodModal.filters": "Filter by category",

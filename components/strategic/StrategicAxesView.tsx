@@ -502,6 +502,7 @@ export function StrategicAxesView() {
               onAxisClick={openAxis}
               expandAllSignal={expandAllSignal}
               clickableActionIds={data.clickableActionIds}
+              users={data.users}
             />
           </div>
         </div>

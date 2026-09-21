@@ -867,6 +867,10 @@ export type StrategicAxis = {
    *  défensif à l'égard des valeurs saisies AVANT cette conversion (texte libre historique, ou
    *  utilisateur depuis retiré de l'entreprise) — voir son commentaire. */
   owner?: string;
+  /** Sponsor de l'axe (`AuthUser.username`, via `UserPicker`) — distinct du responsable (`owner`) :
+   *  le sponsor porte l'axe au niveau direction (même sémantique que `Chantier.sponsorName`).
+   *  Optionnel, rétro-compatible (axes existants sans sponsor). */
+  sponsorName?: string;
   color?: string;
   /** Référence un `MaturityStageConfig.id` du programme. Explicite (jamais dérivé en base) pour
    *  laisser ouverte la décision "stage de l'axe piloté vs dérivé de ses chantiers". */

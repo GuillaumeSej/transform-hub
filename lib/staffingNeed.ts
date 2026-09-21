@@ -10,7 +10,8 @@ export type NeedPeriodMetrics = PeriodBounds & {
   needed: number;
   /** ETP moyens disponibles (base entreprise, instantané constant → sa moyenne est lui-même). */
   available: number;
-  /** ETP moyens effectivement mobilisés : part du besoin dont les jours sont écoulés (<= today). */
+  /** ETP moyens MOBILISÉS TOTAL : staffing réellement affecté aux chantiers (lignes ChantierStaffing
+   *  déjà démarrées, startDate <= today), pondéré par la durée de recouvrement de la période. */
   mobilised: number;
   /** mobilisé / besoin, en % arrondi ; null si besoin nul. */
   staffingPct: number | null;
@@ -55,16 +56,15 @@ function overlapDays(aStart: string, aEnd: string, bStart: string, bEnd: string)
   return Math.max(0, e - s + 1);
 }
 
-/** ETP moyens d'un lot de lignes sur une période, en ne comptant que les jours <= `cutoff`
- *  (omis = toute la période). Lignes sans startDate ignorées ; sans endDate = toujours en cours. */
+/** ETP moyens d'un lot de lignes sur une période (recouvrement / durée de la période, jamais une
+ *  somme brute). Lignes sans startDate ignorées ; sans endDate = toujours en cours. */
 export function averageFte(
   entries: ChantierStaffing[],
-  period: { start: string; end: string },
-  cutoff?: string
+  period: { start: string; end: string }
 ): number {
   const periodDays = dayNum(period.end) - dayNum(period.start) + 1;
-  const end = cutoff && cutoff < period.end ? cutoff : period.end;
-  if (periodDays <= 0 || end < period.start) return 0;
+  const end = period.end;
+  if (periodDays <= 0) return 0;
   let sum = 0;
   for (const e of entries) {
     if (!e.startDate) continue;
@@ -81,7 +81,10 @@ export function needMetrics(
   today: string
 ): NeedPeriodMetrics {
   const needed = averageFte(entries, period);
-  const mobilised = averageFte(entries, period, today);
+  const mobilised = averageFte(
+    entries.filter((e) => e.startDate && e.startDate <= today),
+    period
+  );
   return {
     ...period,
     needed,
