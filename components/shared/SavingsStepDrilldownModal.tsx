@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Modal } from "@/components/shared/Modal";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -163,9 +163,8 @@ export function SavingsStepDrilldownModal({
   const renderRow = (g: DrilldownGroup) => {
     const open = expanded.has(g.id);
     return (
-      <>
+      <Fragment key={g.id}>
         <tr
-          key={g.id}
           className="cursor-pointer border-t border-border hover:bg-neutral-50"
           onClick={() => toggle(g.id)}
         >
@@ -221,7 +220,7 @@ export function SavingsStepDrilldownModal({
               </td>
             </tr>
           ))}
-      </>
+      </Fragment>
     );
   };
 

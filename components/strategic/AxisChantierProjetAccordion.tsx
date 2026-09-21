@@ -154,6 +154,13 @@ function TreeRow({
   );
 }
 
+/** Repli quand le chantier n'a ni pilote ni sponsor : responsable le plus fréquent de ses projets. */
+function mostFrequentOwner(projets: { owner?: string }[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const p of projets) if (p.owner) counts.set(p.owner, (counts.get(p.owner) ?? 0) + 1);
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
 export function AxisChantierProjetAccordion({
   axes,
   chantiers,
@@ -276,7 +283,12 @@ export function AxisChantierProjetAccordion({
                             />
                           }
                           name={chantier.name}
-                          owner={chantier.pilote ?? chantier.sponsorName ?? noOwner}
+                          owner={
+                            chantier.pilote ??
+                            chantier.sponsorName ??
+                            mostFrequentOwner(projets) ??
+                            noOwner
+                          }
                           count={fmt("strategicAxes.tree.projetsN", "{n} projet(s)", {
                             n: projets.length,
                           })}
