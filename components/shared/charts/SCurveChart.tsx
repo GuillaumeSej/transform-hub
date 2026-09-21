@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -63,14 +64,40 @@ export function currentGapMarks(
   );
 }
 
-/** Indication « Cliquer pour plus de détails » placée sous le graphe (hors zone de tracé, donc
- *  jamais au-dessus des courbes ni des libellés). */
-export function ClickForDetailsHint() {
+/** Enveloppe d'un graphe cliquable : au survol, un petit badge « Cliquer pour plus de détails »
+ *  suit le curseur (décalé, sans intercepter la souris) au lieu d'un texte fixe sous le graphe. */
+export function HoverDetailsHint({
+  enabled = true,
+  children,
+}: {
+  enabled?: boolean;
+  children: ReactNode;
+}) {
   const { t } = useTranslation();
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   return (
-    <p className="mt-1 text-right text-[11px] text-tertiary">
-      {t("chart.clickForDetails", "Cliquer pour plus de détails")}
-    </p>
+    <div
+      className="relative"
+      onMouseMove={
+        enabled
+          ? (e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setPos({ x: e.clientX - r.left, y: e.clientY - r.top });
+            }
+          : undefined
+      }
+      onMouseLeave={enabled ? () => setPos(null) : undefined}
+    >
+      {children}
+      {enabled && pos && (
+        <span
+          className="pointer-events-none absolute z-10 whitespace-nowrap rounded bg-[rgba(50,3,0,0.82)] px-1.5 py-0.5 text-[10.5px] font-medium text-white shadow-sm"
+          style={{ left: pos.x + 14, top: pos.y + 16 }}
+        >
+          {t("chart.clickForDetails", "Cliquer pour plus de détails")}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -108,7 +135,7 @@ export function SCurveChart({
   const curIdx = currentPointIndex(data);
   const cur = curIdx >= 0 ? data[curIdx] : null;
   return (
-    <div>
+    <HoverDetailsHint enabled={!!onPointClick}>
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart
           data={data}
@@ -165,7 +192,6 @@ export function SCurveChart({
           />
         </ComposedChart>
       </ResponsiveContainer>
-      {onPointClick && <ClickForDetailsHint />}
-    </div>
+    </HoverDetailsHint>
   );
 }
