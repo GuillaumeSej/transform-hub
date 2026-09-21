@@ -753,6 +753,10 @@ export type HierarchyLevelDef = {
   order: number;
   /** Sémantique facultative permettant d'alimenter les champs et vues standard. */
   semantic?: HierarchySemantic;
+  /** Niveau facultatif (au plus un par arborescence, en général le plus fin, ex. Centre de coût) :
+   *  s'il est optionnel, la maille "effective" affichée dans les filtres/impacts est le niveau
+   *  non-optionnel le plus fin ; le niveau optionnel reste saisissable quand il est connu. */
+  optional?: boolean;
 };
 
 /** Un nœud concret de l'arborescence (ex. le Cost Center "CC-PROC-001", enfant de la Business
