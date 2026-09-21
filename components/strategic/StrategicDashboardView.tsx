@@ -33,6 +33,7 @@ import {
   resolveChantierOwner,
   resolveIndicatorStatus,
   resolveUserFullName,
+  sumProgramProjetBudgets,
 } from "@/lib/axisLogic";
 import {
   STRATEGIC_DASHBOARD_WIDGET_REGISTRY,
@@ -348,6 +349,17 @@ export function StrategicDashboardView() {
   const allocatedBudgetTotal = useMemo(
     () => chantiers.reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0),
     [chantiers]
+  );
+
+  /** Round 28 : somme RÉELLE des budgets leviers du programme actif (`sumProgramProjetBudgets`,
+   *  lib/axisLogic.ts, bottom-up depuis `ChantierAction.budget`) — comparée au budget
+   *  prévisionnel TOTAL déclaré par l'admin (`Program.budget`, ProgramsPanel.tsx) dans le résumé
+   *  juste sous le bandeau Ambition ci-dessous. Distinct de `allocatedBudgetTotal` ci-dessus, qui
+   *  somme `Chantier.allocatedBudget` (une saisie manuelle par chantier), pas les leviers. */
+  const programBudgetActualTotal = useMemo(
+    () =>
+      activeProgram ? sumProgramProjetBudgets(activeProgram.id, chantiers, chantierActions) : 0,
+    [activeProgram, chantiers, chantierActions]
   );
 
   /** Numérotation globale 3-5-15 des indicateurs (`numberIndicators`, lib/axisLogic.ts) — alimente
@@ -805,6 +817,7 @@ export function StrategicDashboardView() {
     leviersSuffix: t("strategicAxes.roadmap.leviersSuffix"),
     late: t("strategicAxes.roadmap.late"),
     lateCount: t("strategicAxes.roadmap.lateCount"),
+    currentMilestone: t("strategicAxes.roadmap.currentMilestone"),
   };
 
   // ─── Layout personnalisable (même mécanique que le dashboard exécutif) ────────────────────
@@ -1038,6 +1051,27 @@ export function StrategicDashboardView() {
               </div>
               <div className="mt-0.5 text-[13px] font-medium leading-snug text-primary">
                 {activeProgram.ambition}
+              </div>
+            </div>
+          )}
+          {/* Round 28 : budget prévisionnel TOTAL du programme (`Program.budget`, réglé par un
+              admin dans ProgramsPanel.tsx) vs somme réelle des budgets leviers
+              (`sumProgramProjetBudgets`) — même convention "masqué si absent" que le bandeau
+              Ambition ci-dessus (pas de placeholder fabriqué tant que l'admin n'a pas renseigné ce
+              budget total). Réutilise `BudgetVsActualBar`, déjà utilisé plus bas pour le budget par
+              axe/chantier, pour rester visuellement cohérent plutôt que d'inventer un nouveau
+              visuel — son badge "Dépassé" intégré signale directement le dépassement. */}
+          {activeProgram.budget !== undefined && (
+            <div className="mt-3 max-w-md rounded-lg border border-border bg-bg-elevated px-4 py-2.5">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                {t("strategicDashboard.programBudgetLabel")}
+              </div>
+              <div className="mt-1">
+                <BudgetVsActualBar
+                  planned={activeProgram.budget}
+                  consumed={programBudgetActualTotal}
+                  formatValue={(value) => `${value.toLocaleString()} ${activeProgram.currency}`}
+                />
               </div>
             </div>
           )}

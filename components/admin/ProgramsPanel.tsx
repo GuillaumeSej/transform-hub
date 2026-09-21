@@ -164,6 +164,10 @@ export function ProgramsPanel({
     type: ProgramType;
     actionPlanEnabled: boolean;
     ambition: string | undefined;
+    // Budget prévisionnel total du programme (round 28) — strictement Plan Stratégique, même
+    // discipline que `ambition` juste au-dessus (voir son commentaire ci-dessous et dans `save`) :
+    // ne concerne jamais un Plan Performance, jamais réécrit pour l'un d'eux.
+    budget: number | undefined;
   }>({
     name: "",
     sponsor: undefined,
@@ -171,6 +175,7 @@ export function ProgramsPanel({
     type: "performance",
     actionPlanEnabled: true,
     ambition: undefined,
+    budget: undefined,
   });
   const [showForm, setShowForm] = useState(false);
   /** Programme (Stratégique ou Performance) dont on affiche la fiche de configuration (null =
@@ -208,6 +213,7 @@ export function ProgramsPanel({
       type: "performance",
       actionPlanEnabled: true,
       ambition: undefined,
+      budget: undefined,
     });
     setShowForm(true);
   };
@@ -222,6 +228,7 @@ export function ProgramsPanel({
       type: resolveProgramType(p),
       actionPlanEnabled: p.actionPlanEnabled ?? true,
       ambition: p.ambition,
+      budget: p.budget,
     });
     setShowForm(true);
   };
@@ -244,6 +251,10 @@ export function ProgramsPanel({
           // chargée par `startEdit` (le patch conserverait sinon une donnée qu'aucun champ ne
           // permet plus d'éditer).
           ...(resolveProgramType(existing) === "strategic" ? { ambition: form.ambition } : {}),
+          // Budget prévisionnel total (round 28) — même garde que `ambition` ci-dessus : jamais
+          // réécrit pour un programme Performance, même si `form.budget` porte encore une ancienne
+          // valeur chargée par `startEdit`.
+          ...(resolveProgramType(existing) === "strategic" ? { budget: form.budget } : {}),
           ...(resolveProgramType(existing) === "performance"
             ? { actionPlanEnabled: form.actionPlanEnabled }
             : {}),
@@ -258,6 +269,9 @@ export function ProgramsPanel({
         sponsor: form.sponsor,
         owner: form.owner,
         ...(form.type === "strategic" ? { ambition: form.ambition } : {}),
+        // Budget prévisionnel total (round 28) — n'a de sens que pour un Plan Stratégique, même
+        // garde que `ambition` ci-dessus (voir `Program.budget`, types/index.ts).
+        ...(form.type === "strategic" ? { budget: form.budget } : {}),
         currency: "€M",
         fyStart: "2026-01",
         fyEnd: "2026-12",
@@ -439,6 +453,31 @@ export function ProgramsPanel({
                   "adminProgramsPanel.ambitionPlaceholder",
                   "Ex. Devenir leader du marché d'ici 2027"
                 )}
+              />
+            </div>
+          )}
+
+          {/* Budget prévisionnel total du programme (round 28) — même garde que le champ Ambition
+              ci-dessus : n'a de sens que pour un Plan Stratégique (voir `Program.budget`,
+              types/index.ts). Comparé plus tard à la somme réelle des budgets leviers
+              (`sumProgramProjetBudgets`) sur le dashboard exécutif — retiré du formulaire d'un
+              Plan Performance, qui n'a pas cette notion. */}
+          {form.type === "strategic" && (
+            <div>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("adminProgramsPanel.budgetLabel", "Budget prévisionnel")}
+              </label>
+              <input
+                type="number"
+                value={form.budget ?? ""}
+                onChange={(e) => {
+                  const trimmed = e.target.value.trim();
+                  const parsed = trimmed === "" ? undefined : Number(trimmed);
+                  if (parsed !== undefined && Number.isNaN(parsed)) return;
+                  setForm((f) => ({ ...f, budget: parsed }));
+                }}
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                placeholder={t("adminProgramsPanel.budgetPlaceholder", "Ex. 5000000")}
               />
             </div>
           )}

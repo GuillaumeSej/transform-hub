@@ -693,6 +693,8 @@ const fr: Record<string, string> = {
   "adminProgramsPanel.owner": "Owner",
   "adminProgramsPanel.ambitionLabel": "Ambition",
   "adminProgramsPanel.ambitionPlaceholder": "Ex. Devenir leader du marché d'ici 2027",
+  "adminProgramsPanel.budgetLabel": "Budget prévisionnel",
+  "adminProgramsPanel.budgetPlaceholder": "Ex. 5000000",
   "adminProgramsPanel.count": "{n} programme(s)",
   "adminProgramsPanel.colProgram": "Programme",
   "adminProgramsPanel.colActions": "Actions",
@@ -708,6 +710,9 @@ const fr: Record<string, string> = {
   "shared.appShell.strategicIndicatorTitle": "Indicateur à risque · {name}",
   "shared.appShell.strategicIndicatorDesc":
     "La dernière mesure est en dehors de l'objectif : {objective}.",
+  "shared.appShell.strategicBudgetOverrunTitle": "Dépassement budgétaire · {program}",
+  "shared.appShell.strategicBudgetOverrunDesc":
+    "Le budget prévisionnel du programme est dépassé de {amount}.",
   "shared.appShell.noAccessTitle": "Aucun accès configuré",
   "shared.appShell.noAccessDesc":
     "Votre compte n'a encore aucun profil ni habilitation associé. Contactez un administrateur pour qu'il vous en attribue un.",
@@ -1383,6 +1388,9 @@ const fr: Record<string, string> = {
   // Round 21 (retour PO) : tooltip de la pastille de comptage "N/total en retard" au niveau
   // chantier — remplace l'icône seule, ambiguë sur un chantier à plusieurs leviers.
   "strategicAxes.roadmap.lateCount": "{n} projet(s) en retard sur {total}",
+  // Round 28 : préfixe de l'infobulle du badge "jalon courant" (ex. "J2") posé sur chaque ligne de
+  // levier de la feuille de route — remplace la fraction "N/5" jugée confuse par le PO.
+  "strategicAxes.roadmap.currentMilestone": "Jalon actuel",
   "strategicAxes.actionsCompleted": "projets terminés",
   "strategicAxes.moreActionsSuffix": "autres",
   "strategicAxes.cardNoActions": "Aucun projet",
@@ -1959,6 +1967,9 @@ const fr: Record<string, string> = {
   // Round 12 : bandeau "ambition" (rappel permanent, réglé une fois en admin) + libellés des
   // listes ouvertes par les puces d'en-tête cliquables (axes/chantiers/indicateurs/budget).
   "strategicDashboard.ambitionLabel": "Ambition",
+  // Round 28 : résumé budget prévisionnel total du programme (`Program.budget`) vs somme réelle
+  // des budgets leviers, sous le bandeau Ambition.
+  "strategicDashboard.programBudgetLabel": "Budget prévisionnel du programme",
   "strategicDashboard.popover.axesTitle": "Axes stratégiques",
   "strategicDashboard.popover.chantiersTitle": "Chantiers",
   "strategicDashboard.popover.indicatorsTitle": "Indicateurs",

@@ -637,6 +637,8 @@ const es: Record<string, string> = {
   "adminProgramsPanel.owner": "Propietario",
   "adminProgramsPanel.ambitionLabel": "Ambición",
   "adminProgramsPanel.ambitionPlaceholder": "Ej. Ser líder del mercado antes de 2027",
+  "adminProgramsPanel.budgetLabel": "Presupuesto previsional",
+  "adminProgramsPanel.budgetPlaceholder": "Ej. 5000000",
   "adminProgramsPanel.count": "{n} programa(s)",
   "adminProgramsPanel.colProgram": "Programa",
   "adminProgramsPanel.colActions": "Acciones",
@@ -652,6 +654,9 @@ const es: Record<string, string> = {
   "shared.appShell.strategicIndicatorTitle": "Indicador en riesgo · {name}",
   "shared.appShell.strategicIndicatorDesc":
     "La última medición no alcanza el objetivo: {objective}.",
+  "shared.appShell.strategicBudgetOverrunTitle": "Desviación presupuestaria · {program}",
+  "shared.appShell.strategicBudgetOverrunDesc":
+    "El presupuesto previsional del programa se ha superado en {amount}.",
   "shared.appShell.noAccessTitle": "Sin acceso configurado",
   "shared.appShell.noAccessDesc":
     "Su cuenta aún no tiene ningún perfil ni permiso asociado. Contacte a un administrador para que le asigne uno.",
@@ -1303,6 +1308,7 @@ const es: Record<string, string> = {
   "strategicAxes.roadmap.leviersSuffix": "iniciativas",
   "strategicAxes.roadmap.late": "Retrasado",
   "strategicAxes.roadmap.lateCount": "{n} iniciativa(s) retrasada(s) de {total}",
+  "strategicAxes.roadmap.currentMilestone": "Hito actual",
   "strategicAxes.actionsCompleted": "iniciativas finalizadas",
   "strategicAxes.moreActionsSuffix": "más",
   "strategicAxes.cardNoActions": "Sin iniciativas",
@@ -1835,6 +1841,9 @@ const es: Record<string, string> = {
   // etiquetas de las listas abiertas por las chips de cabecera clicables (ejes/frentes de
   // trabajo/indicadores/presupuesto).
   "strategicDashboard.ambitionLabel": "Ambición",
+  // Ronda 28: presupuesto previsional total del programa (`Program.budget`) frente a la suma real
+  // de los presupuestos de los frentes, bajo el banner Ambición.
+  "strategicDashboard.programBudgetLabel": "Presupuesto previsional del programa",
   "strategicDashboard.popover.axesTitle": "Ejes estratégicos",
   "strategicDashboard.popover.chantiersTitle": "Frentes de trabajo",
   "strategicDashboard.popover.indicatorsTitle": "Indicadores",

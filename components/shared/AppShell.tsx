@@ -10,6 +10,7 @@ import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import {
   chantierDependencyAlerts,
   latestMeasurement,
+  programBudgetOverrun,
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
 import { cleanupLegacyStorage } from "@/lib/legacyStorageCleanup";
@@ -40,7 +41,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Type du programme actif — le garde-fou de routes ci-dessous doit appliquer EXACTEMENT le même
   // filtre que la Sidebar, sinon une page masquée dans la nav (ex. /hr en mode stratégique)
   // resterait accessible en tapant son URL directement.
-  const { programType, activeProgramId, loading: programsLoading } = useActiveProgram();
+  const {
+    programType,
+    activeProgram,
+    activeProgramId,
+    loading: programsLoading,
+  } = useActiveProgram();
   const router = useRouter();
   const pathname = usePathname();
   const data = useBeTrackData(user?.companyId ?? null);
@@ -160,6 +166,46 @@ export function AppShell({ children }: { children: ReactNode }) {
       routes[id] = "/kpi";
     }
 
+    // 3. Dépassement du budget prévisionnel TOTAL du programme actif (round 28) —
+    //    `programBudgetOverrun` (lib/axisLogic.ts) ne renvoie un montant que si `Program.budget`
+    //    est déclaré ET dépassé par la somme réelle des budgets leviers : rien à signaler tant que
+    //    l'admin n'a pas renseigné ce budget total (voir ProgramsPanel.tsx), même convention
+    //    "absent = pas d'alerte fabriquée" que les deux blocs précédents. Cette alerte est pour le
+    //    PILOTE du plan (`actorRole: "strategic_lead"`), même esprit que `indicator.responsibleRoles[0]`
+    //    ci-dessus qui cible le responsable métier de l'indicateur.
+    if (activeProgram) {
+      const overrun = programBudgetOverrun(
+        activeProgram,
+        strategic.chantiers,
+        strategic.chantierActions
+      );
+      if (overrun !== undefined) {
+        const id = `strategic-budget-overrun-${activeProgram.id}`;
+        const amountLabel = `${overrun.toLocaleString()} ${activeProgram.currency}`;
+        alerts.push({
+          id,
+          type: "red",
+          ts: today,
+          createdAt: today,
+          scope: activeProgram.id,
+          scopeLabel: activeProgram.name,
+          title: t(
+            "shared.appShell.strategicBudgetOverrunTitle",
+            "Dépassement budgétaire · {program}"
+          ).replace("{program}", activeProgram.name),
+          desc: t(
+            "shared.appShell.strategicBudgetOverrunDesc",
+            "Le budget prévisionnel du programme est dépassé de {amount}."
+          ).replace("{amount}", amountLabel),
+          actorRole: "strategic_lead",
+          resolved: false,
+          source: "auto",
+          companyId,
+        });
+        routes[id] = "/dashboard";
+      }
+    }
+
     for (const alert of strategicApprovals.alerts) {
       alerts.push(alert);
       routes[alert.id] = APPROVAL_ALERT_ROUTE;
@@ -169,6 +215,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [
     strategicApprovals.alerts,
     isStrategic,
+    activeProgram,
     strategic.chantiers,
     strategic.chantierActions,
     strategic.indicators,

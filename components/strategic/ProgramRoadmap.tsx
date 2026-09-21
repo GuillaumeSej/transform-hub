@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
 import {
   axisSponsorLabel,
+  displayMilestoneId,
   isProjetLate,
   programRoadmap,
   type ProgramRoadmapRow,
@@ -82,6 +83,9 @@ export type ProgramRoadmapLabels = {
    *  plusieurs leviers : impossible de distinguer "1 en retard sur 2" de "tout le chantier est en
    *  retard" sans ce comptage explicite. */
   lateCount?: string;
+  /** Round 28 : préfixe de l'infobulle du badge "jalon courant" posé sur chaque ligne de levier
+   *  (ex. "Jalon actuel : J2") — voir `displayMilestoneId`, lib/axisLogic.ts. */
+  currentMilestone?: string;
 };
 
 const ROW_LABEL_WIDTH = "w-72";
@@ -210,6 +214,7 @@ export function ProgramRoadmap({
     leviersSuffix: labels?.leviersSuffix ?? "leviers",
     late: labels?.late ?? "En retard",
     lateCount: labels?.lateCount,
+    currentMilestone: labels?.currentMilestone ?? "Jalon actuel",
   };
 
   // Semestre par défaut : le programme complet s'étend typiquement sur plusieurs années, la maille
@@ -456,9 +461,16 @@ export function ProgramRoadmap({
                                 {/* Round 20, point 2 : nom du levier cliquable (même destination que
                                   la barre ci-dessous, `onProjetClick`) et centré verticalement dans
                                   sa colonne — la ligne parente est `flex items-stretch`, ce label
-                                  collait donc en haut sans ce centrage propre. */}
+                                  collait donc en haut sans ce centrage propre.
+                                  Round 28 : badge "jalon courant" (ex. "J2", `displayMilestoneId`)
+                                  ajouté À L'INTÉRIEUR de ce même élément cliquable — remplace la
+                                  fraction "N/5" jugée confuse par le PO (« ça ne dit pas si je suis
+                                  à J1 ou J2 ») par un repère direct, sans second gestionnaire de
+                                  clic : le badge profite du même `onClick` que le nom du levier. Le
+                                  "N%" d'avancement (posé sur la barre, plus bas) N'EST PAS retiré —
+                                  toujours utile, seulement complété par ce repère de jalon. */}
                                 <div
-                                  className={`flex h-full items-center truncate text-[10.5px] font-medium text-primary ${
+                                  className={`flex h-full items-center gap-1.5 text-[10.5px] font-medium text-primary ${
                                     rowClickable
                                       ? "cursor-pointer hover:text-bp-coral hover:underline"
                                       : ""
@@ -470,7 +482,17 @@ export function ProgramRoadmap({
                                       : undefined
                                   }
                                 >
-                                  {row.action.name}
+                                  <span className="min-w-0 flex-1 truncate">{row.action.name}</span>
+                                  <span
+                                    className="shrink-0 rounded-full border border-border bg-neutral-50 px-1.5 py-0.5 text-[9.5px] font-bold text-secondary"
+                                    title={`${l.currentMilestone} : ${displayMilestoneId(
+                                      row.action.milestones?.currentMilestone ?? "E0"
+                                    )}`}
+                                  >
+                                    {displayMilestoneId(
+                                      row.action.milestones?.currentMilestone ?? "E0"
+                                    )}
+                                  </span>
                                 </div>
                               </div>
 

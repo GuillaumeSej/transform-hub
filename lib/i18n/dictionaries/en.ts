@@ -656,6 +656,8 @@ const en: Record<string, string> = {
   "adminProgramsPanel.owner": "Owner",
   "adminProgramsPanel.ambitionLabel": "Ambition",
   "adminProgramsPanel.ambitionPlaceholder": "E.g. Become the market leader by 2027",
+  "adminProgramsPanel.budgetLabel": "Forecasted budget",
+  "adminProgramsPanel.budgetPlaceholder": "E.g. 5000000",
   "adminProgramsPanel.count": "{n} program(s)",
   "adminProgramsPanel.colProgram": "Program",
   "adminProgramsPanel.colActions": "Actions",
@@ -671,6 +673,9 @@ const en: Record<string, string> = {
   "shared.appShell.strategicIndicatorTitle": "Indicator at risk · {name}",
   "shared.appShell.strategicIndicatorDesc":
     "The latest measurement misses the target: {objective}.",
+  "shared.appShell.strategicBudgetOverrunTitle": "Budget overrun · {program}",
+  "shared.appShell.strategicBudgetOverrunDesc":
+    "The program's forecasted budget is exceeded by {amount}.",
   "shared.appShell.noAccessTitle": "No access configured",
   "shared.appShell.noAccessDesc":
     "Your account doesn't have any profile or permission yet. Contact an administrator to have one assigned.",
@@ -1317,6 +1322,7 @@ const en: Record<string, string> = {
   "strategicAxes.roadmap.leviersSuffix": "projects",
   "strategicAxes.roadmap.late": "Late",
   "strategicAxes.roadmap.lateCount": "{n} project(s) late out of {total}",
+  "strategicAxes.roadmap.currentMilestone": "Current milestone",
   "strategicAxes.actionsCompleted": "projects completed",
   "strategicAxes.moreActionsSuffix": "more",
   "strategicAxes.cardNoActions": "No projects",
@@ -1831,6 +1837,9 @@ const en: Record<string, string> = {
   // Round 12: "ambition" banner (persistent reminder, set once in admin) + labels for the lists
   // opened by the clickable header chips (axes/work packages/indicators/budget).
   "strategicDashboard.ambitionLabel": "Ambition",
+  // Round 28: forecasted total program budget (`Program.budget`) vs actual sum of lever budgets,
+  // under the Ambition banner.
+  "strategicDashboard.programBudgetLabel": "Program forecasted budget",
   "strategicDashboard.popover.axesTitle": "Strategic axes",
   "strategicDashboard.popover.chantiersTitle": "Work packages",
   "strategicDashboard.popover.indicatorsTitle": "Indicators",

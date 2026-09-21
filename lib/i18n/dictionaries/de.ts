@@ -640,6 +640,8 @@ const de: Record<string, string> = {
   "adminProgramsPanel.owner": "Owner",
   "adminProgramsPanel.ambitionLabel": "Ambition",
   "adminProgramsPanel.ambitionPlaceholder": "Z. B. Bis 2027 Marktführer werden",
+  "adminProgramsPanel.budgetLabel": "Geplantes Budget",
+  "adminProgramsPanel.budgetPlaceholder": "Z. B. 5000000",
   "adminProgramsPanel.count": "{n} Programm(e)",
   "adminProgramsPanel.colProgram": "Programm",
   "adminProgramsPanel.colActions": "Aktionen",
@@ -654,6 +656,9 @@ const de: Record<string, string> = {
   "shared.appShell.strategicDependencyTitle": "Abhängigkeit gefährdet · {chantier}",
   "shared.appShell.strategicIndicatorTitle": "Indikator gefährdet · {name}",
   "shared.appShell.strategicIndicatorDesc": "Die letzte Messung verfehlt das Ziel: {objective}.",
+  "shared.appShell.strategicBudgetOverrunTitle": "Budgetüberschreitung · {program}",
+  "shared.appShell.strategicBudgetOverrunDesc":
+    "Das geplante Budget des Programms wird um {amount} überschritten.",
   "shared.appShell.noAccessTitle": "Kein Zugriff konfiguriert",
   "shared.appShell.noAccessDesc":
     "Ihrem Konto ist noch kein Profil oder keine Berechtigung zugewiesen. Wenden Sie sich an einen Administrator.",
@@ -1305,6 +1310,7 @@ const de: Record<string, string> = {
   "strategicAxes.roadmap.leviersSuffix": "Projekte",
   "strategicAxes.roadmap.late": "Verzögert",
   "strategicAxes.roadmap.lateCount": "{n} von {total} Projekt(e) verzögert",
+  "strategicAxes.roadmap.currentMilestone": "Aktueller Meilenstein",
   "strategicAxes.actionsCompleted": "Projekte abgeschlossen",
   "strategicAxes.moreActionsSuffix": "weitere",
   "strategicAxes.cardNoActions": "Kein Projekt",
@@ -1835,6 +1841,9 @@ const de: Record<string, string> = {
   // der Listen, die über die klickbaren Kopf-Chips geöffnet werden (Achsen/Arbeitspakete/
   // Indikatoren/Budget).
   "strategicDashboard.ambitionLabel": "Ambition",
+  // Runde 28: geplantes Gesamtbudget des Programms (`Program.budget`) vs. tatsächliche Summe der
+  // Arbeitspaket-Budgets, unter dem Ambition-Banner.
+  "strategicDashboard.programBudgetLabel": "Geplantes Programmbudget",
   "strategicDashboard.popover.axesTitle": "Strategische Achsen",
   "strategicDashboard.popover.chantiersTitle": "Arbeitspakete",
   "strategicDashboard.popover.indicatorsTitle": "Indikatoren",
