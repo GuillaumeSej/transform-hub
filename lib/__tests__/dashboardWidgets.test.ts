@@ -101,7 +101,7 @@ describe("dashboardWidgets — initiative health reorder migration", () => {
 
   it("does not move initiative-health if neither 'risk-center' nor 'portfolio-funnel' is present", () => {
     const before: DashboardWidgetInstance[] = [
-      { instanceId: "bridge", type: "bridge", span: "M" },
+      { instanceId: "s-curve", type: "s-curve", span: "M" },
       {
         instanceId: "initiative-health",
         type: "initiative-health",
@@ -167,11 +167,11 @@ describe("dashboardWidgets — economies section migration", () => {
 
   it("leaves marimekko's position unchanged (span-only fix) when neither anchor is present", () => {
     const before: DashboardWidgetInstance[] = [
-      { instanceId: "bridge", type: "bridge", span: "M" },
+      { instanceId: "s-curve", type: "s-curve", span: "M" },
       { instanceId: "marimekko", type: "marimekko", span: "M", view: "function-country" },
     ];
     const after = migrateEconomiesSectionLayout(before, false);
-    expect(after.map((w) => w.type)).toEqual(["bridge", "marimekko"]);
+    expect(after.map((w) => w.type)).toEqual(["s-curve", "marimekko"]);
     expect(after.find((w) => w.type === "marimekko")?.span).toBe("XL");
   });
 
@@ -272,7 +272,7 @@ describe("dashboardWidgets — configurable widgets (view)", () => {
 
   it("non-configurable widgets have no view field", () => {
     const layout = buildDefaultLayout();
-    expect(layout.find((w) => w.type === "bridge")?.view).toBeUndefined();
+    expect(layout.find((w) => w.type === "s-curve")?.view).toBeUndefined();
   });
 
   it("addWidget sets the requested view, or the default when omitted", () => {
@@ -310,7 +310,7 @@ describe("dashboardWidgets — builder générique (customViews)", () => {
 
   it("non-builder widgets have no customViews field", () => {
     const layout = buildDefaultLayout();
-    expect(layout.find((w) => w.type === "bridge")?.customViews).toBeUndefined();
+    expect(layout.find((w) => w.type === "s-curve")?.customViews).toBeUndefined();
   });
 
   it("addWidgetWithCustomView creates a fresh instance with exactly the requested view", () => {
