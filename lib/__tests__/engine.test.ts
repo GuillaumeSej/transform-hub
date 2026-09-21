@@ -500,6 +500,18 @@ describe("engine — isActionLate", () => {
     expect(isActionLate(action, today)).toBe(false);
   });
 
+  it("action at 100% declared progress is NOT late, whatever its raw status", () => {
+    const action = {
+      id: "a1",
+      name: "A1",
+      start: "2026-01-01",
+      end: "2026-02-01",
+      status: "delayed" as const,
+      declaredProgressPct: 100,
+    };
+    expect(isActionLate(action, today)).toBe(false);
+  });
+
   it("todo action with a past end date IS late", () => {
     const action = {
       id: "a1",

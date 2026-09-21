@@ -781,8 +781,9 @@ const ACTION_STATUS_WEIGHT: Record<ActionStatus, number> = {
  * `new Date()`) pour rester testable sans mocker l'horloge globale.
  */
 export function isActionLate(action: LeverAction, today: Date = new Date()): boolean {
+  // Une action terminée (statut « fait » OU avancement à 100 %) n'est jamais en retard.
+  if (action.status === "done" || actionProgressPct(action) >= 100) return false;
   if (action.status === "delayed") return true;
-  if (action.status === "done") return false;
   return new Date(action.end).getTime() < today.getTime();
 }
 
