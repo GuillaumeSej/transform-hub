@@ -308,7 +308,7 @@ export function ProgramRoadmap({
                       <span className="truncate text-[11.5px] font-bold uppercase tracking-wide text-primary">
                         {axisGroup.axis.name}
                       </span>
-                      {axisGroup.axis.sponsorName && (
+                      {axisGroup.axis.owner && (
                         <span className="truncate text-[10.5px] text-tertiary">
                           · Sponsor : {axisSponsorLabel(axisGroup.axis, users)}
                         </span>

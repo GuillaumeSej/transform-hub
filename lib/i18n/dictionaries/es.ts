@@ -1267,9 +1267,8 @@ const es: Record<string, string> = {
   // Ficha de detalle de un eje
   "strategicAxes.back": "Volver a los ejes",
   "strategicAxes.notFound": "Eje no encontrado.",
-  "strategicAxes.sponsor": "Patrocinador del eje",
   "strategicAxes.sponsorShort": "Patrocinador",
-  "strategicAxes.owner": "Responsable",
+  "strategicAxes.owner": "Sponsor del eje",
   "strategicAxes.editAxis": "Editar el eje",
   "strategicAxes.editAxisModalTitle": "Editar el eje",
   "strategicAxes.stageUpdated": "Etapa actualizada",

@@ -38,22 +38,23 @@ const users = [
 ];
 const by = (n: string) => users.find((x) => x.username === n)!;
 
+// Rôle unique depuis la suppression de `StrategicAxis.sponsorName` (décision explicite : plus de
+// duplication sponsor COMEX / responsable au niveau axe) — `owner` EST le sponsor de l'axe, donc
+// le compte `axis_sponsor` (alex.roussel / marc.dubois) directement.
 const axes = [
   {
     id: "AX-digital",
     companyId: "c1",
     programId: P,
     name: "Digitalisation & Data",
-    owner: "Sophie Nguyen",
-    sponsorName: "alex.roussel",
+    owner: "alex.roussel",
   },
   {
     id: "AX-excop",
     companyId: "c1",
     programId: P,
     name: "Excellence Opérationnelle",
-    owner: "Marc Delattre",
-    sponsorName: "marc.dubois",
+    owner: "marc.dubois",
   },
 ] as unknown as StrategicAxis[];
 const chantiers = [
@@ -204,9 +205,10 @@ describe("script set-strategic-owners — plan", () => {
     profiles:
       n === "test.cto" ? [{ role: "cto" }, { role: "strategic_lead" }] : [{ role: "lever" }],
   }));
+  // `plan()` lit `axis.owner` (sponsor de l'axe, rôle unique) — plus `axis.sponsorName`.
   const ax = ["digital", "durable", "excop", "expclient", "talents"].map((k, i) => ({
     id: `AX-${k}`,
-    sponsorName: acmeUsers[i].username,
+    owner: acmeUsers[i].username,
   }));
   const ch = Array.from({ length: 13 }, (_, i) => ({
     id: `CH-${i}`,

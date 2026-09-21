@@ -25,7 +25,6 @@ import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   chantierDependencyAlerts,
-  axisSponsorLabel,
   countOnTrackAtRisk,
   isProjetLate,
   numberIndicators,
@@ -677,9 +676,6 @@ export function StrategicDashboardView() {
             </button>
             <span className="mt-0.5 block text-[11px] text-tertiary">
               {resolveUserFullName(axis.owner, strategic.users) ?? t("strategicAxes.unassigned")}
-              {axis.sponsorName
-                ? ` · ${t("strategicAxes.sponsorShort", "Sponsor")} : ${axisSponsorLabel(axis, strategic.users)}`
-                : ""}
             </span>
           </span>
         </div>

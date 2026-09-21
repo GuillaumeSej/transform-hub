@@ -2429,26 +2429,27 @@ describe("axisProgressPct / projetMilestoneCounts", () => {
 });
 
 describe("sponsor d'axe", () => {
+  // Rôle unique depuis la suppression de `StrategicAxis.sponsorName` (décision explicite : plus de
+  // duplication sponsor COMEX / responsable au niveau axe) — `owner` EST le sponsor de l'axe.
   const users = [{ username: "u1", name: "Ursule Un" }];
   it("resolveUserFullName / axisSponsorLabel : nom complet, repli brut, undefined", () => {
     expect(resolveUserFullName("u1", users)).toBe("Ursule Un");
     expect(resolveUserFullName("inconnu", users)).toBe("inconnu");
     expect(resolveUserFullName(undefined, users)).toBeUndefined();
-    expect(axisSponsorLabel({ sponsorName: "u1" }, users)).toBe("Ursule Un");
+    expect(axisSponsorLabel({ owner: "u1" }, users)).toBe("Ursule Un");
     expect(axisSponsorLabel({}, users)).toBeUndefined();
   });
-  it("axisDecisionMakers : sponsor puis owner, dédoublonnés", () => {
-    expect(axisDecisionMakers({ owner: "o", sponsorName: "s" })).toEqual(["s", "o"]);
-    expect(axisDecisionMakers({ owner: "x", sponsorName: "x" })).toEqual(["x"]);
+  it("axisDecisionMakers : le sponsor de l'axe (owner), seul rôle de décision", () => {
+    expect(axisDecisionMakers({ owner: "o" })).toEqual(["o"]);
     expect(axisDecisionMakers({})).toEqual([]);
   });
-  it("axesSponsoredBy + scope axis_sponsor via sponsorName", () => {
+  it("axesSponsoredBy + scope axis_sponsor via owner", () => {
     const axes = [
-      { id: "A1", sponsorName: "u1" },
+      { id: "A1", owner: "u1" },
       { id: "A2", owner: "u1" },
       { id: "A3", owner: "z" },
     ] as StrategicAxis[];
-    expect(axesSponsoredBy(axes, "u1").map((a) => a.id)).toEqual(["A1"]);
+    expect(axesSponsoredBy(axes, "u1").map((a) => a.id)).toEqual(["A1", "A2"]);
     const scope = resolveStrategicOwnershipScope(
       { username: "u1", profiles: [{ role: "axis_sponsor" }] },
       "p1",

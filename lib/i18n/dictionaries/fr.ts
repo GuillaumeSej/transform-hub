@@ -1340,9 +1340,11 @@ const fr: Record<string, string> = {
   // Fiche détail d'un axe
   "strategicAxes.back": "Retour aux axes",
   "strategicAxes.notFound": "Axe introuvable.",
-  "strategicAxes.sponsor": "Sponsor de l'axe",
   "strategicAxes.sponsorShort": "Sponsor",
-  "strategicAxes.owner": "Responsable",
+  // Rôle unique (round 28) : suppression de `StrategicAxis.sponsorName`, `owner` EST désormais le
+  // sponsor de l'axe (décision explicite : plus de duplication sponsor COMEX / responsable au
+  // niveau axe, contrairement à Chantier.sponsorName/Chantier.pilote).
+  "strategicAxes.owner": "Sponsor de l'axe",
   "strategicAxes.editAxis": "Modifier l'axe",
   "strategicAxes.editAxisModalTitle": "Modifier l'axe",
   "strategicAxes.stageUpdated": "Étape mise à jour",

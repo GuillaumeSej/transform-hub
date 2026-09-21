@@ -144,12 +144,11 @@ describe("resolveApprover", () => {
       "axis_sponsor"
     );
   });
-  it("sponsor d'axe ET responsable d'axe peuvent décider (projet_create)", () => {
-    const d = data({ axes: [axis({ owner: "alice", sponsorName: "sam" })] });
+  it("le sponsor de l'axe (owner, rôle unique) décide (projet_create)", () => {
+    const d = data({ axes: [axis({ owner: "alice" })] });
     const r = resolveApprover("projet_create", { type: "chantier", id: "CH1" }, d);
-    expect(r.usernames).toEqual(["sam", "alice"]);
+    expect(r.usernames).toEqual(["alice"]);
     const ap = approval({ kind: "projet_create", targetType: "chantier", targetId: "CH1" });
-    expect(canDecide(user("sam"), ap, d)).toBe(true);
     expect(canDecide(user("alice"), ap, d)).toBe(true);
     expect(canDecide(user("zed"), ap, d)).toBe(false);
   });

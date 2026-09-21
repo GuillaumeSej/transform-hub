@@ -15,7 +15,6 @@ import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import { IndicatorStatusSummary } from "@/components/strategic/IndicatorStatusSummary";
 import {
-  axisSponsorLabel,
   chantierDependencyAlerts,
   latestMeasurement,
   resolveIndicatorStatus,
@@ -277,9 +276,6 @@ export function AxisDetailClient() {
           <div className="mt-1 text-[11px] text-tertiary">
             {t("strategicAxes.owner")} :{" "}
             {resolveUserFullName(axis.owner, data.users) ?? t("strategicAxes.unassigned")}
-            {axis.sponsorName
-              ? ` · ${t("strategicAxes.sponsor", "Sponsor de l'axe")} : ${axisSponsorLabel(axis, data.users)}`
-              : ""}
           </div>
         </div>
         {!readOnly && (

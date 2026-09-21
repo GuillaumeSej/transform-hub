@@ -1282,9 +1282,8 @@ const en: Record<string, string> = {
   // Axis detail sheet
   "strategicAxes.back": "Back to axes",
   "strategicAxes.notFound": "Axis not found.",
-  "strategicAxes.sponsor": "Axis sponsor",
   "strategicAxes.sponsorShort": "Sponsor",
-  "strategicAxes.owner": "Owner",
+  "strategicAxes.owner": "Axis sponsor",
   "strategicAxes.editAxis": "Edit axis",
   "strategicAxes.editAxisModalTitle": "Edit axis",
   "strategicAxes.stageUpdated": "Stage updated",

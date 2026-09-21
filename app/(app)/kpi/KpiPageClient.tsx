@@ -24,7 +24,6 @@ import {
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
 import {
-  axisSponsorLabel,
   computeIndicatorDelta,
   latestMeasurement,
   numberIndicators,
@@ -1035,12 +1034,7 @@ function AxisSection({
         <h2 className="text-sm font-bold uppercase tracking-wide text-text-primary">{axis.name}</h2>
         {axis.owner && (
           <span className="text-xs text-text-secondary">
-            {resolveUserFullName(axis.owner, users)}
-          </span>
-        )}
-        {axis.sponsorName && (
-          <span className="text-xs text-text-secondary">
-            {t("strategicAxes.sponsorShort", "Sponsor")} : {axisSponsorLabel(axis, users)}
+            {t("strategicAxes.sponsorShort", "Sponsor")} : {resolveUserFullName(axis.owner, users)}
           </span>
         )}
       </div>

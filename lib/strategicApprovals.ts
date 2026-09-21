@@ -156,7 +156,7 @@ function axisOwners(axisIds: string[], axes: StrategicAxis[]): string[] {
   for (const id of axisIds) {
     const axis = axes.find((a) => a.id === id);
     if (!axis) continue;
-    // Sponsor d'axe ET responsable d'axe peuvent tous deux décider (sponsor en premier).
+    // Le sponsor de l'axe (rôle unique) décide.
     for (const u of axisDecisionMakers(axis)) if (!out.includes(u)) out.push(u);
   }
   return out;

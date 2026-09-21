@@ -2,12 +2,16 @@
 /**
  * Prépare la chaîne de validation du Plan Stratégique d'Acme Corp (companyId "c1", programme
  * « Excellence Opérationnelle 2026-2028 », id p-strat-demo-2026) :
- *  1. profils : `axis_sponsor` pour chaque sponsor d'axe, `chantier_owner` pour les responsables
- *     de chantier — sur des comptes Acme EXISTANTS (doc adminUsers `${username}.c1`), en AJOUTANT
- *     le profil stratégique (limité au programme) sans toucher aux profils existants ni aux mots
- *     de passe ; aucun compte n'est créé ;
- *  2. chantiers : `pilote` (username) + `sponsorName` (sponsor de l'axe du chantier). Un pilote/
- *     sponsor déjà présent n'est conservé que s'il désigne un compte Acme existant.
+ *  1. profils : `axis_sponsor` pour chaque sponsor d'axe (= `StrategicAxis.owner`, rôle unique
+ *     depuis la suppression de `sponsorName` — décision explicite : plus de duplication sponsor
+ *     COMEX / responsable au niveau axe), `chantier_owner` pour les responsables de chantier — sur
+ *     des comptes Acme EXISTANTS (doc adminUsers `${username}.c1`), en AJOUTANT le profil
+ *     stratégique (limité au programme) sans toucher aux profils existants ni aux mots de passe ;
+ *     aucun compte n'est créé ;
+ *  2. chantiers : `pilote` (username) + `sponsorName` (sponsor de l'axe du chantier — ce champ
+ *     RESTE au niveau chantier, `Chantier.sponsorName` n'est pas concerné par la suppression du
+ *     doublon au niveau axe). Un pilote/sponsor déjà présent n'est conservé que s'il désigne un
+ *     compte Acme existant.
  * Idempotent. Usage :
  *   node scripts/set-strategic-owners.js                          # DRY RUN (défaut)
  *   CONFIRM_PROD_MIGRATION=yes node scripts/set-strategic-owners.js --apply
@@ -54,11 +58,14 @@ const stratProfile = (u) =>
       (!p.programId || p.programId === PROGRAM_ID)
   );
 
-/** Plan pur : { profiles: [{username, add}], chantiers: [{id, pilote, sponsorName}] }. */
+/** Plan pur : { profiles: [{username, add}], chantiers: [{id, pilote, sponsorName}] }.
+ *  `sponsorOf`/`sponsors` lisent `axis.owner` (sponsor de l'axe, rôle unique) — PAS
+ *  `axis.sponsorName`, qui n'existe plus sur `StrategicAxis` (seul `Chantier.sponsorName`,
+ *  distinct, survit à la suppression du doublon axe). */
 function plan(axes, chantiers, users) {
   const byName = new Map(users.map((u) => [u.username, u]));
-  const sponsorOf = (axisId) => axes.find((a) => a.id === axisId)?.sponsorName;
-  const sponsors = new Set(axes.map((a) => a.sponsorName).filter(Boolean));
+  const sponsorOf = (axisId) => axes.find((a) => a.id === axisId)?.owner;
+  const sponsors = new Set(axes.map((a) => a.owner).filter(Boolean));
   const owners = users
     .filter(isCandidate)
     .filter((u) => !sponsors.has(u.username) && !stratProfile(u))

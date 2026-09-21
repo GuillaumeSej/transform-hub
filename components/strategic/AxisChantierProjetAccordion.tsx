@@ -5,20 +5,13 @@ import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import {
   axisProgressPct,
-  axisSponsorLabel,
   chantierDeclaredProgress,
   colorForChantier,
   milestoneProgressPct,
   projetMilestoneCounts,
 } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type {
-  AuthUser,
-  Chantier,
-  ChantierAction,
-  ProjetKanbanStatus,
-  StrategicAxis,
-} from "@/types";
+import type { Chantier, ChantierAction, ProjetKanbanStatus, StrategicAxis } from "@/types";
 
 /**
  * Accordéon Axe → Chantier → Projet (round 24, Phase 4, Partie 3) — nouvel onglet "Vue par axe" de
@@ -78,7 +71,6 @@ function TreeRow({
   dot,
   name,
   owner,
-  sponsor,
   count,
   pct,
   openLabel,
@@ -92,8 +84,6 @@ function TreeRow({
   dot: ReactNode;
   name: string;
   owner: string;
-  /** Libellé « Sponsor : X » (niveau axe uniquement), absent si pas de sponsor. */
-  sponsor?: string;
   count: string;
   pct: number;
   openLabel: string;
@@ -152,10 +142,7 @@ function TreeRow({
             <span className="truncate text-[11.5px] font-medium text-primary">{name}</span>
           )}
         </span>
-        <span className="block truncate text-[10.5px] text-tertiary">
-          {owner}
-          {sponsor ? ` · ${sponsor}` : ""}
-        </span>
+        <span className="block truncate text-[10.5px] text-tertiary">{owner}</span>
       </span>
       <span className="hidden shrink-0 rounded-full border border-border bg-white px-2 py-px text-[10px] font-semibold text-tertiary sm:inline">
         {count}
@@ -183,7 +170,6 @@ export function AxisChantierProjetAccordion({
   onAxisClick,
   expandAllSignal = 0,
   clickableActionIds = "all",
-  users,
 }: {
   /** Ordre d'apparition = numérotation "Axe {n}" (position 1-based, jamais retriée). */
   axes: StrategicAxis[];
@@ -199,8 +185,6 @@ export function AxisChantierProjetAccordion({
   expandAllSignal?: number;
   /** Round 25 (RBAC `chantier_contributor`) — un projet hors de cet ensemble reste rendu mais inerte. */
   clickableActionIds?: Set<string> | "all";
-  /** Utilisateurs de l'entreprise, pour afficher le nom complet du sponsor d'axe. */
-  users?: Pick<AuthUser, "username" | "name">[];
 }) {
   const { t } = useTranslation();
   const [expandedAxisIds, setExpandedAxisIds] = useState<Set<string>>(new Set());
@@ -266,11 +250,6 @@ export function AxisChantierProjetAccordion({
                 .replace("{n}", String(axisIndex + 1))
                 .replace("{name}", axis.name)}
               owner={axis.owner ?? noOwner}
-              sponsor={
-                axis.sponsorName
-                  ? `${t("strategicAxes.sponsorShort", "Sponsor")} : ${axisSponsorLabel(axis, users)}`
-                  : undefined
-              }
               count={fmt("strategicAxes.tree.chantiersN", "{n} chantier(s)", {
                 n: axisChantiers.length,
               })}

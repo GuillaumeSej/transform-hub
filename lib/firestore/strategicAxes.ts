@@ -47,7 +47,7 @@ export function subscribeStrategicAxes(
 }
 
 export async function saveStrategicAxis(axis: StrategicAxis): Promise<void> {
-  // Purge des `undefined` (ex. sponsorName retiré) : Firestore les refuse dans `setDoc`.
+  // Purge des `undefined` (ex. owner retiré) : Firestore les refuse dans `setDoc`.
   await setDoc(doc(strategicAxesCol(), axis.id), stripUndefined(axis));
 }
 
