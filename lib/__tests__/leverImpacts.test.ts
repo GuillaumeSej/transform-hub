@@ -322,7 +322,7 @@ describe("cancelled levers are excluded from every aggregate", () => {
     expect(engine.impactTrajectory(bad).points).toHaveLength(0);
   });
   it("waterfall isolates cancelled", () => {
-    const w = engine.savingsWaterfall(d, { today: new Date("2026-06-01") });
+    const w = engine.savingsWaterfall(d);
     expect(w.steps.find((s) => s.key === "initial")?.value).toBe(55);
     expect(w.steps.find((s) => s.key === "cancelled")?.value).toBe(-50);
   });
@@ -460,7 +460,7 @@ describe("savingsWaterfall & financeByHierarchyLevel", () => {
   const c = lever({ id: "C", netSavings: 3, status: "in_progress" });
   const d = data([a, b, c]);
   it("waterfall arithmetic", () => {
-    const w = engine.savingsWaterfall(d, { today: new Date("2026-06-01") });
+    const w = engine.savingsWaterfall(d);
     const v = (k: string) => w.steps.find((s) => s.key === k)!.value;
     expect(v("initial")).toBe(17);
     expect(v("reforecast")).toBe(-2);
