@@ -5,12 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarClock,
   Hash,
+  LayoutGrid,
   ListChecks,
   Lock,
   LineChart,
   Pencil,
   Plus,
+  Table2,
   Target,
+  X,
 } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -39,6 +42,7 @@ import {
   type YearSelection,
 } from "@/lib/kpiHistory";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
+import { KpiTableView } from "@/components/strategic/KpiTableView";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
@@ -101,7 +105,6 @@ function IndicatorCard({
   number,
   highlighted,
   linkedChantiers,
-  year,
 }: {
   indicator: Indicator;
   /** Mesures DE CET indicateur uniquement (déjà filtrées par l'appelant). */
@@ -122,8 +125,6 @@ function IndicatorCard({
    *  rapport avec l'indicateur affiché) par une liste précise et navigable. Vide la plupart du
    *  temps (peu de leviers lient un KPI) — la rangée ne s'affiche alors pas du tout. */
   linkedChantiers: { id: string; name: string }[];
-  /** Année affichée (choix mémorisé au niveau de la page). */
-  year: YearSelection;
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -133,6 +134,16 @@ function IndicatorCard({
   const canFill = canFillIndicatorValue(indicator, user);
   const quantitative = indicator.kind === "quantitative";
   const latest = latestMeasurement(indicator.id, measurements);
+
+  // ── Année affichée — round "cible évolutive" : PER-INDICATEUR (plus un sélecteur global de
+  // page) suite à la demande explicite du PO ("je ne veux pas regarder l'historique global pour
+  // tout, je veux choisir l'année sur chaque indicateur spécifiquement"). Même défaut (année
+  // courante) et même logique de bornes (`availableYears`) que l'ancien sélecteur de page, mais
+  // calculée sur les mesures DE CET indicateur uniquement plutôt que sur tout le programme.
+  const [year, setYear] = useState<YearSelection>(() => new Date().getFullYear());
+  const currentYear = new Date().getFullYear();
+  const yearOptions = useMemo(() => availableYears(measurements), [measurements]);
+  const showYearPicker = yearOptions.some((y) => y < currentYear);
   const yearMeasurements = useMemo(() => filterByYear(measurements, year), [measurements, year]);
   // Écart signé + progression vers la cible (round 6, point 6) : `undefined` sans objectif chiffré
   // ou sans mesure numérique exploitable — même garde-fou que `BusinessKpiCard`, rien à afficher
@@ -153,6 +164,20 @@ function IndicatorCard({
   );
   const [directionDraft, setDirectionDraft] = useState<IndicatorDirection>(
     indicator.direction ?? "up"
+  );
+  // Cible FIXE (historique, défaut) vs PROGRESSIVE (`targetSchedule`, round "cible évolutive") —
+  // le mode initial suit la donnée existante : un `targetSchedule` non vide démarre l'édition en
+  // mode progressif, pré-rempli. `stepDraft.value` est une CHAÎNE (même convention que
+  // `objectiveValueDraft`) : la saisie reste libre tant que l'utilisateur n'a pas soumis, parsée
+  // seulement à la validation (`submitObjective`).
+  const [targetMode, setTargetMode] = useState<"fixed" | "progressive">(
+    indicator.targetSchedule && indicator.targetSchedule.length > 0 ? "progressive" : "fixed"
+  );
+  const [targetSteps, setTargetSteps] = useState<{ period: string; value: string }[]>(
+    (indicator.targetSchedule ?? []).map((step) => ({
+      period: step.period,
+      value: String(step.value),
+    }))
   );
   const [savingObjective, setSavingObjective] = useState(false);
 
@@ -222,7 +247,29 @@ function IndicatorCard({
       indicator.objectiveValue !== undefined ? String(indicator.objectiveValue) : ""
     );
     setDirectionDraft(indicator.direction ?? "up");
+    setTargetMode(
+      indicator.targetSchedule && indicator.targetSchedule.length > 0 ? "progressive" : "fixed"
+    );
+    setTargetSteps(
+      (indicator.targetSchedule ?? []).map((step) => ({
+        period: step.period,
+        value: String(step.value),
+      }))
+    );
     setEditingObjective(true);
+  };
+
+  const addTargetStep = () => {
+    setTargetSteps((steps) => [
+      ...steps,
+      { period: currentPeriod(indicator.frequency), value: "" },
+    ]);
+  };
+  const updateTargetStep = (index: number, patch: Partial<{ period: string; value: string }>) => {
+    setTargetSteps((steps) => steps.map((step, i) => (i === index ? { ...step, ...patch } : step)));
+  };
+  const removeTargetStep = (index: number) => {
+    setTargetSteps((steps) => steps.filter((_, i) => i !== index));
   };
 
   const submitObjective = async () => {
@@ -236,16 +283,34 @@ function IndicatorCard({
       showToast(t("kpi.valueInvalid"), "", "error");
       return;
     }
+    // Paliers valides uniquement (période ET valeur numérique renseignées) — un palier
+    // partiellement saisi (période seule, ou valeur seule) est silencieusement ignoré plutôt que
+    // de bloquer la soumission : l'utilisateur peut avoir ajouté une ligne vide par erreur.
+    const parsedSchedule: { period: string; value: number }[] =
+      quantitative && targetMode === "progressive"
+        ? targetSteps.reduce<{ period: string; value: number }[]>((acc, step) => {
+            const trimmedPeriod = step.period.trim();
+            const parsedValue = parseNumber(step.value);
+            if (trimmedPeriod && parsedValue !== undefined && parsedValue !== null) {
+              acc.push({ period: trimmedPeriod, value: parsedValue });
+            }
+            return acc;
+          }, [])
+        : [];
     setSavingObjective(true);
     try {
       // Même contrainte Firestore que ci-dessus : une cible chiffrée laissée vide n'est pas
       // effacée (elle ne peut pas l'être depuis ici), elle est simplement laissée telle quelle —
-      // la suppression d'une cible relève de l'écran Admin des indicateurs.
+      // la suppression d'une cible relève de l'écran Admin des indicateurs. Même convention pour
+      // `targetSchedule` : omis (jamais écrit vide) dès que le mode n'est pas progressif ou
+      // qu'aucun palier valide n'a été saisi — revenir en mode "fixe" depuis ce formulaire ne
+      // supprime donc pas une trajectoire déjà enregistrée (même garde-fou que pour `objectiveValue`).
       await updateIndicator(indicator.id, {
         objective: trimmedObjective,
         ...(quantitative && parsedTarget !== undefined
           ? { objectiveValue: parsedTarget, direction: directionDraft }
           : {}),
+        ...(parsedSchedule.length > 0 ? { targetSchedule: parsedSchedule } : {}),
       });
       setEditingObjective(false);
       showToast(t("kpi.objectiveSaved"), indicator.name, "success");
@@ -319,6 +384,36 @@ function IndicatorCard({
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             {/* ── Lecture : graphique + dernière valeur ─────────────────────────────────────── */}
             <div className="space-y-3">
+              {/* Sélecteur d'année PAR INDICATEUR (round "cible évolutive" — voir `year`/
+                  `showYearPicker` ci-dessus) : posé juste au-dessus du graphique qu'il pilote,
+                  plutôt qu'un sélecteur unique en tête de page qui affectait auparavant TOUTES les
+                  cartes simultanément. */}
+              {showYearPicker && (
+                <div
+                  className="flex flex-wrap items-center gap-1.5"
+                  role="group"
+                  aria-label={t("kpi.year.label", "Année")}
+                >
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                    {t("kpi.year.label", "Année")}
+                  </span>
+                  {[...yearOptions, "all" as const].map((y) => (
+                    <button
+                      key={y}
+                      type="button"
+                      onClick={() => setYear(y)}
+                      aria-pressed={year === y}
+                      className={`cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                        year === y
+                          ? "border-bp-coral bg-bp-coral text-white"
+                          : "border-border bg-bg-surface text-text-secondary hover:border-bp-coral hover:text-bp-coral"
+                      }`}
+                    >
+                      {y === "all" ? t("kpi.year.all", "Historique") : y}
+                    </button>
+                  ))}
+                </div>
+              )}
               {/* Fenêtré par défaut sur les dernières périodes (calibré par `frequency`, voir
                 `axisLogic.recentMeasurementWindow`) : sur un plan pluriannuel, empiler tout
                 l'historique écrase la tendance récente. Le bouton d'agrandissement du graphique
@@ -326,6 +421,7 @@ function IndicatorCard({
               <IndicatorChart
                 measurements={yearMeasurements}
                 objectiveValue={indicator.objectiveValue}
+                targetSchedule={indicator.targetSchedule}
                 direction={indicator.direction}
                 unit={indicator.unit}
                 qualitative={!quantitative}
@@ -412,7 +508,9 @@ function IndicatorCard({
                     {quantitative && (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <label className="block text-[11px] font-medium text-text-secondary">
-                          {t("kpi.objectiveValue")}
+                          {targetMode === "progressive"
+                            ? t("kpi.objective.finalTarget")
+                            : t("kpi.objectiveValue")}
                           {indicator.unit ? ` (${indicator.unit})` : ""}
                           <input
                             value={objectiveValueDraft}
@@ -434,6 +532,73 @@ function IndicatorCard({
                             <option value="down">{t("kpi.direction.down")}</option>
                           </select>
                         </label>
+                      </div>
+                    )}
+                    {/* Cible FIXE vs PROGRESSIVE (round "cible évolutive") : uniquement pour un
+                        indicateur quantitatif — une cible chiffrée n'a pas de sens sur un
+                        indicateur qualitatif. */}
+                    {quantitative && (
+                      <div className="space-y-2 rounded-md border border-border bg-bg-surface/40 p-2">
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] font-medium text-text-secondary">
+                          <label className="flex cursor-pointer items-center gap-1.5">
+                            <input
+                              type="radio"
+                              name={`target-mode-${indicator.id}`}
+                              checked={targetMode === "fixed"}
+                              onChange={() => setTargetMode("fixed")}
+                            />
+                            {t("kpi.objective.targetModeFixed")}
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-1.5">
+                            <input
+                              type="radio"
+                              name={`target-mode-${indicator.id}`}
+                              checked={targetMode === "progressive"}
+                              onChange={() => setTargetMode("progressive")}
+                            />
+                            {t("kpi.objective.targetModeProgressive")}
+                          </label>
+                        </div>
+
+                        {targetMode === "progressive" && (
+                          <div className="space-y-1.5">
+                            {targetSteps.map((step, index) => (
+                              <div key={index} className="flex items-center gap-1.5">
+                                <input
+                                  value={step.period}
+                                  onChange={(e) =>
+                                    updateTargetStep(index, { period: e.target.value })
+                                  }
+                                  placeholder={t("kpi.objective.stepPeriod")}
+                                  aria-label={t("kpi.objective.stepPeriod")}
+                                  className={`${FIELD_CLASS} flex-1`}
+                                />
+                                <input
+                                  value={step.value}
+                                  onChange={(e) =>
+                                    updateTargetStep(index, { value: e.target.value })
+                                  }
+                                  inputMode="decimal"
+                                  placeholder={t("kpi.objective.stepValue")}
+                                  aria-label={t("kpi.objective.stepValue")}
+                                  className={`${FIELD_CLASS} flex-1`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeTargetStep(index)}
+                                  aria-label={t("kpi.objective.removeStep")}
+                                  title={t("kpi.objective.removeStep")}
+                                  className="shrink-0 cursor-pointer rounded p-1 text-text-secondary hover:bg-bg-surface hover:text-bp-coral"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ))}
+                            <Button variant="ghost" size="sm" onClick={addTargetStep}>
+                              <Plus size={12} /> {t("kpi.objective.addStep")}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="flex gap-2">
@@ -460,11 +625,31 @@ function IndicatorCard({
                     <p>{indicator.objective}</p>
                     {quantitative && indicator.objectiveValue !== undefined && (
                       <p className="text-xs text-text-secondary">
-                        {t("kpi.objectiveValue")} : {indicator.objectiveValue}
+                        {indicator.targetSchedule && indicator.targetSchedule.length > 0
+                          ? t("kpi.objective.finalTarget")
+                          : t("kpi.objectiveValue")}{" "}
+                        : {indicator.objectiveValue}
                         {indicator.unit ? ` ${indicator.unit}` : ""} ·{" "}
                         {t(`kpi.direction.${indicator.direction ?? "up"}`)}
                       </p>
                     )}
+                    {/* Trajectoire de cible évolutive — lecture seule, listant les paliers déjà
+                        déclarés (`indicator.targetSchedule`, trié par période) : sans ça, une
+                        trajectoire éditée resterait invisible hors mode édition. */}
+                    {quantitative &&
+                      indicator.targetSchedule &&
+                      indicator.targetSchedule.length > 0 && (
+                        <p className="text-xs text-text-secondary">
+                          {t("kpi.objective.targetModeProgressive")} :{" "}
+                          {[...indicator.targetSchedule]
+                            .sort((a, b) => a.period.localeCompare(b.period))
+                            .map(
+                              (step) =>
+                                `${step.period} → ${step.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
+                            )
+                            .join(" · ")}
+                        </p>
+                      )}
                   </div>
                 )}
               </div>
@@ -816,10 +1001,11 @@ export function KpiPageClient() {
     return () => clearTimeout(timeout);
   }, [targetIndicatorId, pageReady]);
 
-  const [year, setYear] = useState<YearSelection>(() => new Date().getFullYear());
-  const currentYear = new Date().getFullYear();
-  const yearOptions = useMemo(() => availableYears(measurements), [measurements]);
-  const showYearPicker = yearOptions.some((y) => y < currentYear);
+  // Vue Cartes (défaut, comportement historique) vs Tableau (nouvelle vue plate, sans graphique,
+  // groupée par axe — voir `KpiTableView`) : les deux vues lisent EXACTEMENT le même périmètre déjà
+  // filtré (`grouped`/`orphans`/`measurements`), aucune donnée séparée n'est chargée pour la vue
+  // Tableau.
+  const [kpiView, setKpiView] = useState<"cards" | "table">("cards");
 
   const renderCard = (indicator: Indicator) => (
     <IndicatorCard
@@ -832,7 +1018,6 @@ export function KpiPageClient() {
       number={indicatorNumbers.get(indicator.id)}
       highlighted={indicator.id === highlightedIndicatorId}
       linkedChantiers={chantiersByIndicatorId.get(indicator.id) ?? []}
-      year={year}
     />
   );
 
@@ -905,46 +1090,56 @@ export function KpiPageClient() {
         }}
       />
 
-      {showYearPicker && (
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label={t("kpi.year.label", "Année")}
+      {/* Bascule Cartes / Tableau (nouvelle vue tabulaire, sans graphique, round "cible évolutive")
+          — les deux vues lisent le même périmètre déjà filtré, voir `kpiView` ci-dessus. */}
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label={t("kpi.view.label", "Vue")}
+      >
+        <button
+          type="button"
+          onClick={() => setKpiView("cards")}
+          aria-pressed={kpiView === "cards"}
+          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+            kpiView === "cards"
+              ? "border-bp-coral bg-bp-coral text-white"
+              : "border-border bg-bg-surface text-text-secondary hover:border-bp-coral hover:text-bp-coral"
+          }`}
         >
-          <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-            {t("kpi.year.label", "Année")}
-          </span>
-          {[...yearOptions, "all" as const].map((y) => (
-            <button
-              key={y}
-              type="button"
-              onClick={() => setYear(y)}
-              aria-pressed={year === y}
-              className={`cursor-pointer rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                year === y
-                  ? "border-bp-coral bg-bp-coral text-white"
-                  : "border-border bg-bg-surface text-text-secondary hover:border-bp-coral hover:text-bp-coral"
-              }`}
-            >
-              {y === "all" ? t("kpi.year.all", "Historique") : y}
-            </button>
-          ))}
-        </div>
-      )}
+          <LayoutGrid size={13} /> {t("kpi.view.cards", "Cartes")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setKpiView("table")}
+          aria-pressed={kpiView === "table"}
+          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+            kpiView === "table"
+              ? "border-bp-coral bg-bp-coral text-white"
+              : "border-border bg-bg-surface text-text-secondary hover:border-bp-coral hover:text-bp-coral"
+          }`}
+        >
+          <Table2 size={13} /> {t("kpi.view.table", "Tableau")}
+        </button>
+      </div>
 
-      <Card className="mb-0">
-        <CardHeader title={t("businessKpis.title")} />
-        <CardBody>
-          <BusinessKpiCards
-            indicators={indicators}
-            measurements={measurements}
-            labels={businessKpiLabels}
-            user={user}
-            addMeasurement={addMeasurement}
-            year={year}
-          />
-        </CardBody>
-      </Card>
+      {/* Les KPI business (indicateurs macro) apparaissent déjà comme des lignes de la vue Tableau
+          (groupe `macro` de chaque axe, voir `grouped` plus haut) — cette carte dédiée aux
+          sparklines reste donc réservée à la vue Cartes, pour ne pas doubler le même indicateur. */}
+      {kpiView === "cards" && (
+        <Card className="mb-0">
+          <CardHeader title={t("businessKpis.title")} />
+          <CardBody>
+            <BusinessKpiCards
+              indicators={indicators}
+              measurements={measurements}
+              labels={businessKpiLabels}
+              user={user}
+              addMeasurement={addMeasurement}
+            />
+          </CardBody>
+        </Card>
+      )}
 
       {indicators.length === 0 ? (
         <Card>
@@ -987,26 +1182,45 @@ export function KpiPageClient() {
             />
           </div>
 
-          <div className="space-y-8">
-            {grouped.map(({ axis, macro, byChantier }) => (
-              <AxisSection
-                key={axis.id}
-                axis={axis}
-                macro={macro}
-                byChantier={byChantier}
-                renderCard={renderCard}
-                users={companyUsers}
-              />
-            ))}
-            {orphans.length > 0 && (
-              <section className="space-y-3">
-                <h2 className="text-sm font-bold uppercase tracking-wide text-text-primary">
-                  {t("kpi.axisUnknown")}
-                </h2>
-                <div className="space-y-4">{orphans.map(renderCard)}</div>
-              </section>
-            )}
-          </div>
+          {kpiView === "table" ? (
+            <KpiTableView
+              grouped={grouped}
+              orphans={orphans}
+              measurements={measurements}
+              labels={{
+                axisUnknown: t("kpi.axisUnknown"),
+                indicator: t("kpi.table.indicator"),
+                current: t("kpi.table.current"),
+                target: t("kpi.table.target"),
+                finalTarget: t("kpi.table.finalTarget"),
+                status: t("kpi.table.status"),
+                onTrack: t("indicatorStatus.onTrack"),
+                atRisk: t("indicatorStatus.atRisk"),
+                noValue: t("kpi.noMeasurement"),
+              }}
+            />
+          ) : (
+            <div className="space-y-8">
+              {grouped.map(({ axis, macro, byChantier }) => (
+                <AxisSection
+                  key={axis.id}
+                  axis={axis}
+                  macro={macro}
+                  byChantier={byChantier}
+                  renderCard={renderCard}
+                  users={companyUsers}
+                />
+              ))}
+              {orphans.length > 0 && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-bold uppercase tracking-wide text-text-primary">
+                    {t("kpi.axisUnknown")}
+                  </h2>
+                  <div className="space-y-4">{orphans.map(renderCard)}</div>
+                </section>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

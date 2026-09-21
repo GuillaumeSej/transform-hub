@@ -15,7 +15,11 @@ import {
 } from "recharts";
 import { Modal } from "@/components/shared/Modal";
 import { IndicatorDeltaStat } from "@/components/strategic/IndicatorDeltaStat";
-import { computeIndicatorDelta, recentMeasurementWindow } from "@/lib/axisLogic";
+import {
+  computeIndicatorDelta,
+  recentMeasurementWindow,
+  resolveIndicatorTargetForPeriod,
+} from "@/lib/axisLogic";
 import type { Indicator, IndicatorMeasurement } from "@/types";
 
 // Palette de la courbe (rendu NON-compact uniquement — la sparkline `compact` de
@@ -53,6 +57,13 @@ export type IndicatorChartProps = {
   measurements: IndicatorMeasurement[];
   /** Valeur cible — matérialisée par une `ReferenceLine` horizontale. Absente = pas de ligne. */
   objectiveValue?: number;
+  /** Trajectoire de cibles intermédiaires (round "cible évolutive", `Indicator.targetSchedule`).
+   *  Absente/vide = cible FIXE, comportement historique inchangé (une seule `ReferenceLine` plate
+   *  à `objectiveValue`). Non vide = cible ÉVOLUTIVE : remplace la ligne plate par une ligne en
+   *  ESCALIER suivant `axisLogic.resolveIndicatorTargetForPeriod` à chaque période affichée —
+   *  seul le rendu NON-`compact` en tient compte (la sparkline `compact` garde sa ligne plate
+   *  historique, hors périmètre de ce round). */
+  targetSchedule?: { period: string; value: number }[];
   /** Sens d'amélioration de l'indicateur — nécessaire pour calculer l'écart signé affiché à côté
    *  de la `ReferenceLine` (voir `computeIndicatorDelta`). Absente = traité comme "up" (plus haut
    *  vaut mieux), même convention par défaut que `lib/axisLogic.ts`. */
@@ -133,6 +144,7 @@ function IndicatorTooltip({
 export function IndicatorChart({
   measurements,
   objectiveValue,
+  targetSchedule,
   direction,
   unit,
   qualitative = false,
@@ -202,6 +214,7 @@ export function IndicatorChart({
           <IndicatorChart
             measurements={measurements}
             objectiveValue={objectiveValue}
+            targetSchedule={targetSchedule}
             direction={direction}
             unit={unit}
             qualitative={qualitative}
@@ -248,13 +261,26 @@ export function IndicatorChart({
     );
   }
 
-  const data = sorted.map((m) => ({ period: m.period, value: m.value ?? null }));
+  // Cible évolutive (round "cible évolutive") : non-`compact` uniquement — voir le doc-comment de
+  // `targetSchedule`. `target` est calculé PAR POINT via `resolveIndicatorTargetForPeriod`, déjà
+  // "en escalier" par construction (le palier applicable à CETTE période) — un simple `type=
+  // "stepAfter"` sur la `Line` qui la trace suffit alors à dessiner les marches sans recalcul
+  // supplémentaire dans le rendu recharts lui-même.
+  const hasSchedule = !compact && !!targetSchedule && targetSchedule.length > 0;
+  const data = sorted.map((m) => ({
+    period: m.period,
+    value: m.value ?? null,
+    target: hasSchedule
+      ? (resolveIndicatorTargetForPeriod({ objectiveValue, targetSchedule }, m.period) ?? null)
+      : null,
+  }));
 
   // Largeur d'axe Y calculée sur le libellé le plus long (chiffre + unité) : la largeur recharts par
   // défaut (60 px) + l'ancienne marge gauche négative rognaient les valeurs/unités longues.
   const yTickChars = Math.max(
     ...data.map((d) => (d.value === null ? 0 : formatValue(d.value, unit).length)),
     objectiveValue !== undefined ? formatValue(objectiveValue, unit).length : 0,
+    ...(hasSchedule ? targetSchedule!.map((step) => formatValue(step.value, unit).length) : []),
     2
   );
   const yAxisWidth = Math.min(160, Math.max(44, yTickChars * 7 + 12));
@@ -366,7 +392,12 @@ export function IndicatorChart({
             cursor={{ stroke: lineColor, strokeWidth: 1, strokeDasharray: "4 4" }}
           />
         )}
-        {objectiveValue !== undefined && (
+        {/* Cible FIXE (comportement historique, inchangé) : une seule `ReferenceLine` plate.
+            Retirée dès qu'une trajectoire existe (`hasSchedule`) — remplacée plus bas par une
+            `Line` en escalier sur la série `target` du même `data`, seul moyen recharts de faire
+            varier la position d'une "ligne de cible" le long de l'axe X (une `ReferenceLine` est
+            TOUJOURS horizontale sur toute la largeur du graphique). */}
+        {objectiveValue !== undefined && !hasSchedule && (
           <ReferenceLine
             y={objectiveValue}
             stroke="#806659"
@@ -411,6 +442,29 @@ export function IndicatorChart({
             activeDot={{ r: 6, fill: lineColor, stroke: "#fff", strokeWidth: 2 }}
             isAnimationActive
             connectNulls={false}
+          />
+        )}
+        {/* Cible ÉVOLUTIVE : ligne en ESCALIER sur la série `target` (déjà calculée point par
+            point via `resolveIndicatorTargetForPeriod`, voir plus haut) — placée APRÈS l'`Area`
+            de la valeur dans l'ordre des enfants pour deux raisons : elle reste lisible par-dessus
+            le remplissage semi-transparent de l'`Area` plutôt que d'être partiellement recouverte
+            (l'ancienne `ReferenceLine` était, elle, rendue AVANT), et `payload[0]` de
+            `IndicatorTooltip` (qui ne lit que le premier élément) continue de désigner la série
+            `value`, jamais `target`. `type="stepAfter"` : la valeur d'un point reste affichée
+            jusqu'à la période suivante puis "saute" — exactement la sémantique d'un palier
+            "applicable à partir de cette période". */}
+        {hasSchedule && (
+          <Line
+            type="stepAfter"
+            dataKey="target"
+            name={labelObjective}
+            stroke="#806659"
+            strokeWidth={2}
+            strokeDasharray="6 4"
+            dot={false}
+            activeDot={false}
+            isAnimationActive={false}
+            connectNulls
           />
         )}
       </ComposedChart>

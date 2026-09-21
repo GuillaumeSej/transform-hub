@@ -1751,6 +1751,15 @@ const fr: Record<string, string> = {
   "kpi.editObjective": "Modifier",
   "kpi.objectiveSaved": "Objectif mis à jour",
   "kpi.objectiveRequired": "Renseignez la description de l'objectif.",
+  // ─── Cible évolutive (round "cible évolutive") — mode fixe/progressif dans le formulaire
+  // d'édition de l'objectif d'`IndicatorCard` ───
+  "kpi.objective.targetModeFixed": "Cible fixe",
+  "kpi.objective.targetModeProgressive": "Cible progressive",
+  "kpi.objective.finalTarget": "Cible finale",
+  "kpi.objective.addStep": "Ajouter un palier",
+  "kpi.objective.stepPeriod": "Période",
+  "kpi.objective.stepValue": "Valeur",
+  "kpi.objective.removeStep": "Supprimer ce palier",
   "kpi.addMeasurement": "Ajouter une mesure",
   "kpi.period": "Période",
   "kpi.periodHint":
@@ -1766,6 +1775,15 @@ const fr: Record<string, string> = {
   "kpi.history.entered": "a saisi",
   "kpi.year.label": "Année",
   "kpi.year.all": "Historique",
+  // ─── Bascule Cartes / Tableau + colonnes de la vue tabulaire (round "cible évolutive") ───
+  "kpi.view.label": "Vue",
+  "kpi.view.cards": "Cartes",
+  "kpi.view.table": "Tableau",
+  "kpi.table.indicator": "Indicateur",
+  "kpi.table.current": "Actuel",
+  "kpi.table.target": "Cible",
+  "kpi.table.finalTarget": "Cible finale",
+  "kpi.table.status": "Statut",
   "kpi.fillValue": "Renseigner la valeur",
   "kpi.market.owner": "Saisie : CTO",
   "kpi.section.kpis": "KPI",
