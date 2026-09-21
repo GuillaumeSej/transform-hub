@@ -26,7 +26,10 @@ import {
 import { subscribeUsers, subscribeCompanies } from "@/lib/firestore/admin";
 import { appendAuditEntries } from "@/lib/firestore/levers";
 import {
+  approveMilestoneGate as approveMilestoneGateLogic,
   computeIndicatorStatus,
+  rejectMilestoneApproval as rejectMilestoneApprovalLogic,
+  requestMilestoneApproval as requestMilestoneApprovalLogic,
   resolveStrategicOwnershipScope,
   resolveStrategicRoleForProgram,
   type StrategicOwnershipScope,
@@ -141,6 +144,18 @@ export type StrategicData = {
   ) => Promise<ChantierAction>;
   updateChantierAction: (id: string, patch: Partial<ChantierAction>) => Promise<void>;
   removeChantierAction: (id: string) => Promise<void>;
+
+  /** Soumet une demande de validation de jalon pour ce projet (voir
+   *  `lib/axisLogic.ts::requestMilestoneApproval` pour l'habilitation et les prérequis — lève si
+   *  non satisfaits). Nécessite `user` (voir le doc-comment du paramètre `user` de ce hook, plus
+   *  bas) : lève si omis. */
+  requestMilestoneApproval: (actionId: string) => Promise<void>;
+  /** Approuve la demande en cours — fait avancer `milestones.currentMilestone`/`passedMilestones`
+   *  et vide `milestoneApproval` (voir `lib/axisLogic.ts::approveMilestoneGate`). */
+  approveMilestoneGate: (actionId: string) => Promise<void>;
+  /** Rejette (annule) la demande en cours, sans pénalité (voir
+   *  `lib/axisLogic.ts::rejectMilestoneApproval`). */
+  rejectMilestoneApproval: (actionId: string) => Promise<void>;
 
   createIndicator: (
     input: Pick<
@@ -576,6 +591,17 @@ export function useStrategicData(
       const existing = actionsRef.current.find((a) => a.id === id);
       if (!existing) return;
       const after: ChantierAction = { ...existing, ...patch, id };
+      // Round "projet weighting" : un appelant qui veut effacer un champ optionnel (ex.
+      // `chantierWeightPct`, voir `ProjetWeightsEditor.tsx`'s "Non pondéré") passe explicitement
+      // `undefined` dans `patch` — sans ce nettoyage, la clé resterait présente avec la valeur
+      // `undefined` sur `after` (le spread ci-dessus la copie telle quelle) et `setDoc` (appelé SANS
+      // `{ merge: true }`, voir `saveChantierAction`) rejetterait l'écriture entière ("Unsupported
+      // field value: undefined") — le même piège documenté ailleurs dans ce fichier pour
+      // `ChantierStaffing.note`. Ne change RIEN pour les appelants historiques, qui omettent déjà la
+      // clé plutôt que d'y mettre `undefined` (voir `ChantierActionForm.tsx`, "Clés OMISES").
+      for (const key of Object.keys(after) as (keyof ChantierAction)[]) {
+        if (after[key] === undefined) delete after[key];
+      }
       await saveChantierAction(after);
       logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
     },
@@ -591,6 +617,56 @@ export function useStrategicData(
       }
     },
     [companyId, auditUser]
+  );
+
+  /** Point d'entrée UI de la demande de validation de jalon (voir `lib/axisLogic.ts` pour la
+   *  logique métier complète, mirroir de `useStorage.ts::requestLeverApproval`) — la logique pure
+   *  calcule le prochain `milestoneApproval`, `updateChantierAction` le persiste et journalise le
+   *  changement (diff générique, même mécanisme que le reste de ce hook). Lève si `user` n'a pas été
+   *  fourni au hook (voir son doc-comment) : ce point d'entrée n'a de sens qu'avec un utilisateur
+   *  réel identifié, la logique pure ayant besoin de `user.username` pour l'habilitation.
+   */
+  const requestMilestoneApproval = useCallback<StrategicData["requestMilestoneApproval"]>(
+    async (actionId) => {
+      if (!user) {
+        throw new Error(
+          "Utilisateur non identifié : impossible de soumettre la demande de validation"
+        );
+      }
+      const existing = actionsRef.current.find((a) => a.id === actionId);
+      if (!existing) throw new Error(`Projet "${actionId}" introuvable`);
+      const milestoneApproval = requestMilestoneApprovalLogic(
+        existing,
+        user,
+        chantiersRef.current,
+        actionsRef.current
+      );
+      await updateChantierAction(actionId, { milestoneApproval });
+    },
+    [user, updateChantierAction]
+  );
+
+  const approveMilestoneGate = useCallback<StrategicData["approveMilestoneGate"]>(
+    async (actionId) => {
+      if (!user)
+        throw new Error("Utilisateur non identifié : impossible d'approuver cette demande");
+      const existing = actionsRef.current.find((a) => a.id === actionId);
+      if (!existing) throw new Error(`Projet "${actionId}" introuvable`);
+      const patch = approveMilestoneGateLogic(existing, user, chantiersRef.current);
+      await updateChantierAction(actionId, patch);
+    },
+    [user, updateChantierAction]
+  );
+
+  const rejectMilestoneApproval = useCallback<StrategicData["rejectMilestoneApproval"]>(
+    async (actionId) => {
+      if (!user) throw new Error("Utilisateur non identifié : impossible de rejeter cette demande");
+      const existing = actionsRef.current.find((a) => a.id === actionId);
+      if (!existing) throw new Error(`Projet "${actionId}" introuvable`);
+      const patch = rejectMilestoneApprovalLogic(existing, user, chantiersRef.current);
+      await updateChantierAction(actionId, patch);
+    },
+    [user, updateChantierAction]
   );
 
   const createIndicator = useCallback<StrategicData["createIndicator"]>(
@@ -720,6 +796,9 @@ export function useStrategicData(
     createChantierAction,
     updateChantierAction,
     removeChantierAction,
+    requestMilestoneApproval,
+    approveMilestoneGate,
+    rejectMilestoneApproval,
     createIndicator,
     updateIndicator,
     removeIndicator,

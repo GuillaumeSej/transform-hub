@@ -220,6 +220,27 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      // Round "jalon validation gate" : le pilote stratégique est le SEUL approbateur des demandes
+      // de validation de jalon de projet (`ChantierAction.milestoneApproval`, voir
+      // `lib/axisLogic.ts::approveMilestoneGate`) — même route/id que `CTO_LIKE_NAV`'s "validation"
+      // ci-dessus (la PAGE elle-même est déjà program-type-aware, voir
+      // `app/(app)/validation/page.tsx`), ajoutée ICI (nav propre à `strategic_lead`) plutôt que
+      // d'ôter le `programTypes: ["performance"]` de `CTO_LIKE_NAV` : changement plus petit/ciblé,
+      // suffisant pour le cas courant (`strategic_lead` SEUL, sans profil Performance). Limite
+      // connue et acceptée : `resolveUserNav` ne garde que la PREMIÈRE occurrence d'un id (profils
+      // Performance résolus avant les profils Stratégiques) — un utilisateur cumulant un profil
+      // Performance (`cto`/`program_sponsor`/`program_owner`, seuls rôles à porter "validation" côté
+      // Performance) ET `strategic_lead` verrait donc l'item Performance-only l'emporter et
+      // resterait sans lien "Validation" en mode Stratégique ; combinaison jugée assez rare pour ne
+      // pas justifier de retravailler `resolveUserNav`/`CTO_LIKE_NAV` dans ce lot. `section:
+      // "decision"` — même regroupement que `CTO_LIKE_NAV`.
+      {
+        id: "validation",
+        icon: "ShieldCheck",
+        label: "nav.validation",
+        programTypes: ["strategic"],
+        section: "decision",
+      },
       // Round 13 : le pilote du Plan Stratégique peut désormais consulter/compléter la base ETP
       // entreprise (Plan Performance) — voir les commentaires identiques sur `cto`/`hr` ci-dessus.
       { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },

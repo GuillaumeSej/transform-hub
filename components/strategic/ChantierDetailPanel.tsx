@@ -11,6 +11,7 @@ import { ChantierStaffingEditor, formatFte } from "@/components/strategic/Chanti
 import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
 import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
 import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
+import { ProjetWeightsEditor } from "@/components/strategic/ProjetWeightsEditor";
 import { SuccessKpiList } from "@/components/strategic/SuccessKpiList";
 import {
   formatTimelineDay,
@@ -31,10 +32,11 @@ import { UserPicker } from "@/components/strategic/UserPicker";
 import {
   canStartAction,
   chantierBounds,
+  chantierDeclaredProgress,
   chantierDependencyAlerts,
-  chantierMilestoneProgressPct,
   displayMilestoneId,
   effectiveDueDate,
+  isStrategicLeadOf,
   milestoneProgressPct,
   numberIndicators,
   progressBucket,
@@ -52,8 +54,8 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
-import { isReadOnlyUser } from "@/lib/roleProfiles";
+import { MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
+import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import type {
   ActionPrerequisite,
   ActionPrerequisiteKind,
@@ -1345,6 +1347,14 @@ export function ChantierDetailPanel({
     () => data.chantiers.find((c) => c.id === chantierId),
     [data.chantiers, chantierId]
   );
+  // Round "projet weighting" : autorisation RÉELLE, scopée au propriétaire NOMMÉ du chantier
+  // (`Chantier.pilote`) — contrairement au placeholder Performance de `LeverForm.tsx`'s
+  // `canEditWorkstreamWeight` ("quiconque peut éditer ce levier"), volontairement plus lâche et
+  // documenté comme tel. Suit le même motif que `readOnly`/`isReadOnlyUser` déjà utilisé pour le
+  // reste de cette fiche (lecture seule l'emporte toujours), affiné ici par la propriété nommée :
+  // seul le pilote opérationnel de CE chantier précis, ou un admin, peut repondérer ses projets.
+  const canEditProjetWeights =
+    !readOnly && !!user && !!chantier && (isAnyAdmin(user) || chantier.pilote === user.username);
   // Round 24 : un chantier appartient désormais potentiellement à PLUSIEURS axes (`axisIds`) —
   // toutes les résolutions ci-dessous, dans l'ordre de `data.axes` (même convention que
   // `chantiersByAxis` ailleurs dans le code).
@@ -1426,10 +1436,13 @@ export function ChantierDetailPanel({
     () => (chantier ? chantierBounds(chantier.id, chantierActions) : undefined),
     [chantier, chantierActions]
   );
-  // Round 7 : moyenne des leviers (`chantierMilestoneProgressPct`) — remplace l'ancienne lecture
-  // directe de `chantier.milestones` (@deprecated, le suivi E0→E4 vit désormais par levier).
+  // Round "projet weighting" : moyenne PONDÉRÉE des projets (`chantierDeclaredProgress`, par
+  // `ChantierAction.chantierWeightPct` — voir `ProjetWeightsEditor.tsx` plus bas) — remplace
+  // l'ancienne moyenne simple `chantierMilestoneProgressPct` (round 7) comme figure de progression
+  // affichée en tête de fiche chantier, qui elle-même remplaçait la lecture directe de
+  // `chantier.milestones` (@deprecated, le suivi E0→E4 vit désormais par levier).
   const progressPct = useMemo(
-    () => (chantier ? chantierMilestoneProgressPct(chantier, chantierActions) : 0),
+    () => (chantier ? chantierDeclaredProgress(chantier.id, chantierActions) : 0),
     [chantier, chantierActions]
   );
 
@@ -1694,6 +1707,37 @@ export function ChantierDetailPanel({
       await data.updateChantierAction(actionId, { prerequisites: next });
     } catch (error) {
       console.error("[betrack] échec d'enregistrement des prérequis du levier :", error);
+      showToast(
+        t("strategicAxes.actionSaveErrorTitle"),
+        t("strategicAxes.actionSaveError"),
+        "error"
+      );
+    }
+  };
+
+  /** Persiste `ProjetWeightsEditor.tsx`'s poids déclarés (round "projet weighting") — l'éditeur
+   *  fonctionne directement sur `chantierActions` (pas de buffer local, contrairement à
+   *  `ActionWeightsEditor`/`LeverForm` qui bufferisent jusqu'au submit du formulaire levier
+   *  ENTIER) : chaque saisie renvoie le tableau COMPLET des projets avec leur `chantierWeightPct`
+   *  à jour, on ne persiste QUE les projets dont la valeur a réellement changé, un par un (chaque
+   *  projet est un document Firestore distinct, contrairement aux actions d'un levier). `undefined`
+   *  (poids effacé, bouton "Non pondéré") est passé tel quel à `updateChantierAction`, qui sait
+   *  désormais correctement EFFACER le champ plutôt que d'échouer à l'écriture (voir son
+   *  commentaire ci-dessus). */
+  const updateProjetWeights = async (next: ChantierAction[]) => {
+    const changed = next.filter((a) => {
+      const before = chantierActions.find((b) => b.id === a.id);
+      return !!before && before.chantierWeightPct !== a.chantierWeightPct;
+    });
+    if (changed.length === 0) return;
+    try {
+      await Promise.all(
+        changed.map((a) =>
+          data.updateChantierAction(a.id, { chantierWeightPct: a.chantierWeightPct })
+        )
+      );
+    } catch (error) {
+      console.error("[betrack] échec d'enregistrement de la pondération des projets :", error);
       showToast(
         t("strategicAxes.actionSaveErrorTitle"),
         t("strategicAxes.actionSaveError"),
@@ -2367,6 +2411,16 @@ export function ChantierDetailPanel({
               </div>
             )}
 
+            {chantierActions.length > 0 && (
+              <div className="mb-3">
+                <ProjetWeightsEditor
+                  actions={chantierActions}
+                  onChange={updateProjetWeights}
+                  canEdit={canEditProjetWeights}
+                />
+              </div>
+            )}
+
             {chantierActions.length === 0 && !actionForm ? (
               <p className="py-4 text-center text-[13px] text-tertiary">
                 {t("strategicAxes.noActions")}
@@ -2702,30 +2756,87 @@ export function ChantierDetailPanel({
                                     },
                                   });
                                 }}
-                                onValidateMilestone={() => {
-                                  // Jalon suivant dans l'ordre fixe E0→E4 ; s'il n'y en a pas (E4, déjà
-                                  // le dernier), on le laisse tel quel — voir même commentaire historique
-                                  // sur l'ancien callback chantier-level, mécanique identique ici.
-                                  const currentIndex = MILESTONE_ORDER.indexOf(
-                                    actionMilestones.currentMilestone
-                                  );
-                                  const nextMilestone =
-                                    MILESTONE_ORDER[currentIndex + 1] ??
-                                    actionMilestones.currentMilestone;
-                                  const passedMilestones =
-                                    actionMilestones.passedMilestones.includes(
-                                      actionMilestones.currentMilestone
-                                    )
-                                      ? actionMilestones.passedMilestones
-                                      : [
-                                          ...actionMilestones.passedMilestones,
-                                          actionMilestones.currentMilestone,
-                                        ];
-                                  updateActionMilestones(action.id, {
-                                    currentMilestone: nextMilestone,
-                                    passedMilestones,
-                                    checklists: actionMilestones.checklists,
-                                  });
+                                milestoneApproval={action.milestoneApproval}
+                                // Round "jalon validation gate" : propriétaire du projet ou admin —
+                                // seul habilité à SOUMETTRE une demande (voir
+                                // `requestMilestoneApproval`, lib/axisLogic.ts). Lecture seule
+                                // (`readOnly`) l'emporte toujours, même mécanique que le reste de ce
+                                // panneau (boutons Éditer/Supprimer plus haut).
+                                canSubmitApproval={
+                                  !readOnly &&
+                                  !!user &&
+                                  (isAnyAdmin(user) || action.owner === user.username)
+                                }
+                                // `strategic_lead` du chantier (scopé programme) ou admin — seul
+                                // habilité à APPROUVER (voir `approveMilestoneGate`).
+                                canApproveMilestone={
+                                  !readOnly &&
+                                  !!user &&
+                                  !!chantier &&
+                                  (isAnyAdmin(user) || isStrategicLeadOf(chantier, user))
+                                }
+                                // `strategic_lead`, admin, OU le propriétaire du projet lui-même —
+                                // seul habilité à REJETER/annuler (voir `rejectMilestoneApproval`).
+                                canRejectMilestoneApproval={
+                                  !readOnly &&
+                                  !!user &&
+                                  (isAnyAdmin(user) ||
+                                    action.owner === user.username ||
+                                    (!!chantier && isStrategicLeadOf(chantier, user)))
+                                }
+                                onRequestApproval={async () => {
+                                  try {
+                                    await data.requestMilestoneApproval(action.id);
+                                    showToast(
+                                      t(
+                                        "leverDetail.approval.requested",
+                                        "Demande de validation envoyée"
+                                      ),
+                                      action.name,
+                                      "success"
+                                    );
+                                  } catch (error) {
+                                    showToast(
+                                      t("leverDetail.approval.error", "Action impossible"),
+                                      error instanceof Error ? error.message : String(error),
+                                      "error"
+                                    );
+                                  }
+                                }}
+                                onApproveMilestone={async () => {
+                                  try {
+                                    await data.approveMilestoneGate(action.id);
+                                    showToast(
+                                      t("leverDetail.approval.approved", "Demande approuvée"),
+                                      action.name,
+                                      "success"
+                                    );
+                                  } catch (error) {
+                                    showToast(
+                                      t("leverDetail.approval.error", "Action impossible"),
+                                      error instanceof Error ? error.message : String(error),
+                                      "error"
+                                    );
+                                  }
+                                }}
+                                onRejectMilestoneApproval={async () => {
+                                  try {
+                                    await data.rejectMilestoneApproval(action.id);
+                                    showToast(
+                                      t(
+                                        "leverDetail.approval.rejected",
+                                        "Demande de validation rejetée"
+                                      ),
+                                      action.name,
+                                      "success"
+                                    );
+                                  } catch (error) {
+                                    showToast(
+                                      t("leverDetail.approval.error", "Action impossible"),
+                                      error instanceof Error ? error.message : String(error),
+                                      "error"
+                                    );
+                                  }
                                 }}
                               />
                             </div>

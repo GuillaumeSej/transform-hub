@@ -1,9 +1,10 @@
 import { daysBetween } from "@/lib/dateUtils";
-import { MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
+import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import {
   getStrategicProfile,
   getStrategicProfiles,
   hasAnyRole,
+  hasRole,
   isAnyAdmin,
 } from "@/lib/roleProfiles";
 import type {
@@ -11,6 +12,7 @@ import type {
   Chantier,
   ChantierAction,
   ChantierDependencyType,
+  ChantierMilestoneApproval,
   ChantierMilestoneState,
   ChantierStaffing,
   Deliverable,
@@ -856,6 +858,180 @@ export function canPassMilestone(
   return { canPass: reasons.length === 0, reasons };
 }
 
+/**
+ * Fusionne les items d'un jalon donné — réponses manuelles STOCKÉES (typiquement
+ * `action.milestones.checklists[milestoneId]`) + valeurs LIVE des items automatiques (typiquement
+ * `resolveMilestoneAutoFlags(milestoneId, action, allChantiers, allActions)`) — dans l'ordre de
+ * `MILESTONE_CHECKLISTS[milestoneId]`. Seule source de vérité pour cette fusion (round "jalon
+ * validation gate") : consommée aussi bien par `MilestoneChecklistPanel.tsx` (calcul du bouton
+ * "Valider le jalon", qui a déjà les deux moitiés sous forme de props) que par `canPassMilestone`/
+ * `requestMilestoneApproval` ci-dessous (le PRÉREQUIS avant de pouvoir même soumettre une demande de
+ * validation) — les deux ne doivent jamais diverger sur ce qui compte comme "complet". Reprend
+ * exactement la logique locale `mergedItems` qu'avait `MilestoneChecklistPanel.tsx` avant ce round,
+ * extraite ici pour que les deux appelants ne puissent plus diverger.
+ */
+export function mergeMilestoneChecklistItems(
+  milestoneId: MilestoneId,
+  storedItems: MilestoneChecklistItem[],
+  autoFlags: Record<string, number>
+): MilestoneChecklistItem[] {
+  return MILESTONE_CHECKLISTS[milestoneId].map((def) =>
+    def.auto
+      ? autoFlags[def.itemId] !== undefined
+        ? { itemId: def.itemId, progressPct: autoFlags[def.itemId] }
+        : { itemId: def.itemId }
+      : (storedItems.find((i) => i.itemId === def.itemId) ?? { itemId: def.itemId })
+  );
+}
+
+// ─── Jalon — porte de validation (round "jalon validation gate") ──────────────────────────────
+//
+// Mirroir stratégique de `lib/leversLogic.ts::requestLeverApproval`/`approveLeverGate`/
+// `rejectLeverApproval` (mêmes noms de fonction, même découpage requête → approbation/rejet), avec
+// deux différences assumées :
+//  - le Plan Performance ne protège que 3 des transitions de statut d'un levier (avec un modèle à
+//    DEUX approbateurs possibles, sponsor OU cto) ; ici, TOUTES les transitions de jalon (E0→E1 …
+//    E3→E4) sont protégées, avec un SEUL rôle approbateur : `strategic_lead` (voir
+//    `isStrategicLeadOf` ci-dessous, pendant de `isLeverCtoOf`) ;
+//  - `lib/leversLogic.ts` opère sur un TABLEAU de leviers (le hook `useBeTrackData` maintient un
+//    état local optimiste) et retourne `{ levers, lever, auditEntries }` ; `useStrategicData` n'a
+//    pas cette couche (mutations écrites directement dans Firestore, voir son commentaire de tête)
+//    — ces trois fonctions opèrent donc sur UN SEUL projet et retournent soit la nouvelle valeur de
+//    `milestoneApproval` (requête), soit un PATCH `Partial<ChantierAction>` (approbation/rejet) que
+//    l'appelant (`lib/hooks/useStrategicData.ts`) passe tel quel à `updateChantierAction`.
+
+/**
+ * Un profil `strategic_lead` porte-t-il l'habilitation de pilote stratégique sur CE chantier (donc
+ * sur tous ses projets) ? Même convention que `lib/leversLogic.ts::isLeverCtoOf` : un profil sans
+ * `programId` (pilote "tous programmes") habilite sur N'IMPORTE QUEL chantier de l'entreprise ; un
+ * profil scopé à un `programId` précis n'habilite que sur les chantiers de CE programme
+ * (`chantier.programId`).
+ */
+export function isStrategicLeadOf(
+  chantier: Pick<Chantier, "programId">,
+  user: Pick<AuthUser, "profiles"> | null | undefined
+): boolean {
+  if (!hasRole(user, "strategic_lead")) return false;
+  return !!user?.profiles?.some(
+    (p) =>
+      p.role === "strategic_lead" && (p.programId == null || p.programId === chantier.programId)
+  );
+}
+
+/**
+ * Soumet une demande de validation pour faire passer un projet à son JALON SUIVANT — appelable
+ * uniquement par le propriétaire du projet (`ChantierAction.owner`) ou un admin, et UNIQUEMENT si
+ * `canPassMilestone` est déjà satisfait pour le jalon COURANT (le verrou "tous les items à 100"
+ * reste un PRÉREQUIS, pas remplacé par ce nouveau verrou d'approbation — les deux s'appliquent en
+ * séquence). Pure : ne fait QUE calculer/valider la nouvelle valeur de `milestoneApproval`, ne mute
+ * rien — c'est à l'appelant (`useStrategicData.ts`) de la persister via `updateChantierAction`.
+ * Lève une erreur (jamais un simple `false`) sur toute condition non satisfaite, même convention que
+ * `requestLeverApproval`.
+ */
+export function requestMilestoneApproval(
+  action: ChantierAction,
+  user: Pick<AuthUser, "username" | "isGlobalAdmin" | "isCompanyAdmin">,
+  allChantiers: Chantier[],
+  allActions: ChantierAction[]
+): ChantierMilestoneApproval {
+  if (!isAnyAdmin(user) && action.owner !== user.username) {
+    throw new Error(
+      `Seul le propriétaire du projet "${action.id}" (ou un admin) peut soumettre une demande de validation de jalon`
+    );
+  }
+  const currentMilestone = action.milestones?.currentMilestone ?? "E0";
+  const targetMilestone = MILESTONE_ORDER[MILESTONE_ORDER.indexOf(currentMilestone) + 1];
+  if (!targetMilestone) {
+    throw new Error(
+      `Le projet "${action.id}" a déjà atteint le dernier jalon (${displayMilestoneId(currentMilestone)})`
+    );
+  }
+  const autoFlags = resolveMilestoneAutoFlags(currentMilestone, action, allChantiers, allActions);
+  const storedItems = action.milestones?.checklists[currentMilestone] ?? [];
+  const mergedItems = mergeMilestoneChecklistItems(currentMilestone, storedItems, autoFlags);
+  const { canPass, reasons } = canPassMilestone(currentMilestone, mergedItems);
+  if (!canPass) {
+    throw new Error(
+      `Le jalon ${displayMilestoneId(currentMilestone)} du projet "${action.id}" n'est pas encore complet : ${reasons.join(", ")}`
+    );
+  }
+  return {
+    targetMilestone,
+    requestedBy: user.username,
+    requestedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Approuve la demande de validation en cours — vérifie que l'appelant est habilité (`strategic_lead`
+ * scopé au programme du chantier parent, voir `isStrategicLeadOf`, ou admin). Fait RÉELLEMENT
+ * avancer le jalon (`currentMilestone` → `milestoneApproval.targetMilestone`, l'ancien
+ * `currentMilestone` poussé sur `passedMilestones` s'il n'y est pas déjà) et vide `milestoneApproval`
+ * — c'est le SEUL chemin légitime vers une avancée de jalon, voir le commentaire de tête de cette
+ * section. Chantier parent introuvable (référence orpheline) : traité comme non habilité plutôt que
+ * de lever une exception distincte, seul un admin peut alors approuver.
+ */
+export function approveMilestoneGate(
+  action: ChantierAction,
+  user: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
+  allChantiers: Chantier[]
+): Pick<ChantierAction, "milestones" | "milestoneApproval"> {
+  const approval = action.milestoneApproval;
+  if (!approval) {
+    throw new Error(`Le projet "${action.id}" n'a pas de demande de validation de jalon en cours`);
+  }
+  const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
+  const authorized =
+    isAnyAdmin(user) || (!!parentChantier && isStrategicLeadOf(parentChantier, user));
+  if (!authorized) {
+    throw new Error(`Vous n'êtes pas habilité à approuver cette demande de validation de jalon`);
+  }
+
+  const before: ChantierMilestoneState = action.milestones ?? {
+    currentMilestone: "E0",
+    passedMilestones: [],
+    checklists: {},
+  };
+  const passedMilestones = before.passedMilestones.includes(before.currentMilestone)
+    ? before.passedMilestones
+    : [...before.passedMilestones, before.currentMilestone];
+
+  return {
+    milestones: {
+      ...before,
+      currentMilestone: approval.targetMilestone,
+      passedMilestones,
+    },
+    milestoneApproval: undefined,
+  };
+}
+
+/**
+ * Rejette (annule) la demande en cours — habilité : `strategic_lead` du chantier parent, un admin,
+ * OU le propriétaire du projet lui-même (mirroir de `rejectLeverApproval`, qui autorise de même le
+ * porteur du levier à annuler sa propre demande). Vide `milestoneApproval` : le projet reste sur son
+ * jalon courant, sans pénalité — une nouvelle demande peut être soumise plus tard via
+ * `requestMilestoneApproval` dès que `canPassMilestone` est de nouveau satisfait.
+ */
+export function rejectMilestoneApproval(
+  action: ChantierAction,
+  user: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
+  allChantiers: Chantier[]
+): Pick<ChantierAction, "milestoneApproval"> {
+  if (!action.milestoneApproval) {
+    throw new Error(`Le projet "${action.id}" n'a pas de demande de validation de jalon en cours`);
+  }
+  const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
+  const authorized =
+    isAnyAdmin(user) ||
+    action.owner === user.username ||
+    (!!parentChantier && isStrategicLeadOf(parentChantier, user));
+  if (!authorized) {
+    throw new Error(`Vous n'êtes pas habilité à rejeter cette demande de validation de jalon`);
+  }
+  return { milestoneApproval: undefined };
+}
+
 /** Un des 3 buckets d'affichage discrets d'un `progressPct` (0-100, voir
  *  `MilestoneChecklistItem.progressPct`) — jamais de dégradé continu. Seul point de vérité pour ce
  *  bucketing (round 14) : anciennement dupliqué localement dans `MilestoneChecklistPanel.tsx`
@@ -982,6 +1158,70 @@ export function chantierMilestoneProgressPct(
   if (own.length === 0) return 0;
   const total = own.reduce((sum, action) => sum + milestoneProgressPct(action), 0);
   return Math.round(total / own.length);
+}
+
+/**
+ * Avancement AGRÉGÉ d'un chantier, PONDÉRÉ par le poids déclaré de chacun de ses projets
+ * (`ChantierAction.chantierWeightPct`, round "projet weighting") — remplace
+ * `chantierMilestoneProgressPct` ci-dessus (moyenne SIMPLE, non pondérée) comme figure de
+ * progression réellement affichée sur les écrans que ce round modifie (`ChantierDetailPanel.tsx`,
+ * `ChantierGantt.tsx`). `chantierMilestoneProgressPct` reste exportée et INCHANGÉE — un point d'appel
+ * hors du périmètre de ce round (`ProgramRoadmap.tsx`, qui recalcule sa propre moyenne inline plutôt
+ * que d'importer l'une ou l'autre, voir son commentaire) continue de s'appuyer sur elle sans effet
+ * de bord.
+ *
+ * Algorithme IDENTIQUE à `lib/workstreamLogic.ts::workstreamDeclaredProgress` (même mécanique de
+ * poids déclaratif, adaptée au domaine chantier/projet plutôt que workstream/levier) :
+ *  1. poids déclarés (`chantierWeightPct`) sommés tels quels ;
+ *  2. le reste jusqu'à 100 (jamais négatif) est réparti À PARTS ÉGALES entre les projets SANS poids
+ *     déclaré — un projet sans `chantierWeightPct` n'est donc jamais compté pour 0, mais reçoit un
+ *     poids implicite égal aux autres projets non pondérés ;
+ *  3. moyenne pondérée de `milestoneProgressPct(action)` (degré dégradé — pas d'`autoValues`, cette
+ *     fonction n'a pas accès à `allChantiers`/`allActions`, même limitation assumée que
+ *     `chantierMilestoneProgressPct` ci-dessus, voir son commentaire round 7) par ce poids (déclaré
+ *     ou implicite) ;
+ *  4. repli en moyenne SIMPLE si le poids total effectif vaut 0 (tous les poids déclarés sont à 0 ET
+ *     aucun projet non pondéré pour absorber un reste — cas limite, mais `workstreamDeclaredProgress`
+ *     s'en prémunit, cette fonction fait de même pour ne jamais diviser par zéro).
+ *
+ * Contrairement à `workstreamDeclaredProgress` (qui retourne `null`, et EXCLUT du calcul, un levier
+ * sans aucune action déclarée) : `milestoneProgressPct` ne connaît PAS de notion de "projet non
+ * déclaré" à exclure — un projet sans `.milestones` renseigné vaut simplement 0 (voir son propre
+ * commentaire), jamais `null`. Cette fonction retourne donc toujours un `number` (jamais `null`),
+ * TOUS les projets du chantier participent à la moyenne (pondérée ou implicite), aucun n'est exclu —
+ * seule la notion de POIDS (pas de progression) peut être "non déclarée" ici. 0 si le chantier n'a
+ * aucun projet du tout — même parti pris que `chantierMilestoneProgressPct`.
+ */
+export function chantierDeclaredProgress(chantierId: string, actions: ChantierAction[]): number {
+  const own = actions.filter((a) => a.chantierId === chantierId);
+  if (own.length === 0) return 0;
+
+  const withProgress = own.map((action) => ({ action, progress: milestoneProgressPct(action) }));
+
+  const declaredWeightSum = withProgress.reduce(
+    (acc, x) =>
+      acc + (typeof x.action.chantierWeightPct === "number" ? x.action.chantierWeightPct : 0),
+    0
+  );
+  const undeclaredCount = withProgress.filter(
+    (x) => typeof x.action.chantierWeightPct !== "number"
+  ).length;
+  const remainingWeight = Math.max(0, 100 - declaredWeightSum);
+  const implicitWeight = undeclaredCount > 0 ? remainingWeight / undeclaredCount : 0;
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+  for (const { action, progress } of withProgress) {
+    const weight =
+      typeof action.chantierWeightPct === "number" ? action.chantierWeightPct : implicitWeight;
+    weightedSum += weight * progress;
+    totalWeight += weight;
+  }
+  if (totalWeight === 0) {
+    // Tous les poids déclarés valent 0 (ou aucun poids, aucun reste) — repli en moyenne simple.
+    return Math.round(withProgress.reduce((acc, x) => acc + x.progress, 0) / withProgress.length);
+  }
+  return Math.round(weightedSum / totalWeight);
 }
 
 // ─── Retard d'un projet/chantier (round 20) ────────────────────────────────────────────────────

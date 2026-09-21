@@ -1065,6 +1065,32 @@ export type Deliverable = {
   }[];
 };
 
+/**
+ * Demande de validation de jalon en cours pour UN projet (`ChantierAction`, round "jalon validation
+ * gate") — pendant stratégique de `LeverApproval` (voir son commentaire ci-dessus), adapté :
+ * contrairement au Plan Performance (3 des transitions de statut seulement, sponsor OU cto), le
+ * Plan Stratégique protège TOUTES les transitions de jalon (E0→E1, E1→E2, E2→E3, E3→E4), avec un
+ * SEUL rôle approbateur, `strategic_lead` (le "pilote stratégique"), scopé à son programme exactement
+ * comme `cto` côté Performance (voir `lib/axisLogic.ts::isStrategicLeadOf`, pendant d'
+ * `isLeverCtoOf`). Voir `lib/axisLogic.ts::requestMilestoneApproval`/`approveMilestoneGate`/
+ * `rejectMilestoneApproval` pour la logique métier complète. Non défini = pas de demande en cours
+ * (pas encore soumise, ou déjà approuvée/rejetée).
+ */
+export type ChantierMilestoneApproval = {
+  /** Jalon que le projet atteindra une fois la demande approuvée — toujours celui qui suit
+   *  immédiatement `ChantierMilestoneState.currentMilestone` au moment de la demande (voir
+   *  `MILESTONE_ORDER`, lib/milestoneChecklist.ts). */
+  targetMilestone: MilestoneId;
+  /** Username de l'utilisateur ayant initié la demande de validation — le propriétaire du projet
+   *  (`ChantierAction.owner`) ou un admin, voir `requestMilestoneApproval`. */
+  requestedBy: string;
+  requestedAt: string;
+  /** Renseignés une fois approuvé (informatif — l'objet `milestoneApproval` est vidé juste après,
+   *  même convention que `LeverApproval.approvedBy`/`approvedAt`). */
+  approvedBy?: string;
+  approvedAt?: string;
+};
+
 export type ChantierAction = {
   id: string;
   companyId: string;
@@ -1096,6 +1122,18 @@ export type ChantierAction = {
    *  `indicatorId` — l'ancien aiguillage vers un kanban 3-états pour les leviers sans KPI a été
    *  supprimé (le PO a tranché pour un système unique, plus simple à piloter). */
   milestones?: ChantierMilestoneState;
+  /** Demande de validation de jalon en cours — voir `ChantierMilestoneApproval` ci-dessus. Non
+   *  défini = pas de demande en cours. Le SEUL chemin légitime pour faire progresser
+   *  `milestones.currentMilestone`/`passedMilestones` une fois `canPassMilestone` satisfait (voir
+   *  lib/axisLogic.ts) : `requestMilestoneApproval` (propriétaire du projet ou admin) puis
+   *  `approveMilestoneGate` (`strategic_lead` scopé au programme, ou admin). */
+  milestoneApproval?: ChantierMilestoneApproval;
+  /** Poids déclaratif (0-100) de ce PROJET dans l'avancement de son chantier, renseigné par le
+   *  pilote du chantier (`Chantier.pilote`) — pendant stratégique de `Lever.workstreamWeightPct`
+   *  (voir son commentaire ci-dessus), même sémantique : les poids des projets d'un même chantier
+   *  n'ont pas besoin de sommer à 100, voir `lib/axisLogic.ts::chantierDeclaredProgress` pour le
+   *  calcul de la moyenne pondérée. Non défini = poids implicite égal entre projets du chantier. */
+  chantierWeightPct?: number;
   /** Lien optionnel vers un `Indicator` (KPI) de l'axe ou du chantier de ce levier — round 8, statut
    *  round 18 : purement informatif, n'aiguille plus aucun système de suivi (le suivi E0→E4 via
    *  `milestones` ci-dessus s'applique à tous les leviers, avec ou sans KPI rattaché). Liste des KPI

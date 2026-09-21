@@ -2,10 +2,20 @@
 
 import { Button } from "@/components/shared/Button";
 import { UserPicker } from "@/components/strategic/UserPicker";
-import { canPassMilestone, progressBucket, type ProgressBucket } from "@/lib/axisLogic";
+import {
+  canPassMilestone,
+  mergeMilestoneChecklistItems,
+  progressBucket,
+  type ProgressBucket,
+} from "@/lib/axisLogic";
 import { MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { AuthUser, MilestoneChecklistItem, MilestoneId } from "@/types";
+import type {
+  AuthUser,
+  ChantierMilestoneApproval,
+  MilestoneChecklistItem,
+  MilestoneId,
+} from "@/types";
 
 /**
  * Panneau de check-list du jalon COURANT d'un chantier (round 5) — pièce centrale de la méthode
@@ -34,6 +44,18 @@ import type { AuthUser, MilestoneChecklistItem, MilestoneId } from "@/types";
  * `undefined` → neutre, `0` → rouge, `100` → vert, toute valeur strictement entre les deux → un
  * unique ton orange (jamais de dégradé) — ce ton orange reste affiché tel quel round 26, seule sa
  * conséquence sur `canPassMilestone` a changé (il bloque désormais, comme le rouge).
+ *
+ * Round "jalon validation gate" : le bouton "Valider le jalon" (activé dès que `canPassMilestone`
+ * l'autorise) ne fait plus avancer le jalon directement — il SOUMET une demande de validation
+ * (`onRequestApproval`, voir `lib/axisLogic.ts::requestMilestoneApproval`), qu'un `strategic_lead`
+ * (ou un admin) doit ensuite approuver (`onApproveMilestone`) avant que le jalon n'avance réellement
+ * — mirroir exact du modèle de porte de validation du Plan Performance
+ * (`lib/leversLogic.ts::requestLeverApproval`/`approveLeverGate`), adapté à un SEUL rôle
+ * approbateur. Même mirroir que `LeverDetailClientPerformance.tsx` (pas de raccourci "un seul clic"
+ * même quand l'utilisateur courant EST le `strategic_lead` habilité à approuver sa propre demande :
+ * il voit le bouton "Valider le jalon" comme n'importe quel propriétaire de projet, PUIS — dès que
+ * `milestoneApproval` est posé — les boutons Approuver/Rejeter, exactement comme sur la fiche levier
+ * de Performance).
  */
 
 const INPUT_CLASS =
@@ -93,7 +115,13 @@ export function MilestoneChecklistPanel({
   autoFlags,
   users,
   onChange,
-  onValidateMilestone,
+  milestoneApproval,
+  canSubmitApproval,
+  canApproveMilestone,
+  canRejectMilestoneApproval,
+  onRequestApproval,
+  onApproveMilestone,
+  onRejectMilestoneApproval,
 }: {
   milestoneId: MilestoneId;
   /** Réponses manuelles STOCKÉES du chantier pour ce jalon (les items `auto` n'y sont jamais lus,
@@ -105,7 +133,23 @@ export function MilestoneChecklistPanel({
   autoFlags: Record<string, number>;
   users: AuthUser[];
   onChange: (nextItems: MilestoneChecklistItem[]) => void;
-  onValidateMilestone: () => void;
+  /** Demande de validation en cours sur CE projet, quel que soit son jalon cible (voir
+   *  `ChantierAction.milestoneApproval`) — `undefined` = pas de demande en cours. */
+  milestoneApproval?: ChantierMilestoneApproval;
+  /** Propriétaire du projet ou admin (voir `requestMilestoneApproval`, lib/axisLogic.ts) : seul cas
+   *  où le bouton "Valider le jalon" est rendu (mirroir du `canSubmitApproval` de
+   *  `LeverDetailClientPerformance.tsx`, qui masque de même le bouton "Soumettre pour validation"
+   *  plutôt que de le désactiver pour un non-habilité). */
+  canSubmitApproval: boolean;
+  /** `strategic_lead` du chantier parent ou admin (voir `approveMilestoneGate`) — affiche le bouton
+   *  "Approuver" sur une demande en cours. */
+  canApproveMilestone: boolean;
+  /** `strategic_lead` du chantier parent, admin, OU le propriétaire du projet lui-même (voir
+   *  `rejectMilestoneApproval`) — affiche le bouton "Rejeter" sur une demande en cours. */
+  canRejectMilestoneApproval: boolean;
+  onRequestApproval: () => void;
+  onApproveMilestone: () => void;
+  onRejectMilestoneApproval: () => void;
 }) {
   const { t } = useTranslation();
   const defs = MILESTONE_CHECKLISTS[milestoneId];
@@ -124,14 +168,10 @@ export function MilestoneChecklistPanel({
   };
 
   // Fusion défs + valeurs live (auto) / valeurs stockées (manuel) — c'est CE tableau qu'on passe à
-  // `canPassMilestone`, jamais `items` brut (qui ignore les items auto).
-  const mergedItems: MilestoneChecklistItem[] = defs.map((def) =>
-    def.auto
-      ? autoFlags[def.itemId] !== undefined
-        ? { itemId: def.itemId, progressPct: autoFlags[def.itemId] }
-        : { itemId: def.itemId }
-      : (findStored(def.itemId) ?? { itemId: def.itemId })
-  );
+  // `canPassMilestone`, jamais `items` brut (qui ignore les items auto). Extrait dans
+  // `lib/axisLogic.ts` (round "jalon validation gate") : `requestMilestoneApproval` doit appliquer
+  // EXACTEMENT la même fusion pour que le bouton ci-dessous et le verrou serveur ne divergent jamais.
+  const mergedItems = mergeMilestoneChecklistItems(milestoneId, items, autoFlags);
 
   const { canPass, reasons } = canPassMilestone(milestoneId, mergedItems);
 
@@ -272,21 +312,52 @@ export function MilestoneChecklistPanel({
       </div>
 
       <div className="border-t border-border pt-3">
-        <Button variant="primary" size="sm" onClick={onValidateMilestone} disabled={!canPass}>
-          {t("strategicChantierDetail.milestones.actionPlan.validate")}
-        </Button>
-        {!canPass && (
-          <div className="mt-1.5 text-[11px] text-tertiary">
-            <p>{t("strategicChantierDetail.milestones.actionPlan.missingHint")}</p>
-            {reasons.length > 0 && (
-              <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                {reasons.map((reason, i) => (
-                  // eslint-disable-next-line react/no-array-index-key -- liste dérivée, pas de clé stable disponible
-                  <li key={i}>{reason}</li>
-                ))}
-              </ul>
+        {milestoneApproval ? (
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-rag-amber-light px-2.5 py-1 text-[11px] font-semibold text-rag-amber">
+              {t("strategicChantierDetail.milestones.approval.pendingBadge")}
+            </div>
+            <p className="text-[11px] text-tertiary">
+              {t("strategicChantierDetail.milestones.approval.requestedMeta")
+                .replace("{user}", milestoneApproval.requestedBy)
+                .replace("{date}", new Date(milestoneApproval.requestedAt).toLocaleDateString())}
+            </p>
+            {(canApproveMilestone || canRejectMilestoneApproval) && (
+              <div className="flex items-center gap-2">
+                {canApproveMilestone && (
+                  <Button variant="primary" size="sm" onClick={onApproveMilestone}>
+                    {t("strategicChantierDetail.milestones.approval.approve")}
+                  </Button>
+                )}
+                {canRejectMilestoneApproval && (
+                  <Button variant="ghost" size="sm" onClick={onRejectMilestoneApproval}>
+                    {t("strategicChantierDetail.milestones.approval.reject")}
+                  </Button>
+                )}
+              </div>
             )}
           </div>
+        ) : (
+          canSubmitApproval && (
+            <>
+              <Button variant="primary" size="sm" onClick={onRequestApproval} disabled={!canPass}>
+                {t("strategicChantierDetail.milestones.actionPlan.validate")}
+              </Button>
+              {!canPass && (
+                <div className="mt-1.5 text-[11px] text-tertiary">
+                  <p>{t("strategicChantierDetail.milestones.actionPlan.missingHint")}</p>
+                  {reasons.length > 0 && (
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {reasons.map((reason, i) => (
+                        // eslint-disable-next-line react/no-array-index-key -- liste dérivée, pas de clé stable disponible
+                        <li key={i}>{reason}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </>
+          )
         )}
       </div>
     </div>

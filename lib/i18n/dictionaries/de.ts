@@ -45,6 +45,9 @@ const de: Record<string, string> = {
   "validation.workstream": "Workstream",
   "validation.requestedBy": "Beantragt von",
   "validation.requestedAt": "Beantragt am",
+  "validation.milestone.projet": "Projekt",
+  "validation.milestone.chantier": "Arbeitspaket",
+  "validation.milestone.targetMilestone": "Zielmeilenstein",
   "nav.sectionLabel": "Navigation",
   "nav.sectionDecision": "Entscheidung",
   "nav.sectionReferenceData": "Referenzdaten",
@@ -1188,7 +1191,7 @@ const de: Record<string, string> = {
   // Runde 24 (Phase 4, Teil 1): Beschriftungen der beiden lokalen Tabs dieser Seite — siehe den
   // Doc-Kommentar am Anfang von `StrategicAxesView.tsx`.
   "strategicAxes.tabs.advancement": "Fortschritt",
-  "strategicAxes.tabs.byAxis": "Nach Achse",
+  "strategicAxes.tabs.byAxis": "Baumstruktur",
   // Runde 17 (Tausch): Titel des festen Abschnitts "Fortschrittsstatus der Hebel" dieser Seite
   // (E0→E4-Ansicht nach Hebel + klassisches Kanban für Hebel ohne KPI) — migriert vom ehemaligen
   // Schlüssel `strategicDashboard.widget.chantierHealth` (dieses Dashboard-Widget ist weg, dieser
@@ -1445,6 +1448,12 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Automatisch berechnet.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Als erledigt markieren",
 
+  "strategicChantierDetail.milestones.approval.pendingBadge":
+    "Ausstehende Validierung durch den strategischen Leiter",
+  "strategicChantierDetail.milestones.approval.requestedMeta": "Beantragt von {user} am {date}",
+  "strategicChantierDetail.milestones.approval.approve": "Genehmigen",
+  "strategicChantierDetail.milestones.approval.reject": "Ablehnen",
+
   "strategicChantierDetail.milestones.item.E0_A1": "Abhängigkeiten / Voraussetzungen erfüllt",
   "strategicChantierDetail.milestones.item.E0_A2": "Kunden / Auftraggeber identifiziert",
   "strategicChantierDetail.milestones.item.E0_B1": "Herausforderungen formalisiert",
@@ -1490,7 +1499,7 @@ const de: Record<string, string> = {
   "strategicImport.indicatorsCountLabel": "Indikator(en) zu erstellen",
   "strategicImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "strategicImport.templateDownloadedBody":
-    "5 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencode = FK), Aktionen (Arbeitspaketcode = FK), Ergebnisse (Aktionscode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.",
+    "5 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencodes getrennt durch ; = FK, mehrere Achsen möglich), Projekte (Arbeitspaketcode = FK), Ergebnisse (Projektcode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.",
   "strategicImport.ignoredRowsNote": "{n} Zeile(n) ignoriert",
   "strategicImport.importDoneBody":
     "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Projekt(e) · {indicators} Indikator(en) erstellt",
@@ -1621,6 +1630,17 @@ const de: Record<string, string> = {
   "effectifs.needVsAvailable.neededOf": "von",
   "effectifs.needVsAvailable.overAllocated":
     "Der gemeldete Bedarf übersteigt die tatsächliche Verfügbarkeit dieses Teams.",
+  "effectifs.needVsAvailable.periodHint":
+    "Gemeldeter Bedarf gezählt für {period} (Zeilen, deren Datumsbereich diese Periode überschneidet). Verfügbar: immer zum heutigen Tag berechnet, VZÄ-Basis in Echtzeit.",
+  "effectifs.needVsAvailable.availableToday":
+    "Verfügbar: immer zum heutigen Tag (Live-Momentaufnahme)",
+  "effectifs.needVsAvailable.needDetailTitle": "Detail der gemeldeten Bedarfszeilen — {team}",
+  "effectifs.needVsAvailable.availableDetailTitle": "Verfügbare Mitarbeitende — {team}",
+  "effectifs.needVsAvailable.availableDetailEmpty": "Keine Mitarbeitenden in diesem Team.",
+  "effectifs.needVsAvailable.rowsCount": "{n} Mitarbeitende(r)",
+  "effectifs.needVsAvailable.columnName": "Name",
+  "effectifs.needVsAvailable.columnFunction": "Funktion",
+  "effectifs.needVsAvailable.columnTeam": "Team",
   "effectifs.moneyBudget.title": "Zugewiesenes Finanzbudget",
   "effectifs.moneyBudget.empty": "Für dieses Programm ist kein Budget zugewiesen.",
   "effectifs.moneyBudget.centerLabel": "Gesamt",
@@ -1971,6 +1991,14 @@ const de: Record<string, string> = {
   "actionWeights.total": "Gesamt",
   "actionWeights.mustBe100":
     "Die Summe muss 100 % betragen und alle Aktionen müssen ein Gewicht haben",
+  "projetWeights.title": "Gewichtung der Projekte",
+  "projetWeights.even": "Gleichmäßig verteilen",
+  "projetWeights.clear": "Ungewichtet",
+  "projetWeights.weight": "Gewicht (%)",
+  "projetWeights.declaredTotal": "Deklariertes Gewicht",
+  "projetWeights.remainingHint":
+    "der Rest wird gleichmäßig auf die ungewichteten Projekte verteilt",
+  "projetWeights.unweighted": "Ungewichtet (implizit gleiches Gewicht zwischen den Projekten)",
   "filters.toggle": "Filter",
   "columns.toggle": "Spalten",
   "impactsEditor.gain": "Gewinn",
@@ -2029,6 +2057,8 @@ const de: Record<string, string> = {
   "hr.drilldown.seeAllInEtp": "Diese {n} Bewegungen in der VZÄ-Basis anzeigen",
   "shared.topbar.pendingApprovals": "Ausstehende Freigaben",
   "shared.topbar.approvalPending": "Ausstehend · Sponsor oder CTO · {stage}",
+  "shared.topbar.milestoneApprovalPending":
+    "Ausstehend · strategischer Leiter · Meilenstein {milestone}",
   "leverDetail.trajectory.financial": "Finanzielle Auswirkung",
   "leverDetail.trajectory.fte": "VZÄ-Auswirkung",
   "leverDetail.trajectory.month": "Monat",

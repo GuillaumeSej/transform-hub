@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { resolveApprovalQueue } from "@/lib/hooks/useApprovalQueue";
-import type { AuthUser, BeTrackData, Lever, Workstream } from "@/types";
+import { resolveApprovalQueue, resolveMilestoneApprovalQueue } from "@/lib/hooks/useApprovalQueue";
+import type { AuthUser, BeTrackData, Chantier, ChantierAction, Lever, Workstream } from "@/types";
 
 /**
  * Teste la logique PURE de résolution de la file d'attente de validation
@@ -189,5 +189,94 @@ describe("resolveApprovalQueue", () => {
     });
     const user = makeUser({ profiles: [], isCompanyAdmin: true });
     expect(resolveApprovalQueue(makeData([lever]), user)).toEqual([lever]);
+  });
+});
+
+// ─── Pendant Plan Stratégique — jalons E0→E4 (round "jalon validation gate") ───────────────────
+
+function makeChantier(overrides: Partial<Chantier> = {}): Chantier {
+  return {
+    id: "CH1",
+    companyId: "c1",
+    programId: "p1",
+    axisIds: ["AX1"],
+    name: "Chantier test",
+    stage: "defined",
+    dependencies: [],
+    createdAt: "2026-01-01",
+    lastUpdate: "2026-01-01",
+    ...overrides,
+  };
+}
+
+function makeAction(overrides: Partial<ChantierAction> = {}): ChantierAction {
+  return {
+    id: "A1",
+    companyId: "c1",
+    chantierId: "CH1",
+    name: "Projet test",
+    start: "2026-01-01",
+    end: "2026-06-30",
+    status: "defined",
+    milestoneApproval: { targetMilestone: "E3", requestedBy: "owner1", requestedAt: "2026-01-01" },
+    ...overrides,
+  };
+}
+
+describe("resolveMilestoneApprovalQueue", () => {
+  it("retourne une liste vide sans utilisateur", () => {
+    expect(resolveMilestoneApprovalQueue([makeAction()], [makeChantier()], null)).toEqual([]);
+  });
+
+  it("ignore les projets sans demande de validation de jalon en cours", () => {
+    const action = makeAction({ milestoneApproval: undefined });
+    const user = makeUser({ profiles: [{ role: "strategic_lead" }] });
+    expect(resolveMilestoneApprovalQueue([action], [makeChantier()], user)).toEqual([]);
+  });
+
+  it("ignore un projet dont le chantier parent est introuvable (référence orpheline)", () => {
+    const action = makeAction({ chantierId: "GHOST" });
+    const user = makeUser({ profiles: [{ role: "strategic_lead" }] });
+    expect(resolveMilestoneApprovalQueue([action], [makeChantier()], user)).toEqual([]);
+  });
+
+  it("inclut un projet en attente pour un strategic_lead scopé au bon programme", () => {
+    const action = makeAction();
+    const chantier = makeChantier({ programId: "p1" });
+    const user = makeUser({ profiles: [{ role: "strategic_lead", programId: "p1" }] });
+    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([
+      { action, chantier },
+    ]);
+  });
+
+  it("un strategic_lead sans programId (global) couvre tous les programmes", () => {
+    const action = makeAction();
+    const chantier = makeChantier({ programId: "p2" });
+    const user = makeUser({ profiles: [{ role: "strategic_lead" }] });
+    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([
+      { action, chantier },
+    ]);
+  });
+
+  it("exclut un projet en attente pour un strategic_lead scopé à un AUTRE programme", () => {
+    const action = makeAction();
+    const chantier = makeChantier({ programId: "p2" });
+    const user = makeUser({ profiles: [{ role: "strategic_lead", programId: "p1" }] });
+    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([]);
+  });
+
+  it("exclut un projet en attente pour un utilisateur qui n'est pas strategic_lead", () => {
+    const action = makeAction();
+    const user = makeUser({ profiles: [{ role: "chantier_contributor" }] });
+    expect(resolveMilestoneApprovalQueue([action], [makeChantier()], user)).toEqual([]);
+  });
+
+  it("un admin voit tous les projets en attente, tous rôles confondus", () => {
+    const action = makeAction();
+    const chantier = makeChantier();
+    const user = makeUser({ profiles: [], isCompanyAdmin: true });
+    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([
+      { action, chantier },
+    ]);
   });
 });

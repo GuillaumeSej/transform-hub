@@ -71,6 +71,11 @@ const fr: Record<string, string> = {
   "validation.workstream": "Chantier",
   "validation.requestedBy": "Demandé par",
   "validation.requestedAt": "Demandé le",
+  // Round "jalon validation gate" : colonnes de la vue Plan Stratégique de cette même page
+  // (demandes de validation de jalon de projet, plutôt que de porte de cycle de vie de levier).
+  "validation.milestone.projet": "Projet",
+  "validation.milestone.chantier": "Chantier",
+  "validation.milestone.targetMilestone": "Jalon visé",
   "nav.sectionLabel": "Navigation",
   "nav.sectionDecision": "Décision",
   "nav.sectionReferenceData": "Données de référence",
@@ -1253,7 +1258,7 @@ const fr: Record<string, string> = {
   // Round 24 (Phase 4, Partie 1) : libellés des deux onglets locaux de cette page — voir le
   // doc-comment de tête de `StrategicAxesView.tsx`.
   "strategicAxes.tabs.advancement": "Avancement",
-  "strategicAxes.tabs.byAxis": "Vue par axe",
+  "strategicAxes.tabs.byAxis": "Arborescence",
   // Round 17 (permutation) : titre de la section fixe "État des lieux d'avancement des leviers" de
   // cette page (vue E0→E4 par levier, tous leviers confondus depuis round 18 — voir son ancien
   // kanban classique des leviers sans KPI, supprimé) — migré depuis l'ex-clé
@@ -1535,6 +1540,13 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Calculé automatiquement.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Marquer comme soldé",
 
+  // Round "jalon validation gate" : porte de validation avant le passage réel au jalon suivant.
+  "strategicChantierDetail.milestones.approval.pendingBadge":
+    "En attente de validation par le pilote stratégique",
+  "strategicChantierDetail.milestones.approval.requestedMeta": "Demandé par {user} le {date}",
+  "strategicChantierDetail.milestones.approval.approve": "Approuver",
+  "strategicChantierDetail.milestones.approval.reject": "Rejeter",
+
   "strategicChantierDetail.milestones.item.E0_A1": "Dépendances / prérequis satisfaits",
   "strategicChantierDetail.milestones.item.E0_A2": "Clients / commanditaire identifiés",
   "strategicChantierDetail.milestones.item.E0_B1": "Enjeux formalisés",
@@ -1581,11 +1593,18 @@ const fr: Record<string, string> = {
   "strategicImport.indicatorsCountLabel": "indicateur(s) à créer",
   "strategicImport.templateDownloadedTitle": "Modèle téléchargé",
   "strategicImport.templateDownloadedBody":
-    "5 feuilles : Axes (Code = clé), Chantiers (Code Axe = FK), Actions (Code Chantier = FK), Livrables (Code Action = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK). Supprimez les lignes d'exemple avant de remplir.",
+    "5 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK), Livrables (Code Projet = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK). Supprimez les lignes d'exemple avant de remplir.",
   "strategicImport.ignoredRowsNote": "{n} ligne(s) ignorée(s)",
   "strategicImport.importDoneBody":
     "{axes} axe(s) · {chantiers} chantier(s) · {actions} projet(s) · {indicators} indicateur(s) créé(s)",
   "strategicImport.errorTitle": "Échec de l'import",
+  // Round 27 : création de comptes intégrée à l'import (owners/pilotes/sponsors sans compte).
+  "strategicImport.accountsResultTitle": "Comptes créés",
+  "strategicImport.tempPasswordWarning":
+    "Mots de passe temporaires à transmettre à la personne concernée, non récupérables ensuite — notez-les maintenant.",
+  "strategicImport.copyPassword": "Copier le mot de passe",
+  "strategicImport.newPeopleTitle": "{n} nouvelle(s) personne(s) seront créées avec un accès",
+  "strategicImport.includePerson": "Créer ce compte",
 
   // ─── Plan Stratégique — page KPI (saisie de mesures, édition d'objectif) ───
   "kpi.title": "Indicateurs (KPI)",
@@ -1717,6 +1736,19 @@ const fr: Record<string, string> = {
   "effectifs.needVsAvailable.neededOf": "sur",
   "effectifs.needVsAvailable.overAllocated":
     "Besoin déclaré supérieur au disponible réel de cette équipe.",
+  // Round <n> : sélecteur de période (besoin uniquement) + détail cliquable des deux côtés du
+  // ratio — voir le doc-comment de `needVsAvailableSection`, `EffectifsPageClient.tsx`.
+  "effectifs.needVsAvailable.periodHint":
+    "Besoin déclaré compté sur {period} (lignes dont la plage de dates recoupe cette période). Disponible : toujours calculé aujourd'hui, base ETP en direct.",
+  "effectifs.needVsAvailable.availableToday":
+    "Disponible : toujours aujourd'hui (photo instantanée)",
+  "effectifs.needVsAvailable.needDetailTitle": "Détail des lignes de besoin déclaré — {team}",
+  "effectifs.needVsAvailable.availableDetailTitle": "Employés disponibles — {team}",
+  "effectifs.needVsAvailable.availableDetailEmpty": "Aucun employé dans cette équipe.",
+  "effectifs.needVsAvailable.rowsCount": "{n} employé(s)",
+  "effectifs.needVsAvailable.columnName": "Nom",
+  "effectifs.needVsAvailable.columnFunction": "Fonction",
+  "effectifs.needVsAvailable.columnTeam": "Équipe",
   "effectifs.moneyBudget.title": "Budget financier alloué",
   "effectifs.moneyBudget.empty": "Aucun budget alloué sur ce programme.",
   // Drill-down EN PLACE à 3 niveaux (round 13, converti round 26) — cliquer une part du donut
@@ -2088,6 +2120,15 @@ const fr: Record<string, string> = {
   "actionWeights.total": "Total",
   "actionWeights.mustBe100":
     "le total doit valoir 100 % et toutes les actions doivent avoir un poids",
+  // Round "projet weighting" : pendant stratégique de actionWeights.* ci-dessus, sémantique de
+  // validation DÉCLARATIVE (pas de somme obligatoire à 100, voir ProjetWeightsEditor.tsx).
+  "projetWeights.title": "Pondération des projets",
+  "projetWeights.even": "Répartir équitablement",
+  "projetWeights.clear": "Non pondéré",
+  "projetWeights.weight": "Poids (%)",
+  "projetWeights.declaredTotal": "Poids déclaré",
+  "projetWeights.remainingHint": "le reste est réparti également entre les projets non pondérés",
+  "projetWeights.unweighted": "Non pondéré (poids implicite égal entre les projets)",
   "filters.toggle": "Filtres",
   "columns.toggle": "Colonnes",
   "impactsEditor.gain": "Gain",
@@ -2134,6 +2175,7 @@ const fr: Record<string, string> = {
   "hr.drilldown.seeAllInEtp": "Voir ces {n} mouvements dans la Base ETP",
   "shared.topbar.pendingApprovals": "Validations en attente",
   "shared.topbar.approvalPending": "En attente · sponsor ou CTO · {stage}",
+  "shared.topbar.milestoneApprovalPending": "En attente · pilote stratégique · jalon {milestone}",
   "leverDetail.trajectory.financial": "Impact financier",
   "leverDetail.trajectory.fte": "Impact ETP",
   "leverDetail.trajectory.month": "Mois",

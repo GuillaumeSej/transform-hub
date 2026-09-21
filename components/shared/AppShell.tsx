@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
 import { useNotifications } from "@/lib/hooks/useNotifications";
-import { useApprovalQueue } from "@/lib/hooks/useApprovalQueue";
+import { useApprovalQueue, useMilestoneApprovalQueue } from "@/lib/hooks/useApprovalQueue";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Alert } from "@/types";
 
@@ -72,6 +72,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     activeProgramId,
     user
   );
+  // Pendant Plan Stratégique de `approvalQueue` ci-dessus (round "jalon validation gate") :
+  // demandes de validation de JALON de projet, voir lib/hooks/useApprovalQueue.ts. Comme
+  // `approvalQueue`, pas de garde `isStrategic` explicite — `strategic.chantierActions` est déjà
+  // structurellement vide hors mode stratégique (voir `useStrategicData` ci-dessus, `companyId`
+  // passé à `null`), donc cette file est naturellement vide en mode Plan Performance.
+  const milestoneApprovalQueue = useMilestoneApprovalQueue(strategic, user);
 
   const strategicNotifications = useMemo(() => {
     const alerts: Alert[] = [];
@@ -287,9 +293,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
-          alertCount={shellAlerts.length + approvalQueue.count}
+          alertCount={shellAlerts.length + approvalQueue.count + milestoneApprovalQueue.count}
           alerts={shellAlerts}
           approvalQueue={approvalQueue.queue}
+          milestoneApprovalQueue={milestoneApprovalQueue.queue}
           onAlertClick={(alert) => {
             if (isStrategic) {
               // Une alerte stratégique ne pointe jamais un levier : cascade de dépendance → fiche

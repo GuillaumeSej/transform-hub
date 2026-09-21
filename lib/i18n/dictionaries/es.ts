@@ -44,6 +44,9 @@ const es: Record<string, string> = {
   "validation.workstream": "Workstream",
   "validation.requestedBy": "Solicitado por",
   "validation.requestedAt": "Solicitado el",
+  "validation.milestone.projet": "Iniciativa",
+  "validation.milestone.chantier": "Proyecto",
+  "validation.milestone.targetMilestone": "Hito objetivo",
   "nav.sectionLabel": "Navegación",
   "nav.sectionDecision": "Decisión",
   "nav.sectionReferenceData": "Datos de referencia",
@@ -1187,7 +1190,7 @@ const es: Record<string, string> = {
   // Ronda 24 (Fase 4, Parte 1): etiquetas de las dos pestañas locales de esta página — ver el
   // comentario de cabecera de `StrategicAxesView.tsx`.
   "strategicAxes.tabs.advancement": "Avance",
-  "strategicAxes.tabs.byAxis": "Por eje",
+  "strategicAxes.tabs.byAxis": "Árbol",
   // Ronda 17 (intercambio): título de la sección fija "Estado de avance de las actividades" de
   // esta página (vista E0→E4 por palanca + kanban clásico de las palancas sin KPI) — migrado
   // desde la antigua clave `strategicDashboard.widget.chantierHealth` (ese widget del panel
@@ -1443,6 +1446,12 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Calculado automáticamente.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Marcar como resuelto",
 
+  "strategicChantierDetail.milestones.approval.pendingBadge":
+    "Pendiente de validación por el líder estratégico",
+  "strategicChantierDetail.milestones.approval.requestedMeta": "Solicitado por {user} el {date}",
+  "strategicChantierDetail.milestones.approval.approve": "Aprobar",
+  "strategicChantierDetail.milestones.approval.reject": "Rechazar",
+
   "strategicChantierDetail.milestones.item.E0_A1": "Dependencias / requisitos previos satisfechos",
   "strategicChantierDetail.milestones.item.E0_A2": "Clientes / comanditario identificados",
   "strategicChantierDetail.milestones.item.E0_B1": "Retos formalizados",
@@ -1490,7 +1499,7 @@ const es: Record<string, string> = {
   "strategicImport.indicatorsCountLabel": "indicador(es) a crear",
   "strategicImport.templateDownloadedTitle": "Plantilla descargada",
   "strategicImport.templateDownloadedBody":
-    "5 hojas: Ejes (Code = clave), Proyectos (Code Eje = FK), Acciones (Code Proyecto = FK), Entregables (Code Acción = FK, opcional), Indicadores (Code Eje O Code Proyecto = FK). Elimine las filas de ejemplo antes de completar.",
+    "5 hojas: Ejes (Code = clave), Proyectos (Codes Ejes separados por ; = FK, admite varios ejes), Iniciativas (Code Proyecto = FK), Entregables (Code Iniciativa = FK, opcional), Indicadores (Code Eje O Code Proyecto = FK). Elimine las filas de ejemplo antes de completar.",
   "strategicImport.ignoredRowsNote": "{n} línea(s) ignorada(s)",
   "strategicImport.importDoneBody":
     "{axes} eje(s) · {chantiers} proyecto(s) · {actions} iniciativa(s) · {indicators} indicador(es) creado(s)",
@@ -1621,6 +1630,18 @@ const es: Record<string, string> = {
   "effectifs.needVsAvailable.neededOf": "de",
   "effectifs.needVsAvailable.overAllocated":
     "La necesidad declarada supera la disponibilidad real de este equipo.",
+  "effectifs.needVsAvailable.periodHint":
+    "Necesidad declarada contabilizada para {period} (líneas cuyo rango de fechas se solapa con este período). Disponible: siempre calculado a día de hoy, base de ETC en vivo.",
+  "effectifs.needVsAvailable.availableToday":
+    "Disponible: siempre a día de hoy (instantánea en vivo)",
+  "effectifs.needVsAvailable.needDetailTitle":
+    "Detalle de las líneas de necesidad declarada — {team}",
+  "effectifs.needVsAvailable.availableDetailTitle": "Empleados disponibles — {team}",
+  "effectifs.needVsAvailable.availableDetailEmpty": "Ningún empleado en este equipo.",
+  "effectifs.needVsAvailable.rowsCount": "{n} empleado(s)",
+  "effectifs.needVsAvailable.columnName": "Nombre",
+  "effectifs.needVsAvailable.columnFunction": "Función",
+  "effectifs.needVsAvailable.columnTeam": "Equipo",
   "effectifs.moneyBudget.title": "Presupuesto financiero asignado",
   "effectifs.moneyBudget.empty": "No hay presupuesto asignado en este programa.",
   "effectifs.moneyBudget.centerLabel": "Total",
@@ -1968,6 +1989,14 @@ const es: Record<string, string> = {
   "actionWeights.unweighted": "Sin ponderar (media simple)",
   "actionWeights.total": "Total",
   "actionWeights.mustBe100": "el total debe ser 100 % y todas las acciones deben tener un peso",
+  "projetWeights.title": "Ponderación de las iniciativas",
+  "projetWeights.even": "Repartir equitativamente",
+  "projetWeights.clear": "Sin ponderar",
+  "projetWeights.weight": "Peso (%)",
+  "projetWeights.declaredTotal": "Peso declarado",
+  "projetWeights.remainingHint":
+    "el resto se reparte equitativamente entre las iniciativas sin ponderar",
+  "projetWeights.unweighted": "Sin ponderar (peso implícito igual entre las iniciativas)",
   "filters.toggle": "Filtros",
   "columns.toggle": "Columnas",
   "impactsEditor.gain": "Ganancia",
@@ -2026,6 +2055,7 @@ const es: Record<string, string> = {
   "hr.drilldown.seeAllInEtp": "Ver estos {n} movimientos en la Base FTE",
   "shared.topbar.pendingApprovals": "Validaciones pendientes",
   "shared.topbar.approvalPending": "Pendiente · sponsor o CTO · {stage}",
+  "shared.topbar.milestoneApprovalPending": "Pendiente · líder estratégico · hito {milestone}",
   "leverDetail.trajectory.financial": "Impacto financiero",
   "leverDetail.trajectory.fte": "Impacto FTE",
   "leverDetail.trajectory.month": "Mes",

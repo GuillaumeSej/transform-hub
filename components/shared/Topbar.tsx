@@ -10,6 +10,8 @@ import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 
 import { getDisplayRoleDefinition } from "@/lib/nav-config";
+import { displayMilestoneId } from "@/lib/axisLogic";
+import type { MilestoneApprovalQueueEntry } from "@/lib/hooks/useApprovalQueue";
 import { Avatar } from "@/components/shared/Avatar";
 import type { Alert, Company, Lever } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
@@ -92,6 +94,7 @@ export function Topbar({
   alerts,
   onAlertClick,
   approvalQueue = [],
+  milestoneApprovalQueue = [],
 }: {
   alertCount: number;
   onMenuClick: () => void;
@@ -100,8 +103,18 @@ export function Topbar({
   /** File d'attente de validation en cascade (owner -> sponsor -> cto, voir
    *  lib/hooks/useApprovalQueue.ts) concernant l'utilisateur courant — affichée en section
    *  distincte du dropdown de notifications ci-dessous. Optionnel (défaut vide) pour ne pas
-   *  casser un éventuel autre appelant de `Topbar` qui ne la fournirait pas encore. */
+   *  casser un éventuel autre appelant de `Topbar` qui ne la fournirait pas encore. Plan
+   *  Performance uniquement — voir `milestoneApprovalQueue` ci-dessous pour le pendant Plan
+   *  Stratégique. */
   approvalQueue?: Lever[];
+  /** Pendant Plan Stratégique de `approvalQueue` ci-dessus (round "jalon validation gate") :
+   *  projets dont la demande de validation de JALON attend cet utilisateur (`strategic_lead` scopé
+   *  programme, ou admin — voir `lib/hooks/useApprovalQueue.ts::useMilestoneApprovalQueue`).
+   *  Structurellement vide en mode Plan Performance (aucun `ChantierAction` chargé), et
+   *  réciproquement pour `approvalQueue` en mode Plan Stratégique — les deux sections ne
+   *  s'affichent donc jamais en même temps en pratique, même mécanisme que `AppShell.tsx`'s
+   *  `approvalQueue`/`shellAlerts`. */
+  milestoneApprovalQueue?: MilestoneApprovalQueueEntry[];
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -194,7 +207,9 @@ export function Topbar({
                 )}
               </div>
               <div className="max-h-[360px] overflow-y-auto">
-                {alerts.length === 0 && approvalQueue.length === 0 ? (
+                {alerts.length === 0 &&
+                approvalQueue.length === 0 &&
+                milestoneApprovalQueue.length === 0 ? (
                   <p className="px-4 py-6 text-center text-xs text-tertiary">
                     {t("shared.topbar.noNotifications", "Aucune notification à traiter.")}
                   </p>
@@ -267,6 +282,45 @@ export function Topbar({
                           ).replace(
                             "{stage}",
                             lever.approval ? STATUS_SHORT_LABEL[lever.approval.targetStatus] : ""
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* Pendant Plan Stratégique de la section ci-dessus (round "jalon validation
+                    gate") : projets en attente de validation de jalon, voir le doc-comment de
+                    `milestoneApprovalQueue` plus haut. Même structure visuelle (bordure + sous-
+                    titre), navigue vers la fiche projet plutôt que la fiche levier. */}
+                {milestoneApprovalQueue.length > 0 && (
+                  <div className="border-t-2 border-border">
+                    <div className="bg-neutral-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                      {t("shared.topbar.pendingApprovals", "Validations en attente")}
+                    </div>
+                    {milestoneApprovalQueue.map(({ action, chantier }) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        onClick={async () => {
+                          const proceed = await confirmDiscard();
+                          if (!proceed) return;
+                          setAlertsOpen(false);
+                          router.push(`/levers?chantier=${chantier.id}&action=${action.id}`);
+                        }}
+                        className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
+                      >
+                        <span className="block text-xs font-semibold text-primary">
+                          {action.name}
+                        </span>
+                        <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
+                          {t(
+                            "shared.topbar.milestoneApprovalPending",
+                            "En attente · pilote stratégique · jalon {milestone}"
+                          ).replace(
+                            "{milestone}",
+                            action.milestoneApproval
+                              ? displayMilestoneId(action.milestoneApproval.targetMilestone)
+                              : ""
                           )}
                         </span>
                       </button>

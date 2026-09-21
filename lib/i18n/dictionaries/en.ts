@@ -48,6 +48,9 @@ const en: Record<string, string> = {
   "validation.workstream": "Workstream",
   "validation.requestedBy": "Requested by",
   "validation.requestedAt": "Requested on",
+  "validation.milestone.projet": "Project",
+  "validation.milestone.chantier": "Workstream",
+  "validation.milestone.targetMilestone": "Target milestone",
   "nav.sectionLabel": "Navigation",
   "nav.sectionDecision": "Decision",
   "nav.sectionReferenceData": "Reference data",
@@ -1202,7 +1205,7 @@ const en: Record<string, string> = {
   // Round 24 (Phase 4, Part 1) : labels of this page's two local tabs — see the doc-comment at the
   // top of `StrategicAxesView.tsx`.
   "strategicAxes.tabs.advancement": "Progress",
-  "strategicAxes.tabs.byAxis": "By axis",
+  "strategicAxes.tabs.byAxis": "Tree view",
   // Round 17 (swap) : title of this page's fixed "Lever progress status" section (E0→E4 lever
   // view + classic kanban for levers without a KPI) — migrated from the former
   // `strategicDashboard.widget.chantierHealth` key (that dashboard widget is gone, this content
@@ -1453,6 +1456,12 @@ const en: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Computed automatically.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Mark as resolved",
 
+  "strategicChantierDetail.milestones.approval.pendingBadge":
+    "Pending validation by the strategic lead",
+  "strategicChantierDetail.milestones.approval.requestedMeta": "Requested by {user} on {date}",
+  "strategicChantierDetail.milestones.approval.approve": "Approve",
+  "strategicChantierDetail.milestones.approval.reject": "Reject",
+
   "strategicChantierDetail.milestones.item.E0_A1": "Dependencies / prerequisites satisfied",
   "strategicChantierDetail.milestones.item.E0_A2": "Clients / sponsor identified",
   "strategicChantierDetail.milestones.item.E0_B1": "Stakes formalized",
@@ -1498,7 +1507,7 @@ const en: Record<string, string> = {
   "strategicImport.indicatorsCountLabel": "indicator(s) to create",
   "strategicImport.templateDownloadedTitle": "Template downloaded",
   "strategicImport.templateDownloadedBody":
-    "5 sheets: Axes (Code = key), Workstreams (Axis Code = FK), Actions (Workstream Code = FK), Deliverables (Action Code = FK, optional), Indicators (Axis Code OR Workstream Code = FK). Delete the example rows before filling in.",
+    "5 sheets: Axes (Code = key), Workstreams (Axis Codes separated by ; = FK, accepts several axes), Projects (Workstream Code = FK), Deliverables (Project Code = FK, optional), Indicators (Axis Code OR Workstream Code = FK). Delete the example rows before filling in.",
   "strategicImport.ignoredRowsNote": "{n} row(s) ignored",
   "strategicImport.importDoneBody":
     "{axes} axis/axes · {chantiers} workstream(s) · {actions} project(s) · {indicators} indicator(s) created",
@@ -1625,6 +1634,16 @@ const en: Record<string, string> = {
   "effectifs.needVsAvailable.neededOf": "of",
   "effectifs.needVsAvailable.overAllocated":
     "Declared need exceeds this team's actual availability.",
+  "effectifs.needVsAvailable.periodHint":
+    "Declared need counted over {period} (rows whose date range overlaps this period). Available: always computed as of today, live FTE roster.",
+  "effectifs.needVsAvailable.availableToday": "Available: always as of today (live snapshot)",
+  "effectifs.needVsAvailable.needDetailTitle": "Declared need line detail — {team}",
+  "effectifs.needVsAvailable.availableDetailTitle": "Available employees — {team}",
+  "effectifs.needVsAvailable.availableDetailEmpty": "No employees in this team.",
+  "effectifs.needVsAvailable.rowsCount": "{n} employee(s)",
+  "effectifs.needVsAvailable.columnName": "Name",
+  "effectifs.needVsAvailable.columnFunction": "Function",
+  "effectifs.needVsAvailable.columnTeam": "Team",
   "effectifs.moneyBudget.title": "Allocated financial budget",
   "effectifs.moneyBudget.empty": "No budget allocated on this programme.",
   "effectifs.moneyBudget.centerLabel": "Total",
@@ -1966,6 +1985,13 @@ const en: Record<string, string> = {
   "actionWeights.unweighted": "Unweighted (simple average)",
   "actionWeights.total": "Total",
   "actionWeights.mustBe100": "total must equal 100% and all actions must have a weight",
+  "projetWeights.title": "Project weighting",
+  "projetWeights.even": "Distribute evenly",
+  "projetWeights.clear": "Unweighted",
+  "projetWeights.weight": "Weight (%)",
+  "projetWeights.declaredTotal": "Declared weight",
+  "projetWeights.remainingHint": "the remainder is split evenly among unweighted projects",
+  "projetWeights.unweighted": "Unweighted (implicit equal weight between projects)",
   "filters.toggle": "Filters",
   "columns.toggle": "Columns",
   "impactsEditor.gain": "Gain",
@@ -2022,6 +2048,7 @@ const en: Record<string, string> = {
   "hr.drilldown.seeAllInEtp": "See these {n} movements in the FTE base",
   "shared.topbar.pendingApprovals": "Pending approvals",
   "shared.topbar.approvalPending": "Pending · sponsor or CTO · {stage}",
+  "shared.topbar.milestoneApprovalPending": "Pending · strategic lead · milestone {milestone}",
   "leverDetail.trajectory.financial": "Financial impact",
   "leverDetail.trajectory.fte": "FTE impact",
   "leverDetail.trajectory.month": "Month",
