@@ -14,6 +14,8 @@ export type ColumnDef<T> = {
   editable?: boolean;
   options?: string[];
   allowCustom?: boolean;
+  /** `false` = pas de filtre multi-sélection auto dans la barre du tableau pour cette colonne. */
+  filterable?: boolean;
   sortable?: boolean;
   align?: "left" | "right" | "center";
   render?: (row: T) => React.ReactNode;
@@ -70,7 +72,9 @@ export function EditableTable<T extends { id: string }>({
   const [draftValue, setDraftValue] = useState("");
   const [isCustomMode, setIsCustomMode] = useState(false);
 
-  const filterableColumns = columns.filter((c) => c.options && c.options.length > 0);
+  const filterableColumns = columns.filter(
+    (c) => c.filterable !== false && c.options && c.options.length > 0
+  );
 
   const filtered = useMemo(() => {
     let rows = data;
