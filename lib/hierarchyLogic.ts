@@ -189,3 +189,79 @@ export function resolveHierarchyPath(
     code: n.code,
   }));
 }
+
+/* ------------------------------------------------------------------------------------------------
+ * Niveau optionnel (`HierarchyLevelDef.optional`) — au plus un par arborescence, en général le plus
+ * fin (ex. Centre de coût). `optional` absent = comportement historique (tous obligatoires).
+ * ---------------------------------------------------------------------------------------------- */
+
+function sortLevels(levels: HierarchyLevelDef[]): HierarchyLevelDef[] {
+  return [...levels].sort((a, b) => a.order - b.order);
+}
+
+/** Le niveau marqué optionnel (le premier s'il y en avait plusieurs par erreur), ou undefined. */
+export function optionalLevel(levels: HierarchyLevelDef[]): HierarchyLevelDef | undefined {
+  return sortLevels(levels).find((l) => l.optional);
+}
+
+/** Maille "effective" : le niveau non-optionnel le plus fin — celle à utiliser pour filtrer,
+ *  afficher et grouper. Sans niveau optionnel = le niveau le plus fin. Repli sur le plus fin si
+ *  tous les niveaux sont (à tort) optionnels. */
+export function effectiveLeafLevel(levels: HierarchyLevelDef[]): HierarchyLevelDef | undefined {
+  const sorted = sortLevels(levels);
+  const required = sorted.filter((l) => !l.optional);
+  return required[required.length - 1] ?? sorted[sorted.length - 1];
+}
+
+/** Niveaux sélectionnables dans un sélecteur de feuille : la maille effective plus, si elle est
+ *  plus fine, le niveau optionnel (ordonnés du plus fin au plus macro). */
+export function leafLevels(levels: HierarchyLevelDef[]): HierarchyLevelDef[] {
+  const effective = effectiveLeafLevel(levels);
+  if (!effective) return [];
+  const optional = optionalLevel(levels);
+  return optional && optional.order > effective.order ? [optional, effective] : [effective];
+}
+
+/** Ne garde qu'un seul niveau optionnel : marque/démarque `key` et retire le flag des autres. */
+export function setOptionalLevel(
+  levels: HierarchyLevelDef[],
+  key: string,
+  optional: boolean
+): HierarchyLevelDef[] {
+  return levels.map((l) => {
+    const next = { ...l };
+    if (l.key === key && optional) next.optional = true;
+    else delete next.optional;
+    return next;
+  });
+}
+
+/** Erreur de validation de la structure (plus d'un niveau optionnel), sinon null. */
+export function validateOptionalLevels(levels: HierarchyLevelDef[]): string | null {
+  return levels.filter((l) => l.optional).length > 1 ? "Un seul niveau peut être optionnel." : null;
+}
+
+/** Nœud de la maille effective correspondant à `nodeId` : l'ancêtre du niveau effectif si le nœud
+ *  est plus fin (niveau optionnel), le nœud lui-même s'il est déjà au niveau effectif ou au-dessus.
+ *  Un impact rattaché au niveau obligatoire seul reste donc valide. */
+export function effectiveLeafNode(
+  nodeId: string | undefined,
+  nodes: HierarchyNode[],
+  levels: HierarchyLevelDef[]
+): HierarchyNode | undefined {
+  if (!nodeId) return undefined;
+  const chain = resolveHierarchyNodeChain(nodeId, nodes, levels);
+  if (chain.length === 0) return undefined;
+  const effective = effectiveLeafLevel(levels);
+  if (!effective) return chain[chain.length - 1];
+  return chain.find((n) => n.levelKey === effective.key) ?? chain[chain.length - 1];
+}
+
+/** Nœuds proposés par un sélecteur de feuille (niveau optionnel + niveau effectif). */
+export function selectableLeafNodes(
+  nodes: HierarchyNode[],
+  levels: HierarchyLevelDef[]
+): HierarchyNode[] {
+  const keys = new Set(leafLevels(levels).map((l) => l.key));
+  return nodes.filter((n) => keys.has(n.levelKey));
+}

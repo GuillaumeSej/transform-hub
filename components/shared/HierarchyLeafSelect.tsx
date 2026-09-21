@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { effectiveLeafLevel, selectableLeafNodes } from "@/lib/hierarchyLogic";
 import type { HierarchyLevelDef, HierarchyNode } from "@/types";
 
 const inputClass =
@@ -69,11 +70,10 @@ export function HierarchyLeafSelect({
     };
   }, [companyId]);
 
-  const sortedHierarchyLevels = [...hierarchyLevels].sort((a, b) => a.order - b.order);
-  const finestHierarchyLevel = sortedHierarchyLevels[sortedHierarchyLevels.length - 1];
-  if (!finestHierarchyLevel) return null;
+  if (!effectiveLeafLevel(hierarchyLevels)) return null;
 
-  const leafNodes = financialNodes.filter((n) => n.levelKey === finestHierarchyLevel.key);
+  // Niveau obligatoire le plus fin ET niveau optionnel (si défini) sont sélectionnables.
+  const leafNodes = selectableLeafNodes(financialNodes, hierarchyLevels);
 
   return (
     <select

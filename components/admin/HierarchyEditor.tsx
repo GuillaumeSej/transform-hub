@@ -32,6 +32,8 @@ import {
   buildHierarchyForest,
   buildHierarchyNodePayload,
   resolveHierarchyPath,
+  setOptionalLevel,
+  validateOptionalLevels,
   type HierarchyTreeNode,
 } from "@/lib/hierarchyLogic";
 import {
@@ -241,6 +243,12 @@ export function HierarchyEditor({
     setLevelsDirty(true);
   };
 
+  // Un seul niveau peut être optionnel : en cocher un décoche les autres.
+  const toggleLevelOptional = (key: string, optional: boolean) => {
+    setLevels((current) => setOptionalLevel(current, key, optional));
+    setLevelsDirty(true);
+  };
+
   const moveLevel = (key: string, direction: "up" | "down") => {
     const ordered = [...levels].sort((a, b) => a.order - b.order);
     const idx = ordered.findIndex((l) => l.key === key);
@@ -254,6 +262,14 @@ export function HierarchyEditor({
 
   const saveLevels = async () => {
     if (!companies.some((company) => company.id === companyId)) return;
+    if (validateOptionalLevels(levels)) {
+      showToast(
+        t("adminHierarchy.toastLevelsSaveFailedTitle", "Structure invalide"),
+        t("adminHierarchy.optionalSingle", "Un seul niveau peut être optionnel."),
+        "error"
+      );
+      return;
+    }
     setSavingLevels(true);
     try {
       const sanitized = sortedLevels.map((level) => {
@@ -263,6 +279,7 @@ export function HierarchyEditor({
           order: level.order,
         } as HierarchyLevelDef;
         if (level.semantic) next.semantic = level.semantic;
+        if (level.optional) next.optional = true;
         return next;
       });
       await saveCompanyHierarchyLevels(companyId, domain, sanitized);
@@ -580,6 +597,16 @@ export function HierarchyEditor({
                     <code className="rounded bg-bg-surface px-1.5 py-0.5 text-xs text-text-secondary">
                       {level.key}
                     </code>
+                    {domain === "financial" && (
+                      <label className="mt-1 flex items-center gap-1.5 text-xs text-text-secondary">
+                        <input
+                          type="checkbox"
+                          checked={!!level.optional}
+                          onChange={(e) => toggleLevelOptional(level.key, e.target.checked)}
+                        />
+                        {t("adminHierarchy.optionalLevel", "Niveau optionnel")}
+                      </label>
+                    )}
                   </td>
                   <td className="px-4 py-2.5 text-center">
                     <button
@@ -654,6 +681,16 @@ export function HierarchyEditor({
                   </option>
                 ))}
               </select>
+              {domain === "financial" && (
+                <label className="mb-2 flex items-center gap-1.5 text-xs text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={!!level.optional}
+                    onChange={(e) => toggleLevelOptional(level.key, e.target.checked)}
+                  />
+                  {t("adminHierarchy.optionalLevel", "Niveau optionnel")}
+                </label>
+              )}
               <div className="flex items-center justify-between">
                 <div>
                   <button
