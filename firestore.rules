@@ -294,6 +294,15 @@ service cloud.firestore {
         && request.resource.data.companyId == resource.data.companyId;
       allow delete: if canWriteCompanyScoped(resource.data.companyId);
     }
+    // strategicApprovals : demandes de validation stratégique (lib/firestore/strategicApprovals.ts).
+    // Historique de décisions : jamais supprimable côté client. À REPUBLIER dans la console Firebase.
+    match /strategicApprovals/{id} {
+      allow read: if canReadCompanyScoped(resource.data.companyId);
+      allow create: if canWriteCompanyScoped(request.resource.data.companyId);
+      allow update: if canWriteCompanyScoped(resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId;
+      allow delete: if false;
+    }
     match /chantierStaffing/{id} {
       allow read: if canReadCompanyScoped(resource.data.companyId);
       allow create: if canWriteCompanyScoped(request.resource.data.companyId);

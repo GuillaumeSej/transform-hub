@@ -67,7 +67,10 @@ const CTO_LIKE_NAV: RoleDefinition["nav"] = [
     id: "validation",
     icon: "ShieldCheck",
     label: "nav.validation",
-    programTypes: ["performance"],
+    // Plus de restriction `programTypes` : la page /validation est program-type-aware (portes de
+    // levier côté Performance, demandes de validation stratégique côté Stratégique) et
+    // `resolveUserNav` ne garde que la 1re occurrence d'un id — un item Performance-only masquait
+    // l'item Stratégique des profils cumulés.
     section: "decision",
   },
   // Round 13 : plus de `programTypes` sur "hr-etp" — la base ETP est scopée ENTREPRISE, pas
@@ -240,6 +243,7 @@ export const roles: Record<Role, RoleDefinition> = {
         label: "nav.validation",
         programTypes: ["strategic"],
         section: "decision",
+        badge: "approvals",
       },
       // Round 13 : le pilote du Plan Stratégique peut désormais consulter/compléter la base ETP
       // entreprise (Plan Performance) — voir les commentaires identiques sur `cto`/`hr` ci-dessus.
@@ -269,6 +273,15 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      // Validation stratégique (lib/strategicApprovals.ts) : demandes à valider + "Mes demandes".
+      {
+        id: "validation",
+        icon: "ShieldCheck",
+        label: "nav.validation",
+        programTypes: ["strategic"],
+        section: "decision",
+        badge: "approvals",
+      },
     ],
   },
   chantier_owner: {
@@ -283,6 +296,15 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      // Validation stratégique (lib/strategicApprovals.ts) : demandes à valider + "Mes demandes".
+      {
+        id: "validation",
+        icon: "ShieldCheck",
+        label: "nav.validation",
+        programTypes: ["strategic"],
+        section: "decision",
+        badge: "approvals",
+      },
     ],
   },
   chantier_contributor: {
@@ -297,6 +319,15 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      // Validation stratégique (lib/strategicApprovals.ts) : demandes à valider + "Mes demandes".
+      {
+        id: "validation",
+        icon: "ShieldCheck",
+        label: "nav.validation",
+        programTypes: ["strategic"],
+        section: "decision",
+        badge: "approvals",
+      },
     ],
   },
   internal_comm: {

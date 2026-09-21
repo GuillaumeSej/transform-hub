@@ -1224,6 +1224,33 @@ export function chantierDeclaredProgress(chantierId: string, actions: ChantierAc
   return Math.round(weightedSum / totalWeight);
 }
 
+/**
+ * Avancement d'un AXE (feuille de route) — moyenne simple, arrondie, des avancements de ses
+ * chantiers (`chantierDeclaredProgress`, le même chiffre que la fiche chantier). Un chantier
+ * multi-axe compte sous chacun de ses axes. 0 si l'axe n'a aucun chantier.
+ */
+export function axisProgressPct(
+  axisId: string,
+  chantiers: Pick<Chantier, "id" | "axisIds">[],
+  actions: ChantierAction[]
+): number {
+  const own = chantiers.filter((c) => c.axisIds.includes(axisId));
+  if (own.length === 0) return 0;
+  const total = own.reduce((sum, c) => sum + chantierDeclaredProgress(c.id, actions), 0);
+  return Math.round(total / own.length);
+}
+
+/** Nombre de jalons franchis d'un projet, et total de jalons (E0→E4). */
+export function projetMilestoneCounts(action: Pick<ChantierAction, "milestones">): {
+  passed: number;
+  total: number;
+} {
+  return {
+    passed: action.milestones?.passedMilestones.length ?? 0,
+    total: Object.keys(MILESTONE_WEIGHT_DELTA).length,
+  };
+}
+
 // ─── Retard d'un projet/chantier (round 20) ────────────────────────────────────────────────────
 
 /**

@@ -19,6 +19,9 @@ import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useApprovalQueue, useMilestoneApprovalQueue } from "@/lib/hooks/useApprovalQueue";
+import { useStrategicApprovals } from "@/lib/hooks/useStrategicApprovals";
+import { StrategicApprovalsProvider } from "@/lib/hooks/useStrategicApprovalsContext";
+import { APPROVAL_ALERT_ROUTE } from "@/lib/strategicApprovals";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Alert } from "@/types";
 
@@ -78,6 +81,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   // structurellement vide hors mode stratégique (voir `useStrategicData` ci-dessus, `companyId`
   // passé à `null`), donc cette file est naturellement vide en mode Plan Performance.
   const milestoneApprovalQueue = useMilestoneApprovalQueue(strategic, user);
+  // Validation stratégique (lib/strategicApprovals.ts) : alertes dérivées + badge de la sidebar.
+  // Neutralisé hors mode stratégique (`companyId` null → aucun abonnement).
+  const strategicApprovals = useStrategicApprovals({
+    user,
+    companyId: isStrategic ? (user?.companyId ?? null) : null,
+    programId: activeProgramId,
+    data: strategic,
+  });
 
   const strategicNotifications = useMemo(() => {
     const alerts: Alert[] = [];
@@ -149,8 +160,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       routes[id] = "/kpi";
     }
 
+    for (const alert of strategicApprovals.alerts) {
+      alerts.push(alert);
+      routes[alert.id] = APPROVAL_ALERT_ROUTE;
+    }
+
     return { alerts, routes };
   }, [
+    strategicApprovals.alerts,
     isStrategic,
     strategic.chantiers,
     strategic.chantierActions,
@@ -269,7 +286,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Sidebar fixe — visible seulement à partir de `lg` (1024px). En dessous, remplacée par le
           bouton hamburger du Topbar + ce drawer coulissant. */}
       <div className="hidden lg:flex">
-        <Sidebar alertCount={shellAlerts.length} />
+        <Sidebar
+          alertCount={shellAlerts.length}
+          pendingApprovalCount={strategicApprovals.pendingCount}
+        />
       </div>
 
       {mobileNavOpen && (
@@ -285,6 +305,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
           <Sidebar
             alertCount={shellAlerts.length}
+            pendingApprovalCount={strategicApprovals.pendingCount}
             onNavigate={() => setMobileNavOpen(false)}
             className="relative z-10 h-dvh w-[min(248px,85vw)] min-w-0 shadow-xl"
           />
@@ -309,7 +330,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           }}
           onMenuClick={() => setMobileNavOpen((v) => !v)}
         />
-        <main className="flex-1 overflow-y-auto px-4 pb-10 pt-5 sm:px-6">{children}</main>
+        <main className="flex-1 overflow-y-auto px-4 pb-10 pt-5 sm:px-6">
+          <StrategicApprovalsProvider value={isStrategic ? strategicApprovals : null}>
+            {children}
+          </StrategicApprovalsProvider>
+        </main>
       </div>
       <Toaster />
     </div>

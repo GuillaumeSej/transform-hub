@@ -24,16 +24,27 @@ import {
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
 import {
-  canFillIndicator,
   computeIndicatorDelta,
   latestMeasurement,
   numberIndicators,
   resolveIndicatorOwner,
 } from "@/lib/axisLogic";
+import {
+  canFillIndicatorValue,
+  currentPeriod,
+  filterByYear,
+  availableYears,
+  parseNumber,
+  type YearSelection,
+} from "@/lib/kpiHistory";
+import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
+import { PendingKpiValues } from "@/components/strategic/PendingKpiValues";
+import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
+import { submitKpiValueFlow } from "@/lib/strategicApprovalFlows";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { roles as roleDefinitions } from "@/lib/nav-config";
@@ -42,7 +53,6 @@ import type {
   Chantier,
   Indicator,
   IndicatorDirection,
-  IndicatorFrequency,
   IndicatorMeasurement,
   StrategicAxis,
 } from "@/types";
@@ -74,29 +84,7 @@ import type {
  * Simple pré-remplissage : le champ reste libre à la saisie, un responsable pouvant vouloir
  * rattraper une période passée.
  */
-export function currentPeriod(frequency: IndicatorFrequency, now: Date = new Date()): string {
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  switch (frequency) {
-    case "monthly":
-      return `${year}-${String(month).padStart(2, "0")}`;
-    case "quarterly":
-      return `${year}-Q${Math.ceil(month / 3)}`;
-    case "semiannual":
-      return `${year}-S${month <= 6 ? 1 : 2}`;
-    case "annual":
-      return String(year);
-  }
-}
-
-/** Parse une saisie numérique tolérante à la virgule décimale. `null` = saisie invalide,
- *  `undefined` = champ laissé vide. */
-function parseNumber(raw: string): number | undefined | null {
-  const trimmed = raw.trim();
-  if (trimmed === "") return undefined;
-  const parsed = Number(trimmed.replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : null;
-}
+export { currentPeriod };
 
 const FIELD_CLASS =
   "w-full rounded-lg border border-border bg-bg-surface px-3 py-1.5 text-sm text-text-primary outline-none focus:border-bp-coral disabled:cursor-not-allowed disabled:opacity-60";
@@ -112,6 +100,7 @@ function IndicatorCard({
   number,
   highlighted,
   linkedChantiers,
+  year,
 }: {
   indicator: Indicator;
   /** Mesures DE CET indicateur uniquement (déjà filtrées par l'appelant). */
@@ -132,14 +121,18 @@ function IndicatorCard({
    *  rapport avec l'indicateur affiché) par une liste précise et navigable. Vide la plupart du
    *  temps (peu de leviers lient un KPI) — la rangée ne s'affiche alors pas du tout. */
   linkedChantiers: { id: string; name: string }[];
+  /** Année affichée (choix mémorisé au niveau de la page). */
+  year: YearSelection;
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const router = useRouter();
+  const sa = useStrategicApprovalsApi();
 
-  const canFill = canFillIndicator(indicator, user);
+  const canFill = canFillIndicatorValue(indicator, user);
   const quantitative = indicator.kind === "quantitative";
   const latest = latestMeasurement(indicator.id, measurements);
+  const yearMeasurements = useMemo(() => filterByYear(measurements, year), [measurements, year]);
   // Écart signé + progression vers la cible (round 6, point 6) : `undefined` sans objectif chiffré
   // ou sans mesure numérique exploitable — même garde-fou que `BusinessKpiCard`, rien à afficher
   // plutôt qu'un écart inventé.
@@ -191,17 +184,30 @@ function IndicatorCard({
     try {
       // Les champs optionnels sont OMIS plutôt que passés à `undefined` : Firestore rejette une
       // valeur `undefined` à l'écriture (pas d'`ignoreUndefinedProperties` sur cette instance).
-      await addMeasurement({
-        indicatorId: indicator.id,
-        period: trimmedPeriod,
-        reportedBy: user.username,
-        ...(parsedValue !== undefined ? { value: parsedValue } : {}),
-        ...(trimmedNote !== "" ? { note: trimmedNote } : {}),
-      });
+      const outcome = await submitKpiValueFlow(
+        sa,
+        indicator,
+        {
+          indicatorId: indicator.id,
+          period: trimmedPeriod,
+          reportedBy: user.username,
+          value: parsedValue,
+          note: trimmedNote,
+        },
+        addMeasurement
+      );
       setValue("");
       setNote("");
       setPeriod(currentPeriod(indicator.frequency));
-      showToast(t("kpi.measurementSaved"), indicator.name, "success");
+      if (outcome === "pending") {
+        showToast(
+          t("kpi.valueSubmittedForApproval", "Valeur soumise à validation du responsable du plan"),
+          indicator.name,
+          "success"
+        );
+      } else {
+        showToast(t("kpi.measurementSaved"), indicator.name, "success");
+      }
     } catch {
       showToast(t("kpi.saveError"), indicator.name, "error");
     } finally {
@@ -317,13 +323,13 @@ function IndicatorCard({
                 l'historique écrase la tendance récente. Le bouton d'agrandissement du graphique
                 ouvre l'historique complet depuis le lancement du plan. */}
               <IndicatorChart
-                measurements={measurements}
+                measurements={yearMeasurements}
                 objectiveValue={indicator.objectiveValue}
                 direction={indicator.direction}
                 unit={indicator.unit}
                 qualitative={!quantitative}
                 frequency={indicator.frequency}
-                windowMeasurements="recent"
+                windowMeasurements={year === "all" ? "recent" : "all"}
                 labelValue={t("kpi.chart.value")}
                 labelObjective={t("kpi.chart.objective")}
                 emptyLabel={t("kpi.chart.empty")}
@@ -355,6 +361,7 @@ function IndicatorCard({
                   <span>{t("kpi.noMeasurement")}</span>
                 )}
               </div>
+              <IndicatorHistoryTable indicator={indicator} measurements={yearMeasurements} />
             </div>
 
             {/* ── Écriture : objectif + saisie de mesure ───────────────────────────────────── */}
@@ -460,6 +467,8 @@ function IndicatorCard({
                   </div>
                 )}
               </div>
+
+              <PendingKpiValues indicatorId={indicator.id} unit={indicator.unit} />
 
               {/* Saisie d'une mesure — le cœur de la page. */}
               <div className="rounded-lg border border-border p-3">
@@ -805,6 +814,11 @@ export function KpiPageClient() {
     return () => clearTimeout(timeout);
   }, [targetIndicatorId, pageReady]);
 
+  const [year, setYear] = useState<YearSelection>(() => new Date().getFullYear());
+  const currentYear = new Date().getFullYear();
+  const yearOptions = useMemo(() => availableYears(measurements), [measurements]);
+  const showYearPicker = yearOptions.some((y) => y < currentYear);
+
   const renderCard = (indicator: Indicator) => (
     <IndicatorCard
       key={indicator.id}
@@ -816,6 +830,7 @@ export function KpiPageClient() {
       number={indicatorNumbers.get(indicator.id)}
       highlighted={indicator.id === highlightedIndicatorId}
       linkedChantiers={chantiersByIndicatorId.get(indicator.id) ?? []}
+      year={year}
     />
   );
 
@@ -888,6 +903,33 @@ export function KpiPageClient() {
         }}
       />
 
+      {showYearPicker && (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label={t("kpi.year.label", "Année")}
+        >
+          <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+            {t("kpi.year.label", "Année")}
+          </span>
+          {[...yearOptions, "all" as const].map((y) => (
+            <button
+              key={y}
+              type="button"
+              onClick={() => setYear(y)}
+              aria-pressed={year === y}
+              className={`cursor-pointer rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                year === y
+                  ? "border-bp-coral bg-bp-coral text-white"
+                  : "border-border bg-bg-surface text-text-secondary hover:border-bp-coral hover:text-bp-coral"
+              }`}
+            >
+              {y === "all" ? t("kpi.year.all", "Historique") : y}
+            </button>
+          ))}
+        </div>
+      )}
+
       <Card className="mb-0">
         <CardHeader title={t("businessKpis.title")} />
         <CardBody>
@@ -895,6 +937,9 @@ export function KpiPageClient() {
             indicators={indicators}
             measurements={measurements}
             labels={businessKpiLabels}
+            user={user}
+            addMeasurement={addMeasurement}
+            year={year}
           />
         </CardBody>
       </Card>
@@ -996,16 +1041,22 @@ function AxisSection({
 
       {byChantier.map(({ chantier, indicators: chantierIndicators }) => (
         <div key={chantier.id} className="space-y-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
-            {t("kpi.chantier")} ·{" "}
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border border-l-4 border-l-bp-coral bg-bg-surface px-4 py-2.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+              {t("kpi.chantier")}
+            </span>
             <button
               type="button"
               onClick={() => router.push(`/levers?chantier=${chantier.id}`)}
-              className="cursor-pointer hover:text-bp-coral hover:underline"
+              title={t("kpi.section.openChantier", "Ouvrir le chantier")}
+              className="min-w-0 cursor-pointer break-words text-left text-base font-bold text-text-primary hover:text-bp-coral hover:underline"
             >
               {chantier.name}
             </button>
-          </p>
+            <span className="ml-auto rounded-full bg-bp-coral/10 px-2 py-0.5 text-[11px] font-semibold text-bp-coral">
+              {chantierIndicators.length} {t("kpi.section.kpis", "KPI")}
+            </span>
+          </div>
           {chantierIndicators.map(renderCard)}
         </div>
       ))}

@@ -28,10 +28,13 @@ const SECTION_LABEL_KEYS: Record<string, string> = {
  * au drawer de remplacer `h-screen` par `h-full` (hauteur du panneau, pas du viewport). */
 export function Sidebar({
   alertCount,
+  pendingApprovalCount = 0,
   onNavigate,
   className,
 }: {
   alertCount: number;
+  /** Demandes de validation stratégique à traiter (badge de l'item "Validation"). */
+  pendingApprovalCount?: number;
   onNavigate?: () => void;
   className?: string;
 }) {
@@ -116,6 +119,13 @@ export function Sidebar({
                     leviers » → « Feuille de route » sur la même route /levers) — repli sur
                     `label` quand aucune surcharge n'est définie pour ce type. */}
                 <span>{t(item.labelByProgramType?.[programType] ?? item.label)}</span>
+                {(item.badge === "approvals" || item.id === "validation") &&
+                  programType === "strategic" &&
+                  pendingApprovalCount > 0 && (
+                    <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
+                      {pendingApprovalCount}
+                    </span>
+                  )}
                 {item.badge === "alerts" && alertCount > 0 && (
                   <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
                     {alertCount}

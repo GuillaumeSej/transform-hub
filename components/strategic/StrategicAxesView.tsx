@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
+import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { AxisChantierProjetAccordion } from "@/components/strategic/AxisChantierProjetAccordion";
@@ -15,7 +16,7 @@ import {
 } from "@/components/strategic/ProjetMilestoneBoard";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
 import { hexToRgb, withAlpha } from "@/components/strategic/TimelineBars";
-import { colorForChantier } from "@/lib/axisLogic";
+import { chantierDeclaredProgress, colorForChantier } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantierAction } from "@/lib/firestore/chantierActions";
 import { saveChantier } from "@/lib/firestore/chantiers";
@@ -76,6 +77,8 @@ export function StrategicAxesView() {
   const { activeProgramId, loading: programsLoading } = useActiveProgram();
   const { t } = useTranslation();
   const router = useRouter();
+  const [expandAllSignal, setExpandAllSignal] = useState(0);
+  const [chantiersListOpen, setChantiersListOpen] = useState(false);
   const searchParams = useSearchParams();
   const { showToast } = useToast();
 
@@ -282,10 +285,45 @@ export function StrategicAxesView() {
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
             {t("strategicAxes.title")}
           </h1>
-          <div className="mt-2.5 text-[13px] text-secondary">
-            {data.axes.length} {t("strategicAxes.count")} · {data.chantiers.length}{" "}
-            {t("strategicAxes.chantiersCount")} · {data.indicators.length}{" "}
-            {t("strategicAxes.indicatorsCount")}
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[13px] text-secondary">
+            {(
+              [
+                {
+                  n: data.axes.length,
+                  label: t("strategicAxes.count"),
+                  title: t("strategicAxes.tree.showAxes", "Voir les axes"),
+                  onClick: () => {
+                    setActiveTab("byAxis");
+                    setExpandAllSignal((v) => v + 1);
+                  },
+                },
+                {
+                  n: data.chantiers.length,
+                  label: t("strategicAxes.chantiersCount"),
+                  title: t("strategicAxes.tree.showChantiers", "Voir tous les chantiers"),
+                  onClick: () => setChantiersListOpen(true),
+                },
+                {
+                  n: data.indicators.length,
+                  label: t("strategicAxes.indicatorsCount"),
+                  title: t("strategicAxes.tree.goKpi", "Voir les indicateurs (KPI)"),
+                  onClick: () => router.push("/kpi"),
+                },
+              ] as const
+            ).map((item, i) => (
+              <span key={item.label} className="inline-flex items-center gap-1.5">
+                {i > 0 && <span aria-hidden>·</span>}
+                <button
+                  type="button"
+                  title={item.title}
+                  onClick={item.onClick}
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 transition hover:border-border hover:bg-neutral-100 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                >
+                  <span className="font-semibold text-primary">{item.n}</span> {item.label}
+                  <ChevronRight size={12} className="text-tertiary" aria-hidden />
+                </button>
+              </span>
+            ))}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -461,11 +499,56 @@ export function StrategicAxesView() {
               chantierActions={data.chantierActions}
               onProjetClick={openChantierPanel}
               onDeliverableClick={openChantierPanelOnDeliverable}
+              onAxisClick={openAxis}
+              expandAllSignal={expandAllSignal}
               clickableActionIds={data.clickableActionIds}
             />
           </div>
         </div>
       )}
+
+      <Modal
+        open={chantiersListOpen}
+        onOpenChange={setChantiersListOpen}
+        title={t("strategicAxes.tree.allChantiersTitle", "Tous les chantiers")}
+        maxWidth="720px"
+      >
+        <div className="divide-y divide-border">
+          {data.chantiers.map((c) => {
+            const axisNames = data.axes
+              .filter((a) => c.axisIds.includes(a.id))
+              .map((a) => a.name)
+              .join(", ");
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => {
+                  setChantiersListOpen(false);
+                  openChantierPanel(c.id);
+                }}
+                className="flex w-full cursor-pointer items-center gap-3 px-2 py-2.5 text-left transition hover:bg-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] font-semibold text-primary">
+                    {c.name}
+                  </span>
+                  <span className="block truncate text-[10.5px] text-tertiary">
+                    {axisNames || "-"} ·{" "}
+                    {c.pilote ??
+                      c.sponsorName ??
+                      t("strategicAxes.tree.noOwner", "Aucun responsable")}
+                  </span>
+                </span>
+                <span className="w-[120px] shrink-0">
+                  <ProgressBar pct={chantierDeclaredProgress(c.id, data.chantierActions)} />
+                </span>
+                <ChevronRight size={14} className="shrink-0 text-tertiary" aria-hidden />
+              </button>
+            );
+          })}
+        </div>
+      </Modal>
 
       {/* ── Panneau chantier (round 6, point 0) — remplace l'ancienne route dédiée, monté dans un
           Modal plus large que les modales de formulaire (1100px) pour porter tout le détail chantier

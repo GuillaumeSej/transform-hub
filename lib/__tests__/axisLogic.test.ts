@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   approveMilestoneGate,
+  axisProgressPct,
+  projetMilestoneCounts,
   canFillIndicator,
   canManageChantier,
   canPassMilestone,
@@ -2391,5 +2393,33 @@ describe("programRoadmapBounds", () => {
       { start: "2027-01-01", end: "2028-06-30" },
     ];
     expect(programRoadmapBounds(rows)).toEqual({ start: "2026-11-01", end: "2028-06-30" });
+  });
+});
+
+describe("axisProgressPct / projetMilestoneCounts", () => {
+  const mk = (id: string, chantierId: string, passed: ("E0" | "E1")[]) =>
+    ({
+      id,
+      chantierId,
+      milestones: { currentMilestone: "E1", passedMilestones: passed, checklists: {} },
+    }) as never;
+  it("0 sans chantier", () => {
+    expect(axisProgressPct("A", [], [])).toBe(0);
+  });
+  it("moyenne des chantiers de l'axe (multi-axe inclus)", () => {
+    const chantiers = [
+      { id: "C1", axisIds: ["A"] },
+      { id: "C2", axisIds: ["A", "B"] },
+      { id: "C3", axisIds: ["B"] },
+    ];
+    const actions = [mk("p1", "C1", ["E0"]), mk("p2", "C2", [])];
+    const c1 = chantierDeclaredProgress("C1", actions);
+    const c2 = chantierDeclaredProgress("C2", actions);
+    expect(axisProgressPct("A", chantiers, actions)).toBe(Math.round((c1 + c2) / 2));
+  });
+  it("compte les jalons franchis", () => {
+    expect(projetMilestoneCounts(mk("p", "C", ["E0"])).passed).toBe(1);
+    expect(projetMilestoneCounts({}).passed).toBe(0);
+    expect(projetMilestoneCounts({}).total).toBeGreaterThan(0);
   });
 });

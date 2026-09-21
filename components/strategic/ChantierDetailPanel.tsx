@@ -12,6 +12,7 @@ import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
 import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
 import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
 import { ProjetWeightsEditor } from "@/components/strategic/ProjetWeightsEditor";
+import { DeleteRequestModal } from "@/components/strategic/DeleteRequestModal";
 import { SuccessKpiList } from "@/components/strategic/SuccessKpiList";
 import {
   formatTimelineDay,
@@ -44,6 +45,17 @@ import {
   sumProjetBudgets,
   type ProgressBucket,
 } from "@/lib/axisLogic";
+import { aggregateLinkedKpis, resolveDeleteApproval } from "@/lib/chantierKpis";
+import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
+import {
+  approverLabel,
+  createProjetFlow,
+  deleteFlow,
+  milestoneFlow,
+  newProjetId,
+  pendingApprovals,
+} from "@/lib/strategicApprovalFlows";
 import { cn } from "@/lib/utils";
 import { addDays, parseISO } from "@/lib/dateUtils";
 import { subscribeCompanies } from "@/lib/firestore/admin";
@@ -1322,11 +1334,103 @@ export function ChantierDetailPanel({
   const { showToast } = useToast();
 
   const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
+  const sa = useStrategicApprovalsApi();
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
   /** Ferme le panneau PUIS navigue vers une page réellement différente (ex. la fiche d'axe) — le
    *  panneau ne doit pas rester ouvert « au-dessus » d'une page que l'utilisateur vient de quitter
    *  si jamais il revient en arrière (round 6, point 0). */
+  // ── Suppression soumise à approbation hiérarchique — handlers ISOLÉS, à rebrancher sur
+  // `lib/strategicApprovals.ts` par l'agent d'intégration (voir `submitDeleteApprovalRequest`).
+  // Approbateur : responsable de l'axe pour un chantier, responsable (pilote) du chantier pour un projet.
+  const deleteApproval = (target: { kind: "chantier" } | { kind: "projet"; actionId: string }) =>
+    resolveDeleteApproval(
+      target.kind === "chantier"
+        ? data.axes.filter((a) => chantier?.axisIds.includes(a.id)).map((a) => a.owner)
+        : [chantier?.pilote],
+      user?.username,
+      !!user && isAnyAdmin(user)
+    );
+
+  /** Handler `onRequestDeleteChantier` : suppression directe si l'utilisateur est l'approbateur,
+   *  sinon demande d'approbation (à brancher). */
+  const onRequestDeleteChantier = async (reason: string) => {
+    if (!chantier) return;
+    try {
+      const outcome = await deleteFlow(
+        sa,
+        "chantier",
+        { id: chantier.id, name: chantier.name },
+        reason,
+        async () => {
+          // Les actions du chantier sont retirées d'abord : elles ne portent pas de `programId`
+          // et ne seraient plus rattachables à rien une fois le chantier parti.
+          for (const action of chantierActions) {
+            await data.removeChantierAction(action.id);
+          }
+          await data.removeChantier(chantier.id);
+        }
+      );
+      setDeleteTarget(null);
+      if (outcome === "pending") {
+        showToast(
+          t("strategicDelete.requestSent", "Demande d'approbation envoyée"),
+          chantier.name,
+          "success"
+        );
+        return;
+      }
+      showToast(t("strategicAxes.chantierDeleted"), chantier.name, "success");
+      onClose();
+    } catch (error) {
+      showToast(
+        t("leverDetail.approval.error", "Action impossible"),
+        error instanceof Error ? error.message : String(error),
+        "error"
+      );
+    }
+  };
+
+  /** Handler `onRequestDeleteProjet` : même logique, approbateur = responsable du chantier. */
+  const onRequestDeleteProjet = async (actionId: string, reason: string) => {
+    const action = chantierActions.find((a) => a.id === actionId);
+    if (!action || !chantier) return;
+    try {
+      const outcome = await deleteFlow(
+        sa,
+        "projet",
+        { id: action.id, name: action.name },
+        reason,
+        () => data.removeChantierAction(action.id)
+      );
+      setDeleteTarget(null);
+      showToast(
+        outcome === "pending"
+          ? t("strategicDelete.requestSent", "Demande d'approbation envoyée")
+          : t("strategicAxes.actionDeleted"),
+        action.name,
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        t("leverDetail.approval.error", "Action impossible"),
+        error instanceof Error ? error.message : String(error),
+        "error"
+      );
+    }
+  };
+
+  /** Suppression en attente d'approbation (chantier / projet) — désactive le bouton Supprimer. */
+  const pendingChantierDeleteOf = (chantierIdValue: string) =>
+    pendingApprovals(sa?.approvals, "chantier_delete", chantierIdValue)[0];
+  const pendingProjetDelete = (actionId: string) =>
+    pendingApprovals(sa?.approvals, "projet_delete", actionId)[0];
+  const pendingDeleteLabel = (a: { approverUsername?: string; approverUsernames: string[] }) =>
+    t("strategicDelete.pendingBy", "Suppression en attente d'approbation de {approver}").replace(
+      "{approver}",
+      approverLabel(a) || "—"
+    );
+
   const navigateAway = (path: string) => {
     onClose();
     router.push(path);
@@ -1432,6 +1536,19 @@ export function ChantierDetailPanel({
     [data.axes, data.chantiers, data.indicators]
   );
 
+  // KPI des projets/leviers du chantier (dédupliqués), hors KPI déjà affichés comme critères de succès.
+  const linkedKpis = useMemo(
+    () =>
+      aggregateLinkedKpis(
+        chantierActions,
+        data.indicators,
+        new Set(
+          (chantier?.successKpis ?? []).map((k) => k.indicatorId).filter((x): x is string => !!x)
+        )
+      ),
+    [chantierActions, data.indicators, chantier?.successKpis]
+  );
+
   const bounds = useMemo(
     () => (chantier ? chantierBounds(chantier.id, chantierActions) : undefined),
     [chantier, chantierActions]
@@ -1505,8 +1622,9 @@ export function ChantierDetailPanel({
   } | null>(null);
   /** Suppression en deux temps (clic → « Confirmer »), plutôt qu'un `window.confirm()` natif —
    *  aucun autre écran de l'app n'utilise de dialogue natif. */
-  const [pendingDeleteAction, setPendingDeleteAction] = useState<string | null>(null);
-  const [pendingDeleteChantier, setPendingDeleteChantier] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<
+    { kind: "chantier" } | { kind: "projet"; actionId: string } | null
+  >(null);
 
   // ── Losanges de livrables sur l'onglet "Timeline" (round <n>) — modale de détail (clic sur un
   // losange) et modale de création (bouton "Ajouter un livrable" du `CardHeader`). État de session
@@ -2224,6 +2342,12 @@ export function ChantierDetailPanel({
             <SuccessKpiList
               value={chantier.successKpis ?? []}
               onChange={(next) => updateChantierField({ successKpis: next })}
+              indicators={chantierAvailableIndicators}
+              measurements={data.measurements}
+              indicatorNumbers={indicatorNumbers}
+              linkedKpis={linkedKpis}
+              onOpenIndicator={(id) => navigateAway(`/kpi?indicator=${id}`)}
+              readOnly={readOnly}
             />
           </CardBody>
         </Card>
@@ -2399,8 +2523,25 @@ export function ChantierDetailPanel({
                         await data.updateChantierAction(actionForm.actionId, values);
                         showToast(t("strategicAxes.actionUpdated"), values.name, "success");
                       } else {
-                        await data.createChantierAction({ ...values, chantierId: chantier.id });
-                        showToast(t("strategicAxes.actionCreated"), values.name, "success");
+                        const action = {
+                          ...values,
+                          chantierId: chantier.id,
+                          id: newProjetId(),
+                          companyId: user?.companyId ?? "",
+                        } as ChantierAction;
+                        const outcome = await createProjetFlow(sa, chantier, action, () =>
+                          data.createChantierAction({ ...values, chantierId: chantier.id })
+                        );
+                        showToast(
+                          outcome === "pending"
+                            ? t(
+                                "strategicAxes.actionCreationPending",
+                                "Projet soumis à validation du responsable de l'axe"
+                              )
+                            : t("strategicAxes.actionCreated"),
+                          values.name,
+                          "success"
+                        );
                       }
                       setActionForm(null);
                     } catch (error) {
@@ -2418,6 +2559,26 @@ export function ChantierDetailPanel({
                 />
               </div>
             )}
+
+            {pendingApprovals(sa?.approvals, "projet_create")
+              .filter(
+                (a) => (a.payload as { action: ChantierAction }).action.chantierId === chantier.id
+              )
+              .map((a) => (
+                <div
+                  key={a.id}
+                  className="mb-2 flex items-center gap-1.5 rounded-md border border-dashed border-border bg-bg-surface/60 px-2 py-1 text-xs italic text-text-secondary opacity-80"
+                >
+                  <Lock size={11} className="text-rag-amber" />
+                  <span className="font-medium">
+                    {(a.payload as { action: ChantierAction }).action.name}
+                  </span>
+                  <span className="ml-auto text-[10.5px]">
+                    {t("strategicAxes.pendingCreation", "Création en attente de validation")}
+                    {approverLabel(a) ? ` — ${approverLabel(a)}` : ""}
+                  </span>
+                </div>
+              ))}
 
             {chantierActions.length > 0 && (
               <div className="mb-3">
@@ -2604,23 +2765,24 @@ export function ChantierDetailPanel({
                             >
                               <Pencil size={12} /> {t("strategicAxes.editAction")}
                             </Button>
+                            {pendingProjetDelete(action.id) ? (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber"
+                                title={pendingDeleteLabel(pendingProjetDelete(action.id)!)}
+                              >
+                                <Lock size={10} />{" "}
+                                {pendingDeleteLabel(pendingProjetDelete(action.id)!)}
+                              </span>
+                            ) : null}
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={async () => {
-                                if (pendingDeleteAction !== action.id) {
-                                  setPendingDeleteAction(action.id);
-                                  return;
-                                }
-                                await data.removeChantierAction(action.id);
-                                setPendingDeleteAction(null);
-                                showToast(t("strategicAxes.actionDeleted"), action.name, "success");
-                              }}
+                              disabled={!!pendingProjetDelete(action.id)}
+                              onClick={() =>
+                                setDeleteTarget({ kind: "projet", actionId: action.id })
+                              }
                             >
-                              <Trash2 size={12} />{" "}
-                              {pendingDeleteAction === action.id
-                                ? t("strategicAxes.confirmDelete")
-                                : t("common.delete")}
+                              <Trash2 size={12} /> {t("common.delete")}
                             </Button>
                           </div>
                         )}
@@ -2794,7 +2956,17 @@ export function ChantierDetailPanel({
                                 }
                                 onRequestApproval={async () => {
                                   try {
-                                    await data.requestMilestoneApproval(action.id);
+                                    if (!user) return;
+                                    const outcome = await milestoneFlow(
+                                      sa,
+                                      action,
+                                      user,
+                                      data.chantiers,
+                                      data.chantierActions
+                                    );
+                                    if (outcome === "applied") {
+                                      await data.requestMilestoneApproval(action.id);
+                                    }
                                     showToast(
                                       t(
                                         "leverDetail.approval.requested",
@@ -2813,7 +2985,13 @@ export function ChantierDetailPanel({
                                 }}
                                 onApproveMilestone={async () => {
                                   try {
-                                    await data.approveMilestoneGate(action.id);
+                                    const pending = pendingApprovals(
+                                      sa?.approvals,
+                                      "milestone",
+                                      action.id
+                                    )[0];
+                                    if (sa && pending) await sa.approve(pending.id);
+                                    else await data.approveMilestoneGate(action.id);
                                     showToast(
                                       t("leverDetail.approval.approved", "Demande approuvée"),
                                       action.name,
@@ -2829,7 +3007,20 @@ export function ChantierDetailPanel({
                                 }}
                                 onRejectMilestoneApproval={async () => {
                                   try {
-                                    await data.rejectMilestoneApproval(action.id);
+                                    const pending = pendingApprovals(
+                                      sa?.approvals,
+                                      "milestone",
+                                      action.id
+                                    )[0];
+                                    if (sa && pending) {
+                                      await sa.reject(
+                                        pending.id,
+                                        t(
+                                          "strategicApprovals.rejectedFromSheet",
+                                          "Refusé depuis la fiche du projet"
+                                        )
+                                      );
+                                    } else await data.rejectMilestoneApproval(action.id);
                                     showToast(
                                       t(
                                         "leverDetail.approval.rejected",
@@ -2909,27 +3100,53 @@ export function ChantierDetailPanel({
           <Button
             variant="ghost"
             size="sm"
-            onClick={async () => {
-              if (!pendingDeleteChantier) {
-                setPendingDeleteChantier(true);
-                return;
-              }
-              // Les actions du chantier sont retirées d'abord : elles ne portent pas de `programId`
-              // et ne seraient plus rattachables à rien une fois le chantier parti.
-              for (const action of chantierActions) {
-                await data.removeChantierAction(action.id);
-              }
-              await data.removeChantier(chantier.id);
-              showToast(t("strategicAxes.chantierDeleted"), chantier.name, "success");
-              onClose();
-            }}
+            disabled={!!pendingChantierDeleteOf(chantier.id)}
+            onClick={() => setDeleteTarget({ kind: "chantier" })}
           >
-            <Trash2 size={12} />{" "}
-            {pendingDeleteChantier
-              ? t("strategicAxes.confirmDeleteChantier")
-              : t("strategicAxes.deleteChantier")}
+            <Trash2 size={12} /> {t("strategicAxes.deleteChantier")}
           </Button>
+          {pendingChantierDeleteOf(chantier.id) && (
+            <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-rag-amber">
+              <Lock size={11} /> {pendingDeleteLabel(pendingChantierDeleteOf(chantier.id)!)}
+            </p>
+          )}
         </div>
+      )}
+
+      {/* ── Pop-up de suppression (chantier / projet) ───────────────────────────────────────── */}
+      {deleteTarget && (
+        <DeleteRequestModal
+          open
+          onOpenChange={(o) => {
+            if (!o) setDeleteTarget(null);
+          }}
+          kind={deleteTarget.kind}
+          name={
+            deleteTarget.kind === "chantier"
+              ? chantier.name
+              : (chantierActions.find((a) => a.id === deleteTarget.actionId)?.name ?? "")
+          }
+          projetCount={deleteTarget.kind === "chantier" ? chantierActions.length : 1}
+          milestoneCount={
+            (deleteTarget.kind === "chantier" ? chantierActions.length : 1) * MILESTONE_ORDER.length
+          }
+          approvers={deleteApproval(deleteTarget).approvers}
+          canApproveSelf={
+            sa
+              ? !sa.needsApproval(
+                  deleteTarget.kind === "chantier" ? "chantier_delete" : "projet_delete",
+                  deleteTarget.kind === "chantier"
+                    ? { type: "chantier", id: chantier.id, name: chantier.name }
+                    : { type: "projet", id: deleteTarget.actionId }
+                )
+              : deleteApproval(deleteTarget).canApproveSelf
+          }
+          onConfirm={(reason) =>
+            deleteTarget.kind === "chantier"
+              ? onRequestDeleteChantier(reason)
+              : onRequestDeleteProjet(deleteTarget.actionId, reason)
+          }
+        />
       )}
 
       {/* ── Modales livrables (round <n>) — détail (clic losange) et création ────────────────── */}

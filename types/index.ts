@@ -1008,7 +1008,15 @@ export type Chantier = {
   milestones?: ChantierMilestoneState;
   /** Critères de succès mesurables, en complément de `successCriteria` (texte libre, INCHANGÉ) —
    *  demande PO round 5 : une liste de KPI cochables plutôt qu'un unique paragraphe. */
-  successKpis?: { id: string; label: string; achieved?: boolean }[];
+  successKpis?: {
+    id: string;
+    label: string;
+    achieved?: boolean;
+    /** KPI (`Indicator.id`) mesurant ce critère — optionnel (critère purement textuel sinon). */
+    indicatorId?: string;
+    /** Valeur cible que le chantier vise sur ce KPI (prime sur `Indicator.objectiveValue`). */
+    targetValue?: number;
+  }[];
   /** Budget alloué au chantier (round 7, demande PO), affiché avec `Program.currency` du programme
    *  actif. Optionnel : `undefined` tant qu'aucun budget n'a été saisi (distinct de 0, qui signifie
    *  "budget nul mais renseigné"). */
@@ -1329,7 +1337,7 @@ export type NavItem = {
   id: string;
   icon: string;
   label: string;
-  badge?: "alerts";
+  badge?: "alerts" | "approvals";
   /** Types de programme pour lesquels cet item est pertinent. `undefined` = tous les types
    *  (comportement historique). Ex. `["performance"]` sur Finance/RH/Workstreams/Opérations,
    *  qui n'ont pas de sens sans leviers. */

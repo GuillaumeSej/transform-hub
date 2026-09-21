@@ -7,8 +7,10 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useApprovalQueue, useMilestoneApprovalQueue } from "@/lib/hooks/useApprovalQueue";
 import { useRole } from "@/lib/hooks/useRole";
-import { useStrategicData } from "@/lib/hooks/useStrategicData";
+import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
+import { useStrategicApprovals } from "@/lib/hooks/useStrategicApprovals";
+import { StrategicApprovalsPanel } from "@/components/validation/StrategicApprovalsPanel";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { STATUS_SHORT_LABEL } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
@@ -160,19 +162,28 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
  * (`useMilestoneApprovalQueue`, voir lib/hooks/useApprovalQueue.ts).
  */
 function StrategicValidationTable({
+  data,
   user,
-  activeProgramId,
+  excludeActionIds,
+  hideWhenEmpty,
 }: {
+  data: StrategicData;
   user: AuthUser | null;
-  activeProgramId: string | null;
+  /** Projets déjà couverts par une demande du nouveau flux (lib/strategicApprovals.ts) : évite le
+   *  doublon avec le marqueur `milestoneApproval` posé par `request("milestone", …)`. */
+  excludeActionIds?: Set<string>;
+  hideWhenEmpty?: boolean;
 }) {
   const { t } = useTranslation();
   const router = useRouter();
-  const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
-  const { queue } = useMilestoneApprovalQueue(data, user);
+  const { queue: fullQueue } = useMilestoneApprovalQueue(data, user);
+  const queue = excludeActionIds
+    ? fullQueue.filter(({ action }) => !excludeActionIds.has(action.id))
+    : fullQueue;
   const { showToast } = useToast();
 
   if (queue.length === 0) {
+    if (hideWhenEmpty) return null;
     return (
       <Card>
         <CardBody>
@@ -288,6 +299,47 @@ function StrategicValidationTable({
  * (`useActiveProgram`) plutôt que de dupliquer la route — voir `lib/nav-config.ts` pour l'octroi
  * d'accès nav correspondant (`strategic_lead` y gagne cet item, scopé `programTypes: ["strategic"]`).
  */
+/**
+ * Vue Plan Stratégique complète : demandes de validation (lib/strategicApprovals.ts) + file de
+ * jalons historique (`milestoneApproval` posé hors du nouveau flux) sous « À valider ».
+ */
+function StrategicValidationView({
+  user,
+  activeProgramId,
+}: {
+  user: AuthUser | null;
+  activeProgramId: string | null;
+}) {
+  const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
+  const sa = useStrategicApprovals({
+    user,
+    companyId: user?.companyId ?? null,
+    programId: activeProgramId,
+    data,
+  });
+  const covered = new Set(
+    sa.approvals
+      .filter((a) => a.kind === "milestone" && a.status === "pending")
+      .map((a) => a.targetId)
+  );
+  return (
+    <StrategicApprovalsPanel
+      api={sa}
+      data={{ ...data, programId: activeProgramId }}
+      legacy={
+        <div className="mt-4">
+          <StrategicValidationTable
+            data={data}
+            user={user}
+            excludeActionIds={covered}
+            hideWhenEmpty
+          />
+        </div>
+      }
+    />
+  );
+}
+
 export default function ValidationPage() {
   const { t } = useTranslation();
   const { user } = useRole();
@@ -302,7 +354,7 @@ export default function ValidationPage() {
       </div>
 
       {isStrategic ? (
-        <StrategicValidationTable user={user} activeProgramId={activeProgramId} />
+        <StrategicValidationView user={user} activeProgramId={activeProgramId} />
       ) : (
         <PerformanceValidationTable user={user} />
       )}
