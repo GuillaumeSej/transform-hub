@@ -14,7 +14,9 @@ import {
 } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
-import { Dropdown, type DropdownGroup, type DropdownOption } from "@/components/shared/Dropdown";
+import type { DropdownGroup, DropdownOption } from "@/components/shared/Dropdown";
+import { MultiSelect } from "@/components/shared/MultiSelect";
+import { parseFilterValues, serializeFilterValues } from "@/lib/filterUtils";
 import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import {
@@ -562,9 +564,14 @@ export function KpiPageClient() {
   // (`axis` / `chantier` / `owner`) plutôt que le préfixe `f_` multi-valeurs du round précédent
   // (`FilterBar`, abandonné sur cette page — une seule valeur par filtre se sérialise directement,
   // pas besoin d'un `Array.join(",")`). Le contrat `?indicator=<id>` (plus bas) n'est jamais touché.
-  const selectedAxisId = searchParams.get("axis");
-  const selectedChantierId = searchParams.get("chantier");
-  const selectedOwner = searchParams.get("owner");
+  // Round multi-sélection : chaque paramètre porte 0..n valeurs (`?axis=a,b`, encodées — voir
+  // `lib/filterUtils.ts` ; une ancienne URL `?axis=a` reste valide). Vide = pas de filtre.
+  const axisParam = searchParams.get("axis");
+  const chantierParam = searchParams.get("chantier");
+  const ownerParam = searchParams.get("owner");
+  const selectedAxisIds = useMemo(() => parseFilterValues(axisParam), [axisParam]);
+  const selectedChantierIds = useMemo(() => parseFilterValues(chantierParam), [chantierParam]);
+  const selectedOwners = useMemo(() => parseFilterValues(ownerParam), [ownerParam]);
 
   // `{ scroll: false }` est OBLIGATOIRE ici : le comportement par défaut du router App Router
   // (`router.push`/`replace`) est de ramener le scroll en haut de page à CHAQUE navigation, y
@@ -573,9 +580,9 @@ export function KpiPageClient() {
   // `?indicator=<id>` (plus bas) n'est pas concerné : il défile lui-même explicitement via
   // `scrollIntoView` une fois la page prête, indépendamment de ce réglage.
   const setParam = useCallback(
-    (key: "axis" | "chantier" | "owner", value: string | null) => {
+    (key: "axis" | "chantier" | "owner", values: string[]) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (value) params.set(key, value);
+      if (values.length > 0) params.set(key, serializeFilterValues(values));
       else params.delete(key);
       const qs = params.toString();
       router.replace(qs ? `/kpi?${qs}` : "/kpi", { scroll: false });
@@ -594,7 +601,7 @@ export function KpiPageClient() {
   const chantierGroups: DropdownGroup[] = useMemo(
     () =>
       axes
-        .filter((axis) => !selectedAxisId || axis.id === selectedAxisId)
+        .filter((axis) => selectedAxisIds.length === 0 || selectedAxisIds.includes(axis.id))
         .map((axis) => ({
           groupLabel: axis.name,
           options: chantiers
@@ -602,7 +609,7 @@ export function KpiPageClient() {
             .map((c) => ({ value: c.id, label: c.name })),
         }))
         .filter((group) => group.options.length > 0),
-    [axes, chantiers, selectedAxisId]
+    [axes, chantiers, selectedAxisIds]
   );
 
   // Portée par `selectedAxisId`/`selectedChantierId` (round 15) : ne proposer que les responsables
@@ -611,8 +618,9 @@ export function KpiPageClient() {
   // ici, sous peine de ne plus jamais pouvoir changer de responsable une fois un premier choisi).
   const ownerOptions: DropdownOption[] = useMemo(() => {
     const scoped = indicators.filter((i) => {
-      if (selectedAxisId && i.axisId !== selectedAxisId) return false;
-      if (selectedChantierId && i.chantierId !== selectedChantierId) return false;
+      if (selectedAxisIds.length > 0 && !selectedAxisIds.includes(i.axisId)) return false;
+      if (selectedChantierIds.length > 0 && !selectedChantierIds.includes(i.chantierId ?? ""))
+        return false;
       return true;
     });
     const names = new Set(
@@ -621,7 +629,7 @@ export function KpiPageClient() {
     return Array.from(names)
       .sort()
       .map((name) => ({ value: name, label: name }));
-  }, [indicators, axes, chantiers, t, selectedAxisId, selectedChantierId]);
+  }, [indicators, axes, chantiers, t, selectedAxisIds, selectedChantierIds]);
 
   // Garde-fou de cohérence (round 15) : si le changement d'axe rend le chantier ou le responsable
   // actuellement sélectionné invalide (option qui a disparu de `chantierGroups`/`ownerOptions`
@@ -637,25 +645,37 @@ export function KpiPageClient() {
     // invalide et l'effacerait avant même que les données réelles n'arrivent.
     if (dataLoading) return;
 
-    const chantier = selectedChantierId ? chantiers.find((c) => c.id === selectedChantierId) : null;
-    const chantierInvalid =
-      !!selectedChantierId &&
-      (!chantier || (!!selectedAxisId && !chantier.axisIds.includes(selectedAxisId)));
+    // Multi-sélection : on ne retire que les valeurs devenues invalides (et la clé si plus rien).
+    const validChantiers = selectedChantierIds.filter((id) => {
+      const chantier = chantiers.find((c) => c.id === id);
+      return (
+        !!chantier &&
+        (selectedAxisIds.length === 0 || chantier.axisIds.some((a) => selectedAxisIds.includes(a)))
+      );
+    });
+    const chantierInvalid = validChantiers.length !== selectedChantierIds.length;
 
-    const validOwners = new Set(ownerOptions.map((o) => o.value));
-    const ownerInvalid = !!selectedOwner && !validOwners.has(selectedOwner);
+    const validOwnerSet = new Set(ownerOptions.map((o) => o.value));
+    const validOwners = selectedOwners.filter((o) => validOwnerSet.has(o));
+    const ownerInvalid = validOwners.length !== selectedOwners.length;
 
     if (!chantierInvalid && !ownerInvalid) return;
 
     const params = new URLSearchParams(searchParams.toString());
-    if (chantierInvalid) params.delete("chantier");
-    if (ownerInvalid) params.delete("owner");
+    if (chantierInvalid) {
+      if (validChantiers.length > 0) params.set("chantier", serializeFilterValues(validChantiers));
+      else params.delete("chantier");
+    }
+    if (ownerInvalid) {
+      if (validOwners.length > 0) params.set("owner", serializeFilterValues(validOwners));
+      else params.delete("owner");
+    }
     const qs = params.toString();
     router.replace(qs ? `/kpi?${qs}` : "/kpi", { scroll: false });
   }, [
-    selectedAxisId,
-    selectedChantierId,
-    selectedOwner,
+    selectedAxisIds,
+    selectedChantierIds,
+    selectedOwners,
     chantiers,
     ownerOptions,
     searchParams,
@@ -666,16 +686,19 @@ export function KpiPageClient() {
   const filteredIndicators = useMemo(
     () =>
       indicators.filter((i) => {
-        if (selectedAxisId && i.axisId !== selectedAxisId) return false;
-        if (selectedChantierId && i.chantierId !== selectedChantierId) return false;
+        if (selectedAxisIds.length > 0 && !selectedAxisIds.includes(i.axisId)) return false;
+        if (selectedChantierIds.length > 0 && !selectedChantierIds.includes(i.chantierId ?? ""))
+          return false;
         if (
-          selectedOwner &&
-          resolveIndicatorOwner(i, axes, chantiers, t("strategicAxes.unassigned")) !== selectedOwner
+          selectedOwners.length > 0 &&
+          !selectedOwners.includes(
+            resolveIndicatorOwner(i, axes, chantiers, t("strategicAxes.unassigned"))
+          )
         )
           return false;
         return true;
       }),
-    [indicators, axes, chantiers, t, selectedAxisId, selectedChantierId, selectedOwner]
+    [indicators, axes, chantiers, t, selectedAxisIds, selectedChantierIds, selectedOwners]
   );
 
   /** Regroupement d'affichage : par axe, puis par chantier. Les indicateurs "macro" (sans
@@ -894,29 +917,26 @@ export function KpiPageClient() {
               le hero "sur la trajectoire" et les KPI business ci-dessus sont portfolio-wide et ne
               changent jamais avec ces filtres, les y exposer laissait croire qu'ils étaient inertes. */}
           <div className="flex flex-wrap items-center gap-2">
-            <Dropdown
+            <MultiSelect
               label={t("kpi.filterAxis")}
               placeholder={t("kpi.filterAll")}
-              value={selectedAxisId}
+              values={selectedAxisIds}
               onChange={(v) => setParam("axis", v)}
               options={axisOptions}
-              allowClear
             />
-            <Dropdown
+            <MultiSelect
               label={t("kpi.filterChantier")}
               placeholder={t("kpi.filterAll")}
-              value={selectedChantierId}
+              values={selectedChantierIds}
               onChange={(v) => setParam("chantier", v)}
               groups={chantierGroups}
-              allowClear
             />
-            <Dropdown
+            <MultiSelect
               label={t("kpi.filterOwner")}
               placeholder={t("kpi.filterAll")}
-              value={selectedOwner}
+              values={selectedOwners}
               onChange={(v) => setParam("owner", v)}
               options={ownerOptions}
-              allowClear
             />
           </div>
 

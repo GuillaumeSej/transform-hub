@@ -1,65 +1,44 @@
-import type { ActionImpact, Lever, LeverAction } from "@/types";
-import { MONTH_LABELS } from "@/lib/engine";
+import type { Lever, LeverAction } from "@/types";
+import {
+  MONTH_LABELS,
+  impactTrajectory,
+  leverImpactTotals,
+  leverImpactsOf,
+  realizedGrossSavings,
+  realizedSavings,
+} from "@/lib/engine";
 
 // ─── Consolidation des KPIs d'un levier depuis ses actions ──────────────────
 
-/** Somme des montants d'impacts filtrés. */
-function sumImpacts(actions: LeverAction[], filter: (imp: ActionImpact) => boolean): number {
-  let total = 0;
-  for (const a of actions) {
-    for (const imp of a.impacts ?? []) {
-      if (filter(imp)) total += imp.amount;
-    }
-  }
-  return Math.round(total * 100) / 100;
-}
-
-/** Somme des FTE des impacts (tous types confondus). */
-function sumFTE(actions: LeverAction[]): number {
-  let total = 0;
-  for (const a of actions) {
-    for (const imp of a.impacts ?? []) {
-      if (imp.fteCount) total += imp.fteCount;
-    }
-  }
-  return total;
-}
-
-/** Vérifie si le levier a des actions avec des impacts définis. */
+/** Vérifie si le levier a des impacts définis (niveau levier, ou anciens impacts d'actions non
+ *  encore migrés). Nom conservé pour compat des appelants. */
 export function hasActionImpacts(lever: Lever): boolean {
-  return (lever.actions ?? []).some((a) => (a.impacts ?? []).length > 0);
+  return leverImpactsOf(lever).length > 0;
 }
 
-/** Consolide les KPIs d'un levier depuis ses actions (si elles ont des impacts).
- *  Retourne undefined si le levier n'a pas d'actions avec impacts (= saisie manuelle).
+/** Consolide les KPIs financiers d'un levier depuis ses impacts (`Lever.impacts`, repli sur
+ *  l'ancien `action.impacts`). Retourne undefined si le levier n'a aucun impact (= saisie manuelle
+ *  des macro-valeurs conservée).
  *
- *  `netSavings = savings − capex` (règle métier explicite, alignée sur le "Réalisé" — voir
- *  `actionNetAmount`/`engine.doneActionImpactsTotal`) : NI l'OPEX one-off NI l'OPEX récurrent ne
- *  réduisent le "net", pour que "Plan initial"/"Réactualisé" et "Réalisé à date" restent
- *  strictement comparables (même définition de "net" partout — c'est ce qui permet à
- *  `engine.displayedProgressPct` de diviser l'un par l'autre sans mélanger deux bases de coût
- *  différentes). `opexOneOff`/`opexRec` restent calculés/consolidés à part (KPI dédiés) mais
- *  n'entrent plus dans `netSavings`. Les montants saisis sont déjà des montants annuels par
- *  construction (formulaire d'impact d'action) : aucune pondération temporelle à appliquer. */
+ *  `netSavings = gains récurrents annuels − CAPEX` (règle métier explicite : NI l'OPEX one-off NI
+ *  l'OPEX récurrent ne réduisent le "net"). Les gains one-off sont EXCLUS de grossSavings/netSavings
+ *  (voir `engine.leverImpactTotals`). Le salaire des départs ETP compte en gain, celui des
+ *  recrutements en OPEX récurrent. */
 export function consolidateLeverFromActions(lever: Lever): Partial<Lever> | undefined {
-  const actions = lever.actions ?? [];
-  if (!actions.some((a) => (a.impacts ?? []).length > 0)) return undefined;
-
-  const savings = sumImpacts(actions, (i) => i.type === "saving");
-  const capex = sumImpacts(actions, (i) => i.type === "cost" && i.nature === "capex");
-  const opexOneOff = sumImpacts(actions, (i) => i.type === "cost" && i.nature === "oneoff");
-  const opexRec = sumImpacts(actions, (i) => i.type === "cost" && i.nature === "opex_rec");
-  const fteImpact = sumFTE(actions);
-
+  if (!hasActionImpacts(lever)) return undefined;
+  const t = leverImpactTotals(lever);
   return {
-    grossSavings: Math.round(savings * 100) / 100,
-    netSavings: Math.round((savings - capex) * 100) / 100,
-    capex: Math.round(capex * 100) / 100,
-    opexOneOff: Math.round(opexOneOff * 100) / 100,
-    opexRec: Math.round(opexRec * 100) / 100,
-    fteImpact,
+    grossSavings: t.grossAnnual,
+    netSavings: t.netAnnual,
+    capex: t.capex,
+    opexOneOff: t.opexOneOff,
+    opexRec: t.opexRec,
+    fteImpact: t.fteNet,
   };
 }
+
+/** Alias explicite du nom courant (les impacts vivent sur le levier). */
+export const consolidateLeverFromImpacts = consolidateLeverFromActions;
 
 // ─── Courbe en J ────────────────────────────────────────────────────────────
 
@@ -91,6 +70,34 @@ function actionNetAmount(action: LeverAction): number {
  *  - **Réalisé** : impacts des actions en "done" à leur deliveredDate (ou end si absent)
  *  - **Reforecast** : même que plan pour l'instant (extensible quand les actions auront un reforecast) */
 export function leverJCurve(lever: Lever, fyStart: string, fyEnd: string): JCurvePoint[] {
+  // Modèle actuel : trajectoire issue des impacts du levier (OPEX/CAPEX/gains datés) ; le réalisé
+  // est le plan cumulé au prorata de l'avancement des actions (jamais des gains).
+  if (lever.impacts && lever.impacts.length > 0) {
+    const { points } = impactTrajectory(lever, { granularity: "month", includeCancelled: true });
+    const fyStartDate = new Date(fyStart);
+    const now = new Date();
+    const ratio = realizedSavings(lever) / (lever.netSavings || 1);
+    return points
+      .filter(
+        (p) =>
+          new Date(p.periodStart) >= new Date(fyStartDate.getFullYear(), fyStartDate.getMonth(), 1)
+      )
+      .map((p) => {
+        const d = new Date(p.periodStart);
+        const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        return {
+          month: p.period,
+          plan: Math.round(p.cumulativeNetRecurring * 100) / 100,
+          reforecast: Math.round(p.cumulativeNetRecurring * 100) / 100,
+          actual:
+            monthEnd <= now
+              ? Math.round(
+                  Math.max(0, p.cumulativeNetRecurring) * Math.min(1, Math.max(0, ratio)) * 100
+                ) / 100
+              : null,
+        };
+      });
+  }
   const startYear = new Date(fyStart).getFullYear();
   const endYear = new Date(fyEnd).getFullYear();
   const actions = lever.actions ?? [];
@@ -181,8 +188,7 @@ export function leverJCurve(lever: Lever, fyStart: string, fyEnd: string): JCurv
  *  bruts" — utile pour comprendre l'écart quand des coûts (capex/opex) ont déjà été engagés sur
  *  des actions livrées. */
 export function leverGrossRealizedToDate(lever: Lever): number {
-  const doneActions = (lever.actions ?? []).filter((a) => a.status === "done");
-  return sumImpacts(doneActions, (imp) => imp.type === "saving");
+  return Math.round(realizedGrossSavings(lever) * 100) / 100;
 }
 
 /** Valeur "Plan initial (net)" affichée pour un levier (audit issue #5 : sur certains leviers,

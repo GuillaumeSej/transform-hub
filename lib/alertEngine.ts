@@ -1,5 +1,5 @@
 import type { Alert, BeTrackData, ProgramType } from "@/types";
-import { underperformers, dependencyAlerts } from "@/lib/engine";
+import { underperformers, dependencyAlerts, leverImpactsOf } from "@/lib/engine";
 
 /**
  * Générateur d'alertes automatiques — fonction pure qui analyse les données du programme
@@ -55,12 +55,12 @@ export function generateAlerts(
     // des actions en retard), pas netSavings du levier × ratio d'actions en retard — c'est le gain
     // potentiellement perdu si ces actions en retard ne se réalisent pas, pas une estimation
     // proportionnelle déconnectée des impacts réellement saisis.
-    const lateSavingsImpact = u.lateActions.reduce(
-      (sum, action) =>
-        sum +
-        (action.impacts ?? []).filter((i) => i.type === "saving").reduce((s, i) => s + i.amount, 0),
-      0
-    );
+    // Impacts désormais portés par le levier : on prend les gains récurrents du levier au prorata
+    // des actions en retard (les gains one-off restent hors périmètre).
+    const leverSavings = leverImpactsOf(u)
+      .filter((i) => i.type === "saving" && i.gainRecurrence !== "oneoff")
+      .reduce((s, i) => s + i.amount, 0);
+    const lateSavingsImpact = lateRatio * leverSavings;
     const impact = -lateSavingsImpact;
     auto.push({
       id: `AUTO-DELAY-${u.id}`,

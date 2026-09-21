@@ -7,6 +7,7 @@ import { Building2, Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
 import type { Company } from "@/types";
 import { subscribeCompanies, saveCompany, deleteCompany } from "@/lib/firestore/admin";
 import { useToast } from "@/lib/hooks/useToast";
+import { ImpactConfigEditor } from "@/components/admin/ImpactConfigEditor";
 import { useRole } from "@/lib/hooks/useRole";
 import {
   CompanyFieldsEditor,
@@ -133,6 +134,8 @@ export default function AdminCompaniesPage() {
             value={form}
             onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
           />
+
+          {editId && <ImpactConfigEditor companyId={editId} />}
 
           <div className="flex gap-2">
             <button

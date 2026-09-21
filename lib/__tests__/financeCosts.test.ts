@@ -7,6 +7,8 @@ import {
   costRowsForPeriod,
   costsByHierarchyNode,
   flattenCostImpacts,
+  flattenOneOffGainImpacts,
+  flattenSavingImpacts,
   groupCostsByWorkstream,
   investCostRowsBySegment,
   isCostEngaged,
@@ -161,62 +163,81 @@ describe("financeCosts — flattenCostImpacts", () => {
 });
 
 describe("financeCosts — isCostEngaged", () => {
+  const lv = (o: Partial<Lever>): Lever => ({ ...baseLever, ...o });
+
   it("CAPEX one-shot: engaged once capexDeploymentDate has passed", () => {
-    const a = action({ status: "todo" });
+    const l = lv({ status: "validated" });
     const past = impact({ nature: "capex", capexDeploymentDate: "2026-01-01" });
     const future = impact({ nature: "capex", capexDeploymentDate: "2026-12-01" });
-    expect(isCostEngaged({ impact: past, action: a }, TODAY)).toBe(true);
-    expect(isCostEngaged({ impact: future, action: a }, TODAY)).toBe(false);
+    expect(isCostEngaged({ impact: past, lever: l }, TODAY)).toBe(true);
+    expect(isCostEngaged({ impact: future, lever: l }, TODAY)).toBe(false);
   });
 
   it("CAPEX smoothed: engaged once capexStartDate has passed", () => {
-    const a = action({ status: "todo" });
     const smoothed = impact({
       nature: "capex",
       capexAllocationMode: "smoothed",
       capexStartDate: "2026-03-01",
       capexDeploymentDate: "2026-09-01",
     });
-    expect(isCostEngaged({ impact: smoothed, action: a }, TODAY)).toBe(true);
+    expect(isCostEngaged({ impact: smoothed, lever: lv({ status: "validated" }) }, TODAY)).toBe(
+      true
+    );
   });
 
-  it("OPEX without a CAPEX date falls back to the action's status/start", () => {
+  it("OPEX without a CAPEX date falls back to the lever's status/start", () => {
     const oneoff = impact({ nature: "oneoff" });
-    expect(isCostEngaged({ impact: oneoff, action: action({ status: "done" }) }, TODAY)).toBe(true);
-    expect(isCostEngaged({ impact: oneoff, action: action({ status: "todo" }) }, TODAY)).toBe(
+    expect(isCostEngaged({ impact: oneoff, lever: lv({ status: "delivered" }) }, TODAY)).toBe(true);
+    expect(isCostEngaged({ impact: oneoff, lever: lv({ status: "validated" }) }, TODAY)).toBe(
       false
     );
     expect(
       isCostEngaged(
-        { impact: oneoff, action: action({ status: "in_progress", start: "2026-01-01" }) },
+        { impact: oneoff, lever: lv({ status: "in_progress", start: "2026-01-01" }) },
         TODAY
       )
     ).toBe(true);
     expect(
       isCostEngaged(
-        { impact: oneoff, action: action({ status: "in_progress", start: "2026-12-01" }) },
+        { impact: oneoff, lever: lv({ status: "in_progress", start: "2026-12-01" }) },
         TODAY
       )
     ).toBe(false);
   });
 });
 
-describe("financeCosts — splitEngagedVsUpcoming / splitByNature", () => {
-  it("sums engaged vs upcoming, and total = engaged + upcoming", () => {
+describe("financeCosts — lever-level impacts, fte & one-off", () => {
+  it("reads lever.impacts, excludes fte and one-off gains from savings", () => {
     const lever = {
       ...baseLever,
-      actions: [
-        action({
-          status: "done",
-          impacts: [impact({ id: "c1", nature: "oneoff", amount: 3 })],
-        }),
-        action({
-          status: "todo",
-          impacts: [impact({ id: "c2", nature: "oneoff", amount: 4 })],
-        }),
+      impacts: [
+        impact({ id: "c1", type: "cost", amount: 2 }),
+        impact({ id: "f1", type: "fte", amount: 1, fteCount: 2, fteDirection: "hire" }),
+        impact({ id: "s1", type: "saving", amount: 5 }),
+        impact({ id: "s2", type: "saving", amount: 7, gainRecurrence: "oneoff" }),
       ],
     };
-    const split = splitEngagedVsUpcoming(makeData([lever]), TODAY);
+    const d = makeData([lever]);
+    expect(flattenCostImpacts(d).map((r) => r.impact.id)).toEqual(["c1"]);
+    expect(flattenSavingImpacts(d).map((r) => r.impact.id)).toEqual(["s1"]);
+    expect(flattenOneOffGainImpacts(d).map((r) => r.impact.id)).toEqual(["s2"]);
+  });
+});
+
+describe("financeCosts — splitEngagedVsUpcoming / splitByNature", () => {
+  it("sums engaged vs upcoming, and total = engaged + upcoming", () => {
+    const l1 = {
+      ...baseLever,
+      status: "delivered" as const,
+      impacts: [impact({ id: "c1", nature: "oneoff", amount: 3 })],
+    };
+    const l2 = {
+      ...baseLever,
+      id: "L2",
+      status: "validated" as const,
+      impacts: [impact({ id: "c2", nature: "oneoff", amount: 4 })],
+    };
+    const split = splitEngagedVsUpcoming(makeData([l1, l2]), TODAY);
     expect(split).toEqual({ engaged: 3, upcoming: 4, total: 7 });
   });
 
@@ -326,23 +347,21 @@ describe("financeCosts — isInvestNature", () => {
 
 describe("financeCosts — investCostRowsBySegment", () => {
   it("returns only Invest rows (excludes opex_rec) matching the engaged flag", () => {
-    const lever = {
+    const l1 = {
       ...baseLever,
-      actions: [
-        action({
-          status: "done",
-          impacts: [
-            impact({ id: "c1", nature: "oneoff", amount: 3 }),
-            impact({ id: "c2", nature: "opex_rec", amount: 9 }),
-          ],
-        }),
-        action({
-          status: "todo",
-          impacts: [impact({ id: "c3", nature: "oneoff", amount: 4 })],
-        }),
+      status: "delivered" as const,
+      impacts: [
+        impact({ id: "c1", nature: "oneoff", amount: 3 }),
+        impact({ id: "c2", nature: "opex_rec", amount: 9 }),
       ],
     };
-    const data = makeData([lever]);
+    const l2 = {
+      ...baseLever,
+      id: "L2",
+      status: "validated" as const,
+      impacts: [impact({ id: "c3", nature: "oneoff", amount: 4 })],
+    };
+    const data = makeData([l1, l2]);
     const engaged = investCostRowsBySegment(data, true, TODAY);
     const upcoming = investCostRowsBySegment(data, false, TODAY);
     expect(engaged.map((r) => r.impact.id)).toEqual(["c1"]);

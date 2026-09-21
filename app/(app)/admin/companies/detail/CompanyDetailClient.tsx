@@ -23,6 +23,7 @@ import {
   DEFAULT_COMPANY_FORM,
   type CompanyFormState,
 } from "@/components/admin/CompanyFieldsEditor";
+import { ImpactConfigEditor } from "@/components/admin/ImpactConfigEditor";
 import { UsersPanel } from "@/components/admin/UsersPanel";
 import { HierarchyEditor } from "@/components/admin/HierarchyEditor";
 import { ProgramsPanel } from "@/components/admin/ProgramsPanel";
@@ -33,6 +34,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 type TabId =
   | "settings"
   | "configuration"
+  | "impact-config"
   | "users"
   | "financial-hierarchy"
   | "geographic-hierarchy"
@@ -42,6 +44,7 @@ type TabId =
 const TAB_IDS: TabId[] = [
   "settings",
   "configuration",
+  "impact-config",
   "users",
   "financial-hierarchy",
   "geographic-hierarchy",
@@ -68,6 +71,11 @@ function companyDetailTabs(
     {
       id: "configuration",
       label: t("adminCompanies.tab.configuration", "Configuration"),
+      icon: SlidersHorizontal,
+    },
+    {
+      id: "impact-config",
+      label: t("adminCompanies.tab.impactConfig", "Types & natures"),
       icon: SlidersHorizontal,
     },
     { id: "users", label: t("nav.users", "Utilisateurs"), icon: Users },
@@ -332,6 +340,7 @@ export default function CompanyDetailClient() {
             </div>
           )}
           {tab === "configuration" && <ProgramConfigEditor companyId={company.id} />}
+          {tab === "impact-config" && <ImpactConfigEditor companyId={company.id} />}
           {tab === "users" && <UsersPanel scopeCompanyId={company.id} />}
           {tab === "financial-hierarchy" && (
             <HierarchyEditor companies={companies} companyId={company.id} domain="financial" />

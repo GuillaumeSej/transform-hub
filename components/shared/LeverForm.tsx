@@ -13,12 +13,19 @@ import {
 import type {
   BeTrackData,
   HierarchyLevelDef,
+  Company,
   HierarchyNode,
   Lever,
   LeverStatus,
   Program,
 } from "@/types";
 import { hierarchyPathValue, resolveHierarchyNodeChain } from "@/lib/hierarchyLogic";
+import { ImpactsEditor } from "@/components/shared/ImpactsEditor";
+import { ActionWeightsEditor } from "@/components/shared/ActionWeightsEditor";
+import { getLeverTypes } from "@/lib/impactConfig";
+import { weightsState } from "@/lib/actionWeights";
+import { cleanImpacts } from "@/lib/impactKinds";
+import { leverImpactTotals } from "@/lib/engine";
 import { resolveProgramType } from "@/lib/axisLogic";
 import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
 import { matchLeverOwner } from "@/lib/leverOwnerReconciliation";
@@ -84,7 +91,7 @@ function emptyValues(data: BeTrackData): LeverFormValues {
     // ci-dessous est renseigné dès que la liste des programmes Plan Performance de l'entreprise est
     // connue (voir l'effet plus bas), avant que l'utilisateur n'ait la main.
     programId: "",
-    type: data.leverTypes[0] ?? "",
+    type: "",
     name: "",
     ws: data.workstreams[0]?.id ?? "",
     owner: "",
@@ -215,12 +222,14 @@ export function LeverForm({
   const [geographyLevels, setGeographyLevels] = useState<HierarchyLevelDef[]>([]);
   const [geographyNodes, setGeographyNodes] = useState<HierarchyNode[]>([]);
   const [confidentialityLevels, setConfidentialityLevels] = useState<string[]>([]);
+  const [company, setCompany] = useState<Company | null>(null);
 
   useEffect(() => {
     if (!companyId) {
       setGeographyLevels([]);
       setGeographyNodes([]);
       setConfidentialityLevels([]);
+      setCompany(null);
       return;
     }
     let cancelled = false;
@@ -231,6 +240,7 @@ export function LeverForm({
       const geoLevels = company?.geographyHierarchyLevels ?? [];
       setGeographyLevels(geoLevels);
       setConfidentialityLevels(company?.confidentialityLevels ?? []);
+      setCompany(company ?? null);
       unsubGeoNodes?.();
       if (geoLevels.length === 0) {
         setGeographyNodes([]);
@@ -334,7 +344,6 @@ export function LeverForm({
 
   const set = <K extends keyof LeverFormValues>(key: K, value: LeverFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
-  const num = (v: string) => (v === "" ? 0 : Number(v));
 
   // Dès que le levier a au moins une action chiffrée (impacts renseignés), le business case
   // initial saisi ci-dessous est mis de côté : `consolidateLeverFromActions` (appelé à chaque
@@ -345,7 +354,14 @@ export function LeverForm({
   // les afficher en lecture seule avec un message expliquant le bascule. Même logique que
   // `leverConsolidate.ts::hasActionImpacts`, dupliquée ici pour éviter de typer `values`
   // (`LeverFormValues`, un `Omit<Lever, ...>`) en `Lever` complet juste pour cet appel.
-  const hasCostedActions = (values.actions ?? []).some((a) => (a.impacts ?? []).length > 0);
+  const leverTypes = Array.from(
+    new Set([
+      ...(values.type ? [values.type] : []),
+      ...getLeverTypes(company ?? { leverTypes: data.leverTypes }),
+    ])
+  );
+  const impacts = values.impacts ?? [];
+  const actionWeights = weightsState(values.actions ?? []);
   // Une fois le plan initial figé (passage à "validated"/L3, voir `leversLogic.ts::applyPlanLock`),
   // le business case initial ci-dessous n'est plus éditable manuellement — mêmes montants que le
   // snapshot `lockedPlan` (édition possible d'un tout nouveau levier uniquement).
@@ -357,7 +373,19 @@ export function LeverForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (!values.code.trim() || !values.name.trim() || !values.programId) return;
-        onSubmit(values);
+        if (!actionWeights.valid) return;
+        const cleaned = cleanImpacts(impacts);
+        const next = { ...values, impacts: cleaned, type: values.type || leverTypes[0] || "" };
+        if (cleaned.length > 0 && !isLocked) {
+          const tot = leverImpactTotals(cleaned);
+          next.grossSavings = tot.grossAnnual;
+          next.netSavings = tot.netAnnual;
+          next.capex = tot.capex;
+          next.opexOneOff = tot.opexOneOff;
+          next.opexRec = tot.opexRec;
+          next.fteImpact = tot.fteNet;
+        }
+        onSubmit(next);
       }}
     >
       <SectionTitle>{t("leverForm.sectionIdentification")}</SectionTitle>
@@ -376,7 +404,7 @@ export function LeverForm({
             value={values.type}
             onChange={(e) => set("type", e.target.value)}
           >
-            {data.leverTypes.map((lt) => (
+            {leverTypes.map((lt) => (
               <option key={lt} value={lt}>
                 {lt}
               </option>
@@ -398,7 +426,7 @@ export function LeverForm({
         </Field>
         {canEditWorkstreamWeight && (
           <Field
-            label={t("leverForm.workstreamWeightPct", "Poids dans l'avancement du workstream (%)")}
+            label={t("leverForm.workstreamWeightPct", "Poids dans l'avancement du chantier (%)")}
           >
             <input
               className={inputClass}
@@ -729,88 +757,36 @@ export function LeverForm({
         </Field>
       </div>
 
-      <SectionTitle>{t("leverForm.sectionInitialImpact")}</SectionTitle>
-      {hasCostedActions ? (
-        // Dès qu'une action chiffrée existe, le business case initial est consolidé depuis le
-        // plan d'action (voir `consolidateLeverFromActions`) et n'est plus éditable ici — édition
-        // désormais via "+ Action" sur la fiche détail du levier.
-        <p className="mb-3 rounded-sm border border-border bg-neutral-50 px-2.5 py-2 text-[11px] text-secondary">
-          {t("leverForm.initialImpactSupersededNotice")}
-        </p>
-      ) : (
-        <>
-          {isLocked && (
-            <p className="mb-3 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
-              {t("leverForm.lockedPlanNotice")}{" "}
-              {lifecycle ? lifecycle.label("validated") : STATUS_LABEL.validated}{" "}
-              {t("leverForm.lockedPlanNoticeEnd")}
-            </p>
+      <SectionTitle>{t("leverForm.sectionImpact", "Impact")}</SectionTitle>
+      {isLocked && (
+        <p className="mb-3 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+          {t(
+            "leverForm.impactReforecastNotice",
+            "Le plan initial est figé : les modifications alimentent le réactualisé."
           )}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-            <Field label={t("leverForm.grossSavings")}>
-              <input
-                type="number"
-                step="0.1"
-                disabled={isLocked}
-                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-                value={values.grossSavings}
-                onChange={(e) => set("grossSavings", num(e.target.value))}
-              />
-            </Field>
-            <Field label={t("leverForm.netSavings")}>
-              <input
-                type="number"
-                step="0.1"
-                disabled={isLocked}
-                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-                value={values.netSavings}
-                onChange={(e) => set("netSavings", num(e.target.value))}
-              />
-            </Field>
-            <Field label={t("leverForm.fteImpact")}>
-              <input
-                type="number"
-                step="0.1"
-                disabled={isLocked}
-                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-                value={values.fteImpact}
-                onChange={(e) => set("fteImpact", num(e.target.value))}
-              />
-            </Field>
-            {/* "leverForm.capex" est une clé partagée avec le select "nature" d'ActionForm (où un
-             *  suffixe d'unité serait hors de propos, ex. option de dropdown) — l'unité est donc
-             *  ajoutée ici en local plutôt que dans la traduction elle-même. */}
-            <Field label={`${t("leverForm.capex")} (€M)`}>
-              <input
-                type="number"
-                step="0.1"
-                disabled={isLocked}
-                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-                value={values.capex}
-                onChange={(e) => set("capex", num(e.target.value))}
-              />
-            </Field>
-            <Field label={t("leverForm.opexOneOff")}>
-              <input
-                type="number"
-                step="0.1"
-                disabled={isLocked}
-                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-                value={values.opexOneOff}
-                onChange={(e) => set("opexOneOff", num(e.target.value))}
-              />
-            </Field>
-            <Field label={t("leverForm.opexRec")}>
-              <input
-                type="number"
-                step="0.1"
-                disabled={isLocked}
-                className={`${inputClass} disabled:bg-neutral-100 disabled:text-tertiary`}
-                value={values.opexRec}
-                onChange={(e) => set("opexRec", num(e.target.value))}
-              />
-            </Field>
-          </div>
+        </p>
+      )}
+      <ImpactsEditor
+        impacts={impacts}
+        onChange={(next) => set("impacts", next)}
+        company={company}
+        canEdit
+      />
+      {impacts.length === 0 && (
+        <p className="mt-2 text-[11px] text-tertiary">
+          {t(
+            "leverForm.impactOptional",
+            "Ajoutez des impacts (OPEX, CAPEX, gains, ETP) : les totaux du levier en sont dérivés."
+          )}
+        </p>
+      )}
+      {(values.actions ?? []).length > 0 && (
+        <>
+          <SectionTitle>{t("leverForm.sectionActions", "Actions")}</SectionTitle>
+          <ActionWeightsEditor
+            actions={values.actions ?? []}
+            onChange={(next) => set("actions", next)}
+          />
         </>
       )}
 
@@ -834,7 +810,11 @@ export function LeverForm({
         <Button type="button" variant="ghost" onClick={onCancel}>
           {t("common.cancel")}
         </Button>
-        <Button type="submit" variant="primary" disabled={!values.programId}>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={!values.programId || !actionWeights.valid}
+        >
           {submitLabel ?? t("common.save")}
         </Button>
       </div>

@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { actionNetImpact, fmtCurr, isActionLate } from "@/lib/engine";
+import { actionProgressPct, isActionLate } from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ActionStatus, LeverAction } from "@/types";
 
@@ -12,7 +13,7 @@ function getColumns(
   return [
     { status: "todo", label: t("leverDetail.todo", "À faire") },
     { status: "in_progress", label: t("leverDetail.inProgress", "En cours") },
-    { status: "done", label: t("leverDetail.completed", "Fait") },
+    { status: "done", label: t("leverDetail.completed", "Réalisé") },
     { status: "delayed", label: t("leverDetail.late", "En retard") },
   ];
 }
@@ -35,12 +36,17 @@ function columnActions(actions: LeverAction[], status: ActionStatus): LeverActio
 export function ActionKanban({
   actions,
   onStatusChange,
+  onProgressChange,
   onCardClick,
   hasBlockingDependency,
   readOnly = false,
 }: {
   actions: LeverAction[];
   onStatusChange: (actionId: string, status: ActionStatus) => void;
+  /** Modification du % d'avancement d'une carte. L'appelant doit faire
+   *  `updateAction(scope, id, { declaredProgressPct })` (la règle avancement → colonne est
+   *  appliquée par `updateAction`). Absent = le % est affiché sans pouvoir être édité. */
+  onProgressChange?: (actionId: string, pct: number) => void;
   onCardClick: (action: LeverAction) => void;
   /** Le levier porte au moins une dépendance déclarée (Lever.dependencies) actuellement violée
    *  (voir engine.dependencyAlerts) — la dépendance est portée par le LEVIER, pas par l'action,
@@ -54,6 +60,18 @@ export function ActionKanban({
 }) {
   const { t } = useTranslation();
   const COLUMNS = getColumns(t);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overCol, setOverCol] = useState<ActionStatus | null>(null);
+  const drop = (status: ActionStatus, e: React.DragEvent) => {
+    e.preventDefault();
+    // dataTransfer en priorité (pas de fermeture périmée), état local en repli.
+    const id = e.dataTransfer.getData("text/plain") || dragId;
+    setDragId(null);
+    setOverCol(null);
+    if (!id || readOnly) return;
+    const a = actions.find((x) => x.id === id);
+    if (a && a.status !== status) onStatusChange(id, status);
+  };
   return (
     <div>
       {hasBlockingDependency && (
@@ -68,7 +86,19 @@ export function ActionKanban({
           return (
             <div
               key={col.status}
-              className="min-h-[160px] rounded-lg border border-border bg-neutral-50 p-2.5"
+              className={cn(
+                "min-h-[160px] rounded-lg border bg-neutral-50 p-2.5 transition",
+                overCol === col.status ? "border-bp-coral bg-bp-coral/5" : "border-border"
+              )}
+              onDragOver={(e) => {
+                if (readOnly) return;
+                e.preventDefault();
+                if (overCol !== col.status) setOverCol(col.status);
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverCol(null);
+              }}
+              onDrop={(e) => drop(col.status, e)}
             >
               <div className="flex items-center justify-between px-2 pb-2.5 pt-1">
                 <div className="text-[11.5px] font-bold uppercase tracking-wide text-primary">
@@ -86,7 +116,24 @@ export function ActionKanban({
               {list.map((a) => {
                 const autoLate = a.status !== "delayed" && isActionLate(a);
                 return (
-                  <div key={a.id} className="mb-2 rounded-sm border border-border bg-white p-2.5">
+                  <div
+                    key={a.id}
+                    draggable={!readOnly}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", a.id);
+                      e.dataTransfer.effectAllowed = "move";
+                      setDragId(a.id);
+                    }}
+                    onDragEnd={() => {
+                      setDragId(null);
+                      setOverCol(null);
+                    }}
+                    className={cn(
+                      "mb-2 rounded-sm border border-border bg-white p-2.5",
+                      !readOnly && "cursor-grab",
+                      dragId === a.id && "opacity-50"
+                    )}
+                  >
                     <button
                       onClick={() => onCardClick(a)}
                       className="mb-1.5 flex w-full items-start gap-1 text-left text-xs font-semibold text-primary hover:text-primary hover:underline"
@@ -105,8 +152,29 @@ export function ActionKanban({
                       <span>
                         {a.start} → {a.end}
                       </span>
-                      <span className="font-semibold text-secondary">
-                        {fmtCurr(actionNetImpact(a), 0)}
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        disabled={readOnly || !onProgressChange}
+                        key={`${a.id}-${actionProgressPct(a)}`}
+                        defaultValue={actionProgressPct(a)}
+                        onPointerUp={(e) => {
+                          const v = Number(e.currentTarget.value);
+                          if (v !== actionProgressPct(a)) onProgressChange?.(a.id, v);
+                        }}
+                        onKeyUp={(e) => {
+                          const v = Number(e.currentTarget.value);
+                          if (v !== actionProgressPct(a)) onProgressChange?.(a.id, v);
+                        }}
+                        className="min-w-0 flex-1 accent-bp-coral"
+                        aria-label={t("shared.actionKanban.progress", "Avancement (%)")}
+                      />
+                      <span className="w-9 text-right text-[10.5px] font-semibold text-secondary">
+                        {actionProgressPct(a)} %
                       </span>
                     </div>
                     {!readOnly && (

@@ -8,6 +8,7 @@ import {
   query,
   setDoc,
   updateDoc,
+  deleteField,
   where,
   writeBatch,
   type Unsubscribe,
@@ -392,4 +393,17 @@ export async function ensureAdminSeeded(): Promise<void> {
 
   // Les comptes utilisateurs ne sont plus seedés automatiquement — voir scripts/create-admin.js
   // pour créer le premier compte admin, puis le panneau Admin > Utilisateurs pour les suivants.
+}
+
+/** Persiste les types de levier / natures d'impact d'une entreprise (champs de la fiche
+ *  `companies/{id}`, mêmes règles Firestore que les autres paramètres). `undefined` = retour aux
+ *  valeurs par défaut (champ supprimé du document). */
+export async function saveCompanyImpactConfig(
+  companyId: string,
+  config: { leverTypes?: string[]; impactNatures?: Company["impactNatures"] }
+): Promise<void> {
+  await updateDoc(doc(companiesCol(), companyId), {
+    leverTypes: config.leverTypes ?? deleteField(),
+    impactNatures: config.impactNatures ?? deleteField(),
+  });
 }

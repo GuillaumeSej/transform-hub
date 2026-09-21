@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useDismissable } from "@/lib/hooks/useDismissable";
 import { ChevronDown } from "lucide-react";
 
 export type DropdownOption = { value: string; label: string };
@@ -43,6 +44,8 @@ export function Dropdown({
   allowClear?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismissable(open, () => setOpen(false), ref);
 
   const allOptions = options ?? groups?.flatMap((g) => g.options) ?? [];
   const selected = value !== null ? allOptions.find((o) => o.value === value) : undefined;
@@ -54,12 +57,7 @@ export function Dropdown({
   };
 
   return (
-    <div
-      className="relative"
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
-      }}
-    >
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

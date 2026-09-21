@@ -1,5 +1,6 @@
 "use client";
 
+import { toggleInSelection } from "@/lib/filterUtils";
 import { useState } from "react";
 import type { LeverHealthGroup, LeverHealthStatus } from "@/lib/leverHealth";
 
@@ -36,8 +37,8 @@ export function InitiativeHealthMatrix({
   onLeverClick: (leverId: string) => void;
 }) {
   // Filtre de statut géré localement au composant (chips cliquables, même pattern que les
-  // compteurs de sévérité du widget Alertes) : "all" = aucun filtre actif.
-  const [statusFilter, setStatusFilter] = useState<LeverHealthStatus | "all">("all");
+  // compteurs de sévérité du widget Alertes) : tableau vide = aucun filtre actif (multi-sélection).
+  const [statusFilter, setStatusFilter] = useState<LeverHealthStatus[]>([]);
 
   if (groups.length === 0) {
     return <p className="py-10 text-center text-sm text-tertiary">{labels.empty}</p>;
@@ -46,9 +47,9 @@ export function InitiativeHealthMatrix({
   const filteredGroups = groups.map((group) => ({
     ...group,
     cells:
-      statusFilter === "all"
+      statusFilter.length === 0
         ? group.cells
-        : group.cells.filter((cell) => cell.health === statusFilter),
+        : group.cells.filter((cell) => statusFilter.includes(cell.health)),
   }));
 
   return (
@@ -56,12 +57,14 @@ export function InitiativeHealthMatrix({
       {/* Puces de filtre par statut — cliquer bascule actif/inactif ; état actif = fond plein. */}
       <div className="flex flex-wrap items-center gap-1.5">
         {FILTERABLE_HEALTH.map((status) => {
-          const isActive = statusFilter === status;
+          const isActive = statusFilter.includes(status);
           return (
             <button
               key={status}
               type="button"
-              onClick={() => setStatusFilter((prev) => (prev === status ? "all" : status))}
+              onClick={() =>
+                setStatusFilter((prev) => toggleInSelection(prev, status) as LeverHealthStatus[])
+              }
               className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition ${
                 isActive
                   ? `${HEALTH_STYLE[status]} border-transparent text-white`

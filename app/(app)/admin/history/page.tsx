@@ -1,5 +1,6 @@
 "use client";
 
+import { MultiSelect } from "@/components/shared/MultiSelect";
 import { useEffect, useState } from "react";
 import { History } from "lucide-react";
 import type { AuditEntry, Lever } from "@/types";
@@ -57,8 +58,8 @@ export default function AdminHistoryPage() {
   const companyId = user?.companyId ?? null;
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [levers, setLevers] = useState<Lever[]>([]);
-  const [actionFilter, setActionFilter] = useState<string>("all");
-  const [entityFilter, setEntityFilter] = useState<string>("all");
+  const [actionFilter, setActionFilter] = useState<string[]>([]);
+  const [entityFilter, setEntityFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -74,22 +75,26 @@ export default function AdminHistoryPage() {
   const scopedAudit = filterAuditByCompany(audit, levers, companyId);
 
   const filtered = scopedAudit.filter((entry) => {
-    if (actionFilter !== "all" && entry.action !== actionFilter) return false;
-    if (entityFilter !== "all") {
+    if (actionFilter.length > 0 && !actionFilter.includes(entry.action)) return false;
+    if (entityFilter.length > 0) {
       const e = entry.entity.toLowerCase();
-      if (entityFilter === "lever" && !e.startsWith("l") && !e.startsWith("sl")) return false;
-      if (entityFilter === "sublever" && !e.startsWith("sl")) return false;
-      if (entityFilter === "movement" && !e.startsWith("mv")) return false;
-      if (entityFilter === "employee" && !e.startsWith("emp")) return false;
+      // Multi-sélection : l'entrée passe si elle correspond à AU MOINS un type d'entité coché.
       // Entités Plan Stratégique (round audit trail) — ids générés par `newId()`
-      // (lib/hooks/useStrategicData.ts), toujours `{PREFIX}-...`, un préfixe distinct par type
-      // d'entité (voir son doc-comment) : "ax-" (axe), "ch-" (chantier), "ca-" (projet, alias de
-      // ChantierAction), "ind-" (indicateur). Vérifiés avec le tiret pour ne jamais chevaucher un
-      // futur préfixe Performance à une seule lettre.
-      if (entityFilter === "axis" && !e.startsWith("ax-")) return false;
-      if (entityFilter === "chantier" && !e.startsWith("ch-")) return false;
-      if (entityFilter === "projet" && !e.startsWith("ca-")) return false;
-      if (entityFilter === "indicator" && !e.startsWith("ind-")) return false;
+      // (lib/hooks/useStrategicData.ts), toujours `{PREFIX}-...` : "ax-" (axe), "ch-" (chantier),
+      // "ca-" (projet), "ind-" (indicateur) ; avec le tiret pour ne jamais chevaucher un futur
+      // préfixe Performance à une seule lettre.
+      const matchesEntity = (f: string) => {
+        if (f === "lever") return e.startsWith("l") || e.startsWith("sl");
+        if (f === "sublever") return e.startsWith("sl");
+        if (f === "movement") return e.startsWith("mv");
+        if (f === "employee") return e.startsWith("emp");
+        if (f === "axis") return e.startsWith("ax-");
+        if (f === "chantier") return e.startsWith("ch-");
+        if (f === "projet") return e.startsWith("ca-");
+        if (f === "indicator") return e.startsWith("ind-");
+        return false;
+      };
+      if (!entityFilter.some(matchesEntity)) return false;
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -118,37 +123,39 @@ export default function AdminHistoryPage() {
           placeholder={t("adminHistory.searchPlaceholder", "Rechercher...")}
           className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral w-56"
         />
-        <select
-          value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value)}
-          className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-        >
-          <option value="all">{t("adminHistory.allActions", "Toutes les actions")}</option>
-          <option value="created">{ACTION_LABELS.created}</option>
-          <option value="updated">{ACTION_LABELS.updated}</option>
-          <option value="deleted">{ACTION_LABELS.deleted}</option>
-          <option value="completed">{ACTION_LABELS.completed}</option>
-          <option value="validated">{ACTION_LABELS.validated}</option>
-          <option value="commented">{ACTION_LABELS.commented}</option>
-          <option value="approval_requested">{ACTION_LABELS.approval_requested}</option>
-          <option value="approval_approved">{ACTION_LABELS.approval_approved}</option>
-          <option value="approval_rejected">{ACTION_LABELS.approval_rejected}</option>
-        </select>
-        <select
-          value={entityFilter}
-          onChange={(e) => setEntityFilter(e.target.value)}
-          className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-        >
-          <option value="all">{t("adminHistory.allEntities", "Toutes les entités")}</option>
-          <option value="lever">{t("dashboard.tableHeader.leverCount", "Leviers")}</option>
-          <option value="sublever">{t("adminHistory.entity.sublevers", "Sous-leviers")}</option>
-          <option value="movement">{t("adminHistory.entity.hrMovements", "Mouvements RH")}</option>
-          <option value="employee">{t("adminHistory.entity.employees", "Employés")}</option>
-          <option value="axis">{t("adminHistory.entity.axis", "Axes")}</option>
-          <option value="chantier">{t("adminHistory.entity.chantier", "Chantiers")}</option>
-          <option value="projet">{t("adminHistory.entity.projet", "Projets")}</option>
-          <option value="indicator">{t("adminHistory.entity.indicator", "Indicateurs")}</option>
-        </select>
+        <MultiSelect
+          label={t("adminHistory.filterAction", "Action")}
+          placeholder={t("adminHistory.allActions", "Toutes les actions")}
+          values={actionFilter}
+          onChange={setActionFilter}
+          options={[
+            { value: "created", label: ACTION_LABELS.created },
+            { value: "updated", label: ACTION_LABELS.updated },
+            { value: "deleted", label: ACTION_LABELS.deleted },
+            { value: "completed", label: ACTION_LABELS.completed },
+            { value: "validated", label: ACTION_LABELS.validated },
+            { value: "commented", label: ACTION_LABELS.commented },
+            { value: "approval_requested", label: ACTION_LABELS.approval_requested },
+            { value: "approval_approved", label: ACTION_LABELS.approval_approved },
+            { value: "approval_rejected", label: ACTION_LABELS.approval_rejected },
+          ]}
+        />
+        <MultiSelect
+          label={t("adminHistory.filterEntity", "Entité")}
+          placeholder={t("adminHistory.allEntities", "Toutes les entités")}
+          values={entityFilter}
+          onChange={setEntityFilter}
+          options={[
+            { value: "lever", label: t("dashboard.tableHeader.leverCount", "Leviers") },
+            { value: "sublever", label: t("adminHistory.entity.sublevers", "Sous-leviers") },
+            { value: "movement", label: t("adminHistory.entity.hrMovements", "Mouvements RH") },
+            { value: "employee", label: t("adminHistory.entity.employees", "Employés") },
+            { value: "axis", label: t("adminHistory.entity.axis", "Axes") },
+            { value: "chantier", label: t("adminHistory.entity.chantier", "Chantiers") },
+            { value: "projet", label: t("adminHistory.entity.projet", "Projets") },
+            { value: "indicator", label: t("adminHistory.entity.indicator", "Indicateurs") },
+          ]}
+        />
         <span className="text-xs text-text-secondary">
           {t("adminHistory.entryCount", "{n} entrée(s)").replace("{n}", String(sorted.length))}
         </span>

@@ -142,7 +142,7 @@ export const HR_DIMENSION_REGISTRY: HrDimensionDef[] = [
     getValue: (m) => m.toDepartment || NOT_APPLICABLE,
   },
   { key: "country", label: "Pays", getValue: (m) => m.country || FALLBACK_LABEL },
-  { key: "workstream", label: "Workstream", getValue: (m) => m.workstream || FALLBACK_LABEL },
+  { key: "workstream", label: "Chantier", getValue: (m) => m.workstream || FALLBACK_LABEL },
   { key: "function", label: "Fonction", getValue: (m) => m.function || FALLBACK_LABEL },
   { key: "hrOwner", label: "Owner RH", getValue: (m) => m.hrOwner || FALLBACK_LABEL },
   { key: "status", label: "Statut", getValue: (m) => m.status },

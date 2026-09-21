@@ -4,10 +4,9 @@ import type {
   HierarchyLevelDef,
   HierarchyNode,
   Lever,
-  LeverAction,
   Workstream,
 } from "@/types";
-import { MONTH_LABELS } from "@/lib/engine";
+import { MONTH_LABELS, leverImpactsOf } from "@/lib/engine";
 
 /**
  * Sélecteurs purs pour les graphiques de suivi des coûts du module Finance
@@ -23,13 +22,11 @@ export type FinanceGranularity = "month" | "quarter" | "year";
 
 export type CostImpactRow = {
   impact: ActionImpact;
-  action: LeverAction;
   lever: Lever;
 };
 
 export type SavingImpactRow = {
   impact: ActionImpact;
-  action: LeverAction;
   lever: Lever;
 };
 
@@ -37,32 +34,40 @@ function round2(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
-/** Aplatit tous les impacts de type "cost" de tous les leviers/actions, avec leur levier/action
- *  parent — exclut les leviers annulés (même filtre que `programSummary`/`realizedSavings` dans
- *  lib/engine.ts). */
+/** Aplatit tous les impacts de type "cost" des leviers actifs (via `leverImpactsOf` : impacts
+ *  portés par le levier, repli sur les anciens impacts d'actions) — exclut les leviers annulés
+ *  (même filtre que `programSummary`/`realizedSavings`). Les impacts "fte" sont exclus (leur
+ *  salaire chargé est traité par le moteur ETP, pas comme coût d'investissement). */
 export function flattenCostImpacts(data: BeTrackData): CostImpactRow[] {
   return data.levers
     .filter((lever) => lever.status !== "cancelled")
     .flatMap((lever) =>
-      (lever.actions ?? []).flatMap((action) =>
-        (action.impacts ?? [])
-          .filter((impact) => impact.type === "cost")
-          .map((impact) => ({ impact, action, lever }))
-      )
+      leverImpactsOf(lever)
+        .filter((impact) => impact.type === "cost")
+        .map((impact) => ({ impact, lever }))
     );
 }
 
-/** Aplatit tous les impacts de type "saving" de tous les leviers/actions, avec leur levier/action
- *  parent — même filtre d'exclusion (leviers annulés) que `flattenCostImpacts`. */
+/** Aplatit les impacts "saving" RÉCURRENTS des leviers actifs. Les gains one-off sont exclus des
+ *  totaux de savings (voir `flattenOneOffGainImpacts` pour les afficher à part). */
 export function flattenSavingImpacts(data: BeTrackData): SavingImpactRow[] {
   return data.levers
     .filter((lever) => lever.status !== "cancelled")
     .flatMap((lever) =>
-      (lever.actions ?? []).flatMap((action) =>
-        (action.impacts ?? [])
-          .filter((impact) => impact.type === "saving")
-          .map((impact) => ({ impact, action, lever }))
-      )
+      leverImpactsOf(lever)
+        .filter((impact) => impact.type === "saving" && impact.gainRecurrence !== "oneoff")
+        .map((impact) => ({ impact, lever }))
+    );
+}
+
+/** Gains ponctuels (one-off) des leviers actifs — à afficher séparément, jamais dans les savings. */
+export function flattenOneOffGainImpacts(data: BeTrackData): SavingImpactRow[] {
+  return data.levers
+    .filter((lever) => lever.status !== "cancelled")
+    .flatMap((lever) =>
+      leverImpactsOf(lever)
+        .filter((impact) => impact.type === "saving" && impact.gainRecurrence === "oneoff")
+        .map((impact) => ({ impact, lever }))
     );
 }
 
@@ -99,30 +104,30 @@ export function isInvestNature(nature: ActionImpact["nature"]): boolean {
  *    `capexDeploymentDate`, voir `bucketCostsByPeriod` qui répartit le montant entre les deux.
  *  - OPEX (récurrent ou one-off), ou CAPEX sans date renseignée : date de début de l'action, seule
  *    date toujours disponible sur une ligne de coût. */
-function referenceDate(impact: ActionImpact, action: LeverAction): string {
+function referenceDate(impact: ActionImpact, lever: Lever): string {
   if (impact.nature === "capex") {
     if (impact.capexAllocationMode === "smoothed" && impact.capexStartDate) {
       return impact.capexStartDate;
     }
     if (impact.capexDeploymentDate) return impact.capexDeploymentDate;
   }
-  return action.start;
+  return lever.start;
 }
 
 /** Date de référence d'un gain : `gainDate` (encaissement réel) si renseignée, sinon date de
  *  début de l'action qui le porte — même repli que `referenceDate` pour les coûts. */
-function savingReferenceDate(impact: ActionImpact, action: LeverAction): string {
-  return impact.gainDate ?? action.start;
+function savingReferenceDate(impact: ActionImpact, lever: Lever): string {
+  return impact.gainDate ?? lever.start;
 }
 
 /** Un coût est "déjà engagé" si sa date de référence (voir `referenceDate`) est passée, ou —
  *  pour un OPEX sans date CAPEX dédiée — si l'action qui le porte est en cours ou terminée. Un
  *  levier/action encore "à faire" avec une date de début future reste "à venir". */
 export function isCostEngaged(
-  row: Pick<CostImpactRow, "impact" | "action">,
+  row: Pick<CostImpactRow, "impact" | "lever">,
   today: Date = new Date()
 ): boolean {
-  const { impact, action } = row;
+  const { impact, lever } = row;
   if (impact.nature === "capex") {
     const refDate =
       impact.capexAllocationMode === "smoothed"
@@ -130,10 +135,9 @@ export function isCostEngaged(
         : impact.capexDeploymentDate;
     if (refDate) return new Date(refDate).getTime() <= today.getTime();
   }
-  if (action.status === "done") return true;
-  if (action.status === "delayed") return true; // en retard = déjà censé être engagé
-  if (action.status === "in_progress") return new Date(action.start).getTime() <= today.getTime();
-  return false; // "todo" : pas encore engagé
+  if (lever.status === "delivered") return true;
+  if (lever.status === "in_progress") return new Date(lever.start).getTime() <= today.getTime();
+  return false; // idée / qualifié / validé : pas encore engagé
 }
 
 /** Répartition Engagé / À venir / Total (€M) des coûts "Invest" (CAPEX + OPEX one-off,
@@ -238,7 +242,7 @@ function attributeCostRowsToPeriods(
 ): PeriodAttributedCostRow[] {
   const out: PeriodAttributedCostRow[] = [];
   for (const row of rows) {
-    const { impact, action } = row;
+    const { impact, lever } = row;
     if (
       impact.nature === "capex" &&
       impact.capexAllocationMode === "smoothed" &&
@@ -256,7 +260,7 @@ function attributeCostRowsToPeriods(
       }
       continue;
     }
-    const ref = new Date(referenceDate(impact, action));
+    const ref = new Date(referenceDate(impact, lever));
     out.push({ ...row, periodAmount: impact.amount, periodKey: periodSortKey(ref, granularity) });
   }
   return out;
@@ -338,8 +342,8 @@ export function bucketRecurrentOpexByPeriod(
 ): CostPeriodPoint[] {
   const rows = flattenCostImpacts(data).filter(({ impact }) => impact.nature === "opex_rec");
   const byPeriod = new Map<string, number>();
-  for (const { impact, action } of rows) {
-    const d = new Date(action.start);
+  for (const { impact, lever } of rows) {
+    const d = new Date(lever.start);
     const key = periodSortKey(d, granularity);
     byPeriod.set(key, (byPeriod.get(key) ?? 0) + impact.amount);
   }
@@ -355,8 +359,8 @@ export function bucketSavingsByPeriod(
 ): CostPeriodPoint[] {
   const rows = flattenSavingImpacts(data);
   const byPeriod = new Map<string, number>();
-  for (const { impact, action } of rows) {
-    const d = new Date(savingReferenceDate(impact, action));
+  for (const { impact, lever } of rows) {
+    const d = new Date(savingReferenceDate(impact, lever));
     const key = periodSortKey(d, granularity);
     byPeriod.set(key, (byPeriod.get(key) ?? 0) + impact.amount);
   }

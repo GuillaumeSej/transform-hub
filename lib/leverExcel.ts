@@ -55,6 +55,7 @@ export function leverToExcelRow(
     "Réalisé à date (€M)": engine.realizedSavings(lever),
     "Impact estimé (ETP)": lever.fteImpact,
     "Réalisé à date (ETP)": engine.realizedFte(lever),
+    "Gains one-off (€M)": engine.leverImpactTotals(lever).oneOffGains,
     "Population impactée": data.workstreams.find((w) => w.id === lever.popImpacted)?.name ?? "",
     "CAPEX (€M)": lever.capex,
     "OPEX one-off (€M)": lever.opexOneOff,
@@ -66,4 +67,40 @@ export function leverToExcelRow(
     "Créé le": lever.createdAt,
     "Dernière mise à jour": lever.lastUpdate,
   };
+}
+
+const IMPACT_TYPE_EXPORT = { cost: "Coût", saving: "Gain", fte: "ETP" } as const;
+const IMPACT_NATURE_EXPORT = {
+  capex: "CAPEX",
+  opex_rec: "OPEX récurrent",
+  oneoff: "One-off",
+} as const;
+
+/** Lignes de la feuille "Impacts" (impacts portés par le levier) — mêmes colonnes que
+ *  `IMPACT_IMPORT_HEADERS` (lib/leverExcelImport.ts) ; "Nom de l'action" reste vide. */
+export function leverImpactsToExcelRows(lever: Lever): Record<string, string | number>[] {
+  return engine.leverImpactsOf(lever).map((imp) => ({
+    "Code Levier": lever.code,
+    "Nom de l'action": "",
+    Type: IMPACT_TYPE_EXPORT[imp.type],
+    Nature: imp.type === "cost" ? IMPACT_NATURE_EXPORT[imp.nature] : "",
+    "Montant (€M)": imp.amount,
+    ETP: imp.fteCount ?? "",
+    "Type de gain": "",
+    "Date CAPEX": imp.capexDeploymentDate ?? "",
+    "Date gain": imp.gainDate ?? "",
+    "Poste de coût": imp.pnlMap ?? "",
+    "Centre de coût": imp.costCenter ?? "",
+    "Entité P&L": imp.entity ?? "",
+    Commentaire: "",
+    Mode:
+      imp.type === "saving"
+        ? imp.gainRecurrence === "oneoff"
+          ? "Gain one-off"
+          : "Gain annuel"
+        : "",
+    "Nature de l'impact": imp.natureId ?? "",
+    Technologie: imp.technology ?? "",
+    Sens: imp.type === "fte" ? (imp.fteDirection === "hire" ? "Recrutement" : "Départ") : "",
+  }));
 }

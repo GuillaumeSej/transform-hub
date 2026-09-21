@@ -4,6 +4,7 @@ import {
   STATUS_LABEL,
   STATUS_SHORT_LABEL,
 } from "@/lib/status-config";
+import { getImpactNatures } from "@/lib/impactConfig";
 import type {
   ActionImpact,
   ActionStatus,
@@ -129,6 +130,11 @@ export const IMPACT_IMPORT_HEADERS = [
   "Centre de coût",
   "Entité P&L",
   "Commentaire",
+  // Colonnes ajoutées (impacts portés par le LEVIER — "Nom de l'action" peut alors rester vide) :
+  "Mode", // Gain annuel | Gain one-off
+  "Nature de l'impact", // libellé d'une nature paramétrée (matières premières, main-d'œuvre...)
+  "Technologie",
+  "Sens", // Type = ETP : Recrutement | Départ (Montant = salaire chargé total, ETP = nombre)
 ] as const;
 
 // ---------- Libellés humains <-> valeurs internes ----------
@@ -143,6 +149,26 @@ const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
 const IMPACT_TYPE_LABEL: Record<ActionImpact["type"], string> = {
   cost: "Coût",
   saving: "Gain",
+  fte: "ETP",
+};
+
+const GAIN_MODE_LABELS: Record<string, "annual" | "oneoff"> = {
+  "gain annuel": "annual",
+  annuel: "annual",
+  récurrent: "annual",
+  recurrent: "annual",
+  "gain one-off": "oneoff",
+  "one-off": "oneoff",
+  oneoff: "oneoff",
+  ponctuel: "oneoff",
+};
+
+const FTE_DIRECTION_LABELS: Record<string, "hire" | "departure"> = {
+  recrutement: "hire",
+  embauche: "hire",
+  départ: "departure",
+  depart: "departure",
+  réduction: "departure",
 };
 
 const IMPACT_NATURE_LABEL: Record<ActionImpact["nature"], string> = {
@@ -623,6 +649,7 @@ export function validateLeverImportRows(
 
   // ---------- Feuille "Impacts" ----------
   let impactSeq = 0;
+  const leverImpactsByCode = new Map<string, ActionImpact[]>();
 
   sheets.impacts.forEach((row, i) => {
     const rowNumber = i + 2;
@@ -635,16 +662,12 @@ export function validateLeverImportRows(
     }
     const lowerLeverCode = leverCodeRaw.toLowerCase();
     const actionNameRaw = str(row["Nom de l'action"]);
-    if (!actionNameRaw) {
-      errors.push({ sheet: "Impacts", rowNumber, reason: `"Nom de l'action" est obligatoire` });
-      return;
-    }
-
+    // "Nom de l'action" vide = impact porté directement par le levier (modèle actuel).
     const actionsForLever = actionsByLeverCode.get(lowerLeverCode) ?? [];
-    const matched = actionsForLever.find(
-      (a) => a.action.name.toLowerCase() === actionNameRaw.toLowerCase()
-    );
-    if (!matched) {
+    const matched = actionNameRaw
+      ? actionsForLever.find((a) => a.action.name.toLowerCase() === actionNameRaw.toLowerCase())
+      : undefined;
+    if (actionNameRaw && !matched) {
       errors.push({
         sheet: "Impacts",
         rowNumber,
@@ -746,9 +769,39 @@ export function validateLeverImportRows(
     const comment = str(row["Commentaire"]);
 
     impactSeq += 1;
+    const modeRaw = str(row["Mode"]);
+    const gainRecurrence = modeRaw ? GAIN_MODE_LABELS[modeRaw.toLowerCase()] : undefined;
+    if (modeRaw && !gainRecurrence) {
+      errors.push({
+        sheet: "Impacts",
+        rowNumber,
+        reason: `Mode "${modeRaw}" inconnu (attendu : Gain annuel, Gain one-off)`,
+      });
+      return;
+    }
+    const directionRaw = str(row["Sens"]);
+    const fteDirection = directionRaw
+      ? FTE_DIRECTION_LABELS[directionRaw.toLowerCase()]
+      : undefined;
+    if (directionRaw && !fteDirection) {
+      errors.push({
+        sheet: "Impacts",
+        rowNumber,
+        reason: `Sens "${directionRaw}" inconnu (attendu : Recrutement, Départ)`,
+      });
+      return;
+    }
+    const natureLabelRaw = str(row["Nature de l'impact"]);
+    const natureId = natureLabelRaw
+      ? getImpactNatures(undefined).find(
+          (n) => n.label.toLowerCase() === natureLabelRaw.toLowerCase() || n.id === natureLabelRaw
+        )?.id
+      : undefined;
+    const impactLabel = `${matched ? `${matched.action.name} — ` : ""}${IMPACT_TYPE_LABEL[type]} (${IMPACT_NATURE_LABEL[nature]})`;
+
     const impact: ActionImpact = {
       id: makeImpactId(impactSeq),
-      label: `${matched.action.name} — ${IMPACT_TYPE_LABEL[type]} (${IMPACT_NATURE_LABEL[nature]})`,
+      label: impactLabel,
       type,
       nature,
       amount,
@@ -759,10 +812,21 @@ export function validateLeverImportRows(
       savingType,
       capexDeploymentDate,
       gainDate,
+      ...(type === "saving" && gainRecurrence ? { gainRecurrence } : {}),
+      ...(type === "fte" ? { fteDirection: fteDirection ?? "departure" } : {}),
+      ...(natureId ? { natureId } : {}),
+      ...(str(row["Technologie"]) ? { technology: str(row["Technologie"]) } : {}),
       comments: comment ? [{ user: "Import Excel", ts: nowDate(), text: comment }] : undefined,
     };
 
-    matched.action.impacts = [...(matched.action.impacts ?? []), impact];
+    if (matched) {
+      matched.action.impacts = [...(matched.action.impacts ?? []), impact];
+    } else {
+      leverImpactsByCode.set(lowerLeverCode, [
+        ...(leverImpactsByCode.get(lowerLeverCode) ?? []),
+        impact,
+      ]);
+    }
   });
 
   // ---------- Assemblage final : chaque levier reçoit son plan d'action ----------
@@ -775,7 +839,13 @@ export function validateLeverImportRows(
     const declaredActions = (actionsByLeverCode.get(lowerCode) ?? []).map((a) => a.action);
     const existing = existingByCode.get(lowerCode);
     const actions = declaredActions; // toujours ce que le fichier déclare, y compris vide — l'import Excel fait foi
-    toUpsert.push({ ...p.values, risk: existing?.risk ?? "low", actions });
+    const leverImpacts = leverImpactsByCode.get(lowerCode);
+    toUpsert.push({
+      ...p.values,
+      risk: existing?.risk ?? "low",
+      actions,
+      ...(leverImpacts && leverImpacts.length > 0 ? { impacts: leverImpacts } : {}),
+    });
     if (existing) updateCount++;
     else createCount++;
   }

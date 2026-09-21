@@ -16,8 +16,11 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type WorkstreamBarPoint = {
   label: string;
+  /** Cible RÉACTUALISÉE (barre de fond). */
   target: number;
   realized: number;
+  /** Planifié initial (plan figé) — dessiné en contour pointillé derrière/autour des barres. */
+  planned?: number;
   reforecast?: number;
   /** Détail par levier de la contribution à la cible / au réalisé — alimente le tooltip détaillé
    *  (même esprit que le Mekko : lister les leviers derrière un segment agrégé). Optionnel : les
@@ -217,17 +220,21 @@ export function WorkstreamBarChart({
   data,
   labelTarget,
   labelRealized,
+  labelPlanned,
   onSegmentClick,
 }: {
   data: WorkstreamBarPoint[];
   labelTarget?: string;
   labelRealized?: string;
+  labelPlanned?: string;
   onSegmentClick?: (point: WorkstreamBarPoint, segment: "target" | "realized") => void;
 }) {
   const { t } = useTranslation();
-  const resolvedLabelTarget = labelTarget ?? t("chart.bar.target", "Cible");
+  const resolvedLabelTarget = labelTarget ?? t("chart.bar.target", "Cible réactualisée");
   const resolvedLabelRealized = labelRealized ?? t("chart.bar.realized", "Réalisé");
+  const resolvedLabelPlanned = labelPlanned ?? t("chart.bar.planned", "Planifié initial");
   const fmt = (v: number) => `€${v}M`;
+  const hasPlanned = data.some((d) => d.planned !== undefined);
 
   if (data.length === 0) {
     return (
@@ -243,7 +250,7 @@ export function WorkstreamBarChart({
     remaining: Math.max(0, Math.round((d.target - d.realized) * 10) / 10),
   }));
 
-  const maxValue = Math.max(...data.map((d) => Math.max(d.target, d.realized)));
+  const maxValue = Math.max(...data.map((d) => Math.max(d.target, d.realized, d.planned ?? 0)));
 
   // Label combiné du segment "remaining" : la cible totale au-dessus de la pile (comportement
   // existant) + l'écart (valeur propre au segment gris) centré à l'intérieur du segment, mais
@@ -298,6 +305,12 @@ export function WorkstreamBarChart({
           <span>{isTarget ? resolvedLabelTarget : resolvedLabelRealized}</span>
           <span className="font-semibold text-primary">{fmt(total)}</span>
         </div>
+        {point.planned !== undefined && (
+          <div className="flex items-center justify-between gap-3 text-secondary">
+            <span>{resolvedLabelPlanned}</span>
+            <span className="font-semibold text-primary">{fmt(point.planned)}</span>
+          </div>
+        )}
         {breakdown && breakdown.length > 0 && (
           <BreakdownList items={breakdown} fmt={fmt} color={hexForChantier(point.label)} />
         )}
@@ -327,6 +340,9 @@ export function WorkstreamBarChart({
             // hasard selon le filtre actif.
             interval={0}
           />
+          {/* Second axe X masqué (mêmes catégories) : la barre "Planifié initial" se superpose
+              exactement aux barres empilées au lieu de s'y juxtaposer. */}
+          <XAxis xAxisId="planned" dataKey="label" hide />
           <YAxis
             tick={{ fontSize: 11 }}
             axisLine={false}
@@ -387,6 +403,20 @@ export function WorkstreamBarChart({
           >
             <LabelList dataKey="remaining" content={renderRemainingLabels} />
           </Bar>
+          {/* Planifié initial : contour pointillé sans remplissage */}
+          {hasPlanned && (
+            <Bar
+              dataKey="planned"
+              name={resolvedLabelPlanned}
+              xAxisId="planned"
+              fill="none"
+              stroke="#320300"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              isAnimationActive={false}
+              legendType="plainline"
+            />
+          )}
         </BarChart>
       </ResponsiveContainer>
     </div>

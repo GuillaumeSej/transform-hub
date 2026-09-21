@@ -19,7 +19,7 @@ const splineMono = Spline_Sans_Mono({
 // (plein écran, icône marque, splash noir). Chemins via assetPath pour le basePath GitHub Pages.
 export const metadata: Metadata = {
   title: "BeTrack — BearingPoint Transformation Platform",
-  description: "Plateforme de pilotage de transformation — savings, leviers, workstreams.",
+  description: "Plateforme de pilotage de transformation — savings, leviers, chantiers.",
   manifest: assetPath("/manifest.webmanifest"),
   appleWebApp: {
     capable: true,

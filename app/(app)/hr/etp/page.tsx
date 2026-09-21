@@ -18,7 +18,8 @@ import { HrExcelButtons } from "@/components/shared/HrExcelButtons";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { type FilterDef } from "@/components/shared/FilterBar";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
-import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
+import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
+import { matchesFilter } from "@/lib/filterUtils";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import type {
@@ -462,19 +463,19 @@ export default function BaseEtpPage() {
   // `FilterBar` de cette page (employés / mouvements) partageaient le même `setFilters`, donc des
   // `FilterDef` de même `key` (ex. "department") s'activaient/se désactivaient l'un l'autre à
   // tort — `namespace` isole chacun dans son propre paramètre d'URL.
-  const { activeFilters: etpActiveFilters, setFilters: setEtpFilters } = useFilterBarState(
+  const { activeFilters: etpActiveFilters, setFilters: setEtpFilters } = useMultiFilterBarState(
     etpFilterDefs,
     { namespace: "emp" }
   );
   const { activeFilters: movementActiveFilters, setFilters: setMovementFilters } =
-    useFilterBarState(movementFilterDefs, { namespace: "mov" });
+    useMultiFilterBarState(movementFilterDefs, { namespace: "mov" });
 
   const filteredEmployees = useMemo(
     () =>
       employeeRows.filter((row) =>
         Object.entries(etpActiveFilters).every(([key, value]) => {
           const def = etpFilterDefs.find((d) => d.key === key);
-          return !def || value == null || def.getValue(row) === value;
+          return !def || matchesFilter(def.getValue(row), value);
         })
       ),
     [employeeRows, etpActiveFilters, etpFilterDefs]
@@ -491,7 +492,7 @@ export default function BaseEtpPage() {
     return movementRows.filter((row) =>
       Object.entries(movementActiveFilters).every(([key, value]) => {
         const def = movementFilterDefs.find((d) => d.key === key);
-        return !def || value == null || def.getValue(row) === value;
+        return !def || matchesFilter(def.getValue(row), value);
       })
     );
   }, [movementRows, movementActiveFilters, movementFilterDefs, highlightedMovementIds]);
@@ -839,6 +840,7 @@ export default function BaseEtpPage() {
           <div className="mb-3.5 rounded-md border border-border bg-white p-3">
             <DropdownFilterBar
               items={employeeRows}
+              multiple
               defs={etpFilterDefs}
               active={etpActiveFilters}
               onChange={setEtpFilters}
@@ -880,6 +882,7 @@ export default function BaseEtpPage() {
             <div className="mb-3.5 rounded-md border border-border bg-white p-3">
               <DropdownFilterBar
                 items={movementRows}
+                multiple
                 defs={movementFilterDefs}
                 active={movementActiveFilters}
                 onChange={setMovementFilters}

@@ -57,8 +57,10 @@ import {
   SavingsPeriodCumulChart,
 } from "@/components/shared/charts/HrGooduelleCharts";
 import { type FilterDef } from "@/components/shared/FilterBar";
+import { MultiSelect } from "@/components/shared/MultiSelect";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
-import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
+import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
+import { matchesFilter, parseFilterValues, serializeFilterValues } from "@/lib/filterUtils";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
@@ -329,7 +331,7 @@ export default function HrDashboardPage() {
   const filterDefs: FilterDef<WorkforceMovement>[] = useMemo(
     () => [
       { key: "type", label: "Type", getValue: (m) => m.type },
-      { key: "workstream", label: "Workstream", getValue: (m) => m.workstream || "—" },
+      { key: "workstream", label: "Chantier", getValue: (m) => m.workstream || "—" },
       {
         key: "function",
         label: t("dashboard.function", "Fonction"),
@@ -358,7 +360,7 @@ export default function HrDashboardPage() {
   // Round <n> : hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts), remplace un
   // `useState<ActiveFilters>({})` local — même contrat pour `activeFilters`/`onChange`, mais
   // synchronisé dans l'URL (comme les autres pages à `FilterBar`, voir ce hook pour le détail).
-  const { activeFilters, setFilters: setActiveFilters } = useFilterBarState(filterDefs);
+  const { activeFilters, setFilters: setActiveFilters } = useMultiFilterBarState(filterDefs);
 
   const wf = data.workforce;
 
@@ -403,9 +405,9 @@ export default function HrDashboardPage() {
       // DropdownFilterBar (nominal).
       for (const key of keys) {
         const value = activeFilters[key];
-        if (!value) continue;
+        if (!value || value.length === 0) continue;
         const def = filterDefs.find((d) => d.key === key);
-        if (def && def.getValue(m) !== value) return false;
+        if (def && !matchesFilter(def.getValue(m), value)) return false;
       }
       return true;
     });
@@ -1101,10 +1103,14 @@ export default function HrDashboardPage() {
           </Card>
         );
       case "movement-status-by-type": {
-        const [departmentFilter, countryFilter] = (instance.view ?? "all|all").split("|");
+        // Vue du widget = "<départements>|<pays>", chaque côté = valeurs encodées séparées par des
+        // virgules (multi-sélection) ; l'ancien format ("all" / valeur simple) reste lu.
+        const [rawDepartments = "", rawCountries = ""] = (instance.view ?? "|").split("|");
+        const departmentFilter = rawDepartments === "all" ? [] : parseFilterValues(rawDepartments);
+        const countryFilter = rawCountries === "all" ? [] : parseFilterValues(rawCountries);
         const rows = movementStatusByType(filteredMovements, {
-          ...(departmentFilter !== "all" ? { department: departmentFilter } : {}),
-          ...(countryFilter !== "all" ? { country: countryFilter } : {}),
+          department: departmentFilter,
+          country: countryFilter,
         });
         const departments = Array.from(
           new Set(filteredMovements.map((movement) => movement.department).filter(Boolean))
@@ -1112,8 +1118,14 @@ export default function HrDashboardPage() {
         const countries = Array.from(
           new Set(filteredMovements.map((movement) => movement.country).filter(Boolean))
         ).sort((a, b) => a.localeCompare(b, "fr"));
-        const setFilter = (department: string, country: string) =>
-          updateLayout(setHrWidgetView(layout, instance.instanceId, `${department}|${country}`));
+        const setFilter = (department: string[], country: string[]) =>
+          updateLayout(
+            setHrWidgetView(
+              layout,
+              instance.instanceId,
+              `${serializeFilterValues(department)}|${serializeFilterValues(country)}`
+            )
+          );
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
@@ -1121,30 +1133,20 @@ export default function HrDashboardPage() {
               title={t("hr.widget.movementStatusByType", "Statut des mouvements par type")}
               actions={
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={departmentFilter}
-                    onChange={(event) => setFilter(event.target.value, countryFilter)}
-                    className="rounded-sm border border-border bg-white px-2 py-1 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
-                  >
-                    <option value="all">{t("hr.allDepartments", "Tous les départements")}</option>
-                    {departments.map((department) => (
-                      <option key={department} value={department}>
-                        {department}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={countryFilter}
-                    onChange={(event) => setFilter(departmentFilter, event.target.value)}
-                    className="rounded-sm border border-border bg-white px-2 py-1 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
-                  >
-                    <option value="all">{t("hr.allCountries", "Tous les pays")}</option>
-                    {countries.map((country) => (
-                      <option key={country} value={country}>
-                        {country}
-                      </option>
-                    ))}
-                  </select>
+                  <MultiSelect
+                    label={t("hr.filter.department", "Département")}
+                    placeholder={t("hr.allDepartments", "Tous les départements")}
+                    values={departmentFilter}
+                    onChange={(vals) => setFilter(vals, countryFilter)}
+                    options={departments.map((d) => ({ value: d, label: d }))}
+                  />
+                  <MultiSelect
+                    label={t("hr.filter.country", "Pays")}
+                    placeholder={t("hr.allCountries", "Tous les pays")}
+                    values={countryFilter}
+                    onChange={(vals) => setFilter(departmentFilter, vals)}
+                    options={countries.map((c) => ({ value: c, label: c }))}
+                  />
                 </div>
               }
             />
@@ -1263,7 +1265,7 @@ export default function HrDashboardPage() {
                   options={[
                     { value: "department", label: t("hr.department", "Département") },
                     { value: "country", label: t("dashboard.country", "Pays") },
-                    { value: "workstream", label: "Workstream" },
+                    { value: "workstream", label: "Chantier" },
                   ]}
                   value={dimension}
                   onChange={(next) =>
@@ -1282,7 +1284,7 @@ export default function HrDashboardPage() {
                           ? t("hr.department", "Département")
                           : dimension === "country"
                             ? t("dashboard.country", "Pays")
-                            : "Workstream",
+                            : "Chantier",
                         t("hr.column.baselineFte", "Baseline ETP"),
                         t("hr.current", "Actuel"),
                         t("hr.target", "Cible"),
@@ -1500,6 +1502,7 @@ export default function HrDashboardPage() {
       <div className="mb-4">
         <DropdownFilterBar
           items={wf.movements}
+          multiple
           defs={filterDefs}
           active={activeFilters}
           onChange={setActiveFilters}

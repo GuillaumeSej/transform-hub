@@ -2,29 +2,19 @@
 
 import type { LeverAction } from "@/types";
 import { Tooltip } from "@/components/shared/Tooltip";
+import { actionProgressPct } from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
-const STATUS_FILL: Record<string, string> = {
-  done: "opacity-100",
-  in_progress: "opacity-70",
-  todo: "opacity-30",
-  delayed: "opacity-50",
+const STATUS_COLOR: Record<string, string> = {
+  done: "bg-rag-green",
+  in_progress: "bg-info-blue",
+  todo: "bg-neutral-400",
+  delayed: "bg-bp-coral",
 };
 
-/** Montant net d'une action (savings − coûts) depuis ses impacts. */
-function actionNet(action: LeverAction): number {
-  let net = 0;
-  for (const imp of action.impacts ?? []) {
-    net += imp.type === "saving" ? imp.amount : -imp.amount;
-  }
-  return Math.round(net * 100) / 100;
-}
-
 /** Mini-Gantt des actions d'un levier — barres horizontales positionnées dans le temps,
- *  colorées vert (gain net) ou rouge (coût net), avec remplissage selon le statut. Affiche en
- *  plus, par ligne d'impact : un marqueur losange pour le milestone CAPEX (date d'engagement à
- *  100%) et une bande pour le gain, lissée depuis le début de l'action jusqu'à la date
- *  d'encaissement. Clic sur une barre → ouvre la fiche action (via onActionClick). */
+ *  colorées selon le statut, avec l'avancement (%) à droite de la barre. Clic sur une barre →
+ *  ouvre la fiche action (via onActionClick). */
 export function ActionGantt({
   actions,
   height,
@@ -44,21 +34,10 @@ export function ActionGantt({
     );
   }
 
-  // Calculer l'intervalle temporel global — inclut les dates de milestone CAPEX/gain pour que les
-  // marqueurs qui tombent hors de la plage start/end des actions restent visibles.
-  const allDates = actions.flatMap((a) => [
-    new Date(a.start).getTime(),
-    new Date(a.end).getTime(),
-    ...(a.impacts ?? []).flatMap((i) =>
-      [i.capexDeploymentDate, i.capexStartDate, i.gainDate]
-        .filter(Boolean)
-        .map((d) => new Date(d as string).getTime())
-    ),
-  ]);
+  const allDates = actions.flatMap((a) => [new Date(a.start).getTime(), new Date(a.end).getTime()]);
   const minTime = Math.min(...allDates);
   const maxTime = Math.max(...allDates);
   const range = maxTime - minTime || 1;
-  const pctOf = (iso: string) => ((new Date(iso).getTime() - minTime) / range) * 100;
 
   // Marqueur "aujourd'hui" — même formule que `pctOf` ci-dessus pour rester exactement aligné sur
   // les barres. `null` si le jour courant tombe hors de la plage affichée : pas de marqueur plutôt
@@ -84,7 +63,10 @@ export function ActionGantt({
 
   return (
     <div className="w-full overflow-x-auto" style={{ minHeight: totalHeight }}>
-      <div className="relative w-full" style={{ height: totalHeight, minWidth: 400 }}>
+      <div
+        className="relative w-full"
+        style={{ height: totalHeight, minWidth: 640, marginRight: 200 }}
+      >
         {/* Lignes verticales (mois) */}
         {monthLabels.map((m, i) => (
           <div
@@ -120,12 +102,9 @@ export function ActionGantt({
           const startPct = ((new Date(action.start).getTime() - minTime) / range) * 100;
           const endPct = ((new Date(action.end).getTime() - minTime) / range) * 100;
           const widthPct = Math.max(2, endPct - startPct);
-          const net = actionNet(action);
-          const isGain = net >= 0;
-          const bgColor = isGain ? "bg-rag-green" : "bg-bp-coral";
-          const statusClass = STATUS_FILL[action.status] ?? "opacity-50";
-          const fmtAmount =
-            Math.abs(net) >= 1 ? `€${net.toFixed(1)}M` : `€${Math.round(net * 1000)}K`;
+          const progress = Math.round(actionProgressPct(action));
+          const bgColor = STATUS_COLOR[action.status] ?? "bg-neutral-400";
+          const labelLeft = startPct >= 30;
           const statusLabels: Record<string, string> = {
             done: t("leverDetail.finished", "Terminé"),
             in_progress: t("leverDetail.inProgress", "En cours"),
@@ -139,22 +118,23 @@ export function ActionGantt({
               className="absolute flex items-center"
               style={{ top: idx * rowHeight + 4, left: 0, right: 0, height: rowHeight - 8 }}
             >
-              {/* Label gauche */}
+              {/* Label : à gauche de la barre s'il y a la place (≥ 30 %), sinon à droite du pourcentage,
+                  jamais tronqué (whitespace-nowrap) — nom complet aussi en tooltip. */}
               <div
-                className="absolute truncate text-[10px] font-medium text-secondary"
-                style={{
-                  left: 0,
-                  width: `${Math.max(0, startPct - 1)}%`,
-                  textAlign: "right",
-                  paddingRight: 6,
-                }}
+                title={action.name}
+                className="absolute whitespace-nowrap text-[10px] font-medium text-secondary"
+                style={
+                  labelLeft
+                    ? { right: `${100 - startPct}%`, textAlign: "right", paddingRight: 6 }
+                    : { left: `${Math.min(98, startPct + widthPct + 0.5)}%`, paddingLeft: 52 }
+                }
               >
                 {action.name}
               </div>
 
               {/* Barre — cliquable si onActionClick est fourni */}
               <Tooltip
-                text={`${action.name} · ${statusLabels[action.status] ?? action.status} · ${fmtAmount}`}
+                text={`${action.name} · ${statusLabels[action.status] ?? action.status} · ${progress}%`}
                 className="absolute"
                 style={{ left: `${startPct}%`, width: `${widthPct}%` }}
               >
@@ -169,7 +149,7 @@ export function ActionGantt({
                         }
                       : undefined
                   }
-                  className={`h-5 w-full rounded-sm ${bgColor} ${statusClass} transition-all ${
+                  className={`h-5 w-full rounded-sm ${bgColor} transition-all ${
                     onActionClick
                       ? "cursor-pointer ring-offset-1 hover:ring-2 hover:ring-bp-coral/40"
                       : ""
@@ -177,75 +157,13 @@ export function ActionGantt({
                 />
               </Tooltip>
 
-              {/* Montant droite */}
+              {/* Avancement droite */}
               <div
-                className={`absolute text-[10px] font-bold ${isGain ? "text-rag-green-dark" : "text-bp-coral"}`}
+                className="absolute text-[10px] font-bold text-secondary"
                 style={{ left: `${Math.min(98, startPct + widthPct + 0.5)}%` }}
               >
-                {fmtAmount}
+                {progress}%
               </div>
-
-              {/* Milestones CAPEX / gain par ligne d'impact */}
-              {(action.impacts ?? []).map((impact) => (
-                <span key={impact.id}>
-                  {impact.capexDeploymentDate &&
-                    impact.capexAllocationMode === "smoothed" &&
-                    impact.capexStartDate && (
-                      <span
-                        className="absolute top-0 h-1.5 rounded-sm bg-info-blue/40"
-                        style={{
-                          left: `${pctOf(impact.capexStartDate)}%`,
-                          width: `${Math.max(0, pctOf(impact.capexDeploymentDate) - pctOf(impact.capexStartDate))}%`,
-                        }}
-                        title={t(
-                          "shared.actionGantt.capexSmoothedTitle",
-                          "CAPEX {amount}€M lissé du {start} au {end}"
-                        )
-                          .replace("{amount}", String(impact.amount))
-                          .replace("{start}", impact.capexStartDate)
-                          .replace("{end}", impact.capexDeploymentDate)}
-                      />
-                    )}
-                  {impact.capexDeploymentDate && (
-                    <Tooltip
-                      text={
-                        impact.capexAllocationMode === "smoothed"
-                          ? t(
-                              "shared.actionGantt.capexSmoothedEndTooltip",
-                              "CAPEX {amount}€M lissé, fin au {date}"
-                            )
-                              .replace("{amount}", String(impact.amount))
-                              .replace("{date}", impact.capexDeploymentDate)
-                          : t(
-                              "shared.actionGantt.capexTooltip",
-                              "CAPEX {amount}€M engagé au {date}"
-                            )
-                              .replace("{amount}", String(impact.amount))
-                              .replace("{date}", impact.capexDeploymentDate)
-                      }
-                      className="absolute"
-                      style={{ left: `${pctOf(impact.capexDeploymentDate)}%`, top: "50%" }}
-                    >
-                      <span className="block h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-white bg-info-blue" />
-                    </Tooltip>
-                  )}
-                  {impact.gainDate && (
-                    <span
-                      className="absolute top-0 h-1.5 rounded-sm bg-rag-green/40"
-                      style={{
-                        left: `${startPct}%`,
-                        width: `${Math.max(0, pctOf(impact.gainDate) - startPct)}%`,
-                      }}
-                      title={t(
-                        "shared.actionGantt.gainSmoothedTitle",
-                        "Gain {amount}€M lissé jusqu'au {date}"
-                      )
-                        .replace("{amount}", String(impact.amount))
-                        .replace("{date}", impact.gainDate)}
-                    />
-                  )}
-                </span>
-              ))}
             </div>
           );
         })}
@@ -262,18 +180,6 @@ export function ActionGantt({
           ))}
         </div>
       </div>
-      {actions.some((a) => (a.impacts ?? []).some((i) => i.capexDeploymentDate || i.gainDate)) && (
-        <div className="mt-2 flex flex-wrap items-center gap-4 text-[10px] text-tertiary">
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rotate-45 border border-white bg-info-blue" />{" "}
-            {t("shared.actionGantt.legendCapex", "Milestone CAPEX")}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-1.5 w-3 rounded-sm bg-rag-green/40" />{" "}
-            {t("shared.actionGantt.legendGainSmoothed", "Gain lissé")}
-          </span>
-        </div>
-      )}
     </div>
   );
 }

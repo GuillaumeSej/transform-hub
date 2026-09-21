@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
-export type QuarterBridgePoint = { quarter: string; delta: number; cumulative: number };
+export type QuarterBridgePoint = { quarter: string; delta: number; cumulative: number | null };
 
 /** Économies par période (barres) cumulées vs plan initial (ligne pointillée).
  *

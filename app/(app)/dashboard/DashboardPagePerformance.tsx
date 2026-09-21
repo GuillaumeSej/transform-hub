@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
-import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
+import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
+import { matchesFilter, serializeFilterValues, toggleInSelection } from "@/lib/filterUtils";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { type FilterDef } from "@/components/shared/FilterBar";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
@@ -70,6 +71,8 @@ import { InitiativeHealthMatrix } from "@/components/shared/charts/InitiativeHea
 import { StageFunnel } from "@/components/shared/charts/StageFunnel";
 import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
 import { QuarterlyBridgeChart } from "@/components/shared/charts/QuarterlyBridgeChart";
+import { SavingsWaterfallChart } from "@/components/shared/charts/SavingsWaterfallChart";
+import { oneOffGainsTotal, savingsTriple, seriesToBridge } from "@/lib/dashboardSavings";
 import type { Lever, LeverStatus } from "@/types";
 import {
   DASHBOARD_WIDGET_REGISTRY,
@@ -343,7 +346,7 @@ export function DashboardPagePerformance() {
       },
       {
         key: "ws",
-        label: "Workstream",
+        label: "Chantier",
         getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       },
       { key: "owner", label: "Owner", getValue: (l) => l.owner },
@@ -373,7 +376,7 @@ export function DashboardPagePerformance() {
   // n'avaient pas d'entrée dans la table de correspondance de l'ancien `handleFilterChange` —
   // sélectionner une valeur sur l'un de ces filtres ne filtrait donc RIEN, silencieusement. Le
   // hook partagé gère n'importe quelle clé dynamique de `filterDefs` sans table de correspondance.
-  const { activeFilters, setFilters } = useFilterBarState(filterDefs);
+  const { activeFilters, setFilters } = useMultiFilterBarState(filterDefs);
 
   // Filtrage générique par `filterDefs` — même patron que `LeversPagePerformance.tsx`/
   // `app/(app)/hr/etp/page.tsx`/`app/(app)/hr/page.tsx` (voir `useFilterBarState`, même base
@@ -385,7 +388,7 @@ export function DashboardPagePerformance() {
     return programScopedLevers.filter((l) =>
       Object.entries(activeFilters).every(([key, value]) => {
         const def = filterDefs.find((d) => d.key === key);
-        return !def || value == null || def.getValue(l) === value;
+        return !def || matchesFilter(def.getValue(l), value);
       })
     );
   }, [programScopedLevers, activeFilters, filterDefs]);
@@ -446,7 +449,7 @@ export function DashboardPagePerformance() {
   // ── Alertes enrichies (manuelles + auto-générées) ──────────────────────────
   const ALERTS_PER_PAGE = 5;
   const [alertPage, setAlertPage] = useState(0);
-  const [alertTypeFilter, setAlertTypeFilter] = useState<string>("all");
+  const [alertTypeFilter, setAlertTypeFilter] = useState<string[]>([]);
   const [alertShowResolved, setAlertShowResolved] = useState(false);
   const [manualAlertOpen, setManualAlertOpen] = useState(false);
   const { alerts: allAlerts } = useNotifications(visibleData, user);
@@ -485,7 +488,7 @@ export function DashboardPagePerformance() {
   const filteredAlerts = useMemo(() => {
     let result = scopedAlerts;
     if (!alertShowResolved) result = result.filter((a) => !a.resolved);
-    if (alertTypeFilter !== "all") result = result.filter((a) => a.type === alertTypeFilter);
+    if (alertTypeFilter.length > 0) result = result.filter((a) => alertTypeFilter.includes(a.type));
     return result;
   }, [scopedAlerts, alertShowResolved, alertTypeFilter]);
 
@@ -572,7 +575,7 @@ export function DashboardPagePerformance() {
   );
 
   const trajSCurve = useMemo(() => {
-    const full = engine.sCurve3(filteredData, trajGranularity);
+    const full = engine.savingsSeries(filteredData, trajGranularity);
     const start = new Date(trajRangeStart);
     const end = new Date(trajRangeEnd);
     return full.filter((p) => {
@@ -581,19 +584,14 @@ export function DashboardPagePerformance() {
     });
   }, [filteredData, trajGranularity, trajRangeStart, trajRangeEnd, labelToDate]);
 
-  const trajBridge = useMemo(() => {
-    const full = engine.financialBridge(filteredData, trajGranularity);
-    const start = new Date(trajRangeStart);
-    const end = new Date(trajRangeEnd);
-    return full.filter((p) => {
-      const d = labelToDate(p.quarter, trajGranularity);
-      return d >= start && d <= end;
-    });
-  }, [filteredData, trajGranularity, trajRangeStart, trajRangeEnd, labelToDate]);
+  // Barres = MÊME série que la courbe en S (`savingsSeries`) : valeurs identiques au basculement.
+  const trajBridge = useMemo(() => seriesToBridge(trajSCurve), [trajSCurve]);
   const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
-  const sCurve = engine.sCurve3(filteredData, sCurveGranularity);
+  const sCurve = engine.savingsSeries(filteredData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
-  const bridge = engine.financialBridge(filteredData, bridgeGranularity);
+  const savingsWaterfallData = useMemo(() => engine.savingsWaterfall(filteredData), [filteredData]);
+  const oneOffGains = useMemo(() => oneOffGainsTotal(filteredData), [filteredData]);
+  const bridge = seriesToBridge(engine.savingsSeries(filteredData, bridgeGranularity));
 
   // Reporte les filtres actuellement actifs sur CE dashboard vers `/levers` (Bibliothèque de
   // leviers) — dont les `FilterDef.key` sont toujours préfixés `f_` (`f_status`, `f_geo_xxx`,
@@ -602,7 +600,8 @@ export function DashboardPagePerformance() {
   const goToLevers = (params: Record<string, string>) => {
     const globalParams: Record<string, string> = {};
     Object.entries(activeFilters).forEach(([key, value]) => {
-      if (value) globalParams[`f_${key}`] = value;
+      if (value.length > 0)
+        globalParams[`f_${key}`] = value.length === 1 ? value[0] : serializeFilterValues(value);
     });
     const merged = { ...globalParams, ...params };
     const qs = new URLSearchParams(merged).toString();
@@ -628,10 +627,6 @@ export function DashboardPagePerformance() {
   };
   const currentYear = new Date(effectiveFyStart).getFullYear();
   const goToMonth = (month: string) => goToLevers({ f_endMonth: `${month} ${currentYear}` });
-  const goToBridgePeriod = (period: string, granularity = bridgeGranularity) =>
-    granularity === "quarter"
-      ? goToLevers({ f_endQuarter: period })
-      : goToLevers({ f_endMonth: period });
   const goToSCurvePoint = (label: string, granularity = sCurveGranularity) =>
     granularity === "quarter"
       ? goToLevers({ f_endQuarter: `${label} ${currentYear}` })
@@ -665,17 +660,19 @@ export function DashboardPagePerformance() {
     // cibles différentes pour un même workstream dès que `w.target` divergeait de la somme des
     // `netSavings` des leviers actifs (même classe de bug que celui déjà corrigé pour
     // `Program.target`, voir le commentaire plus bas sur l'ambition programme).
-    const { realized, target } = engine.workstreamSummary(filteredData, w.id);
-    const reforecast =
-      Math.round(levers.reduce((s, l) => s + (l.reforecast?.netSavings ?? l.netSavings), 0) * 10) /
-      10;
+    // `target` = cible RÉACTUALISÉE (barre de fond) ; `planned` = planifié initial (contour
+    // pointillé) ; `realized` = réalisé. Leviers annulés exclus (voir `savingsTriple`).
+    const { planned, reforecast, realized } = savingsTriple(levers);
     return {
       label: w.name,
-      target,
+      target: reforecast,
+      planned,
       realized,
-      reforecast: Math.abs(reforecast - target) > 0.05 ? reforecast : undefined,
       leverBreakdown: {
-        target: levers.map((l) => ({ name: l.name, value: l.netSavings })),
+        target: levers.map((l) => ({
+          name: l.name,
+          value: engine.displayedReforecastNet(l).value,
+        })),
         realized: levers.map((l) => ({ name: l.name, value: engine.realizedSavings(l) })),
       },
     };
@@ -692,20 +689,17 @@ export function DashboardPagePerformance() {
     });
     return Array.from(groups.entries())
       .map(([key, levers]) => {
-        const target = Math.round(levers.reduce((s, l) => s + l.netSavings, 0) * 10) / 10;
-        const realized =
-          Math.round(levers.reduce((s, l) => s + engine.realizedSavings(l), 0) * 10) / 10;
-        const reforecast =
-          Math.round(
-            levers.reduce((s, l) => s + (l.reforecast?.netSavings ?? l.netSavings), 0) * 10
-          ) / 10;
+        const { planned, reforecast, realized } = savingsTriple(levers);
         return {
           label: key,
-          target,
+          target: reforecast,
+          planned,
           realized,
-          reforecast: Math.abs(reforecast - target) > 0.05 ? reforecast : undefined,
           leverBreakdown: {
-            target: levers.map((l) => ({ name: l.name, value: l.netSavings })),
+            target: levers.map((l) => ({
+              name: l.name,
+              value: engine.displayedReforecastNet(l).value,
+            })),
             realized: levers.map((l) => ({ name: l.name, value: engine.realizedSavings(l) })),
           },
         };
@@ -721,17 +715,26 @@ export function DashboardPagePerformance() {
   // par programme sur le même principe que engine.programSummary — somme des netSavings des
   // leviers actifs rattachés au programme.
   const programTargetById = new Map<string, number>();
+  const programPlannedById = new Map<string, number>();
   visibleData.levers
     .filter((l) => l.status !== "cancelled")
     .forEach((l) => {
       if (!l.programId) return;
-      programTargetById.set(l.programId, (programTargetById.get(l.programId) ?? 0) + l.netSavings);
+      programTargetById.set(
+        l.programId,
+        (programTargetById.get(l.programId) ?? 0) + engine.displayedReforecastNet(l).value
+      );
+      programPlannedById.set(
+        l.programId,
+        (programPlannedById.get(l.programId) ?? 0) + (l.lockedPlan?.netSavings ?? l.netSavings)
+      );
     });
   const programBars = [
     ...programs.map((p) => ({
       label: p.name,
       realized: programMap[p.name] ?? 0,
       target: Math.round((programTargetById.get(p.id) ?? 0) * 10) / 10,
+      planned: Math.round((programPlannedById.get(p.id) ?? 0) * 10) / 10,
     })),
     ...(programMap["Non assigné"]
       ? [
@@ -1040,7 +1043,7 @@ export function DashboardPagePerformance() {
                     {(["red", "amber", "green", "blue"] as const).map((type) => {
                       const count = alertCounts[type];
                       if (count === 0) return null;
-                      const isActive = alertTypeFilter === type;
+                      const isActive = alertTypeFilter.includes(type);
                       const colors: Record<string, string> = {
                         red: isActive ? "bg-rag-red text-white" : "bg-rag-red-light text-rag-red",
                         amber: isActive
@@ -1057,7 +1060,7 @@ export function DashboardPagePerformance() {
                         <Tooltip key={type} text={t(`alerts.tooltip.${type}`)} position="bottom">
                           <button
                             onClick={() =>
-                              setAlertTypeFilter((prev) => (prev === type ? "all" : type))
+                              setAlertTypeFilter((prev) => toggleInSelection(prev, type))
                             }
                             className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold transition ${colors[type]}`}
                           >
@@ -1397,7 +1400,7 @@ export function DashboardPagePerformance() {
                 <QuarterlyBridgeChart
                   data={trajBridge}
                   height={340}
-                  onBarClick={(period) => goToBridgePeriod(period, trajGranularity)}
+                  onBarClick={(period) => goToSCurvePoint(period, trajGranularity)}
                   barLabel={
                     trajGranularity === "month"
                       ? t("chart.bridge.monthSavings")
@@ -1451,7 +1454,7 @@ export function DashboardPagePerformance() {
               <QuarterlyBridgeChart
                 data={bridge}
                 height={340}
-                onBarClick={goToBridgePeriod}
+                onBarClick={(period) => goToSCurvePoint(period, bridgeGranularity)}
                 barLabel={
                   bridgeGranularity === "month"
                     ? t("chart.bridge.monthSavings")
@@ -1565,6 +1568,7 @@ export function DashboardPagePerformance() {
               <WorkstreamBarChart
                 data={barData}
                 labelTarget={t("chart.bar.target")}
+                labelPlanned={t("chart.bar.planned")}
                 labelRealized={t("chart.bar.realized")}
                 onSegmentClick={(point, segment) => setWorkstreamDetail({ point, segment })}
               />
@@ -1584,6 +1588,16 @@ export function DashboardPagePerformance() {
           </Card>
         );
       }
+      case "savings-waterfall":
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader title={t("dashboard.widgets.savingsWaterfall", "Cascade des économies")} />
+            <CardBody>
+              <SavingsWaterfallChart waterfall={savingsWaterfallData} oneOffGains={oneOffGains} />
+            </CardBody>
+          </Card>
+        );
       case "geo-breakdown": {
         const activeView = resolveActiveCustomView(instance);
         const views = resolveCustomViews(instance);
@@ -1644,7 +1658,7 @@ export function DashboardPagePerformance() {
                   <thead>
                     <tr>
                       {[
-                        t("dashboard.workstream", "Workstream"),
+                        t("dashboard.workstream", "Chantier"),
                         "Sponsor",
                         t("dashboard.tableHeader.leverCount", "Leviers"),
                         t("dashboard.tableHeader.realizedTarget", "Réalisé / Cible"),
@@ -1871,6 +1885,7 @@ export function DashboardPagePerformance() {
       <div className="mb-4">
         <DropdownFilterBar
           items={programScopedLevers}
+          multiple
           defs={filterDefs}
           active={activeFilters}
           onChange={setFilters}

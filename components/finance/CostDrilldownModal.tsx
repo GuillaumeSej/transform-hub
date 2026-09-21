@@ -106,7 +106,7 @@ export function CostDrilldownModal({
             className="mb-3 flex items-center gap-1 text-[12px] font-semibold text-secondary hover:text-primary"
           >
             <ChevronLeft size={14} />
-            {t("finance.drilldown.back", "Retour aux workstreams")}
+            {t("finance.drilldown.back", "Retour aux chantiers")}
           </button>
           <p className="mb-3 flex items-center gap-2 text-[12px] text-tertiary">
             <span

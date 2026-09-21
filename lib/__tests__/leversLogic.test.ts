@@ -460,7 +460,7 @@ describe("leversLogic — enriched action consolidation", () => {
     expect(result.changedLever?.fteImpact).toBe(-4);
   });
 
-  it("weights action progress by financial exposure", () => {
+  it("no longer weights action progress by financial exposure (simple mean without weightPct)", () => {
     const lever = {
       ...lockedLever,
       actions: [
@@ -500,7 +500,7 @@ describe("leversLogic — enriched action consolidation", () => {
     };
 
     const result = updateAction([lever], { leverId: "L001" }, "A1", { status: "done" }, "alice");
-    expect(result.changedLever?.progress).toBe(10);
+    expect(result.changedLever?.progress).toBe(50);
   });
 
   it("clears deliveredDate when a done action is reopened", () => {

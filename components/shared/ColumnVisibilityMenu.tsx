@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useDismissable } from "@/lib/hooks/useDismissable";
+import { useRef, useState } from "react";
 import { Check, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -31,15 +32,12 @@ export function ColumnVisibilityMenu({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDismissable(open, () => setOpen(false), rootRef);
   const visibleCount = columns.length - hiddenKeys.size;
 
   return (
-    <div
-      className="relative flex-shrink-0"
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
-      }}
-    >
+    <div className="relative flex-shrink-0" ref={rootRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

@@ -1,5 +1,5 @@
 import type {
-  ActionImpact,
+  LeverImpact,
   ActionStatus,
   Alert,
   BeTrackData,
@@ -15,7 +15,11 @@ import type {
   WorkstreamSummary,
 } from "@/types";
 import { daysBetween } from "@/lib/dateUtils";
-import { nodesForDomain, resolveHierarchyPath } from "@/lib/hierarchyLogic";
+import {
+  nodesForDomain,
+  resolveHierarchyNodeChain,
+  resolveHierarchyPath,
+} from "@/lib/hierarchyLogic";
 import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type { LeverStatus } from "@/types";
 
@@ -25,17 +29,133 @@ import type { LeverStatus } from "@/types";
  * Fonctions pures : prennent les données en paramètre plutôt que de lire un état global mutable.
  */
 
-/** Somme des impacts des actions "done" d'un levier — SEULE source du "Réalisé" : une action
- *  encore "in_progress" ne contribue à rien tant qu'elle n'est pas passée "done" (contrairement à
- *  l'ancien calcul `netSavings × progression %`, qui créditait par anticipation une partie du
- *  business case initial avant toute livraison effective). Retourne 0 pour un levier sans action
- *  chiffrée : son business case initial (voir `LeverForm`, section "Impact initial") définit le
- *  planifié, pas le réalisé, tant qu'il n'a pas été ventilé en plan d'action.
- *  `pick === "net"` : gains bruts − CAPEX UNIQUEMENT (règle métier explicite, ni OPEX one-off ni
- *  OPEX récurrent ne réduisent le "Réalisé" — un levier livré avec seulement un coût OPEX one-off
- *  affichait à tort un réalisé négatif avant ce correctif). Même filtre que
- *  `leverConsolidate.ts::actionNetAmount`, dupliqué ici plutôt qu'importé pour éviter un cycle
- *  d'import (`leverConsolidate.ts` importe déjà `MONTH_LABELS` d'ici). */
+// ---------- Impacts au niveau levier ----------
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Lignes d'impact effectives d'un levier : `lever.impacts` (modèle actuel) ; à défaut, repli sur
+ *  les anciens `action.impacts` non encore migrés (voir `lib/leverImpactMigration.ts`). */
+export function leverImpactsOf(lever: Lever): LeverImpact[] {
+  if (lever.impacts && lever.impacts.length > 0) return lever.impacts;
+  return (lever.actions ?? []).flatMap((a) => a.impacts ?? []);
+}
+
+export function hasLeverImpacts(lever: Lever): boolean {
+  return leverImpactsOf(lever).length > 0;
+}
+
+export type LeverImpactTotals = {
+  /** Gains récurrents annuels (hors one-off) + salaire des départs ETP. */
+  grossAnnual: number;
+  /** Gains ponctuels — JAMAIS inclus dans grossAnnual/netAnnual/totaux programme. */
+  oneOffGains: number;
+  opexOneOff: number;
+  /** OPEX récurrent, y compris salaire chargé des recrutements ETP. */
+  opexRec: number;
+  capex: number;
+  /** +recrutements / −départs. */
+  fteNet: number;
+  /** grossAnnual − capex (règle métier "net = savings − CAPEX", ni OPEX one-off ni récurrent). */
+  netAnnual: number;
+};
+
+/** Totaux financiers/ETP dérivés des impacts du levier (source de vérité unique). */
+export function leverImpactTotals(lever: Lever | LeverImpact[]): LeverImpactTotals {
+  const impacts = Array.isArray(lever) ? lever : leverImpactsOf(lever);
+  let gross = 0;
+  let oneOffGains = 0;
+  let opexOneOff = 0;
+  let opexRec = 0;
+  let capex = 0;
+  let fte = 0;
+  for (const imp of impacts) {
+    if (imp.type === "saving") {
+      if (imp.gainRecurrence === "oneoff") oneOffGains += imp.amount;
+      else gross += imp.amount;
+      if (imp.fteCount) fte += imp.fteCount;
+    } else if (imp.type === "fte") {
+      const count = imp.fteCount ?? 0;
+      if (imp.fteDirection === "hire") {
+        opexRec += imp.amount;
+        fte += count;
+      } else {
+        gross += imp.amount;
+        fte -= count;
+      }
+    } else if (imp.nature === "capex") {
+      capex += imp.amount;
+      if (imp.fteCount) fte += imp.fteCount;
+    } else if (imp.nature === "oneoff") {
+      opexOneOff += imp.amount;
+      if (imp.fteCount) fte += imp.fteCount;
+    } else {
+      opexRec += imp.amount;
+      if (imp.fteCount) fte += imp.fteCount;
+    }
+  }
+  return {
+    grossAnnual: round2(gross),
+    oneOffGains: round2(oneOffGains),
+    opexOneOff: round2(opexOneOff),
+    opexRec: round2(opexRec),
+    capex: round2(capex),
+    fteNet: Math.round(fte * 10) / 10,
+    netAnnual: round2(gross - capex),
+  };
+}
+
+/** Avancement d'UNE action (0-100) : `declaredProgressPct` s'il est renseigné, sinon dérivé du
+ *  statut (done=100, todo=0, in_progress=50, delayed=0). */
+export function actionProgressPct(action: LeverAction): number {
+  if (typeof action.declaredProgressPct === "number") {
+    return Math.min(100, Math.max(0, action.declaredProgressPct));
+  }
+  return ACTION_STATUS_WEIGHT[action.status] ?? 0;
+}
+
+export type LeverActionWeighting = {
+  mode: "weighted" | "unweighted";
+  /** Poids (en %, somme = 100) par id d'action. */
+  weights: Record<string, number>;
+};
+
+/** Mode pondéré ssi TOUTES les actions ont `weightPct` ET la somme vaut 100 ; sinon moyenne simple. */
+export function leverActionWeighting(lever: Pick<Lever, "actions">): LeverActionWeighting {
+  const actions = lever.actions ?? [];
+  const weights: Record<string, number> = {};
+  const weighted =
+    actions.length > 0 &&
+    actions.every((a) => typeof a.weightPct === "number") &&
+    Math.abs(actions.reduce((s, a) => s + (a.weightPct as number), 0) - 100) < 1e-6;
+  if (weighted) {
+    for (const a of actions) weights[a.id] = a.weightPct as number;
+    return { mode: "weighted", weights };
+  }
+  for (const a of actions) weights[a.id] = actions.length ? 100 / actions.length : 0;
+  return { mode: "unweighted", weights };
+}
+
+/** Avancement d'un levier = avancement pondéré de ses ACTIONS uniquement (jamais les gains).
+ *  Sans action : 0. */
+export function leverActionProgress(lever: Pick<Lever, "actions">): number {
+  const actions = lever.actions ?? [];
+  if (actions.length === 0) return 0;
+  const { weights } = leverActionWeighting(lever);
+  const total = actions.reduce((s, a) => s + (weights[a.id] / 100) * actionProgressPct(a), 0);
+  return Math.round(total);
+}
+
+/** Fraction (0-1) du plan du levier considérée comme réalisée : avancement des actions ; sans
+ *  action, 1 si livré sinon 0. */
+function realizationFraction(lever: Lever): number {
+  if (lever.status === "delivered") return 1;
+  if ((lever.actions ?? []).length === 0) return 0;
+  return leverActionProgress(lever) / 100;
+}
+
+/** Somme des impacts (legacy : portés par les actions) des actions "done". `pick === "net"` :
+ *  gains bruts − CAPEX UNIQUEMENT. Utilisé uniquement pour les leviers SANS impact de niveau
+ *  levier (données non migrées). */
 function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): number {
   let total = 0;
   for (const action of lever.actions ?? []) {
@@ -55,14 +175,24 @@ function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): nu
   return pick === "fte" ? total : Math.round(total * 100) / 100;
 }
 
+/** Réalisé net : levier avec impacts de niveau levier → dernière version nette (réactualisé,
+ *  sinon plan figé, sinon impacts live) × fraction d'avancement des actions (100 % si livré) ;
+ *  ancien modèle (impacts sur les actions) → somme des actions "done". Annulé → 0. */
 export function realizedSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
+  if (lever.impacts && lever.impacts.length > 0) {
+    return round2(displayedReforecastNet(lever).value * realizationFraction(lever));
+  }
   return doneActionImpactsTotal(lever, "net");
 }
 
 /** Équivalent BRUT (avant déduction des coûts) de `realizedSavings`. */
 export function realizedGrossSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
+  if (lever.impacts && lever.impacts.length > 0) {
+    const gross = lever.reforecast?.grossSavings ?? lever.lockedPlan?.grossSavings;
+    return round2((gross ?? leverImpactTotals(lever).grossAnnual) * realizationFraction(lever));
+  }
   return doneActionImpactsTotal(lever, "gross");
 }
 
@@ -104,6 +234,9 @@ export function displayedProgressPct(lever: Lever): number {
 
 export function realizedFte(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
+  if (lever.impacts && lever.impacts.length > 0) {
+    return Math.round(leverImpactTotals(lever).fteNet * realizationFraction(lever) * 10) / 10;
+  }
   return Math.round(doneActionImpactsTotal(lever, "fte") * 10) / 10;
 }
 
@@ -257,6 +390,14 @@ function dateMatchesPeriod(dateStr: string | undefined, filter: PnlPeriodFilter)
  *  niveau de chaque action/impact, via `ActionImpact.hierarchyLeafId`) — tant qu'un impact n'a pas
  *  de rattachement fin, son montant apparaît dans ce bucket plutôt que d'être arbitrairement
  *  rattaché à un compte. */
+/** Montant signé d'une ligne d'impact pour le P&L (gain +, coût −) ; `null` pour un gain one-off
+ *  (jamais agrégé aux totaux annualisés). */
+function impactSignedAmount(imp: LeverImpact): number | null {
+  if (imp.type === "saving") return imp.gainRecurrence === "oneoff" ? null : imp.amount;
+  if (imp.type === "fte") return imp.fteDirection === "hire" ? -imp.amount : imp.amount;
+  return -imp.amount;
+}
+
 export const UNALLOCATED_ACCOUNT_ID = "__unallocated__";
 
 /** Impact P&L détaillé : plan vs réalisé par compte, ventilé par période.
@@ -324,7 +465,7 @@ export function pnlImpactDetailed(
 
   // Même mécanique que `resolveLeverAccount`, appliquée au rattachement fin de CET impact
   // (`ActionImpact.hierarchyLeafId`) — résolution prioritaire, voir doc-comment ci-dessus.
-  const resolveImpactAccount = (impact: ActionImpact): string | undefined => {
+  const resolveImpactAccount = (impact: LeverImpact): string | undefined => {
     if (!useHierarchy || !impact.hierarchyLeafId) return undefined;
     const path = resolveHierarchyPath(
       impact.hierarchyLeafId,
@@ -336,6 +477,30 @@ export function pnlImpactDetailed(
 
   for (const lever of active) {
     const hierarchyAccount = resolveLeverAccount(lever);
+    // Modèle actuel : impacts portés par le levier (gains one-off exclus : jamais dans le P&L
+    // annualisé). Plan à la date de gain (sinon fin du levier) ; réalisé au prorata de
+    // l'avancement des actions, à la date de livraison (sinon fin du levier).
+    if (lever.impacts && lever.impacts.length > 0) {
+      const frac = realizationFraction(lever);
+      for (const impact of lever.impacts) {
+        const signed = impactSignedAmount(impact);
+        if (signed === null) continue;
+        const account =
+          resolveImpactAccount(impact) ??
+          hierarchyAccount ??
+          (impact.pnlMap || lever.pnlMap) ??
+          UNALLOCATED_ACCOUNT_ID;
+        const planDate = impact.gainDate ?? impact.capexDeploymentDate ?? lever.end;
+        if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) addPlan(account, signed);
+        if (frac > 0) {
+          const realDate = lever.deliveredDate ?? lever.end;
+          if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
+            addRealized(account, signed * frac);
+          }
+        }
+      }
+      continue;
+    }
     const actionImpacts = (lever.actions ?? []).flatMap((action) =>
       (action.impacts ?? []).map((impact) => ({ action, impact }))
     );
@@ -615,9 +780,8 @@ export function isActionLate(action: LeverAction, today: Date = new Date()): boo
   return new Date(action.end).getTime() < today.getTime();
 }
 
-/** Impact financier net (€M) d'une action = somme signée de ses lignes `impacts` (gain positif,
- *  coût négatif) — seule source de vérité pour la valeur € d'une action, partagée par la courbe
- *  en J, l'onglet Impact et le Kanban du plan d'action. Sans ligne d'impact, l'action vaut 0. */
+/** Impact financier net (€M) d'une action — DEPRECATED : les impacts vivent sur le levier. Ne
+ *  lit plus que l'ancien `action.impacts` (données non migrées). */
 export function actionNetImpact(action: LeverAction): number {
   return (action.impacts ?? []).reduce(
     (sum, impact) => sum + (impact.type === "saving" ? impact.amount : -impact.amount),
@@ -625,31 +789,19 @@ export function actionNetImpact(action: LeverAction): number {
   );
 }
 
-/** Progression d'un plan d'action : moyenne pondérée par statut des actions (done=100, in_progress=50). */
+/** Progression d'un plan d'action (liste d'actions) — pondérée si toutes les actions portent un
+ *  `weightPct` sommant à 100, sinon moyenne simple ; jamais pondérée par des montants. */
 export function actionProgress(actions: LeverAction[]): number {
-  if (actions.length === 0) return 0;
-  const weights = actions.map((action) => {
-    const financialWeight = (action.impacts ?? []).reduce(
-      (sum, impact) => sum + Math.abs(impact.amount),
-      0
-    );
-    return financialWeight > 0 ? financialWeight : 1;
-  });
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-  const total = actions.reduce(
-    (sum, action, index) => sum + ACTION_STATUS_WEIGHT[action.status] * weights[index],
-    0
-  );
-  return Math.round(total / totalWeight);
+  return leverActionProgress({ actions });
 }
 
 /**
- * Progression d'un levier : moyenne pondérée par statut de son plan d'action (Lever.actions) ;
- * sans action, la valeur manuelle existante est conservée inchangée.
+ * Progression d'un levier : avancement pondéré de ses actions ; sans action, la valeur manuelle
+ * existante est conservée inchangée.
  */
 export function recomputeLeverProgress(lever: Lever): number {
   if (lever.actions && lever.actions.length > 0) {
-    return actionProgress(lever.actions);
+    return leverActionProgress(lever);
   }
   return lever.progress;
 }
@@ -1014,14 +1166,6 @@ export function sankeyChronology(data: BeTrackData): {
   };
 }
 
-function financialTotal(data: BeTrackData, pick: (l: Lever) => number): number {
-  return (
-    Math.round(
-      data.levers.filter((l) => l.status !== "cancelled").reduce((s, l) => s + pick(l), 0) * 10
-    ) / 10
-  );
-}
-
 export const MONTH_LABELS = [
   "Jan",
   "Feb",
@@ -1059,116 +1203,138 @@ function fiscalMonthIndex(dateStr: string, fyStart: Date): number {
   return Math.min(11, Math.max(0, idx));
 }
 
-/** Noyau de lissage (approx. gaussien) : transforme un empilement de montants sur leur mois de fin
- * exact (un "escalier") en une répartition mensuelle progressive type courbe en S, en étalant
- * chaque montant sur les mois voisins plutôt que de le concentrer sur un seul mois. */
-const SCURVE_SMOOTH_KERNEL: { offset: number; weight: number }[] = [
-  { offset: -2, weight: 0.06 },
-  { offset: -1, weight: 0.24 },
-  { offset: 0, weight: 0.4 },
-  { offset: 1, weight: 0.24 },
-  { offset: 2, weight: 0.06 },
-];
+/**
+ * SÉRIE PARTAGÉE courbe en S + graphique en barres (pont) — une seule source de calcul pour que
+ * les deux vues ne divergent plus. Cause de l'ancien écart : la S-curve lissait les montants avec
+ * un noyau gaussien et plafonnait sur l'index de mois fiscal, alors que le pont bucketisait le
+ * réalisé à la date de fin exacte des seuls leviers échus — deux règles de temporalité différentes.
+ *
+ * Règles communes (leviers annulés exclus de planned/reforecast/actual) :
+ *  - planned    : net du plan figé (sinon net courant), cumulé à la date de fin du levier ;
+ *  - reforecast : net réactualisé (repli plan figé, net courant), cumulé à la date de fin ;
+ *  - actual     : réalisé (`realizedSavings`) cumulé à `deliveredDate`, sinon min(fin, aujourd'hui) —
+ *                 donc le cumul à date == `programSummary.realized` ; null pour les périodes futures ;
+ *  - gap        : écart réactualisé − réalisé cumulé par période, ventilé en `late` (leviers en retard :
+ *                 action en retard ou fin dépassée non livrée), `other` (le reste) ; `cancelled` est un
+ *                 mémo (plan des leviers annulés échus, hors `total` car déjà retirés du réactualisé).
+ * Les dates hors exercice sont rattachées à la première/dernière période (comme avant).
+ */
+export type SavingsSeriesGap = { total: number; late: number; cancelled: number; other: number };
+export type SavingsSeriesPoint = {
+  month: string;
+  planned: number;
+  reforecast: number;
+  actual: number | null;
+  /** Réalisé apporté par cette seule période (pour le pont / barres). */
+  actualDelta: number;
+  gap: SavingsSeriesGap;
+};
 
-/** Répartit 12 fractions mensuelles (deltas, somme = 1) à partir des dates de fin réelles des
- * leviers, pondérées par le montant de chacun (valeur absolue, pour éviter qu'un mélange de
- * montants positifs/négatifs n'annule la pondération), et lissées avec `SCURVE_SMOOTH_KERNEL`.
- * Même logique de ventilation par date réelle (`lever.end`) que `financialBridge` et
- * `pnlImpactDetailed`, mais cumulée en courbe en S plutôt qu'en escalier trimestriel. */
-function sCurveMonthlyDeltaFractions(
-  entries: { date: string; amount: number }[],
-  fyStart: Date
-): number[] {
-  const deltas = new Array(12).fill(0);
-  const totalWeight = entries.reduce((s, e) => s + Math.abs(e.amount), 0);
-  if (totalWeight === 0) return deltas;
-  for (const entry of entries) {
-    const weight = Math.abs(entry.amount) / totalWeight;
-    if (weight === 0) continue;
-    const centerIdx = fiscalMonthIndex(entry.date, fyStart);
-    for (const { offset, weight: kernelWeight } of SCURVE_SMOOTH_KERNEL) {
-      const monthIdx = centerIdx + offset;
-      if (monthIdx < 0 || monthIdx > 11) continue;
-      deltas[monthIdx] += weight * kernelWeight;
-    }
-  }
-  // Renormaliser : le noyau est tronqué en début/fin d'exercice, ce qui ferait perdre du poids.
-  const sum = deltas.reduce((s, v) => s + v, 0);
-  if (sum > 0) {
-    for (let i = 0; i < 12; i++) deltas[i] /= sum;
-  }
-  return deltas;
+function isLeverLate(lever: Lever, today: Date): boolean {
+  if (lever.status === "delivered" || lever.status === "cancelled") return false;
+  if ((lever.actions ?? []).some((a) => isActionLate(a, today))) return true;
+  return new Date(lever.end).getTime() < today.getTime();
 }
 
-function cumulativeFractions(deltas: number[]): number[] {
-  let acc = 0;
-  return deltas.map((v) => (acc += v));
-}
-
-/** S-curve à 3 courbes : Plan initial (figé à L3, ou valeur courante tant que non figé), Réalisé
- * à date (inchangé, calculé depuis la progression), Réactualisé (dernière prévision, ou plan
- * initial/valeur courante tant que non réactualisé à L4). Les totaux sont exacts (somme = valeur
- * réelle du programme) ; la répartition mensuelle est dérivée des vraies dates de fin des leviers
- * (`lever.end` / `deliveredDate`), lissée en courbe en S — pas d'un gabarit générique fixe. */
-export function sCurve3(data: BeTrackData, granularity: TimeGranularity = "month") {
-  const active = data.levers.filter((l) => l.status !== "cancelled");
+export function savingsSeries(
+  data: BeTrackData,
+  granularity: TimeGranularity = "month",
+  today: Date = new Date()
+): SavingsSeriesPoint[] {
   const fyStart = new Date(data.program.fyStart);
-
-  const plannedTotal = financialTotal(data, (l) => l.lockedPlan?.netSavings ?? l.netSavings);
-  const reforecastTotal = financialTotal(
-    data,
-    (l) => l.reforecast?.netSavings ?? l.lockedPlan?.netSavings ?? l.netSavings
-  );
-  const actualTotal = active.reduce((s, l) => s + realizedSavings(l), 0);
-
-  const plannedFractions = cumulativeFractions(
-    sCurveMonthlyDeltaFractions(
-      active.map((l) => ({ date: l.end, amount: l.lockedPlan?.netSavings ?? l.netSavings })),
-      fyStart
-    )
-  );
-  const reforecastFractions = cumulativeFractions(
-    sCurveMonthlyDeltaFractions(
-      active.map((l) => ({
-        date: l.end,
-        amount: l.reforecast?.netSavings ?? l.lockedPlan?.netSavings ?? l.netSavings,
-      })),
-      fyStart
-    )
-  );
-  const actualFractions = cumulativeFractions(
-    sCurveMonthlyDeltaFractions(
-      active.map((l) => ({ date: l.deliveredDate ?? l.end, amount: realizedSavings(l) })),
-      fyStart
-    )
-  );
-
-  const now = new Date();
-  const currentMonthIdx = Math.min(
-    11,
+  const all = data.levers;
+  const active = all.filter((l) => l.status !== "cancelled");
+  const cancelled = all.filter((l) => l.status === "cancelled");
+  const N = 12;
+  const idxOf = (date: string) => fiscalMonthIndex(date, fyStart);
+  const todayIdx = Math.min(
+    N - 1,
     Math.max(
       0,
-      (now.getFullYear() - fyStart.getFullYear()) * 12 + now.getMonth() - fyStart.getMonth()
+      (today.getFullYear() - fyStart.getFullYear()) * 12 + today.getMonth() - fyStart.getMonth()
     )
   );
 
-  const monthlyPoints = MONTH_LABELS.map((label, i) => ({
-    month: label,
-    planned: Math.round(plannedFractions[i] * plannedTotal * 10) / 10,
-    reforecast: Math.round(reforecastFractions[i] * reforecastTotal * 10) / 10,
-    actual: i <= currentMonthIdx ? Math.round(actualFractions[i] * actualTotal * 10) / 10 : null,
-  }));
+  const planned = new Array(N).fill(0);
+  const reforecast = new Array(N).fill(0);
+  const actualDelta = new Array(N).fill(0);
+  const lateGap = new Array(N).fill(0);
+  const otherGap = new Array(N).fill(0);
+  const cancelledMemo = new Array(N).fill(0);
+  const add = (arr: number[], i: number, v: number) => {
+    for (let k = i; k < N; k++) arr[k] += v;
+  };
 
-  if (granularity === "month") return monthlyPoints;
+  for (const l of active) {
+    const endI = idxOf(l.end);
+    const plan = l.lockedPlan?.netSavings ?? l.netSavings;
+    const refo = displayedReforecastNet(l).value;
+    add(planned, endI, plan);
+    add(reforecast, endI, refo);
+    const real = realizedSavings(l);
+    let actI = -1;
+    if (real !== 0) {
+      const d = l.deliveredDate
+        ? new Date(l.deliveredDate)
+        : new Date(Math.min(new Date(l.end).getTime(), today.getTime()));
+      actI = idxOf(d.toISOString().slice(0, 10));
+      actualDelta[actI] += real;
+    }
+    const late = isLeverLate(l, today);
+    for (let i = 0; i < N; i++) {
+      const expected = i >= endI ? refo : 0;
+      const got = actI >= 0 && i >= actI ? real : 0;
+      const g = expected - got;
+      if (late) lateGap[i] += g;
+      else otherGap[i] += g;
+    }
+  }
+  for (const l of cancelled) {
+    add(cancelledMemo, idxOf(l.end), l.lockedPlan?.netSavings ?? l.netSavings);
+  }
 
-  // Vue trimestrielle : point de fin de chaque trimestre (mois 3/6/9/12) — cohérent avec la vue
-  // mensuelle puisque ce sont des courbes cumulatives (le dernier mois du trimestre porte déjà le
-  // cumul des mois précédents).
-  return [2, 5, 8, 11].map((endMonthIdx, qIdx) => ({
-    month: `Q${qIdx + 1}`,
-    planned: monthlyPoints[endMonthIdx].planned,
-    reforecast: monthlyPoints[endMonthIdx].reforecast,
-    actual: monthlyPoints[endMonthIdx].actual,
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  let cumActual = 0;
+  const monthly: SavingsSeriesPoint[] = MONTH_LABELS.map((label, i) => {
+    cumActual += actualDelta[i];
+    const shown = i <= todayIdx;
+    const late = lateGap[i];
+    const other = otherGap[i];
+    return {
+      month: label,
+      planned: r1(planned[i]),
+      reforecast: r1(reforecast[i]),
+      actual: shown ? r1(cumActual) : null,
+      actualDelta: r1(actualDelta[i]),
+      gap: shown
+        ? {
+            total: r1(late + other),
+            late: r1(late),
+            other: r1(other),
+            cancelled: r1(cancelledMemo[i]),
+          }
+        : { total: 0, late: 0, other: 0, cancelled: 0 },
+    };
+  });
+  if (granularity === "month") return monthly;
+  return [2, 5, 8, 11].map((endIdx, q) => {
+    const from = q * 3;
+    return {
+      ...monthly[endIdx],
+      month: `Q${q + 1}`,
+      actualDelta: r1(monthly.slice(from, endIdx + 1).reduce((s, p) => s + p.actualDelta, 0)),
+    };
+  });
+}
+
+/** S-curve à 3 courbes (Plan initial / Réalisé / Réactualisé) — projection de `savingsSeries`
+ * (mêmes valeurs que le pont `financialBridge`). Voir `savingsSeries` pour les règles. */
+export function sCurve3(data: BeTrackData, granularity: TimeGranularity = "month") {
+  return savingsSeries(data, granularity).map(({ month, planned, reforecast, actual }) => ({
+    month,
+    planned,
+    reforecast,
+    actual,
   }));
 }
 
@@ -1290,12 +1456,22 @@ export function financialBridge(
   granularity: TimeGranularity = "quarter"
 ): QuarterBridge[] {
   const now = new Date();
-  const active = data.levers.filter((l) => l.status !== "cancelled" && new Date(l.end) <= now);
+  // Même règle de temporalité que `savingsSeries` (courbe en S) : réalisé daté à `deliveredDate`,
+  // sinon min(fin, aujourd'hui). Un levier sans réalisé n'apparaît que s'il est échu (delta 0).
+  const active = data.levers.filter(
+    (l) => l.status !== "cancelled" && (realizedSavings(l) !== 0 || new Date(l.end) <= now)
+  );
   const byPeriod = new Map<string, number>();
   active.forEach((l) => {
-    const d = new Date(l.end);
+    const real = realizedSavings(l);
+    const d =
+      real !== 0
+        ? l.deliveredDate
+          ? new Date(l.deliveredDate)
+          : new Date(Math.min(new Date(l.end).getTime(), now.getTime()))
+        : new Date(l.end);
     const key = periodSortKey(d, granularity);
-    byPeriod.set(key, (byPeriod.get(key) ?? 0) + realizedSavings(l));
+    byPeriod.set(key, (byPeriod.get(key) ?? 0) + real);
   });
   const sortedKeys = Array.from(byPeriod.keys()).sort();
   let cumulative = 0;
@@ -1309,4 +1485,368 @@ export function financialBridge(
 /** @deprecated conservé pour compat — utiliser `financialBridge(data, "quarter")`. */
 export function quarterlyBridge(data: BeTrackData): QuarterBridge[] {
   return financialBridge(data, "quarter");
+}
+
+// ─── Trajectoire des impacts (courbe en J réelle) ────────────────────────────
+
+export type TrajectoryGranularity = "month" | "quarter" | "year";
+
+export type ImpactTrajectoryPoint = {
+  period: string;
+  /** Début de période (ISO yyyy-mm-01). */
+  periodStart: string;
+  /** OPEX one-off de la période (montant positif = coût). */
+  opexOneOff: number;
+  /** OPEX récurrent de la période (annuel × durée) — apparaît à CHAQUE période. */
+  opexRec: number;
+  /** CAPEX de la période : en une fois à sa date, ou lissé de capexStartDate à capexDeploymentDate. */
+  capex: number;
+  /** Gains récurrents annuels de la période (annuel × durée, à partir de gainDate). */
+  gains: number;
+  /** Gains ponctuels (one-off) de la période — séparés, jamais agrégés aux gains annualisés. */
+  oneOffGains: number;
+  /** Cumul net gains récurrents + one-off − OPEX − CAPEX (vue trésorerie/J-curve). */
+  cumulativeNet: number;
+  /** Idem `cumulativeNet` mais SANS les gains one-off (cohérent avec les totaux savings). */
+  cumulativeNetRecurring: number;
+  /** ETP cumulés en fin de période (+recrutements / −départs). */
+  fte: number;
+};
+
+export type ImpactTrajectory = {
+  points: ImpactTrajectoryPoint[];
+  /** Index de la période contenant `today` (borné à [0, n-1]) — pour tracer le curseur. */
+  todayIndex: number;
+};
+
+const monthIndexOf = (iso: string): number => {
+  const y = Number(iso.slice(0, 4));
+  const m = Number(iso.slice(5, 7)) - 1;
+  return y * 12 + (Number.isFinite(m) ? m : 0);
+};
+
+const isoOfMonthIndex = (mi: number): string =>
+  `${Math.floor(mi / 12)}-${String((mi % 12) + 1).padStart(2, "0")}-01`;
+
+/**
+ * Trajectoire temporelle des impacts d'un ou plusieurs leviers (annulés exclus sauf
+ * `includeCancelled`). Calendrier : du plus tôt des dates d'impact/levier à 12 mois après la
+ * dernière (min. 24 mois de fenêtre pour montrer la récurrence).
+ *  - dates : gain → `gainDate ?? lever.end` ; coût → `capexDeploymentDate ?? capexStartDate ?? lever.start`
+ *  - CAPEX "smoothed" : réparti uniformément sur les mois capexStartDate → capexDeploymentDate
+ *  - récurrent (gain annuel, OPEX récurrent, salaire ETP) : montant/12 par mois actif
+ *  - `view: "fte"` ne renseigne que la colonne ETP (les montants restent à 0).
+ */
+export function impactTrajectory(
+  input: Lever | Lever[],
+  opts: {
+    granularity?: TrajectoryGranularity;
+    view?: "financial" | "fte";
+    today?: Date;
+    includeCancelled?: boolean;
+  } = {}
+): ImpactTrajectory {
+  const granularity = opts.granularity ?? "month";
+  const view = opts.view ?? "financial";
+  const today = opts.today ?? new Date();
+  const levers = (Array.isArray(input) ? input : [input]).filter(
+    (l) => opts.includeCancelled || l.status !== "cancelled"
+  );
+
+  type Ev = { mi: number; kind: "oneoff_cost" | "capex" | "oneoff_gain"; amount: number };
+  type Rec = { from: number; kind: "opexRec" | "gain"; annual: number };
+  const events: Ev[] = [];
+  const recs: Rec[] = [];
+  const smoothed: { from: number; to: number; amount: number }[] = [];
+  const fteEvents: { mi: number; delta: number }[] = [];
+
+  for (const lever of levers) {
+    for (const imp of leverImpactsOf(lever)) {
+      const gainMi = monthIndexOf(imp.gainDate ?? lever.end);
+      const costMi = monthIndexOf(imp.capexDeploymentDate ?? imp.capexStartDate ?? lever.start);
+      const isGain = imp.type === "saving" || (imp.type === "fte" && imp.fteDirection !== "hire");
+      if (imp.type === "fte") {
+        const count = imp.fteCount ?? 0;
+        fteEvents.push(
+          imp.fteDirection === "hire" ? { mi: costMi, delta: count } : { mi: gainMi, delta: -count }
+        );
+      } else if (imp.fteCount) {
+        fteEvents.push({ mi: imp.type === "saving" ? gainMi : costMi, delta: imp.fteCount });
+      }
+      if (isGain) {
+        if (imp.type === "saving" && imp.gainRecurrence === "oneoff") {
+          events.push({ mi: gainMi, kind: "oneoff_gain", amount: imp.amount });
+        } else {
+          recs.push({ from: gainMi, kind: "gain", annual: imp.amount });
+        }
+      } else if (imp.type === "fte") {
+        recs.push({ from: costMi, kind: "opexRec", annual: imp.amount });
+      } else if (imp.nature === "capex") {
+        if (imp.capexAllocationMode === "smoothed" && imp.capexStartDate) {
+          const from = monthIndexOf(imp.capexStartDate);
+          const to = Math.max(from, monthIndexOf(imp.capexDeploymentDate ?? imp.capexStartDate));
+          smoothed.push({ from, to, amount: imp.amount });
+        } else {
+          events.push({ mi: costMi, kind: "capex", amount: imp.amount });
+        }
+      } else if (imp.nature === "oneoff") {
+        events.push({ mi: costMi, kind: "oneoff_cost", amount: imp.amount });
+      } else {
+        recs.push({ from: costMi, kind: "opexRec", annual: imp.amount });
+      }
+    }
+  }
+
+  const todayMi = today.getFullYear() * 12 + today.getMonth();
+  const marks = [
+    ...events.map((e) => e.mi),
+    ...recs.map((r) => r.from),
+    ...smoothed.flatMap((x) => [x.from, x.to]),
+    ...fteEvents.map((e) => e.mi),
+    ...levers.map((l) => monthIndexOf(l.start)),
+  ].filter((n) => Number.isFinite(n));
+  if (marks.length === 0) return { points: [], todayIndex: 0 };
+  let startMi = Math.min(...marks);
+  const step = granularity === "year" ? 12 : granularity === "quarter" ? 3 : 1;
+  if (granularity === "year") startMi = Math.floor(startMi / 12) * 12;
+  if (granularity === "quarter") startMi = Math.floor(startMi / 3) * 3;
+  const endMi = Math.max(Math.max(...marks) + 12, startMi + 23);
+
+  const points: ImpactTrajectoryPoint[] = [];
+  let cum = 0;
+  let cumRec = 0;
+  let fteCum = 0;
+  let todayIndex = 0;
+  const r2 = (n: number) => Math.round(n * 1000) / 1000;
+  for (let ps = startMi; ps <= endMi; ps += step) {
+    const pe = ps + step - 1; // dernier mois inclus
+    let opexOneOff = 0;
+    let opexRec = 0;
+    let capex = 0;
+    let gains = 0;
+    let oneOffGains = 0;
+    for (const e of events) {
+      if (e.mi < ps || e.mi > pe) continue;
+      if (e.kind === "capex") capex += e.amount;
+      else if (e.kind === "oneoff_cost") opexOneOff += e.amount;
+      else oneOffGains += e.amount;
+    }
+    for (const sm of smoothed) {
+      const months = sm.to - sm.from + 1;
+      const overlap = Math.max(0, Math.min(pe, sm.to) - Math.max(ps, sm.from) + 1);
+      capex += (sm.amount * overlap) / months;
+    }
+    for (const r of recs) {
+      const active = Math.max(0, pe - Math.max(ps, r.from) + 1);
+      const v = (r.annual * active) / 12;
+      if (r.kind === "gain") gains += v;
+      else opexRec += v;
+    }
+    fteCum = fteEvents.reduce((s, f) => (f.mi <= pe ? s + f.delta : s), 0);
+    if (view === "fte") {
+      opexOneOff = opexRec = capex = gains = oneOffGains = 0;
+    }
+    cumRec += gains - opexOneOff - opexRec - capex;
+    cum += gains + oneOffGains - opexOneOff - opexRec - capex;
+    if (todayMi >= ps && todayMi <= pe) todayIndex = points.length;
+    else if (todayMi > pe) todayIndex = points.length;
+    points.push({
+      period:
+        granularity === "year"
+          ? String(Math.floor(ps / 12))
+          : granularity === "quarter"
+            ? `Q${Math.floor((ps % 12) / 3) + 1} ${Math.floor(ps / 12)}`
+            : `${MONTH_LABELS[ps % 12]} ${Math.floor(ps / 12)}`,
+      periodStart: isoOfMonthIndex(ps),
+      opexOneOff: r2(opexOneOff),
+      opexRec: r2(opexRec),
+      capex: r2(capex),
+      gains: r2(gains),
+      oneOffGains: r2(oneOffGains),
+      cumulativeNet: r2(cum),
+      cumulativeNetRecurring: r2(cumRec),
+      fte: Math.round(fteCum * 10) / 10,
+    });
+  }
+  return { points, todayIndex: Math.min(points.length - 1, Math.max(0, todayIndex)) };
+}
+
+// ─── Cascade planifié → réactualisé → annulé → retard → réalisé ─────────────
+
+export type WaterfallStep = {
+  key: "initial" | "reforecast" | "cancelled" | "late" | "costs" | "expected";
+  label: string;
+  /** "total" = barre pleine depuis 0 ; "delta" = variation signée. */
+  kind: "total" | "delta";
+  value: number;
+  /** Cumul après cette étape (€M). */
+  cumulative: number;
+};
+
+export type SavingsWaterfall = {
+  steps: WaterfallStep[];
+  /** Total attendu final = réactualisé − retard − coûts non provisionnés. */
+  expected: number;
+  realized: number;
+  remaining: number;
+};
+
+/**
+ * Cascade des savings (€M) :
+ *  initial (plan figé de TOUS les leviers) + Δ réactualisé (leviers actifs) − annulé (plan figé des
+ *  annulés) = cible réactualisée ; − retard (reste à réaliser des leviers en retard) − coûts (OPEX
+ *  one-off + récurrent des leviers actifs, non inclus dans le net) = total attendu, scindé en
+ *  réalisé / reste à faire. Les leviers annulés ne comptent que dans l'étape "annulé".
+ */
+export function savingsWaterfall(data: BeTrackData, opts: { today?: Date } = {}): SavingsWaterfall {
+  const today = opts.today ?? new Date();
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  const lockedNet = (l: Lever) => l.lockedPlan?.netSavings ?? l.netSavings;
+  const active = data.levers.filter((l) => l.status !== "cancelled");
+  const cancelled = data.levers.filter((l) => l.status === "cancelled");
+
+  const initial = data.levers.reduce((s, l) => s + lockedNet(l), 0);
+  const reforecastDelta = active.reduce(
+    (s, l) => s + displayedReforecastNet(l).value - lockedNet(l),
+    0
+  );
+  const cancelledAmt = cancelled.reduce((s, l) => s + lockedNet(l), 0);
+  const realized = active.reduce((s, l) => s + realizedSavings(l), 0);
+  const late = active
+    .filter((l) => isLeverLate(l, today))
+    .reduce((s, l) => s + Math.max(0, displayedReforecastNet(l).value - realizedSavings(l)), 0);
+  const costs = active.reduce((s, l) => {
+    const snap = l.reforecast ?? l.lockedPlan ?? l;
+    return s + snap.opexOneOff + snap.opexRec;
+  }, 0);
+
+  const target = initial + reforecastDelta - cancelledAmt;
+  const expected = target - late - costs;
+  const steps: WaterfallStep[] = [];
+  let cum = 0;
+  const push = (
+    key: WaterfallStep["key"],
+    label: string,
+    kind: WaterfallStep["kind"],
+    value: number
+  ) => {
+    cum = kind === "total" ? value : cum + value;
+    steps.push({ key, label, kind, value: r1(value), cumulative: r1(cum) });
+  };
+  push("initial", "Planifié initial", "total", initial);
+  push("reforecast", "Réactualisé", "delta", reforecastDelta);
+  push("cancelled", "Annulé", "delta", -cancelledAmt);
+  push("late", "En retard", "delta", -late);
+  push("costs", "Coûts", "delta", -costs);
+  push("expected", "Total attendu", "total", expected);
+  return {
+    steps,
+    expected: r1(expected),
+    realized: r1(realized),
+    remaining: r1(expected - realized),
+  };
+}
+
+// ─── Finance par niveau de hiérarchie ───────────────────────────────────────
+
+export type FinanceHierarchyRow = {
+  nodeId: string;
+  code: string;
+  label: string;
+  /** Planifié initial (plan figé, tous leviers y compris annulés). */
+  planned: number;
+  reforecast: number;
+  cancelled: number;
+  late: number;
+  realized: number;
+};
+
+export const UNATTRIBUTED_NODE_ID = "__unattributed__";
+
+/**
+ * Finance (€M) par nœud du niveau `levelOrder` (`HierarchyLevelDef.order`) de l'arborescence
+ * financière : chaque levier est rattaché via `hierarchyLeafId` (ou celui de ses impacts, au prorata
+ * du |montant net| de chaque impact) puis remonté à l'ancêtre du niveau demandé via `parentId`.
+ * Une feuille plus macro que le niveau demandé reste sur son propre nœud. Sans rattachement :
+ * ligne "Non attribué". Le total de toutes les lignes égale la somme des leviers.
+ */
+export function financeByHierarchyLevel(
+  data: BeTrackData,
+  company: { hierarchyLevels?: HierarchyLevelDef[] } | null | undefined,
+  levelOrder: number,
+  nodes: HierarchyNode[],
+  opts: { today?: Date } = {}
+): FinanceHierarchyRow[] {
+  const today = opts.today ?? new Date();
+  const levels = company?.hierarchyLevels ?? [];
+  const financial = nodesForDomain(nodes, "financial");
+  const targetKey = levels.find((lv) => lv.order === levelOrder)?.key;
+  const rows = new Map<string, FinanceHierarchyRow>();
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  const rowFor = (id: string, code: string, label: string) => {
+    let row = rows.get(id);
+    if (!row) {
+      row = {
+        nodeId: id,
+        code,
+        label,
+        planned: 0,
+        reforecast: 0,
+        cancelled: 0,
+        late: 0,
+        realized: 0,
+      };
+      rows.set(id, row);
+    }
+    return row;
+  };
+  const resolveNode = (leafId: string | undefined): HierarchyNode | undefined => {
+    if (!leafId) return undefined;
+    const chain = resolveHierarchyNodeChain(leafId, financial, levels);
+    if (chain.length === 0) return undefined;
+    return chain.find((n) => n.levelKey === targetKey) ?? chain[chain.length - 1];
+  };
+
+  for (const l of data.levers) {
+    const locked = l.lockedPlan?.netSavings ?? l.netSavings;
+    const isCancelled = l.status === "cancelled";
+    const refo = isCancelled ? 0 : displayedReforecastNet(l).value;
+    const real = isCancelled ? 0 : realizedSavings(l);
+    const late = !isCancelled && isLeverLate(l, today) ? Math.max(0, refo - real) : 0;
+
+    // Répartition par feuille
+    const shares = new Map<string | undefined, number>();
+    const imps = leverImpactsOf(l);
+    for (const imp of imps) {
+      const w = Math.abs(impactSignedAmount(imp) ?? 0);
+      if (w === 0) continue;
+      const key = imp.hierarchyLeafId ?? l.hierarchyLeafId;
+      shares.set(key, (shares.get(key) ?? 0) + w);
+    }
+    if (shares.size === 0) shares.set(l.hierarchyLeafId, 1);
+    const totalW = Array.from(shares.values()).reduce((s, v) => s + v, 0) || 1;
+
+    for (const [leafId, w] of Array.from(shares.entries())) {
+      const f = w / totalW;
+      const node = resolveNode(leafId);
+      const row = node
+        ? rowFor(node.id, node.code, node.label)
+        : rowFor(UNATTRIBUTED_NODE_ID, "", "Non attribué");
+      row.planned += locked * f;
+      row.reforecast += refo * f;
+      if (isCancelled) row.cancelled += locked * f;
+      row.late += late * f;
+      row.realized += real * f;
+    }
+  }
+  return Array.from(rows.values())
+    .map((r) => ({
+      ...r,
+      planned: r1(r.planned),
+      reforecast: r1(r.reforecast),
+      cancelled: r1(r.cancelled),
+      late: r1(r.late),
+      realized: r1(r.realized),
+    }))
+    .sort((a, b) => b.planned - a.planned);
 }

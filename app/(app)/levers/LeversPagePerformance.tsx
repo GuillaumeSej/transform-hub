@@ -38,7 +38,8 @@ import { FilterToggleButton, useFilterBarExpanded } from "@/components/shared/Co
 import { ColumnVisibilityMenu } from "@/components/shared/ColumnVisibilityMenu";
 import { Modal } from "@/components/shared/Modal";
 import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
-import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
+import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
+import { matchesFilter } from "@/lib/filterUtils";
 import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
 
 type LeverRow = Lever & {
@@ -356,8 +357,17 @@ export function LeversPagePerformance() {
   // Toutes les propriétés catégorielles du levier sont filtrables — les valeurs proposées sont
   // celles réellement présentes dans les données. L'état vit dans l'URL (préfixe f_) pour rester
   // partageable/actualisable, comme les anciens filtres ws/status/risk.
+  // ORDRE ET LIBELLÉS : identiques à ceux des colonnes du tableau (voir `columns` plus bas) —
+  // Type, Chantier, Programme, Responsable, Sponsor, Département, Région, Pays, Entité, Risque ;
+  // puis les filtres sans colonne dédiée (arborescence, coût, alertes, dates de fin).
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
+      { key: "f_type", label: "Type", getValue: (l) => l.type },
+      {
+        key: "f_ws",
+        label: t("leverForm.workstream", "Chantier"),
+        getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
+      },
       ...(showProgramColumn
         ? [
             {
@@ -367,19 +377,13 @@ export function LeversPagePerformance() {
             },
           ]
         : []),
-      { key: "f_type", label: "Type", getValue: (l) => l.type },
+      { key: "f_owner", label: t("leverForm.owner", "Responsable"), getValue: (l) => l.owner },
+      { key: "f_sponsor", label: t("leverForm.sponsor", "Sponsor"), getValue: (l) => l.sponsor },
       {
-        key: "f_ws",
-        label: "Workstream",
-        getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
+        key: "f_function",
+        label: t("dashboard.leverDepartment", "Département"),
+        getValue: (l) => l.function,
       },
-      {
-        key: "f_status",
-        label: t("levers.columnMaturity", "Maturité"),
-        getValue: (l) => lifecycle.label(l.status),
-      },
-      { key: "f_owner", label: "Owner", getValue: (l) => l.owner },
-      { key: "f_sponsor", label: "Sponsor", getValue: (l) => l.sponsor },
       ...(geographyFilterDefs.length > 0
         ? geographyFilterDefs
         : [
@@ -390,7 +394,7 @@ export function LeversPagePerformance() {
             },
             {
               key: "f_country",
-              label: t("dashboard.country", "Pays"),
+              label: t("leverForm.country", "Pays"),
               getValue: (l: Lever) => l.country,
             },
             {
@@ -400,10 +404,29 @@ export function LeversPagePerformance() {
             },
           ]),
       {
-        key: "f_function",
-        label: t("dashboard.leverDepartment", "Département"),
-        getValue: (l) => l.function,
+        key: "f_risk",
+        label: t("leverForm.risk", "Risque"),
+        // Recalculé depuis les alertes (voir engine.computeLeverRisk), pas la valeur stockée —
+        // les options proposées doivent refléter le risque réellement affiché.
+        getValue: (l) => engine.computeLeverRisk(l.id, alerts, riskThresholds).level,
       },
+      // Maturité : PAS de colonne-filtre en vue Table (retiré) ; conservé pour Kanban/Arborescence
+      // et pour la compatibilité des liens du dashboard (`f_status`, voir plus bas).
+      {
+        key: "f_status",
+        label: t("levers.columnMaturity", "Maturité"),
+        getValue: (l) => lifecycle.label(l.status),
+      },
+      ...(hierarchyFilterDefs.length > 0
+        ? hierarchyFilterDefs
+        : [
+            {
+              key: "f_pnl",
+              label: t("leverForm.pnlAccount", "Compte P&L impacté"),
+              getValue: (l: Lever) =>
+                data.pnlAccounts.find((p) => p.id === l.pnlMap)?.name ?? l.pnlMap,
+            },
+          ]),
       {
         key: "f_costCenter",
         label: t("levers.filter.costCenter", "Centre de coût / Poste de dépense"),
@@ -417,24 +440,6 @@ export function LeversPagePerformance() {
             : l.costCenter;
         },
       },
-      {
-        key: "f_risk",
-        label: t("leverForm.risk", "Risque"),
-        // Recalculé depuis les alertes (voir engine.computeLeverRisk), pas la valeur stockée —
-        // les options proposées doivent refléter le risque réellement affiché. Seul le niveau
-        // (.level) sert à filtrer/grouper — le motif (.reason) n'a de sens qu'en affichage.
-        getValue: (l) => engine.computeLeverRisk(l.id, alerts, riskThresholds).level,
-      },
-      ...(hierarchyFilterDefs.length > 0
-        ? hierarchyFilterDefs
-        : [
-            {
-              key: "f_pnl",
-              label: t("leverForm.pnlAccount", "Compte P&L impacté"),
-              getValue: (l: Lever) =>
-                data.pnlAccounts.find((p) => p.id === l.pnlMap)?.name ?? l.pnlMap,
-            },
-          ]),
       {
         key: "f_alerts",
         label: t("levers.filter.dependencyAlert", "Alerte dépendance"),
@@ -472,11 +477,20 @@ export function LeversPagePerformance() {
   // Round <n> : passe par le hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts) —
   // remplace une implémentation ad hoc qui avait un bug (le premier clic sur un bouton de filtre
   // ne produisait aucun effet visible, voir le commentaire du hook pour le détail).
-  const { activeFilters, setFilters } = useFilterBarState(filterDefs);
+  const { activeFilters, setFilters } = useMultiFilterBarState(filterDefs);
   const { expanded: filterBarExpanded, toggle: toggleFilterBar } = useFilterBarExpanded(
     "betrack_leversFilterBar_expanded"
   );
-  const activeFilterCount = Object.values(activeFilters).filter((v) => v != null).length;
+  const activeFilterCount = Object.entries(activeFilters).filter(
+    ([k, v]) => v.length > 0 && !(view === "table" && k === "f_status")
+  ).length;
+
+  // Vue Table : pas de filtre Maturité dans la barre (le filtre reste actif s'il vient de l'URL,
+  // ex. lien du dashboard, et s'affiche en pastille retirable sous la barre).
+  const barDefs = useMemo(
+    () => (view === "table" ? filterDefs.filter((d) => d.key !== "f_status") : filterDefs),
+    [view, filterDefs]
+  );
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -489,7 +503,7 @@ export function LeversPagePerformance() {
     return programScopedLevers.filter((lever) =>
       Object.entries(activeFilters).every(([key, value]) => {
         const def = filterDefs.find((d) => d.key === key);
-        return !def || value == null || def.getValue(lever) === value;
+        return !def || matchesFilter(def.getValue(lever), value);
       })
     );
   }, [programScopedLevers, activeFilters, filterDefs]);
@@ -501,7 +515,7 @@ export function LeversPagePerformance() {
       risk: riskAssessment.level,
       riskReason: riskAssessment.reason,
       realized: engine.realizedSavings(l),
-      progressPct: engine.displayedProgressPct(l),
+      progressPct: engine.leverActionProgress(l),
       wsName: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       statusLabel: lifecycle.label(l.status),
       costCenterLabel: (() => {
@@ -696,7 +710,7 @@ export function LeversPagePerformance() {
       // Risque calculé automatiquement depuis les alertes (voir engine.computeLeverRisk) —
       // affichage lecture seule, plus d'édition manuelle possible.
       key: "risk",
-      label: "Risque",
+      label: t("leverForm.risk", "Risque"),
       mobile: "secondary",
       width: "110px",
       render: (r) => <StatusBadge risk={r.risk} reason={r.riskReason} />,
@@ -842,10 +856,21 @@ export function LeversPagePerformance() {
             <div className="border-b border-border p-3">
               <DropdownFilterBar
                 items={programScopedLevers}
-                defs={filterDefs}
+                defs={barDefs}
                 active={activeFilters}
                 onChange={setFilters}
+                multiple
               />
+              {view === "table" && (activeFilters.f_status?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...activeFilters, f_status: [] })}
+                  className="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-neutral-50 px-2 py-0.5 text-[11px] font-semibold text-secondary hover:bg-neutral-100"
+                  title={t("levers.columnMaturity", "Maturité")}
+                >
+                  {t("levers.columnMaturity", "Maturité")} : {activeFilters.f_status.join(", ")} ×
+                </button>
+              )}
             </div>
           )}
         </CardBody>

@@ -1,5 +1,6 @@
 "use client";
 
+import { MultiSelect } from "@/components/shared/MultiSelect";
 import { useEffect, useState } from "react";
 import { Users, Target, Briefcase, FileSpreadsheet, Activity, History } from "lucide-react";
 import type { Company, AuthUser, Program, Lever, AuditEntry } from "@/types";
@@ -62,8 +63,8 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
   const [movementsCount, setMovementsCount] = useState(0);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
 
-  const [actionFilter, setActionFilter] = useState<string>("all");
-  const [entityFilter, setEntityFilter] = useState<string>("all");
+  const [actionFilter, setActionFilter] = useState<string[]>([]);
+  const [entityFilter, setEntityFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -113,12 +114,16 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
 
   const scopedAudit = filterAuditByCompany(audit, levers, companyId);
   const filtered = scopedAudit.filter((entry) => {
-    if (actionFilter !== "all" && entry.action !== actionFilter) return false;
-    if (entityFilter !== "all") {
+    if (actionFilter.length > 0 && !actionFilter.includes(entry.action)) return false;
+    if (entityFilter.length > 0) {
       const e = entry.entity.toLowerCase();
-      if (entityFilter === "lever" && !e.startsWith("l")) return false;
-      if (entityFilter === "movement" && !e.startsWith("mv")) return false;
-      if (entityFilter === "employee" && !e.startsWith("emp")) return false;
+      const matchesEntity = (f: string) => {
+        if (f === "lever") return e.startsWith("l");
+        if (f === "movement") return e.startsWith("mv");
+        if (f === "employee") return e.startsWith("emp");
+        return false;
+      };
+      if (!entityFilter.some(matchesEntity)) return false;
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -212,33 +217,31 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
             placeholder={t("adminCompanyHistory.searchPlaceholder", "Rechercher...")}
             className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral w-56"
           />
-          <select
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-          >
-            <option value="all">{t("adminCompanyHistory.allActions", "Toutes les actions")}</option>
-            <option value="created">{ACTION_LABELS.created}</option>
-            <option value="updated">{ACTION_LABELS.updated}</option>
-            <option value="deleted">{ACTION_LABELS.deleted}</option>
-            <option value="completed">{ACTION_LABELS.completed}</option>
-            <option value="validated">{ACTION_LABELS.validated}</option>
-            <option value="commented">{ACTION_LABELS.commented}</option>
-          </select>
-          <select
-            value={entityFilter}
-            onChange={(e) => setEntityFilter(e.target.value)}
-            className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-          >
-            <option value="all">
-              {t("adminCompanyHistory.allEntities", "Toutes les entités")}
-            </option>
-            <option value="lever">{t("adminCompanyHistory.levers", "Leviers")}</option>
-            <option value="movement">
-              {t("adminCompanyHistory.movementsHr", "Mouvements RH")}
-            </option>
-            <option value="employee">{t("adminCompanyHistory.employees", "Employés")}</option>
-          </select>
+          <MultiSelect
+            label={t("adminCompanyHistory.filterAction", "Action")}
+            placeholder={t("adminCompanyHistory.allActions", "Toutes les actions")}
+            values={actionFilter}
+            onChange={setActionFilter}
+            options={[
+              { value: "created", label: ACTION_LABELS.created },
+              { value: "updated", label: ACTION_LABELS.updated },
+              { value: "deleted", label: ACTION_LABELS.deleted },
+              { value: "completed", label: ACTION_LABELS.completed },
+              { value: "validated", label: ACTION_LABELS.validated },
+              { value: "commented", label: ACTION_LABELS.commented },
+            ]}
+          />
+          <MultiSelect
+            label={t("adminCompanyHistory.filterEntity", "Entité")}
+            placeholder={t("adminCompanyHistory.allEntities", "Toutes les entités")}
+            values={entityFilter}
+            onChange={setEntityFilter}
+            options={[
+              { value: "lever", label: t("adminCompanyHistory.levers", "Leviers") },
+              { value: "movement", label: t("adminCompanyHistory.movementsHr", "Mouvements RH") },
+              { value: "employee", label: t("adminCompanyHistory.employees", "Employés") },
+            ]}
+          />
           <span className="text-xs text-text-secondary">
             {t("adminCompanyHistory.count", "{n} entrée(s)").replace("{n}", String(sorted.length))}
           </span>

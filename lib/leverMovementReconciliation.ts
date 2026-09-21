@@ -1,6 +1,7 @@
 import type { Lever, WorkforceMovement } from "@/types";
 import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
 import { fteEffect } from "@/lib/hrEngine";
+import { leverImpactsOf } from "@/lib/engine";
 import { isActiveMovement } from "@/lib/workforceLogic";
 
 /**
@@ -92,10 +93,7 @@ export function reconcileLeverMovements(
 const HIRING_KEYWORDS = ["recrut", "embauch", "hire", "hiring"];
 
 export function mentionsHiring(lever: Lever): boolean {
-  const haystack = [
-    lever.description,
-    ...(lever.actions ?? []).flatMap((a) => (a.impacts ?? []).map((i) => i.label)),
-  ]
+  const haystack = [lever.description, ...leverImpactsOf(lever).map((i) => i.label)]
     .filter((s): s is string => !!s)
     .join(" ")
     .toLowerCase();

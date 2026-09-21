@@ -10,6 +10,7 @@ import {
   CostEngagedVsUpcomingChart,
   InvestVsSavingsChart,
 } from "@/components/finance/FinanceCostCharts";
+import { FinanceHierarchyTable } from "@/components/finance/FinanceHierarchyTable";
 import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -20,7 +21,9 @@ import type { Company, HierarchyLevelDef, HierarchyNode, Lever } from "@/types";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { type FilterDef } from "@/components/shared/FilterBar";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
-import { useFilterBarState } from "@/lib/hooks/useFilterBarState";
+import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
+import { matchesFilter } from "@/lib/filterUtils";
+import { MultiSelect } from "@/components/shared/MultiSelect";
 
 /**
  * Module Finance — le compte de résultat configuré (baseline P&L éditable, reforecast, waterfall)
@@ -117,14 +120,14 @@ export default function FinancePage() {
       },
       {
         key: "ws",
-        label: "Workstream",
+        label: "Chantier",
         getValue: (l: Lever) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       },
     ],
     [geographyFilterDefs, data.workstreams, t]
   );
 
-  const { activeFilters: financeFilters, setFilters: setFinanceFilters } = useFilterBarState(
+  const { activeFilters: financeFilters, setFilters: setFinanceFilters } = useMultiFilterBarState(
     filterDefs,
     { namespace: "finance" }
   );
@@ -132,9 +135,9 @@ export default function FinancePage() {
   const filteredLevers = useMemo(() => {
     let levers = data.levers.filter((l) => l.status !== "cancelled");
     Object.entries(financeFilters).forEach(([key, value]) => {
-      if (!value) return;
+      if (!value || value.length === 0) return;
       const def = filterDefs.find((d) => d.key === key);
-      if (def) levers = levers.filter((l) => def.getValue(l) === value);
+      if (def) levers = levers.filter((l) => matchesFilter(def.getValue(l), value));
     });
     return levers;
   }, [data, financeFilters, filterDefs]);
@@ -143,18 +146,21 @@ export default function FinancePage() {
 
   // ── Widget "Impact P&L par compte" (déplacé depuis le dashboard Performance) ──
   // Filtres géographiques (cascade Région → Pays → Entité).
-  const [pnlFilterGeo, setPnlFilterGeo] = useState("");
-  const [pnlFilterCountry, setPnlFilterCountry] = useState("");
-  const [pnlFilterEntity, setPnlFilterEntity] = useState("");
+  const [pnlFilterGeo, setPnlFilterGeo] = useState<string[]>([]);
+  const [pnlFilterCountry, setPnlFilterCountry] = useState<string[]>([]);
+  const [pnlFilterEntity, setPnlFilterEntity] = useState<string[]>([]);
 
   // Repart des leviers déjà filtrés par les filtres globaux de la page (géographie/département/
   // workstream, voir `filteredLevers` ci-dessus) — cette cascade géo locale au widget reste pour
   // affiner encore par pays/entité, sans dupliquer le filtre région déjà couvert globalement.
   const pnlFilteredLevers = useMemo(() => {
     let levers = filteredLevers;
-    if (pnlFilterGeo) levers = levers.filter((l) => l.geography === pnlFilterGeo);
-    if (pnlFilterCountry) levers = levers.filter((l) => l.country === pnlFilterCountry);
-    if (pnlFilterEntity) levers = levers.filter((l) => l.entity === pnlFilterEntity);
+    if (pnlFilterGeo.length)
+      levers = levers.filter((l) => matchesFilter(l.geography, pnlFilterGeo));
+    if (pnlFilterCountry.length)
+      levers = levers.filter((l) => matchesFilter(l.country, pnlFilterCountry));
+    if (pnlFilterEntity.length)
+      levers = levers.filter((l) => matchesFilter(l.entity, pnlFilterEntity));
     return levers;
   }, [filteredLevers, pnlFilterGeo, pnlFilterCountry, pnlFilterEntity]);
 
@@ -168,7 +174,7 @@ export default function FinancePage() {
   const pnlCountryOptions = useMemo(() => {
     const vals = new Set<string>();
     data.levers
-      .filter((l) => !pnlFilterGeo || l.geography === pnlFilterGeo)
+      .filter((l) => matchesFilter(l.geography, pnlFilterGeo))
       .forEach((l) => {
         if (l.country) vals.add(l.country);
       });
@@ -177,8 +183,8 @@ export default function FinancePage() {
   const pnlEntityOptions = useMemo(() => {
     const vals = new Set<string>();
     data.levers
-      .filter((l) => !pnlFilterGeo || l.geography === pnlFilterGeo)
-      .filter((l) => !pnlFilterCountry || l.country === pnlFilterCountry)
+      .filter((l) => matchesFilter(l.geography, pnlFilterGeo))
+      .filter((l) => matchesFilter(l.country, pnlFilterCountry))
       .forEach((l) => {
         if (l.entity) vals.add(l.entity);
       });
@@ -279,6 +285,7 @@ export default function FinancePage() {
           configuré" (voir `filteredData`/`pnlFilteredLevers`). */}
       <DropdownFilterBar
         items={data.levers.filter((l) => l.status !== "cancelled")}
+        multiple
         defs={filterDefs}
         active={financeFilters}
         onChange={setFinanceFilters}
@@ -293,6 +300,12 @@ export default function FinancePage() {
         />
       </div>
 
+      <FinanceHierarchyTable
+        data={filteredData}
+        hierarchyLevels={hierarchyLevels}
+        hierarchyNodes={hierarchyNodes}
+      />
+
       <InvestVsSavingsChart data={filteredData} />
 
       <CostCommitmentTimelineChart data={filteredData} />
@@ -302,49 +315,34 @@ export default function FinancePage() {
           title={t("dashboard.widgets.pnl")}
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              <select
-                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                value={pnlFilterGeo}
-                onChange={(e) => {
-                  setPnlFilterGeo(e.target.value);
-                  setPnlFilterCountry("");
-                  setPnlFilterEntity("");
+              <MultiSelect
+                label={t("pnl.filterRegion", "Région")}
+                placeholder={t("pnl.allRegions")}
+                values={pnlFilterGeo}
+                onChange={(vals) => {
+                  setPnlFilterGeo(vals);
+                  setPnlFilterCountry([]);
+                  setPnlFilterEntity([]);
                 }}
-              >
-                <option value="">{t("pnl.allRegions")}</option>
-                {pnlGeoOptions.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                value={pnlFilterCountry}
-                onChange={(e) => {
-                  setPnlFilterCountry(e.target.value);
-                  setPnlFilterEntity("");
+                options={pnlGeoOptions.map((g) => ({ value: g, label: g }))}
+              />
+              <MultiSelect
+                label={t("pnl.filterCountry", "Pays")}
+                placeholder={t("pnl.allCountries")}
+                values={pnlFilterCountry}
+                onChange={(vals) => {
+                  setPnlFilterCountry(vals);
+                  setPnlFilterEntity([]);
                 }}
-              >
-                <option value="">{t("pnl.allCountries")}</option>
-                {pnlCountryOptions.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
-                value={pnlFilterEntity}
-                onChange={(e) => setPnlFilterEntity(e.target.value)}
-              >
-                <option value="">{t("pnl.allEntities")}</option>
-                {pnlEntityOptions.map((ent) => (
-                  <option key={ent} value={ent}>
-                    {ent}
-                  </option>
-                ))}
-              </select>
+                options={pnlCountryOptions.map((c) => ({ value: c, label: c }))}
+              />
+              <MultiSelect
+                label={t("pnl.filterEntity", "Entité")}
+                placeholder={t("pnl.allEntities")}
+                values={pnlFilterEntity}
+                onChange={setPnlFilterEntity}
+                options={pnlEntityOptions.map((ent) => ({ value: ent, label: ent }))}
+              />
               {/* Filtres temporels : Année → Trimestre → Mois */}
               <span className="mx-1 text-[10px] text-tertiary">|</span>
               <select

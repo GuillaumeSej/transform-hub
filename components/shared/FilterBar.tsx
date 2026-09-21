@@ -18,6 +18,10 @@ export type ActiveFilters = Record<string, string[]>;
  * quel pour ses `defs`. */
 export type SingleActiveFilters = Record<string, string | null>;
 
+/** État multi-sélection d'un `DropdownFilterBar` : tableau de valeurs par dimension (absent/vide =
+ * pas de filtre). Voir `lib/hooks/useMultiFilterBarState.ts`. */
+export type MultiActiveFilters = Record<string, string[]>;
+
 export function FilterBar<T>({
   items,
   defs,

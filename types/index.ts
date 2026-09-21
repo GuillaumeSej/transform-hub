@@ -301,6 +301,10 @@ export type Lever = {
   // d'impact (poste de dépense/BU compris via ActionImpact.costCenter/entity), plus de niveau
   // sous-levier intermédiaire.
   actions?: LeverAction[];
+  /** Impacts financiers/ETP du levier (OPEX, CAPEX, gains, ETP) — saisis dès la création du levier,
+   *  indépendants des actions. Source de vérité unique des chiffres du levier (voir
+   *  `lib/engine.ts::leverImpactTotals`). */
+  impacts?: LeverImpact[];
   /** Niveau de confidentialité (doit correspondre à une valeur de Company.confidentialityLevels).
    *  Non défini = visible par tous les rôles de l'entreprise. */
   confidentialityLevel?: string;
@@ -359,14 +363,27 @@ export type LeverApproval = {
 /** Ligne d'impact d'une action — décrit UN effet financier/RH sur UN poste de coût.
  *  Une action peut avoir plusieurs lignes d'impact (ex: consulting fees + licence + réduction ETP).
  *  Ce sont des attributs de l'action, pas un 3ème niveau de navigation. */
-export type ActionImpact = {
+export type LeverImpact = {
   id: string;
   label: string; // "Consulting fees", "Réduction ETP comptables"
-  type: "cost" | "saving";
-  /** Pour les coûts : CAPEX, OPEX récurrent, ou One-off. Ignoré pour les savings. */
+  /** "cost" = OPEX/CAPEX, "saving" = gain, "fte" = impact ETP (voir `fteDirection`). */
+  type: "cost" | "saving" | "fte";
+  /** Pour type="cost" : CAPEX, OPEX récurrent, ou OPEX One-off. Ignoré pour "saving"/"fte". */
   nature: "capex" | "opex_rec" | "oneoff";
-  amount: number; // €M — toujours positif, le type détermine le signe
-  fteCount?: number; // ETP (négatif = réduction)
+  amount: number; // €M — toujours positif, le type détermine le signe. Pour type="fte" : salaire chargé total (€M) des ETP concernés.
+  fteCount?: number; // ETP — toujours positif, le sens est porté par `fteDirection`
+  /** Pour type="fte" : "hire" = recrutement (+ETP, coût), "departure" = départ (-ETP, économie). */
+  fteDirection?: "hire" | "departure";
+  /** Pour type="saving" : gain récurrent annuel (défaut, seul compté dans les savings) ou gain
+   *  ponctuel one-off (affiché à part, JAMAIS agrégé aux savings/gains bruts annualisés). */
+  gainRecurrence?: "annual" | "oneoff";
+  /** Id d'une entrée de `Company.impactNatures` (nature du coût/du gain : matières premières,
+   *  main-d'œuvre...). Paramétrable en admin. */
+  natureId?: string;
+  /** Technologie impactée — champ libre (utile pour les leviers industriels/opérationnels). */
+  technology?: string;
+  /** Id du HierarchyNode géographique (maille la plus fine de l'arborescence géographique). */
+  geographyLeafId?: string;
   /** Id du HierarchyNode (maille la plus fine, ex. Cost Center) pour CETTE ligne d'impact —
    *  même mécanique que Lever.hierarchyLeafId, mais résolue en priorité sur lui dans
    *  engine.pnlImpactDetailed (un levier peut avoir des gains sur plusieurs comptes P&L
@@ -394,6 +411,10 @@ export type ActionImpact = {
   comments?: Comment[];
 };
 
+/** @deprecated Renommé `LeverImpact` — les impacts sont désormais portés par le levier
+ *  (`Lever.impacts`), plus par les actions. Alias conservé le temps de la migration. */
+export type ActionImpact = LeverImpact;
+
 export type LeverAction = {
   id: string;
   name: string;
@@ -404,10 +425,14 @@ export type LeverAction = {
   end: string; // ISO date
   status: ActionStatus;
   deliveredDate?: string; // date de passage en "done"
-  /** Lignes d'impact financier (tableau embarqué). Chaque ligne porte son propre
-   *  mapping P&L, centre de coût, et entité. Le levier parent consolide automatiquement
-   *  ses KPIs depuis la somme des impacts de toutes ses actions. */
-  impacts?: ActionImpact[];
+  /** @deprecated Les impacts ne sont plus portés par les actions mais par `Lever.impacts`.
+   *  Champ legacy : lu uniquement par la migration (`lib/leverImpactMigration.ts`) qui remonte
+   *  ces lignes sur le levier puis le vide. Ne plus écrire dedans. */
+  impacts?: LeverImpact[];
+  /** Pondération (0-100) de cette action dans l'avancement du levier. Mode pondéré = TOUTES les
+   *  actions du levier ont `weightPct` défini ET la somme vaut 100. Sinon mode "non pondéré"
+   *  (moyenne simple des avancements). Voir `lib/engine.ts::leverActionWeighting`. */
+  weightPct?: number;
   /** Avancement déclaratif (0-100) de cette action, renseigné par le pilote du levier — distinct
    *  de `status` (étape maturité). Sert au calcul de `leverDeclaredProgress` puis
    *  `workstreamDeclaredProgress` (voir `lib/workstreamLogic.ts`). Non défini = action non encore
@@ -698,6 +723,19 @@ export type Company = {
    *  monter d'un niveau de risque soit par montant, soit par délai dépassé, le plus élevé des
    *  deux étant retenu. Non défini = pas de contrainte de délai pour ce niveau. */
   riskThresholds?: { level: RiskLevel; minAmount: number; delayDays?: number }[];
+  /** Types de levier paramétrables (ex. Automatisation, Excellence opérationnelle). Non défini =
+   *  `DEFAULT_LEVER_TYPES` (lib/impactConfig.ts). */
+  leverTypes?: string[];
+  /** Natures de coût/gain paramétrables (ex. matières premières, main-d'œuvre). Non défini =
+   *  `DEFAULT_IMPACT_NATURES` (lib/impactConfig.ts). */
+  impactNatures?: ImpactNatureDef[];
+};
+
+export type ImpactNatureDef = {
+  id: string;
+  label: string;
+  /** À quels impacts la nature s'applique : coûts (OPEX/CAPEX), gains, ou les deux. */
+  appliesTo: "cost" | "saving" | "both";
 };
 
 /** Un niveau de l'arborescence financière P&L → Cost Center, configuré par entreprise.
