@@ -130,6 +130,16 @@ export function AxisDetailClient() {
   const openChantierId = searchParams.get("chantier");
   const focusActionId = searchParams.get("action") ?? undefined;
 
+  /** Round <n> (RBAC, gating identique au dashboard exécutif) : `axis_sponsor` perd le clic-vers-KPI
+   *  pour tout indicateur CHANTIER-SCOPÉ — copie exacte de `isIndicatorPillClickable`
+   *  (`StrategicDashboardView.tsx`, ~ligne 299) pour rester cohérent avec le SEUL autre endroit de
+   *  l'app qui gate ce même clic. Pas d'export partagé : les deux fichiers construisent déjà leur
+   *  propre gate locale à partir de `strategic.strategicRole`/`data.strategicRole` (même hook,
+   *  `useStrategicData`), une seule ligne à dupliquer ne justifie pas une extraction. */
+  const isAxisSponsor = data.strategicRole === "axis_sponsor";
+  const isIndicatorClickable = (indicator: Pick<Indicator, "chantierId">) =>
+    !(isAxisSponsor && indicator.chantierId);
+
   if (data.loading) {
     return (
       <div className="rounded-lg border border-border bg-white p-10 text-center text-sm text-tertiary">
@@ -150,12 +160,39 @@ export function AxisDetailClient() {
   }
 
   /** Carte d'un indicateur — LECTURE SEULE (voir en-tête de fichier) : graphique, dernière valeur,
-   *  badge de statut effectif. Aucun contrôle de saisie ni d'édition d'objectif. */
+   *  badge de statut effectif. Aucun contrôle de saisie ni d'édition d'objectif ici — round <n> :
+   *  la carte devient NAVIGABLE (clic → fiche KPI, `/kpi?indicator=<id>`, où vivent seuls la saisie
+   *  de mesure et l'édition d'objectif/seuil, voir le doc-comment de tête de fichier), même RBAC que
+   *  les puces d'indicateur du dashboard exécutif (`isIndicatorClickable` ci-dessus). Le clic est
+   *  posé sur la carte plutôt que dans un `<button>` l'enveloppant : `IndicatorChart` porte son
+   *  propre bouton interactif ("voir l'historique complet"), et un `<button>` ne peut pas contenir
+   *  un autre `<button>` — la zone graphique stoppe donc explicitement la propagation du clic
+   *  (`stopPropagation` ci-dessous) pour que l'ouverture de son historique complet ne déclenche pas
+   *  AUSSI une navigation vers la fiche KPI. */
   const renderIndicator = (indicator: Indicator) => {
     const measures = data.measurements.filter((m) => m.indicatorId === indicator.id);
     const latest = latestMeasurement(indicator.id, data.measurements);
+    const clickable = isIndicatorClickable(indicator);
     return (
-      <div key={indicator.id} className="rounded-lg border border-border bg-white p-3.5">
+      <div
+        key={indicator.id}
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        onClick={clickable ? () => router.push(`/kpi?indicator=${indicator.id}`) : undefined}
+        onKeyDown={
+          clickable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  router.push(`/kpi?indicator=${indicator.id}`);
+                }
+              }
+            : undefined
+        }
+        className={`rounded-lg border border-border bg-white p-3.5 transition-colors ${
+          clickable ? "cursor-pointer hover:border-black" : ""
+        }`}
+      >
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="text-[13px] font-semibold text-primary">{indicator.name}</div>
@@ -189,7 +226,7 @@ export function AxisDetailClient() {
           {latest && <span className="text-tertiary"> · {latest.period}</span>}
         </div>
 
-        <div className="mt-2">
+        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
           <IndicatorChart
             measurements={measures}
             objectiveValue={indicator.objectiveValue}

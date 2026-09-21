@@ -349,7 +349,7 @@ export function StrategicAxesView() {
             {(
               [
                 { id: "advancement", label: t("strategicAxes.tabs.advancement", "Avancement") },
-                { id: "byAxis", label: t("strategicAxes.tabs.byAxis", "Vue par axe") },
+                { id: "byAxis", label: t("strategicAxes.tabs.byAxis", "Arborescence") },
               ] as const
             ).map((tab) => (
               <button

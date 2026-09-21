@@ -10,7 +10,12 @@ import {
   type BudgetDonutSlice,
 } from "@/components/shared/charts/BudgetDonutChart";
 import { KPICard } from "@/components/shared/KPICard";
+import { Modal } from "@/components/shared/Modal";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
+import {
+  StaffingDetailModal,
+  type StaffingDetailRow,
+} from "@/components/strategic/StaffingDetailModal";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
 import { colorForDepartment } from "@/lib/axisLogic";
@@ -80,6 +85,69 @@ function totalsByFunction(entries: ChantierStaffing[]): { fn: string; fte: numbe
   return Array.from(map.entries())
     .map(([fn, fte]) => ({ fn, fte }))
     .sort((a, b) => b.fte - a.fte);
+}
+
+/** Granularité du sélecteur de période du widget besoin/disponible ci-dessous — round <n>. Même
+ *  triplet trimestre/semestre/année que `StaffingPeriodBreakdown.tsx` (`Granularity`, non exporté),
+ *  réutilisé ici avec les MÊMES clés i18n (`staffingPeriod.granularity.*`) pour rester visuellement
+ *  et sémantiquement cohérent avec l'autre sélecteur de granularité de cette même page. */
+type NeedPeriodGranularity = "quarterly" | "semiannual" | "annual";
+
+/** Bornes ISO [début, fin] + libellé de la période COURANTE (calculée depuis la date du jour) pour
+ *  une granularité donnée — alimente le filtre "besoin déclaré" du widget besoin/disponible
+ *  ci-dessous (round <n>). Pendant "bornes" de `periodLabelForDate` (lib/axisLogic.ts) : cette
+ *  dernière ne renvoie qu'un LIBELLÉ à partir d'une date, suffisant pour bucketer `ChantierStaffing`
+ *  par sa seule `startDate` (voir `staffingPeriodBuckets`/`axisPeriodBuckets`, tous deux utilisés
+ *  ailleurs sur cette page par `StaffingPeriodBreakdown.tsx`), mais pas pour tester si la PLAGE
+ *  `startDate`/`endDate` d'une ligne recoupe une période donnée — ce dont CE widget a besoin
+ *  (« besoin déclaré » doit compter une ligne dès que son intervalle touche la période courante, pas
+ *  seulement si elle DÉBUTE dedans). Aucune fonction de bornes équivalente n'existe ailleurs dans
+ *  l'app pour ce même découpage trimestre/semestre/année — introduite ici, localement à ce fichier,
+ *  plutôt que de génériciser `periodLabelForDate` pour ce seul appelant. */
+function currentPeriodBounds(
+  granularity: NeedPeriodGranularity,
+  today: Date
+): { start: string; end: string; label: string } {
+  const year = today.getFullYear();
+  const month = today.getMonth(); // 0-11
+  const iso = (y: number, m: number, d: number) =>
+    `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const lastDayOfMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+
+  if (granularity === "annual") {
+    return { start: iso(year, 0, 1), end: iso(year, 11, 31), label: String(year) };
+  }
+  if (granularity === "semiannual") {
+    const semester = month <= 5 ? 1 : 2;
+    const startMonth = semester === 1 ? 0 : 6;
+    const endMonth = semester === 1 ? 5 : 11;
+    return {
+      start: iso(year, startMonth, 1),
+      end: iso(year, endMonth, lastDayOfMonth(year, endMonth)),
+      label: `${year}-S${semester}`,
+    };
+  }
+  const quarter = Math.floor(month / 3) + 1;
+  const startMonth = (quarter - 1) * 3;
+  const endMonth = startMonth + 2;
+  return {
+    start: iso(year, startMonth, 1),
+    end: iso(year, endMonth, lastDayOfMonth(year, endMonth)),
+    label: `${year}-Q${quarter}`,
+  };
+}
+
+/** Une ligne de staffing est comptée sur la période courante si sa plage `startDate`/`endDate`
+ *  RECOUPE (et pas seulement "démarre dans") les bornes de cette période. Une ligne sans `endDate`
+ *  connue est considérée toujours en cours (voir `types/index.ts`, doc-comment de
+ *  `ChantierStaffing.endDate` : "optionnelle même quand `startDate` est renseignée, staffing sans
+ *  échéance connue"). Une ligne sans `startDate` (« non daté ») est exclue — même convention que
+ *  `staffingPeriodBuckets`/`periodLabelForDate` : « compté dans les totaux globaux [existants, hors
+ *  de ce widget] mais ignoré par toute vue PAR PÉRIODE ». */
+function overlapsPeriod(entry: ChantierStaffing, period: { start: string; end: string }): boolean {
+  if (!entry.startDate) return false;
+  const entryEnd = entry.endDate ?? "9999-12-31";
+  return entry.startDate <= period.end && entryEnd >= period.start;
 }
 
 /** Barre horizontale simple — `pct` déjà borné par l'appelant. `fn` détermine la couleur de
@@ -153,7 +221,11 @@ export function EffectifsPageClient() {
     strategicRole,
     loading: dataLoading,
   } = useStrategicData(user?.companyId ?? null, activeProgramId, user);
-  const { fteByDept, loading: departmentsLoading } = useCompanyDepartments(user?.companyId ?? null);
+  const {
+    employees,
+    fteByDept,
+    loading: departmentsLoading,
+  } = useCompanyDepartments(user?.companyId ?? null);
 
   /** État du drill-down EN PLACE du donut « Budget financier alloué » (round 26 — remplace le
    *  drill-down par MODALE de round 13/25 : le même donut se redessine désormais d'un niveau à
@@ -189,24 +261,64 @@ export function EffectifsPageClient() {
   const globalTotals = useMemo(() => totalsByFunction(staffing), [staffing]);
   const totalFte = useMemo(() => staffing.reduce((sum, e) => sum + (e.fte || 0), 0), [staffing]);
 
-  /** Besoin (staffing déclaré) vs disponible (base ETP réelle) par équipe — round 13, remplace la
-   *  section « Budget d'ETP par fonction ». Une équipe apparaît dès qu'elle a du besoin OU du
-   *  disponible (une équipe entièrement dispo mais jamais staffée reste visible : c'est une
-   *  information utile — "cette équipe n'est staffée sur aucun chantier du plan"). Triée par
-   *  besoin décroissant. */
+  /** Sélecteur de période du widget besoin/disponible (round <n>) — voir `currentPeriodBounds`
+   *  ci-dessus. Par défaut le trimestre courant, cohérent avec le défaut de
+   *  `StaffingPeriodBreakdown.tsx` (`granularity` initialisée à `"quarterly"`). État PUREMENT LOCAL
+   *  à ce widget (comme `mode`/`granularity` de `StaffingPeriodBreakdown`) : rien d'autre sur cette
+   *  page n'en dépend. */
+  const [needPeriodGranularity, setNeedPeriodGranularity] =
+    useState<NeedPeriodGranularity>("quarterly");
+  const needPeriod = useMemo(
+    () => currentPeriodBounds(needPeriodGranularity, new Date()),
+    [needPeriodGranularity]
+  );
+
+  /** Lignes de staffing dont la plage `startDate`/`endDate` recoupe la période courante
+   *  (`needPeriod`, voir `overlapsPeriod` ci-dessus) — remplace round <n> l'ancien calcul TOUT-TEMPS
+   *  (`globalTotals`, toujours utilisé tel quel par le KPI "ETP mobilisés au total" et sa barre de
+   *  répartition ci-dessous, hors périmètre de ce correctif) pour le côté "besoin" du widget
+   *  besoin/disponible SEUL. */
+  const staffingInNeedPeriod = useMemo(
+    () => staffing.filter((entry) => overlapsPeriod(entry, needPeriod)),
+    [staffing, needPeriod]
+  );
+  const needTotalsByFunction = useMemo(
+    () => totalsByFunction(staffingInNeedPeriod),
+    [staffingInNeedPeriod]
+  );
+
+  /** Besoin (staffing déclaré, filtré sur `needPeriod` ci-dessus) vs disponible (base ETP réelle,
+   *  TOUJOURS "aujourd'hui" — `Employee` n'a structurellement aucune dimension temporelle, voir
+   *  `useCompanyDepartments`) par équipe — round 13, remplace la section « Budget d'ETP par
+   *  fonction » ; round <n> : le côté besoin devient filtré par période plutôt que cumulatif
+   *  tout-temps (l'ancien calcul mélangeait un besoin toutes périodes confondues avec un disponible
+   *  instantané, un pourcentage sans grand sens). Une équipe apparaît dès qu'elle a du besoin sur
+   *  CETTE période OU du disponible (une équipe entièrement dispo mais non staffée sur la période
+   *  reste visible : "cette équipe n'est staffée sur aucun chantier du plan pour cette période").
+   *  Triée par besoin décroissant. */
   const needVsAvailable = useMemo(() => {
     const names = new Set<string>([
-      ...globalTotals.map((row) => row.fn),
+      ...needTotalsByFunction.map((row) => row.fn),
       ...Object.keys(fteByDept),
     ]);
     return Array.from(names)
       .map((fn) => ({
         fn,
-        needed: globalTotals.find((row) => row.fn === fn)?.fte ?? 0,
+        needed: needTotalsByFunction.find((row) => row.fn === fn)?.fte ?? 0,
         available: fteByDept[fn] ?? 0,
       }))
       .sort((a, b) => b.needed - a.needed);
-  }, [globalTotals, fteByDept]);
+  }, [needTotalsByFunction, fteByDept]);
+
+  /** Détail « exploitable » ouvert par clic sur le besoin OU le disponible d'une équipe (round <n>,
+   *  même esprit que `StaffingPeriodBreakdown.detailScope`) — `null` = aucune modale ouverte.
+   *  "need" ouvre `StaffingDetailModal` (lignes `ChantierStaffing` brutes, même composant/forme que
+   *  `StaffingPeriodBreakdown.tsx`) ; "available" ouvre une modale locale dédiée (le composant
+   *  partagé `StaffingDetailModal` est typé pour des lignes `ChantierStaffing`, pas pour des
+   *  `Employee` — forme différente, voir son doc-comment). */
+  const [needDetailScope, setNeedDetailScope] = useState<
+    { kind: "need"; fn: string } | { kind: "available"; fn: string } | null
+  >(null);
 
   /** Segments colorés (un par équipe mobilisée) pour la barre de la tuile « Total ETP » — même
    *  couleur par équipe que partout ailleurs sur cette page (`colorForDepartment`). */
@@ -241,6 +353,70 @@ export function EffectifsPageClient() {
     () => Object.fromEntries(chantierActions.map((a) => [a.id, a.name])),
     [chantierActions]
   );
+
+  /** `StrategicAxis.id` → nom — pour la colonne "Axe(s)" des lignes de `StaffingDetailModal`
+   *  ci-dessous, même besoin que `axisNamesForChantier` de `StaffingPeriodBreakdown.tsx` (non
+   *  exportée, donc reconstruite localement ici avec le même résultat). */
+  const axisNameById = useMemo(() => new Map(axes.map((a) => [a.id, a.name])), [axes]);
+
+  /** Lignes `ChantierStaffing` BRUTES derrière le besoin de l'équipe couramment ouverte
+   *  (`needDetailScope.kind === "need"`), restreintes à `staffingInNeedPeriod` (même période que le
+   *  chiffre cliqué) — alimente `StaffingDetailModal`, même forme de ligne que
+   *  `StaffingPeriodBreakdown.detailRows`. Libellé de la modale volontairement honnête (« lignes de
+   *  besoin déclaré », jamais « personnes ») : `ChantierStaffing` n'a pas de champ nom structuré,
+   *  seulement `note`, un texte libre qui PEUT contenir un nom sans que ce soit garanti — voir la
+   *  colonne "Précision" déjà affichée telle quelle par `StaffingDetailModal`. */
+  const needDetailRows: StaffingDetailRow[] = useMemo(() => {
+    if (!needDetailScope || needDetailScope.kind !== "need") return [];
+    return staffingInNeedPeriod
+      .filter((e) => e.function === needDetailScope.fn)
+      .map((e) => ({
+        id: e.id,
+        chantierName: chantierNames.get(e.chantierId) ?? t("effectifs.chantierUnknown"),
+        function: e.function,
+        axisNames:
+          (axisIdsByChantier[e.chantierId] ?? [])
+            .map((id) => axisNameById.get(id) ?? t("effectifs.axisUnknown"))
+            .join(", ") || "—",
+        fte: e.fte || 0,
+        periodLabel: e.startDate
+          ? `${e.startDate} → ${e.endDate ?? "…"}`
+          : t("staffingPeriod.detailModal.undated"),
+        lever: e.actionId ? (actionNamesById[e.actionId] ?? "—") : "—",
+        note: e.note ?? "—",
+      }))
+      .sort((a, b) => b.fte - a.fte);
+  }, [
+    needDetailScope,
+    staffingInNeedPeriod,
+    chantierNames,
+    axisIdsByChantier,
+    axisNameById,
+    actionNamesById,
+    t,
+  ]);
+  const needDetailTotalFte = useMemo(
+    () => needDetailRows.reduce((sum, row) => sum + row.fte, 0),
+    [needDetailRows]
+  );
+
+  /** Employés RÉELS (noms compris, `useCompanyDepartments`'s `employees`, jusqu'ici totalement
+   *  ignorés par cette page qui n'en dérivait que `fteByDept`) derrière le disponible de l'équipe
+   *  couramment ouverte (`needDetailScope.kind === "available"`) — TOUJOURS l'instantané complet
+   *  d'aujourd'hui (`Employee` n'a pas de notion de période), jamais restreint à `needPeriod`. */
+  const availableDetailRows = useMemo(() => {
+    if (!needDetailScope || needDetailScope.kind !== "available") return [];
+    return employees
+      .filter((e) => e.department === needDetailScope.fn)
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [needDetailScope, employees]);
+
+  const needDetailModalTitle = !needDetailScope
+    ? ""
+    : needDetailScope.kind === "need"
+      ? t("effectifs.needVsAvailable.needDetailTitle").replace("{team}", needDetailScope.fn)
+      : t("effectifs.needVsAvailable.availableDetailTitle").replace("{team}", needDetailScope.fn);
 
   // ── Budget FINANCIER alloué (round 12) ─────────────────────────────────────────────────────
   // Nouvelle section monétaire, distincte du besoin/disponible ETP ci-dessus (une question de €,
@@ -543,55 +719,180 @@ export function EffectifsPageClient() {
 
   // Section besoin vs disponible : indépendante de la présence de lignes de staffing (une équipe
   // de la base ETP peut être 100% disponible et n'apparaître ici que pour ça) — construite une
-  // seule fois et rendue dans les deux branches ci-dessous (staffing vide ou non).
+  // seule fois et rendue dans les deux branches ci-dessous (staffing vide ou non). Round <n> :
+  // sélecteur de période (besoin uniquement, voir `currentPeriodBounds`/`needPeriod` ci-dessus) +
+  // les deux chiffres deviennent cliquables (`needDetailScope`), plus les deux modales de détail
+  // qui vont avec — embarquées ICI, dans le même JSX partagé par les deux branches de retour
+  // ci-dessous, plutôt qu'au niveau racine du composant (une seule des deux branches s'exécute par
+  // rendu, mais les modales doivent rester disponibles quelle que soit celle qui rend).
   const needVsAvailableSection = (
-    <Card className="mb-0">
-      <CardHeader title={t("effectifs.needVsAvailable.title")} />
-      <CardBody>
-        {needVsAvailable.length === 0 ? (
-          <p className="text-sm text-text-secondary">{t("effectifs.needVsAvailable.empty")}</p>
-        ) : (
-          <ul className="space-y-3">
-            {needVsAvailable.map(({ fn, needed, available }) => {
-              const pct = available > 0 ? Math.round((needed / available) * 100) : null;
-              const overAllocated = pct !== null && pct > 100;
-              return (
-                <li key={fn}>
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-primary">
-                      <span
-                        aria-hidden
-                        className={`h-2 w-2 rounded-full ${colorForDepartment(fn)}`}
-                      />
-                      {fn}
-                    </span>
-                    <span className="text-[12px] text-secondary">
-                      <strong className="text-primary">{formatFte(needed)}</strong>{" "}
-                      {t("effectifs.needVsAvailable.neededOf")}{" "}
-                      <strong className="text-primary">{formatFte(available)}</strong>{" "}
-                      {t("staffing.fteUnit")}
-                      {pct !== null && (
+    <>
+      <Card className="mb-0">
+        <CardHeader
+          title={t("effectifs.needVsAvailable.title")}
+          actions={
+            // Même style/convention que le toggle de granularité de `StaffingPeriodBreakdown.tsx`
+            // (mêmes clés i18n `staffingPeriod.granularity.*`) — cohérence visuelle voulue entre les
+            // deux sélecteurs de période de cette page.
+            <div className="flex overflow-hidden rounded-md border border-border">
+              {(["quarterly", "semiannual", "annual"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  aria-pressed={needPeriodGranularity === g}
+                  onClick={() => setNeedPeriodGranularity(g)}
+                  className={`px-2.5 py-1 text-[11px] font-semibold transition ${
+                    needPeriodGranularity === g
+                      ? "bg-black text-white"
+                      : "bg-white text-secondary hover:text-primary"
+                  }`}
+                >
+                  {t(`staffingPeriod.granularity.${g}`)}
+                </button>
+              ))}
+            </div>
+          }
+        />
+        <CardBody>
+          {/* Clarifie explicitement les deux périmètres temporels différents des deux côtés du
+              ratio (demande PO — voir le doc-comment de tête de fichier) : le besoin est filtré sur
+              la période choisie ci-dessus, le disponible reste structurellement une photo
+              instantanée d'aujourd'hui (`Employee` n'a aucune notion de période). */}
+          <p className="mb-3 text-[11px] text-tertiary">
+            {t("effectifs.needVsAvailable.periodHint").replace("{period}", needPeriod.label)}
+          </p>
+          {needVsAvailable.length === 0 ? (
+            <p className="text-sm text-text-secondary">{t("effectifs.needVsAvailable.empty")}</p>
+          ) : (
+            <ul className="space-y-3">
+              {needVsAvailable.map(({ fn, needed, available }) => {
+                const pct = available > 0 ? Math.round((needed / available) * 100) : null;
+                const overAllocated = pct !== null && pct > 100;
+                return (
+                  <li key={fn}>
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-primary">
                         <span
-                          className={`ml-1.5 font-bold ${overAllocated ? "text-bp-coral" : ""}`}
+                          aria-hidden
+                          className={`h-2 w-2 rounded-full ${colorForDepartment(fn)}`}
+                        />
+                        {fn}
+                      </span>
+                      <span className="text-[12px] text-secondary">
+                        <button
+                          type="button"
+                          onClick={() => setNeedDetailScope({ kind: "need", fn })}
+                          title={t("effectifs.needVsAvailable.needDetailTitle").replace(
+                            "{team}",
+                            fn
+                          )}
+                          className="font-bold text-primary underline-offset-2 hover:text-bp-coral hover:underline"
                         >
-                          ({pct}%)
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <Bar pct={pct !== null ? Math.min(pct, 100) : 0} fn={fn} />
-                  {overAllocated && (
-                    <p className="mt-1 text-[11px] font-semibold text-bp-coral">
-                      {t("effectifs.needVsAvailable.overAllocated")}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                          {formatFte(needed)}
+                        </button>{" "}
+                        {t("effectifs.needVsAvailable.neededOf")}{" "}
+                        <button
+                          type="button"
+                          onClick={() => setNeedDetailScope({ kind: "available", fn })}
+                          title={t("effectifs.needVsAvailable.availableToday")}
+                          className="font-bold text-primary underline-offset-2 hover:text-bp-coral hover:underline"
+                        >
+                          {formatFte(available)}
+                        </button>{" "}
+                        {t("staffing.fteUnit")}
+                        {pct !== null && (
+                          <span
+                            className={`ml-1.5 font-bold ${overAllocated ? "text-bp-coral" : ""}`}
+                          >
+                            ({pct}%)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <Bar pct={pct !== null ? Math.min(pct, 100) : 0} fn={fn} />
+                    {overAllocated && (
+                      <p className="mt-1 text-[11px] font-semibold text-bp-coral">
+                        {t("effectifs.needVsAvailable.overAllocated")}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Détail "besoin déclaré" (round <n>) — réutilise `StaffingDetailModal` tel quel (même forme
+          de ligne que `StaffingPeriodBreakdown.tsx`) : lignes `ChantierStaffing` brutes de l'équipe
+          cliquée, sur la période sélectionnée. Titre volontairement honnête (jamais "personnes") —
+          voir le doc-comment de `needDetailRows`. */}
+      <StaffingDetailModal
+        open={needDetailScope?.kind === "need"}
+        onOpenChange={(open) => {
+          if (!open) setNeedDetailScope(null);
+        }}
+        title={needDetailModalTitle}
+        rows={needDetailRows}
+        totalFte={needDetailTotalFte}
+      />
+
+      {/* Détail "disponible" (round <n>) — modale LOCALE dédiée (pas `StaffingDetailModal`, dont la
+          forme de ligne ne colle pas à `Employee`, voir le doc-comment d'`availableDetailRows`) :
+          vrai tableau HTML des employés RÉELS de l'équipe cliquée, même parti pris que
+          `StaffingDetailModal` (texte nativement sélectionnable plutôt qu'un panneau en prose). */}
+      <Modal
+        open={needDetailScope?.kind === "available"}
+        onOpenChange={(open) => {
+          if (!open) setNeedDetailScope(null);
+        }}
+        title={needDetailModalTitle}
+        maxWidth="640px"
+      >
+        {availableDetailRows.length === 0 ? (
+          <p className="py-6 text-center text-sm text-tertiary">
+            {t("effectifs.needVsAvailable.availableDetailEmpty")}
+          </p>
+        ) : (
+          <div>
+            <p className="mb-3 text-[12px] text-tertiary">
+              {t("staffing.total")} :{" "}
+              <strong className="text-primary">
+                {formatFte(availableDetailRows.reduce((sum, e) => sum + (e.fte || 0), 0))}{" "}
+                {t("staffing.fteUnit")}
+              </strong>
+              {" · "}
+              {t("effectifs.needVsAvailable.rowsCount").replace(
+                "{n}",
+                String(availableDetailRows.length)
+              )}
+            </p>
+            <div className="overflow-x-auto rounded-md border border-border">
+              <table className="w-full min-w-[520px] text-left text-[12px]">
+                <thead className="bg-neutral-50 text-[11px] font-semibold uppercase tracking-wide text-secondary">
+                  <tr>
+                    <th className="px-3 py-2">{t("effectifs.needVsAvailable.columnName")}</th>
+                    <th className="px-3 py-2">{t("effectifs.needVsAvailable.columnFunction")}</th>
+                    <th className="px-3 py-2">{t("effectifs.needVsAvailable.columnTeam")}</th>
+                    <th className="px-3 py-2 text-right">{t("etp.column.fte")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {availableDetailRows.map((emp) => (
+                    <tr key={emp.id} className="text-primary">
+                      <td className="px-3 py-2 font-medium">{emp.name}</td>
+                      <td className="px-3 py-2 text-tertiary">{emp.func}</td>
+                      <td className="px-3 py-2 text-tertiary">{emp.team}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{formatFte(emp.fte)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
-      </CardBody>
-    </Card>
+      </Modal>
+    </>
   );
 
   if (staffing.length === 0) {
