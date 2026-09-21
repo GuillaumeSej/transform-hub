@@ -15,8 +15,9 @@ import {
 } from "@/lib/impactKinds";
 import { leverImpactTotals } from "@/lib/engine";
 import { coerceImpactStatus, impactStatusOf } from "@/lib/impactStatus";
+import { effectiveLeafLevel, leafLevels } from "@/lib/hierarchyLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Company, HierarchyLevelDef, HierarchyNode, LeverImpact } from "@/types";
+import type { Company, HierarchyNode, LeverImpact } from "@/types";
 
 const inputClass =
   "w-full min-w-0 rounded-sm border border-border bg-white px-1.5 py-1 text-[12px] focus:border-bp-coral focus:outline-none disabled:bg-neutral-100 disabled:text-tertiary";
@@ -32,19 +33,15 @@ function emptyImpact(): LeverImpact {
   return { id: newId(), label: "", amount: 0, ...impactKindPatch("opex") } as LeverImpact;
 }
 
-function finest(levels?: HierarchyLevelDef[]): HierarchyLevelDef | undefined {
-  return [...(levels ?? [])].sort((a, b) => a.order - b.order).pop();
-}
-
 function GeographyLeafSelect({
   companyId,
-  levelKey,
+  levelKeys,
   value,
   onChange,
   disabled,
 }: {
   companyId: string;
-  levelKey: string;
+  levelKeys: string[];
   value?: string;
   onChange: (v: string | undefined) => void;
   disabled?: boolean;
@@ -74,7 +71,7 @@ function GeographyLeafSelect({
     >
       <option value="">{t("leverForm.selectPlaceholder", "Sélectionner")}</option>
       {nodes
-        .filter((n) => n.levelKey === levelKey)
+        .filter((n) => levelKeys.includes(n.levelKey))
         .map((n) => (
           <option key={n.id} value={n.id}>
             {n.label} ({n.code})
@@ -104,8 +101,8 @@ export function ImpactsEditor({
   const { t } = useTranslation();
   const editable = canEdit && !readOnly;
   const companyId = company?.id;
-  const finLevel = finest(company?.hierarchyLevels);
-  const geoLevel = finest(company?.geographyHierarchyLevels);
+  const finLevel = effectiveLeafLevel(company?.hierarchyLevels ?? []);
+  const geoLevel = effectiveLeafLevel(company?.geographyHierarchyLevels ?? []);
   const totals = leverImpactTotals(impacts);
 
   const update = (id: string, patch: Partial<LeverImpact>) =>
@@ -352,7 +349,9 @@ export function ImpactsEditor({
                     {geoLevel && companyId ? (
                       <GeographyLeafSelect
                         companyId={companyId}
-                        levelKey={geoLevel.key}
+                        levelKeys={leafLevels(company?.geographyHierarchyLevels ?? []).map(
+                          (l) => l.key
+                        )}
                         value={imp.geographyLeafId}
                         disabled={!editable}
                         onChange={(v) => update(imp.id, { geographyLeafId: v })}
