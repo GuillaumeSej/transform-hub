@@ -341,7 +341,15 @@ describe("cancelled levers are excluded from every aggregate", () => {
   });
   it("waterfall = brut − OPEX récurrent = net, cancelled excluded", () => {
     const w = engine.savingsWaterfall(d);
-    expect(w.steps.map((x) => x.key)).toEqual(["gross", "opexRec", "target"]);
+    expect(w.steps.map((x) => x.key)).toEqual([
+      "initial",
+      "reforecast",
+      "cancelled",
+      "target",
+      "gross",
+      "opexRec",
+      "net",
+    ]);
     expect(w.target).toBe(5);
     expect(w.gross - w.opexRec).toBeCloseTo(w.target, 1);
     expect(w.steps.find((x) => x.key === "target")?.value).toBe(w.target);
@@ -482,7 +490,6 @@ describe("savingsWaterfall & financeByHierarchyLevel", () => {
   it("waterfall arithmetic: gross − recurring OPEX = net target (same as savingsTriple)", () => {
     const w = engine.savingsWaterfall(d);
     const v = (k: string) => w.steps.find((s) => s.key === k)!.value;
-    expect(w.steps.map((s) => s.key)).toEqual(["gross", "opexRec", "target"]);
     expect(v("target")).toBe(11); // A réactualisé 8 + C 3 ; B annulé exclu
     expect(w.target).toBe(v("target"));
     expect(v("opexRec")).toBe(-w.opexRec);
@@ -490,6 +497,16 @@ describe("savingsWaterfall & financeByHierarchyLevel", () => {
     expect(v("gross")).toBeCloseTo(v("target") + w.opexRec, 1);
     expect(v("gross") + v("opexRec")).toBeCloseTo(v("target"), 1);
     expect(w.remaining).toBe(Math.round((w.target - w.realized) * 10) / 10);
+    expect(v("net")).toBe(v("target"));
+  });
+  it("group A loops: initial + Δ réactualisé − annulé = cible", () => {
+    const w = engine.savingsWaterfall(d);
+    const v = (k: string) => w.steps.find((s) => s.key === k)!.value;
+    expect(v("initial")).toBe(17); // A 10 + B 4 (annulé) + C 3 : plan figé de tous les leviers
+    expect(v("cancelled")).toBe(-4);
+    expect(v("reforecast")).toBe(-2); // A 10 -> 8
+    expect(v("initial") + v("reforecast") + v("cancelled")).toBeCloseTo(v("target"), 5);
+    expect(v("target")).toBe(engine.savingsWaterfall(d).target);
   });
   it("waterfall target/realized equal savingsTriple (same numbers as dashboard KPI/graph)", () => {
     const w = engine.savingsWaterfall(d);

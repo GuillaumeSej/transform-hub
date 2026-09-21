@@ -1732,8 +1732,11 @@ export function impactTrajectory(
 
 // ─── Cascade planifié → réactualisé → annulé → cible réactualisée ───────────
 
+export type WaterfallStepKey =
+  "initial" | "reforecast" | "cancelled" | "target" | "gross" | "opexRec" | "net";
+
 export type WaterfallStep = {
-  key: "gross" | "opexRec" | "target";
+  key: WaterfallStepKey;
   label: string;
   /** "total" = barre pleine depuis 0 ; "delta" = variation signée. */
   kind: "total" | "delta";
@@ -1743,7 +1746,14 @@ export type WaterfallStep = {
 };
 
 export type SavingsWaterfall = {
+  /** Groupe A : initial → ± réactualisé → − annulé → = cible ; groupe B : brut → − OPEX → = net. */
   steps: WaterfallStep[];
+  /** Planifié initial annualisé (plan figé de TOUS les leviers, annulés inclus). */
+  initial: number;
+  /** Δ des leviers actifs réactualisés (réactualisé − plan figé). */
+  reforecastDelta: number;
+  /** Plan figé des leviers annulés (retiré de la cible). */
+  cancelled: number;
   /** Net annualisé réactualisé (€M) = MÊME valeur que `savingsTriple(...).reforecast`
    *  (graphe "Réalisation des économies", KPI du dashboard). */
   target: number;
@@ -1757,32 +1767,64 @@ export type SavingsWaterfall = {
 };
 
 /**
- * Cascade des économies ANNUALISÉES (€M) : brut − OPEX récurrent = net (cible réactualisée).
+ * Cascade des économies ANNUALISÉES (€M), en deux groupes :
+ *  (a) planifié initial (plan figé, tous leviers) ± réactualisé − annulé = cible réactualisée (net) ;
+ *  (b) décomposition de cette cible : brut − OPEX récurrent = net.
  * Règle métier : net = brut − OPEX récurrent ; le CAPEX et les coûts one-off n'y entrent jamais.
  * Le net est celui de `savingsTriple` (scindé réalisé / reste à faire) ; le brut est dérivé
- * (net + OPEX récurrent) pour que la cascade boucle exactement. Leviers annulés exclus.
+ * (net + OPEX récurrent) et le Δ réactualisé est dérivé de l'arrondi pour que tout boucle
+ * exactement. Leviers annulés exclus de la cible.
  */
 export function savingsWaterfall(data: BeTrackData): SavingsWaterfall {
   const r1 = (n: number) => Math.round(n * 10) / 10;
   const active = data.levers.filter((l) => l.status !== "cancelled");
+  const cancelledLevers = data.levers.filter((l) => l.status === "cancelled");
+  const lockedOf = (l: Lever) => l.lockedPlan?.netSavings ?? l.netSavings;
   const realized = r1(active.reduce((s, l) => s + realizedSavings(l), 0));
-  const targetRaw = active.reduce((s, l) => s + displayedReforecastNet(l).value, 0);
-  const opexRaw = active.reduce((s, l) => s + leverOpexRecOf(l), 0);
-  const target = r1(targetRaw);
-  const opexRec = r1(opexRaw);
+  const target = r1(active.reduce((s, l) => s + displayedReforecastNet(l).value, 0));
+  const opexRec = r1(active.reduce((s, l) => s + leverOpexRecOf(l), 0));
+  const cancelled = r1(cancelledLevers.reduce((s, l) => s + lockedOf(l), 0));
+  const initial = r1(data.levers.reduce((s, l) => s + lockedOf(l), 0));
+  const reforecastDelta = r1(target + cancelled - initial);
   const gross = r1(target + opexRec);
   const steps: WaterfallStep[] = [
-    { key: "gross", label: "Gain brut annualisé", kind: "total", value: gross, cumulative: gross },
-    { key: "opexRec", label: "OPEX récurrent", kind: "delta", value: -opexRec, cumulative: target },
+    {
+      key: "initial",
+      label: "Planifié initial",
+      kind: "total",
+      value: initial,
+      cumulative: initial,
+    },
+    {
+      key: "reforecast",
+      label: "Réactualisé",
+      kind: "delta",
+      value: reforecastDelta,
+      cumulative: r1(initial + reforecastDelta),
+    },
+    { key: "cancelled", label: "Annulé", kind: "delta", value: -cancelled, cumulative: target },
     {
       key: "target",
-      label: "Net annualisé réactualisé",
+      label: "Cible réactualisée",
       kind: "total",
       value: target,
       cumulative: target,
     },
+    { key: "gross", label: "Gain brut annualisé", kind: "total", value: gross, cumulative: gross },
+    { key: "opexRec", label: "OPEX récurrent", kind: "delta", value: -opexRec, cumulative: target },
+    { key: "net", label: "Net annualisé", kind: "total", value: target, cumulative: target },
   ];
-  return { steps, target, realized, remaining: r1(target - realized), gross, opexRec };
+  return {
+    steps,
+    initial,
+    reforecastDelta,
+    cancelled,
+    target,
+    realized,
+    remaining: r1(target - realized),
+    gross,
+    opexRec,
+  };
 }
 
 /** OPEX récurrent annuel d'un levier (snapshot réactualisé ?? plan figé ?? courant). */

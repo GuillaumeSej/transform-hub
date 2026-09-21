@@ -351,9 +351,10 @@ function groupSegments(groups: DrilldownGroup[]): OpexSegment[] {
   const acc = new Map<string, OpexSegment>();
   for (const g of groups)
     for (const s of g.segments) {
-      const cur = acc.get(s.key);
+      const k = s.label.trim().toLowerCase();
+      const cur = acc.get(k);
       if (cur) cur.value += s.value;
-      else acc.set(s.key, { ...s });
+      else acc.set(k, { ...s, key: k });
     }
   return Array.from(acc.values()).sort((a, b) => b.value - a.value);
 }

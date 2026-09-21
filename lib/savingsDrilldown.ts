@@ -53,24 +53,29 @@ export function leverOpexRecSegments(
   const snap = lever.reforecast ?? lever.lockedPlan ?? lever;
   const total = snap.opexRec;
   const acc = new Map<string, OpexSegment>();
-  const add = (key: string, label: string, v: number) => {
+  // Clé = libellé normalisé : deux natures de même nom fusionnent en un seul segment.
+  const add = (_key: string, label: string, v: number) => {
+    const key = label.trim().toLowerCase();
     const cur = acc.get(key);
     if (cur) cur.value += v;
     else acc.set(key, { key, label, value: v });
   };
   for (const imp of leverImpactsOf(lever)) {
     if (imp.type === "cost" && imp.nature === "opex_rec") {
-      add(`n:${imp.natureId ?? ""}`, natureLabel(imp.natureId), imp.amount);
+      // Nature configurée → nature ; sinon technologie renseignée ; sinon « Non détaillé » unique.
+      const tech = imp.technology?.trim();
+      if (imp.natureId) add(`n:${imp.natureId}`, natureLabel(imp.natureId), imp.amount);
+      else if (tech) add(`t:${tech.toLowerCase()}`, tech, imp.amount);
+      else add("other", labels.other, imp.amount);
     } else if (imp.type === "fte" && imp.fteDirection === "hire") {
       add("fte", labels.fte, imp.amount);
     }
   }
-  const segs = Array.from(acc.values());
-  const detailed = segs.reduce((s, x) => s + x.value, 0);
+  const detailed = Array.from(acc.values()).reduce((s, x) => s + x.value, 0);
   const rest = r2(total - detailed);
-  if (segs.length === 0 && total !== 0)
-    return [{ key: "other", label: labels.other, value: r2(total) }];
-  if (Math.abs(rest) >= 0.05) segs.push({ key: "other", label: labels.other, value: rest });
+  if (acc.size === 0 && total !== 0) add("other", labels.other, total);
+  else if (Math.abs(rest) >= 0.05) add("other", labels.other, rest);
+  const segs = Array.from(acc.values());
   return segs.filter((s) => Math.abs(s.value) > 0.004).map((s) => ({ ...s, value: r2(s.value) }));
 }
 
@@ -169,12 +174,14 @@ export function buildDrilldownEntries(
 
 /** Segments d'OPEX récurrent agrégés sur un ensemble d'entrées (pour la barre segmentée). */
 export function aggregateSegments(entries: DrilldownEntry[]): OpexSegment[] {
+  // Fusion par libellé (deux natures homonymes / non précisées ne donnent qu'un segment).
   const acc = new Map<string, OpexSegment>();
   for (const e of entries)
     for (const s of e.segments) {
-      const cur = acc.get(s.key);
+      const k = s.label.trim().toLowerCase();
+      const cur = acc.get(k);
       if (cur) cur.value = r2(cur.value + s.value);
-      else acc.set(s.key, { ...s });
+      else acc.set(k, { ...s, key: k });
     }
   return Array.from(acc.values()).sort((a, b) => b.value - a.value);
 }

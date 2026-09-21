@@ -2235,12 +2235,14 @@ const fr: Record<string, string> = {
   "chart.waterfall.realized": "Réalisé",
   "chart.waterfall.remaining": "Reste à faire",
   "chart.waterfall.oneOff": "Gains ponctuels (hors totaux)",
-  "chart.waterfall.step.initial": "Planifié initial (annualisé)",
-  "chart.waterfall.step.reforecast": "Réactualisé (annualisé)",
-  "chart.waterfall.step.cancelled": "Annulé",
-  "chart.waterfall.step.target": "Net réactualisé (cible)",
+  "chart.waterfall.step.initial": "Planifié initial",
+  "chart.waterfall.step.reforecast": "± Réactualisé",
+  "chart.waterfall.step.cancelled": "− Annulé",
+  "chart.waterfall.step.target": "= Cible réactualisée",
   "chart.waterfall.step.gross": "Gain brut annualisé",
-  "chart.waterfall.step.opexRec": "OPEX récurrent",
+  "chart.waterfall.step.opexRec": "− OPEX récurrent",
+  "chart.waterfall.step.net": "= Net annualisé",
+  "chart.waterfall.opex.others": "Autres",
   "chart.waterfall.favorable": "Favorable",
   "chart.waterfall.unfavorable": "Défavorable",
   "chart.waterfall.opex.unspecified": "Nature non précisée",
@@ -2272,7 +2274,7 @@ const fr: Record<string, string> = {
   "chart.waterfall.drill.intro.opexRec":
     "OPEX récurrent annuel des leviers actifs, par nature d'impact, déduit du brut pour obtenir le net.",
   "chart.waterfall.note":
-    "Net annualisé = gain brut − OPEX récurrent (le CAPEX et les coûts ponctuels sont suivis à part). Net réactualisé = réalisé + reste à faire (identique au graphe « Réalisation des économies »). Leviers annulés exclus des totaux.",
+    "Gauche : planifié initial (plan figé) ± réactualisé − annulé = cible réactualisée, en net annualisé (= réalisé + reste à faire, identique au graphe « Réalisation des économies »). Droite : décomposition de cette cible, gain brut − OPEX récurrent = net (CAPEX et coûts ponctuels suivis à part).",
 };
 
 export default fr;

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  aggregateSegments,
   buildDrilldownEntries,
   drilldownTotals,
   geographyGroupNode,
@@ -91,10 +92,40 @@ describe("buildDrilldownEntries", () => {
       labels: { fte: "ETP", other: "Autres" },
     });
     expect(e.segments).toEqual([
-      { key: "n:lic", label: "Licences", value: 2 },
-      { key: "other", label: "Autres", value: 1 },
+      { key: "licences", label: "Licences", value: 2 },
+      { key: "autres", label: "Autres", value: 1 },
     ]);
     expect(e.value).toBe(-3);
+  });
+  it("merges same-label segments and folds natureless impacts into one 'other'", () => {
+    const mk = (
+      id: string,
+      imps: Partial<Lever["impacts"] extends (infer I)[] | undefined ? I : never>[]
+    ) =>
+      lever({
+        id,
+        reforecast: snap(10, 6),
+        impacts: imps.map((x, i) => ({
+          id: `${id}${i}`,
+          label: "c",
+          type: "cost",
+          nature: "opex_rec",
+          ...x,
+        })),
+      } as unknown as Partial<Lever>);
+    const levers = [
+      mk("P", [{ amount: 1, natureId: "a" }, { amount: 2 }, { amount: 1, technology: "SAP" }]),
+      mk("Q", [{ amount: 1, natureId: "b" }, { amount: 1 }]),
+    ];
+    const entries = buildDrilldownEntries("opexRec", levers, {
+      natureLabel: () => "Licences", // deux natures distinctes de même libellé
+      labels: { fte: "ETP", other: "Non détaillé" },
+    });
+    const segs = aggregateSegments(entries);
+    expect(segs.filter((x) => x.label === "Licences")).toHaveLength(1);
+    expect(segs.filter((x) => x.label === "Non détaillé")).toHaveLength(1);
+    expect(segs.find((x) => x.label === "SAP")?.value).toBe(1);
+    expect(segs.reduce((a, x) => a + x.value, 0)).toBeCloseTo(12, 5); // = OPEX total des 2 leviers
   });
 });
 

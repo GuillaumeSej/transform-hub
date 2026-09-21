@@ -7,13 +7,14 @@ import {
   CartesianGrid,
   Cell,
   LabelList,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { SavingsWaterfall } from "@/lib/engine";
-import { waterfallBars, type WaterfallBar } from "@/lib/dashboardSavings";
+import { limitSegments, waterfallBars, type WaterfallBar } from "@/lib/dashboardSavings";
 import {
   aggregateSegments,
   buildDrilldownEntries,
@@ -42,9 +43,16 @@ export const OPEX_SEGMENT_COLORS = [
 
 const fmt = (v: number) => `€${Math.round(v * 10) / 10}M`;
 
-/** Cascade des économies ANNUALISÉES : gain brut -> OPEX récurrent (segmenté par
- *  nature) -> net réactualisé = cible (empilé réalisé / reste à faire, = graphe "Réalisation des
- *  économies"). Cliquable : détail par étape. */
+const TOTAL_KEYS = ["initial", "target", "gross", "net"];
+const MAX_LEGEND = 6;
+/** Étape de détail (pop-up) associée à une barre : "net" = même détail que la cible. */
+const drillStepOf = (key: string): DrilldownStepKey | null =>
+  key === "gap" ? null : key === "net" ? "target" : (key as DrilldownStepKey);
+
+/** Cascade des économies ANNUALISÉES (net) en deux groupes : planifié initial ± réactualisé −
+ *  annulé = cible réactualisée (empilée réalisé / reste à faire, = graphe "Réalisation des
+ *  économies"), puis sa décomposition : gain brut − OPEX récurrent (segmenté par nature) = net.
+ *  Cliquable : détail par étape. */
 export function SavingsWaterfallChart({
   waterfall,
   height = 340,
@@ -74,15 +82,19 @@ export function SavingsWaterfallChart({
       case "gross":
         return t("chart.waterfall.step.gross", "Gain brut annualisé");
       case "initial":
-        return t("chart.waterfall.step.initial", "Planifié initial (annualisé)");
+        return t("chart.waterfall.step.initial", "Planifié initial");
       case "reforecast":
-        return t("chart.waterfall.step.reforecast", "Réactualisé (annualisé)");
+        return t("chart.waterfall.step.reforecast", "± Réactualisé");
       case "cancelled":
-        return t("chart.waterfall.step.cancelled", "Annulé");
+        return t("chart.waterfall.step.cancelled", "− Annulé");
       case "target":
-        return t("chart.waterfall.step.target", "Net réactualisé (cible)");
+        return t("chart.waterfall.step.target", "= Cible réactualisée");
       case "opexRec":
-        return t("chart.waterfall.step.opexRec", "OPEX récurrent");
+        return t("chart.waterfall.step.opexRec", "− OPEX récurrent");
+      case "net":
+        return t("chart.waterfall.step.net", "= Net annualisé");
+      case "gap":
+        return " ";
       default:
         return fallback;
     }
@@ -102,7 +114,11 @@ export function SavingsWaterfallChart({
         other: t("chart.waterfall.opex.other", "Non détaillé"),
       },
     });
-    return aggregateSegments(entries);
+    return limitSegments(
+      aggregateSegments(entries),
+      MAX_LEGEND,
+      t("chart.waterfall.opex.others", "Autres")
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [levers, natureLabels]);
 
@@ -114,7 +130,7 @@ export function SavingsWaterfallChart({
   const data = useMemo(
     () =>
       bars.map((b) => {
-        const row: Record<string, number | string | number[]> = { ...b, anchor: 0 };
+        const row: Record<string, number | string | number[]> = { ...b, anchor: 0.001 };
         b.seg.forEach((v, i) => (row[`s${i}`] = v));
         return row;
       }),
@@ -139,17 +155,18 @@ export function SavingsWaterfallChart({
     const raw = state?.activeTooltipIndex ?? state?.activeIndex;
     const idx = typeof raw === "string" ? Number(raw) : raw;
     const bar = typeof idx === "number" && !Number.isNaN(idx) ? bars[idx] : undefined;
-    if (bar) setOpenStep(bar.key as DrilldownStepKey);
+    const step = bar ? drillStepOf(bar.key) : null;
+    if (step) setOpenStep(step);
   };
 
   // Valeur au-dessus de chaque barre : + vert / − rouge pour les variations, neutre pour les totaux.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderLabel = (p: any) => {
     const b = bars[p.index] as WaterfallBar | undefined;
-    if (!b) return null;
+    if (!b || b.key === "gap") return null;
     let text: string;
     let color: string = WATERFALL_COLORS.total;
-    if (b.key === "gross" || b.key === "target") {
+    if (TOTAL_KEYS.includes(b.key)) {
       text = fmt(b.value);
     } else if (b.value === 0) {
       text = fmt(0);
@@ -178,10 +195,10 @@ export function SavingsWaterfallChart({
   const tooltip = ({ active, payload }: any) => {
     if (!active || !payload?.length) return null;
     const b = payload[0].payload as WaterfallBar;
-    const signed =
-      b.key === "gross" || b.key === "target"
-        ? fmt(b.value)
-        : `${b.value >= 0 ? "+" : "−"}${fmt(Math.abs(b.value))}`;
+    if (b.key === "gap") return null;
+    const signed = TOTAL_KEYS.includes(b.key)
+      ? fmt(b.value)
+      : `${b.value >= 0 ? "+" : "−"}${fmt(Math.abs(b.value))}`;
     return (
       <div className="rounded-md border border-border bg-white px-3 py-2 text-xs shadow-lg">
         <div className="font-semibold text-primary">{b.label}</div>
@@ -277,11 +294,12 @@ export function SavingsWaterfallChart({
           />
           <Tooltip content={tooltip} cursor={clickable ? { fill: "rgba(0,0,0,0.04)" } : false} />
           <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
+          <ReferenceLine x=" " stroke="rgba(0,0,0,0.25)" strokeDasharray="4 4" />
           <Bar dataKey="up" stackId="w" isAnimationActive={false}>
-            {bars.map((b) => (
+            {bars.map((b, i) => (
               <Cell
-                key={b.key}
-                fill={b.key === "gross" ? WATERFALL_COLORS.total : WATERFALL_COLORS.up}
+                key={`${b.key}-${i}`}
+                fill={TOTAL_KEYS.includes(b.key) ? WATERFALL_COLORS.total : WATERFALL_COLORS.up}
               />
             ))}
           </Bar>
@@ -316,7 +334,7 @@ export function SavingsWaterfallChart({
       <p className="mt-2 text-[11px] text-tertiary">
         {t(
           "chart.waterfall.note",
-          "Net annualisé = gain brut − OPEX récurrent (le CAPEX et les coûts ponctuels sont suivis à part). Net réactualisé = réalisé + reste à faire (identique au graphe « Réalisation des économies »). Leviers annulés exclus des totaux."
+          "Gauche : planifié initial (plan figé) ± réactualisé − annulé = cible réactualisée, en net annualisé (= réalisé + reste à faire, identique au graphe « Réalisation des économies »). Droite : décomposition de cette cible, gain brut − OPEX récurrent = net (CAPEX et coûts ponctuels suivis à part)."
         )}
         {oneOffGains > 0 &&
           ` ${t("chart.waterfall.oneOff", "Gains ponctuels (hors totaux)")} : ${fmt(oneOffGains)}.`}

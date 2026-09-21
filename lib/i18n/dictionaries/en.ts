@@ -2107,12 +2107,14 @@ const en: Record<string, string> = {
   "chart.waterfall.realized": "Actual",
   "chart.waterfall.remaining": "Remaining",
   "chart.waterfall.oneOff": "One-off gains (excluded from totals)",
-  "chart.waterfall.step.initial": "Initial plan (annualized)",
-  "chart.waterfall.step.reforecast": "Reforecast (annualized)",
-  "chart.waterfall.step.cancelled": "Cancelled",
-  "chart.waterfall.step.target": "Reforecast net (target)",
+  "chart.waterfall.step.initial": "Initial plan",
+  "chart.waterfall.step.reforecast": "± Reforecast",
+  "chart.waterfall.step.cancelled": "− Cancelled",
+  "chart.waterfall.step.target": "= Reforecast target",
   "chart.waterfall.step.gross": "Annualized gross gain",
-  "chart.waterfall.step.opexRec": "Recurring OPEX",
+  "chart.waterfall.step.opexRec": "− Recurring OPEX",
+  "chart.waterfall.step.net": "= Annualized net",
+  "chart.waterfall.opex.others": "Others",
   "chart.waterfall.favorable": "Favorable",
   "chart.waterfall.unfavorable": "Unfavorable",
   "chart.waterfall.opex.unspecified": "Unspecified nature",
@@ -2144,7 +2146,7 @@ const en: Record<string, string> = {
   "chart.waterfall.drill.intro.opexRec":
     "Annual recurring OPEX of active levers by impact nature, deducted from gross to get net.",
   "chart.waterfall.note":
-    'Initial plan and reforecast = annualized gains. Reforecast target = actual + remaining (same as the "Savings realization" chart). Recurring OPEX: annual cost, outside the target. Cancelled levers excluded from totals.',
+    'Left: initial plan (frozen) ± reforecast − cancelled = reforecast target, annualized net (= realized + remaining, same as the "Savings realization" chart). Right: breakdown of that target, gross gain − recurring OPEX = net (CAPEX and one-off costs tracked separately).',
 };
 
 export default en;
