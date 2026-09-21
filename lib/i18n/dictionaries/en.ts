@@ -2004,6 +2004,13 @@ const en: Record<string, string> = {
   "chart.scurveDetail.modeReforecast": "Cumulative reforecast",
   "chart.scurveDetail.period": "Period",
   "chart.scurveDetail.seeLevers": "View levers",
+  "chart.gapDrill.title": "Origin of the reforecast − realized gap",
+  "chart.gapDrill.intro":
+    "Cumulative gap at this period (reforecast − realized), by workstream or geography. Same rule as the curve: the sum of the rows = the gap shown.",
+  "chart.gapDrill.empty": "No gap for this period.",
+  "chart.gapDrill.late": "of which late",
+  "chart.gapDrill.onTime": "of which on time",
+  "chart.clickForDetails": "Click for more details",
   "dashboard.workstreamTable.targetNote":
     "Realized versus the reforecast target (latest version of the target).",
   "dashboard.tableHeader.realizedReforecastTarget": "Realized / Reforecast target",

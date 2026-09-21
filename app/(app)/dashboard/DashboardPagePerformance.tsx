@@ -61,7 +61,8 @@ import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "l
 import { Avatar } from "@/components/shared/Avatar";
 import { SCurveChart, type SCurvePoint } from "@/components/shared/charts/SCurveChart";
 import { SCurveDetail } from "@/components/shared/charts/SCurveDetail";
-import { savingsSeriesByWorkstream } from "@/lib/scurveDetail";
+import { gapEntriesAt, savingsSeriesByWorkstream } from "@/lib/scurveDetail";
+import { currentPointIndex } from "@/components/shared/charts/SCurveChart";
 import {
   WorkstreamBarChart,
   WorkstreamBarDetail,
@@ -592,7 +593,24 @@ export function DashboardPagePerformance() {
   const [scurveDetail, setScurveDetail] = useState<{
     points: SCurvePoint[];
     granularity: engine.TimeGranularity;
+    /** Période dont on détaille l'écart (période cliquée si réalisée, sinon période courante). */
+    month: string;
   } | null>(null);
+  const openScurveDetail = (
+    points: SCurvePoint[],
+    granularity: engine.TimeGranularity,
+    clicked?: string
+  ) => {
+    const clickedPoint = points.find((p) => p.month === clicked);
+    const cur = points[currentPointIndex(points)];
+    const month = (clickedPoint?.actual != null ? clickedPoint : cur)?.month ?? points[0]?.month;
+    if (month) setScurveDetail({ points, granularity, month });
+  };
+  const scurveGapEntries = useMemo(
+    () =>
+      scurveDetail ? gapEntriesAt(filteredData, scurveDetail.granularity, scurveDetail.month) : [],
+    [scurveDetail, filteredData]
+  );
   const scurveDetailByWs = useMemo(
     () =>
       scurveDetail
@@ -610,7 +628,8 @@ export function DashboardPagePerformance() {
   const stages = engine.stageCounts(filteredData);
   const savingsWaterfallData = useMemo(() => engine.savingsWaterfall(filteredData), [filteredData]);
   const oneOffGains = useMemo(() => oneOffGainsTotal(filteredData), [filteredData]);
-  const bridge = seriesToBridge(engine.savingsSeries(filteredData, bridgeGranularity));
+  const bridgeSeries = engine.savingsSeries(filteredData, bridgeGranularity);
+  const bridge = seriesToBridge(bridgeSeries);
 
   // Reporte les filtres actuellement actifs sur CE dashboard vers `/levers` (Bibliothèque de
   // leviers) — dont les `FilterDef.key` sont toujours préfixés `f_` (`f_status`, `f_geo_xxx`,
@@ -644,12 +663,6 @@ export function DashboardPagePerformance() {
       goToLevers({});
     }
   };
-  const currentYear = new Date(effectiveFyStart).getFullYear();
-  const goToMonth = (month: string) => goToLevers({ f_endMonth: `${month} ${currentYear}` });
-  const goToSCurvePoint = (label: string, granularity = sCurveGranularity) =>
-    granularity === "quarter"
-      ? goToLevers({ f_endQuarter: `${label} ${currentYear}` })
-      : goToMonth(label);
 
   // `data.workstreams` vient de `useBeTrackData` → `programConfig`, abonnement Firestore
   // (`onSnapshot`) qui démarre à `[]` (voir `emptyProgramConfig()` dans lib/hooks/useStorage.ts)
@@ -1410,9 +1423,7 @@ export function DashboardPagePerformance() {
                 <SCurveChart
                   data={trajSCurve}
                   height={360}
-                  onPointClick={() =>
-                    setScurveDetail({ points: trajSCurve, granularity: trajGranularity })
-                  }
+                  onPointClick={(month) => openScurveDetail(trajSCurve, trajGranularity, month)}
                   labelActual={t("chart.scurve.actual")}
                   labelPlanned={t("chart.scurve.planned")}
                   labelReforecast={t("chart.scurve.reforecast")}
@@ -1421,7 +1432,7 @@ export function DashboardPagePerformance() {
                 <QuarterlyBridgeChart
                   data={trajBridge}
                   height={340}
-                  onBarClick={(period) => goToSCurvePoint(period, trajGranularity)}
+                  onBarClick={(period) => openScurveDetail(trajSCurve, trajGranularity, period)}
                   barLabel={
                     trajGranularity === "month"
                       ? t("chart.bridge.monthSavings")
@@ -1430,6 +1441,8 @@ export function DashboardPagePerformance() {
                   labelCumulative={t("chart.bridge.cumulative")}
                   labelPlanned={t("chart.bridge.planned")}
                   plannedCumulative={trajSCurve.map((p) => p.planned)}
+                  reforecastCumulative={trajSCurve.map((p) => p.reforecast)}
+                  labelReforecast={t("chart.scurve.reforecast")}
                 />
               )}
             </CardBody>
@@ -1449,9 +1462,7 @@ export function DashboardPagePerformance() {
               <SCurveChart
                 data={sCurve}
                 height={360}
-                onPointClick={() =>
-                  setScurveDetail({ points: sCurve, granularity: sCurveGranularity })
-                }
+                onPointClick={(month) => openScurveDetail(sCurve, sCurveGranularity, month)}
                 labelActual={t("chart.scurve.actual")}
                 labelPlanned={t("chart.scurve.planned")}
                 labelReforecast={t("chart.scurve.reforecast")}
@@ -1477,7 +1488,7 @@ export function DashboardPagePerformance() {
               <QuarterlyBridgeChart
                 data={bridge}
                 height={340}
-                onBarClick={(period) => goToSCurvePoint(period, bridgeGranularity)}
+                onBarClick={(period) => openScurveDetail(bridgeSeries, bridgeGranularity, period)}
                 barLabel={
                   bridgeGranularity === "month"
                     ? t("chart.bridge.monthSavings")
@@ -1485,7 +1496,9 @@ export function DashboardPagePerformance() {
                 }
                 labelCumulative={t("chart.bridge.cumulative")}
                 labelPlanned={t("chart.bridge.planned")}
-                plannedCumulative={sCurve.map((p) => p.planned)}
+                plannedCumulative={bridgeSeries.map((p) => p.planned)}
+                reforecastCumulative={bridgeSeries.map((p) => p.reforecast)}
+                labelReforecast={t("chart.scurve.reforecast")}
               />
             </CardBody>
           </Card>
@@ -2107,6 +2120,13 @@ export function DashboardPagePerformance() {
           <SCurveDetail
             points={scurveDetail.points}
             byWorkstream={scurveDetailByWs}
+            gap={{
+              month: scurveDetail.month,
+              entries: scurveGapEntries,
+              workstreams: filteredData.workstreams,
+              geographyLevels: geographyHierarchyLevels,
+              geographyNodes,
+            }}
             onSeeLevers={() => {
               setScurveDetail(null);
               goToLevers({});

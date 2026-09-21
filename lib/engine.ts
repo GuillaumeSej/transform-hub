@@ -1498,8 +1498,20 @@ export function quarterlyBridge(data: BeTrackData): QuarterBridge[] {
 
 export type TrajectoryGranularity = "month" | "quarter" | "year";
 
+/** Contribution d'un impact à une période (montant positif ; le sens est porté par `category`). */
+export type TrajectoryItem = {
+  impactId: string;
+  label: string;
+  category: "gain" | "opex" | "capex";
+  recurrence: "recurring" | "oneoff";
+  amount: number;
+  planned: boolean;
+};
+
 export type ImpactTrajectoryPoint = {
   period: string;
+  /** Détail des impacts contribuant à la période (pour le drill-down du graphique). */
+  items: TrajectoryItem[];
   /** Début de période (ISO yyyy-mm-01). */
   periodStart: string;
   /** OPEX one-off de la période (montant positif = coût). */
@@ -1563,6 +1575,9 @@ export function impactTrajectory(
     view?: "financial" | "fte";
     today?: Date;
     includeCancelled?: boolean;
+    /** Lisse les montants annualisés (gains, OPEX récurrent) : annuel / 12 par mois écoulé depuis
+     *  la date de début, au lieu du montant complet à la date de début puis à chaque anniversaire. */
+    smoothRecurring?: boolean;
   } = {}
 ): ImpactTrajectory {
   const granularity = opts.granularity ?? "month";
@@ -1577,11 +1592,27 @@ export function impactTrajectory(
     kind: "oneoff_cost" | "capex" | "oneoff_gain";
     amount: number;
     planned: boolean;
+    id: string;
+    label: string;
   };
-  type Rec = { from: number; kind: "opexRec" | "gain"; annual: number; planned: boolean };
+  type Rec = {
+    from: number;
+    kind: "opexRec" | "gain";
+    annual: number;
+    planned: boolean;
+    id: string;
+    label: string;
+  };
   const events: Ev[] = [];
   const recs: Rec[] = [];
-  const smoothed: { from: number; to: number; amount: number; planned: boolean }[] = [];
+  const smoothed: {
+    from: number;
+    to: number;
+    amount: number;
+    planned: boolean;
+    id: string;
+    label: string;
+  }[] = [];
   const fteEvents: { mi: number; delta: number }[] = [];
 
   for (const lever of levers) {
@@ -1601,24 +1632,66 @@ export function impactTrajectory(
       }
       if (isGain) {
         if (imp.type === "saving" && imp.gainRecurrence === "oneoff") {
-          events.push({ mi: gainMi, kind: "oneoff_gain", amount: imp.amount, planned });
+          events.push({
+            mi: gainMi,
+            kind: "oneoff_gain",
+            amount: imp.amount,
+            planned,
+            id: imp.id,
+            label: imp.label,
+          });
         } else {
-          recs.push({ from: gainMi, kind: "gain", annual: imp.amount, planned });
+          recs.push({
+            from: gainMi,
+            kind: "gain",
+            annual: imp.amount,
+            planned,
+            id: imp.id,
+            label: imp.label,
+          });
         }
       } else if (imp.type === "fte") {
-        recs.push({ from: costMi, kind: "opexRec", annual: imp.amount, planned });
+        recs.push({
+          from: costMi,
+          kind: "opexRec",
+          annual: imp.amount,
+          planned,
+          id: imp.id,
+          label: imp.label,
+        });
       } else if (imp.nature === "capex") {
         if (imp.capexAllocationMode === "smoothed" && imp.capexStartDate) {
           const from = monthIndexOf(imp.capexStartDate);
           const to = Math.max(from, monthIndexOf(imp.capexDeploymentDate ?? imp.capexStartDate));
-          smoothed.push({ from, to, amount: imp.amount, planned });
+          smoothed.push({ from, to, amount: imp.amount, planned, id: imp.id, label: imp.label });
         } else {
-          events.push({ mi: costMi, kind: "capex", amount: imp.amount, planned });
+          events.push({
+            mi: costMi,
+            kind: "capex",
+            amount: imp.amount,
+            planned,
+            id: imp.id,
+            label: imp.label,
+          });
         }
       } else if (imp.nature === "oneoff") {
-        events.push({ mi: costMi, kind: "oneoff_cost", amount: imp.amount, planned });
+        events.push({
+          mi: costMi,
+          kind: "oneoff_cost",
+          amount: imp.amount,
+          planned,
+          id: imp.id,
+          label: imp.label,
+        });
       } else {
-        recs.push({ from: costMi, kind: "opexRec", annual: imp.amount, planned });
+        recs.push({
+          from: costMi,
+          kind: "opexRec",
+          annual: imp.amount,
+          planned,
+          id: imp.id,
+          label: imp.label,
+        });
       }
     }
   }
@@ -1654,8 +1727,31 @@ export function impactTrajectory(
     let gains = 0;
     let oneOffGains = 0;
     const pl = { opexOneOff: 0, opexRec: 0, capex: 0, gains: 0, oneOffGains: 0 };
+    const items: TrajectoryItem[] = [];
+    const addItem = (
+      x: { id: string; label: string; planned: boolean },
+      category: TrajectoryItem["category"],
+      recurrence: TrajectoryItem["recurrence"],
+      amount: number
+    ) => {
+      if (view === "fte" || amount === 0) return;
+      items.push({
+        impactId: x.id,
+        label: x.label,
+        category,
+        recurrence,
+        amount: r2(amount),
+        planned: x.planned,
+      });
+    };
     for (const e of events) {
       if (e.mi < ps || e.mi > pe) continue;
+      addItem(
+        e,
+        e.kind === "capex" ? "capex" : e.kind === "oneoff_cost" ? "opex" : "gain",
+        "oneoff",
+        e.amount
+      );
       if (e.kind === "capex") {
         capex += e.amount;
         if (e.planned) pl.capex += e.amount;
@@ -1672,12 +1768,20 @@ export function impactTrajectory(
       const overlap = Math.max(0, Math.min(pe, sm.to) - Math.max(ps, sm.from) + 1);
       capex += (sm.amount * overlap) / months;
       if (sm.planned) pl.capex += (sm.amount * overlap) / months;
+      addItem(sm, "capex", "oneoff", (sm.amount * overlap) / months);
     }
     for (const r of recs) {
       // Montant annualisé constaté à la date de début, puis « réannualisé » à chaque anniversaire.
-      let hits = 0;
-      for (let a = r.from; a <= pe; a += 12) if (a >= ps) hits++;
-      const v = r.annual * hits;
+      let v: number;
+      if (opts.smoothRecurring) {
+        const months = Math.max(0, pe - Math.max(ps, r.from) + 1);
+        v = (r.annual * months) / 12;
+      } else {
+        let hits = 0;
+        for (let a = r.from; a <= pe; a += 12) if (a >= ps) hits++;
+        v = r.annual * hits;
+      }
+      addItem(r, r.kind === "gain" ? "gain" : "opex", "recurring", v);
       if (r.kind === "gain") {
         gains += v;
         if (r.planned) pl.gains += v;
@@ -1710,6 +1814,7 @@ export function impactTrajectory(
             ? `Q${Math.floor((ps % 12) / 3) + 1} ${Math.floor(ps / 12)}`
             : `${MONTH_LABELS[ps % 12]} ${Math.floor(ps / 12)}`,
       periodStart: isoOfMonthIndex(ps),
+      items,
       opexOneOff: r2(opexOneOff),
       opexRec: r2(opexRec),
       capex: r2(capex),

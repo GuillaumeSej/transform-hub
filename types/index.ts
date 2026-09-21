@@ -410,6 +410,8 @@ export type LeverImpact = {
   /** Statut de l'impact : planifié ; réalisé (ponctuel, a eu lieu) ; en cours (récurrent, court depuis
    *  sa date de début). Absent = dérivé de la date de début (`impactStatusOf`, lib/impactStatus.ts). */
   status?: "planned" | "done" | "ongoing";
+  /** Date de fin (ETP, ou impact borné) — optionnelle. Le CAPEX lissé utilise `capexDeploymentDate`. */
+  endDate?: string; // ISO date
   /** Commentaires libres sur cette ligne d'impact (ex. méthode de calcul, hypothèses). */
   comments?: Comment[];
 };
@@ -753,6 +755,10 @@ export type HierarchyLevelDef = {
   order: number;
   /** Sémantique facultative permettant d'alimenter les champs et vues standard. */
   semantic?: HierarchySemantic;
+  /** Niveau facultatif (au plus un par arborescence, en général le plus fin, ex. Centre de coût) :
+   *  s'il est optionnel, la maille "effective" affichée dans les filtres/impacts est le niveau
+   *  non-optionnel le plus fin ; le niveau optionnel reste saisissable quand il est connu. */
+  optional?: boolean;
 };
 
 /** Un nœud concret de l'arborescence (ex. le Cost Center "CC-PROC-001", enfant de la Business

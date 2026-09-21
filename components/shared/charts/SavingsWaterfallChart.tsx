@@ -6,6 +6,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Customized,
+  useXAxisScale,
+  useYAxisScale,
   LabelList,
   ReferenceLine,
   ResponsiveContainer,
@@ -41,6 +44,8 @@ export const OPEX_SEGMENT_COLORS = [
   "#9C6B6B",
 ];
 
+/** Écart entre catégories (part de la bande) — sert aussi au calcul des traits de liaison. */
+const BAR_GAP = 0.25;
 const fmt = (v: number) => `€${Math.round(v * 10) / 10}M`;
 
 const TOTAL_KEYS = ["initial", "target", "gross", "net"];
@@ -177,9 +182,38 @@ export function SavingsWaterfallChart({
       text = `−${fmt(Math.abs(b.value))}`;
       color = WATERFALL_COLORS.down;
     }
+    const cx = Number(p.x) + Number(p.width) / 2;
+    if (b.key === "opexRec") {
+      // OPEX récurrent : montant en pastille (fond blanc, contour rouge) bien lisible.
+      const w = text.length * 8 + 14;
+      return (
+        <g>
+          <rect
+            x={cx - w / 2}
+            y={Number(p.y) - 26}
+            width={w}
+            height={20}
+            rx={4}
+            fill="#fff"
+            stroke={WATERFALL_COLORS.down}
+            strokeWidth={1.5}
+          />
+          <text
+            x={cx}
+            y={Number(p.y) - 12}
+            textAnchor="middle"
+            fontSize={13}
+            fontWeight={800}
+            fill={WATERFALL_COLORS.down}
+          >
+            {text}
+          </text>
+        </g>
+      );
+    }
     return (
       <text
-        x={Number(p.x) + Number(p.width) / 2}
+        x={cx}
         y={Number(p.y) - 6}
         textAnchor="middle"
         fontSize={11}
@@ -191,43 +225,65 @@ export function SavingsWaterfallChart({
     );
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null;
-    const b = payload[0].payload as WaterfallBar;
-    if (b.key === "gap") return null;
-    const signed = TOTAL_KEYS.includes(b.key)
-      ? fmt(b.value)
-      : `${b.value >= 0 ? "+" : "−"}${fmt(Math.abs(b.value))}`;
+  // Traits de liaison entre barres consécutives : niveau cumulé en sortie de la barre i = niveau
+  // de départ de la barre i+1 (bas de la barre pour une baisse / l'OPEX, sommet sinon). Pas de
+  // liaison à travers le séparateur entre les deux groupes.
+  const endLevel = (b: WaterfallBar) =>
+    b.key === "opexRec" || b.down > 0 ? b.base : b.base + b.up + b.realized + b.remaining;
+  const Connectors = () => {
+    const xScale = useXAxisScale();
+    const yScale = useYAxisScale();
+    if (!xScale || !yScale) return null;
+    const bw = (xScale as unknown as { bandwidth?: () => number }).bandwidth;
+    const band = typeof bw === "function" ? bw.call(xScale) : 0;
+    const half = band * (1 - BAR_GAP) * 0.5;
     return (
-      <div className="rounded-md border border-border bg-white px-3 py-2 text-xs shadow-lg">
-        <div className="font-semibold text-primary">{b.label}</div>
-        <div className="text-secondary">{signed}</div>
-        {b.key === "target" && (
-          <>
-            <div className="text-secondary">
-              {t("chart.waterfall.realized", "Réalisé")} : {fmt(b.realized)}
-            </div>
-            <div className="text-secondary">
-              {t("chart.waterfall.remaining", "Reste à faire")} : {fmt(b.remaining)}
-            </div>
-          </>
-        )}
-        {b.key === "opexRec" &&
-          b.seg.length > 1 &&
-          b.seg.map((v, i) => (
-            <div key={i} className="text-secondary">
-              {segLabel(i)} : −{fmt(v)}
-            </div>
-          ))}
-        {clickable && (
-          <div className="mt-1 text-[10px] text-tertiary">
-            {t("chart.waterfall.clickHint", "Cliquer pour le détail")}
-          </div>
-        )}
-      </div>
+      <g>
+        {bars.slice(0, -1).map((b, i) => {
+          const next = bars[i + 1];
+          if (b.key === "gap" || next.key === "gap") return null;
+          const y = (yScale(endLevel(b)) as number) ?? 0;
+          const x1 = ((xScale(b.label) as number) ?? 0) + band / 2 + half;
+          const x2 = ((xScale(next.label) as number) ?? 0) + band / 2 - half;
+          return (
+            <line
+              key={`${b.key}-${i}`}
+              x1={x1}
+              x2={x2}
+              y1={y}
+              y2={y}
+              stroke="rgba(0,0,0,0.35)"
+              strokeWidth={1}
+              strokeDasharray="3 2"
+            />
+          );
+        })}
+      </g>
     );
   };
+
+  // Montant à l'intérieur d'un segment de la cible (réalisé / reste à faire), si assez haut.
+  const segLabel2 = (_kind: "realized" | "remaining", color: string) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function SegLabel(p: any) {
+      // Recharts 3 : `p.index` ne pointe plus vers `bars` ; seule la barre "cible" porte un réalisé /
+      // reste à faire > 0, on s'appuie donc sur la valeur du label.
+      const v = Number(p.value);
+      const h = Number(p.height);
+      if (!(h >= 14) || !(v > 0)) return null;
+      return (
+        <text
+          x={Number(p.x) + Number(p.width) / 2}
+          y={Number(p.y) + h / 2 + 4}
+          textAnchor="middle"
+          fontSize={11}
+          fontWeight={700}
+          fill={color}
+        >
+          {fmt(v)}
+        </text>
+      );
+    };
 
   return (
     <div>
@@ -274,7 +330,8 @@ export function SavingsWaterfallChart({
       <ResponsiveContainer width="100%" height={height}>
         <BarChart
           data={data}
-          margin={{ top: 22, right: 8, left: -16, bottom: 0 }}
+          barCategoryGap={`${BAR_GAP * 100}%`}
+          margin={{ top: 34, right: 8, left: -16, bottom: 0 }}
           onClick={onChartClick}
           style={clickable ? { cursor: "pointer" } : undefined}
         >
@@ -292,7 +349,8 @@ export function SavingsWaterfallChart({
             tickLine={false}
             tickFormatter={(v) => `€${v}M`}
           />
-          <Tooltip content={tooltip} cursor={clickable ? { fill: "rgba(0,0,0,0.04)" } : false} />
+          {/* Tooltip vide : pas d'infobulle au survol, mais fournit l'index actif pour le clic. */}
+          <Tooltip content={() => null} cursor={false} />
           <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
           <ReferenceLine x=" " stroke="rgba(0,0,0,0.25)" strokeDasharray="4 4" />
           <Bar dataKey="up" stackId="w" isAnimationActive={false}>
@@ -309,13 +367,17 @@ export function SavingsWaterfallChart({
             stackId="w"
             fill={WATERFALL_COLORS.realized}
             isAnimationActive={false}
-          />
+          >
+            <LabelList dataKey="realized" content={segLabel2("realized", "#fff")} />
+          </Bar>
           <Bar
             dataKey="remaining"
             stackId="w"
             fill={WATERFALL_COLORS.remaining}
             isAnimationActive={false}
-          />
+          >
+            <LabelList dataKey="remaining" content={segLabel2("remaining", "#1A1A1A")} />
+          </Bar>
           {Array.from({ length: segCount }).map((_, i) => (
             <Bar
               key={i}
@@ -329,18 +391,18 @@ export function SavingsWaterfallChart({
           <Bar dataKey="anchor" stackId="w" fill="transparent" isAnimationActive={false}>
             <LabelList dataKey="anchor" content={renderLabel} />
           </Bar>
+          <Customized component={Connectors} />
         </BarChart>
       </ResponsiveContainer>
-      <p className="mt-2 text-[11px] text-tertiary">
-        {t(
-          "chart.waterfall.note",
-          "Gauche : planifié initial (plan figé) ± réactualisé − annulé = cible réactualisée, en net annualisé (= réalisé + reste à faire, identique au graphe « Réalisation des économies »). Droite : décomposition de cette cible, gain brut − OPEX récurrent = net (CAPEX et coûts ponctuels suivis à part)."
-        )}
-        {oneOffGains > 0 &&
-          ` ${t("chart.waterfall.oneOff", "Gains ponctuels (hors totaux)")} : ${fmt(oneOffGains)}.`}
-        {clickable &&
-          ` ${t("chart.waterfall.clickHintLong", "Cliquez sur une barre pour voir le détail.")}`}
-      </p>
+      {(oneOffGains > 0 || clickable) && (
+        <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-tertiary">
+          <span>
+            {oneOffGains > 0 &&
+              `${t("chart.waterfall.oneOff", "Gains ponctuels (hors totaux)")} : ${fmt(oneOffGains)}`}
+          </span>
+          {clickable && <span>{t("chart.clickForDetails", "Cliquer pour plus de détails")}</span>}
+        </div>
+      )}
       {openStep && (
         <SavingsStepDrilldownModal
           step={openStep}

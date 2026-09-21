@@ -994,7 +994,7 @@ export function LeverDetailClientPerformance() {
               <Collapsible
                 title={t(
                   "leverDetail.jcurveTimelineTitle",
-                  "Trajectoire d'impact & Timeline des actions"
+                  "Trajectoire des gains & Timeline des actions"
                 )}
               >
                 {engine.hasLeverImpacts(lever) && <ImpactTrajectoryChart lever={lever} />}

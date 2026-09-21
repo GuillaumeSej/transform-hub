@@ -10,6 +10,7 @@ import {
   type MovementFinancials,
 } from "@/lib/hrFinancials";
 import { fmtCurr } from "@/lib/engine";
+import { effectiveLeafLevel, selectableLeafNodes } from "@/lib/hierarchyLogic";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import type {
   BeTrackData,
@@ -165,11 +166,8 @@ export function MovementForm({
     : [];
   const hasGeographyHierarchy = geographyLeafNodes.length > 0;
 
-  const sortedHierarchyLevels = [...hierarchyLevels].sort((a, b) => a.order - b.order);
-  const finestHierarchyLevel = sortedHierarchyLevels[sortedHierarchyLevels.length - 1];
-  const hierarchyLeafNodes = finestHierarchyLevel
-    ? hierarchyNodes.filter((n) => n.levelKey === finestHierarchyLevel.key)
-    : [];
+  const finestHierarchyLevel = effectiveLeafLevel(hierarchyLevels);
+  const hierarchyLeafNodes = selectableLeafNodes(hierarchyNodes, hierarchyLevels);
   const hasHierarchy = hierarchyLeafNodes.length > 0;
 
   const [values, setValues] = useState<MovementFormValues>({
@@ -506,7 +504,7 @@ export function MovementForm({
           <Field
             label={translate(
               "shared.movementForm.hierarchyLeaf",
-              `${finestHierarchyLevel.label} (arborescence financière)`
+              `${finestHierarchyLevel?.label ?? ""} (arborescence financière)`
             )}
           >
             <select

@@ -2263,6 +2263,13 @@ const de: Record<string, string> = {
   "chart.scurveDetail.modeReforecast": "Neuprognose kumuliert",
   "chart.scurveDetail.period": "Periode",
   "chart.scurveDetail.seeLevers": "Hebel anzeigen",
+  "chart.gapDrill.title": "Ursprung der Abweichung Neuprognose − Realisiert",
+  "chart.gapDrill.intro":
+    "Kumulierte Abweichung in dieser Periode (Neuprognose − Realisiert), nach Arbeitspaket oder Geografie. Gleiche Regel wie die Kurve: Summe der Zeilen = angezeigte Abweichung.",
+  "chart.gapDrill.empty": "Keine Abweichung in dieser Periode.",
+  "chart.gapDrill.late": "davon verspätet",
+  "chart.gapDrill.onTime": "davon im Zeitplan",
+  "chart.clickForDetails": "Für mehr Details klicken",
   "dashboard.workstreamTable.targetNote":
     "Realisiert im Verhältnis zum neu prognostizierten Ziel (letzte Version des Ziels).",
   "dashboard.tableHeader.realizedReforecastTarget": "Realisiert / Neu prognostiziertes Ziel",
