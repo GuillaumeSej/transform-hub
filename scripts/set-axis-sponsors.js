@@ -121,8 +121,9 @@ async function main() {
   const axes = axesSnap.docs.map((d) => d.data()).filter((a) => a.programId === program.id);
   const usersSnap = await db.collection("adminUsers").get();
   const users = usersSnap.docs
-    .map((d) => ({ username: d.id, ...d.data() }))
-    .filter((u) => u.companyId === COMPANY_ID);
+    .map((d) => ({ docId: d.id, ...d.data() }))
+    // Ignore les comptes hérités non migrés (id = username brut) : l'app ne les charge pas.
+    .filter((u) => u.companyId === COMPANY_ID && u.docId === `${u.username}.${COMPANY_ID}`);
   console.log(
     `${axes.length} axe(s), ${users.length} utilisateur(s) Acme — ${apply ? "APPLY" : "DRY RUN"}\n`
   );
