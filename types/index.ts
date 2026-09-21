@@ -832,6 +832,16 @@ export type Program = {
    *  type) car réellement lu par `StrategicDashboardView` : seul son édition côté Performance a été
    *  retirée. */
   ambition?: string;
+  /** Budget prévisionnel TOTAL du plan (round <n>, demande PO) — n'a de sens QUE pour un programme
+   *  "strategic" (comme `ambition` ci-dessus), retiré du formulaire d'un Plan Performance dans
+   *  `components/admin/ProgramsPanel.tsx`. Comparé à la somme remontée depuis les projets
+   *  (`ChantierAction.budget`, voir `lib/axisLogic.ts::sumProgramProjetBudgets`) : chaque projet
+   *  déclare son propre budget, sommé par chantier puis par programme (PAS par axe — un chantier
+   *  multi-axes ferait sinon compter son budget plusieurs fois si on sommait des sous-totaux par
+   *  axe). Si la somme dépasse ce budget, une alerte synthétique est levée pour le pilote
+   *  stratégique (voir `components/shared/AppShell.tsx`). Optionnel : `undefined` tant qu'aucun
+   *  budget total n'a été déclaré (pas d'alerte possible sans référence à comparer). */
+  budget?: number;
 };
 
 // ─── Plan Stratégique (méthodologie 3-5-15 : Vision → Axes → Chantiers → Actions) ─────────────
@@ -1226,7 +1236,22 @@ export type Indicator = {
   /** Objectif exprimé en texte libre (toujours renseigné, y compris pour un indicateur
    *  qualitatif où `objectiveValue` n'a pas de sens). */
   objective: string;
+  /** Cible FINALE — reste la seule cible pour un indicateur "à cible fixe" (`targetSchedule`
+   *  absent/vide). Pour un indicateur "à cible évolutive" (`targetSchedule` non vide), c'est la
+   *  cible ultime vers laquelle la trajectoire converge (ex. 75% final), distincte des paliers
+   *  intermédiaires — voir `targetSchedule` ci-dessous et
+   *  `lib/axisLogic.ts::resolveIndicatorTargetForPeriod`. */
   objectiveValue?: number;
+  /** Trajectoire de cibles intermédiaires (round <n>, demande PO : "en 2026 Q2 on visait 70%, la
+   *  cible finale est 75%") — chaque entrée `period` suit le MÊME format que
+   *  `IndicatorMeasurement.period` (aligné sur `frequency`, ex. "2026-Q2"), triée chronologiquement
+   *  par convention lexicographique (pas garanti à l'écriture, voir `resolveIndicatorTargetForPeriod`
+   *  qui trie lui-même avant lecture). Absent ou vide = indicateur à CIBLE FIXE (comportement
+   *  historique, seul `objectiveValue` compte, à toute période). Non vide = CIBLE ÉVOLUTIVE : la
+   *  cible applicable à une période donnée est celle du dernier palier dont `period` est
+   *  lexicographiquement <= la période demandée, ou `objectiveValue` (la cible finale) au-delà du
+   *  dernier palier déclaré — jamais une valeur inventée par interpolation. */
+  targetSchedule?: { period: string; value: number }[];
   direction?: IndicatorDirection;
   unit?: string;
   /** Rôles autorisés à renseigner cet indicateur — au moins un attendu. Liste DIRECTE de rôles

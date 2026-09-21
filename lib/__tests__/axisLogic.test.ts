@@ -29,6 +29,7 @@ import {
   milestoneProgressPct,
   numberIndicators,
   programBlockedActions,
+  programBudgetOverrun,
   programRoadmap,
   programRoadmapBounds,
   progressBucket,
@@ -37,6 +38,7 @@ import {
   resolveChantierOwner,
   resolveIndicatorOwner,
   resolveIndicatorStatus,
+  resolveIndicatorTargetForPeriod,
   resolveMilestoneAutoFlags,
   resolveProgramType,
   resolveStrategicOwnershipScope,
@@ -44,6 +46,7 @@ import {
   staffingPeriodBuckets,
   sumLatestQuantitativeValues,
   sumConsumedBudget,
+  sumProgramProjetBudgets,
   sumProjetBudgets,
 } from "@/lib/axisLogic";
 import type {
@@ -855,6 +858,54 @@ describe("computeIndicatorDelta", () => {
     const delta = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-03", 5));
     expect(delta?.deltaPct).toBe(0);
     expect(delta?.progressPct).toBe(100);
+  });
+
+  it("compares against the schedule step applicable to the measurement's period, not the final target", () => {
+    const indicator = makeIndicator({
+      direction: "up",
+      objectiveValue: 75, // cible finale
+      targetSchedule: [
+        { period: "2026-Q1", value: 60 },
+        { period: "2026-Q2", value: 70 },
+      ],
+    });
+    // Mesure Q2 à 72 : au-dessus du palier Q2 (70), pas de la cible finale (75) → favorable.
+    const q2 = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-Q2", 72));
+    expect(q2?.favorable).toBe(true);
+    expect(q2?.delta).toBe(2); // 72 - 70, pas 72 - 75
+
+    // Mesure Q3 (au-delà du dernier palier déclaré) : replie sur la cible finale (75).
+    const q3 = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-Q3", 72));
+    expect(q3?.delta).toBe(-3); // 72 - 75
+  });
+});
+
+describe("resolveIndicatorTargetForPeriod", () => {
+  it("always returns objectiveValue for a fixed-target indicator (no schedule)", () => {
+    const indicator = { objectiveValue: 80, targetSchedule: undefined };
+    expect(resolveIndicatorTargetForPeriod(indicator, "2026-Q1")).toBe(80);
+    expect(resolveIndicatorTargetForPeriod(indicator, "2030-Q4")).toBe(80);
+  });
+
+  it("returns the applicable schedule step for a progressive target, falling back to the final target beyond the last step", () => {
+    const indicator = {
+      objectiveValue: 75,
+      targetSchedule: [
+        { period: "2026-Q2", value: 70 },
+        { period: "2026-Q1", value: 60 }, // volontairement désordonné : la fonction trie elle-même
+      ],
+    };
+    expect(resolveIndicatorTargetForPeriod(indicator, "2026-Q1")).toBe(60);
+    expect(resolveIndicatorTargetForPeriod(indicator, "2026-Q2")).toBe(70);
+    expect(resolveIndicatorTargetForPeriod(indicator, "2026-Q3")).toBe(75); // au-delà → cible finale
+  });
+
+  it("falls back to the final target when the requested period precedes every declared step", () => {
+    const indicator = {
+      objectiveValue: 75,
+      targetSchedule: [{ period: "2026-Q2", value: 70 }],
+    };
+    expect(resolveIndicatorTargetForPeriod(indicator, "2026-Q1")).toBe(75);
   });
 });
 
@@ -2138,6 +2189,48 @@ describe("sumConsumedBudget", () => {
       makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
     ];
     expect(sumConsumedBudget("CH1", actions)).toBe(0);
+  });
+});
+
+describe("sumProgramProjetBudgets", () => {
+  it("sums projet budgets across all chantiers of the program, regardless of axis", () => {
+    const chantiers: Chantier[] = [
+      makeChantier("CH1", { programId: "p1", axisIds: ["AX001"] }),
+      makeChantier("CH2", { programId: "p1", axisIds: ["AX002", "AX003"] }), // multi-axe
+      makeChantier("CH3", { programId: "p2" }), // autre programme
+    ];
+    const actions: ChantierAction[] = [
+      { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"), budget: 1000 },
+      { ...makeAction("CH2", "2026-01-01", "2026-01-31", "A2"), budget: 2000 },
+      { ...makeAction("CH3", "2026-01-01", "2026-01-31", "A3"), budget: 999999 },
+    ];
+    // Un chantier multi-axe (CH2) ne doit compter QU'UNE fois, pas une fois par axe.
+    expect(sumProgramProjetBudgets("p1", chantiers, actions)).toBe(3000);
+  });
+
+  it("returns 0 for a program with no chantier or no projet budget declared", () => {
+    expect(sumProgramProjetBudgets("p1", [], [])).toBe(0);
+  });
+});
+
+describe("programBudgetOverrun", () => {
+  const chantiers: Chantier[] = [makeChantier("CH1", { programId: "p1" })];
+  const actions: ChantierAction[] = [
+    { ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"), budget: 1500 },
+  ];
+
+  it("returns undefined when the program has no declared total budget", () => {
+    expect(
+      programBudgetOverrun({ id: "p1", budget: undefined }, chantiers, actions)
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when the projet sum does not exceed the declared budget", () => {
+    expect(programBudgetOverrun({ id: "p1", budget: 2000 }, chantiers, actions)).toBeUndefined();
+  });
+
+  it("returns the overrun amount when the projet sum exceeds the declared budget", () => {
+    expect(programBudgetOverrun({ id: "p1", budget: 1000 }, chantiers, actions)).toBe(500);
   });
 });
 

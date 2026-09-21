@@ -121,21 +121,53 @@ export function recentMeasurementWindow<T extends { period: string }>(
  * manquantes relève du suivi de reporting, pas du statut de risque.
  */
 export function computeIndicatorStatus(
-  indicator: Pick<Indicator, "id" | "kind" | "objectiveValue" | "direction">,
+  indicator: Pick<Indicator, "id" | "kind" | "objectiveValue" | "direction" | "targetSchedule">,
   measurements: IndicatorMeasurement[]
 ): IndicatorRiskStatus {
   if (indicator.kind === "qualitative") return "on_track";
-  if (indicator.objectiveValue === undefined) return "on_track";
   const latest = latestMeasurement(indicator.id, measurements);
   if (!latest || latest.value === undefined) return "on_track";
+  // Round "cible évolutive" : compare à la cible APPLICABLE à la période de cette mesure (le
+  // palier courant d'une trajectoire, ou `objectiveValue` pour une cible fixe) — jamais toujours
+  // la cible finale, qui rendrait "at_risk" une mesure pourtant conforme au palier du moment.
+  const target = resolveIndicatorTargetForPeriod(indicator, latest.period);
+  if (target === undefined) return "on_track";
   // "down" = plus bas vaut mieux (ex. délai, taux de rebut) ; défaut "up".
   return indicator.direction === "down"
-    ? latest.value <= indicator.objectiveValue
+    ? latest.value <= target
       ? "on_track"
       : "at_risk"
-    : latest.value >= indicator.objectiveValue
+    : latest.value >= target
       ? "on_track"
       : "at_risk";
+}
+
+/**
+ * Cible APPLICABLE d'un indicateur pour une PÉRIODE donnée (round "cible évolutive") — pour un
+ * indicateur à cible FIXE (`targetSchedule` absent/vide), toujours `objectiveValue`, quelle que
+ * soit la période (comportement historique, inchangé). Pour un indicateur à cible ÉVOLUTIVE, le
+ * dernier palier de `targetSchedule` dont `period` est <= la période demandée (ordre
+ * lexicographique, même convention que `IndicatorMeasurement.period`) ; si `period` est
+ * antérieure à TOUS les paliers déclarés (déclaration incomplète), ou postérieure au dernier,
+ * replie sur `objectiveValue` (la cible finale) — jamais une valeur interpolée/inventée.
+ */
+export function resolveIndicatorTargetForPeriod(
+  indicator: Pick<Indicator, "objectiveValue" | "targetSchedule">,
+  period: string
+): number | undefined {
+  const schedule = indicator.targetSchedule;
+  if (!schedule || schedule.length === 0) return indicator.objectiveValue;
+  const sorted = [...schedule].sort((a, b) => a.period.localeCompare(b.period));
+  // Au-delà du DERNIER palier déclaré : la cible finale prend le relais (voir doc-comment) —
+  // sans ce garde-fou, le dernier palier resterait "actif" indéfiniment plutôt que de converger
+  // vers l'objectif final une fois la trajectoire intermédiaire épuisée.
+  if (period > sorted[sorted.length - 1].period) return indicator.objectiveValue;
+  let applicable: number | undefined;
+  for (const step of sorted) {
+    if (step.period <= period) applicable = step.value;
+    else break;
+  }
+  return applicable ?? indicator.objectiveValue;
 }
 
 /** Statut EFFECTIF d'un indicateur : la surcharge manuelle du responsable prime toujours sur le
@@ -169,14 +201,16 @@ export type IndicatorDelta = {
  *  pas de mesure exploitable (absente ou sans valeur numérique) — rien à afficher plutôt qu'un
  *  écart inventé. */
 export function computeIndicatorDelta(
-  indicator: Pick<Indicator, "objectiveValue" | "direction">,
+  indicator: Pick<Indicator, "objectiveValue" | "direction" | "targetSchedule">,
   latest: IndicatorMeasurement | undefined
 ): IndicatorDelta | undefined {
-  if (indicator.objectiveValue === undefined) return undefined;
   if (!latest || latest.value === undefined) return undefined;
+  // Round "cible évolutive" : écart à la cible du PALIER courant (période de la mesure), pas
+  // toujours la cible finale — voir `resolveIndicatorTargetForPeriod`.
+  const objective = resolveIndicatorTargetForPeriod(indicator, latest.period);
+  if (objective === undefined) return undefined;
 
   const value = latest.value;
-  const objective = indicator.objectiveValue;
   const isDown = indicator.direction === "down";
 
   const delta = value - objective;
@@ -1573,6 +1607,43 @@ export function sumConsumedBudget(chantierId: string, actions: ChantierAction[])
   return actions
     .filter((action) => action.chantierId === chantierId)
     .reduce((sum, action) => sum + (action.consumedBudget ?? 0), 0);
+}
+
+/**
+ * Somme des budgets PROJET (`ChantierAction.budget`) de TOUT un programme (round "budget du plan
+ * stratégique") — comparée à `Program.budget` (le budget prévisionnel total déclaré) pour détecter
+ * un dépassement, voir `programBudgetOverrun` ci-dessous.
+ *
+ * Somme DIRECTEMENT sur les projets du programme (via leur chantier parent), jamais en sommant des
+ * sous-totaux PAR AXE : un chantier peut appartenir à plusieurs axes (`Chantier.axisIds`), sommer
+ * un sous-total par axe compterait alors plusieurs fois le budget d'un même chantier partagé. Ici,
+ * chaque projet ne compte qu'UNE fois, quel que soit le nombre d'axes de son chantier.
+ */
+export function sumProgramProjetBudgets(
+  programId: string,
+  chantiers: Chantier[],
+  actions: ChantierAction[]
+): number {
+  const chantierIds = new Set(chantiers.filter((c) => c.programId === programId).map((c) => c.id));
+  return actions
+    .filter((action) => chantierIds.has(action.chantierId))
+    .reduce((sum, action) => sum + (action.budget ?? 0), 0);
+}
+
+/**
+ * Dépassement du budget prévisionnel total du programme (`Program.budget`) — `undefined` tant
+ * qu'aucun budget total n'a été déclaré (rien à comparer, voir le commentaire de `Program.budget`
+ * dans `types/index.ts`) ou si la somme réelle ne dépasse pas ce budget (pas de dépassement à
+ * signaler). Sinon, le montant du dépassement (toujours strictement positif).
+ */
+export function programBudgetOverrun(
+  program: Pick<Program, "id" | "budget">,
+  chantiers: Chantier[],
+  actions: ChantierAction[]
+): number | undefined {
+  if (program.budget === undefined) return undefined;
+  const total = sumProgramProjetBudgets(program.id, chantiers, actions);
+  return total > program.budget ? total - program.budget : undefined;
 }
 
 // ─── Responsable affiché d'un indicateur (round 12) ────────────────────────────────────────────
