@@ -699,6 +699,7 @@ export function LeversPagePerformance() {
     {
       key: "statusLabel",
       label: t("levers.columnMaturity"),
+      filterable: false, // filtre Maturité retiré en vue Table
       editable: true,
       type: "select",
       options: data.leverStatuses.map((s) => lifecycle.label(s)),
