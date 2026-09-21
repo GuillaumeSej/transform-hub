@@ -61,7 +61,7 @@ import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "l
 import { Avatar } from "@/components/shared/Avatar";
 import { SCurveChart, type SCurvePoint } from "@/components/shared/charts/SCurveChart";
 import { SCurveDetail } from "@/components/shared/charts/SCurveDetail";
-import { gapEntriesAt, savingsSeriesByWorkstream } from "@/lib/scurveDetail";
+import { gapEntriesAt } from "@/lib/scurveDetail";
 import { currentPointIndex } from "@/components/shared/charts/SCurveChart";
 import {
   WorkstreamBarChart,
@@ -72,9 +72,8 @@ import { GeoDonutChart } from "@/components/shared/charts/GeoDonutChart";
 import { InitiativeHealthMatrix } from "@/components/shared/charts/InitiativeHealthMatrix";
 import { StageFunnel } from "@/components/shared/charts/StageFunnel";
 import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
-import { QuarterlyBridgeChart } from "@/components/shared/charts/QuarterlyBridgeChart";
 import { SavingsWaterfallChart } from "@/components/shared/charts/SavingsWaterfallChart";
-import { oneOffGainsTotal, savingsTriple, seriesToBridge } from "@/lib/dashboardSavings";
+import { oneOffGainsTotal, savingsTriple } from "@/lib/dashboardSavings";
 import type { Lever, LeverStatus } from "@/types";
 import {
   DASHBOARD_WIDGET_REGISTRY,
@@ -545,7 +544,6 @@ export function DashboardPagePerformance() {
   const [sCurveGranularity, setSCurveGranularity] = useState<engine.TimeGranularity>("month");
 
   // ── Trajectoire des économies (widget combiné S-curve + Bridge) ────────
-  const [trajView, setTrajView] = useState<"scurve" | "bridge">("scurve");
   const [trajGranularity, setTrajGranularity] = useState<engine.TimeGranularity>("month");
   const [trajRangeStart, setTrajRangeStart] = useState(effectiveFyStart);
   const [trajRangeEnd, setTrajRangeEnd] = useState(effectiveFyEnd);
@@ -586,9 +584,6 @@ export function DashboardPagePerformance() {
     });
   }, [filteredData, trajGranularity, trajRangeStart, trajRangeEnd, labelToDate]);
 
-  // Barres = MÊME série que la courbe en S (`savingsSeries`) : valeurs identiques au basculement.
-  const trajBridge = useMemo(() => seriesToBridge(trajSCurve), [trajSCurve]);
-  const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
   // Pop-up de détail de la trajectoire (clic sur la courbe en S).
   const [scurveDetail, setScurveDetail] = useState<{
     points: SCurvePoint[];
@@ -611,25 +606,10 @@ export function DashboardPagePerformance() {
       scurveDetail ? gapEntriesAt(filteredData, scurveDetail.granularity, scurveDetail.month) : [],
     [scurveDetail, filteredData]
   );
-  const scurveDetailByWs = useMemo(
-    () =>
-      scurveDetail
-        ? savingsSeriesByWorkstream(
-            filteredData,
-            data.workstreams,
-            scurveDetail.granularity,
-            new Date(),
-            scurveDetail.points.map((p) => p.month)
-          )
-        : [],
-    [scurveDetail, filteredData, data.workstreams]
-  );
   const sCurve = engine.savingsSeries(filteredData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
   const savingsWaterfallData = useMemo(() => engine.savingsWaterfall(filteredData), [filteredData]);
   const oneOffGains = useMemo(() => oneOffGainsTotal(filteredData), [filteredData]);
-  const bridgeSeries = engine.savingsSeries(filteredData, bridgeGranularity);
-  const bridge = seriesToBridge(bridgeSeries);
 
   // Reporte les filtres actuellement actifs sur CE dashboard vers `/levers` (Bibliothèque de
   // leviers) — dont les `FilterDef.key` sont toujours préfixés `f_` (`f_status`, `f_geo_xxx`,
@@ -1378,24 +1358,6 @@ export function DashboardPagePerformance() {
               title={t("dashboard.widgets.savingsTrajectory")}
               actions={
                 <div className="flex items-center gap-2">
-                  {/* Toggle S-Curve / Bridge */}
-                  <div className="flex rounded-md border border-border-strong p-0.5 text-[11px] font-semibold">
-                    {(["scurve", "bridge"] as const).map((v) => (
-                      <button
-                        key={v}
-                        onClick={() => setTrajView(v)}
-                        className={`rounded px-2 py-1 transition ${
-                          trajView === v
-                            ? "bg-bp-coral text-white"
-                            : "text-secondary hover:text-primary"
-                        }`}
-                      >
-                        {v === "scurve"
-                          ? t("dashboard.widgets.viewSCurve")
-                          : t("dashboard.widgets.viewBridge")}
-                      </button>
-                    ))}
-                  </div>
                   {/* Granularité Mois / Trimestre */}
                   <GranularityToggle value={trajGranularity} onChange={setTrajGranularity} />
                   {/* Range picker libre */}
@@ -1419,32 +1381,14 @@ export function DashboardPagePerformance() {
               }
             />
             <CardBody>
-              {trajView === "scurve" ? (
-                <SCurveChart
-                  data={trajSCurve}
-                  height={360}
-                  onPointClick={(month) => openScurveDetail(trajSCurve, trajGranularity, month)}
-                  labelActual={t("chart.scurve.actual")}
-                  labelPlanned={t("chart.scurve.planned")}
-                  labelReforecast={t("chart.scurve.reforecast")}
-                />
-              ) : (
-                <QuarterlyBridgeChart
-                  data={trajBridge}
-                  height={340}
-                  onBarClick={(period) => openScurveDetail(trajSCurve, trajGranularity, period)}
-                  barLabel={
-                    trajGranularity === "month"
-                      ? t("chart.bridge.monthSavings")
-                      : t("chart.bridge.quarterSavings")
-                  }
-                  labelCumulative={t("chart.bridge.cumulative")}
-                  labelPlanned={t("chart.bridge.planned")}
-                  plannedCumulative={trajSCurve.map((p) => p.planned)}
-                  reforecastCumulative={trajSCurve.map((p) => p.reforecast)}
-                  labelReforecast={t("chart.scurve.reforecast")}
-                />
-              )}
+              <SCurveChart
+                data={trajSCurve}
+                height={360}
+                onPointClick={(month) => openScurveDetail(trajSCurve, trajGranularity, month)}
+                labelActual={t("chart.scurve.actual")}
+                labelPlanned={t("chart.scurve.planned")}
+                labelReforecast={t("chart.scurve.reforecast")}
+              />
             </CardBody>
           </Card>
         );
@@ -1465,39 +1409,6 @@ export function DashboardPagePerformance() {
                 onPointClick={(month) => openScurveDetail(sCurve, sCurveGranularity, month)}
                 labelActual={t("chart.scurve.actual")}
                 labelPlanned={t("chart.scurve.planned")}
-                labelReforecast={t("chart.scurve.reforecast")}
-              />
-            </CardBody>
-          </Card>
-        );
-      case "bridge":
-        return renderWidgetShell(
-          instance,
-          <Card className="mb-0 h-full">
-            <CardHeader
-              title={
-                bridgeGranularity === "quarter"
-                  ? t("dashboard.widgets.bridgeQuarter")
-                  : t("dashboard.widgets.bridgeMonth")
-              }
-              actions={
-                <GranularityToggle value={bridgeGranularity} onChange={setBridgeGranularity} />
-              }
-            />
-            <CardBody>
-              <QuarterlyBridgeChart
-                data={bridge}
-                height={340}
-                onBarClick={(period) => openScurveDetail(bridgeSeries, bridgeGranularity, period)}
-                barLabel={
-                  bridgeGranularity === "month"
-                    ? t("chart.bridge.monthSavings")
-                    : t("chart.bridge.quarterSavings")
-                }
-                labelCumulative={t("chart.bridge.cumulative")}
-                labelPlanned={t("chart.bridge.planned")}
-                plannedCumulative={bridgeSeries.map((p) => p.planned)}
-                reforecastCumulative={bridgeSeries.map((p) => p.reforecast)}
                 labelReforecast={t("chart.scurve.reforecast")}
               />
             </CardBody>
@@ -2118,18 +2029,12 @@ export function DashboardPagePerformance() {
       >
         {scurveDetail && (
           <SCurveDetail
-            points={scurveDetail.points}
-            byWorkstream={scurveDetailByWs}
             gap={{
               month: scurveDetail.month,
               entries: scurveGapEntries,
               workstreams: filteredData.workstreams,
               geographyLevels: geographyHierarchyLevels,
               geographyNodes,
-            }}
-            onSeeLevers={() => {
-              setScurveDetail(null);
-              goToLevers({});
             }}
           />
         )}

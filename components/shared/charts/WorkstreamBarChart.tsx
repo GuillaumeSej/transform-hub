@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -10,7 +11,6 @@ import {
   XAxis,
   YAxis,
   usePlotArea,
-  useXAxisScale,
   useYAxisScale,
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -167,15 +167,25 @@ export function WorkstreamBarDetail({
   );
 }
 
-const TAG_W = 40;
+const TAG_W = 44;
+const TAG_H = 14;
+/** Marge de catégorie (part de la bande, de chaque côté) : largeur de barre = bande × (1 − 2×gap). */
+const CATEGORY_GAP = 0.1;
+const CHART_MARGIN_RIGHT = 128;
 
-function bandwidthOf(scale: unknown): number {
-  const bw = (scale as { bandwidth?: () => number }).bandwidth;
-  return typeof bw === "function" ? bw.call(scale) : 0;
+/** Centre de chaque catégorie déduit de la zone de tracé (fiable, contrairement à l'échelle X qui
+ *  n'est pas décalée de l'origine de la zone avec un 2e axe X masqué). */
+function useCategoryCenters(count: number): number[] | null {
+  const plot = usePlotArea();
+  if (!plot || !Number.isFinite(plot.x + plot.width) || count === 0) return null;
+  const band = plot.width / count;
+  return Array.from({ length: count }, (_, i) => plot.x + band * (i + 0.5));
 }
 
-/** Tags de totaux à droite de chaque barre : réalisé, cible réactualisée, planifié initial. Les tags
- *  d'une même barre sont espacés d'au moins 14 px verticalement pour rester lisibles. */
+/** Tags de totaux, centrés au-dessus de chaque barre en colonne alignée (jamais côte à côte, donc
+ *  aucun chevauchement) : planifié initial (contour pointillé) au-dessus, cible réactualisée
+ *  (gris) en dessous. Le réalisé est écrit DANS le segment coral quand il est assez haut, sinon il
+ *  rejoint la colonne de tags. */
 function TotalTags({
   data,
   hasPlanned,
@@ -185,52 +195,68 @@ function TotalTags({
   hasPlanned: boolean;
   fmt: (v: number) => string;
 }) {
-  const xScale = useXAxisScale();
+  const centers = useCategoryCenters(data.length);
   const yScale = useYAxisScale();
-  if (!xScale || !yScale) return null;
-  const band = bandwidthOf(xScale);
+  if (!centers || !yScale) return null;
   const yOf = (v: number) => (yScale(v) as number) ?? 0;
   return (
     <g>
-      {data.map((d) => {
-        const cx = ((xScale(d.label) as number) ?? 0) + band / 2;
-        const x = cx + band * 0.275 + 3;
+      {data.map((d, di) => {
+        const cx = centers[di];
         const stackTop = Math.max(d.target, d.realized);
-        const items = [
-          { key: "t", v: d.target, y: yOf(stackTop), fill: "rgba(107,93,87,0.85)", dashed: false },
-          { key: "r", v: d.realized, y: yOf(d.realized / 2), fill: "#FF3C47", dashed: false },
-          ...(hasPlanned && d.planned !== undefined
-            ? [{ key: "p", v: d.planned, y: yOf(d.planned), fill: "#320300", dashed: true }]
-            : []),
-        ].sort((a, b) => a.y - b.y);
-        const ys: number[] = [];
-        items.forEach((it, i) => ys.push(i === 0 ? it.y : Math.max(it.y, ys[i - 1] + 14)));
+        const top =
+          hasPlanned && d.planned !== undefined ? Math.max(stackTop, d.planned) : stackTop;
+        const realizedH = yOf(0) - yOf(d.realized);
+        const realizedInside = realizedH >= 18;
+        // De bas en haut, à partir du sommet de la barre la plus haute.
+        const tags: { key: string; v: number; fill: string; dashed?: boolean }[] = [
+          { key: "t", v: d.target, fill: "rgba(107,93,87,0.9)" },
+        ];
+        if (!realizedInside) tags.push({ key: "r", v: d.realized, fill: "#FF3C47" });
+        if (hasPlanned && d.planned !== undefined)
+          tags.push({ key: "p", v: d.planned, fill: "#fff", dashed: true });
+        const baseY = yOf(top) - 4;
         return (
           <g key={d.label}>
-            {items.map((it, i) => (
-              <g key={it.key}>
-                <rect
-                  x={x}
-                  y={ys[i] - 6.5}
-                  width={TAG_W}
-                  height={13}
-                  rx={3}
-                  fill={it.dashed ? "#fff" : it.fill}
-                  stroke={it.dashed ? "#320300" : "none"}
-                  strokeDasharray={it.dashed ? "3 2" : undefined}
-                />
-                <text
-                  x={x + TAG_W / 2}
-                  y={ys[i] + 3.2}
-                  textAnchor="middle"
-                  fontSize={9}
-                  fontWeight={700}
-                  fill={it.dashed ? "#320300" : "#fff"}
-                >
-                  {fmt(it.v)}
-                </text>
-              </g>
-            ))}
+            {realizedInside && (
+              <text
+                x={cx}
+                y={yOf(d.realized / 2) + 4}
+                textAnchor="middle"
+                fontSize={11}
+                fontWeight={800}
+                fill="#fff"
+              >
+                {fmt(d.realized)}
+              </text>
+            )}
+            {tags.map((it, i) => {
+              const y = baseY - (i + 1) * (TAG_H + 2) + 2;
+              return (
+                <g key={it.key}>
+                  <rect
+                    x={cx - TAG_W / 2}
+                    y={y}
+                    width={TAG_W}
+                    height={TAG_H}
+                    rx={3}
+                    fill={it.fill}
+                    stroke={it.dashed ? "#320300" : "none"}
+                    strokeDasharray={it.dashed ? "3 2" : undefined}
+                  />
+                  <text
+                    x={cx}
+                    y={y + 10.2}
+                    textAnchor="middle"
+                    fontSize={10}
+                    fontWeight={700}
+                    fill={it.dashed ? "#320300" : "#fff"}
+                  >
+                    {fmt(it.v)}
+                  </text>
+                </g>
+              );
+            })}
           </g>
         );
       })}
@@ -245,19 +271,20 @@ function SideCallouts({
   data,
   hasPlanned,
   labels,
+  barW,
 }: {
   data: ChartDatum[];
   hasPlanned: boolean;
   labels: [string, string, string];
+  barW: number;
 }) {
-  const xScale = useXAxisScale();
+  const centers = useCategoryCenters(data.length);
   const yScale = useYAxisScale();
   const plot = usePlotArea();
   const last = data[data.length - 1];
-  if (!xScale || !yScale || !plot || !last || !Number.isFinite(plot.x + plot.width)) return null;
-  const band = bandwidthOf(xScale);
-  const cx = ((xScale(last.label) as number) ?? 0) + band / 2;
-  const barRight = cx + band * 0.275 + TAG_W + 6;
+  if (!centers || !yScale || !plot || !last || !Number.isFinite(plot.x + plot.width)) return null;
+  const cx = centers[data.length - 1];
+  const barRight = cx + barW / 2 + 4;
   const yTop = (v: number) => (yScale(v) as number) ?? 0;
   const stackTop = Math.max(last.target, last.realized);
   const items = [
@@ -292,7 +319,7 @@ function SideCallouts({
   items.forEach((it, i) => {
     labelY.push(i === 0 ? it.y : Math.max(it.y, labelY[i - 1] + 16));
   });
-  const xText = plot.x + plot.width + 22;
+  const xText = plot.x + plot.width + 18;
   return (
     <g>
       {items.map((it, i) => (
@@ -347,6 +374,17 @@ export function WorkstreamBarChart({
   onSegmentClick?: (point: WorkstreamBarPoint, segment: "target" | "realized") => void;
 }) {
   const { t } = useTranslation();
+  // Largeur de barre en px (Recharts 3 ignore barSize en % avec 2 axes X) : ~80 % de la bande.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [wrapW, setWrapW] = useState(0);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWrapW(el.clientWidth));
+    ro.observe(el);
+    setWrapW(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
   const resolvedLabelTarget = labelTarget ?? t("chart.bar.target", "Cible réactualisée");
   const resolvedLabelRealized = labelRealized ?? t("chart.bar.realized", "Réalisé");
   const resolvedLabelPlanned = labelPlanned ?? t("chart.bar.planned", "Planifié initial");
@@ -369,13 +407,17 @@ export function WorkstreamBarChart({
 
   const maxValue = Math.max(...data.map((d) => Math.max(d.target, d.realized, d.planned ?? 0)));
 
+  const band = Math.max(0, wrapW - CHART_MARGIN_RIGHT - 44) / Math.max(1, data.length);
+  const barW = Math.round(Math.min(120, Math.max(14, band * (1 - 2 * CATEGORY_GAP))));
+
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapRef}>
       <ResponsiveContainer width="100%" height={320}>
         <BarChart
           data={chartData}
-          margin={{ top: 20, right: 150, left: -16, bottom: 4 }}
-          barCategoryGap="45%"
+          margin={{ top: 52, right: CHART_MARGIN_RIGHT, left: -16, bottom: 4 }}
+          barCategoryGap={`${CATEGORY_GAP * 100}%`}
+          barSize={barW}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
           <XAxis
@@ -399,7 +441,7 @@ export function WorkstreamBarChart({
             axisLine={false}
             tickLine={false}
             tickFormatter={(v) => `€${v}M`}
-            domain={[0, Math.ceil(maxValue * 1.15)]}
+            domain={[0, Math.ceil(maxValue * 1.05)]}
           />
           <Legend
             wrapperStyle={{ fontSize: 11 }}
@@ -441,6 +483,7 @@ export function WorkstreamBarChart({
                 data={chartData}
                 hasPlanned={hasPlanned}
                 labels={[resolvedLabelTarget, resolvedLabelRealized, resolvedLabelPlanned]}
+                barW={barW}
               />
             )}
           />
@@ -488,7 +531,7 @@ export function WorkstreamBarChart({
               xAxisId="planned"
               fill="none"
               stroke="#320300"
-              strokeWidth={1.5}
+              strokeWidth={2}
               strokeDasharray="4 3"
               isAnimationActive={false}
               legendType="plainline"

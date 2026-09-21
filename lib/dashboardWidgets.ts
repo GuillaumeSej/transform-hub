@@ -39,7 +39,6 @@ export type DashboardWidgetType =
   | "stage-funnel"
   | "risk-center"
   | "s-curve"
-  | "bridge"
   | "marimekko"
   | "workstream-breakdown"
   | "geo-breakdown"
@@ -69,7 +68,6 @@ export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   "risk-center": "cockpit",
   "savings-trajectory": "trajectory",
   "s-curve": "trajectory",
-  bridge: "trajectory",
   marimekko: "portfolio",
   "workstream-breakdown": "portfolio",
   "geo-breakdown": "portfolio",
@@ -238,14 +236,6 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     type: "s-curve",
     label: "S-Curve — Plan initial / Réalisé / Réactualisé",
     icon: "TrendingUp",
-    defaultSpan: "XL",
-    allowedSpans: ["L", "XL"],
-    excludeFromDefault: true,
-  },
-  {
-    type: "bridge",
-    label: "Économies par période → cible",
-    icon: "BarChart3",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
     excludeFromDefault: true,
@@ -756,7 +746,14 @@ export function loadDashboardLayout(): DashboardWidgetInstance[] {
       window.localStorage.setItem(SAVINGS_WATERFALL_MIGRATION_KEY, "1");
       return buildDefaultLayout();
     }
-    const parsed: unknown = JSON.parse(raw);
+    const parsedRaw: unknown = JSON.parse(raw);
+    // Widget "bridge" autonome retiré : on l'écarte des layouts persistés (sinon le layout entier
+    // serait rejeté par `isValidInstance`).
+    const parsed: unknown = Array.isArray(parsedRaw)
+      ? parsedRaw.filter((w) => (w as { type?: unknown } | null)?.type !== "bridge")
+      : parsedRaw;
+    const hadLegacyBridge =
+      Array.isArray(parsedRaw) && (parsed as unknown[]).length !== parsedRaw.length;
     if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidInstance)) {
       window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
       window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
@@ -784,6 +781,7 @@ export function loadDashboardLayout(): DashboardWidgetInstance[] {
       waterfallAlreadyApplied
     );
     if (
+      hadLegacyBridge ||
       !migrationAlreadyApplied ||
       !reorderAlreadyApplied ||
       !economiesSectionAlreadyApplied ||
