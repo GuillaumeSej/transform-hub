@@ -6,6 +6,13 @@ import { subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { getImpactNatures } from "@/lib/impactConfig";
 import { impactKindOf, impactKindPatch, type ImpactKind } from "@/lib/impactKinds";
 import { leverImpactTotals } from "@/lib/engine";
+import {
+  allowedImpactStatuses,
+  coerceImpactStatus,
+  impactStatusOf,
+  isRecurringImpact,
+  type ImpactStatus,
+} from "@/lib/impactStatus";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Company, HierarchyLevelDef, HierarchyNode, LeverImpact } from "@/types";
 
@@ -98,8 +105,27 @@ export function ImpactsEditor({
   const totals = leverImpactTotals(impacts);
   const [openId, setOpenId] = useState<string | null>(null);
 
+  // Un changement de mode (récurrent ↔ ponctuel) corrige un statut devenu invalide (réalisé ↔ en cours).
   const update = (id: string, patch: Partial<LeverImpact>) =>
-    onChange(impacts.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+    onChange(
+      impacts.map((i) => {
+        if (i.id !== id) return i;
+        const next = { ...i, ...patch };
+        if (next.status && !("status" in patch))
+          next.status = coerceImpactStatus(next, next.status);
+        return next;
+      })
+    );
+  const STATUS_LABELS: Record<ImpactStatus, string> = {
+    planned: t("impactsEditor.statusPlanned", "Planifié"),
+    done: t("impactsEditor.statusDone", "Réalisé"),
+    ongoing: t("impactsEditor.statusOngoing", "En cours"),
+  };
+  const STATUS_STYLES: Record<ImpactStatus, string> = {
+    planned: "bg-neutral-100 text-secondary",
+    done: "bg-emerald-50 text-emerald-700",
+    ongoing: "bg-blue-50 text-blue-700",
+  };
   const remove = (id: string) => onChange(impacts.filter((i) => i.id !== id));
 
   const KIND_LABELS: Record<ImpactKind, string> = {
@@ -129,15 +155,13 @@ export function ImpactsEditor({
           kind === "gain" || (kind === "fte" && imp.fteDirection === "departure")
             ? imp.gainDate
             : (imp.capexStartDate ?? imp.capexDeploymentDate);
-        const recurring =
-          (kind === "gain" && imp.gainRecurrence !== "oneoff") ||
-          (kind === "opex" && imp.nature !== "oneoff") ||
-          kind === "fte";
+        const recurring = isRecurringImpact(imp);
         const isNegative = !(
           kind === "gain" ||
           (kind === "fte" && imp.fteDirection === "departure")
         );
-        const active = !!start && new Date(start) <= new Date();
+        const status = impactStatusOf(imp);
+        const futureWarn = status !== "planned" && !!start && new Date(start) > new Date();
         return (
           <div key={imp.id} className="rounded-md border border-border bg-white">
             <button
@@ -165,10 +189,12 @@ export function ImpactsEditor({
               <span className="text-[11px] text-secondary">
                 {start ? start : t("impactsEditor.noDate", "Date à définir")}
               </span>
-              <span className="text-[11px] text-tertiary">
-                {active
-                  ? t("impactsEditor.statusActive", "Actif")
-                  : t("impactsEditor.statusPlanned", "Planifié")}
+              <span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[status]}`}
+                >
+                  {STATUS_LABELS[status]}
+                </span>
               </span>
               <span className="text-right text-[11px] font-semibold text-bp-coral">
                 {open
@@ -197,6 +223,29 @@ export function ImpactsEditor({
                         </option>
                       ))}
                     </select>
+                  </label>
+                  <label>
+                    <span className={labelClass}>{t("impactsEditor.status", "Statut")}</span>
+                    <select
+                      className={inputClass}
+                      disabled={!editable}
+                      value={status}
+                      onChange={(e) => update(imp.id, { status: e.target.value as ImpactStatus })}
+                    >
+                      {allowedImpactStatuses(imp).map((s) => (
+                        <option key={s} value={s}>
+                          {STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                    {futureWarn && (
+                      <span className="mt-0.5 block text-[10px] text-bp-coral">
+                        {t(
+                          "impactsEditor.statusFutureWarn",
+                          "Impact réalisé / en cours : la date de début est dans le futur."
+                        )}
+                      </span>
+                    )}
                   </label>
                   <label className="md:col-span-2">
                     <span className={labelClass}>{t("impactsEditor.label", "Libellé")}</span>

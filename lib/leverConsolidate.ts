@@ -20,8 +20,8 @@ export function hasActionImpacts(lever: Lever): boolean {
  *  l'ancien `action.impacts`). Retourne undefined si le levier n'a aucun impact (= saisie manuelle
  *  des macro-valeurs conservée).
  *
- *  `netSavings = gains récurrents annuels − CAPEX` (règle métier explicite : NI l'OPEX one-off NI
- *  l'OPEX récurrent ne réduisent le "net"). Les gains one-off sont EXCLUS de grossSavings/netSavings
+ *  `netSavings = gains récurrents annuels − OPEX récurrent` (règle métier : le CAPEX et l'OPEX
+ *  one-off ne réduisent JAMAIS le "net" annualisé, ils sont suivis séparément). Les gains one-off sont EXCLUS de grossSavings/netSavings
  *  (voir `engine.leverImpactTotals`). Le salaire des départs ETP compte en gain, celui des
  *  recrutements en OPEX récurrent. */
 export function consolidateLeverFromActions(lever: Lever): Partial<Lever> | undefined {
@@ -49,16 +49,19 @@ export type JCurvePoint = {
   actual: number | null; // cumulatif réalisé (null si futur)
 };
 
-/** Calcule le montant net d'une action : gains bruts − CAPEX uniquement (règle métier explicite —
- *  ni l'OPEX one-off ni l'OPEX récurrent ne réduisent ce "net", contrairement à un calcul naïf qui
- *  soustrairait tous les impacts `type==="cost"` sans distinguer leur `nature`). Root cause d'un
- *  bug remonté : un levier avec seulement un impact OPEX one-off sur une action livrée affichait un
- *  "Réalisé à date (net)" négatif — l'OPEX one-off ne doit JAMAIS apparaître dans ce calcul. */
+/** Montant net annualisé d'une action (ancien modèle) : gains récurrents − OPEX récurrent (règle
+ *  métier net = brut − OPEX récurrent). Le CAPEX et l'OPEX one-off n'y entrent JAMAIS (suivis à part
+ *  dans la trajectoire/courbe en J des impacts). */
 function actionNetAmount(action: LeverAction): number {
   let net = 0;
   for (const imp of action.impacts ?? []) {
-    if (imp.type === "saving") net += imp.amount;
-    else if (imp.nature === "capex") net -= imp.amount;
+    if (imp.type === "saving") {
+      if (imp.gainRecurrence !== "oneoff") net += imp.amount;
+    } else if (imp.type === "fte") {
+      net += imp.fteDirection === "hire" ? -imp.amount : imp.amount;
+    } else if (imp.nature !== "capex" && imp.nature !== "oneoff") {
+      net -= imp.amount;
+    }
   }
   return net;
 }

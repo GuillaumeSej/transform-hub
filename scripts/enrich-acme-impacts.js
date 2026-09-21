@@ -7,14 +7,17 @@
  * réactualisation (reforecast ≠ plan figé) sur une partie des leviers.
  *
  * Cohérence des totaux : la CIBLE NETTE (netSavings, lockedPlan.netSavings, reforecast.netSavings)
- * n'est jamais modifiée (sauf +8% de réactualisation sur L020). Le brut est recalé à
- * net + CAPEX (règle métier net = gains − CAPEX). Réalisé ≤ réactualisé garanti par le moteur
+ * n'est jamais modifiée (sauf +8% de réactualisation sur L020). Règle métier : NET = BRUT − OPEX
+ * RÉCURRENT (le CAPEX et l'OPEX one-off n'entrent jamais dans le net annualisé) ; le brut est donc
+ * recalé à net + OPEX récurrent. Réalisé ≤ réactualisé garanti par le moteur
  * (réalisé = réactualisé net × fraction ≤ 1). Leviers annulés et leviers déjà dotés d'impacts :
  * jamais modifiés (idempotent : relancer ne fait rien).
  *
  * Usage :
  *   node scripts/enrich-acme-impacts.js                      # DRY RUN (défaut)
  *   CONFIRM_PROD_MIGRATION=yes node scripts/enrich-acme-impacts.js --apply
+ *   node scripts/enrich-acme-impacts.js --recalibrate         # DRY RUN de la recalibration (leviers déjà enrichis)
+ *   CONFIRM_PROD_MIGRATION=yes node scripts/enrich-acme-impacts.js --recalibrate --apply
  *   CONFIRM_PROD_MIGRATION=yes node scripts/enrich-acme-impacts.js --restore scripts/output/<backup>.json
  * --apply écrit d'abord une sauvegarde JSON (valeurs d'origine des champs modifiés) dans
  * scripts/output/ ; --restore remet ces champs à leur valeur d'origine (supprime `impacts`).
@@ -48,6 +51,39 @@ const PATCH_FIELDS = [
   "lockedPlan",
   "reforecast",
 ];
+
+/** Cumuls d'un jeu d'impacts (mêmes règles que engine.leverImpactTotals). */
+function impactTotals(impacts) {
+  const t = { gross: 0, fteGross: 0, opexRec: 0, opexOneOff: 0, capex: 0 };
+  for (const i of impacts) {
+    if (i.type === "saving") {
+      if (i.gainRecurrence !== "oneoff") t.gross += i.amount;
+    } else if (i.type === "fte") {
+      if (i.fteDirection === "hire") t.opexRec += i.amount;
+      else {
+        t.gross += i.amount;
+        t.fteGross += i.amount;
+      }
+    } else if (i.nature === "capex") t.capex += i.amount;
+    else if (i.nature === "oneoff") t.opexOneOff += i.amount;
+    else t.opexRec += i.amount;
+  }
+  return t;
+}
+
+/** Met à l'échelle les lignes de gain récurrent (hors ETP départs) pour que Σ brut = targetGross. */
+function rescaleGains(impacts, targetGross) {
+  const t = impactTotals(impacts);
+  const lines = impacts.filter((i) => i.type === "saving" && i.gainRecurrence !== "oneoff");
+  if (lines.length === 0) return;
+  const want = Math.max(0.05, r2(targetGross - t.fteGross));
+  const cur = lines.reduce((s, i) => s + i.amount, 0) || 1;
+  let allocated = 0;
+  lines.forEach((i, k) => {
+    i.amount = k === lines.length - 1 ? r2(want - allocated) : r2((i.amount * want) / cur);
+    allocated = r2(allocated + i.amount);
+  });
+}
 
 function rng(seed) {
   let h = 1779033703 ^ seed.length;
@@ -148,8 +184,9 @@ function buildEnrichment(lever) {
   const fteSalary = r2(fteDepartures * 0.075);
   const hireSalary = r2(hires * 0.085);
 
-  // --- Gains : brut = net + CAPEX (net = gains − CAPEX), dont ETP départs ---
-  const gross = r2(net + capex);
+  // --- Gains : brut = net + OPEX récurrent (net = brut − OPEX rec), dont ETP départs. Le brut
+  // définitif est recalé plus bas une fois toutes les lignes d'OPEX récurrent connues. ---
+  const gross = r2(net + opexRecBase + dis + hireSalary);
   const savingsTotal = r2(Math.max(0.05, gross - fteSalary));
   const pool = SAVING_POOL[ws] ?? SAVING_POOL["WS-OPS"];
   const nLines = 2 + (rnd() < 0.5 ? 1 : 0);
@@ -287,6 +324,8 @@ function buildEnrichment(lever) {
     });
   }
 
+  rescaleGains(impacts, r2(net + impactTotals(impacts).opexRec));
+
   // --- Totaux dérivés (mêmes règles que engine.leverImpactTotals) ---
   const totals = { gross: 0, opexOneOff: 0, opexRec: 0, capex: 0, fte: 0 };
   for (const i of impacts) {
@@ -316,15 +355,16 @@ function buildEnrichment(lever) {
   const planCostFactor = [1, 0.85, 1.12, 0.92][Math.floor(rnd() * 4)];
   const snap = (s, factor) => {
     const cap = r2(T.capex * factor);
+    const opexRec = r2(T.opexRec * (factor === 1 ? 1 : 0.9 + (factor - 0.85) * 0.3));
     return {
       ...s,
-      grossSavings: r2(s.netSavings + cap),
+      grossSavings: r2(s.netSavings + opexRec),
       capex: cap,
       opexOneOff: r2(T.opexOneOff * factor),
-      opexRec: r2(T.opexRec * (factor === 1 ? 1 : 0.9 + (factor - 0.85) * 0.3)),
+      opexRec,
     };
   };
-  const patch = { impacts, ...T, netSavings: r2(T.grossSavings - T.capex) };
+  const patch = { impacts, ...T, netSavings: r2(T.grossSavings - T.opexRec) };
   if (lever.lockedPlan) patch.lockedPlan = snap(lever.lockedPlan, planCostFactor);
   if (lever.reforecast) patch.reforecast = snap(lever.reforecast, 1);
   else if (["in_progress", "delivered"].includes(lever.status) && lever.lockedPlan) {
@@ -346,9 +386,9 @@ function applyReforecastVariance(lever, patch) {
   )
     return;
   const newNet = r2(rf.netSavings * 1.08);
-  patch.reforecast = { ...rf, netSavings: newNet, grossSavings: r2(newNet + rf.capex) };
+  patch.reforecast = { ...rf, netSavings: newNet, grossSavings: r2(newNet + rf.opexRec) };
   patch.netSavings = newNet;
-  patch.grossSavings = r2(newNet + patch.capex);
+  patch.grossSavings = r2(newNet + patch.opexRec);
   // Répercute le +8% sur la première ligne de gain pour garder impacts == snapshot.
   const first = patch.impacts.find((i) => i.type === "saving" && i.gainRecurrence === "annual");
   first.amount = r2(
@@ -365,6 +405,29 @@ function applyReforecastVariance(lever, patch) {
           0
         ))
   );
+}
+
+/** Recalibre un levier déjà stocké : net inchangé, brut = net + OPEX récurrent (lever, plan figé,
+ *  réactualisé) ; lignes de gain rescalées pour que les impacts bouclent sur le brut du levier. */
+function buildRecalibration(lever) {
+  const patch = {};
+  const impacts = (lever.impacts ?? []).map((i) => ({ ...i }));
+  if (impacts.length > 0) {
+    const t = impactTotals(impacts);
+    rescaleGains(impacts, r2(lever.netSavings + t.opexRec));
+    const t2 = impactTotals(impacts);
+    patch.impacts = impacts;
+    patch.grossSavings = r2(t2.gross);
+    patch.opexRec = r2(t2.opexRec);
+    patch.netSavings = r2(t2.gross - t2.opexRec);
+  } else {
+    patch.grossSavings = r2(lever.netSavings + (lever.opexRec ?? 0));
+  }
+  for (const k of ["lockedPlan", "reforecast"]) {
+    const s = lever[k];
+    if (s) patch[k] = { ...s, grossSavings: r2(s.netSavings + (s.opexRec ?? 0)) };
+  }
+  return patch;
 }
 
 async function main() {
@@ -402,7 +465,35 @@ async function main() {
     process.exit(0);
   }
 
+  const recalibrate = args.includes("--recalibrate");
   const snap = await db.collection("levers").where("companyId", "==", COMPANY_ID).get();
+  if (recalibrate) {
+    const bk = { createdAt: new Date().toISOString(), companyId: COMPANY_ID, levers: {} };
+    const ws = [];
+    for (const d of snap.docs) {
+      const lever = { id: d.id, ...d.data() };
+      const patch = buildRecalibration(lever);
+      const orig = {};
+      for (const f of PATCH_FIELDS) if (f in lever) orig[f] = lever[f];
+      bk.levers[lever.id] = orig;
+      ws.push([d.ref, patch]);
+      console.log(
+        `${lever.id} ${lever.code} [${lever.status}] gross ${lever.grossSavings}->${patch.grossSavings} ` +
+          `net ${lever.netSavings}->${patch.netSavings ?? lever.netSavings} opexRec ${lever.opexRec}->${patch.opexRec ?? lever.opexRec} ` +
+          `capex ${lever.capex} (hors net)`
+      );
+    }
+    if (!apply) {
+      console.log(`\nDRY RUN recalibration : ${ws.length} leviers — relancer avec --apply.`);
+      process.exit(0);
+    }
+    fs.mkdirSync(path.resolve(__dirname, "output"), { recursive: true });
+    const file = path.resolve(__dirname, "output", `acme-recalibrate-backup-${Date.now()}.json`);
+    fs.writeFileSync(file, JSON.stringify(bk, null, 2));
+    for (const [ref, patch] of ws) await ref.update(patch);
+    console.log(`Écrit : ${ws.length} leviers. Sauvegarde : ${file}`);
+    process.exit(0);
+  }
   console.log(`${snap.size} leviers Acme — mode ${apply ? "APPLY" : "DRY RUN"}\n`);
   const backup = { createdAt: new Date().toISOString(), companyId: COMPANY_ID, levers: {} };
   const writes = [];

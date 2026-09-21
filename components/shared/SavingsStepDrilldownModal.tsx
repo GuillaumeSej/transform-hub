@@ -134,6 +134,10 @@ export function SavingsStepDrilldownModal({
         t("chart.waterfall.drill.geography", "Géographie"));
 
   const intro: Record<DrilldownStepKey, string> = {
+    gross: t(
+      "chart.waterfall.drill.intro.gross",
+      "Gain brut annualisé des leviers actifs = net + OPEX récurrent."
+    ),
     initial: t(
       "chart.waterfall.drill.intro.initial",
       "Plan figé annualisé de tous les leviers (y compris annulés)."
@@ -148,11 +152,11 @@ export function SavingsStepDrilldownModal({
     ),
     target: t(
       "chart.waterfall.drill.intro.target",
-      "Cible réactualisée = réalisé + reste à faire (mêmes chiffres que « Réalisation des économies »)."
+      "Net réactualisé (brut − OPEX récurrent) = réalisé + reste à faire (mêmes chiffres que « Réalisation des économies »)."
     ),
     opexRec: t(
       "chart.waterfall.drill.intro.opexRec",
-      "OPEX récurrent annuel des leviers actifs, par nature d'impact. Hors cible."
+      "OPEX récurrent annuel des leviers actifs, par nature d'impact, déduit du brut pour obtenir le net."
     ),
   };
 
@@ -182,7 +186,11 @@ export function SavingsStepDrilldownModal({
             </td>
           )}
           <td className="pl-2 text-right tabular-nums">
-            {step === "initial" || step === "target" ? fmt(g.value) : <Signed v={g.value} />}
+            {step === "gross" || step === "initial" || step === "target" ? (
+              fmt(g.value)
+            ) : (
+              <Signed v={g.value} />
+            )}
           </td>
         </tr>
         {open &&
@@ -205,7 +213,11 @@ export function SavingsStepDrilldownModal({
               {showRealized && <td className="px-2 text-right tabular-nums">{fmt(e.remaining)}</td>}
               {isOpex && <td />}
               <td className="pl-2 text-right tabular-nums">
-                {step === "initial" || step === "target" ? fmt(e.value) : <Signed v={e.value} />}
+                {step === "gross" || step === "initial" || step === "target" ? (
+                  fmt(e.value)
+                ) : (
+                  <Signed v={e.value} />
+                )}
               </td>
             </tr>
           ))}
@@ -321,7 +333,7 @@ export function SavingsStepDrilldownModal({
               )}
               {isOpex && <td />}
               <td className="pl-2 text-right tabular-nums">
-                {step === "initial" || step === "target" ? (
+                {step === "gross" || step === "initial" || step === "target" ? (
                   fmt(totals.value)
                 ) : (
                   <Signed v={totals.value} />

@@ -1,3 +1,4 @@
+import { savingsTriple } from "@/lib/dashboardSavings";
 import { describe, it, expect } from "vitest";
 import * as engine from "@/lib/engine";
 import {
@@ -122,7 +123,7 @@ describe("leverImpactMigration", () => {
 });
 
 describe("leverImpactTotals", () => {
-  it("computes gross/net/one-off/fte with the net = savings - capex rule", () => {
+  it("computes gross/net/one-off/fte with the net = gross - recurring OPEX rule", () => {
     const t = engine.leverImpactTotals(
       lever({
         impacts: [
@@ -142,7 +143,24 @@ describe("leverImpactTotals", () => {
     expect(t.opexOneOff).toBe(1);
     expect(t.opexRec).toBe(1.1); // 0.5 + hire salary
     expect(t.fteNet).toBe(-7);
-    expect(t.netAnnual).toBe(9);
+    expect(t.netAnnual).toBe(10.9); // 12 − 1.1 : CAPEX (3) et OPEX one-off (1) ignorés
+  });
+  it("net = gross − recurring OPEX; CAPEX and one-off OPEX never enter the annualized net", () => {
+    const gainOnly = engine.leverImpactTotals([imp("g", { amount: 10 })]);
+    const withCapex = engine.leverImpactTotals([
+      imp("g", { amount: 10 }),
+      imp("cx", { type: "cost", nature: "capex", amount: 7 }),
+      imp("oo", { type: "cost", nature: "oneoff", amount: 5 }),
+    ]);
+    expect(withCapex.netAnnual).toBe(gainOnly.netAnnual);
+    expect(withCapex.netAnnual).toBe(10);
+    const withOpex = engine.leverImpactTotals([
+      imp("g", { amount: 10 }),
+      imp("cx", { type: "cost", nature: "capex", amount: 7 }),
+      imp("or", { type: "cost", nature: "opex_rec", amount: 2.5 }),
+    ]);
+    expect(withOpex.netAnnual).toBe(7.5);
+    expect(withOpex.netAnnual).toBe(withOpex.grossAnnual - withOpex.opexRec);
   });
 });
 
@@ -243,7 +261,7 @@ describe("lever financials recomputed from impacts", () => {
       "u"
     );
     expect(created.grossSavings).toBe(5);
-    expect(created.netSavings).toBe(4);
+    expect(created.netSavings).toBe(5); // CAPEX (1) hors net annualisé
     expect(created.capex).toBe(1);
     const manual = createLever(
       [],
@@ -321,10 +339,12 @@ describe("cancelled levers are excluded from every aggregate", () => {
     ).toBe(5);
     expect(engine.impactTrajectory(bad).points).toHaveLength(0);
   });
-  it("waterfall isolates cancelled", () => {
+  it("waterfall = brut − OPEX récurrent = net, cancelled excluded", () => {
     const w = engine.savingsWaterfall(d);
-    expect(w.steps.find((s) => s.key === "initial")?.value).toBe(55);
-    expect(w.steps.find((s) => s.key === "cancelled")?.value).toBe(-50);
+    expect(w.steps.map((x) => x.key)).toEqual(["gross", "opexRec", "target"]);
+    expect(w.target).toBe(5);
+    expect(w.gross - w.opexRec).toBeCloseTo(w.target, 1);
+    expect(w.steps.find((x) => x.key === "target")?.value).toBe(w.target);
   });
 });
 
@@ -459,17 +479,23 @@ describe("savingsWaterfall & financeByHierarchyLevel", () => {
   const b = lever({ id: "B", hierarchyLeafId: "cc2", netSavings: 4, status: "cancelled" });
   const c = lever({ id: "C", netSavings: 3, status: "in_progress" });
   const d = data([a, b, c]);
-  it("waterfall arithmetic", () => {
+  it("waterfall arithmetic: gross − recurring OPEX = net target (same as savingsTriple)", () => {
     const w = engine.savingsWaterfall(d);
     const v = (k: string) => w.steps.find((s) => s.key === k)!.value;
-    expect(v("initial")).toBe(17);
-    expect(v("reforecast")).toBe(-2);
-    expect(v("cancelled")).toBe(-4);
-    expect(v("target")).toBe(v("initial") + v("reforecast") + v("cancelled"));
+    expect(w.steps.map((s) => s.key)).toEqual(["gross", "opexRec", "target"]);
+    expect(v("target")).toBe(11); // A réactualisé 8 + C 3 ; B annulé exclu
     expect(w.target).toBe(v("target"));
-    expect(v("opexRec")).toBe(-1);
-    expect(w.opexRec).toBe(1);
+    expect(v("opexRec")).toBe(-w.opexRec);
+    expect(w.opexRec).toBeGreaterThanOrEqual(1); // A : 1 (réactualisé) + OPEX de C
+    expect(v("gross")).toBeCloseTo(v("target") + w.opexRec, 1);
+    expect(v("gross") + v("opexRec")).toBeCloseTo(v("target"), 1);
     expect(w.remaining).toBe(Math.round((w.target - w.realized) * 10) / 10);
+  });
+  it("waterfall target/realized equal savingsTriple (same numbers as dashboard KPI/graph)", () => {
+    const w = engine.savingsWaterfall(d);
+    const t = savingsTriple(d.levers);
+    expect(w.target).toBe(t.reforecast);
+    expect(w.realized).toBe(t.realized);
   });
   it("aggregates leaves up to the chosen level", () => {
     const rows = engine.financeByHierarchyLevel(d, company, 0, nodes, {

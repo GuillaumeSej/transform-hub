@@ -742,7 +742,7 @@ for (const def of LEVER_DEFS) {
         case "Impact estimé brut (€M)":
           return def.gross;
         case "Impact estimé net (€M)":
-          return def.net;
+          return Math.round((def.gross - def.opexRec) * 100) / 100; // net = brut − OPEX récurrent
         case "Impact estimé (ETP)":
           return def.fte;
         case "Population impactée":
@@ -800,10 +800,27 @@ for (const def of LEVER_DEFS) {
     entity,
     "",
   ]);
+  if (def.opexRec > 0) {
+    impactRows.push([
+      def.code,
+      actionNames[costActionIndex],
+      "Coût",
+      "OPEX récurrent",
+      def.opexRec,
+      0,
+      "",
+      toFr(addDays(bounds[costActionIndex], 30)),
+      "",
+      pnl,
+      def.costCenter,
+      entity,
+      "",
+    ]);
+  }
 
   if (n >= 2) {
-    const gain1 = round1(def.net * 0.6);
-    const gain2 = round1(def.net - gain1);
+    const gain1 = round1(def.gross * 0.6);
+    const gain2 = round1(def.gross - gain1);
     const midActionIndex = Math.min(1, n - 1);
     const lastActionIndex = n - 1;
     impactRows.push([
@@ -842,7 +859,7 @@ for (const def of LEVER_DEFS) {
       actionNames[0],
       "Gain",
       "",
-      def.net,
+      def.gross,
       def.fte,
       def.fte >= 0 ? "Augmentation du CA" : "Réduction de coût",
       "",

@@ -1,5 +1,10 @@
 import type { HierarchyLevelDef, HierarchyNode, Lever, Workstream } from "@/types";
-import { displayedReforecastNet, leverImpactsOf, realizedSavings } from "@/lib/engine";
+import {
+  displayedReforecastNet,
+  leverImpactsOf,
+  leverOpexRecOf,
+  realizedSavings,
+} from "@/lib/engine";
 import { resolveHierarchyNodeChain } from "@/lib/hierarchyLogic";
 
 /**
@@ -8,7 +13,8 @@ import { resolveHierarchyNodeChain } from "@/lib/hierarchyLogic";
  * plan figé) pour une cohérence stricte avec le graphe "Réalisation des économies".
  */
 
-export type DrilldownStepKey = "initial" | "reforecast" | "cancelled" | "target" | "opexRec";
+export type DrilldownStepKey =
+  "gross" | "initial" | "reforecast" | "cancelled" | "target" | "opexRec";
 export type DrilldownDimension = "workstream" | "geography";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -93,6 +99,18 @@ export function buildDrilldownEntries(
         before: locked,
         after: locked,
         value: locked,
+        realized: 0,
+        remaining: 0,
+      });
+    } else if (step === "gross") {
+      if (cancelled) continue;
+      const net = displayedReforecastNet(l).value;
+      const opex = leverOpexRecOf(l);
+      out.push({
+        ...base(l),
+        before: net,
+        after: net + opex,
+        value: net + opex,
         realized: 0,
         remaining: 0,
       });

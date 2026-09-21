@@ -451,10 +451,10 @@ describe("leversLogic — enriched action consolidation", () => {
     expect(result.action.deliveredDate).toBeDefined();
     expect(result.changedLever?.progress).toBe(100);
     expect(result.changedLever?.status).toBe("delivered");
-    // netSavings = savings − capex (lib/leverConsolidate.ts) : le CAPEX (1) réduit netSavings.
+    // netSavings = brut − OPEX récurrent : le CAPEX (1) reste hors net annualisé.
     expect(result.changedLever?.reforecast).toEqual({
       grossSavings: 3,
-      netSavings: 2,
+      netSavings: 3,
       capex: 1,
       opexOneOff: 0,
       opexRec: 0,

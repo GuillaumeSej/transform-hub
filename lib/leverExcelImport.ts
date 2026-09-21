@@ -135,6 +135,7 @@ export const IMPACT_IMPORT_HEADERS = [
   "Nature de l'impact", // libellé d'une nature paramétrée (matières premières, main-d'œuvre...)
   "Technologie",
   "Sens", // Type = ETP : Recrutement | Départ (Montant = salaire chargé total, ETP = nombre)
+  "Statut impact", // Planifié | Réalisé (ponctuel) | En cours (récurrent) — vide = dérivé de la date
 ] as const;
 
 // ---------- Libellés humains <-> valeurs internes ----------
@@ -169,6 +170,17 @@ const FTE_DIRECTION_LABELS: Record<string, "hire" | "departure"> = {
   départ: "departure",
   depart: "departure",
   réduction: "departure",
+};
+
+const IMPACT_STATUS_LABELS: Record<string, "planned" | "done" | "ongoing"> = {
+  planifié: "planned",
+  planifie: "planned",
+  planned: "planned",
+  réalisé: "done",
+  realise: "done",
+  done: "done",
+  "en cours": "ongoing",
+  ongoing: "ongoing",
 };
 
 const IMPACT_NATURE_LABEL: Record<ActionImpact["nature"], string> = {
@@ -791,6 +803,16 @@ export function validateLeverImportRows(
       });
       return;
     }
+    const statusRaw = str(row["Statut impact"]);
+    const statusParsed = statusRaw ? IMPACT_STATUS_LABELS[statusRaw.toLowerCase()] : undefined;
+    if (statusRaw && !statusParsed) {
+      errors.push({
+        sheet: "Impacts",
+        rowNumber,
+        reason: `Statut impact "${statusRaw}" inconnu (attendu : Planifié, Réalisé, En cours)`,
+      });
+      return;
+    }
     const natureLabelRaw = str(row["Nature de l'impact"]);
     const natureId = natureLabelRaw
       ? getImpactNatures(undefined).find(
@@ -815,6 +837,7 @@ export function validateLeverImportRows(
       ...(type === "saving" && gainRecurrence ? { gainRecurrence } : {}),
       ...(type === "fte" ? { fteDirection: fteDirection ?? "departure" } : {}),
       ...(natureId ? { natureId } : {}),
+      ...(statusParsed ? { status: statusParsed } : {}),
       ...(str(row["Technologie"]) ? { technology: str(row["Technologie"]) } : {}),
       comments: comment ? [{ user: "Import Excel", ts: nowDate(), text: comment }] : undefined,
     };

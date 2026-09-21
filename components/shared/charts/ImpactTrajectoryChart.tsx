@@ -42,11 +42,13 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
 
   const data = traj.points.map((p) => ({
     period: p.period,
-    gains: p.gains,
-    oneOffGains: p.oneOffGains,
-    opexRec: -p.opexRec,
-    opexOneOff: -p.opexOneOff,
-    capex: -p.capex,
+    gains: p.gains - p.planned.gains,
+    oneOffGains: p.oneOffGains - p.planned.oneOffGains,
+    opexRec: -(p.opexRec - p.planned.opexRec),
+    opexOneOff: -(p.opexOneOff - p.planned.opexOneOff),
+    capex: -(p.capex - p.planned.capex),
+    gainsPlanned: p.planned.gains + p.planned.oneOffGains,
+    costsPlanned: -(p.planned.opexRec + p.planned.opexOneOff + p.planned.capex),
     cumulativeNet: p.cumulativeNet,
     cumulativeNetRecurring: p.cumulativeNetRecurring,
     fte: p.fte,
@@ -154,6 +156,24 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
                   stackId="s"
                   fill="#3b82c4"
                   name={t("leverDetail.trajectory.capex", "CAPEX (ponctuel ou lissé)")}
+                />
+                <Bar
+                  dataKey="gainsPlanned"
+                  stackId="s"
+                  fill="#3f9d6a"
+                  fillOpacity={0.3}
+                  stroke="#3f9d6a"
+                  strokeDasharray="3 2"
+                  name={t("leverDetail.trajectory.gainsPlanned", "Gains planifiés (prévisionnel)")}
+                />
+                <Bar
+                  dataKey="costsPlanned"
+                  stackId="s"
+                  fill="#e0655a"
+                  fillOpacity={0.3}
+                  stroke="#e0655a"
+                  strokeDasharray="3 2"
+                  name={t("leverDetail.trajectory.costsPlanned", "Coûts planifiés (prévisionnel)")}
                 />
                 <Line
                   type="stepAfter"

@@ -42,9 +42,9 @@ export const OPEX_SEGMENT_COLORS = [
 
 const fmt = (v: number) => `€${Math.round(v * 10) / 10}M`;
 
-/** Cascade des économies ANNUALISÉES : planifié initial -> réactualisé -> annulé -> cible
- *  réactualisée (empilé réalisé / reste à faire, = graphe "Réalisation des économies"), puis
- *  OPEX récurrent (hors cible, segmenté par nature). Cliquable : détail par étape. */
+/** Cascade des économies ANNUALISÉES : gain brut -> OPEX récurrent (segmenté par
+ *  nature) -> net réactualisé = cible (empilé réalisé / reste à faire, = graphe "Réalisation des
+ *  économies"). Cliquable : détail par étape. */
 export function SavingsWaterfallChart({
   waterfall,
   height = 340,
@@ -71,6 +71,8 @@ export function SavingsWaterfallChart({
 
   const labelOf = (key: string, fallback: string) => {
     switch (key) {
+      case "gross":
+        return t("chart.waterfall.step.gross", "Gain brut annualisé");
       case "initial":
         return t("chart.waterfall.step.initial", "Planifié initial (annualisé)");
       case "reforecast":
@@ -78,7 +80,7 @@ export function SavingsWaterfallChart({
       case "cancelled":
         return t("chart.waterfall.step.cancelled", "Annulé");
       case "target":
-        return t("chart.waterfall.step.target", "Cible réactualisée");
+        return t("chart.waterfall.step.target", "Net réactualisé (cible)");
       case "opexRec":
         return t("chart.waterfall.step.opexRec", "OPEX récurrent");
       default:
@@ -147,7 +149,7 @@ export function SavingsWaterfallChart({
     if (!b) return null;
     let text: string;
     let color: string = WATERFALL_COLORS.total;
-    if (b.key === "initial" || b.key === "target") {
+    if (b.key === "gross" || b.key === "target") {
       text = fmt(b.value);
     } else if (b.value === 0) {
       text = fmt(0);
@@ -177,7 +179,7 @@ export function SavingsWaterfallChart({
     if (!active || !payload?.length) return null;
     const b = payload[0].payload as WaterfallBar;
     const signed =
-      b.key === "initial" || b.key === "target"
+      b.key === "gross" || b.key === "target"
         ? fmt(b.value)
         : `${b.value >= 0 ? "+" : "−"}${fmt(Math.abs(b.value))}`;
     return (
@@ -279,7 +281,7 @@ export function SavingsWaterfallChart({
             {bars.map((b) => (
               <Cell
                 key={b.key}
-                fill={b.key === "initial" ? WATERFALL_COLORS.total : WATERFALL_COLORS.up}
+                fill={b.key === "gross" ? WATERFALL_COLORS.total : WATERFALL_COLORS.up}
               />
             ))}
           </Bar>
@@ -314,7 +316,7 @@ export function SavingsWaterfallChart({
       <p className="mt-2 text-[11px] text-tertiary">
         {t(
           "chart.waterfall.note",
-          "Planifié initial et réactualisé = gains annualisés. Cible réactualisée = réalisé + reste à faire (identique au graphe « Réalisation des économies »). OPEX récurrent : coût annuel, hors cible. Leviers annulés exclus des totaux."
+          "Net annualisé = gain brut − OPEX récurrent (le CAPEX et les coûts ponctuels sont suivis à part). Net réactualisé = réalisé + reste à faire (identique au graphe « Réalisation des économies »). Leviers annulés exclus des totaux."
         )}
         {oneOffGains > 0 &&
           ` ${t("chart.waterfall.oneOff", "Gains ponctuels (hors totaux)")} : ${fmt(oneOffGains)}.`}

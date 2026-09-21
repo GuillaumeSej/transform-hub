@@ -145,7 +145,7 @@ describe("engine — realizedSavings", () => {
     expect(realizedSavings(lever)).toBe(0);
   });
 
-  it("sums gross savings minus CAPEX of 'done' actions only — an in_progress action contributes nothing", () => {
+  it("sums gross savings minus recurring OPEX of 'done' actions only — an in_progress action contributes nothing", () => {
     const lever = {
       ...baseLever,
       actions: [
@@ -153,7 +153,8 @@ describe("engine — realizedSavings", () => {
           id: "A1",
           impacts: [
             { id: "I1", label: "Gain", type: "saving", nature: "opex_rec", amount: 10 },
-            { id: "I2", label: "Coût CAPEX", type: "cost", nature: "capex", amount: 2 },
+            { id: "I2", label: "Coût OPEX rec", type: "cost", nature: "opex_rec", amount: 2 },
+            { id: "I4", label: "Coût CAPEX", type: "cost", nature: "capex", amount: 5 },
           ],
         }),
         {
@@ -177,7 +178,7 @@ describe("engine — realizedSavings", () => {
     expect(realizedSavings(lever)).toBe(8);
   });
 
-  it("never deducts OPEX one-off or OPEX récurrent from the realized net — CAPEX is the only cost that counts", () => {
+  it("never deducts CAPEX or OPEX one-off from the realized net — only recurring OPEX counts", () => {
     const lever = {
       ...baseLever,
       actions: [
@@ -191,7 +192,7 @@ describe("engine — realizedSavings", () => {
         }),
       ],
     };
-    expect(realizedSavings(lever)).toBe(10);
+    expect(realizedSavings(lever)).toBe(7); // 10 − 3 (OPEX rec) ; one-off ignoré
   });
 
   it("rounds to 2 decimals", () => {

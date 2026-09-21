@@ -2101,7 +2101,7 @@ const fr: Record<string, string> = {
   "leverDetail.latestVersion": "Dernière version",
   "leverDetail.grossAnnual": "Gains bruts annualisés",
   "leverDetail.oneOffGainsNotCounted": "Gains ponctuels (non comptés)",
-  "leverDetail.netGains": "Gains nets (bruts − CAPEX)",
+  "leverDetail.netGains": "Gains nets (bruts − OPEX récurrent)",
   "leverDetail.fte.created": "postes créés",
   "leverDetail.fte.reduced": "postes supprimés/réduits",
   "leverDetail.fte.positiveWarning": "ETP positif — à vérifier",
@@ -2174,6 +2174,11 @@ const fr: Record<string, string> = {
   "impactsEditor.noDate": "Date à définir",
   "impactsEditor.statusActive": "Actif",
   "impactsEditor.statusPlanned": "Planifié",
+  "impactsEditor.statusDone": "Réalisé",
+  "impactsEditor.statusOngoing": "En cours",
+  "impactsEditor.status": "Statut",
+  "impactsEditor.statusFutureWarn":
+    "Impact réalisé / en cours : la date de début est dans le futur.",
   "impactsEditor.close": "Fermer",
   "impactsEditor.edit": "Modifier",
   "impactsEditor.view": "Détail",
@@ -2222,6 +2227,8 @@ const fr: Record<string, string> = {
   "leverDetail.trajectory.opexRec": "OPEX récurrent (début puis anniversaires)",
   "leverDetail.trajectory.opexOneOff": "OPEX one-off",
   "leverDetail.trajectory.capex": "CAPEX (ponctuel ou lissé)",
+  "leverDetail.trajectory.gainsPlanned": "Gains planifiés (prévisionnel)",
+  "leverDetail.trajectory.costsPlanned": "Coûts planifiés (prévisionnel)",
   "leverDetail.trajectory.cumNet": "Net cumulé (avec ponctuels)",
   "leverDetail.trajectory.cumNetRec": "Net cumulé (hors ponctuels)",
   "leverDetail.trajectory.fteCum": "ETP cumulés (+ recrutements / − départs)",
@@ -2231,7 +2238,8 @@ const fr: Record<string, string> = {
   "chart.waterfall.step.initial": "Planifié initial (annualisé)",
   "chart.waterfall.step.reforecast": "Réactualisé (annualisé)",
   "chart.waterfall.step.cancelled": "Annulé",
-  "chart.waterfall.step.target": "Cible réactualisée",
+  "chart.waterfall.step.target": "Net réactualisé (cible)",
+  "chart.waterfall.step.gross": "Gain brut annualisé",
   "chart.waterfall.step.opexRec": "OPEX récurrent",
   "chart.waterfall.favorable": "Favorable",
   "chart.waterfall.unfavorable": "Défavorable",
@@ -2257,12 +2265,14 @@ const fr: Record<string, string> = {
     "Uniquement les chantiers réactualisés : gain annualisé avant (plan initial) et après réactualisation.",
   "chart.waterfall.drill.intro.cancelled":
     "Plan initial annualisé des leviers annulés, retirés de la cible.",
+  "chart.waterfall.drill.intro.gross":
+    "Gain brut annualisé des leviers actifs = net + OPEX récurrent.",
   "chart.waterfall.drill.intro.target":
-    "Cible réactualisée = réalisé + reste à faire (mêmes chiffres que « Réalisation des économies »).",
+    "Net réactualisé (brut − OPEX récurrent) = réalisé + reste à faire (mêmes chiffres que « Réalisation des économies »).",
   "chart.waterfall.drill.intro.opexRec":
-    "OPEX récurrent annuel des leviers actifs, par nature d'impact. Hors cible.",
+    "OPEX récurrent annuel des leviers actifs, par nature d'impact, déduit du brut pour obtenir le net.",
   "chart.waterfall.note":
-    "Planifié initial et réactualisé = gains annualisés. Cible réactualisée = réalisé + reste à faire (identique au graphe « Réalisation des économies »). OPEX récurrent : coût annuel, hors cible. Leviers annulés exclus des totaux.",
+    "Net annualisé = gain brut − OPEX récurrent (le CAPEX et les coûts ponctuels sont suivis à part). Net réactualisé = réalisé + reste à faire (identique au graphe « Réalisation des économies »). Leviers annulés exclus des totaux.",
 };
 
 export default fr;

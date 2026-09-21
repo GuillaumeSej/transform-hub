@@ -64,7 +64,7 @@ function realizedSavings(lever) {
     if (action.status !== "done") continue;
     for (const imp of action.impacts ?? []) {
       if (imp.type === "saving") total += imp.amount || 0;
-      else if (imp.nature === "capex") total -= imp.amount || 0;
+      else if (imp.type === "cost" && imp.nature === "opex_rec") total -= imp.amount || 0;
     }
   }
   return round2(total);
@@ -72,14 +72,14 @@ function realizedSavings(lever) {
 
 function consolidatedNetSavings(lever) {
   let savings = 0;
-  let capex = 0;
+  let opexRec = 0;
   for (const a of lever.actions ?? []) {
     for (const imp of a.impacts ?? []) {
       if (imp.type === "saving") savings += imp.amount || 0;
-      else if (imp.type === "cost" && imp.nature === "capex") capex += imp.amount || 0;
+      else if (imp.type === "cost" && imp.nature === "opex_rec") opexRec += imp.amount || 0;
     }
   }
-  return round2(savings - capex);
+  return round2(savings - opexRec);
 }
 
 function displayedReforecastNetValue(lever) {

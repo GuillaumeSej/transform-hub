@@ -44,17 +44,16 @@ export type WaterfallBar = {
   value: number;
 };
 
-/** Transforme `engine.savingsWaterfall` en barres Recharts (technique "base invisible"). La barre
- *  "Cible réactualisée" est scindée en réalisé + reste à faire (= savingsTriple) ; la barre
- *  "OPEX récurrent" (hors cible) est empilée par segments de nature, partant de 0. */
+/** Transforme `engine.savingsWaterfall` en barres Recharts (technique "base invisible") :
+ *  brut (barre pleine) → OPEX récurrent (flottant, empilé par segments de nature, entre le net et
+ *  le brut) → net = cible réactualisée (scindé réalisé + reste à faire = savingsTriple). */
 export function waterfallBars(
   w: SavingsWaterfall,
   opexSegments: { value: number }[] = []
 ): WaterfallBar[] {
   const bars: WaterfallBar[] = [];
-  let prev = 0;
+  const empty = { up: 0, down: 0, realized: 0, remaining: 0, seg: [] as number[] };
   for (const step of w.steps) {
-    const empty = { up: 0, down: 0, realized: 0, remaining: 0, seg: [] as number[] };
     if (step.key === "target") {
       const realized = Math.max(0, Math.min(w.realized, step.value));
       bars.push({
@@ -73,12 +72,12 @@ export function waterfallBars(
       bars.push({
         key: step.key,
         label: step.label,
-        base: 0,
+        base: r1(Math.max(0, step.cumulative)),
         ...empty,
         seg: segs,
         value: step.value,
       });
-    } else if (step.kind === "total") {
+    } else {
       bars.push({
         key: step.key,
         label: step.label,
@@ -87,20 +86,7 @@ export function waterfallBars(
         up: step.value,
         value: step.value,
       });
-    } else {
-      const cum = step.cumulative;
-      const lo = Math.min(prev, cum);
-      bars.push({
-        key: step.key,
-        label: step.label,
-        base: r1(Math.max(0, lo)),
-        ...empty,
-        up: step.value >= 0 ? r1(Math.abs(step.value)) : 0,
-        down: step.value < 0 ? r1(Math.abs(step.value)) : 0,
-        value: step.value,
-      });
     }
-    if (step.key !== "opexRec") prev = step.cumulative;
   }
   return bars;
 }

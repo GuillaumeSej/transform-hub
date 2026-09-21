@@ -1955,7 +1955,7 @@ const de: Record<string, string> = {
   "leverDetail.latestVersion": "Letzte Version",
   "leverDetail.grossAnnual": "Annualisierte Bruttogewinne",
   "leverDetail.oneOffGainsNotCounted": "Einmalige Gewinne (nicht gezählt)",
-  "leverDetail.netGains": "Nettogewinne (brutto − CAPEX)",
+  "leverDetail.netGains": "Nettogewinne (brutto − wiederkehrende OPEX)",
   "leverDetail.fte.created": "geschaffene Stellen",
   "leverDetail.fte.reduced": "abgebaute/reduzierte Stellen",
   "leverDetail.fte.positiveWarning": "Positive VZÄ — prüfen",
@@ -2029,6 +2029,11 @@ const de: Record<string, string> = {
   "impactsEditor.noDate": "Datum offen",
   "impactsEditor.statusActive": "Aktiv",
   "impactsEditor.statusPlanned": "Geplant",
+  "impactsEditor.statusDone": "Realisiert",
+  "impactsEditor.statusOngoing": "Laufend",
+  "impactsEditor.status": "Status",
+  "impactsEditor.statusFutureWarn":
+    "Realisierte / laufende Wirkung: Startdatum liegt in der Zukunft.",
   "impactsEditor.close": "Schließen",
   "impactsEditor.edit": "Bearbeiten",
   "impactsEditor.view": "Details",
@@ -2090,6 +2095,8 @@ const de: Record<string, string> = {
   "leverDetail.trajectory.opexRec": "Wiederkehrender OPEX (Start, dann Jubiläen)",
   "leverDetail.trajectory.opexOneOff": "Einmaliger OPEX",
   "leverDetail.trajectory.capex": "CAPEX (einmalig oder verteilt)",
+  "leverDetail.trajectory.gainsPlanned": "Geplante Gewinne (Prognose)",
+  "leverDetail.trajectory.costsPlanned": "Geplante Kosten (Prognose)",
   "leverDetail.trajectory.cumNet": "Kumuliert netto (mit Einmaligem)",
   "leverDetail.trajectory.cumNetRec": "Kumuliert netto (ohne Einmaliges)",
   "leverDetail.trajectory.fteCum": "Kumulierte VZÄ (+ Einstellungen / − Abgänge)",
@@ -2101,7 +2108,8 @@ const de: Record<string, string> = {
   "chart.waterfall.step.initial": "Ursprungsplan (annualisiert)",
   "chart.waterfall.step.reforecast": "Neuprognose (annualisiert)",
   "chart.waterfall.step.cancelled": "Storniert",
-  "chart.waterfall.step.target": "Neuprognose-Ziel",
+  "chart.waterfall.step.target": "Neuprognose netto (Ziel)",
+  "chart.waterfall.step.gross": "Annualisierter Bruttogewinn",
   "chart.waterfall.step.opexRec": "Wiederkehrende OPEX",
   "chart.waterfall.favorable": "Günstig",
   "chart.waterfall.unfavorable": "Ungünstig",
@@ -2127,12 +2135,14 @@ const de: Record<string, string> = {
     "Nur neu prognostizierte Workstreams: annualisierter Gewinn vorher (Ursprungsplan) und nachher.",
   "chart.waterfall.drill.intro.cancelled":
     "Ursprünglicher annualisierter Plan stornierter Hebel, aus dem Ziel entfernt.",
+  "chart.waterfall.drill.intro.gross":
+    "Annualisierter Bruttogewinn der aktiven Hebel = netto + wiederkehrende OPEX.",
   "chart.waterfall.drill.intro.target":
-    "Neuprognose-Ziel = Ist + Verbleibend (gleiche Zahlen wie « Realisierung der Einsparungen »).",
+    "Neuprognose netto (brutto − wiederkehrende OPEX) = realisiert + verbleibend (gleiche Zahlen wie « Einsparungsrealisierung »).",
   "chart.waterfall.drill.intro.opexRec":
-    "Jährliche wiederkehrende OPEX der aktiven Hebel nach Wirkungsart. Außerhalb des Ziels.",
+    "Jährliche wiederkehrende OPEX der aktiven Hebel nach Wirkungsart, vom Brutto abgezogen, um das Netto zu erhalten.",
   "chart.waterfall.note":
-    "Ursprungsplan und Neuprognose = annualisierte Gewinne. Neuprognose-Ziel = Ist + Verbleibend (wie im Diagramm zur Realisierung der Einsparungen). Wiederkehrende OPEX: Jahreskosten, außerhalb des Ziels. Stornierte Hebel aus den Summen ausgeschlossen.",
+    "Annualisiertes Netto = Bruttogewinn − wiederkehrende OPEX (CAPEX und Einmalkosten werden separat verfolgt). Neuprognose netto = realisiert + verbleibend (identisch mit dem Diagramm « Einsparungsrealisierung »). Stornierte Hebel sind aus den Summen ausgeschlossen.",
   "chart.bar.planned": "Ursprünglich geplant",
   "chart.scurve.gapTotal": "Abweichung: Neuprognose − realisiert",
   "chart.scurve.gapLate": "davon verspätete Hebel",

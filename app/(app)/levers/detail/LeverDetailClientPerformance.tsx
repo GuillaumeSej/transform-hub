@@ -1520,7 +1520,7 @@ function ImpactTotalsBlock({ lever }: { lever: Lever }) {
         <Stat label={t("leverDetail.oneOffGainsNotCounted", "Gains ponctuels (non comptés)")}>
           {engine.fmtCurr(tot.oneOffGains)}
         </Stat>
-        <Stat label={t("leverDetail.netGains", "Gains nets (bruts − CAPEX)")} accent>
+        <Stat label={t("leverDetail.netGains", "Gains nets (bruts − OPEX récurrent)")} accent>
           {engine.fmtCurr(tot.netAnnual)}
         </Stat>
       </div>

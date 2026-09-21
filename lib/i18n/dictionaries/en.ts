@@ -1967,7 +1967,7 @@ const en: Record<string, string> = {
   "leverDetail.latestVersion": "Latest version",
   "leverDetail.grossAnnual": "Annualized gross gains",
   "leverDetail.oneOffGainsNotCounted": "One-off gains (not counted)",
-  "leverDetail.netGains": "Net gains (gross − CAPEX)",
+  "leverDetail.netGains": "Net gains (gross − recurring OPEX)",
   "leverDetail.fte.created": "positions created",
   "leverDetail.fte.reduced": "positions removed/reduced",
   "leverDetail.fte.positiveWarning": "Positive FTE — to check",
@@ -2037,6 +2037,10 @@ const en: Record<string, string> = {
   "impactsEditor.noDate": "Date to be set",
   "impactsEditor.statusActive": "Active",
   "impactsEditor.statusPlanned": "Planned",
+  "impactsEditor.statusDone": "Done",
+  "impactsEditor.statusOngoing": "Ongoing",
+  "impactsEditor.status": "Status",
+  "impactsEditor.statusFutureWarn": "Done / ongoing impact: the start date is in the future.",
   "impactsEditor.close": "Close",
   "impactsEditor.edit": "Edit",
   "impactsEditor.view": "Details",
@@ -2095,6 +2099,8 @@ const en: Record<string, string> = {
   "leverDetail.trajectory.opexRec": "Recurring OPEX (start, then anniversaries)",
   "leverDetail.trajectory.opexOneOff": "One-off OPEX",
   "leverDetail.trajectory.capex": "CAPEX (one-off or smoothed)",
+  "leverDetail.trajectory.gainsPlanned": "Planned gains (forecast)",
+  "leverDetail.trajectory.costsPlanned": "Planned costs (forecast)",
   "leverDetail.trajectory.cumNet": "Cumulative net (with one-offs)",
   "leverDetail.trajectory.cumNetRec": "Cumulative net (excluding one-offs)",
   "leverDetail.trajectory.fteCum": "Cumulative FTE (+ hires / − departures)",
@@ -2104,7 +2110,8 @@ const en: Record<string, string> = {
   "chart.waterfall.step.initial": "Initial plan (annualized)",
   "chart.waterfall.step.reforecast": "Reforecast (annualized)",
   "chart.waterfall.step.cancelled": "Cancelled",
-  "chart.waterfall.step.target": "Reforecast target",
+  "chart.waterfall.step.target": "Reforecast net (target)",
+  "chart.waterfall.step.gross": "Annualized gross gain",
   "chart.waterfall.step.opexRec": "Recurring OPEX",
   "chart.waterfall.favorable": "Favorable",
   "chart.waterfall.unfavorable": "Unfavorable",
@@ -2130,10 +2137,12 @@ const en: Record<string, string> = {
     "Reforecast workstreams only: annualized gain before (initial plan) and after reforecast.",
   "chart.waterfall.drill.intro.cancelled":
     "Initial annualized plan of cancelled levers, removed from the target.",
+  "chart.waterfall.drill.intro.gross":
+    "Annualized gross gain of active levers = net + recurring OPEX.",
   "chart.waterfall.drill.intro.target":
     'Reforecast target = actual + remaining (same figures as "Savings realization").',
   "chart.waterfall.drill.intro.opexRec":
-    "Annual recurring OPEX of active levers, by impact nature. Outside the target.",
+    "Annual recurring OPEX of active levers by impact nature, deducted from gross to get net.",
   "chart.waterfall.note":
     'Initial plan and reforecast = annualized gains. Reforecast target = actual + remaining (same as the "Savings realization" chart). Recurring OPEX: annual cost, outside the target. Cancelled levers excluded from totals.',
 };
