@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { UserPicker } from "@/components/strategic/UserPicker";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { AuthUser, MaturityStageConfig, StrategicAxis } from "@/types";
 
 /**
@@ -15,7 +16,7 @@ import type { AuthUser, MaturityStageConfig, StrategicAxis } from "@/types";
 
 export type AxisFormValues = Pick<
   StrategicAxis,
-  "name" | "description" | "owner" | "color" | "stage" | "confidentialityLevel"
+  "name" | "description" | "owner" | "sponsorName" | "color" | "stage" | "confidentialityLevel"
 >;
 
 const COLOR_CHOICES = ["#320300", "#FF3C47", "#806659", "#B8A99A", "#4A7C59", "#2F5D8C"];
@@ -48,9 +49,11 @@ export function AxisForm({
   /** Mise en page resserrée pour une création rapide inline (une colonne, pas de description). */
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [owner, setOwner] = useState<string | undefined>(initial?.owner);
+  const [sponsorName, setSponsorName] = useState<string | undefined>(initial?.sponsorName);
   const [color, setColor] = useState(initial?.color ?? COLOR_CHOICES[0]);
   const [stage, setStage] = useState(initial?.stage ?? stages[0]?.id ?? "");
   const [confidentialityLevel, setConfidentialityLevel] = useState(
@@ -70,6 +73,7 @@ export function AxisForm({
         // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
         ...(description.trim() ? { description: description.trim() } : {}),
         ...(owner ? { owner } : {}),
+        ...(sponsorName ? { sponsorName } : {}),
         ...(confidentialityLevel ? { confidentialityLevel } : {}),
         color,
         stage,
@@ -103,6 +107,13 @@ export function AxisForm({
           onChange={setOwner}
           label="Responsable"
           id="axis-owner"
+        />
+        <UserPicker
+          users={users}
+          value={sponsorName}
+          onChange={setSponsorName}
+          label={t("strategicAxes.sponsor", "Sponsor de l'axe")}
+          id="axis-sponsor"
         />
         <div>
           <label className="text-xs font-medium text-text-secondary" htmlFor="axis-stage">

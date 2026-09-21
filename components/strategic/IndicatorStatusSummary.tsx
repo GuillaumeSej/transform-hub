@@ -1,5 +1,6 @@
 "use client";
 
+import { PendingKpiValues } from "@/components/strategic/PendingKpiValues";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Activity, Sigma } from "lucide-react";
@@ -13,7 +14,17 @@ import {
   latestMeasurement,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
-import type { Indicator, IndicatorMeasurement } from "@/types";
+import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
+import { IndicatorValueModal } from "@/components/strategic/IndicatorValueModal";
+import {
+  canFillIndicatorValue,
+  filterByYear,
+  isMarketKpi,
+  type IndicatorValueInput,
+  type YearSelection,
+} from "@/lib/kpiHistory";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import type { AuthUser, Indicator, IndicatorMeasurement } from "@/types";
 
 /**
  * Compteur d'ensemble « N indicateurs suivis · X sur la trajectoire · Y à risque ». Affiché en tête
@@ -186,7 +197,16 @@ export function BusinessKpiCards({
   measurements,
   labels,
   className,
+  user,
+  addMeasurement,
+  year = "all",
 }: {
+  /** Saisie de valeur (KPI marché, responsabilité CTO) : bouton affiché seulement si `user` ET
+   *  `addMeasurement` sont fournis et que `canFillIndicatorValue` l'autorise. */
+  user?: AuthUser | null;
+  addMeasurement?: (input: IndicatorValueInput) => Promise<unknown>;
+  /** Année affichée (défaut : tout l'historique, comportement historique). */
+  year?: YearSelection;
   /** Périmètre complet (le filtrage « macro » est fait ici, pour que les deux appelants ne
    *  puissent pas diverger sur la définition d'un KPI business). */
   indicators: Indicator[];
@@ -195,7 +215,7 @@ export function BusinessKpiCards({
   labels?: BusinessKpiLabels;
   className?: string;
 }) {
-  const macro = indicators.filter((indicator) => !!indicator.axisId && !indicator.chantierId);
+  const macro = indicators.filter(isMarketKpi);
 
   const l = resolveBusinessKpiLabels(labels);
 
@@ -223,6 +243,9 @@ export function BusinessKpiCards({
           indicator={indicator}
           measurements={measurementsByIndicator.get(indicator.id) ?? []}
           labels={l}
+          user={user}
+          addMeasurement={addMeasurement}
+          year={year}
         />
       ))}
     </div>
@@ -273,12 +296,22 @@ function BusinessKpiCard({
   /** Mesures DE CET indicateur uniquement (déjà filtrées par l'appelant). */
   measurements,
   labels: l,
+  user,
+  addMeasurement,
+  year,
 }: {
   indicator: Indicator;
   measurements: IndicatorMeasurement[];
   labels: Required<BusinessKpiLabels>;
+  user?: AuthUser | null;
+  addMeasurement?: (input: IndicatorValueInput) => Promise<unknown>;
+  year: YearSelection;
 }) {
+  const { t } = useTranslation();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [fillOpen, setFillOpen] = useState(false);
+  const canFill = !!user && !!addMeasurement && canFillIndicatorValue(indicator, user);
+  const yearMeasurements = useMemo(() => filterByYear(measurements, year), [measurements, year]);
 
   const latest = latestMeasurement(indicator.id, measurements);
   const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
@@ -323,41 +356,66 @@ function BusinessKpiCard({
 
   const cardClass = "flex flex-col rounded-lg border border-border bg-white p-3 shadow-sm";
 
-  if (!hasHistory) {
-    return <div className={cardClass}>{content}</div>;
-  }
+  const fillButton = canFill ? (
+    <button
+      type="button"
+      onClick={() => setFillOpen(true)}
+      className="cursor-pointer rounded-md border border-bp-coral/40 px-2 py-1 text-[11px] font-semibold text-bp-coral transition hover:bg-bp-coral/10"
+    >
+      {t("kpi.fillValue", "Renseigner la valeur")}
+    </button>
+  ) : null;
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setHistoryOpen(true)}
-        className={`${cardClass} text-left transition hover:border-bp-coral hover:shadow-md`}
-        title={`${l.fullHistory} — ${indicator.name}`}
-      >
-        {content}
-      </button>
-      <Modal
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        title={`${l.fullHistory} — ${indicator.name}`}
-        maxWidth="820px"
-      >
-        <IndicatorChart
-          measurements={measurements}
-          objectiveValue={indicator.objectiveValue}
-          direction={indicator.direction}
-          unit={indicator.unit}
-          qualitative={indicator.kind === "qualitative"}
-          height={360}
-          windowMeasurements="all"
-          frequency={indicator.frequency}
-          labelValue={l.chartValue}
-          labelObjective={l.chartObjective}
-          emptyLabel={l.noValue}
-          labelProgress={l.progressToTarget}
+    <div className="flex flex-col gap-1.5">
+      {hasHistory ? (
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(true)}
+          className={`${cardClass} flex-1 text-left transition hover:border-bp-coral hover:shadow-md`}
+          title={`${l.fullHistory} — ${indicator.name}`}
+        >
+          {content}
+        </button>
+      ) : (
+        <div className={`${cardClass} flex-1`}>{content}</div>
+      )}
+      <p className="text-[10px] text-tertiary">{t("kpi.market.owner", "Saisie : CTO")}</p>
+      <PendingKpiValues indicatorId={indicator.id} unit={indicator.unit} compact />
+      {fillButton}
+      {canFill && user && addMeasurement && (
+        <IndicatorValueModal
+          indicator={indicator}
+          user={user}
+          addMeasurement={addMeasurement}
+          open={fillOpen}
+          onOpenChange={setFillOpen}
         />
-      </Modal>
-    </>
+      )}
+      {hasHistory && (
+        <Modal
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          title={`${l.fullHistory} — ${indicator.name}`}
+          maxWidth="820px"
+        >
+          <IndicatorChart
+            measurements={yearMeasurements}
+            objectiveValue={indicator.objectiveValue}
+            direction={indicator.direction}
+            unit={indicator.unit}
+            qualitative={indicator.kind === "qualitative"}
+            height={360}
+            windowMeasurements="all"
+            frequency={indicator.frequency}
+            labelValue={l.chartValue}
+            labelObjective={l.chartObjective}
+            emptyLabel={l.noValue}
+            labelProgress={l.progressToTarget}
+          />
+          <IndicatorHistoryTable indicator={indicator} measurements={yearMeasurements} />
+        </Modal>
+      )}
+    </div>
   );
 }

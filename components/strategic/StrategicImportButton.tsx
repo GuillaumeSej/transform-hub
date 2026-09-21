@@ -214,6 +214,7 @@ export function StrategicImportButton({
   const computePeopleToCreate = (result: StrategicImportPreview): PersonToCreate[] => {
     const rawNames = [
       ...result.toCreate.axes.map((a) => a.owner),
+      ...result.toCreate.axes.map((a) => a.sponsorName),
       ...result.toCreate.chantiers.map((c) => c.pilote),
       ...result.toCreate.actions.map((a) => a.owner),
       ...result.toCreate.actions.map((a) => a.sponsor),

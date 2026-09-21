@@ -1,10 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { colorForChantier } from "@/lib/axisLogic";
+import { useEffect, useState, type ReactNode } from "react";
+import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { ProgressBar } from "@/components/shared/ProgressBar";
+import {
+  axisProgressPct,
+  axisSponsorLabel,
+  chantierDeclaredProgress,
+  colorForChantier,
+  milestoneProgressPct,
+  projetMilestoneCounts,
+} from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Chantier, ChantierAction, ProjetKanbanStatus, StrategicAxis } from "@/types";
+import type {
+  AuthUser,
+  Chantier,
+  ChantierAction,
+  ProjetKanbanStatus,
+  StrategicAxis,
+} from "@/types";
 
 /**
  * Accordéon Axe → Chantier → Projet (round 24, Phase 4, Partie 3) — nouvel onglet "Vue par axe" de
@@ -53,38 +67,149 @@ function deliverableStatusColor(status: ProjetKanbanStatus | undefined): string 
   }
 }
 
+/** Ligne d'arborescence commune aux 3 niveaux : nom (cliquable → fiche), responsable, décompte
+ *  d'éléments en dessous et barre d'avancement + % (même composition que le plan Performance,
+ *  `LeverLibraryTree.tsx`). Un clic sur la ligne déplie (`onToggle`) ; le nom ouvre la fiche. */
+function TreeRow({
+  level,
+  open,
+  onToggle,
+  onOpen,
+  dot,
+  name,
+  owner,
+  sponsor,
+  count,
+  pct,
+  openLabel,
+  indentClass,
+  dimmed,
+}: {
+  level: "axis" | "chantier" | "projet";
+  open?: boolean;
+  onToggle?: () => void;
+  onOpen?: () => void;
+  dot: ReactNode;
+  name: string;
+  owner: string;
+  /** Libellé « Sponsor : X » (niveau axe uniquement), absent si pas de sponsor. */
+  sponsor?: string;
+  count: string;
+  pct: number;
+  openLabel: string;
+  indentClass: string;
+  dimmed?: boolean;
+}) {
+  const expandable = level !== "projet";
+  const activate = expandable ? onToggle : onOpen;
+  const Chevron = open ? ChevronDown : ChevronRight;
+  return (
+    <div
+      role="button"
+      tabIndex={activate ? 0 : undefined}
+      aria-expanded={expandable ? open : undefined}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (activate && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          activate();
+        }
+      }}
+      className={`group flex w-full items-center gap-2 py-2.5 pr-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-black ${indentClass} ${
+        activate ? "cursor-pointer hover:bg-neutral-100" : "opacity-60"
+      } ${dimmed ? "opacity-60" : ""} ${level === "axis" ? "bg-neutral-50" : ""}`}
+    >
+      {expandable ? (
+        <Chevron size={14} className="shrink-0 text-tertiary" aria-hidden />
+      ) : (
+        <span className="w-[14px] shrink-0" aria-hidden />
+      )}
+      {dot}
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          {onOpen && expandable ? (
+            <button
+              type="button"
+              title={openLabel}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen();
+              }}
+              className="inline-flex min-w-0 items-center gap-1 text-left hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+            >
+              <span
+                className={`truncate ${level === "axis" ? "text-[12.5px] font-bold text-primary" : "text-[12px] font-semibold text-secondary"}`}
+              >
+                {name}
+              </span>
+              <ExternalLink
+                size={11}
+                className="shrink-0 text-tertiary opacity-0 transition group-hover:opacity-100"
+                aria-hidden
+              />
+            </button>
+          ) : (
+            <span className="truncate text-[11.5px] font-medium text-primary">{name}</span>
+          )}
+        </span>
+        <span className="block truncate text-[10.5px] text-tertiary">
+          {owner}
+          {sponsor ? ` · ${sponsor}` : ""}
+        </span>
+      </span>
+      <span className="hidden shrink-0 rounded-full border border-border bg-white px-2 py-px text-[10px] font-semibold text-tertiary sm:inline">
+        {count}
+      </span>
+      <span className="w-[120px] shrink-0">
+        <ProgressBar pct={pct} />
+      </span>
+    </div>
+  );
+}
+
+/** Repli quand le chantier n'a ni pilote ni sponsor : responsable le plus fréquent de ses projets. */
+function mostFrequentOwner(projets: { owner?: string }[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const p of projets) if (p.owner) counts.set(p.owner, (counts.get(p.owner) ?? 0) + 1);
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
 export function AxisChantierProjetAccordion({
   axes,
   chantiers,
   chantierActions,
   onProjetClick,
   onDeliverableClick,
+  onAxisClick,
+  expandAllSignal = 0,
   clickableActionIds = "all",
+  users,
 }: {
-  /** Ordre d'apparition = numérotation "Axe {n}" (même convention que la section "Avancement" de
-   *  `StrategicAxesView.tsx` : position 1-based dans ce tableau, jamais retriée). */
+  /** Ordre d'apparition = numérotation "Axe {n}" (position 1-based, jamais retriée). */
   axes: StrategicAxis[];
   chantiers: Chantier[];
   chantierActions: ChantierAction[];
-  /** Clic sur un projet (ou, sans `focusActionId`, sur un chantier) — ouvre le panneau chantier de
-   *  l'appelant, même contrat que `openChantierPanel` de `StrategicAxesView.tsx`. */
+  /** Clic sur un projet (ou, sans `focusActionId`, sur un chantier) — ouvre le panneau chantier. */
   onProjetClick: (chantierId: string, focusActionId?: string) => void;
-  /** Clic sur UN livrable précis (round <n>) — contrat SÉPARÉ de `onProjetClick` ci-dessus plutôt
-   *  qu'un 3e paramètre optionnel sur celui-ci : les deux gestes sont sémantiquement distincts
-   *  ("ouvre le panneau sur ce projet" vs. "ouvre le panneau ET la modale de CE livrable précis"),
-   *  et l'appelant (`StrategicAxesView.tsx`) doit de toute façon distinguer les deux pour poser le
-   *  bon état d'ouverture du panneau (`ChantierDetailPanel`'s `initialOpenDeliverable`). */
+  /** Clic sur UN livrable précis — contrat séparé de `onProjetClick`. */
   onDeliverableClick: (chantierId: string, actionId: string, deliverableId: string) => void;
-  /** Round 25 (RBAC `chantier_contributor`) — voir `StrategicData.clickableActionIds`,
-   *  lib/hooks/useStrategicData.ts. Un projet dont l'id n'est PAS dans cet ensemble reste rendu
-   *  (carte + livrables) mais devient inerte : ni `onProjetClick` ni `onDeliverableClick` ne sont
-   *  jamais invoqués pour lui. Défaut `"all"` (comportement historique inchangé). */
+  /** Ouvre la fiche d'un axe (route existante `/levers/detail?id=`). */
+  onAxisClick?: (axisId: string) => void;
+  /** Incrémenter pour déplier tous les axes (clic sur « axes » de l'en-tête de la vue). */
+  expandAllSignal?: number;
+  /** Round 25 (RBAC `chantier_contributor`) — un projet hors de cet ensemble reste rendu mais inerte. */
   clickableActionIds?: Set<string> | "all";
+  /** Utilisateurs de l'entreprise, pour afficher le nom complet du sponsor d'axe. */
+  users?: Pick<AuthUser, "username" | "name">[];
 }) {
   const { t } = useTranslation();
   const [expandedAxisIds, setExpandedAxisIds] = useState<Set<string>>(new Set());
   /** Clé composite `${axisId}:${chantierId}` — voir le doc-comment de tête de ce fichier. */
   const [expandedChantierKeys, setExpandedChantierKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (expandAllSignal > 0) setExpandedAxisIds(new Set(axes.map((a) => a.id)));
+  }, [expandAllSignal, axes]);
 
   const toggleAxis = (axisId: string) => {
     setExpandedAxisIds((prev) => {
@@ -108,41 +233,49 @@ export function AxisChantierProjetAccordion({
     return <p className="py-6 text-center text-sm text-tertiary">{t("strategicAxes.empty")}</p>;
   }
 
+  const noOwner = t("strategicAxes.tree.noOwner", "Aucun responsable");
+  const openLabel = t("strategicAxes.tree.open", "Ouvrir la fiche");
+  const fmt = (key: string, fallback: string, vars: Record<string, number>) =>
+    Object.entries(vars).reduce(
+      (acc, [k, v]) => acc.replace(`{${k}}`, String(v)),
+      t(key, fallback)
+    );
+
   return (
     <div className="space-y-2">
       {axes.map((axis, axisIndex) => {
-        // Round 24 (Phase 2) : appartenance multi-axe — un chantier figure sous CHAQUE axe listé
-        // dans son `axisIds`, pas seulement le premier (même règle que `chantiersByAxis` de
-        // `StrategicAxesView.tsx`).
         const axisChantiers = chantiers.filter((c) => c.axisIds.includes(axis.id));
         const axisOpen = expandedAxisIds.has(axis.id);
         return (
           <div key={axis.id} className="overflow-hidden rounded-lg border border-border bg-white">
-            <button
-              type="button"
-              onClick={() => toggleAxis(axis.id)}
-              aria-expanded={axisOpen}
-              className="flex w-full items-center gap-2 bg-neutral-50 px-3.5 py-2.5 text-left transition hover:bg-neutral-100"
-            >
-              {axisOpen ? (
-                <ChevronDown size={14} className="shrink-0 text-tertiary" aria-hidden />
-              ) : (
-                <ChevronRight size={14} className="shrink-0 text-tertiary" aria-hidden />
-              )}
-              <span
-                aria-hidden
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
-              />
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-primary">
-                {t("strategicAxes.axisNumberPrefix", "Axe {n} : {name}")
-                  .replace("{n}", String(axisIndex + 1))
-                  .replace("{name}", axis.name)}
-              </span>
-              <span className="shrink-0 rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
-                {axisChantiers.length}
-              </span>
-            </button>
+            <TreeRow
+              level="axis"
+              open={axisOpen}
+              onToggle={() => toggleAxis(axis.id)}
+              onOpen={onAxisClick ? () => onAxisClick(axis.id) : undefined}
+              indentClass="pl-3.5"
+              openLabel={openLabel}
+              dot={
+                <span
+                  aria-hidden
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
+                />
+              }
+              name={t("strategicAxes.axisNumberPrefix", "Axe {n} : {name}")
+                .replace("{n}", String(axisIndex + 1))
+                .replace("{name}", axis.name)}
+              owner={axis.owner ?? noOwner}
+              sponsor={
+                axis.sponsorName
+                  ? `${t("strategicAxes.sponsorShort", "Sponsor")} : ${axisSponsorLabel(axis, users)}`
+                  : undefined
+              }
+              count={fmt("strategicAxes.tree.chantiersN", "{n} chantier(s)", {
+                n: axisChantiers.length,
+              })}
+              pct={axisProgressPct(axis.id, chantiers, chantierActions)}
+            />
 
             {axisOpen && (
               <div className="divide-y divide-border border-t border-border">
@@ -157,32 +290,31 @@ export function AxisChantierProjetAccordion({
                     const projets = chantierActions.filter((a) => a.chantierId === chantier.id);
                     return (
                       <div key={chantierKey}>
-                        <button
-                          type="button"
-                          onClick={() => toggleChantier(chantierKey)}
-                          aria-expanded={chantierOpen}
-                          className="flex w-full items-center gap-2 py-2.5 pl-8 pr-3.5 text-left transition hover:bg-neutral-50"
-                        >
-                          {chantierOpen ? (
-                            <ChevronDown size={13} className="shrink-0 text-tertiary" aria-hidden />
-                          ) : (
-                            <ChevronRight
-                              size={13}
-                              className="shrink-0 text-tertiary"
+                        <TreeRow
+                          level="chantier"
+                          open={chantierOpen}
+                          onToggle={() => toggleChantier(chantierKey)}
+                          onOpen={() => onProjetClick(chantier.id)}
+                          indentClass="pl-8"
+                          openLabel={openLabel}
+                          dot={
+                            <span
                               aria-hidden
+                              className={`h-2 w-2 shrink-0 rounded-full ${colorForChantier(chantier.id)}`}
                             />
-                          )}
-                          <span
-                            aria-hidden
-                            className={`h-2 w-2 shrink-0 rounded-full ${colorForChantier(chantier.id)}`}
-                          />
-                          <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-secondary">
-                            {chantier.name}
-                          </span>
-                          <span className="shrink-0 rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
-                            {projets.length}
-                          </span>
-                        </button>
+                          }
+                          name={chantier.name}
+                          owner={
+                            chantier.pilote ??
+                            chantier.sponsorName ??
+                            mostFrequentOwner(projets) ??
+                            noOwner
+                          }
+                          count={fmt("strategicAxes.tree.projetsN", "{n} projet(s)", {
+                            n: projets.length,
+                          })}
+                          pct={chantierDeclaredProgress(chantier.id, chantierActions)}
+                        />
 
                         {chantierOpen && (
                           <div className="space-y-1.5 bg-neutral-50/70 py-2 pl-14 pr-3.5">
@@ -192,62 +324,38 @@ export function AxisChantierProjetAccordion({
                               </p>
                             ) : (
                               projets.map((action) => {
-                                // Round 25 (RBAC `chantier_contributor`) : ce projet précis est-il
-                                // cliquable pour l'utilisateur courant ? Voir le doc-comment du
-                                // prop `clickableActionIds` ci-dessus — un projet non cliquable
-                                // reste affiché (carte + livrables) mais devient inerte.
                                 const projetClickable =
                                   clickableActionIds === "all" || clickableActionIds.has(action.id);
+                                const { passed, total } = projetMilestoneCounts(action);
                                 return (
-                                  // Round <n> : DIV cliquable (pas `<button>`) — les livrables
-                                  // ci-dessous sont désormais eux-mêmes des `<button>` individuels
-                                  // (voir plus bas), et un `<button>` imbriqué dans un autre
-                                  // `<button>` est du HTML invalide (le navigateur "referme" le
-                                  // parent au premier `<button>` enfant rencontré, cassant le clic
-                                  // sur la carte). `role="button"`/`tabIndex`/`onKeyDown` reproduisent
-                                  // le comportement clavier qu'un vrai `<button>` offrait gratuitement.
                                   <div
                                     key={action.id}
-                                    role={projetClickable ? "button" : undefined}
-                                    tabIndex={projetClickable ? 0 : undefined}
-                                    aria-disabled={!projetClickable}
-                                    onClick={
-                                      projetClickable
-                                        ? () => onProjetClick(chantier.id, action.id)
-                                        : undefined
-                                    }
-                                    onKeyDown={
-                                      projetClickable
-                                        ? (e) => {
-                                            if (e.key === "Enter" || e.key === " ") {
-                                              e.preventDefault();
-                                              onProjetClick(chantier.id, action.id);
-                                            }
-                                          }
-                                        : undefined
-                                    }
-                                    className={`flex w-full flex-col items-start gap-1.5 rounded-md border border-border bg-white px-2.5 py-1.5 text-left transition focus:outline-none ${
-                                      projetClickable
-                                        ? "cursor-pointer hover:-translate-y-px hover:border-black hover:shadow-sm focus:ring-2 focus:ring-black"
-                                        : "opacity-60"
-                                    }`}
+                                    className="overflow-hidden rounded-md border border-border bg-white"
                                   >
-                                    <span className="w-full truncate text-[11.5px] font-medium text-primary">
-                                      {action.name}
-                                    </span>
-                                    {/* Livrables (round 24, Phase 4 ; round <n> : pastille anonyme →
-                                      étiquette nommée individuellement cliquable) — même code
-                                      couleur de statut que la timeline fusionnée de
-                                      `ChantierDetailPanel.tsx`/le Gantt programme
-                                      (`ProgramRoadmap.tsx`) — pas le `TimelineMarker` lui-même
-                                      (conçu pour un positionnement temporel en %, hors sujet dans
-                                      une simple liste). Chaque étiquette ouvre directement LA
-                                      modale de CE livrable (`onDeliverableClick`), pas seulement
-                                      le projet — `e.stopPropagation()` empêche le clic de
-                                      remonter au conteneur de la carte projet ci-dessus (qui
-                                      ouvrirait sinon le panneau SANS cibler le livrable). */}
+                                    <TreeRow
+                                      level="projet"
+                                      onOpen={
+                                        projetClickable
+                                          ? () => onProjetClick(chantier.id, action.id)
+                                          : undefined
+                                      }
+                                      indentClass="pl-2"
+                                      openLabel={openLabel}
+                                      dot={<span className="hidden" />}
+                                      name={action.name}
+                                      owner={action.owner ?? noOwner}
+                                      count={fmt(
+                                        "strategicAxes.tree.milestonesN",
+                                        "{p}/{t} jalons",
+                                        {
+                                          p: passed,
+                                          t: total,
+                                        }
+                                      )}
+                                      pct={milestoneProgressPct(action)}
+                                    />
                                     {action.deliverables && action.deliverables.length > 0 && (
-                                      <span className="flex flex-wrap items-center gap-1">
+                                      <span className="flex flex-wrap items-center gap-1 px-2.5 pb-2">
                                         {action.deliverables.map((deliverable) => (
                                           <button
                                             key={deliverable.id}
@@ -255,14 +363,12 @@ export function AxisChantierProjetAccordion({
                                             disabled={!projetClickable}
                                             onClick={
                                               projetClickable
-                                                ? (e) => {
-                                                    e.stopPropagation();
+                                                ? () =>
                                                     onDeliverableClick(
                                                       chantier.id,
                                                       action.id,
                                                       deliverable.id
-                                                    );
-                                                  }
+                                                    )
                                                 : undefined
                                             }
                                             title={deliverable.label}

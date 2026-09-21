@@ -120,7 +120,7 @@ function IndicatorTooltip({
   const raw = payload[0]?.value;
   if (raw === undefined || raw === null) return null;
   return (
-    <div className="rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
+    <div className="max-w-[240px] break-words whitespace-normal rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
       <p className="text-[11px] font-semibold text-primary">{label}</p>
       <p className="mt-0.5 text-[12px] text-secondary">
         {labelValue} :{" "}
@@ -250,6 +250,17 @@ export function IndicatorChart({
 
   const data = sorted.map((m) => ({ period: m.period, value: m.value ?? null }));
 
+  // Largeur d'axe Y calculée sur le libellé le plus long (chiffre + unité) : la largeur recharts par
+  // défaut (60 px) + l'ancienne marge gauche négative rognaient les valeurs/unités longues.
+  const yTickChars = Math.max(
+    ...data.map((d) => (d.value === null ? 0 : formatValue(d.value, unit).length)),
+    objectiveValue !== undefined ? formatValue(objectiveValue, unit).length : 0,
+    2
+  );
+  const yAxisWidth = Math.min(160, Math.max(44, yTickChars * 7 + 12));
+  // Labels X : inclinés et espacés dès que la série est dense, jamais tronqués.
+  const rotateX = data.length > 6 || data.some((d) => d.period.length > 8);
+
   // Dernière mesure de TOUT l'historique (`all`, pas `sorted`/fenêtré) — sert à la fois à l'écart
   // signé ci-dessous ET au nouveau rappel de valeur courante (voir `chartWithDelta` plus bas) :
   // aucun des deux ne doit changer selon que la fenêtre "récente" masque ou non la mesure la plus
@@ -296,8 +307,8 @@ export function IndicatorChart({
         data={data}
         margin={
           compact
-            ? { top: 3, right: 3, left: 3, bottom: 3 }
-            : { top: 4, right: 8, left: -16, bottom: 0 }
+            ? { top: 6, right: 6, left: 6, bottom: 6 }
+            : { top: 16, right: 16, left: 4, bottom: rotateX ? 8 : 4 }
         }
       >
         {/* Dégradé de la zone sous la courbe (rendu normal uniquement) : de la couleur de statut de
@@ -324,6 +335,12 @@ export function IndicatorChart({
           <XAxis
             dataKey="period"
             tick={{ fontSize: 11 }}
+            interval="preserveStartEnd"
+            minTickGap={rotateX ? 4 : 12}
+            angle={rotateX ? -35 : 0}
+            textAnchor={rotateX ? "end" : "middle"}
+            height={rotateX ? 56 : 30}
+            padding={{ left: 8, right: 8 }}
             // Ligne d'axe très discrète plutôt qu'entièrement masquée (`axisLine={false}` avant) :
             // ancre visuellement la courbe à une base, sans réintroduire un cadre complet.
             axisLine={{ stroke: "rgba(0,0,0,0.1)" }}
@@ -335,6 +352,7 @@ export function IndicatorChart({
         ) : (
           <YAxis
             tick={{ fontSize: 12 }}
+            width={yAxisWidth}
             axisLine={false}
             tickLine={false}
             tickFormatter={(v) => formatValue(v as number, unit)}
@@ -343,6 +361,8 @@ export function IndicatorChart({
         {!compact && (
           <Tooltip
             content={<IndicatorTooltip unit={unit} labelValue={labelValue} />}
+            wrapperStyle={{ zIndex: 30, maxWidth: "min(260px, 90vw)" }}
+            allowEscapeViewBox={{ x: false, y: true }}
             cursor={{ stroke: lineColor, strokeWidth: 1, strokeDasharray: "4 4" }}
           />
         )}
