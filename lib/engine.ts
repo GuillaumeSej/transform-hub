@@ -1497,11 +1497,11 @@ export type ImpactTrajectoryPoint = {
   periodStart: string;
   /** OPEX one-off de la période (montant positif = coût). */
   opexOneOff: number;
-  /** OPEX récurrent de la période (annuel × durée) — apparaît à CHAQUE période. */
+  /** OPEX récurrent : montant annualisé, compté à la date de début et à chaque anniversaire. */
   opexRec: number;
   /** CAPEX de la période : en une fois à sa date, ou lissé de capexStartDate à capexDeploymentDate. */
   capex: number;
-  /** Gains récurrents annuels de la période (annuel × durée, à partir de gainDate). */
+  /** Gains récurrents annualisés : comptés à la date de début et à chaque anniversaire (+12 mois). */
   gains: number;
   /** Gains ponctuels (one-off) de la période — séparés, jamais agrégés aux gains annualisés. */
   oneOffGains: number;
@@ -1534,7 +1534,8 @@ const isoOfMonthIndex = (mi: number): string =>
  * dernière (min. 24 mois de fenêtre pour montrer la récurrence).
  *  - dates : gain → `gainDate ?? lever.end` ; coût → `capexDeploymentDate ?? capexStartDate ?? lever.start`
  *  - CAPEX "smoothed" : réparti uniformément sur les mois capexStartDate → capexDeploymentDate
- *  - récurrent (gain annuel, OPEX récurrent, salaire ETP) : montant/12 par mois actif
+ *  - récurrent (gain annuel, OPEX récurrent, salaire ETP) : le montant ANNUALISÉ est acquis à la
+ *    date de début puis à chaque date anniversaire (+12 mois) — jamais réparti/répété par mois
  *  - `view: "fte"` ne renseigne que la colonne ETP (les montants restent à 0).
  */
 export function impactTrajectory(
@@ -1610,7 +1611,8 @@ export function impactTrajectory(
   const step = granularity === "year" ? 12 : granularity === "quarter" ? 3 : 1;
   if (granularity === "year") startMi = Math.floor(startMi / 12) * 12;
   if (granularity === "quarter") startMi = Math.floor(startMi / 3) * 3;
-  const endMi = Math.max(Math.max(...marks) + 12, startMi + 23);
+  // Fenêtre : ≥ 36 mois pour montrer au moins 2 dates anniversaires des impacts récurrents.
+  const endMi = Math.max(Math.max(...marks) + 12, startMi + 35);
 
   const points: ImpactTrajectoryPoint[] = [];
   let cum = 0;
@@ -1637,8 +1639,10 @@ export function impactTrajectory(
       capex += (sm.amount * overlap) / months;
     }
     for (const r of recs) {
-      const active = Math.max(0, pe - Math.max(ps, r.from) + 1);
-      const v = (r.annual * active) / 12;
+      // Montant annualisé constaté à la date de début, puis « réannualisé » à chaque anniversaire.
+      let hits = 0;
+      for (let a = r.from; a <= pe; a += 12) if (a >= ps) hits++;
+      const v = r.annual * hits;
       if (r.kind === "gain") gains += v;
       else opexRec += v;
     }
@@ -1671,10 +1675,10 @@ export function impactTrajectory(
   return { points, todayIndex: Math.min(points.length - 1, Math.max(0, todayIndex)) };
 }
 
-// ─── Cascade planifié → réactualisé → annulé → retard → réalisé ─────────────
+// ─── Cascade planifié → réactualisé → annulé → cible réactualisée ───────────
 
 export type WaterfallStep = {
-  key: "initial" | "reforecast" | "cancelled" | "late" | "costs" | "expected";
+  key: "initial" | "reforecast" | "cancelled" | "target" | "opexRec";
   label: string;
   /** "total" = barre pleine depuis 0 ; "delta" = variation signée. */
   kind: "total" | "delta";
@@ -1685,21 +1689,23 @@ export type WaterfallStep = {
 
 export type SavingsWaterfall = {
   steps: WaterfallStep[];
-  /** Total attendu final = réactualisé − retard − coûts non provisionnés. */
-  expected: number;
+  /** Cible réactualisée (€M annualisés) = MÊME valeur que `savingsTriple(...).reforecast`
+   *  (graphe "Réalisation des économies"). */
+  target: number;
+  /** Réalisé = MÊME valeur que `savingsTriple(...).realized` (KPI "économies réalisées"). */
   realized: number;
   remaining: number;
+  /** OPEX récurrent annuel des leviers actifs — information hors cible (le net = savings − CAPEX). */
+  opexRec: number;
 };
 
 /**
- * Cascade des savings (€M) :
+ * Cascade des savings ANNUALISÉS (€M) :
  *  initial (plan figé de TOUS les leviers) + Δ réactualisé (leviers actifs) − annulé (plan figé des
- *  annulés) = cible réactualisée ; − retard (reste à réaliser des leviers en retard) − coûts (OPEX
- *  one-off + récurrent des leviers actifs, non inclus dans le net) = total attendu, scindé en
- *  réalisé / reste à faire. Les leviers annulés ne comptent que dans l'étape "annulé".
+ *  annulés) = cible réactualisée, scindée en réalisé / reste à faire (mêmes fonctions que
+ *  `savingsTriple`). L'OPEX récurrent est fourni à part (étape "opexRec", hors cible, non cumulée).
  */
-export function savingsWaterfall(data: BeTrackData, opts: { today?: Date } = {}): SavingsWaterfall {
-  const today = opts.today ?? new Date();
+export function savingsWaterfall(data: BeTrackData): SavingsWaterfall {
   const r1 = (n: number) => Math.round(n * 10) / 10;
   const lockedNet = (l: Lever) => l.lockedPlan?.netSavings ?? l.netSavings;
   const active = data.levers.filter((l) => l.status !== "cancelled");
@@ -1711,40 +1717,31 @@ export function savingsWaterfall(data: BeTrackData, opts: { today?: Date } = {})
     0
   );
   const cancelledAmt = cancelled.reduce((s, l) => s + lockedNet(l), 0);
-  const realized = active.reduce((s, l) => s + realizedSavings(l), 0);
-  const late = active
-    .filter((l) => isLeverLate(l, today))
-    .reduce((s, l) => s + Math.max(0, displayedReforecastNet(l).value - realizedSavings(l)), 0);
-  const costs = active.reduce((s, l) => {
+  const realized = r1(active.reduce((s, l) => s + realizedSavings(l), 0));
+  const target = r1(active.reduce((s, l) => s + displayedReforecastNet(l).value, 0));
+  const opexRec = active.reduce((s, l) => {
     const snap = l.reforecast ?? l.lockedPlan ?? l;
-    return s + snap.opexOneOff + snap.opexRec;
+    return s + snap.opexRec;
   }, 0);
 
-  const target = initial + reforecastDelta - cancelledAmt;
-  const expected = target - late - costs;
   const steps: WaterfallStep[] = [];
   let cum = 0;
   const push = (
     key: WaterfallStep["key"],
     label: string,
     kind: WaterfallStep["kind"],
-    value: number
+    value: number,
+    cumulate = true
   ) => {
-    cum = kind === "total" ? value : cum + value;
-    steps.push({ key, label, kind, value: r1(value), cumulative: r1(cum) });
+    if (cumulate) cum = kind === "total" ? value : cum + value;
+    steps.push({ key, label, kind, value: r1(value), cumulative: r1(cumulate ? cum : value) });
   };
   push("initial", "Planifié initial", "total", initial);
   push("reforecast", "Réactualisé", "delta", reforecastDelta);
   push("cancelled", "Annulé", "delta", -cancelledAmt);
-  push("late", "En retard", "delta", -late);
-  push("costs", "Coûts", "delta", -costs);
-  push("expected", "Total attendu", "total", expected);
-  return {
-    steps,
-    expected: r1(expected),
-    realized: r1(realized),
-    remaining: r1(expected - realized),
-  };
+  push("target", "Cible réactualisée", "total", target);
+  push("opexRec", "OPEX récurrent", "delta", -opexRec, false);
+  return { steps, target, realized, remaining: r1(target - realized), opexRec: r1(opexRec) };
 }
 
 // ─── Finance par niveau de hiérarchie ───────────────────────────────────────

@@ -368,17 +368,19 @@ describe("impactTrajectory (J-curve)", () => {
     expect(at("Jun 2026").capex).toBe(2);
     expect(at("Jul 2026").capex).toBe(0);
   });
-  it("shows recurring OPEX every period, one-off once", () => {
-    expect(at("Mar 2026").opexRec).toBe(0.1);
-    expect(at("Dec 2026").opexRec).toBe(0.1);
+  it("books recurring OPEX at start and each anniversary, one-off once", () => {
+    expect(at("Mar 2026").opexRec).toBe(1.2);
+    expect(at("Dec 2026").opexRec).toBe(0);
+    expect(at("Mar 2027").opexRec).toBe(1.2);
     expect(at("Mar 2026").opexOneOff).toBe(2);
     expect(at("Apr 2026").opexOneOff).toBe(0);
   });
   it("annual gains recur, one-off separate", () => {
-    expect(at("Jul 2026").gains).toBeCloseTo(24 / 12 + 1 / 12, 2); // gain annuel + salaire des départs // 24/12 + 1/12
+    expect(at("Jul 2026").gains).toBeCloseTo(24 + 1, 2); // gain annualisé + salaire des départs
+    expect(at("Jul 2027").gains).toBeCloseTo(25, 2); // réannualisé à l'anniversaire
     expect(at("Aug 2026").oneOffGains).toBe(5);
     expect(at("Sep 2026").oneOffGains).toBe(0);
-    expect(at("Sep 2026").gains).toBeGreaterThan(0);
+    expect(at("Sep 2026").gains).toBe(0);
   });
   it("cumulative differs by one-off gains and fte/todayIndex work", () => {
     const last = t.points[t.points.length - 1];
@@ -463,12 +465,11 @@ describe("savingsWaterfall & financeByHierarchyLevel", () => {
     expect(v("initial")).toBe(17);
     expect(v("reforecast")).toBe(-2);
     expect(v("cancelled")).toBe(-4);
-    expect(v("late")).toBe(-8); // seul A est en retard (fin dépassée) ; C se termine fin décembre
-    expect(v("costs")).toBe(-1);
-    expect(w.expected).toBe(
-      v("initial") + v("reforecast") + v("cancelled") + v("late") + v("costs")
-    );
-    expect(w.remaining).toBe(w.expected - w.realized);
+    expect(v("target")).toBe(v("initial") + v("reforecast") + v("cancelled"));
+    expect(w.target).toBe(v("target"));
+    expect(v("opexRec")).toBe(-1);
+    expect(w.opexRec).toBe(1);
+    expect(w.remaining).toBe(Math.round((w.target - w.realized) * 10) / 10);
   });
   it("aggregates leaves up to the chosen level", () => {
     const rows = engine.financeByHierarchyLevel(d, company, 0, nodes, {

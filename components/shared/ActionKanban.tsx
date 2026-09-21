@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { actionProgressPct, isActionLate } from "@/lib/engine";
@@ -18,16 +18,68 @@ function getColumns(
   ];
 }
 
-/** Répartit les actions par colonne — la colonne "En retard" agrège désormais TOUTE action en
- * retard au sens de `isActionLate` (date de fin dépassée sans être "done", ou statut "delayed"
- * explicitement posé), pas seulement celles au statut manuel "delayed". Une action "todo"/
- * "in_progress" dont la date est dépassée apparaît donc dans "En retard" plutôt que dans sa
- * colonne de statut d'origine — c'est le comportement voulu : le Kanban doit refléter le retard
- * réel, pas seulement le flag manuel. */
+/** Colonne DÉRIVÉE du % d'avancement : 0 = À faire, 1-99 = En cours, 100 = Fait ; « En retard »
+ * agrège toute action non terminée en retard (`isActionLate`). */
 function columnActions(actions: LeverAction[], status: ActionStatus): LeverAction[] {
   if (status === "delayed") return actions.filter((a) => isActionLate(a));
-  if (status === "done") return actions.filter((a) => a.status === "done");
-  return actions.filter((a) => a.status === status && !isActionLate(a));
+  const notLate = actions.filter((a) => !isActionLate(a));
+  return notLate.filter((a) => {
+    const p = actionProgressPct(a);
+    if (status === "done") return p >= 100;
+    if (status === "todo") return p <= 0;
+    return p > 0 && p < 100;
+  });
+}
+
+/** % cohérent à poser quand on dépose une carte dans une colonne (null = pas de changement). */
+function pctForColumn(status: ActionStatus, current: number): number | null {
+  if (status === "done") return 100;
+  if (status === "todo") return 0;
+  if (status === "in_progress") return current > 0 && current < 100 ? current : 50;
+  return null;
+}
+
+function ProgressSlider({
+  value,
+  disabled,
+  label,
+  onCommit,
+  onActive,
+}: {
+  value: number;
+  disabled: boolean;
+  label: string;
+  onCommit: (v: number) => void;
+  onActive: (active: boolean) => void;
+}) {
+  const [local, setLocal] = useState(value);
+  useEffect(() => setLocal(value), [value]);
+  const commit = (v: number) => {
+    onActive(false);
+    if (v !== value) onCommit(v);
+  };
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        disabled={disabled}
+        value={local}
+        draggable={false}
+        onPointerDown={() => onActive(true)}
+        onChange={(e) => setLocal(Number(e.target.value))}
+        onPointerUp={(e) => commit(Number(e.currentTarget.value))}
+        onPointerCancel={() => onActive(false)}
+        onKeyUp={(e) => commit(Number(e.currentTarget.value))}
+        onBlur={(e) => commit(Number(e.currentTarget.value))}
+        className="min-w-0 flex-1 accent-bp-coral"
+        aria-label={label}
+      />
+      <span className="w-9 text-right text-[10.5px] font-semibold text-secondary">{local} %</span>
+    </div>
+  );
 }
 
 /** Kanban du plan d'action — même langage visuel que components/shared/Kanban.tsx, changement de
@@ -61,6 +113,7 @@ export function ActionKanban({
   const { t } = useTranslation();
   const COLUMNS = getColumns(t);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [sliding, setSliding] = useState(false);
   const [overCol, setOverCol] = useState<ActionStatus | null>(null);
   const drop = (status: ActionStatus, e: React.DragEvent) => {
     e.preventDefault();
@@ -70,7 +123,11 @@ export function ActionKanban({
     setOverCol(null);
     if (!id || readOnly) return;
     const a = actions.find((x) => x.id === id);
-    if (a && a.status !== status) onStatusChange(id, status);
+    if (!a) return;
+    const pct = pctForColumn(status, actionProgressPct(a));
+    if (pct === null || pct === actionProgressPct(a)) return;
+    if (onProgressChange) onProgressChange(id, pct);
+    else onStatusChange(id, status);
   };
   return (
     <div>
@@ -114,11 +171,10 @@ export function ActionKanban({
                 </div>
               )}
               {list.map((a) => {
-                const autoLate = a.status !== "delayed" && isActionLate(a);
                 return (
                   <div
                     key={a.id}
-                    draggable={!readOnly}
+                    draggable={!readOnly && !sliding}
                     onDragStart={(e) => {
                       e.dataTransfer.setData("text/plain", a.id);
                       e.dataTransfer.effectAllowed = "move";
@@ -139,62 +195,19 @@ export function ActionKanban({
                       className="mb-1.5 flex w-full items-start gap-1 text-left text-xs font-semibold text-primary hover:text-primary hover:underline"
                     >
                       <span className="min-w-0 flex-1">{a.name}</span>
-                      {autoLate && (
-                        <span
-                          className="mt-px inline-flex shrink-0 items-center gap-0.5 rounded-full bg-rag-red/10 px-1.5 py-px text-[9px] font-bold uppercase text-rag-red no-underline"
-                          title={t("shared.actionKanban.overdue", "Date de fin dépassée")}
-                        >
-                          {t("leverDetail.late", "En retard")}
-                        </span>
-                      )}
                     </button>
                     <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10.5px] text-tertiary">
                       <span>
                         {a.start} → {a.end}
                       </span>
                     </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={5}
-                        disabled={readOnly || !onProgressChange}
-                        key={`${a.id}-${actionProgressPct(a)}`}
-                        defaultValue={actionProgressPct(a)}
-                        onPointerUp={(e) => {
-                          const v = Number(e.currentTarget.value);
-                          if (v !== actionProgressPct(a)) onProgressChange?.(a.id, v);
-                        }}
-                        onKeyUp={(e) => {
-                          const v = Number(e.currentTarget.value);
-                          if (v !== actionProgressPct(a)) onProgressChange?.(a.id, v);
-                        }}
-                        className="min-w-0 flex-1 accent-bp-coral"
-                        aria-label={t("shared.actionKanban.progress", "Avancement (%)")}
-                      />
-                      <span className="w-9 text-right text-[10.5px] font-semibold text-secondary">
-                        {actionProgressPct(a)} %
-                      </span>
-                    </div>
-                    {!readOnly && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {COLUMNS.map((c) => (
-                          <button
-                            key={c.status}
-                            onClick={() => onStatusChange(a.id, c.status)}
-                            className={cn(
-                              "rounded-full border px-2 py-0.5 text-[9.5px] font-semibold transition",
-                              a.status === c.status
-                                ? "border-bp-coral bg-black text-white"
-                                : "border-border bg-white text-secondary hover:border-black"
-                            )}
-                          >
-                            {c.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    <ProgressSlider
+                      value={actionProgressPct(a)}
+                      disabled={readOnly || !onProgressChange}
+                      label={t("shared.actionKanban.progress", "Avancement (%)")}
+                      onCommit={(v) => onProgressChange?.(a.id, v)}
+                      onActive={setSliding}
+                    />
                   </div>
                 );
               })}

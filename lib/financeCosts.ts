@@ -565,3 +565,81 @@ export function costsByHierarchyNode(
     .filter((slice) => slice.amount > 0)
     .sort((a, b) => b.amount - a.amount);
 }
+
+// ─── Détail d'une période du graphique "Coût d'investissement vs Savings" ─────────────────────
+
+export type InvestVsSavingsLeverRow = {
+  leverId: string;
+  leverCode: string;
+  leverName: string;
+  wsId: string;
+  grossSavings: number;
+  opexRec: number;
+  opexOneOff: number;
+  capex: number;
+  /** grossSavings - opexRec - opexOneOff - capex (négatif = économie négative). */
+  net: number;
+};
+
+/** Décomposition par levier d'une période du graphique "Coût d'investissement vs Savings" (mêmes
+ *  règles d'attribution que `bucketInvestVsSavingsByPeriod`). */
+export function investVsSavingsRowsForPeriod(
+  data: BeTrackData,
+  granularity: FinanceGranularity,
+  periodKey: string
+): InvestVsSavingsLeverRow[] {
+  const byLever = new Map<string, InvestVsSavingsLeverRow>();
+  const ensure = (lever: Lever) => {
+    let r = byLever.get(lever.id);
+    if (!r) {
+      r = {
+        leverId: lever.id,
+        leverCode: lever.code,
+        leverName: lever.name,
+        wsId: lever.ws,
+        grossSavings: 0,
+        opexRec: 0,
+        opexOneOff: 0,
+        capex: 0,
+        net: 0,
+      };
+      byLever.set(lever.id, r);
+    }
+    return r;
+  };
+  for (const { impact, lever } of flattenSavingImpacts(data)) {
+    if (periodSortKey(new Date(savingReferenceDate(impact, lever)), granularity) === periodKey)
+      ensure(lever).grossSavings += impact.amount;
+  }
+  for (const { impact, lever } of flattenCostImpacts(data)) {
+    if (
+      impact.nature === "opex_rec" &&
+      periodSortKey(new Date(lever.start), granularity) === periodKey
+    )
+      ensure(lever).opexRec += impact.amount;
+  }
+  for (const { lever, amount } of costRowsForPeriod(
+    data,
+    granularity,
+    periodKey,
+    (n) => n === "capex"
+  ))
+    ensure(lever).capex += amount;
+  for (const { lever, amount } of costRowsForPeriod(
+    data,
+    granularity,
+    periodKey,
+    (n) => n === "oneoff"
+  ))
+    ensure(lever).opexOneOff += amount;
+  return Array.from(byLever.values())
+    .map((r) => ({
+      ...r,
+      grossSavings: round2(r.grossSavings),
+      opexRec: round2(r.opexRec),
+      opexOneOff: round2(r.opexOneOff),
+      capex: round2(r.capex),
+      net: round2(r.grossSavings - r.opexRec - r.opexOneOff - r.capex),
+    }))
+    .sort((a, b) => a.net - b.net);
+}

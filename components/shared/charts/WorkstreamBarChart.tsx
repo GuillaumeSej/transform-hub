@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Customized,
   LabelList,
   Legend,
   ResponsiveContainer,
@@ -187,9 +188,9 @@ export function WorkstreamBarDetail({
                 {fmt(row.realized)} / {fmt(row.target)} · {pct}%
               </span>
             </div>
-            <div className="relative h-3 w-full overflow-hidden rounded-full bg-neutral-100">
+            <div className="relative h-3 w-full overflow-hidden rounded-full">
               <div
-                className="absolute inset-y-0 left-0 rounded-full bg-[rgba(168,154,147,0.35)]"
+                className="absolute inset-y-0 left-0 rounded-full bg-[rgba(107,93,87,0.45)]"
                 style={{ width: `${targetWidth}%` }}
               />
               <div
@@ -201,6 +202,95 @@ export function WorkstreamBarDetail({
         );
       })}
     </ul>
+  );
+}
+
+type CalloutProps = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  xAxisMap?: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  yAxisMap?: Record<string, any>;
+  offset?: { left: number; top: number; width: number; height: number };
+};
+
+/** Légendes sur le côté : pour la dernière barre, une pastille de la couleur du segment reliée
+ *  par un petit trait au segment (gris = cible réactualisée, rouge = réalisé, pointillé = planifié
+ *  initial). Positions verticales espacées d'au moins 16 px pour éviter tout chevauchement. */
+function SideCallouts({
+  xAxisMap,
+  yAxisMap,
+  offset,
+  data,
+  hasPlanned,
+  labels,
+}: CalloutProps & { data: ChartDatum[]; hasPlanned: boolean; labels: [string, string, string] }) {
+  const xAxis = xAxisMap && Object.values(xAxisMap)[0];
+  const yAxis = yAxisMap && Object.values(yAxisMap)[0];
+  const last = data[data.length - 1];
+  if (!xAxis?.scale || !yAxis?.scale || !offset || !last) return null;
+  const band = typeof xAxis.scale.bandwidth === "function" ? xAxis.scale.bandwidth() : 0;
+  const cx = (xAxis.scale(last.label) ?? 0) + band / 2;
+  const barRight = cx + band * 0.4;
+  const yTop = (v: number) => yAxis.scale(v) as number;
+  const stackTop = Math.max(last.target, last.realized);
+  const items = [
+    {
+      key: "t",
+      label: labels[0],
+      y: (yTop(last.realized) + yTop(stackTop)) / 2,
+      color: "rgba(107,93,87,0.6)",
+      dashed: false,
+      show: last.target > last.realized,
+    },
+    {
+      key: "r",
+      label: labels[1],
+      y: (yTop(0) + yTop(last.realized)) / 2,
+      color: "#FF3C47",
+      dashed: false,
+      show: true,
+    },
+    {
+      key: "p",
+      label: labels[2],
+      y: yTop(last.planned ?? 0),
+      color: "#320300",
+      dashed: true,
+      show: hasPlanned && last.planned !== undefined,
+    },
+  ]
+    .filter((i) => i.show)
+    .sort((a, b) => a.y - b.y);
+  const labelY: number[] = [];
+  items.forEach((it, i) => {
+    labelY.push(i === 0 ? it.y : Math.max(it.y, labelY[i - 1] + 16));
+  });
+  const xText = offset.left + offset.width + 22;
+  return (
+    <g>
+      {items.map((it, i) => (
+        <g key={it.key}>
+          <polyline
+            points={`${barRight},${it.y} ${offset.left + offset.width + 4},${labelY[i]} ${xText - 8},${labelY[i]}`}
+            fill="none"
+            stroke="#6B5D57"
+            strokeWidth={0.75}
+            strokeDasharray={it.dashed ? "3 2" : undefined}
+          />
+          <circle
+            cx={xText - 4}
+            cy={labelY[i]}
+            r={4}
+            fill={it.dashed ? "#fff" : it.color}
+            stroke={it.dashed ? "#320300" : "none"}
+            strokeDasharray={it.dashed ? "2 1.5" : undefined}
+          />
+          <text x={xText + 6} y={labelY[i] + 3.5} fontSize={11} fontWeight={600} fill="#1A1A1A">
+            {it.label}
+          </text>
+        </g>
+      ))}
+    </g>
   );
 }
 
@@ -252,16 +342,13 @@ export function WorkstreamBarChart({
 
   const maxValue = Math.max(...data.map((d) => Math.max(d.target, d.realized, d.planned ?? 0)));
 
-  // Label combiné du segment "remaining" : la cible totale au-dessus de la pile (comportement
-  // existant) + l'écart (valeur propre au segment gris) centré à l'intérieur du segment, mais
-  // seulement quand ce dernier est assez haut pour rester lisible (évite le fouillis visuel sur
-  // les tout petits écarts).
+  // Total (cible) au-dessus de chaque pile. Les libellés des segments (gris / rouge / pointillé)
+  // ne sont plus dessinés dans les blocs : ils sont sortis en callouts sur le côté (`SideCallouts`).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderRemainingLabels = (props: any) => {
-    const { x = 0, y = 0, width = 0, height = 0, index } = props;
+    const { x = 0, y = 0, width = 0, index } = props;
     const d = chartData[index];
     if (!d) return null;
-    const showGap = height > 14 && d.remaining > 0;
     return (
       <g>
         <text
@@ -274,18 +361,6 @@ export function WorkstreamBarChart({
         >
           {fmt(d.target)}
         </text>
-        {showGap && (
-          <text
-            x={x + width / 2}
-            y={y + height / 2 + 3}
-            textAnchor="middle"
-            fontSize={10}
-            fontWeight={600}
-            fill="#6B5D57"
-          >
-            {fmt(d.remaining)}
-          </text>
-        )}
       </g>
     );
   };
@@ -323,7 +398,7 @@ export function WorkstreamBarChart({
       <ResponsiveContainer width="100%" height={320}>
         <BarChart
           data={chartData}
-          margin={{ top: 20, right: 8, left: -16, bottom: 4 }}
+          margin={{ top: 20, right: 150, left: -16, bottom: 4 }}
           barCategoryGap="20%"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
@@ -356,7 +431,47 @@ export function WorkstreamBarChart({
               parasite "qui va jusqu'au bout" et ne représente rien métier qui était signalée.
               Le graphique ne doit garder que les deux barres empilées Cible/Réalisé. */}
           <Tooltip content={CustomTooltip} shared={false} cursor={false} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Legend
+            wrapperStyle={{ fontSize: 11 }}
+            content={() => (
+              <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-[11px] font-medium text-primary">
+                <li className="flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#FF3C47]" />
+                  {resolvedLabelRealized}
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[rgba(107,93,87,0.35)]" />
+                  {resolvedLabelTarget}
+                </li>
+                {hasPlanned && (
+                  <li className="flex items-center gap-1.5">
+                    <svg width="18" height="6" aria-hidden="true">
+                      <line
+                        x1="0"
+                        y1="3"
+                        x2="18"
+                        y2="3"
+                        stroke="#320300"
+                        strokeWidth="1.5"
+                        strokeDasharray="4 3"
+                      />
+                    </svg>
+                    {resolvedLabelPlanned}
+                  </li>
+                )}
+              </ul>
+            )}
+          />
+          <Customized
+            component={(props: unknown) => (
+              <SideCallouts
+                {...(props as CalloutProps)}
+                data={chartData}
+                hasPlanned={hasPlanned}
+                labels={[resolvedLabelTarget, resolvedLabelRealized, resolvedLabelPlanned]}
+              />
+            )}
+          />
           {/* Barre réalisé (bas de la pile) — coral */}
           <Bar
             dataKey="realized"
@@ -374,21 +489,13 @@ export function WorkstreamBarChart({
                   }
                 : undefined
             }
-          >
-            <LabelList
-              dataKey="realized"
-              position="inside"
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={(v: any) => (typeof v === "number" && v > 0 ? `€${v}M` : "")}
-              style={{ fontSize: 10, fontWeight: 600, fill: "#fff" }}
-            />
-          </Bar>
+          ></Bar>
           {/* Barre remaining (haut de la pile) — gris transparent, complète jusqu'à la cible */}
           <Bar
             dataKey="remaining"
             name={resolvedLabelTarget}
             stackId="a"
-            fill="rgba(168,154,147,0.3)"
+            fill="rgba(107,93,87,0.35)"
             radius={[4, 4, 0, 0]}
             cursor={onSegmentClick ? "pointer" : undefined}
             onClick={

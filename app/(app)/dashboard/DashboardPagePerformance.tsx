@@ -58,9 +58,10 @@ import { useNotifications } from "@/lib/hooks/useNotifications";
 import { paginateDashboardItems } from "@/lib/dashboardPagination";
 import { groupLeversByHealthDimension, type LeverHealthDimension } from "@/lib/leverHealth";
 import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Avatar } from "@/components/shared/Avatar";
-import { SCurveChart } from "@/components/shared/charts/SCurveChart";
+import { SCurveChart, type SCurvePoint } from "@/components/shared/charts/SCurveChart";
+import { SCurveDetail } from "@/components/shared/charts/SCurveDetail";
+import { savingsSeriesByWorkstream } from "@/lib/scurveDetail";
 import {
   WorkstreamBarChart,
   WorkstreamBarDetail,
@@ -587,6 +588,24 @@ export function DashboardPagePerformance() {
   // Barres = MÊME série que la courbe en S (`savingsSeries`) : valeurs identiques au basculement.
   const trajBridge = useMemo(() => seriesToBridge(trajSCurve), [trajSCurve]);
   const [bridgeGranularity, setBridgeGranularity] = useState<engine.TimeGranularity>("quarter");
+  // Pop-up de détail de la trajectoire (clic sur la courbe en S).
+  const [scurveDetail, setScurveDetail] = useState<{
+    points: SCurvePoint[];
+    granularity: engine.TimeGranularity;
+  } | null>(null);
+  const scurveDetailByWs = useMemo(
+    () =>
+      scurveDetail
+        ? savingsSeriesByWorkstream(
+            filteredData,
+            data.workstreams,
+            scurveDetail.granularity,
+            new Date(),
+            scurveDetail.points.map((p) => p.month)
+          )
+        : [],
+    [scurveDetail, filteredData, data.workstreams]
+  );
   const sCurve = engine.savingsSeries(filteredData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
   const savingsWaterfallData = useMemo(() => engine.savingsWaterfall(filteredData), [filteredData]);
@@ -1391,7 +1410,9 @@ export function DashboardPagePerformance() {
                 <SCurveChart
                   data={trajSCurve}
                   height={360}
-                  onPointClick={(label) => goToSCurvePoint(label, trajGranularity)}
+                  onPointClick={() =>
+                    setScurveDetail({ points: trajSCurve, granularity: trajGranularity })
+                  }
                   labelActual={t("chart.scurve.actual")}
                   labelPlanned={t("chart.scurve.planned")}
                   labelReforecast={t("chart.scurve.reforecast")}
@@ -1428,7 +1449,9 @@ export function DashboardPagePerformance() {
               <SCurveChart
                 data={sCurve}
                 height={360}
-                onPointClick={goToSCurvePoint}
+                onPointClick={() =>
+                  setScurveDetail({ points: sCurve, granularity: sCurveGranularity })
+                }
                 labelActual={t("chart.scurve.actual")}
                 labelPlanned={t("chart.scurve.planned")}
                 labelReforecast={t("chart.scurve.reforecast")}
@@ -1594,7 +1617,15 @@ export function DashboardPagePerformance() {
           <Card className="mb-0 h-full">
             <CardHeader title={t("dashboard.widgets.savingsWaterfall", "Cascade des économies")} />
             <CardBody>
-              <SavingsWaterfallChart waterfall={savingsWaterfallData} oneOffGains={oneOffGains} />
+              <SavingsWaterfallChart
+                waterfall={savingsWaterfallData}
+                oneOffGains={oneOffGains}
+                levers={filteredData.levers}
+                workstreams={filteredData.workstreams}
+                geographyLevels={geographyHierarchyLevels}
+                geographyNodes={geographyNodes}
+                impactNatures={company?.impactNatures}
+              />
             </CardBody>
           </Card>
         );
@@ -1652,6 +1683,12 @@ export function DashboardPagePerformance() {
           instance,
           <Card className="mb-0 h-full">
             <CardHeader title={t("dashboard.widgets.workstreamTable")} />
+            <p className="px-4 pb-2 text-[11px] text-secondary">
+              {t(
+                "dashboard.workstreamTable.targetNote",
+                "Réalisé par rapport à la cible réactualisée (dernière version de la cible)."
+              )}
+            </p>
             <CardBody flush>
               <div className="overflow-auto">
                 <table className="w-full border-collapse text-[12.5px]">
@@ -1661,8 +1698,10 @@ export function DashboardPagePerformance() {
                         t("dashboard.workstream", "Chantier"),
                         "Sponsor",
                         t("dashboard.tableHeader.leverCount", "Leviers"),
-                        t("dashboard.tableHeader.realizedTarget", "Réalisé / Cible"),
-                        t("dashboard.tableHeader.progress", "Progression"),
+                        t(
+                          "dashboard.tableHeader.realizedReforecastTarget",
+                          "Réalisé / Cible réactualisée"
+                        ),
                         t("dashboard.tableHeader.capexRealizedPlan", "CAPEX (réalisé / plan)"),
                         t(
                           "dashboard.tableHeader.opexOneOffRealizedPlan",
@@ -1734,9 +1773,6 @@ export function DashboardPagePerformance() {
                           <td className="px-3 py-2.5 tabular-nums">
                             <strong>{engine.fmtCurr(ss.realized)}</strong> /{" "}
                             {engine.fmtCurr(ss.target)}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <ProgressBar pct={ss.progressPct} />
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
                             <strong>{engine.fmtCurr(capexRealized)}</strong> /{" "}
@@ -2058,6 +2094,26 @@ export function DashboardPagePerformance() {
           )}
         </div>
       )}
+
+      <Modal
+        open={scurveDetail !== null}
+        onOpenChange={(open) => {
+          if (!open) setScurveDetail(null);
+        }}
+        title={t("chart.scurveDetail.title", "Trajectoire des économies — détail")}
+        maxWidth="880px"
+      >
+        {scurveDetail && (
+          <SCurveDetail
+            points={scurveDetail.points}
+            byWorkstream={scurveDetailByWs}
+            onSeeLevers={() => {
+              setScurveDetail(null);
+              goToLevers({});
+            }}
+          />
+        )}
+      </Modal>
 
       {/* Étape 1 du builder générique (widgets déjà présents) : nouveau bloc séparé, ou vue
           supplémentaire ajoutée au sélecteur d'un bloc existant (l'utilisateur choisit LEQUEL

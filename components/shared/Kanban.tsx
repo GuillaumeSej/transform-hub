@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/shared/Tooltip";
 import { Avatar } from "@/components/shared/Avatar";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { DeclaredProgressBadge } from "@/components/shared/DeclaredProgressBadge";
@@ -61,16 +62,35 @@ function StatusColumns({
               >
                 <div className="mb-1.5 text-xs font-semibold text-primary">{l.name}</div>
                 <div className="flex flex-wrap items-center justify-between gap-1.5">
-                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
-                    {l.code}
-                  </span>
-                  <span className="text-[12.5px] font-bold text-primary">
-                    {fmtCurr(l.netSavings)}
-                  </span>
+                  <Tooltip text={t("shared.kanban.tip.id", "ID du levier")}>
+                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
+                      {l.code}
+                    </span>
+                  </Tooltip>
+                  <Tooltip text={t("shared.kanban.tip.amount", "Gain net réactualisé")}>
+                    <span className="text-[12.5px] font-bold text-primary">
+                      {fmtCurr(l.netSavings)}
+                    </span>
+                  </Tooltip>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <ProgressBar pct={leverActionProgress(l)} className="flex-1" />
-                  <Avatar initials={l.ownerInit} size="sm" />
+                  <Tooltip
+                    className="flex-1"
+                    text={t(
+                      "shared.kanban.tip.progress",
+                      "Avancement du plan d'action : {pct} %"
+                    ).replace("{pct}", String(Math.round(leverActionProgress(l))))}
+                  >
+                    <ProgressBar pct={leverActionProgress(l)} className="flex-1" />
+                  </Tooltip>
+                  <Tooltip
+                    text={t("shared.kanban.tip.owner", "Responsable du levier : {name}").replace(
+                      "{name}",
+                      l.owner
+                    )}
+                  >
+                    <Avatar initials={l.ownerInit} size="sm" />
+                  </Tooltip>
                 </div>
               </button>
             ))}

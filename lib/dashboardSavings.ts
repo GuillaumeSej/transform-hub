@@ -35,21 +35,27 @@ export type WaterfallBar = {
   up: number;
   /** Variation négative (valeur absolue). */
   down: number;
-  /** Uniquement pour la barre finale : réalisé / reste à faire (empilés). */
+  /** Uniquement pour la barre "Cible réactualisée" : réalisé / reste à faire (empilés). */
   realized: number;
   remaining: number;
+  /** Uniquement pour la barre "OPEX récurrent" : un montant par segment (même ordre que `segments`). */
+  seg: number[];
   /** Valeur signée d'origine (pour libellés/tooltip). */
   value: number;
 };
 
 /** Transforme `engine.savingsWaterfall` en barres Recharts (technique "base invisible"). La barre
- *  finale "Total attendu" est scindée en réalisé + reste à faire. */
-export function waterfallBars(w: SavingsWaterfall): WaterfallBar[] {
+ *  "Cible réactualisée" est scindée en réalisé + reste à faire (= savingsTriple) ; la barre
+ *  "OPEX récurrent" (hors cible) est empilée par segments de nature, partant de 0. */
+export function waterfallBars(
+  w: SavingsWaterfall,
+  opexSegments: { value: number }[] = []
+): WaterfallBar[] {
   const bars: WaterfallBar[] = [];
   let prev = 0;
   for (const step of w.steps) {
-    const empty = { up: 0, down: 0, realized: 0, remaining: 0 };
-    if (step.key === "expected") {
+    const empty = { up: 0, down: 0, realized: 0, remaining: 0, seg: [] as number[] };
+    if (step.key === "target") {
       const realized = Math.max(0, Math.min(w.realized, step.value));
       bars.push({
         key: step.key,
@@ -58,6 +64,18 @@ export function waterfallBars(w: SavingsWaterfall): WaterfallBar[] {
         ...empty,
         realized: r1(realized),
         remaining: r1(Math.max(0, step.value - realized)),
+        value: step.value,
+      });
+    } else if (step.key === "opexRec") {
+      const total = Math.abs(step.value);
+      const segs =
+        opexSegments.length > 0 ? opexSegments.map((x) => Math.max(0, x.value)) : [total];
+      bars.push({
+        key: step.key,
+        label: step.label,
+        base: 0,
+        ...empty,
+        seg: segs,
         value: step.value,
       });
     } else if (step.kind === "total") {
@@ -82,7 +100,7 @@ export function waterfallBars(w: SavingsWaterfall): WaterfallBar[] {
         value: step.value,
       });
     }
-    prev = step.cumulative;
+    if (step.key !== "opexRec") prev = step.cumulative;
   }
   return bars;
 }

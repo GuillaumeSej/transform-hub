@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { subscribeCompanies, subscribePrograms } from "@/lib/firestore/admin";
 import {
+  allActionsDone,
   canUserViewLever,
   isLeverCtoOf,
   isLeverOwnedBy,
@@ -453,6 +454,19 @@ export function LeverDetailClientPerformance() {
               );
             })}
           </div>
+          {lever.status !== "delivered" &&
+            (lever.actions?.length ?? 0) > 0 &&
+            !allActionsDone(lever) && (
+              <p className="mt-2 flex items-start gap-1.5 text-[11px] text-tertiary">
+                <Info size={12} className="mt-px shrink-0" />
+                {t(
+                  "leverDetail.deliveredNeedsAllActions",
+                  "Le passage à « {stage} » exige que toutes les actions soient faites (100 %). Tant que ce n'est pas le cas, le levier reste « {current} »."
+                )
+                  .replace("{stage}", lifecycle.shortLabel("delivered"))
+                  .replace("{current}", lifecycle.shortLabel("in_progress"))}
+              </p>
+            )}
           {!readOnly &&
             (lever.status === "idea" ||
               lever.status === "qualified" ||
@@ -1241,9 +1255,17 @@ export function LeverDetailClientPerformance() {
       {tab === "impact" && (
         <Card>
           <CardBody>
-            <SectionTitle first>
-              {t("leverDetail.financialImpactTitle", "Impact financier")}
-            </SectionTitle>
+            <SectionTitle first>{t("leverDetail.impactsTitle", "Impacts du levier")}</SectionTitle>
+            <ImpactTotalsBlock lever={lever} />
+            <ImpactsEditor
+              impacts={lever.impacts ?? []}
+              company={company}
+              canEdit={!readOnly}
+              readOnly={readOnly}
+              onChange={(next) => data.updateLever(lever.id, { impacts: next })}
+            />
+
+            <SectionTitle>{t("leverDetail.financialImpactTitle", "Impact financier")}</SectionTitle>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6">
               <Stat
                 label={t(
@@ -1276,16 +1298,6 @@ export function LeverDetailClientPerformance() {
                 {engine.fmtCurr(consolidatedKPIs?.opexRec ?? lever.opexRec)}
               </Stat>
             </div>
-
-            <SectionTitle>{t("leverDetail.impactsTitle", "Impacts du levier")}</SectionTitle>
-            <ImpactTotalsBlock lever={lever} />
-            <ImpactsEditor
-              impacts={lever.impacts ?? []}
-              company={company}
-              canEdit={!readOnly}
-              readOnly={readOnly}
-              onChange={(next) => data.updateLever(lever.id, { impacts: next })}
-            />
 
             <SectionTitle>{t("leverDetail.hrImpactTitle", "Impact RH")}</SectionTitle>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

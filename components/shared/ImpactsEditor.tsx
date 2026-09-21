@@ -96,6 +96,7 @@ export function ImpactsEditor({
   const finLevel = finest(company?.hierarchyLevels);
   const geoLevel = finest(company?.geographyHierarchyLevels);
   const totals = leverImpactTotals(impacts);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const update = (id: string, patch: Partial<LeverImpact>) =>
     onChange(impacts.map((i) => (i.id === id ? { ...i, ...patch } : i)));
@@ -123,258 +124,324 @@ export function ImpactsEditor({
             ? "saving"
             : "cost"
         );
+        const open = openId === imp.id;
+        const start =
+          kind === "gain" || (kind === "fte" && imp.fteDirection === "departure")
+            ? imp.gainDate
+            : (imp.capexStartDate ?? imp.capexDeploymentDate);
+        const recurring =
+          (kind === "gain" && imp.gainRecurrence !== "oneoff") ||
+          (kind === "opex" && imp.nature !== "oneoff") ||
+          kind === "fte";
+        const isNegative = !(
+          kind === "gain" ||
+          (kind === "fte" && imp.fteDirection === "departure")
+        );
+        const active = !!start && new Date(start) <= new Date();
         return (
-          <div key={imp.id} className="rounded-md border border-border bg-white p-2.5">
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <label>
-                <span className={labelClass}>{t("impactsEditor.kind", "Type")}</span>
-                <select
-                  className={inputClass}
-                  disabled={!editable}
-                  value={kind}
-                  onChange={(e) => update(imp.id, impactKindPatch(e.target.value as ImpactKind))}
-                >
-                  {(Object.keys(KIND_LABELS) as ImpactKind[]).map((k) => (
-                    <option key={k} value={k}>
-                      {KIND_LABELS[k]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="md:col-span-2">
-                <span className={labelClass}>{t("impactsEditor.label", "Libellé")}</span>
-                <input
-                  className={inputClass}
-                  disabled={!editable}
-                  value={imp.label}
-                  onChange={(e) => update(imp.id, { label: e.target.value })}
-                />
-              </label>
-              <label>
-                <span className={labelClass}>
-                  {kind === "fte"
-                    ? t("impactsEditor.loadedSalary", "Salaire chargé total (€M)")
-                    : t("impactsEditor.amount", "Montant (€M)")}
-                </span>
-                <input
-                  className={`${inputClass} text-right`}
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  disabled={!editable}
-                  value={imp.amount || ""}
-                  onChange={(e) => update(imp.id, { amount: parseFloat(e.target.value) || 0 })}
-                />
-              </label>
-
-              {kind === "opex" && (
-                <label>
-                  <span className={labelClass}>{t("impactsEditor.mode", "Mode")}</span>
-                  <select
-                    className={inputClass}
-                    disabled={!editable}
-                    value={imp.nature === "oneoff" ? "oneoff" : "opex_rec"}
-                    onChange={(e) =>
-                      update(imp.id, { nature: e.target.value as LeverImpact["nature"] })
-                    }
-                  >
-                    <option value="oneoff">{t("impactsEditor.oneOff", "One-off")}</option>
-                    <option value="opex_rec">{t("impactsEditor.recurring", "Récurrent")}</option>
-                  </select>
-                </label>
-              )}
-              {kind === "capex" && (
-                <>
+          <div key={imp.id} className="rounded-md border border-border bg-white">
+            <button
+              type="button"
+              onClick={() => setOpenId(open ? null : imp.id)}
+              aria-expanded={open}
+              className="grid w-full grid-cols-[1fr_auto] items-center gap-x-3 gap-y-0.5 px-3 py-2 text-left hover:bg-neutral-50 md:grid-cols-[1fr_110px_120px_100px_90px_70px]"
+            >
+              <span className="truncate text-xs font-semibold text-primary">
+                {imp.label || t("impactsEditor.untitled", "Impact sans libellé")}
+              </span>
+              <span className="text-[11px] text-secondary">
+                {KIND_LABELS[kind]} ·{" "}
+                {recurring
+                  ? t("impactsEditor.recurring", "Récurrent")
+                  : t("impactsEditor.oneOff", "One-off")}
+              </span>
+              <span
+                className={`text-right text-xs font-semibold tabular-nums ${isNegative ? "text-bp-coral" : "text-emerald-700"}`}
+              >
+                {isNegative ? "−" : "+"}
+                {fmt(imp.amount)}
+                {recurring ? t("impactsEditor.perYear", " /an") : ""}
+              </span>
+              <span className="text-[11px] text-secondary">
+                {start ? start : t("impactsEditor.noDate", "Date à définir")}
+              </span>
+              <span className="text-[11px] text-tertiary">
+                {active
+                  ? t("impactsEditor.statusActive", "Actif")
+                  : t("impactsEditor.statusPlanned", "Planifié")}
+              </span>
+              <span className="text-right text-[11px] font-semibold text-bp-coral">
+                {open
+                  ? t("impactsEditor.close", "Fermer")
+                  : editable
+                    ? t("impactsEditor.edit", "Modifier")
+                    : t("impactsEditor.view", "Détail")}
+              </span>
+            </button>
+            {open && (
+              <div className="border-t border-border p-2.5">
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                   <label>
-                    <span className={labelClass}>{t("impactsEditor.mode", "Mode")}</span>
+                    <span className={labelClass}>{t("impactsEditor.kind", "Type")}</span>
                     <select
                       className={inputClass}
                       disabled={!editable}
-                      value={imp.capexAllocationMode ?? "one_shot"}
+                      value={kind}
                       onChange={(e) =>
-                        update(imp.id, {
-                          capexAllocationMode: e.target.value as "one_shot" | "smoothed",
-                          capexStartDate:
-                            e.target.value === "smoothed" ? imp.capexStartDate : undefined,
-                        })
+                        update(imp.id, impactKindPatch(e.target.value as ImpactKind))
                       }
                     >
-                      <option value="one_shot">{t("impactsEditor.oneOff", "One-off")}</option>
-                      <option value="smoothed">{t("impactsEditor.smoothed", "Lissé")}</option>
+                      {(Object.keys(KIND_LABELS) as ImpactKind[]).map((k) => (
+                        <option key={k} value={k}>
+                          {KIND_LABELS[k]}
+                        </option>
+                      ))}
                     </select>
                   </label>
-                  {imp.capexAllocationMode === "smoothed" && (
-                    <label>
-                      <span className={labelClass}>
-                        {t("impactsEditor.capexStart", "Début de période")}
-                      </span>
-                      <input
-                        className={inputClass}
-                        type="date"
-                        disabled={!editable}
-                        value={imp.capexStartDate ?? ""}
-                        onChange={(e) =>
-                          update(imp.id, { capexStartDate: e.target.value || undefined })
-                        }
-                      />
-                    </label>
-                  )}
-                  <label>
-                    <span className={labelClass}>
-                      {imp.capexAllocationMode === "smoothed"
-                        ? t("impactsEditor.capexEnd", "Fin de période")
-                        : t("impactsEditor.capexDeployment", "Date d'engagement")}
-                    </span>
+                  <label className="md:col-span-2">
+                    <span className={labelClass}>{t("impactsEditor.label", "Libellé")}</span>
                     <input
                       className={inputClass}
-                      type="date"
                       disabled={!editable}
-                      value={imp.capexDeploymentDate ?? ""}
-                      onChange={(e) =>
-                        update(imp.id, { capexDeploymentDate: e.target.value || undefined })
-                      }
+                      value={imp.label}
+                      onChange={(e) => update(imp.id, { label: e.target.value })}
                     />
-                  </label>
-                </>
-              )}
-              {kind === "gain" && (
-                <>
-                  <label>
-                    <span className={labelClass}>{t("impactsEditor.mode", "Mode")}</span>
-                    <select
-                      className={inputClass}
-                      disabled={!editable}
-                      value={imp.gainRecurrence ?? "annual"}
-                      onChange={(e) =>
-                        update(imp.id, { gainRecurrence: e.target.value as "annual" | "oneoff" })
-                      }
-                    >
-                      <option value="annual">{t("impactsEditor.annual", "Annuel")}</option>
-                      <option value="oneoff">{t("impactsEditor.oneOff", "One-off")}</option>
-                    </select>
                   </label>
                   <label>
                     <span className={labelClass}>
-                      {t("impactsEditor.gainDate", "Date du gain")}
-                    </span>
-                    <input
-                      className={inputClass}
-                      type="date"
-                      disabled={!editable}
-                      value={imp.gainDate ?? ""}
-                      onChange={(e) => update(imp.id, { gainDate: e.target.value || undefined })}
-                    />
-                  </label>
-                </>
-              )}
-              {kind === "fte" && (
-                <>
-                  <label>
-                    <span className={labelClass}>{t("impactsEditor.direction", "Sens")}</span>
-                    <select
-                      className={inputClass}
-                      disabled={!editable}
-                      value={imp.fteDirection ?? "hire"}
-                      onChange={(e) =>
-                        update(imp.id, { fteDirection: e.target.value as "hire" | "departure" })
-                      }
-                    >
-                      <option value="hire">{t("impactsEditor.hire", "Recrutement (+)")}</option>
-                      <option value="departure">
-                        {t("impactsEditor.departure", "Départ (−)")}
-                      </option>
-                    </select>
-                  </label>
-                  <label>
-                    <span className={labelClass}>
-                      {t("impactsEditor.fteCount", "Nombre d'ETP")}
+                      {kind === "fte"
+                        ? t("impactsEditor.loadedSalary", "Salaire chargé total (€M)")
+                        : t("impactsEditor.amount", "Montant (€M)")}
                     </span>
                     <input
                       className={`${inputClass} text-right`}
                       type="number"
-                      step="0.1"
+                      step="0.01"
                       min={0}
                       disabled={!editable}
-                      value={imp.fteCount ?? ""}
-                      onChange={(e) =>
-                        update(imp.id, {
-                          fteCount: e.target.value ? parseFloat(e.target.value) : undefined,
-                        })
-                      }
+                      value={imp.amount || ""}
+                      onChange={(e) => update(imp.id, { amount: parseFloat(e.target.value) || 0 })}
                     />
                   </label>
-                </>
-              )}
 
-              <label>
-                <span className={labelClass}>{t("impactsEditor.nature", "Nature")}</span>
-                <select
-                  className={inputClass}
-                  disabled={!editable}
-                  value={imp.natureId ?? ""}
-                  onChange={(e) => update(imp.id, { natureId: e.target.value || undefined })}
-                >
-                  <option value="">—</option>
-                  {natures.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span className={labelClass}>
-                  {t("impactsEditor.technology", "Technologie impactée")}
-                </span>
-                <input
-                  className={inputClass}
-                  disabled={!editable}
-                  value={imp.technology ?? ""}
-                  onChange={(e) => update(imp.id, { technology: e.target.value || undefined })}
-                />
-              </label>
-              <div>
-                <span className={labelClass}>
-                  {finLevel?.label ?? t("leverForm.costCenter", "Centre de coût")}
-                </span>
-                {editable && companyId ? (
-                  <HierarchyLeafSelect
-                    companyId={companyId}
-                    value={imp.hierarchyLeafId}
-                    onChange={(v) => update(imp.id, { hierarchyLeafId: v })}
-                    className={inputClass}
-                  />
-                ) : (
-                  <input
-                    className={inputClass}
-                    disabled={!editable}
-                    value={imp.costCenter ?? ""}
-                    onChange={(e) => update(imp.id, { costCenter: e.target.value || undefined })}
-                  />
-                )}
-              </div>
-              {geoLevel && companyId && (
-                <div>
-                  <span className={labelClass}>{geoLevel.label}</span>
-                  <GeographyLeafSelect
-                    companyId={companyId}
-                    levelKey={geoLevel.key}
-                    value={imp.geographyLeafId}
-                    disabled={!editable}
-                    onChange={(v) => update(imp.id, { geographyLeafId: v })}
-                  />
+                  {kind === "opex" && (
+                    <label>
+                      <span className={labelClass}>{t("impactsEditor.mode", "Mode")}</span>
+                      <select
+                        className={inputClass}
+                        disabled={!editable}
+                        value={imp.nature === "oneoff" ? "oneoff" : "opex_rec"}
+                        onChange={(e) =>
+                          update(imp.id, { nature: e.target.value as LeverImpact["nature"] })
+                        }
+                      >
+                        <option value="oneoff">{t("impactsEditor.oneOff", "One-off")}</option>
+                        <option value="opex_rec">
+                          {t("impactsEditor.recurring", "Récurrent")}
+                        </option>
+                      </select>
+                    </label>
+                  )}
+                  {kind === "capex" && (
+                    <>
+                      <label>
+                        <span className={labelClass}>{t("impactsEditor.mode", "Mode")}</span>
+                        <select
+                          className={inputClass}
+                          disabled={!editable}
+                          value={imp.capexAllocationMode ?? "one_shot"}
+                          onChange={(e) =>
+                            update(imp.id, {
+                              capexAllocationMode: e.target.value as "one_shot" | "smoothed",
+                              capexStartDate:
+                                e.target.value === "smoothed" ? imp.capexStartDate : undefined,
+                            })
+                          }
+                        >
+                          <option value="one_shot">{t("impactsEditor.oneOff", "One-off")}</option>
+                          <option value="smoothed">{t("impactsEditor.smoothed", "Lissé")}</option>
+                        </select>
+                      </label>
+                      {imp.capexAllocationMode === "smoothed" && (
+                        <label>
+                          <span className={labelClass}>
+                            {t("impactsEditor.capexStart", "Début de période")}
+                          </span>
+                          <input
+                            className={inputClass}
+                            type="date"
+                            disabled={!editable}
+                            value={imp.capexStartDate ?? ""}
+                            onChange={(e) =>
+                              update(imp.id, { capexStartDate: e.target.value || undefined })
+                            }
+                          />
+                        </label>
+                      )}
+                      <label>
+                        <span className={labelClass}>
+                          {imp.capexAllocationMode === "smoothed"
+                            ? t("impactsEditor.capexEnd", "Fin de période")
+                            : t("impactsEditor.capexDeployment", "Date d'engagement")}
+                        </span>
+                        <input
+                          className={inputClass}
+                          type="date"
+                          disabled={!editable}
+                          value={imp.capexDeploymentDate ?? ""}
+                          onChange={(e) =>
+                            update(imp.id, { capexDeploymentDate: e.target.value || undefined })
+                          }
+                        />
+                      </label>
+                    </>
+                  )}
+                  {kind === "gain" && (
+                    <>
+                      <label>
+                        <span className={labelClass}>{t("impactsEditor.mode", "Mode")}</span>
+                        <select
+                          className={inputClass}
+                          disabled={!editable}
+                          value={imp.gainRecurrence ?? "annual"}
+                          onChange={(e) =>
+                            update(imp.id, {
+                              gainRecurrence: e.target.value as "annual" | "oneoff",
+                            })
+                          }
+                        >
+                          <option value="annual">{t("impactsEditor.annual", "Annuel")}</option>
+                          <option value="oneoff">{t("impactsEditor.oneOff", "One-off")}</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span className={labelClass}>
+                          {t("impactsEditor.gainDate", "Date du gain")}
+                        </span>
+                        <input
+                          className={inputClass}
+                          type="date"
+                          disabled={!editable}
+                          value={imp.gainDate ?? ""}
+                          onChange={(e) =>
+                            update(imp.id, { gainDate: e.target.value || undefined })
+                          }
+                        />
+                      </label>
+                    </>
+                  )}
+                  {kind === "fte" && (
+                    <>
+                      <label>
+                        <span className={labelClass}>{t("impactsEditor.direction", "Sens")}</span>
+                        <select
+                          className={inputClass}
+                          disabled={!editable}
+                          value={imp.fteDirection ?? "hire"}
+                          onChange={(e) =>
+                            update(imp.id, { fteDirection: e.target.value as "hire" | "departure" })
+                          }
+                        >
+                          <option value="hire">{t("impactsEditor.hire", "Recrutement (+)")}</option>
+                          <option value="departure">
+                            {t("impactsEditor.departure", "Départ (−)")}
+                          </option>
+                        </select>
+                      </label>
+                      <label>
+                        <span className={labelClass}>
+                          {t("impactsEditor.fteCount", "Nombre d'ETP")}
+                        </span>
+                        <input
+                          className={`${inputClass} text-right`}
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          disabled={!editable}
+                          value={imp.fteCount ?? ""}
+                          onChange={(e) =>
+                            update(imp.id, {
+                              fteCount: e.target.value ? parseFloat(e.target.value) : undefined,
+                            })
+                          }
+                        />
+                      </label>
+                    </>
+                  )}
+
+                  <label>
+                    <span className={labelClass}>{t("impactsEditor.nature", "Nature")}</span>
+                    <select
+                      className={inputClass}
+                      disabled={!editable}
+                      value={imp.natureId ?? ""}
+                      onChange={(e) => update(imp.id, { natureId: e.target.value || undefined })}
+                    >
+                      <option value="">—</option>
+                      {natures.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span className={labelClass}>
+                      {t("impactsEditor.technology", "Technologie impactée")}
+                    </span>
+                    <input
+                      className={inputClass}
+                      disabled={!editable}
+                      value={imp.technology ?? ""}
+                      onChange={(e) => update(imp.id, { technology: e.target.value || undefined })}
+                    />
+                  </label>
+                  <div>
+                    <span className={labelClass}>
+                      {finLevel?.label ?? t("leverForm.costCenter", "Centre de coût")}
+                    </span>
+                    {editable && companyId ? (
+                      <HierarchyLeafSelect
+                        companyId={companyId}
+                        value={imp.hierarchyLeafId}
+                        onChange={(v) => update(imp.id, { hierarchyLeafId: v })}
+                        className={inputClass}
+                      />
+                    ) : (
+                      <input
+                        className={inputClass}
+                        disabled={!editable}
+                        value={imp.costCenter ?? ""}
+                        onChange={(e) =>
+                          update(imp.id, { costCenter: e.target.value || undefined })
+                        }
+                      />
+                    )}
+                  </div>
+                  {geoLevel && companyId && (
+                    <div>
+                      <span className={labelClass}>{geoLevel.label}</span>
+                      <GeographyLeafSelect
+                        companyId={companyId}
+                        levelKey={geoLevel.key}
+                        value={imp.geographyLeafId}
+                        disabled={!editable}
+                        onChange={(v) => update(imp.id, { geographyLeafId: v })}
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            {editable && (
-              <div className="mt-2 text-right">
-                <button
-                  type="button"
-                  onClick={() => remove(imp.id)}
-                  className="text-[11px] font-semibold text-tertiary hover:text-bp-coral"
-                >
-                  {t("common.delete", "Supprimer")}
-                </button>
+                {editable && (
+                  <div className="mt-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => remove(imp.id)}
+                      className="text-[11px] font-semibold text-tertiary hover:text-bp-coral"
+                    >
+                      {t("common.delete", "Supprimer")}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -385,7 +452,11 @@ export function ImpactsEditor({
         <div>
           <button
             type="button"
-            onClick={() => onChange([...impacts, emptyImpact()])}
+            onClick={() => {
+              const n = emptyImpact();
+              onChange([...impacts, n]);
+              setOpenId(n.id);
+            }}
             className="rounded-sm bg-bp-coral/10 px-2.5 py-1 text-xs font-semibold text-bp-coral transition hover:bg-bp-coral/20"
           >
             + {t("impactsEditor.add", "Ajouter un impact")}

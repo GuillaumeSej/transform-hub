@@ -198,9 +198,6 @@ export function FinanceHierarchyTable({
                           <span className="mr-1 inline-block w-3.5" />
                         )}
                         {r.label}
-                        {r.code ? (
-                          <span className="ml-1 text-[10px] text-tertiary">{r.code}</span>
-                        ) : null}
                       </td>
                       {COLUMNS.map((c) => (
                         <td key={c.key} className={numCell}>
@@ -214,12 +211,7 @@ export function FinanceHierarchyTable({
                           key={ch.nodeId}
                           className="border-b border-border/40 bg-neutral-50 text-secondary"
                         >
-                          <td className="py-1.5 pl-9 pr-3">
-                            {ch.label}
-                            {ch.code ? (
-                              <span className="ml-1 text-[10px] text-tertiary">{ch.code}</span>
-                            ) : null}
-                          </td>
+                          <td className="py-1.5 pl-9 pr-3">{ch.label}</td>
                           {COLUMNS.map((c) => (
                             <td key={c.key} className={`${numCell} py-1.5`}>
                               {fmt(ch[c.key])}
@@ -241,12 +233,6 @@ export function FinanceHierarchyTable({
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11px] text-tertiary">
-          {t(
-            "finance.hierarchyTable.note",
-            "Planifié initial = plan figé (tous leviers). Réactualisé et réalisé excluent les leviers annulés ; « Annulé » = plan des leviers annulés ; « En retard » = reste à réaliser des leviers en retard."
-          )}
-        </p>
       </CardBody>
     </Card>
   );

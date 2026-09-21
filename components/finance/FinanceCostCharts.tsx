@@ -5,7 +5,6 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Bar,
   CartesianGrid,
-  Cell,
   ComposedChart,
   Legend,
   Line,
@@ -18,6 +17,7 @@ import {
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { BudgetDonutChart } from "@/components/shared/charts/BudgetDonutChart";
 import { GranularityToggle } from "@/components/shared/GranularityToggle";
+import { InvestVsSavingsModal } from "@/components/finance/InvestVsSavingsModal";
 import { CostDrilldownModal } from "@/components/finance/CostDrilldownModal";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import * as engine from "@/lib/engine";
@@ -26,10 +26,10 @@ import {
   bucketInvestVsSavingsByPeriod,
   costRowsForPeriod,
   costsByHierarchyNode,
+  investVsSavingsRowsForPeriod,
   groupCostsByWorkstream,
   investCostRowsBySegment,
   isInvestNature,
-  leversWithUndetailedCosts,
   sortedHierarchyLevels,
   type FinanceGranularity,
   type HierarchyCostSlice,
@@ -81,17 +81,7 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
   return (
     <Card>
       <CardHeader
-        title={
-          <span className="flex flex-col gap-0.5">
-            <span>{t("finance.chart.engagedTitle", "Coûts engagés vs à venir")}</span>
-            <span className="text-[9.5px] font-normal text-tertiary">
-              {t(
-                "finance.chart.engagedSubtitle",
-                'Périmètre Invest (CAPEX + OPEX one-off), OPEX récurrent exclu — à ne pas comparer directement au total "Répartition par centre de coût / P&L", qui inclut aussi l\'OPEX récurrent. "Déjà engagé" (date/statut déjà passé) est une notion différente du CAPEX "Réalisé" du KPI Pilotage global (pondéré par la progression % du levier) : les deux chiffres ne sont pas censés coïncider.'
-              )}
-            </span>
-          </span>
-        }
+        title={t("finance.chart.engagedTitle", "Coûts engagés vs à venir")}
         actions={
           segment ? (
             <button
@@ -179,19 +169,7 @@ export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
   return (
     <Card>
       <CardHeader
-        title={
-          <span className="flex flex-col gap-0.5">
-            <span>
-              {t("finance.chart.timelineTitle", "Engagement des coûts dans le temps (Invest)")}
-            </span>
-            <span className="text-[10.5px] font-normal text-tertiary">
-              {t(
-                "finance.chart.timelineSubtitle",
-                "CAPEX + OPEX one-off — voir le graphique Coût d'investissement vs Savings pour la comparaison aux gains"
-              )}
-            </span>
-          </span>
-        }
+        title={t("finance.chart.timelineTitle", "Engagement des coûts dans le temps (Invest)")}
         actions={<GranularityToggle value={granularity} onChange={setGranularity} />}
       />
       <CardBody>
@@ -209,6 +187,7 @@ export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
                 tickFormatter={(v) => `€${v}M`}
               />
               <Tooltip formatter={(value) => `€${value}M`} />
+              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11 }} />
               <Bar
                 dataKey="delta"
                 name={t("finance.chart.periodCost", "Coût de la période")}
@@ -281,41 +260,14 @@ export function CostByHierarchyChart({
     return groupCostsByWorkstream(leafSlice.rows, data.workstreams);
   }, [leafSlice, data.workstreams]);
 
-  // Leviers avec un CAPEX/OPEX chiffré au niveau du levier mais sans plan d'action détaillé — ils
-  // ne contribuent à AUCUN graphique de coûts (tous basés sur `flattenCostImpacts`, donc sur les
-  // impacts d'action), pas seulement celui-ci. Voir `leversWithUndetailedCosts`. Affiché comme note
-  // explicite plutôt que de laisser le lecteur croire à tort que ces leviers n'ont "aucun coût".
-  const undetailedLevers = useMemo(() => leversWithUndetailedCosts(data), [data]);
-
-  const hierarchySubtitle = t(
-    "finance.chart.hierarchySubtitle",
-    'Tous types de coûts confondus (CAPEX + OPEX one-off + OPEX récurrent) — périmètre plus large que "Coûts engagés vs à venir" (Invest uniquement).'
-  );
-  const undetailedNote =
-    undetailedLevers.length > 0
-      ? t(
-          "finance.chart.undetailedCostsNote",
-          "{n} levier(s) avec un CAPEX/OPEX saisi au niveau du levier mais sans plan d'action détaillé, non inclus dans ce graphique (ni dans les autres graphiques Finance) : {names}."
-        )
-          .replace("{n}", String(undetailedLevers.length))
-          .replace("{names}", undetailedLevers.map((l) => l.name).join(", "))
-      : null;
-
   if (levels.length === 0) {
     return (
       <Card>
         <CardHeader
-          title={
-            <span className="flex flex-col gap-0.5">
-              <span>
-                {t(
-                  "finance.chart.hierarchyTitle",
-                  "Répartition des coûts par centre de coût / P&L"
-                )}
-              </span>
-              <span className="text-[10.5px] font-normal text-tertiary">{hierarchySubtitle}</span>
-            </span>
-          }
+          title={t(
+            "finance.chart.hierarchyTitle",
+            "Répartition des coûts par centre de coût / P&L"
+          )}
         />
         <CardBody>
           <p className="py-10 text-center text-sm text-tertiary">
@@ -332,14 +284,7 @@ export function CostByHierarchyChart({
   return (
     <Card>
       <CardHeader
-        title={
-          <span className="flex flex-col gap-0.5">
-            <span>
-              {t("finance.chart.hierarchyTitle", "Répartition des coûts par centre de coût / P&L")}
-            </span>
-            <span className="text-[10.5px] font-normal text-tertiary">{hierarchySubtitle}</span>
-          </span>
-        }
+        title={t("finance.chart.hierarchyTitle", "Répartition des coûts par centre de coût / P&L")}
         actions={
           drillPath.length > 0 ? (
             <button
@@ -375,11 +320,6 @@ export function CostByHierarchyChart({
               }
             }}
           />
-        )}
-        {undetailedNote && (
-          <p className="mt-3 rounded-md bg-neutral-50 px-2.5 py-2 text-[11px] text-tertiary">
-            {undetailedNote}
-          </p>
         )}
       </CardBody>
       <CostDrilldownModal
@@ -443,10 +383,29 @@ const COLOR_CUMULATIVE = "#0a0a0a";
 export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
   const { t } = useTranslation();
   const [granularity, setGranularity] = useState<FinanceGranularity>("quarter");
+  const [selected, setSelected] = useState<{ key: string; label: string } | null>(null);
   const points = useMemo(
-    () => bucketInvestVsSavingsByPeriod(data, granularity),
+    () =>
+      bucketInvestVsSavingsByPeriod(data, granularity).map((p) => ({
+        ...p,
+        negOpex: -p.opexRecStarted,
+        negInvest: -p.investCost,
+      })),
     [data, granularity]
   );
+  const rows = useMemo(
+    () => (selected ? investVsSavingsRowsForPeriod(data, granularity, selected.key) : []),
+    [selected, data, granularity]
+  );
+  const open = (p: { sortKey?: string; period?: string } | undefined) => {
+    if (p?.sortKey) setSelected({ key: p.sortKey, label: p.period ?? p.sortKey });
+  };
+  const gainsLabel = t("finance.chart.grossSavings", "Gains bruts");
+  const opexLabel = t("finance.chart.opexRecShort", "OPEX récurrent");
+  const investLabel = t("finance.chart.investCost", "Coût d'investissement");
+  const netNegLabel = t("finance.chart.netNegative", "Économie négative");
+  const netLabel = t("finance.chart.netPeriodShort", "Économie nette");
+  const cumLabel = t("finance.chart.netCumulative", "Cumul net");
 
   return (
     <Card>
@@ -458,8 +417,19 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
         {points.length === 0 ? (
           <EmptyState />
         ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={points} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart
+              data={points}
+              stackOffset="sign"
+              margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+              style={{ cursor: "pointer" }}
+              onClick={(state) => {
+                const payload = (
+                  state as { activePayload?: { payload: (typeof points)[number] }[] }
+                )?.activePayload?.[0]?.payload;
+                open(payload);
+              }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
               <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis
@@ -470,45 +440,42 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
               />
               <ReferenceLine y={0} stroke="rgba(0,0,0,0.2)" />
               <Tooltip content={<InvestVsSavingsTooltip />} />
-              <Legend
-                wrapperStyle={{ fontSize: 11 }}
-                content={() => (
-                  <div className="mb-1 flex flex-wrap items-center justify-end gap-4 text-[11px] text-secondary">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-[1.5px]"
-                        style={{ background: COLOR_POSITIVE }}
-                      />
-                      {t("finance.chart.netPositive", "Économie positive")}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-[1.5px]"
-                        style={{ background: COLOR_NEGATIVE }}
-                      />
-                      {t("finance.chart.netNegative", "Économie négative")}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        className="inline-block h-0 w-4 border-t-2"
-                        style={{ borderColor: COLOR_CUMULATIVE }}
-                      />
-                      {t("finance.chart.netCumulative", "Cumul net")}
-                    </span>
-                  </div>
-                )}
+              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="grossSavings" name={gainsLabel} stackId="s" fill={COLOR_POSITIVE} />
+              <Bar dataKey="negOpex" name={opexLabel} stackId="s" fill="#B08A75" />
+              <Bar dataKey="negInvest" name={investLabel} stackId="s" fill={COLOR_NEGATIVE} />
+              <Line
+                type="monotone"
+                dataKey="netPeriodResult"
+                name={netLabel}
+                stroke="#a3a3a3"
+                strokeWidth={1}
+                strokeDasharray="4 3"
+                dot={(props: {
+                  cx?: number;
+                  cy?: number;
+                  payload?: { netPeriodResult: number; sortKey: string };
+                }) => {
+                  const { cx, cy, payload } = props;
+                  const neg = (payload?.netPeriodResult ?? 0) < 0;
+                  return (
+                    <circle
+                      key={payload?.sortKey}
+                      cx={cx}
+                      cy={cy}
+                      r={neg ? 6 : 4}
+                      fill={neg ? COLOR_NEGATIVE : COLOR_POSITIVE}
+                      stroke="#fff"
+                      strokeWidth={1.5}
+                    />
+                  );
+                }}
+                legendType="none"
               />
-              <Bar dataKey="netPeriodResult" radius={[3, 3, 3, 3]} isAnimationActive={false}>
-                {points.map((p) => (
-                  <Cell
-                    key={p.sortKey}
-                    fill={p.netPeriodResult >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}
-                  />
-                ))}
-              </Bar>
               <Line
                 type="monotone"
                 dataKey="netCumulative"
+                name={cumLabel}
                 stroke={COLOR_CUMULATIVE}
                 strokeWidth={2}
                 dot={{ r: 3 }}
@@ -516,7 +483,35 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
             </ComposedChart>
           </ResponsiveContainer>
         )}
+        {points.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-[11px] text-secondary">
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ background: COLOR_POSITIVE }}
+              />
+              {t("finance.chart.netPositive", "Économie positive")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="inline-block h-3 w-3 rounded-full"
+                style={{ background: COLOR_NEGATIVE }}
+              />
+              {netNegLabel}
+            </span>
+          </div>
+        )}
       </CardBody>
+      <InvestVsSavingsModal
+        open={selected !== null}
+        onOpenChange={(o) => {
+          if (!o) setSelected(null);
+        }}
+        title={`${t("finance.chart.investVsSavingsTitle", "Coût d'investissement vs Savings")} — ${selected?.label ?? ""}`}
+        rows={rows}
+        workstreams={data.workstreams}
+        formatValue={(v) => engine.fmtCurr(v)}
+      />
     </Card>
   );
 }

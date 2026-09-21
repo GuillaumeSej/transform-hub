@@ -187,7 +187,7 @@ export function LeverLibraryTree({
               <div className="divide-y divide-border border-t border-border">
                 {typesInGroup.length === 0 ? (
                   <p className="px-4 py-3 text-center text-[12px] text-tertiary">
-                    {t("levers.tree.wsNoLever", "Aucun levier dans ce workstream.")}
+                    {t("levers.tree.wsNoLever", "Aucun levier dans ce chantier.")}
                   </p>
                 ) : (
                   typesInGroup.map((type) => {

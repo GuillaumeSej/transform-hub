@@ -14,6 +14,8 @@ import {
   requestLeverApproval,
   approveLeverGate,
   rejectLeverApproval,
+  allActionsDone,
+  enforceDeliveredRule,
 } from "@/lib/leversLogic";
 import type { Lever, LeverStatus } from "@/types";
 
@@ -855,5 +857,34 @@ describe("validation gates (requestLeverApproval / approveLeverGate / rejectLeve
       const levers = [leverAt("idea")];
       expect(() => rejectLeverApproval(levers, "L001", owner)).toThrow();
     });
+  });
+});
+
+describe("leversLogic — règle Réalisé / actions", () => {
+  const act = (id: string, pct: number) => ({
+    id,
+    name: id,
+    start: "2026-01-01",
+    end: "2026-12-31",
+    status: (pct >= 100 ? "done" : "in_progress") as "done" | "in_progress",
+    declaredProgressPct: pct,
+  });
+  it("allActionsDone / enforceDeliveredRule", () => {
+    expect(allActionsDone({ actions: [] })).toBe(true);
+    expect(allActionsDone({ actions: [act("a", 100), act("b", 50)] })).toBe(false);
+    expect(enforceDeliveredRule({ status: "delivered", actions: [act("a", 50)] })).toBe(
+      "in_progress"
+    );
+    expect(enforceDeliveredRule({ status: "delivered", actions: [act("a", 100)] })).toBe(
+      "delivered"
+    );
+  });
+  it("bloque le passage à Réalisé et retombe à Exécuté quand une action bouge", () => {
+    const lever = makeLever("in_progress", { actions: [act("a", 100), act("b", 50)] });
+    const blocked = updateLever([lever], lever.id, { status: "delivered" }, "u");
+    expect(blocked.lever.status).toBe("in_progress");
+    const done = makeLever("delivered", { actions: [act("a", 100), act("b", 100)] });
+    const res = updateAction([done], { leverId: done.id }, "b", { declaredProgressPct: 40 }, "u");
+    expect(res.changedLever?.status).toBe("in_progress");
   });
 });
