@@ -14,6 +14,9 @@ import {
 import { hexForChantier } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { WorkstreamSeries } from "@/lib/scurveDetail";
+import type { HierarchyLevelDef, HierarchyNode, Workstream } from "@/types";
+import type { DrilldownEntry } from "@/lib/savingsDrilldown";
+import { ScurveGapDrilldown } from "./ScurveGapDrilldown";
 import type { SCurvePoint } from "./SCurveChart";
 
 const fmtM = (v: number) => `€${Math.round(v * 10) / 10}M`;
@@ -25,10 +28,19 @@ export function SCurveDetail({
   points,
   byWorkstream,
   onSeeLevers,
+  gap,
 }: {
   points: SCurvePoint[];
   byWorkstream: WorkstreamSeries[];
   onSeeLevers?: () => void;
+  /** Détail de l'écart réactualisé − réalisé (filtre chantier / géographie). */
+  gap?: {
+    month: string;
+    entries: DrilldownEntry[];
+    workstreams: Pick<Workstream, "id" | "name">[];
+    geographyLevels: HierarchyLevelDef[];
+    geographyNodes: HierarchyNode[];
+  };
 }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<"realized" | "reforecast">("realized");
@@ -45,6 +57,7 @@ export function SCurveDetail({
     }`;
   return (
     <div className="space-y-5">
+      {gap && <ScurveGapDrilldown {...gap} />}
       <section>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-bold text-primary">
