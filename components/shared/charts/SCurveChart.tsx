@@ -8,7 +8,6 @@ import {
   ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -26,46 +25,52 @@ export type SCurvePoint = {
 
 const fmtM = (v: number) => `€${Math.round(v * 10) / 10}M`;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ScurveTooltip({ active, payload, label }: any) {
-  const { t } = useTranslation();
-  if (!active || !payload || payload.length === 0) return null;
-  const p = payload[0].payload as SCurvePoint;
-  const gap = p.gap;
+/** Repère de l'écart réactualisé − réalisé sur la période courante (segment + badge). Partagé avec
+ *  le bridge pour que les deux vues affichent exactement le même écart. À appeler comme enfant
+ *  direct du graphe Recharts (`{currentGapMarks(...)}`). */
+export function currentGapMarks(
+  cur: { month: string; actual: number | null; reforecast: number } | null,
+  label: string
+) {
+  if (!cur || cur.actual === null) return null;
+  const gap = Math.round((cur.reforecast - cur.actual) * 10) / 10;
+  if (gap === 0) return null;
   return (
-    <div className="max-w-[280px] rounded-md border border-border bg-white px-3 py-2 text-xs shadow-lg">
-      <div className="mb-1 font-semibold text-primary">{label}</div>
-      <div className="flex justify-between gap-3 text-secondary">
-        <span>{t("chart.scurve.planned", "Plan initial")}</span>
-        <span className="font-semibold text-primary">{fmtM(p.planned)}</span>
-      </div>
-      <div className="flex justify-between gap-3 text-secondary">
-        <span>{t("chart.scurve.reforecast", "Réactualisé")}</span>
-        <span className="font-semibold text-primary">{fmtM(p.reforecast)}</span>
-      </div>
-      <div className="flex justify-between gap-3 text-secondary">
-        <span>{t("chart.scurve.actual", "Réalisé")}</span>
-        <span className="font-semibold text-primary">
-          {p.actual === null ? "—" : fmtM(p.actual)}
-        </span>
-      </div>
-      {gap && p.actual !== null && (
-        <div className="mt-1.5 border-t border-border pt-1.5">
-          <div className="flex justify-between gap-3 font-semibold text-primary">
-            <span>{t("chart.scurve.gapTotal", "Écart réactualisé − réalisé")}</span>
-            <span>{fmtM(gap.total)}</span>
-          </div>
-          <div className="flex justify-between gap-3 text-secondary">
-            <span>{t("chart.scurve.gapLate", "dont leviers en retard")}</span>
-            <span>{fmtM(gap.late)}</span>
-          </div>
-          <div className="flex justify-between gap-3 text-secondary">
-            <span>{t("chart.scurve.gapInProgress", "dont leviers en cours dans les temps")}</span>
-            <span>{fmtM(gap.other)}</span>
-          </div>
-        </div>
-      )}
-    </div>
+    <>
+      <ReferenceLine
+        segment={[
+          { x: cur.month, y: cur.actual },
+          { x: cur.month, y: cur.reforecast },
+        ]}
+        stroke="#FF3C47"
+        strokeWidth={3}
+        ifOverflow="extendDomain"
+      />
+      <ReferenceDot
+        x={cur.month}
+        y={cur.reforecast}
+        r={0}
+        ifOverflow="extendDomain"
+        label={{
+          value: `${label} ${gap > 0 ? "−" : "+"}${fmtM(Math.abs(gap))}`,
+          position: "top",
+          fontSize: 11,
+          fontWeight: 700,
+          fill: "#FF3C47",
+        }}
+      />
+    </>
+  );
+}
+
+/** Indication « Cliquer pour plus de détails » placée sous le graphe (hors zone de tracé, donc
+ *  jamais au-dessus des courbes ni des libellés). */
+export function ClickForDetailsHint() {
+  const { t } = useTranslation();
+  return (
+    <p className="mt-1 text-right text-[11px] text-tertiary">
+      {t("chart.clickForDetails", "Cliquer pour plus de détails")}
+    </p>
   );
 }
 
@@ -102,8 +107,6 @@ export function SCurveChart({
   const resolvedLabelReforecast = labelReforecast ?? t("chart.scurve.reforecast", "Réactualisé");
   const curIdx = currentPointIndex(data);
   const cur = curIdx >= 0 ? data[curIdx] : null;
-  const curGap =
-    cur && cur.actual !== null ? Math.round((cur.reforecast - cur.actual) * 10) / 10 : 0;
   return (
     <div>
       <ResponsiveContainer width="100%" height={height}>
@@ -124,7 +127,6 @@ export function SCurveChart({
             tickLine={false}
             tickFormatter={(v) => `€${v}M`}
           />
-          <Tooltip content={<ScurveTooltip />} />
           <Legend
             verticalAlign="top"
             align="right"
@@ -132,32 +134,7 @@ export function SCurveChart({
             wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
           />
           {/* Écart réactualisé ↔ réalisé : uniquement sur la période courante, avec badge visible. */}
-          {cur && cur.actual !== null && curGap !== 0 && (
-            <>
-              <ReferenceLine
-                segment={[
-                  { x: cur.month, y: cur.actual },
-                  { x: cur.month, y: cur.reforecast },
-                ]}
-                stroke="#FF3C47"
-                strokeWidth={3}
-                ifOverflow="extendDomain"
-              />
-              <ReferenceDot
-                x={cur.month}
-                y={cur.reforecast}
-                r={0}
-                ifOverflow="extendDomain"
-                label={{
-                  value: `${t("chart.scurve.gapBadge", "Écart")} ${curGap > 0 ? "−" : "+"}${fmtM(Math.abs(curGap))}`,
-                  position: "top",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  fill: "#FF3C47",
-                }}
-              />
-            </>
-          )}
+          {currentGapMarks(cur, t("chart.scurve.gapBadge", "Écart"))}
           <Line
             type="monotone"
             dataKey="actual"
@@ -188,12 +165,7 @@ export function SCurveChart({
           />
         </ComposedChart>
       </ResponsiveContainer>
-      <p className="mt-1 text-[11px] text-tertiary">
-        {t(
-          "chart.gap.explain2",
-          "L'écart (réactualisé − réalisé) est affiché sur la période courante uniquement. Cliquez sur le graphe pour le détail par chantier."
-        )}
-      </p>
+      {onPointClick && <ClickForDetailsHint />}
     </div>
   );
 }

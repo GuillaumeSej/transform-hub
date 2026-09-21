@@ -5,14 +5,11 @@ import {
   BarChart,
   CartesianGrid,
   Customized,
-  LabelList,
   Legend,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { hexForChantier } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 export type WorkstreamBarPoint = {
@@ -74,7 +71,7 @@ function wrapLabel(label: string): [string, string] {
 
 /** Tick custom pour l'axe X : label complet réparti sur 2 lignes (plus de troncature à 12
  *  caractères). Le code couleur par workstream (déterministe, `hexForChantier`) a été déplacé
- *  dans le tooltip au survol d'une barre (voir `BreakdownList` ci-dessous) — la légende de
+ *  dans le tooltip au survol d'une barre — la légende de
  *  couleurs qui vivait ici (un carré + nom sous chaque barre) faisait doublon avec le libellé de
  *  l'axe X déjà affiché juste en dessous et n'apportait aucune information supplémentaire.
  *  Le `<title>` SVG natif reste en place pour le survol (utile si une 2e ligne est malgré tout
@@ -96,44 +93,6 @@ function CategoryTick(props: any) {
         </text>
       )}
     </g>
-  );
-}
-
-/** Détail par levier au format du tooltip custom (nom + montant formaté), avec un carré de
- *  couleur devant chaque levier — reprend la couleur du workstream survolé (`hexForChantier`,
- *  même hash déterministe que l'ancienne légende sous le graphique, voir `CategoryTick`
- *  ci-dessus), répétée sur chaque ligne : c'est la seule couleur pertinente et déjà disponible
- *  ici (les leviers du breakdown n'exposent que `name`/`value`, aucun statut/maturité), et elle
- *  reste cohérente avec la barre survolée. */
-function BreakdownList({
-  items,
-  fmt,
-  color,
-}: {
-  items: { name: string; value: number }[];
-  fmt: (v: number) => string;
-  color: string;
-}) {
-  if (items.length === 0) return null;
-  const sorted = [...items].sort((a, b) => b.value - a.value).slice(0, 8);
-  return (
-    <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
-      {sorted.map((item) => (
-        <li key={item.name} className="flex items-center justify-between gap-3">
-          <span className="flex min-w-0 items-center gap-1.5 truncate text-tertiary">
-            <span
-              className="inline-block h-2 w-2 shrink-0 rounded-[1.5px]"
-              style={{ backgroundColor: color }}
-            />
-            <span className="truncate">{item.name}</span>
-          </span>
-          <span className="shrink-0 font-medium text-primary">{fmt(item.value)}</span>
-        </li>
-      ))}
-      {items.length > sorted.length && (
-        <li className="text-[10px] text-tertiary">+ {items.length - sorted.length} autre(s)</li>
-      )}
-    </ul>
   );
 }
 
@@ -205,6 +164,8 @@ export function WorkstreamBarDetail({
   );
 }
 
+const TAG_W = 40;
+
 type CalloutProps = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   xAxisMap?: Record<string, any>;
@@ -212,6 +173,68 @@ type CalloutProps = {
   yAxisMap?: Record<string, any>;
   offset?: { left: number; top: number; width: number; height: number };
 };
+
+/** Tags de totaux à droite de chaque barre : réalisé, cible réactualisée, planifié initial. Les tags
+ *  d'une même barre sont espacés d'au moins 14 px verticalement pour rester lisibles. */
+function TotalTags({
+  xAxisMap,
+  yAxisMap,
+  data,
+  hasPlanned,
+  fmt,
+}: CalloutProps & { data: ChartDatum[]; hasPlanned: boolean; fmt: (v: number) => string }) {
+  const xAxis = xAxisMap && Object.values(xAxisMap)[0];
+  const yAxis = yAxisMap && Object.values(yAxisMap)[0];
+  if (!xAxis?.scale || !yAxis?.scale) return null;
+  const band = typeof xAxis.scale.bandwidth === "function" ? xAxis.scale.bandwidth() : 0;
+  const yOf = (v: number) => yAxis.scale(v) as number;
+  return (
+    <g>
+      {data.map((d) => {
+        const cx = (xAxis.scale(d.label) ?? 0) + band / 2;
+        const x = cx + band * 0.275 + 3;
+        const stackTop = Math.max(d.target, d.realized);
+        const items = [
+          { key: "t", v: d.target, y: yOf(stackTop), fill: "rgba(107,93,87,0.85)", dashed: false },
+          { key: "r", v: d.realized, y: yOf(d.realized / 2), fill: "#FF3C47", dashed: false },
+          ...(hasPlanned && d.planned !== undefined
+            ? [{ key: "p", v: d.planned, y: yOf(d.planned), fill: "#320300", dashed: true }]
+            : []),
+        ].sort((a, b) => a.y - b.y);
+        const ys: number[] = [];
+        items.forEach((it, i) => ys.push(i === 0 ? it.y : Math.max(it.y, ys[i - 1] + 14)));
+        return (
+          <g key={d.label}>
+            {items.map((it, i) => (
+              <g key={it.key}>
+                <rect
+                  x={x}
+                  y={ys[i] - 6.5}
+                  width={TAG_W}
+                  height={13}
+                  rx={3}
+                  fill={it.dashed ? "#fff" : it.fill}
+                  stroke={it.dashed ? "#320300" : "none"}
+                  strokeDasharray={it.dashed ? "3 2" : undefined}
+                />
+                <text
+                  x={x + TAG_W / 2}
+                  y={ys[i] + 3.2}
+                  textAnchor="middle"
+                  fontSize={9}
+                  fontWeight={700}
+                  fill={it.dashed ? "#320300" : "#fff"}
+                >
+                  {fmt(it.v)}
+                </text>
+              </g>
+            ))}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
 
 /** Légendes sur le côté : pour la dernière barre, une pastille de la couleur du segment reliée
  *  par un petit trait au segment (gris = cible réactualisée, rouge = réalisé, pointillé = planifié
@@ -230,7 +253,7 @@ function SideCallouts({
   if (!xAxis?.scale || !yAxis?.scale || !offset || !last) return null;
   const band = typeof xAxis.scale.bandwidth === "function" ? xAxis.scale.bandwidth() : 0;
   const cx = (xAxis.scale(last.label) ?? 0) + band / 2;
-  const barRight = cx + band * 0.4;
+  const barRight = cx + band * 0.275 + TAG_W + 6;
   const yTop = (v: number) => yAxis.scale(v) as number;
   const stackTop = Math.max(last.target, last.realized);
   const items = [
@@ -303,8 +326,8 @@ function SideCallouts({
  *
  *  Valeurs affichées directement sur les barres (réalisé à l'intérieur du segment coral, écart à
  *  l'intérieur du segment gris quand il est assez haut pour rester lisible, cible au sommet de la
- *  pile). Tooltip détaillé au survol d'un segment : liste des leviers qui composent ce segment
- *  (même esprit que le détail par levier du Mekko). Clic sur un segment : callback `onSegmentClick`
+ *  pile). Pas de tooltip au survol : les totaux sont des tags à droite de chaque barre.
+ * Clic sur un segment : callback `onSegmentClick`
  *  pour ouvrir un détail par levier (popup côté appelant). */
 export function WorkstreamBarChart({
   data,
@@ -342,64 +365,13 @@ export function WorkstreamBarChart({
 
   const maxValue = Math.max(...data.map((d) => Math.max(d.target, d.realized, d.planned ?? 0)));
 
-  // Total (cible) au-dessus de chaque pile. Les libellés des segments (gris / rouge / pointillé)
-  // ne sont plus dessinés dans les blocs : ils sont sortis en callouts sur le côté (`SideCallouts`).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const renderRemainingLabels = (props: any) => {
-    const { x = 0, y = 0, width = 0, index } = props;
-    const d = chartData[index];
-    if (!d) return null;
-    return (
-      <g>
-        <text
-          x={x + width / 2}
-          y={y - 6}
-          textAnchor="middle"
-          fontSize={10}
-          fontWeight={600}
-          fill="#1A1A1A"
-        >
-          {fmt(d.target)}
-        </text>
-      </g>
-    );
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload || payload.length === 0) return null;
-    const entry = payload[0];
-    const point = entry.payload as ChartDatum;
-    const isTarget = entry.dataKey === "remaining";
-    const total = isTarget ? point.target : point.realized;
-    const breakdown = isTarget ? point.leverBreakdown?.target : point.leverBreakdown?.realized;
-    return (
-      <div className="max-w-[260px] rounded-md border border-border bg-white px-3 py-2 text-xs shadow-lg">
-        <div className="font-semibold text-primary">{point.label}</div>
-        <div className="flex items-center justify-between gap-3 text-secondary">
-          <span>{isTarget ? resolvedLabelTarget : resolvedLabelRealized}</span>
-          <span className="font-semibold text-primary">{fmt(total)}</span>
-        </div>
-        {point.planned !== undefined && (
-          <div className="flex items-center justify-between gap-3 text-secondary">
-            <span>{resolvedLabelPlanned}</span>
-            <span className="font-semibold text-primary">{fmt(point.planned)}</span>
-          </div>
-        )}
-        {breakdown && breakdown.length > 0 && (
-          <BreakdownList items={breakdown} fmt={fmt} color={hexForChantier(point.label)} />
-        )}
-      </div>
-    );
-  };
-
   return (
     <div className="relative">
       <ResponsiveContainer width="100%" height={320}>
         <BarChart
           data={chartData}
           margin={{ top: 20, right: 150, left: -16, bottom: 4 }}
-          barCategoryGap="20%"
+          barCategoryGap="45%"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
           <XAxis
@@ -425,12 +397,6 @@ export function WorkstreamBarChart({
             tickFormatter={(v) => `€${v}M`}
             domain={[0, Math.ceil(maxValue * 1.15)]}
           />
-          {/* `cursor={false}` : par défaut Recharts dessine, au survol/clic d'une barre, un
-              rectangle de fond gris très léger sur toute la hauteur du plot pour la catégorie
-              active (le halo de sélection standard de <Tooltip>) — c'est cette barre grise
-              parasite "qui va jusqu'au bout" et ne représente rien métier qui était signalée.
-              Le graphique ne doit garder que les deux barres empilées Cible/Réalisé. */}
-          <Tooltip content={CustomTooltip} shared={false} cursor={false} />
           <Legend
             wrapperStyle={{ fontSize: 11 }}
             content={() => (
@@ -460,6 +426,16 @@ export function WorkstreamBarChart({
                   </li>
                 )}
               </ul>
+            )}
+          />
+          <Customized
+            component={(props: unknown) => (
+              <TotalTags
+                {...(props as CalloutProps)}
+                data={chartData}
+                hasPlanned={hasPlanned}
+                fmt={fmt}
+              />
             )}
           />
           <Customized
@@ -507,9 +483,7 @@ export function WorkstreamBarChart({
                   }
                 : undefined
             }
-          >
-            <LabelList dataKey="remaining" content={renderRemainingLabels} />
-          </Bar>
+          ></Bar>
           {/* Planifié initial : contour pointillé sans remplissage */}
           {hasPlanned && (
             <Bar

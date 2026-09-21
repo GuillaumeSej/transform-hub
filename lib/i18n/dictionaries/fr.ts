@@ -2139,6 +2139,13 @@ const fr: Record<string, string> = {
   "chart.scurveDetail.modeReforecast": "Réactualisé cumulé",
   "chart.scurveDetail.period": "Période",
   "chart.scurveDetail.seeLevers": "Voir les leviers",
+  "chart.gapDrill.title": "Origine de l'écart réactualisé − réalisé",
+  "chart.gapDrill.intro":
+    "Écart cumulé à cette période (réactualisé − réalisé), par chantier ou par géographie. Même règle que la courbe : la somme des lignes = l'écart affiché.",
+  "chart.gapDrill.empty": "Aucun écart à cette période.",
+  "chart.gapDrill.late": "dont en retard",
+  "chart.gapDrill.onTime": "dont dans les temps",
+  "chart.clickForDetails": "Cliquer pour plus de détails",
   "dashboard.workstreamTable.targetNote":
     "Réalisé par rapport à la cible réactualisée (dernière version de la cible).",
   "dashboard.tableHeader.realizedReforecastTarget": "Réalisé / Cible réactualisée",

@@ -2259,6 +2259,13 @@ const es: Record<string, string> = {
   "chart.scurveDetail.modeReforecast": "Reactualizado acumulado",
   "chart.scurveDetail.period": "Periodo",
   "chart.scurveDetail.seeLevers": "Ver las palancas",
+  "chart.gapDrill.title": "Origen de la desviación reprevisto − realizado",
+  "chart.gapDrill.intro":
+    "Desviación acumulada en este periodo (reprevisto − realizado), por frente de trabajo o geografía. Misma regla que la curva: la suma de las filas = la desviación mostrada.",
+  "chart.gapDrill.empty": "Sin desviación en este periodo.",
+  "chart.gapDrill.late": "de los cuales retrasados",
+  "chart.gapDrill.onTime": "de los cuales en plazo",
+  "chart.clickForDetails": "Haga clic para más detalles",
   "dashboard.workstreamTable.targetNote":
     "Realizado respecto al objetivo reactualizado (última versión del objetivo).",
   "dashboard.tableHeader.realizedReforecastTarget": "Realizado / Objetivo reactualizado",
