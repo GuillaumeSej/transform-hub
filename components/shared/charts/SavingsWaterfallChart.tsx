@@ -7,6 +7,8 @@ import {
   CartesianGrid,
   Cell,
   Customized,
+  useXAxisScale,
+  useYAxisScale,
   LabelList,
   ReferenceLine,
   ResponsiveContainer,
@@ -228,21 +230,21 @@ export function SavingsWaterfallChart({
   // liaison à travers le séparateur entre les deux groupes.
   const endLevel = (b: WaterfallBar) =>
     b.key === "opexRec" || b.down > 0 ? b.base : b.base + b.up + b.realized + b.remaining;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const renderConnectors = (props: any) => {
-    const xAxis = props.xAxisMap && (Object.values(props.xAxisMap)[0] as any); // eslint-disable-line @typescript-eslint/no-explicit-any
-    const yAxis = props.yAxisMap && (Object.values(props.yAxisMap)[0] as any); // eslint-disable-line @typescript-eslint/no-explicit-any
-    if (!xAxis?.scale || !yAxis?.scale) return null;
-    const band = typeof xAxis.scale.bandwidth === "function" ? xAxis.scale.bandwidth() : 0;
+  const Connectors = () => {
+    const xScale = useXAxisScale();
+    const yScale = useYAxisScale();
+    if (!xScale || !yScale) return null;
+    const bw = (xScale as unknown as { bandwidth?: () => number }).bandwidth;
+    const band = typeof bw === "function" ? bw.call(xScale) : 0;
     const half = band * (1 - BAR_GAP) * 0.5;
     return (
       <g>
         {bars.slice(0, -1).map((b, i) => {
           const next = bars[i + 1];
           if (b.key === "gap" || next.key === "gap") return null;
-          const y = yAxis.scale(endLevel(b)) as number;
-          const x1 = (xAxis.scale(b.label) ?? 0) + band / 2 + half;
-          const x2 = (xAxis.scale(next.label) ?? 0) + band / 2 - half;
+          const y = (yScale(endLevel(b)) as number) ?? 0;
+          const x1 = ((xScale(b.label) as number) ?? 0) + band / 2 + half;
+          const x2 = ((xScale(next.label) as number) ?? 0) + band / 2 - half;
           return (
             <line
               key={`${b.key}-${i}`}
@@ -261,12 +263,14 @@ export function SavingsWaterfallChart({
   };
 
   // Montant à l'intérieur d'un segment de la cible (réalisé / reste à faire), si assez haut.
-  const segLabel2 = (kind: "realized" | "remaining", color: string) =>
+  const segLabel2 = (_kind: "realized" | "remaining", color: string) =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function SegLabel(p: any) {
-      const b = bars[p.index] as WaterfallBar | undefined;
+      // Recharts 3 : `p.index` ne pointe plus vers `bars` ; seule la barre "cible" porte un réalisé /
+      // reste à faire > 0, on s'appuie donc sur la valeur du label.
+      const v = Number(p.value);
       const h = Number(p.height);
-      if (!b || b.key !== "target" || !(h >= 14) || !(b[kind] > 0)) return null;
+      if (!(h >= 14) || !(v > 0)) return null;
       return (
         <text
           x={Number(p.x) + Number(p.width) / 2}
@@ -276,7 +280,7 @@ export function SavingsWaterfallChart({
           fontWeight={700}
           fill={color}
         >
-          {fmt(b[kind])}
+          {fmt(v)}
         </text>
       );
     };
@@ -387,7 +391,7 @@ export function SavingsWaterfallChart({
           <Bar dataKey="anchor" stackId="w" fill="transparent" isAnimationActive={false}>
             <LabelList dataKey="anchor" content={renderLabel} />
           </Bar>
-          <Customized component={renderConnectors} />
+          <Customized component={Connectors} />
         </BarChart>
       </ResponsiveContainer>
       {(oneOffGains > 0 || clickable) && (

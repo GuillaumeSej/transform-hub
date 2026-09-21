@@ -9,6 +9,9 @@ import {
   ResponsiveContainer,
   XAxis,
   YAxis,
+  usePlotArea,
+  useXAxisScale,
+  useYAxisScale,
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -166,32 +169,31 @@ export function WorkstreamBarDetail({
 
 const TAG_W = 40;
 
-type CalloutProps = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  xAxisMap?: Record<string, any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  yAxisMap?: Record<string, any>;
-  offset?: { left: number; top: number; width: number; height: number };
-};
+function bandwidthOf(scale: unknown): number {
+  const bw = (scale as { bandwidth?: () => number }).bandwidth;
+  return typeof bw === "function" ? bw.call(scale) : 0;
+}
 
 /** Tags de totaux à droite de chaque barre : réalisé, cible réactualisée, planifié initial. Les tags
  *  d'une même barre sont espacés d'au moins 14 px verticalement pour rester lisibles. */
 function TotalTags({
-  xAxisMap,
-  yAxisMap,
   data,
   hasPlanned,
   fmt,
-}: CalloutProps & { data: ChartDatum[]; hasPlanned: boolean; fmt: (v: number) => string }) {
-  const xAxis = xAxisMap && Object.values(xAxisMap)[0];
-  const yAxis = yAxisMap && Object.values(yAxisMap)[0];
-  if (!xAxis?.scale || !yAxis?.scale) return null;
-  const band = typeof xAxis.scale.bandwidth === "function" ? xAxis.scale.bandwidth() : 0;
-  const yOf = (v: number) => yAxis.scale(v) as number;
+}: {
+  data: ChartDatum[];
+  hasPlanned: boolean;
+  fmt: (v: number) => string;
+}) {
+  const xScale = useXAxisScale();
+  const yScale = useYAxisScale();
+  if (!xScale || !yScale) return null;
+  const band = bandwidthOf(xScale);
+  const yOf = (v: number) => (yScale(v) as number) ?? 0;
   return (
     <g>
       {data.map((d) => {
-        const cx = (xAxis.scale(d.label) ?? 0) + band / 2;
+        const cx = ((xScale(d.label) as number) ?? 0) + band / 2;
         const x = cx + band * 0.275 + 3;
         const stackTop = Math.max(d.target, d.realized);
         const items = [
@@ -240,21 +242,23 @@ function TotalTags({
  *  par un petit trait au segment (gris = cible réactualisée, rouge = réalisé, pointillé = planifié
  *  initial). Positions verticales espacées d'au moins 16 px pour éviter tout chevauchement. */
 function SideCallouts({
-  xAxisMap,
-  yAxisMap,
-  offset,
   data,
   hasPlanned,
   labels,
-}: CalloutProps & { data: ChartDatum[]; hasPlanned: boolean; labels: [string, string, string] }) {
-  const xAxis = xAxisMap && Object.values(xAxisMap)[0];
-  const yAxis = yAxisMap && Object.values(yAxisMap)[0];
+}: {
+  data: ChartDatum[];
+  hasPlanned: boolean;
+  labels: [string, string, string];
+}) {
+  const xScale = useXAxisScale();
+  const yScale = useYAxisScale();
+  const plot = usePlotArea();
   const last = data[data.length - 1];
-  if (!xAxis?.scale || !yAxis?.scale || !offset || !last) return null;
-  const band = typeof xAxis.scale.bandwidth === "function" ? xAxis.scale.bandwidth() : 0;
-  const cx = (xAxis.scale(last.label) ?? 0) + band / 2;
+  if (!xScale || !yScale || !plot || !last || !Number.isFinite(plot.x + plot.width)) return null;
+  const band = bandwidthOf(xScale);
+  const cx = ((xScale(last.label) as number) ?? 0) + band / 2;
   const barRight = cx + band * 0.275 + TAG_W + 6;
-  const yTop = (v: number) => yAxis.scale(v) as number;
+  const yTop = (v: number) => (yScale(v) as number) ?? 0;
   const stackTop = Math.max(last.target, last.realized);
   const items = [
     {
@@ -288,13 +292,13 @@ function SideCallouts({
   items.forEach((it, i) => {
     labelY.push(i === 0 ? it.y : Math.max(it.y, labelY[i - 1] + 16));
   });
-  const xText = offset.left + offset.width + 22;
+  const xText = plot.x + plot.width + 22;
   return (
     <g>
       {items.map((it, i) => (
         <g key={it.key}>
           <polyline
-            points={`${barRight},${it.y} ${offset.left + offset.width + 4},${labelY[i]} ${xText - 8},${labelY[i]}`}
+            points={`${barRight},${it.y} ${plot.x + plot.width + 4},${labelY[i]} ${xText - 8},${labelY[i]}`}
             fill="none"
             stroke="#6B5D57"
             strokeWidth={0.75}
@@ -429,19 +433,11 @@ export function WorkstreamBarChart({
             )}
           />
           <Customized
-            component={(props: unknown) => (
-              <TotalTags
-                {...(props as CalloutProps)}
-                data={chartData}
-                hasPlanned={hasPlanned}
-                fmt={fmt}
-              />
-            )}
+            component={() => <TotalTags data={chartData} hasPlanned={hasPlanned} fmt={fmt} />}
           />
           <Customized
-            component={(props: unknown) => (
+            component={() => (
               <SideCallouts
-                {...(props as CalloutProps)}
                 data={chartData}
                 hasPlanned={hasPlanned}
                 labels={[resolvedLabelTarget, resolvedLabelRealized, resolvedLabelPlanned]}
