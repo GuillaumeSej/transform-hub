@@ -1482,7 +1482,7 @@ const en: Record<string, string> = {
   "strategicChantierDetail.successCriteria.placeholder": "We'll be happy in [year] if...",
 
   // ─── Strategic Plan — E0-E4 milestones (round 5) ────────────────────────────
-  "strategicChantierDetail.milestones.title": "E0-E4 milestone method",
+  "strategicChantierDetail.milestones.title": "J0-J4 milestone method",
   "strategicChantierDetail.milestones.stepper.title": "Project milestones",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Unlocks after the current milestone",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Milestone passed",
@@ -1526,9 +1526,9 @@ const en: Record<string, string> = {
 
   "strategicChantierDetail.milestones.item.E3_B1": "Results match objectives",
   "strategicChantierDetail.milestones.item.E3_B2": "Operational handover completed",
-  "strategicChantierDetail.milestones.item.E3_B3": "Stakes closure date (E4) set",
+  "strategicChantierDetail.milestones.item.E3_B3": "Stakes closure date (J4) set",
 
-  "strategicChantierDetail.milestones.item.E4_B1": "E3 action plan carried out",
+  "strategicChantierDetail.milestones.item.E4_B1": "J3 action plan carried out",
   "strategicChantierDetail.milestones.item.E4_B2":
     "Stakes achieved (or root-cause analysis presented)",
 

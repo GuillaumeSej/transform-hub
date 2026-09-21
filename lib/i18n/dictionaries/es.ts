@@ -1472,7 +1472,7 @@ const es: Record<string, string> = {
   "strategicChantierDetail.successCriteria.placeholder": "Estaremos satisfechos en [año] si...",
 
   // ─── Plan Estratégico — hitos E0-E4 (ronda 5) ────────────────────────────────
-  "strategicChantierDetail.milestones.title": "Método de hitos E0-E4",
+  "strategicChantierDetail.milestones.title": "Método de hitos J0-J4",
   "strategicChantierDetail.milestones.stepper.title": "Hitos de la iniciativa",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Se desbloquea tras el hito actual",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Hito superado",
@@ -1518,9 +1518,9 @@ const es: Record<string, string> = {
 
   "strategicChantierDetail.milestones.item.E3_B1": "Resultados conformes a los objetivos",
   "strategicChantierDetail.milestones.item.E3_B2": "Transferencia operativa realizada",
-  "strategicChantierDetail.milestones.item.E3_B3": "Fecha de cierre de los retos (E4) fijada",
+  "strategicChantierDetail.milestones.item.E3_B3": "Fecha de cierre de los retos (J4) fijada",
 
-  "strategicChantierDetail.milestones.item.E4_B1": "Plan de acción E3 realizado",
+  "strategicChantierDetail.milestones.item.E4_B1": "Plan de acción J3 realizado",
   "strategicChantierDetail.milestones.item.E4_B2":
     "Retos alcanzados (o análisis de causas presentado)",
 

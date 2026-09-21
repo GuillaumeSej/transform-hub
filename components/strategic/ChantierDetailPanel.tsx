@@ -2937,22 +2937,44 @@ export function ChantierDetailPanel({
                                   !!user &&
                                   (isAnyAdmin(user) || action.owner === user.username)
                                 }
-                                // `strategic_lead` du chantier (scopé programme) ou admin — seul
-                                // habilité à APPROUVER (voir `approveMilestoneGate`).
+                                // Round "décision unifiée" : l'approbateur RÉEL d'un jalon est
+                                // désormais le pilote du CHANTIER (`resolveApprover("milestone", ...)`,
+                                // lib/strategicApprovals.ts), plus admin/strategic_lead en repli — pas
+                                // `isStrategicLeadOf` seul, qui n'habilitait que le pilote stratégique
+                                // du PROGRAMME et laissait le pilote du chantier sans bouton ici (bug :
+                                // la demande apparaissait bien dans /validation mais jamais "Approuver"
+                                // sur la fiche projet elle-même). `sa.pending` est déjà filtré aux
+                                // demandes DÉCIDABLES par l'utilisateur courant (voir
+                                // `useStrategicApprovals`) — on vérifie juste qu'une demande "milestone"
+                                // de CE projet s'y trouve. Repli legacy : une demande encore au format
+                                // `ChantierAction.milestoneApproval` SANS équivalent nouveau système
+                                // (créée avant ce round) reste approuvable par `isStrategicLeadOf`
+                                // (ancien seul rôle habilité), pour ne pas bloquer une demande en cours.
                                 canApproveMilestone={
                                   !readOnly &&
                                   !!user &&
                                   !!chantier &&
-                                  (isAnyAdmin(user) || isStrategicLeadOf(chantier, user))
+                                  (pendingApprovals(sa?.pending, "milestone", action.id).length >
+                                    0 ||
+                                    (!!action.milestoneApproval &&
+                                      pendingApprovals(sa?.approvals, "milestone", action.id)
+                                        .length === 0 &&
+                                      (isAnyAdmin(user) || isStrategicLeadOf(chantier, user))))
                                 }
-                                // `strategic_lead`, admin, OU le propriétaire du projet lui-même —
-                                // seul habilité à REJETER/annuler (voir `rejectMilestoneApproval`).
+                                // Même bascule que `canApproveMilestone` ci-dessus : rejeter est
+                                // habilité au propriétaire du projet (annulation de sa propre demande)
+                                // en plus de qui peut approuver.
                                 canRejectMilestoneApproval={
                                   !readOnly &&
                                   !!user &&
-                                  (isAnyAdmin(user) ||
-                                    action.owner === user.username ||
-                                    (!!chantier && isStrategicLeadOf(chantier, user)))
+                                  (action.owner === user.username ||
+                                    pendingApprovals(sa?.pending, "milestone", action.id).length >
+                                      0 ||
+                                    (!!action.milestoneApproval &&
+                                      pendingApprovals(sa?.approvals, "milestone", action.id)
+                                        .length === 0 &&
+                                      (isAnyAdmin(user) ||
+                                        (!!chantier && isStrategicLeadOf(chantier, user)))))
                                 }
                                 onRequestApproval={async () => {
                                   try {

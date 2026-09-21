@@ -1566,7 +1566,7 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.successCriteria.placeholder": "On sera content en [année] si...",
 
   // ─── Plan Stratégique — jalons E0→E4 (round 5) ─────────────────────────────────────────
-  "strategicChantierDetail.milestones.title": "Méthode de jalons E0→E4",
+  "strategicChantierDetail.milestones.title": "Méthode de jalons J0→J4",
   "strategicChantierDetail.milestones.stepper.title": "Jalons du projet",
   "strategicChantierDetail.milestones.stepper.lockedTooltip": "Se débloque après le jalon courant",
   "strategicChantierDetail.milestones.stepper.passedLabel": "Jalon franchi",
@@ -1612,9 +1612,9 @@ const fr: Record<string, string> = {
 
   "strategicChantierDetail.milestones.item.E3_B1": "Résultats conformes aux objectifs",
   "strategicChantierDetail.milestones.item.E3_B2": "Transfert opérationnel réalisé",
-  "strategicChantierDetail.milestones.item.E3_B3": "Date de bouclage des enjeux (E4) fixée",
+  "strategicChantierDetail.milestones.item.E3_B3": "Date de bouclage des enjeux (J4) fixée",
 
-  "strategicChantierDetail.milestones.item.E4_B1": "Plan d'action E3 réalisé",
+  "strategicChantierDetail.milestones.item.E4_B1": "Plan d'action J3 réalisé",
   "strategicChantierDetail.milestones.item.E4_B2":
     "Enjeux atteints (ou analyse des causes présentée)",
 

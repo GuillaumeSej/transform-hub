@@ -1473,7 +1473,7 @@ const de: Record<string, string> = {
   "strategicChantierDetail.successCriteria.placeholder": "Wir sind im [Jahr] zufrieden, wenn...",
 
   // ─── Strategieplan — Meilensteine E0-E4 (Runde 5) ───────────────────────────
-  "strategicChantierDetail.milestones.title": "E0-E4-Meilensteinmethode",
+  "strategicChantierDetail.milestones.title": "J0-J4-Meilensteinmethode",
   "strategicChantierDetail.milestones.stepper.title": "Meilensteine des Projekts",
   "strategicChantierDetail.milestones.stepper.lockedTooltip":
     "Wird nach dem aktuellen Meilenstein freigeschaltet",
@@ -1518,9 +1518,9 @@ const de: Record<string, string> = {
 
   "strategicChantierDetail.milestones.item.E3_B1": "Ergebnisse entsprechen den Zielen",
   "strategicChantierDetail.milestones.item.E3_B2": "Operative Übergabe abgeschlossen",
-  "strategicChantierDetail.milestones.item.E3_B3": "Abschlussdatum der Themen (E4) festgelegt",
+  "strategicChantierDetail.milestones.item.E3_B3": "Abschlussdatum der Themen (J4) festgelegt",
 
-  "strategicChantierDetail.milestones.item.E4_B1": "Aktionsplan E3 umgesetzt",
+  "strategicChantierDetail.milestones.item.E4_B1": "Aktionsplan J3 umgesetzt",
   "strategicChantierDetail.milestones.item.E4_B2":
     "Themen erreicht (oder Ursachenanalyse vorgelegt)",
 
