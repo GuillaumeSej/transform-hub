@@ -20,6 +20,8 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type Row = Lever & {
   realized: number;
+  /** Cible RÉACTUALISÉE du levier (`engine.displayedReforecastNet`) — référence de comparaison. */
+  reforecastNet: number;
   /** `engine.displayedProgressPct(l)` (réalisé net / réactualisé net) — PAS le champ brut
    *  `progress` hérité de `Lever`, voir même doc-comment dans LeversPagePerformance.tsx. */
   progressPct: number;
@@ -77,9 +79,15 @@ export default function WorkstreamsPage() {
   );
   const summary = engine.programSummary({ ...data, levers: visibleLevers });
 
+  const reforecastPct =
+    summary.reforecastTarget > 0
+      ? Math.max(0, Math.round((summary.realized / summary.reforecastTarget) * 100))
+      : 0;
+
   const rows: Row[] = visibleLevers.map((l) => ({
     ...l,
     realized: engine.realizedSavings(l),
+    reforecastNet: engine.displayedReforecastNet(l).value,
     progressPct: engine.displayedProgressPct(l),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
     statusLabel: lifecycle.label(l.status),
@@ -92,7 +100,7 @@ export default function WorkstreamsPage() {
       label: t("levers.columnName", "Levier"),
       render: (r) => <strong>{r.name}</strong>,
     },
-    { key: "wsName", label: "Workstream" },
+    { key: "wsName", label: "Chantier" },
     {
       key: "owner",
       label: "Owner",
@@ -104,10 +112,10 @@ export default function WorkstreamsPage() {
     },
     { key: "sponsor", label: "Sponsor" },
     {
-      key: "netSavings",
-      label: "Net €M",
+      key: "reforecastNet",
+      label: t("workstreams.reforecastTarget", "Cible réactualisée €M"),
       align: "right",
-      render: (r) => r.netSavings.toFixed(1),
+      render: (r) => r.reforecastNet.toFixed(1),
     },
     {
       key: "realized",
@@ -135,7 +143,7 @@ export default function WorkstreamsPage() {
       <div className="animate-fade-up">
         <div className="mb-5">
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            {t("nav.workstreamDashboard", "Workstream Dashboard")}
+            {t("nav.workstreamDashboard", "Suivi des chantiers")}
           </h1>
         </div>
         <div className="rounded-lg border border-border bg-white p-10 text-center">
@@ -154,12 +162,12 @@ export default function WorkstreamsPage() {
     <div className="animate-fade-up">
       <div className="mb-5">
         <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-          {t("nav.workstreamDashboard", "Workstream Dashboard")}
+          {t("nav.workstreamDashboard", "Suivi des chantiers")}
         </h1>
         <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] text-secondary">
           {t(
             "workstreams.subtitle",
-            "Vue de tous les leviers du programme, tous workstreams confondus."
+            "Vue de tous les leviers du programme, tous chantiers confondus."
           )}
           {performancePrograms.length > 1 ? (
             <select
@@ -187,9 +195,9 @@ export default function WorkstreamsPage() {
           value={String(summary.leverCount)}
         />
         <Kpi
-          label={t("workstreams.savingsRealizedTarget", "Savings réalisés / cible")}
-          value={`${engine.fmtCurr(summary.realized)} / ${engine.fmtCurr(summary.target)}`}
-          sub={`${summary.progressPct}%`}
+          label={t("workstreams.savingsRealizedTarget", "Réalisé / cible réactualisée")}
+          value={`${engine.fmtCurr(summary.realized)} / ${engine.fmtCurr(summary.reforecastTarget)}`}
+          sub={`${reforecastPct}% ${t("workstreams.vsReforecast", "de la cible réactualisée")}`}
         />
         <Kpi label="On track" value={String(summary.onTrack)} tone="green" />
         <Kpi label="At risk" value={String(summary.atRisk)} tone="amber" />

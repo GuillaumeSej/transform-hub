@@ -24,7 +24,7 @@ export function ManualAlertForm({
   const scopes = [
     ...data.workstreams.map((item) => ({
       id: item.id,
-      label: t("shared.manualAlertForm.workstreamPrefix", "Workstream · {name}").replace(
+      label: t("shared.manualAlertForm.workstreamPrefix", "Chantier · {name}").replace(
         "{name}",
         item.name
       ),
@@ -99,7 +99,7 @@ export function ManualAlertForm({
             onChange={(e) => setScope(e.target.value)}
           >
             <option value="">
-              {t("shared.manualAlertForm.choosePlaceholder", "Choisir un levier ou workstream")}
+              {t("shared.manualAlertForm.choosePlaceholder", "Choisir un levier ou chantier")}
             </option>
             {scopes.map((item) => (
               <option key={item.id} value={item.id}>

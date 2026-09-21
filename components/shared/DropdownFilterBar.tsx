@@ -3,9 +3,24 @@
 import { useMemo } from "react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Dropdown } from "@/components/shared/Dropdown";
-import type { FilterDef, SingleActiveFilters } from "@/components/shared/FilterBar";
+import { MultiSelect } from "@/components/shared/MultiSelect";
+import type {
+  FilterDef,
+  MultiActiveFilters,
+  SingleActiveFilters,
+} from "@/components/shared/FilterBar";
 
 /**
+ * === API MULTI-SÉLECTION (à adopter par la page Leviers) ===
+ * Passer `multiple` : `active: Record<string, string[]>` (MultiActiveFilters), `onChange` reçoit
+ * le même type. Sélection vide/absente = pas de filtre ; chaque dimension est un `MultiSelect`
+ * (cases à cocher, "Tout sélectionner"/"Effacer", résumé "Statut (2)"). État + URL via
+ * `useMultiFilterBarState(defs, { namespace? })` (lib/hooks/useMultiFilterBarState.ts, valeurs
+ * sérialisées en virgules, anciennes valeurs simples relues). Filtrage : `matchesFilter(value,
+ * selected)` de `lib/filterUtils.ts`. Sans `multiple`, l'ancien comportement mono-sélection
+ * (`SingleActiveFilters`, `useFilterBarState`) est conservé tel quel pour compatibilité.
+ * Ce qui suit est l'historique du composant mono-sélection.
+ *
  * Remplaçant "drop-in" de `FilterBar.tsx` (chips empilées en deux rangées, jugées peu lisibles —
  * demande produit explicite : "pas clean, on s'y retrouve pas du tout, c'est assez compliqué") par
  * le même motif de `Dropdown` (bouton carte + panneau, `allowClear` → "Tous") déjà utilisé sur les
@@ -31,19 +46,24 @@ import type { FilterDef, SingleActiveFilters } from "@/components/shared/FilterB
  * est déjà compact (bouton fixe ~200px) et n'a pas besoin de ce repli : un simple `flex-wrap` reste
  * lisible sur mobile (les dropdowns passent à la ligne).
  */
-export function DropdownFilterBar<T>({
-  items,
-  defs,
-  active,
-  onChange,
-  className,
-}: {
+type Common<T> = {
   items: T[];
   defs: FilterDef<T>[];
+  className?: string;
+};
+type SingleProps = {
+  multiple?: false;
   active: SingleActiveFilters;
   onChange: (next: SingleActiveFilters) => void;
-  className?: string;
-}) {
+};
+type MultiProps = {
+  multiple: true;
+  active: MultiActiveFilters;
+  onChange: (next: MultiActiveFilters) => void;
+};
+
+export function DropdownFilterBar<T>(props: Common<T> & (SingleProps | MultiProps)) {
+  const { items, defs, className } = props;
   const { t } = useTranslation();
 
   const optionsMap = useMemo(() => {
@@ -54,26 +74,46 @@ export function DropdownFilterBar<T>({
     return map;
   }, [items, defs]);
 
-  const setValue = (key: string, value: string | null) => {
-    const next = { ...active };
-    if (value === null) delete next[key];
-    else next[key] = value;
-    onChange(next);
-  };
-
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className ?? ""}`}>
-      {defs.map((def) => (
-        <Dropdown
-          key={def.key}
-          label={def.label}
-          placeholder={t("kpi.filterAll", "Tous")}
-          value={active[def.key] ?? null}
-          onChange={(value) => setValue(def.key, value)}
-          options={(optionsMap[def.key] ?? []).map((opt) => ({ value: opt, label: opt }))}
-          allowClear
-        />
-      ))}
+      {defs.map((def) => {
+        const options = (optionsMap[def.key] ?? []).map((opt) => ({ value: opt, label: opt }));
+        if (props.multiple) {
+          const { active, onChange } = props;
+          return (
+            <MultiSelect
+              key={def.key}
+              label={def.label}
+              placeholder={t("kpi.filterAll", "Tous")}
+              values={active[def.key] ?? []}
+              onChange={(vals) => {
+                const next = { ...active };
+                if (vals.length === 0) delete next[def.key];
+                else next[def.key] = vals;
+                onChange(next);
+              }}
+              options={options}
+            />
+          );
+        }
+        const { active, onChange } = props;
+        return (
+          <Dropdown
+            key={def.key}
+            label={def.label}
+            placeholder={t("kpi.filterAll", "Tous")}
+            value={active[def.key] ?? null}
+            onChange={(value) => {
+              const next = { ...active };
+              if (value === null) delete next[def.key];
+              else next[def.key] = value;
+              onChange(next);
+            }}
+            options={options}
+            allowClear
+          />
+        );
+      })}
     </div>
   );
 }

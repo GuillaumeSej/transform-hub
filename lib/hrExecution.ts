@@ -1,3 +1,4 @@
+import { matchesFilter } from "@/lib/filterUtils";
 import type { Program, WorkforceMovement } from "@/types";
 import { daysBetween } from "@/lib/dateUtils";
 import { HR_TODAY } from "@/lib/hrEngine";
@@ -176,7 +177,7 @@ const emptyMovementsByStatus = (): Record<MovementExecutionStatus, WorkforceMove
 
 export function movementStatusByType(
   movements: WorkforceMovement[],
-  filters: { department?: string; country?: string } = {},
+  filters: { department?: string | string[]; country?: string | string[] } = {},
   today: string = HR_TODAY
 ): MovementStatusByTypeRow[] {
   const rows = new Map(
@@ -194,8 +195,8 @@ export function movementStatusByType(
     ])
   );
   for (const movement of movements) {
-    if (filters.department && movement.department !== filters.department) continue;
-    if (filters.country && movement.country !== filters.country) continue;
+    if (!matchesFilter(movement.department, filters.department)) continue;
+    if (!matchesFilter(movement.country, filters.country)) continue;
     const status = classifyMovementExecution(movement, today);
     const row = rows.get(movement.type)!;
     row[status] += 1;

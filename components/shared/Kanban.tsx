@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/shared/Avatar";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { DeclaredProgressBadge } from "@/components/shared/DeclaredProgressBadge";
-import { displayedProgressPct, fmtCurr } from "@/lib/engine";
+import { leverActionProgress, fmtCurr } from "@/lib/engine";
 import { STATUS_CYCLE, STATUS_LABEL } from "@/lib/status-config";
 import { workstreamDeclaredProgress } from "@/lib/workstreamLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -69,7 +69,7 @@ function StatusColumns({
                   </span>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <ProgressBar pct={displayedProgressPct(l)} showLabel={false} className="flex-1" />
+                  <ProgressBar pct={leverActionProgress(l)} className="flex-1" />
                   <Avatar initials={l.ownerInit} size="sm" />
                 </div>
               </button>

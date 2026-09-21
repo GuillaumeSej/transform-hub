@@ -45,18 +45,18 @@ import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
 import { ActionForm, type ActionFormValues } from "@/components/shared/ActionForm";
 import { ActionKanban } from "@/components/shared/ActionKanban";
 import { ActionGantt } from "@/components/shared/charts/ActionGantt";
-import { JCurveChart } from "@/components/shared/charts/JCurveChart";
+import { ImpactTrajectoryChart } from "@/components/shared/charts/ImpactTrajectoryChart";
+import { ImpactsEditor } from "@/components/shared/ImpactsEditor";
+import { ActionWeightsEditor } from "@/components/shared/ActionWeightsEditor";
 import {
   consolidateLeverFromActions,
   leverGrossRealizedToDate,
   leverJCurve,
-  leverPayback,
   resolveLockedPlanNet,
 } from "@/lib/leverConsolidate";
 import { mentionsHiring, reconcileLeverMovements } from "@/lib/leverMovementReconciliation";
 import { fteEffect } from "@/lib/hrEngine";
-import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import type { ActionImpact, ActionStatus, Company, LeverAction, Program } from "@/types";
+import type { ActionStatus, Lever, Company, LeverAction, Program } from "@/types";
 
 const TABS = ["overview", "plan", "impact", "collab"] as const;
 type Tab = (typeof TABS)[number];
@@ -79,9 +79,11 @@ export function LeverDetailClientPerformance() {
   const [roleClearance, setRoleClearance] = useState<Company["roleClearance"]>();
   const [riskThresholds, setRiskThresholds] = useState<Company["riskThresholds"]>();
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [company, setCompany] = useState<Company | null>(null);
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
+      setCompany(company ?? null);
       setRoleClearance(company?.roleClearance);
       setRiskThresholds(company?.riskThresholds);
     }, user?.companyId ?? null);
@@ -188,7 +190,6 @@ export function LeverDetailClientPerformance() {
     () => (lever ? leverJCurve(lever, jCurveFyStart, jCurveFyEnd) : []),
     [lever, jCurveFyStart, jCurveFyEnd]
   );
-  const paybackMonth = useMemo(() => leverPayback(jCurveData), [jCurveData]);
   const consolidatedKPIs = useMemo(
     () => (lever ? consolidateLeverFromActions(lever) : undefined),
     [lever]
@@ -910,7 +911,7 @@ export function LeverDetailClientPerformance() {
                   <span className="font-mono text-[13px] text-primary">{lever.code}</span>
                 </OverviewField>
                 <OverviewField label="Type">{lever.type}</OverviewField>
-                <OverviewField label="Workstream">
+                <OverviewField label="Chantier">
                   <span className="font-medium" style={{ color: ws?.color }}>
                     {ws?.name}
                   </span>
@@ -946,8 +947,8 @@ export function LeverDetailClientPerformance() {
                   <span className="text-[12px] text-secondary">
                     {Array.from(
                       new Set(
-                        actions
-                          .flatMap((action) => action.impacts ?? [])
+                        engine
+                          .leverImpactsOf(lever)
                           .map((impact) => impact.costCenter)
                           .filter((value): value is string => !!value)
                       )
@@ -974,18 +975,15 @@ export function LeverDetailClientPerformance() {
               </div>
             </Collapsible>
 
-            {/* ── Courbe en J + Gantt des actions (si le levier a des actions avec impacts) ── */}
-            {(lever.actions ?? []).some((a) => (a.impacts ?? []).length > 0) && (
+            {/* ── Trajectoire d'impact + Gantt des actions ── */}
+            {(engine.hasLeverImpacts(lever) || (lever.actions ?? []).length > 0) && (
               <Collapsible
-                title={t("leverDetail.jcurveTimelineTitle", "Courbe en J & Timeline des actions")}
+                title={t(
+                  "leverDetail.jcurveTimelineTitle",
+                  "Trajectoire d'impact & Timeline des actions"
+                )}
               >
-                <JCurveChart
-                  data={jCurveData}
-                  paybackMonth={paybackMonth}
-                  labelPlan={t("chart.pnl.plan", "Plan")}
-                  labelReforecast={t("dashboard.kpi.reforecast", "Reforecast")}
-                  labelActual={t("levers.realized", "Réalisé")}
-                />
+                {engine.hasLeverImpacts(lever) && <ImpactTrajectoryChart lever={lever} />}
                 {(lever.actions ?? []).length > 0 && (
                   <>
                     <SectionTitle>{t("lever.actionTimeline", "Timeline des actions")}</SectionTitle>
@@ -1194,9 +1192,20 @@ export function LeverDetailClientPerformance() {
               <span className="ml-auto font-bold text-primary">
                 {t("leverDetail.percentOfPlan", "{pct}% du plan").replace(
                   "{pct}",
-                  String(engine.actionProgress(actions))
+                  String(Math.round(engine.leverActionProgress(lever)))
                 )}
               </span>
+            </div>
+
+            <WeightingBanner actions={actions} />
+            <div className="mb-4">
+              <Collapsible title={t("leverDetail.weightsTitle", "Pondération des actions")}>
+                <ActionWeightsEditor
+                  actions={actions}
+                  canEdit={!readOnly}
+                  onChange={(next) => data.updateLever(lever.id, { actions: next })}
+                />
+              </Collapsible>
             </div>
 
             {actionView === "kanban" ? (
@@ -1206,6 +1215,10 @@ export function LeverDetailClientPerformance() {
                 onStatusChange={(actionId, status: ActionStatus) => {
                   if (readOnly) return;
                   data.updateAction(actionScope, actionId, { status });
+                }}
+                onProgressChange={(actionId, pct) => {
+                  if (readOnly) return;
+                  data.updateAction(actionScope, actionId, { declaredProgressPct: pct });
                 }}
                 hasBlockingDependency={allDependencyAlerts.some((d) => d.sourceId === lever.id)}
                 readOnly={readOnly}
@@ -1264,17 +1277,14 @@ export function LeverDetailClientPerformance() {
               </Stat>
             </div>
 
-            <SectionTitle>
-              {t("leverDetail.impactsByActionTitle", "Impacts par action")}
-            </SectionTitle>
-            <ActionImpactTable
-              actions={actions}
-              fallbackPnlMap={lever.pnlMap}
-              fallbackCostCenter={lever.costCenter}
-              fallbackEntity={lever.entity}
-              pnlAccountName={(pnlId) =>
-                data.pnlAccounts.find((p) => p.id === pnlId)?.name ?? pnlId
-              }
+            <SectionTitle>{t("leverDetail.impactsTitle", "Impacts du levier")}</SectionTitle>
+            <ImpactTotalsBlock lever={lever} />
+            <ImpactsEditor
+              impacts={lever.impacts ?? []}
+              company={company}
+              canEdit={!readOnly}
+              readOnly={readOnly}
+              onChange={(next) => data.updateLever(lever.id, { impacts: next })}
             />
 
             <SectionTitle>{t("leverDetail.hrImpactTitle", "Impact RH")}</SectionTitle>
@@ -1462,96 +1472,47 @@ export function LeverDetailClientPerformance() {
   );
 }
 
-function ActionImpactTable({
-  actions,
-  fallbackPnlMap,
-  fallbackCostCenter,
-  fallbackEntity,
-  pnlAccountName,
-}: {
-  actions: LeverAction[];
-  fallbackPnlMap: string;
-  fallbackCostCenter: string;
-  fallbackEntity: string;
-  pnlAccountName: (id: string) => string;
-}) {
+function WeightingBanner({ actions }: { actions: LeverAction[] }) {
   const { t } = useTranslation();
-  type Row = {
-    id: string;
-    actionName: string;
-    actionEnd: string;
-    label: string;
-    type: string;
-    rawType: "cost" | "saving";
-    rawNature: ActionImpact["nature"];
-    nature: string;
-    amount: number;
-    fte: number;
-    pnlName: string;
-    costCenter: string;
-    entity: string;
-  };
-  const rows: Row[] = actions.flatMap((action) =>
-    (action.impacts ?? []).map((impact) => ({
-      id: `${action.id}-${impact.id}`,
-      actionName: action.name,
-      actionEnd: action.end,
-      label: impact.label,
-      type: impact.type === "saving" ? t("action.saving", "Gain") : t("action.cost", "Coût"),
-      rawType: impact.type,
-      rawNature: impact.nature,
-      nature:
-        impact.type === "saving"
-          ? impact.nature === "opex_rec"
-            ? t("leverDetail.impactTable.recurrent", "Récurrent")
-            : "One-off"
-          : impact.nature === "opex_rec"
-            ? t("leverDetail.impactTable.opexRec", "OPEX récurrent")
-            : impact.nature === "capex"
-              ? "CAPEX"
-              : "One-off",
-      amount: impact.amount,
-      fte: impact.fteCount ?? 0,
-      pnlName: pnlAccountName(impact.pnlMap || fallbackPnlMap),
-      costCenter: impact.costCenter || fallbackCostCenter,
-      entity: impact.entity || fallbackEntity,
-    }))
-  );
-
-  const columns: ColumnDef<Row>[] = [
-    { key: "actionName", label: "Action", render: (r) => <strong>{r.actionName}</strong> },
-    { key: "label", label: "Impact" },
-    { key: "type", label: "Type" },
-    { key: "nature", label: t("leverDetail.impactTable.nature", "Nature") },
-    { key: "pnlName", label: t("leverDetail.impactTable.pnlAccount", "Compte P&L") },
-    { key: "costCenter", label: t("leverForm.costCenter", "Centre de coût") },
-    { key: "entity", label: t("leverDetail.impactTable.entityPnl", "Entité (P&L)") },
-    {
-      key: "amount",
-      label: t("leverDetail.impactTable.amount", "Montant €M"),
-      align: "right",
-      render: (r) => (r.rawType === "cost" ? `-${r.amount.toFixed(2)}` : r.amount.toFixed(2)),
-    },
-    { key: "fte", label: "ETP", align: "right" },
-  ];
-
-  // Un coût est par définition négatif : le total net = gains - coûts, pas la somme des valeurs
-  // absolues (impact.amount est toujours stocké positif, seul `type` détermine le signe réel).
-  // Les montants saisis (savings comme opexRec) sont déjà annuels par construction — aucune
-  // pondération temporelle n'est appliquée (voir lib/leverConsolidate.ts::consolidateLeverFromActions).
+  if (actions.length === 0) return null;
+  const w = engine.leverActionWeighting({ actions });
   return (
-    <EditableTable
-      data={rows}
-      columns={columns}
-      showTotalsRow
-      totalsConfig={{
-        amount: (list) =>
-          list
-            .reduce((sum, row) => (row.rawType === "cost" ? sum - row.amount : sum + row.amount), 0)
-            .toFixed(2),
-        fte: (list) => list.reduce((sum, row) => sum + row.fte, 0),
-      }}
-    />
+    <div className="mb-3 rounded-md border border-border bg-neutral-50 px-3 py-2 text-xs text-primary">
+      {w.mode === "weighted"
+        ? `${t("leverDetail.weighted", "Les actions sont pondérées")} : ${actions
+            .map((a) => `${a.name} ${Math.round(w.weights[a.id] * 10) / 10}%`)
+            .join(" · ")}`
+        : t(
+            "leverDetail.unweighted",
+            "Les actions ne sont pas pondérées (avancement = moyenne simple)"
+          )}
+    </div>
+  );
+}
+
+function ImpactTotalsBlock({ lever }: { lever: Lever }) {
+  const { t } = useTranslation();
+  const tot = engine.leverImpactTotals(lever);
+  const version = lever.reforecast
+    ? t("leverDetail.versionReforecast", "Version réactualisée")
+    : t("leverDetail.versionPlanned", "Version planifiée");
+  return (
+    <div className="mb-4">
+      <div className="mb-2 text-[11px] font-semibold text-tertiary">
+        {t("leverDetail.latestVersion", "Dernière version")} : {version}
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Stat label={t("leverDetail.grossAnnual", "Gains bruts annualisés")}>
+          {engine.fmtCurr(tot.grossAnnual)}
+        </Stat>
+        <Stat label={t("leverDetail.oneOffGainsNotCounted", "Gains ponctuels (non comptés)")}>
+          {engine.fmtCurr(tot.oneOffGains)}
+        </Stat>
+        <Stat label={t("leverDetail.netGains", "Gains nets (bruts − CAPEX)")} accent>
+          {engine.fmtCurr(tot.netAnnual)}
+        </Stat>
+      </div>
+    </div>
   );
 }
 

@@ -47,7 +47,8 @@ export type DashboardWidgetType =
   | "dependencies"
   | "portfolio-funnel"
   | "savings-trajectory"
-  | "initiative-health";
+  | "initiative-health"
+  | "savings-waterfall";
 
 /** Onglets du dashboard CTO — chaque widget est assigné à un onglet par défaut.
  *  L'onglet actif filtre les widgets affichés dans la grille. */
@@ -75,6 +76,7 @@ export const WIDGET_DEFAULT_TAB: Record<DashboardWidgetType, DashboardTab> = {
   "workstream-table": "portfolio",
   dependencies: "prioritization",
   "initiative-health": "prioritization",
+  "savings-waterfall": "trajectory",
 };
 
 /** Une option d'indicateur/dimension pour un type de widget "configurable" (voir plus bas) — ex.
@@ -213,7 +215,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
         id: "workstream-lever",
         metric: "realizedSavings",
         dimensions: ["ws", "lever"],
-        label: "Workstream × Levier",
+        label: "Chantier × Levier",
       },
     ],
   },
@@ -262,7 +264,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     defaultView: "workstream",
     builderDimensionCount: 1,
     defaultCustomViews: [
-      { id: "workstream", metric: "realizedSavings", dimensions: ["ws"], label: "Workstream" },
+      { id: "workstream", metric: "realizedSavings", dimensions: ["ws"], label: "Chantier" },
       { id: "country", metric: "realizedSavings", dimensions: ["country"], label: "Pays" },
       { id: "function", metric: "realizedSavings", dimensions: ["function"], label: "Département" },
     ],
@@ -287,7 +289,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   },
   {
     type: "workstream-table",
-    label: "Synthèse des Workstreams",
+    label: "Synthèse des chantiers",
     icon: "Table2",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
@@ -314,6 +316,17 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     type: "risk-center",
     label: "Alertes & Dépendances",
     icon: "Bell",
+    defaultSpan: "XL",
+    allowedSpans: ["L", "XL"],
+  },
+  {
+    // Cascade planifié initial -> réactualisé -> annulé -> retard -> coûts -> total attendu
+    // (réalisé / reste à faire), voir `engine.savingsWaterfall`. Toujours EN DERNIER du registre :
+    // c'est la synthèse finale de la trajectoire des économies. Leviers annulés exclus de tous
+    // les totaux (seule l'étape "Annulé" les montre, en retrait).
+    type: "savings-waterfall",
+    label: "Cascade des économies",
+    icon: "BarChart3",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
   },
@@ -536,6 +549,7 @@ const INITIATIVE_HEALTH_REORDER_KEY = "betrack_dashboard_initiative_health_reord
  *  repositionne `marimekko` juste après `initiative-health` (Sept 2026 — section "économies").
  *  Voir `migrateEconomiesSectionLayout`. */
 const ECONOMIES_SECTION_MIGRATION_KEY = "betrack_dashboard_migration_economies_section_v1";
+const SAVINGS_WATERFALL_MIGRATION_KEY = "betrack_dashboard_migration_savings_waterfall_v1";
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -616,6 +630,21 @@ export function migrateInitiativeHealthWidget(
       span: def.defaultSpan,
       view: def.defaultView,
     },
+  ];
+}
+
+/** Ajoute une seule fois le widget "Cascade des économies" à la FIN des layouts persistés
+ * antérieurs (le booléen est persisté à part : supprimé par l'utilisateur, il ne réapparaît pas). */
+export function migrateSavingsWaterfallWidget(
+  layout: DashboardWidgetInstance[],
+  migrationAlreadyApplied: boolean
+): DashboardWidgetInstance[] {
+  if (migrationAlreadyApplied || layout.some((i) => i.type === "savings-waterfall")) return layout;
+  const def = getWidgetDef("savings-waterfall");
+  if (!def) return layout;
+  return [
+    ...layout,
+    { instanceId: "savings-waterfall", type: "savings-waterfall", span: def.defaultSpan },
   ];
 }
 
@@ -724,6 +753,7 @@ export function loadDashboardLayout(): DashboardWidgetInstance[] {
       window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
       window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
       window.localStorage.setItem(ECONOMIES_SECTION_MIGRATION_KEY, "1");
+      window.localStorage.setItem(SAVINGS_WATERFALL_MIGRATION_KEY, "1");
       return buildDefaultLayout();
     }
     const parsed: unknown = JSON.parse(raw);
@@ -731,6 +761,7 @@ export function loadDashboardLayout(): DashboardWidgetInstance[] {
       window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
       window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
       window.localStorage.setItem(ECONOMIES_SECTION_MIGRATION_KEY, "1");
+      window.localStorage.setItem(SAVINGS_WATERFALL_MIGRATION_KEY, "1");
       return buildDefaultLayout();
     }
     const migrationAlreadyApplied =
@@ -746,10 +777,21 @@ export function loadDashboardLayout(): DashboardWidgetInstance[] {
       migrationAlreadyApplied
     );
     const reordered = reorderInitiativeHealthWidget(added, reorderAlreadyApplied);
-    const migrated = migrateEconomiesSectionLayout(reordered, economiesSectionAlreadyApplied);
-    if (!migrationAlreadyApplied || !reorderAlreadyApplied || !economiesSectionAlreadyApplied) {
+    const waterfallAlreadyApplied =
+      window.localStorage.getItem(SAVINGS_WATERFALL_MIGRATION_KEY) === "1";
+    const migrated = migrateSavingsWaterfallWidget(
+      migrateEconomiesSectionLayout(reordered, economiesSectionAlreadyApplied),
+      waterfallAlreadyApplied
+    );
+    if (
+      !migrationAlreadyApplied ||
+      !reorderAlreadyApplied ||
+      !economiesSectionAlreadyApplied ||
+      !waterfallAlreadyApplied
+    ) {
       window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(migrated));
     }
+    window.localStorage.setItem(SAVINGS_WATERFALL_MIGRATION_KEY, "1");
     window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
     window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
     window.localStorage.setItem(ECONOMIES_SECTION_MIGRATION_KEY, "1");
@@ -766,6 +808,7 @@ export function saveDashboardLayout(layout: DashboardWidgetInstance[]): void {
     window.localStorage.setItem(INITIATIVE_HEALTH_MIGRATION_KEY, "1");
     window.localStorage.setItem(INITIATIVE_HEALTH_REORDER_KEY, "1");
     window.localStorage.setItem(ECONOMIES_SECTION_MIGRATION_KEY, "1");
+    window.localStorage.setItem(SAVINGS_WATERFALL_MIGRATION_KEY, "1");
   } catch (err) {
     console.error(
       "[betrack storage] échec d'écriture localStorage pour le layout dashboard :",

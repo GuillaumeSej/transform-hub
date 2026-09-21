@@ -1,5 +1,7 @@
 "use client";
 
+import { MultiSelect } from "@/components/shared/MultiSelect";
+import { matchesFilter } from "@/lib/filterUtils";
 import { useEffect, useState } from "react";
 import { Users, Plus, Pencil, Trash2 } from "lucide-react";
 import type { AuthUser, Role, Company, Program, ProfileAssignment } from "@/types";
@@ -33,9 +35,9 @@ const PASSWORD_TOO_SHORT_MESSAGE = `Le mot de passe doit contenir au moins ${MIN
  *  traduit, mêmes libellés littéraux que les rôles du Plan Stratégique ci-dessous. */
 const PERFORMANCE_ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "cto", label: "CTO" },
-  // Libellé "Workstream Leader" (renommage du libellé affiché — la clé technique `sponsor` reste
+  // Libellé "Responsable de chantier" (renommage du libellé affiché — la clé technique `sponsor` reste
   // inchangée, toujours scopée WORKSTREAM, voir types/index.ts).
-  { value: "sponsor", label: "Workstream Leader" },
+  { value: "sponsor", label: "Responsable de chantier" },
   { value: "lever", label: "Lever Owner" },
   { value: "finance", label: "Finance" },
   { value: "hr", label: "HR" },
@@ -189,7 +191,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     return unsub;
   }, [fixedCompanyId]);
 
-  const [companyFilter, setCompanyFilter] = useState<string>("all");
+  const [companyFilter, setCompanyFilter] = useState<string[]>([]);
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [form, setForm] = useState({
     username: "",
@@ -975,21 +977,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           <label className="text-xs font-semibold text-text-secondary">
             Filtrer par entreprise
           </label>
-          <select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-          >
-            <option value="all">Toutes les entreprises</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <MultiSelect
+            label="Entreprise"
+            placeholder="Toutes les entreprises"
+            values={companyFilter}
+            onChange={setCompanyFilter}
+            options={companies.map((c) => ({ value: c.id, label: c.name }))}
+          />
           <span className="text-xs text-text-secondary">
-            {users.filter((u) => companyFilter === "all" || u.companyId === companyFilter).length}{" "}
-            utilisateur(s)
+            {users.filter((u) => matchesFilter(u.companyId, companyFilter)).length} utilisateur(s)
           </span>
         </div>
       )}
@@ -1020,9 +1016,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           </thead>
           <tbody>
             {users
-              .filter(
-                (u) => fixedCompanyId || companyFilter === "all" || u.companyId === companyFilter
-              )
+              .filter((u) => fixedCompanyId || matchesFilter(u.companyId, companyFilter))
               .map((u, idx) => {
                 const { profileLabels, badges } = profilesSummary(u);
                 return (

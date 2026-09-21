@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useDismissable } from "@/lib/hooks/useDismissable";
+import { useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, FolderKanban, LayoutGrid } from "lucide-react";
 import { CONSOLIDATED_PROGRAM_ID, useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -47,6 +48,8 @@ export function ProgramSwitcher() {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDismissable(open, () => setOpen(false), rootRef);
 
   const authorizedPrograms = getAuthorizedPrograms(user, programs);
   const consolidatedPrograms = getConsolidatedPerformancePrograms(user, programs);
@@ -89,12 +92,7 @@ export function ProgramSwitcher() {
   };
 
   return (
-    <div
-      className="relative"
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
-      }}
-    >
+    <div className="relative" ref={rootRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

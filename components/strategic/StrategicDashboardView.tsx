@@ -50,7 +50,9 @@ import {
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
-import { Dropdown, type DropdownGroup, type DropdownOption } from "@/components/shared/Dropdown";
+import type { DropdownGroup, DropdownOption } from "@/components/shared/Dropdown";
+import { MultiSelect } from "@/components/shared/MultiSelect";
+import { parseFilterValues, serializeFilterValues } from "@/lib/filterUtils";
 import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
 import {
   BudgetDonutChart,
@@ -423,14 +425,19 @@ export function StrategicDashboardView() {
    * d'ouverture du panneau chantier (`openChantierPanel` plus haut) — réutiliser ce nom
    * corromprait ce mécanisme.
    */
-  const rmAxis = searchParams.get("rmAxis");
-  const rmChantier = searchParams.get("rmChantier");
-  const rmOwner = searchParams.get("rmOwner");
+  // Multi-sélection : 0..n valeurs par paramètre (`?rmAxis=a,b`, encodées ; ancienne URL à valeur
+  // simple toujours valide). Vide = pas de filtre.
+  const rmAxisParam = searchParams.get("rmAxis");
+  const rmChantierParam = searchParams.get("rmChantier");
+  const rmOwnerParam = searchParams.get("rmOwner");
+  const rmAxes = useMemo(() => parseFilterValues(rmAxisParam), [rmAxisParam]);
+  const rmChantiers = useMemo(() => parseFilterValues(rmChantierParam), [rmChantierParam]);
+  const rmOwners = useMemo(() => parseFilterValues(rmOwnerParam), [rmOwnerParam]);
 
   const setRoadmapParam = useCallback(
-    (key: "rmAxis" | "rmChantier" | "rmOwner", value: string | null) => {
+    (key: "rmAxis" | "rmChantier" | "rmOwner", values: string[]) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (value) params.set(key, value);
+      if (values.length > 0) params.set(key, serializeFilterValues(values));
       else params.delete(key);
       const qs = params.toString();
       router.replace(qs ? `/dashboard?${qs}` : "/dashboard", { scroll: false });
@@ -448,7 +455,7 @@ export function StrategicDashboardView() {
   const roadmapChantierGroups: DropdownGroup[] = useMemo(
     () =>
       axes
-        .filter((axis) => !rmAxis || axis.id === rmAxis)
+        .filter((axis) => rmAxes.length === 0 || rmAxes.includes(axis.id))
         .map((axis) => ({
           groupLabel: axis.name,
           options: chantiers
@@ -456,7 +463,7 @@ export function StrategicDashboardView() {
             .map((c) => ({ value: c.id, label: c.name })),
         }))
         .filter((group) => group.options.length > 0),
-    [axes, chantiers, rmAxis]
+    [axes, chantiers, rmAxes]
   );
 
   // Portée par `rmAxis`/`rmChantier` — même logique que `ownerOptions` de `KpiPageClient.tsx`, mais
@@ -464,8 +471,8 @@ export function StrategicDashboardView() {
   // vue par levier, sans indicateur à résoudre.
   const roadmapOwnerOptions: DropdownOption[] = useMemo(() => {
     const scoped = chantiers.filter((c) => {
-      if (rmAxis && !c.axisIds.includes(rmAxis)) return false;
-      if (rmChantier && c.id !== rmChantier) return false;
+      if (rmAxes.length > 0 && !c.axisIds.some((a) => rmAxes.includes(a))) return false;
+      if (rmChantiers.length > 0 && !rmChantiers.includes(c.id)) return false;
       return true;
     });
     const names = new Set(
@@ -474,7 +481,7 @@ export function StrategicDashboardView() {
     return Array.from(names)
       .sort()
       .map((name) => ({ value: name, label: name }));
-  }, [chantiers, axes, t, rmAxis, rmChantier]);
+  }, [chantiers, axes, t, rmAxes, rmChantiers]);
 
   // Garde-fou de cohérence (même patron que `KpiPageClient.tsx`) : si le changement d'axe rend le
   // chantier ou le responsable actuellement sélectionné invalide, on le réinitialise — UN seul
@@ -482,24 +489,37 @@ export function StrategicDashboardView() {
   useEffect(() => {
     if (strategic.loading) return;
 
-    const chantier = rmChantier ? chantiers.find((c) => c.id === rmChantier) : null;
-    const chantierInvalid =
-      !!rmChantier && (!chantier || (!!rmAxis && !chantier.axisIds.includes(rmAxis)));
+    // Multi-sélection : ne retire que les valeurs devenues invalides.
+    const validChantiers = rmChantiers.filter((id) => {
+      const chantier = chantiers.find((c) => c.id === id);
+      return (
+        !!chantier && (rmAxes.length === 0 || chantier.axisIds.some((a) => rmAxes.includes(a)))
+      );
+    });
+    const chantierInvalid = validChantiers.length !== rmChantiers.length;
 
-    const validOwners = new Set(roadmapOwnerOptions.map((o) => o.value));
-    const ownerInvalid = !!rmOwner && !validOwners.has(rmOwner);
+    const validOwnerSet = new Set(roadmapOwnerOptions.map((o) => o.value));
+    const validOwners = rmOwners.filter((o) => validOwnerSet.has(o));
+    const ownerInvalid = validOwners.length !== rmOwners.length;
 
     if (!chantierInvalid && !ownerInvalid) return;
 
     const params = new URLSearchParams(searchParams.toString());
-    if (chantierInvalid) params.delete("rmChantier");
-    if (ownerInvalid) params.delete("rmOwner");
+    if (chantierInvalid) {
+      if (validChantiers.length > 0)
+        params.set("rmChantier", serializeFilterValues(validChantiers));
+      else params.delete("rmChantier");
+    }
+    if (ownerInvalid) {
+      if (validOwners.length > 0) params.set("rmOwner", serializeFilterValues(validOwners));
+      else params.delete("rmOwner");
+    }
     const qs = params.toString();
     router.replace(qs ? `/dashboard?${qs}` : "/dashboard", { scroll: false });
   }, [
-    rmAxis,
-    rmChantier,
-    rmOwner,
+    rmAxes,
+    rmChantiers,
+    rmOwners,
     chantiers,
     strategic.loading,
     roadmapOwnerOptions,
@@ -510,16 +530,16 @@ export function StrategicDashboardView() {
   const roadmapChantiers = useMemo(
     () =>
       chantiers.filter((chantier) => {
-        if (rmAxis && !chantier.axisIds.includes(rmAxis)) return false;
-        if (rmChantier && chantier.id !== rmChantier) return false;
+        if (rmAxes.length > 0 && !chantier.axisIds.some((a) => rmAxes.includes(a))) return false;
+        if (rmChantiers.length > 0 && !rmChantiers.includes(chantier.id)) return false;
         if (
-          rmOwner &&
-          resolveChantierOwner(chantier, axes, t("strategicAxes.unassigned")) !== rmOwner
+          rmOwners.length > 0 &&
+          !rmOwners.includes(resolveChantierOwner(chantier, axes, t("strategicAxes.unassigned")))
         )
           return false;
         return true;
       }),
-    [chantiers, axes, t, rmAxis, rmChantier, rmOwner]
+    [chantiers, axes, t, rmAxes, rmChantiers, rmOwners]
   );
 
   const roadmapActions = useMemo(() => {
@@ -1222,29 +1242,26 @@ export function StrategicDashboardView() {
         <Card className="overflow-visible">
           <CardBody flush>
             <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-              <Dropdown
+              <MultiSelect
                 label={t("kpi.filterAxis")}
                 placeholder={t("kpi.filterAll")}
-                value={rmAxis}
+                values={rmAxes}
                 onChange={(v) => setRoadmapParam("rmAxis", v)}
                 options={roadmapAxisOptions}
-                allowClear
               />
-              <Dropdown
+              <MultiSelect
                 label={t("kpi.filterChantier")}
                 placeholder={t("kpi.filterAll")}
-                value={rmChantier}
+                values={rmChantiers}
                 onChange={(v) => setRoadmapParam("rmChantier", v)}
                 groups={roadmapChantierGroups}
-                allowClear
               />
-              <Dropdown
+              <MultiSelect
                 label={t("kpi.filterOwner")}
                 placeholder={t("kpi.filterAll")}
-                value={rmOwner}
+                values={rmOwners}
                 onChange={(v) => setRoadmapParam("rmOwner", v)}
                 options={roadmapOwnerOptions}
-                allowClear
               />
             </div>
 

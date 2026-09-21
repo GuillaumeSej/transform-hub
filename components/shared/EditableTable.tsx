@@ -1,5 +1,7 @@
 "use client";
 
+import { MultiSelect } from "@/components/shared/MultiSelect";
+import { matchesFilter } from "@/lib/filterUtils";
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -62,7 +64,7 @@ export function EditableTable<T extends { id: string }>({
   const resolvedSearchPlaceholder =
     searchPlaceholder ?? t("shared.editableTable.searchPlaceholder", "Rechercher...");
   const [search, setSearch] = useState("");
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
   const [sort, setSort] = useState(defaultSort ?? null);
   const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
   const [draftValue, setDraftValue] = useState("");
@@ -83,8 +85,8 @@ export function EditableTable<T extends { id: string }>({
       );
     }
     Object.entries(columnFilters).forEach(([key, value]) => {
-      if (!value) return;
-      rows = rows.filter((row) => String(row[key as keyof T]) === value);
+      if (!value || value.length === 0) return;
+      rows = rows.filter((row) => matchesFilter(String(row[key as keyof T]), value));
     });
     if (sort) {
       rows = [...rows].sort((a, b) => {
@@ -165,23 +167,16 @@ export function EditableTable<T extends { id: string }>({
           className="min-w-[220px] rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none"
         />
         {filterableColumns.map((c) => (
-          <select
+          <MultiSelect
             key={c.key}
-            value={columnFilters[c.key] ?? ""}
-            onChange={(e) => setColumnFilters((prev) => ({ ...prev, [c.key]: e.target.value }))}
-            className="rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none"
-          >
-            <option value="">
-              {c.label} {t("shared.editableTable.allSuffix", "(tous)")}
-            </option>
-            {c.options!.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
+            label={c.label}
+            placeholder={t("shared.editableTable.allSuffix", "(tous)")}
+            values={columnFilters[c.key] ?? []}
+            onChange={(vals) => setColumnFilters((prev) => ({ ...prev, [c.key]: vals }))}
+            options={c.options!.map((opt) => ({ value: opt, label: opt }))}
+          />
         ))}
-        {(search || Object.values(columnFilters).some(Boolean)) && (
+        {(search || Object.values(columnFilters).some((v) => v.length > 0)) && (
           <button
             onClick={resetFilters}
             className="text-xs font-medium text-bp-coral hover:underline"

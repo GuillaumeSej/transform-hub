@@ -63,7 +63,7 @@ export default function ValidationPage() {
               <tr className="border-b border-border bg-neutral-50 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
                 <th className="px-4 py-2.5">{t("validation.lever", "Levier")}</th>
                 <th className="px-4 py-2.5">{t("validation.gate", "Étape")}</th>
-                <th className="px-4 py-2.5">{t("validation.workstream", "Workstream")}</th>
+                <th className="px-4 py-2.5">{t("validation.workstream", "Chantier")}</th>
                 <th className="px-4 py-2.5">{t("validation.requestedBy", "Demandé par")}</th>
                 <th className="px-4 py-2.5">{t("validation.requestedAt", "Demandé le")}</th>
                 <th className="px-4 py-2.5" />

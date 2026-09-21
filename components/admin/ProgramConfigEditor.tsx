@@ -195,7 +195,7 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
       <p className="text-xs text-text-secondary">
         {t(
           "adminProgramConfig.hint",
-          "Configuration du programme historique de l'entreprise (nom, sponsor, exercice, cibles financières) et de ses workstreams — utilisée par le tableau de bord et les calculs financiers."
+          "Configuration du programme historique de l'entreprise (nom, sponsor, exercice, cibles financières) et de ses chantiers — utilisée par le tableau de bord et les calculs financiers."
         )}
       </p>
 
@@ -291,14 +291,14 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
 
       <div className="border-t border-border pt-3 space-y-3">
         <div className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-          {t("adminProgramConfig.workstreamsTitle", "Workstreams")}
+          {t("adminProgramConfig.workstreamsTitle", "Chantiers")}
         </div>
 
         {form.workstreams.length === 0 && (
           <p className="rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
             {t(
               "adminProgramConfig.workstreamsEmpty",
-              "Aucun workstream configuré pour ce programme."
+              "Aucun chantier configuré pour ce programme."
             )}
           </p>
         )}
@@ -434,7 +434,7 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
             onClick={addWorkstream}
             className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-text-secondary hover:bg-bg-surface"
           >
-            <Plus size={14} /> {t("adminProgramConfig.addWorkstream", "Ajouter le workstream")}
+            <Plus size={14} /> {t("adminProgramConfig.addWorkstream", "Ajouter le chantier")}
           </button>
         </div>
       </div>

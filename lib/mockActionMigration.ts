@@ -1,5 +1,5 @@
 import type {
-  ActionImpact,
+  LeverImpact as ActionImpact,
   ActionStatus,
   Lever,
   LeverAction,
@@ -8,6 +8,7 @@ import type {
   SavingType,
 } from "@/types";
 import { hasActionImpacts } from "@/lib/leverConsolidate";
+import { migrateLeversImpacts } from "@/lib/leverImpactMigration";
 
 /** Forme d'un ancien sous-levier (référentiel legacy pré-migration), utilisée uniquement pour
  * convertir le seed `data/mockData.ts` historique vers le modèle actuel Levier → Action enrichie.
@@ -592,4 +593,13 @@ export function migrateMockLeversToActions(levers: Lever[], subLevers: LegacySub
       dependencies: Array.from(dependencyByTarget.values()),
     };
   });
+}
+
+/** Seed démo au modèle actuel : enrichissement en actions puis remontée des impacts au niveau
+ *  levier (`lib/leverImpactMigration.ts`). */
+export function migrateMockLeversToLeverImpacts(
+  levers: Lever[],
+  subLevers: LegacySubLever[]
+): Lever[] {
+  return migrateLeversImpacts(migrateMockLeversToActions(levers, subLevers));
 }

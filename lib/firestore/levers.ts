@@ -171,7 +171,10 @@ export function filterAuditByCompany(
 }
 
 export async function saveLever(lever: Lever): Promise<void> {
-  await setDoc(doc(leversCol(), lever.id), lever);
+  // Round-trip JSON : Firestore rejette les valeurs `undefined` (ex. `deliveredDate: undefined`
+  // posé par une mutation d'action), ce qui faisait échouer silencieusement la persistance d'un
+  // changement d'étape d'action (l'erreur n'était que loguée par le hook).
+  await setDoc(doc(leversCol(), lever.id), JSON.parse(JSON.stringify(lever)));
 }
 
 /** Création/mise à jour en masse (import Excel — voir lib/leverExcelImport.ts) : un seul

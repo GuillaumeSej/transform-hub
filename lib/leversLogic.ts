@@ -1,5 +1,6 @@
 import * as engine from "@/lib/engine";
 import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
+import { migrateLeverImpacts } from "@/lib/leverImpactMigration";
 import type { CascadeShift } from "@/lib/engine";
 import { GATE_BY_STATUS, STATUS_ORDER } from "@/lib/status-config";
 import type {
@@ -8,6 +9,7 @@ import type {
   Comment,
   FinancialSnapshot,
   Lever,
+  ActionStatus,
   LeverAction,
   LeverApproval,
   LeverApprovalGate,
@@ -252,37 +254,90 @@ function makeAuditEntry(entry: Omit<AuditEntry, "ts">): AuditEntry {
   return { ...entry, ts: nowTs() };
 }
 
-/** Recalcule le levier parent depuis son plan d'action : progression pondérée et agrégats
- * financiers/RH. Si le plan initial est déjà figé, les chiffres consolidés alimentent le
- * reforecast ; sinon ils alimentent directement les champs du levier. */
-function recomputeLeverProgress(lever: Lever): Lever | undefined {
-  const newProgress = engine.recomputeLeverProgress(lever);
-  const consolidated = consolidateLeverFromActions(lever);
+/** Recalcule les champs financiers du levier depuis ses impacts (source de vérité unique) :
+ *  grossSavings/netSavings/opexOneOff/opexRec/capex/fteImpact. Sans impact, les macro-valeurs
+ *  manuelles sont conservées. Si `refreshReforecast` et qu'un reforecast existe, il est aligné sur
+ *  les impacts (le plan figé `lockedPlan` n'est JAMAIS touché). Migre au passage d'éventuels
+ *  impacts encore portés par les actions. */
+export function withImpactTotals(lever: Lever, refreshReforecast = false): Lever {
+  const migrated = migrateLeverImpacts(lever);
+  const consolidated = consolidateLeverFromActions(migrated);
+  if (!consolidated) return migrated;
+  const financial = {
+    grossSavings: consolidated.grossSavings ?? 0,
+    netSavings: consolidated.netSavings ?? 0,
+    opexOneOff: consolidated.opexOneOff ?? 0,
+    opexRec: consolidated.opexRec ?? 0,
+    capex: consolidated.capex ?? 0,
+  };
+  return {
+    ...migrated,
+    ...financial,
+    fteImpact: consolidated.fteImpact ?? 0,
+    ...(refreshReforecast && migrated.reforecast ? { reforecast: financial } : {}),
+  };
+}
+
+/** Recalcule le levier parent depuis son plan d'action : avancement (pondéré, actions uniquement),
+ *  `lastUpdate`, passage automatique à "delivered" à 100 %. Retourne TOUJOURS le levier à
+ *  persister (avec `lastUpdate` rafraîchi). */
+function recomputeLeverProgress(lever: Lever): Lever {
+  const base = withImpactTotals(lever);
+  const newProgress = engine.recomputeLeverProgress(base);
   const nextStatus =
-    newProgress >= 100 && lever.status !== "cancelled" ? "delivered" : lever.status;
-  const financialPatch: Partial<Lever> = consolidated
-    ? lever.lockedPlan
-      ? {
-          reforecast: {
-            grossSavings: consolidated.grossSavings ?? lever.grossSavings,
-            netSavings: consolidated.netSavings ?? lever.netSavings,
-            capex: consolidated.capex ?? lever.capex,
-            opexOneOff: consolidated.opexOneOff ?? lever.opexOneOff,
-            opexRec: consolidated.opexRec ?? lever.opexRec,
-          },
-          fteImpact: consolidated.fteImpact ?? lever.fteImpact,
-        }
-      : consolidated
-    : {};
-  const next: Lever = {
-    ...lever,
-    ...financialPatch,
+    newProgress >= 100 && base.status !== "cancelled" && (base.actions?.length ?? 0) > 0
+      ? "delivered"
+      : base.status;
+  return {
+    ...base,
     progress: newProgress,
     status: nextStatus,
-    ...(nextStatus === "delivered" && !lever.deliveredDate ? { deliveredDate: nowDate() } : {}),
+    lastUpdate: nowDate(),
+    ...(nextStatus === "delivered" && !base.deliveredDate ? { deliveredDate: nowDate() } : {}),
   };
+}
 
-  return JSON.stringify(next) === JSON.stringify(lever) ? undefined : next;
+/** Règle avancement → statut d'une action (pur). `pct` est borné à 0-100. 100 → "done"
+ *  (Réalisé) ; >0 sur une action "todo" → "in_progress" ; quitter 100 → repasse "in_progress". */
+export function applyActionProgress(action: LeverAction, pct: number): LeverAction {
+  const clamped = Math.min(100, Math.max(0, Math.round(Number.isFinite(pct) ? pct : 0)));
+  const next: LeverAction = { ...action, declaredProgressPct: clamped };
+  if (clamped >= 100) {
+    next.status = "done";
+    next.deliveredDate = action.deliveredDate ?? nowDate();
+  } else {
+    if (action.status === "done") next.status = "in_progress";
+    if (action.status === "todo" && clamped > 0) next.status = "in_progress";
+    if (next.status !== "done") delete next.deliveredDate;
+  }
+  return next;
+}
+
+/** Règle statut → avancement d'une action (pur) : "done" → 100 ; "todo" → 0 ; "in_progress"
+ *  depuis 0/100 efface l'avancement déclaré (retour au défaut statut) ; "delayed" le conserve. */
+export function applyActionStatus(action: LeverAction, status: ActionStatus): LeverAction {
+  const next: LeverAction = { ...action, status };
+  if (status === "done") {
+    next.declaredProgressPct = 100;
+    next.deliveredDate = action.deliveredDate ?? nowDate();
+    return next;
+  }
+  delete next.deliveredDate;
+  if (status === "todo") next.declaredProgressPct = 0;
+  else if (
+    status === "in_progress" &&
+    (action.declaredProgressPct === 0 || action.declaredProgressPct === 100)
+  ) {
+    delete next.declaredProgressPct;
+  }
+  return next;
+}
+
+/** Après verrouillage du plan : aligne le reforecast sur les impacts (création, ou impacts
+ *  modifiés) — le `lockedPlan` n'est jamais modifié. */
+function finalizeImpacts(lever: Lever, refresh: boolean): Lever {
+  if (!refresh || !lever.reforecast || !(lever.impacts && lever.impacts.length > 0)) return lever;
+  return withImpactTotals(lever, true);
 }
 
 export type LeverMutationResult = {
@@ -312,7 +367,10 @@ export function createLever(
   const seq = `L${String(maxNum + 1).padStart(3, "0")}`;
   const id = input.companyId ? `${input.companyId}-${seq}` : seq;
   const now = nowDate();
-  const lever: Lever = applyPlanLock({ ...input, id, createdAt: now, lastUpdate: now });
+  const lever: Lever = finalizeImpacts(
+    applyPlanLock(withImpactTotals({ ...input, id, createdAt: now, lastUpdate: now })),
+    true
+  );
   return {
     levers: [...levers, lever],
     lever,
@@ -400,12 +458,22 @@ export function updateLever(
     safePatch.status === "cancelled" && before.status !== "cancelled"
       ? { cancelledAtStage: before.status }
       : {};
-  const after: Lever = applyPlanLock({
+  const impactsPatched = "impacts" in safePatch || "actions" in safePatch;
+  const merged: Lever = {
     ...before,
     ...safePatch,
     ...cancelledPatch,
     lastUpdate: nowDate(),
-  });
+  };
+  // Impacts = source de vérité : les macro-valeurs (et le reforecast si impacts modifiés) sont
+  // recalculées ; le plan figé, lui, reste intact. L'avancement suit toujours les actions.
+  let after: Lever = applyPlanLock(withImpactTotals(merged));
+  after = finalizeImpacts(after, impactsPatched);
+  if ("actions" in safePatch) {
+    const progressed = recomputeLeverProgress(after);
+    after = { ...after, progress: progressed.progress, status: progressed.status };
+    if (progressed.deliveredDate) after.deliveredDate = progressed.deliveredDate;
+  }
   const nextLevers = [...levers];
   nextLevers[idx] = after;
 
@@ -696,17 +764,14 @@ export function writeActions(
 ): { levers: Lever[]; changedLever?: Lever } {
   const idx = levers.findIndex((l) => l.id === scope.leverId);
   if (idx === -1) throw new Error(`Lever "${scope.leverId}" introuvable`);
-  let nextLevers = [...levers];
-  nextLevers[idx] = { ...levers[idx], actions };
-
-  const lever = nextLevers[idx];
-  const recomputed = recomputeLeverProgress(lever);
-  const changedLever = recomputed ?? lever;
-  if (recomputed) {
-    nextLevers = nextLevers.map((l) => (l.id === recomputed.id ? recomputed : l));
-  }
-
-  return { levers: nextLevers, changedLever };
+  const nextLevers = [...levers];
+  // Toute mutation d'actions recalcule ET persiste l'avancement du levier (+ lastUpdate) ; les
+  // éventuels impacts portés par les actions importées sont remontés au niveau levier.
+  const hadLegacyImpacts = actions.some((a) => (a.impacts?.length ?? 0) > 0);
+  let lever = recomputeLeverProgress({ ...levers[idx], actions });
+  if (hadLegacyImpacts) lever = finalizeImpacts(lever, true);
+  nextLevers[idx] = lever;
+  return { levers: nextLevers, changedLever: lever };
 }
 
 export function createAction(
@@ -716,11 +781,14 @@ export function createAction(
   user: string
 ): ActionMutationResult {
   const allIds = levers.flatMap((l) => l.actions?.map((a) => a.id) ?? []);
-  const action: LeverAction = {
-    ...input,
-    id: nextEntityId("AC", allIds),
-    ...(input.status === "done" && !input.deliveredDate ? { deliveredDate: nowDate() } : {}),
-  };
+  const draft: LeverAction = { ...input, id: nextEntityId("AC", allIds) };
+  const action: LeverAction =
+    input.declaredProgressPct !== undefined
+      ? applyActionProgress(draft, input.declaredProgressPct)
+      : input.status === "done"
+        ? applyActionStatus(draft, "done")
+        : draft;
+  if (input.status === "done" && input.deliveredDate) action.deliveredDate = input.deliveredDate;
   const currentActions = readActions(levers, scope);
   const result = writeActions(levers, scope, [...currentActions, action]);
 
@@ -749,13 +817,21 @@ export function updateAction(
   const idx = actions.findIndex((a) => a.id === actionId);
   if (idx === -1) throw new Error(`Action "${actionId}" introuvable`);
   const before = actions[idx];
-  const deliveredDatePatch: Partial<LeverAction> =
-    patch.status === "done" && before.status !== "done"
-      ? { deliveredDate: patch.deliveredDate ?? nowDate() }
-      : patch.status && patch.status !== "done"
-        ? { deliveredDate: undefined }
-        : {};
-  const after = { ...before, ...patch, ...deliveredDatePatch };
+  // Règles statut <-> avancement (voir applyActionStatus/applyActionProgress). Si le patch fixe
+  // explicitement les deux, on les respecte tels quels.
+  let after: LeverAction;
+  const hasStatus = patch.status !== undefined && patch.status !== before.status;
+  const hasPct = patch.declaredProgressPct !== undefined;
+  if (hasPct && !hasStatus) {
+    after = applyActionProgress({ ...before, ...patch }, patch.declaredProgressPct as number);
+  } else if (hasStatus && !hasPct) {
+    after = applyActionStatus({ ...before, ...patch }, patch.status as ActionStatus);
+    if (patch.status === "done" && patch.deliveredDate) after.deliveredDate = patch.deliveredDate;
+  } else {
+    after = { ...before, ...patch };
+    if (after.status === "done" && !after.deliveredDate) after.deliveredDate = nowDate();
+    if (after.status !== "done") delete after.deliveredDate;
+  }
   const nextActions = [...actions];
   nextActions[idx] = after;
   const result = writeActions(levers, scope, nextActions);

@@ -188,7 +188,7 @@ export function LeverImportButton({
       const { createdCount, updatedCount } = onImport(rowsToUpsert);
       const wsNote =
         preview.toCreateWorkstreams.length > 0
-          ? ` · ${t("shared.leverImportButton.workstreamsCreatedNote", "{n} workstream(s) créé(s)").replace("{n}", String(preview.toCreateWorkstreams.length))}`
+          ? ` · ${t("shared.leverImportButton.workstreamsCreatedNote", "{n} chantier(s) créé(s)").replace("{n}", String(preview.toCreateWorkstreams.length))}`
           : "";
       const errNote =
         preview.errors.length > 0
@@ -300,7 +300,7 @@ export function LeverImportButton({
             <strong className="text-primary">{preview.toCreateWorkstreams.length}</strong>{" "}
             {t(
               "shared.leverImportButton.workstreamsNoteIntro",
-              "workstream(s) référencé(s) dans le fichier n'existe(nt) pas encore pour cette entreprise et"
+              "chantier(s) référencé(s) dans le fichier n'existe(nt) pas encore pour cette entreprise et"
             )}{" "}
             {preview.toCreateWorkstreams.length > 1
               ? t("shared.leverImportButton.willBeCreatedPlural", "seront créés")

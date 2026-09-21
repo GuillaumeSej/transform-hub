@@ -1,8 +1,9 @@
 "use client";
 
+import { useDismissable } from "@/lib/hooks/useDismissable";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
@@ -39,19 +40,15 @@ const STRATEGIC_CRUMBS: Record<string, string> = {
 };
 
 /** Petit sélecteur de langue (texte seul, pas de drapeaux) — disponible pour tous les profils,
- * pas seulement admin. Ferme au clic extérieur via `onBlur` (délai pour laisser le clic sur une
- * option s'exécuter avant la fermeture). */
+ * pas seulement admin. Ferme au clic extérieur via `useDismissable` (pointerdown hors du composant + Échap). */
 function LanguageSwitcher() {
   const { locale, setLocale, t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDismissable(open, () => setOpen(false), rootRef);
 
   return (
-    <div
-      className="relative"
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
-      }}
-    >
+    <div className="relative" ref={rootRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -108,6 +105,8 @@ export function Topbar({
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const alertsRef = useRef<HTMLDivElement>(null);
+  useDismissable(alertsOpen, () => setAlertsOpen(false), alertsRef);
   const { logout, user, profiles, isGlobalAdmin, isCompanyAdmin } = useRole();
 
   useEffect(() => {
@@ -172,7 +171,7 @@ export function Topbar({
         <span className="hidden sm:block">
           <LanguageSwitcher />
         </span>
-        <div className="relative">
+        <div className="relative" ref={alertsRef}>
           <button
             onClick={() => setAlertsOpen((open) => !open)}
             className="relative flex h-11 w-11 items-center justify-center rounded-full border border-border bg-white text-secondary transition hover:border-black sm:h-[34px] sm:w-[34px]"

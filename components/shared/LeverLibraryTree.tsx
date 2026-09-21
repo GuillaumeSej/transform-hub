@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { DeclaredProgressBadge } from "@/components/shared/DeclaredProgressBadge";
-import { leverDeclaredProgress, workstreamDeclaredProgress } from "@/lib/workstreamLogic";
+import { ProgressBar } from "@/components/shared/ProgressBar";
+import { actionProgressPct, leverActionProgress } from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Lever, LeverAction, Workstream } from "@/types";
 
 /**
  * 3ᵉ vue de la bibliothèque des leviers (round <n>, fondations RBAC déclaratives) — accordéon à 4
- * niveaux Workstream → Type → Levier → Action, modelé sur le pattern de
+ * niveaux Chantier → Type → Levier → Action, modelé sur le pattern de
  * `components/strategic/AxisChantierProjetAccordion.tsx` (tout replié par défaut, `Set<string>`
  * par niveau, clés composites pour un niveau qui peut apparaître sous plusieurs parents).
  *
@@ -27,6 +27,41 @@ import type { Lever, LeverAction, Workstream } from "@/types";
  *  - Action : même fiche levier, onglet "Plan d'action", avec `?action=<id>` pour cibler l'action
  *    précise (voir le support ajouté dans `LeverDetailClientPerformance.tsx`).
  */
+/** Tag "responsable" avec infobulle (titre natif) — toujours présent, même si non renseigné. */
+function OwnerTag({
+  label,
+  value,
+  emptyLabel,
+}: {
+  label: string;
+  value?: string;
+  emptyLabel: string;
+}) {
+  const filled = !!value?.trim();
+  return (
+    <span
+      title={filled ? `${label} : ${value}` : emptyLabel}
+      className={
+        "max-w-[160px] shrink-0 truncate rounded-full border px-1.5 py-px text-[10px] font-semibold " +
+        (filled
+          ? "border-border bg-white text-secondary"
+          : "border-dashed border-border bg-neutral-50 text-tertiary")
+      }
+    >
+      {filled ? value : "—"}
+    </span>
+  );
+}
+
+/** Progression compacte (barre + %) — basée sur les ACTIONS (voir engine.leverActionProgress). */
+function Progress({ pct }: { pct: number }) {
+  return (
+    <span className="w-[120px] shrink-0" title={`Progression : ${pct}%`}>
+      <ProgressBar pct={pct} />
+    </span>
+  );
+}
+
 export function LeverLibraryTree({
   levers,
   progressLevers,
@@ -93,10 +128,18 @@ export function LeverLibraryTree({
     <div className="space-y-2">
       {groups.map((group) => {
         const wsOpen = expandedWsIds.has(group.id);
-        const declaredPct =
-          group.id === "__other__" ? null : workstreamDeclaredProgress(progressLevers, group.id);
+        const wsSponsor = workstreams.find((w) => w.id === group.id)?.sponsor;
+        // Progression du chantier = moyenne des progressions (actions) de ses leviers non abandonnés.
+        const progressBase = progressLevers.filter(
+          (l) => l.ws === group.id && l.status !== "cancelled"
+        );
+        const wsPct = progressBase.length
+          ? Math.round(
+              progressBase.reduce((sum, l) => sum + leverActionProgress(l), 0) / progressBase.length
+            )
+          : 0;
         // Un levier abandonné ne doit jamais être compté ni mélangé aux leviers actifs — écarté de
-        // l'arborescence Workstream → Type → Levier, regroupé à part en fin de swimlane, grisé
+        // l'arborescence Chantier → Type → Levier, regroupé à part en fin de swimlane, grisé
         // (même principe que Kanban.tsx CancelledLeversStrip).
         const activeGroupLevers = group.levers.filter((l) => l.status !== "cancelled");
         const cancelledGroupLevers = group.levers.filter((l) => l.status === "cancelled");
@@ -130,7 +173,14 @@ export function LeverLibraryTree({
               <span className="shrink-0 rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
                 {activeGroupLevers.length}
               </span>
-              <DeclaredProgressBadge pct={declaredPct} />
+              {group.id !== "__other__" && (
+                <OwnerTag
+                  label={t("levers.tree.wsLead", "Responsable de chantier")}
+                  value={wsSponsor}
+                  emptyLabel={t("levers.tree.wsLeadEmpty", "Responsable de chantier non renseigné")}
+                />
+              )}
+              <Progress pct={wsPct} />
             </button>
 
             {wsOpen && (
@@ -188,7 +238,7 @@ export function LeverLibraryTree({
                           <div className="space-y-1.5 bg-neutral-50/70 py-2 pl-14 pr-3.5">
                             {typeLevers.map((lever) => {
                               const leverOpen = expandedLeverIds.has(lever.id);
-                              const leverPct = leverDeclaredProgress(lever.actions);
+                              const leverPct = leverActionProgress(lever);
                               const actions = lever.actions ?? [];
                               return (
                                 <div
@@ -224,7 +274,15 @@ export function LeverLibraryTree({
                                         {actions.length}
                                       </span>
                                     </button>
-                                    <DeclaredProgressBadge pct={leverPct} />
+                                    <OwnerTag
+                                      label={t("levers.tree.leverOwner", "Responsable de levier")}
+                                      value={lever.owner}
+                                      emptyLabel={t(
+                                        "levers.tree.leverOwnerEmpty",
+                                        "Responsable de levier non renseigné"
+                                      )}
+                                    />
+                                    <Progress pct={leverPct} />
                                     <button
                                       type="button"
                                       onClick={() => onLeverClick(lever.id)}
@@ -254,9 +312,9 @@ export function LeverLibraryTree({
                                             <span className="min-w-0 flex-1 truncate text-[11px] text-primary">
                                               {action.name}
                                             </span>
-                                            <DeclaredProgressBadge
-                                              pct={action.declaredProgressPct ?? null}
-                                            />
+                                            <span className="shrink-0 text-[10.5px] font-semibold text-secondary">
+                                              {actionProgressPct(action)}%
+                                            </span>
                                           </button>
                                         ))
                                       )}

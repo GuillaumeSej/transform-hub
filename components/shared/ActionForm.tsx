@@ -1,17 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { HierarchyLeafSelect } from "@/components/shared/HierarchyLeafSelect";
-import { subscribeCompanies } from "@/lib/firestore/admin";
-import type {
-  ActionImpact,
-  ActionStatus,
-  BeTrackData,
-  HierarchyLevelDef,
-  LeverAction,
-  SavingType,
-} from "@/types";
+import { applyActionProgress, applyActionStatus } from "@/lib/leversLogic";
+import type { ActionStatus, BeTrackData, LeverAction } from "@/types";
 
 const inputClass =
   "w-full rounded-sm border border-border bg-white px-2 py-1.5 text-[12px] focus:border-bp-coral focus:outline-none";
@@ -26,59 +18,25 @@ function actionStatusLabels(
   return {
     todo: t("leverDetail.todo", "À faire"),
     in_progress: t("leverDetail.inProgress", "En cours"),
-    done: t("leverDetail.finished", "Terminé"),
+    done: t("leverDetail.finished", "Réalisé"),
     delayed: t("leverDetail.late", "En retard"),
-  };
-}
-
-function savingTypeLabels(
-  t: (key: string, fallback?: string) => string
-): Record<SavingType, string> {
-  return {
-    cost_reduction: t("shared.actionForm.savingCostReduction", "Réduction de coût"),
-    revenue_increase: t("shared.actionForm.savingRevenueIncrease", "Augmentation du CA"),
-    working_capital: t("shared.actionForm.savingWorkingCapital", "Impact BFR"),
-  };
-}
-
-function generateId(): string {
-  return "IMP" + Math.random().toString(36).slice(2, 8).toUpperCase();
-}
-
-function emptyImpact(): ActionImpact {
-  return {
-    id: generateId(),
-    label: "",
-    type: "cost",
-    nature: "oneoff",
-    amount: 0,
   };
 }
 
 export type ActionFormValues = Omit<LeverAction, "id">;
 
-/** Formulaire de création/édition d'une action enrichie, avec un tableau d'impacts inline.
- *  Le tableau d'impacts permet d'ajouter/supprimer des lignes comme dans un tableur. Pour les
- *  gains (type="saving"), on précise en plus la nature du gain (coût/CA/BFR), la date
- *  d'encaissement et le mode de reconnaissance (lissé/one-shot) ; pour les CAPEX (nature="capex"),
- *  la date d'engagement. Un commentaire libre peut expliquer la méthode de calcul. */
+/** Formulaire simplifié d'une action : identification, dates, statut, avancement (%) et poids
+ *  optionnel. Les impacts vivent sur le levier (`Lever.impacts`). Statut et avancement restent
+ *  synchronisés (voir `applyActionProgress`/`applyActionStatus`). */
 export function ActionForm({
-  companyId,
   initialValues,
   submitLabel,
   onSubmit,
   onCancel,
   onDelete,
 }: {
-  /** Conservé dans l'interface pour compat avec les appelants existants — n'est plus utilisé
-   *  dans ce formulaire depuis le retrait des colonnes "Poste de coût"/"Entité (P&L)" (voir
-   *  demande "une seule colonne de rattachement", qui passe désormais par `HierarchyLeafSelect`
-   *  via `companyId`). */
-  data: BeTrackData;
-  /** Entreprise courante — nécessaire à `HierarchyLeafSelect` pour rattacher chaque ligne
-   *  d'impact à l'arborescence financière (`ActionImpact.hierarchyLeafId`, voir round
-   *  "rattachement financier par action"). Non défini = le champ ne s'affiche jamais avec
-   *  d'options (même comportement que si l'entreprise n'a pas configuré de hiérarchie). */
+  /** Conservés pour compat avec les appelants existants — non utilisés. */
+  data?: BeTrackData;
   companyId?: string | null;
   initialValues?: Partial<LeverAction>;
   submitLabel?: string;
@@ -88,61 +46,31 @@ export function ActionForm({
 }) {
   const { t } = useTranslation();
   const STATUS_LABELS = actionStatusLabels(t);
-  const SAVING_TYPE_LABELS = savingTypeLabels(t);
   const resolvedSubmitLabel = submitLabel ?? t("leverDetail.createAction", "Créer l'action");
   const [name, setName] = useState(initialValues?.name ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [owner, setOwner] = useState(initialValues?.owner ?? "");
   const [start, setStart] = useState(initialValues?.start ?? "");
   const [end, setEnd] = useState(initialValues?.end ?? "");
-  const [status, setStatus] = useState<ActionStatus>(initialValues?.status ?? "todo");
-  // Round <n> (fondations RBAC déclaratives) : avancement déclaratif de l'action, saisi par son
-  // pilote (même contrôle d'édition que le reste de ce formulaire, voir `LeverDetailClientPerformance`
-  // — `openActionForEdit` est déjà gatée `readOnly`). Consommé par `lib/workstreamLogic.ts`
-  // (`leverDeclaredProgress`/`workstreamDeclaredProgress`) — non défini = action pas encore
-  // déclarée, ignorée du calcul plutôt que comptée comme 0% (voir doc-comment `types/index.ts`).
-  const [declaredProgressPct, setDeclaredProgressPct] = useState<number | undefined>(
-    initialValues?.declaredProgressPct
-  );
-  const [impacts, setImpacts] = useState<ActionImpact[]>(
-    initialValues?.impacts && initialValues.impacts.length > 0
-      ? initialValues.impacts
-      : [emptyImpact()]
-  );
-
-  // Demande métier "une seule colonne de rattachement financier" : la maille la plus fine de
-  // l'arborescence (`HierarchyLeafSelect`) remplace poste de coût/centre de coût texte/entité
-  // dès que l'entreprise a une hiérarchie financière configurée. Repli sur le champ texte libre
-  // legacy `costCenter` sinon — même logique que l'ancien `hasHierarchy` de `LeverForm.tsx`
-  // (voir doc-comment `HierarchyLeafSelect`, qui rend `null` dans ce cas et laisse l'appelant
-  // décider du repli).
-  const [hierarchyLevels, setHierarchyLevels] = useState<HierarchyLevelDef[]>([]);
-  useEffect(() => {
-    if (!companyId) {
-      setHierarchyLevels([]);
-      return;
-    }
-    let cancelled = false;
-    const unsubscribe = subscribeCompanies((companies) => {
-      if (cancelled) return;
-      const company = companies.find((c) => c.id === companyId);
-      setHierarchyLevels(company?.hierarchyLevels ?? []);
-    }, companyId);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [companyId]);
-  const hasHierarchy = hierarchyLevels.length > 0;
-
-  const updateImpact = (idx: number, patch: Partial<ActionImpact>) => {
-    setImpacts((prev) => prev.map((imp, i) => (i === idx ? { ...imp, ...patch } : imp)));
-  };
-  const removeImpact = (idx: number) => setImpacts((prev) => prev.filter((_, i) => i !== idx));
-  const addImpact = () => setImpacts((prev) => [...prev, emptyImpact()]);
+  const [weightPct, setWeightPct] = useState<number | undefined>(initialValues?.weightPct);
+  // Statut + avancement + date de livraison évoluent ensemble via les règles de leversLogic.
+  const [sync, setSync] = useState<
+    Pick<LeverAction, "status" | "declaredProgressPct" | "deliveredDate">
+  >({
+    status: initialValues?.status ?? "todo",
+    declaredProgressPct:
+      initialValues?.declaredProgressPct ?? (initialValues?.status === "done" ? 100 : undefined),
+    deliveredDate: initialValues?.deliveredDate,
+  });
+  const base = { ...(initialValues as LeverAction), ...sync } as LeverAction;
+  const pick = (a: LeverAction) =>
+    setSync({
+      status: a.status,
+      declaredProgressPct: a.declaredProgressPct,
+      deliveredDate: a.deliveredDate,
+    });
 
   const handleSubmit = () => {
-    const validImpacts = impacts.filter((imp) => imp.label.trim() !== "" && imp.amount > 0);
     onSubmit({
       name: name.trim(),
       description: description.trim() || undefined,
@@ -157,9 +85,10 @@ export function ActionForm({
           .toUpperCase() || undefined,
       start,
       end,
-      status,
-      declaredProgressPct,
-      impacts: validImpacts,
+      status: sync.status,
+      declaredProgressPct: sync.declaredProgressPct,
+      deliveredDate: sync.deliveredDate,
+      weightPct,
     });
   };
 
@@ -201,8 +130,8 @@ export function ActionForm({
           </label>
           <select
             className={selectClass}
-            value={status}
-            onChange={(e) => setStatus(e.target.value as ActionStatus)}
+            value={sync.status}
+            onChange={(e) => pick(applyActionStatus(base, e.target.value as ActionStatus))}
           >
             {ACTION_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -235,6 +164,23 @@ export function ActionForm({
         </div>
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
+            {t("actionWeights.weight", "Poids (%)")}
+          </label>
+          <input
+            className={inputClass}
+            type="number"
+            min={0}
+            max={100}
+            step={0.1}
+            value={weightPct ?? ""}
+            onChange={(e) =>
+              setWeightPct(e.target.value === "" ? undefined : Number(e.target.value))
+            }
+            placeholder={t("actionWeights.optional", "Optionnel")}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
             {t("shared.actionForm.declaredProgressPct", "Avancement déclaratif (%)")}
           </label>
           <input
@@ -243,371 +189,16 @@ export function ActionForm({
             min={0}
             max={100}
             step={1}
-            value={declaredProgressPct ?? ""}
-            onChange={(e) =>
-              setDeclaredProgressPct(e.target.value === "" ? undefined : Number(e.target.value))
-            }
+            value={sync.declaredProgressPct ?? ""}
+            onChange={(e) => {
+              if (e.target.value === "") {
+                setSync((c) => ({ ...c, declaredProgressPct: undefined }));
+                return;
+              }
+              pick(applyActionProgress(base, Number(e.target.value)));
+            }}
             placeholder={t("shared.actionForm.declaredProgressPctPlaceholder", "Non déclaré")}
           />
-        </div>
-      </div>
-
-      {/* Tableau d'impacts inline */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wide text-secondary">
-            {t("action.impacts", "Lignes d'impact")}
-          </span>
-          <button
-            type="button"
-            onClick={addImpact}
-            className="rounded-sm bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral transition hover:bg-bp-coral/20"
-          >
-            + {t("common.add", "Ajouter")}
-          </button>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto rounded-md border border-border">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1270px] border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-border bg-neutral-50">
-                  <th className="sticky left-0 z-10 w-[90px] min-w-[90px] bg-neutral-50 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("shared.actionForm.type", "Type")}
-                  </th>
-                  <th className="w-[160px] min-w-[160px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("leverForm.sectionDescription", "Description")}
-                  </th>
-                  <th className="w-[110px] min-w-[110px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("leverDetail.impactTable.nature", "Nature")}
-                  </th>
-                  <th className="w-[90px] min-w-[90px] px-2 py-1.5 text-right text-xs font-semibold uppercase tracking-wide text-secondary">
-                    €M
-                  </th>
-                  <th className="w-[70px] min-w-[70px] px-2 py-1.5 text-right text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("shared.actionForm.fteColumn", "ETP")}
-                  </th>
-                  <th className="w-[130px] min-w-[130px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("shared.actionForm.savingType", "Type de gain")}
-                  </th>
-                  <th className="w-[220px] min-w-[220px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("shared.actionForm.capexDate", "CAPEX — mode & dates")}
-                  </th>
-                  <th className="w-[120px] min-w-[120px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("shared.actionForm.gainDate", "Date gain")}
-                  </th>
-                  {/* Demande métier "une seule colonne de rattachement" : on ne garde plus que la
-                   *  maille la plus fine de l'arborescence financière (`HierarchyLeafSelect`,
-                   *  `impact.hierarchyLeafId`), qui fait automatiquement le lien avec le P&L —
-                   *  les anciennes colonnes "Poste de coût" (`pnlMap`), "Centre de coût" texte
-                   *  libre legacy (`costCenter`) et "Entité (P&L)" (`entity`) sont retirées de ce
-                   *  formulaire (elles restent lisibles en repli côté calcul, voir `lib/engine.ts`
-                   *  `resolveImpactAccount`, pour les données déjà saisies). Repli sur le champ
-                   *  texte libre legacy `costCenter` uniquement si l'entreprise n'a pas configuré
-                   *  de hiérarchie financière (`hasHierarchy`, même pattern que l'ancien
-                   *  `LeverForm.tsx`). */}
-                  <th className="w-[150px] min-w-[150px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("leverForm.costCenter", "Centre de coût")}
-                  </th>
-                  <th className="w-[180px] min-w-[180px] px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-secondary">
-                    {t("hr.column.comment", "Commentaire")}
-                  </th>
-                  <th
-                    className="w-[40px] min-w-[40px] px-2 py-1.5"
-                    aria-label={t("shared.actionForm.actionsColumnAria", "Actions")}
-                  />
-                </tr>
-              </thead>
-              <tbody>
-                {impacts.map((imp, idx) => (
-                  <tr key={imp.id} className="border-b border-border last:border-b-0">
-                    <td className="sticky left-0 z-10 w-[90px] min-w-[90px] bg-white px-2 py-1.5 align-top">
-                      <select
-                        className={selectClass}
-                        value={imp.type}
-                        onChange={(e) => {
-                          const newType = e.target.value as "cost" | "saving";
-                          const patch: Partial<ActionImpact> = { type: newType };
-                          // Si on passe en "saving" et que la nature est "capex" (non valide), basculer vers "oneoff"
-                          if (newType === "saving" && imp.nature === "capex") {
-                            patch.nature = "oneoff";
-                          }
-                          if (newType === "cost") {
-                            patch.savingType = undefined;
-                            patch.gainDate = undefined;
-                          }
-                          updateImpact(idx, patch);
-                        }}
-                      >
-                        <option value="cost">{t("action.cost", "Coût")}</option>
-                        <option value="saving">{t("action.saving", "Gain")}</option>
-                      </select>
-                    </td>
-
-                    <td className="w-[160px] min-w-[160px] px-2 py-1.5 align-top">
-                      <input
-                        className={inputClass}
-                        value={imp.label}
-                        onChange={(e) => updateImpact(idx, { label: e.target.value })}
-                        placeholder={t(
-                          "shared.actionForm.descriptionPlaceholder",
-                          "Description..."
-                        )}
-                      />
-                    </td>
-
-                    <td className="w-[110px] min-w-[110px] px-2 py-1.5 align-top">
-                      <select
-                        className={selectClass}
-                        value={imp.nature}
-                        onChange={(e) => {
-                          const nature = e.target.value as ActionImpact["nature"];
-                          const patch: Partial<ActionImpact> = { nature };
-                          if (nature !== "capex") {
-                            patch.capexDeploymentDate = undefined;
-                            patch.capexAllocationMode = undefined;
-                            patch.capexStartDate = undefined;
-                          }
-                          updateImpact(idx, patch);
-                        }}
-                      >
-                        {imp.type === "cost" ? (
-                          <>
-                            <option value="capex">{t("leverForm.capex", "CAPEX")}</option>
-                            <option value="oneoff">
-                              {t("shared.actionForm.oneOffCost", "OPEX one-off")}
-                            </option>
-                            <option value="opex_rec">
-                              {t("shared.actionForm.opexRecCost", "OPEX récurrent")}
-                            </option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="opex_rec">
-                              {t("leverDetail.impactTable.recurrent", "Récurrent")}
-                            </option>
-                            <option value="oneoff">
-                              {t("shared.actionForm.oneOff", "One-off")}
-                            </option>
-                          </>
-                        )}
-                      </select>
-                    </td>
-
-                    <td className="w-[90px] min-w-[90px] px-2 py-1.5 align-top">
-                      <input
-                        className={`${inputClass} text-right`}
-                        type="number"
-                        step="0.01"
-                        value={imp.amount || ""}
-                        onChange={(e) =>
-                          updateImpact(idx, { amount: parseFloat(e.target.value) || 0 })
-                        }
-                      />
-                    </td>
-
-                    <td className="w-[70px] min-w-[70px] px-2 py-1.5 align-top">
-                      <input
-                        className={`${inputClass} text-right`}
-                        type="number"
-                        step="1"
-                        value={imp.fteCount ?? ""}
-                        onChange={(e) =>
-                          updateImpact(idx, {
-                            fteCount: e.target.value ? parseInt(e.target.value) : undefined,
-                          })
-                        }
-                      />
-                    </td>
-
-                    <td className="w-[130px] min-w-[130px] px-2 py-1.5 align-top">
-                      {imp.type === "saving" ? (
-                        <select
-                          className={selectClass}
-                          value={imp.savingType ?? ""}
-                          onChange={(e) =>
-                            updateImpact(idx, {
-                              savingType: (e.target.value || undefined) as SavingType | undefined,
-                            })
-                          }
-                        >
-                          <option value="">—</option>
-                          {(Object.keys(SAVING_TYPE_LABELS) as SavingType[]).map((st) => (
-                            <option key={st} value={st}>
-                              {SAVING_TYPE_LABELS[st]}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-tertiary">—</span>
-                      )}
-                    </td>
-
-                    <td className="w-[220px] min-w-[220px] px-2 py-1.5 align-top">
-                      {imp.nature === "capex" ? (
-                        <div className="flex flex-col gap-1.5">
-                          <select
-                            className={selectClass}
-                            value={imp.capexAllocationMode ?? "one_shot"}
-                            onChange={(e) =>
-                              updateImpact(idx, {
-                                capexAllocationMode: e.target.value as "one_shot" | "smoothed",
-                                capexStartDate:
-                                  e.target.value === "smoothed" ? imp.capexStartDate : undefined,
-                              })
-                            }
-                            title={t(
-                              "shared.actionForm.capexAllocationModeTitle",
-                              "Mode de comptabilisation du CAPEX : engagé en une fois à une date précise, ou étalé sur une période"
-                            )}
-                          >
-                            <option value="one_shot">
-                              {t("shared.actionForm.capexOneShot", "One shot — une seule date")}
-                            </option>
-                            <option value="smoothed">
-                              {t("shared.actionForm.capexSmoothed", "Lissé — sur une période")}
-                            </option>
-                          </select>
-                          {imp.capexAllocationMode === "smoothed" && (
-                            <label className="block">
-                              <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
-                                {t("shared.actionForm.capexStartDateLabel", "Début période")}
-                              </span>
-                              <input
-                                className={inputClass}
-                                type="date"
-                                value={imp.capexStartDate ?? ""}
-                                onChange={(e) =>
-                                  updateImpact(idx, {
-                                    capexStartDate: e.target.value || undefined,
-                                  })
-                                }
-                                title={t(
-                                  "shared.actionForm.capexStartDateTitle",
-                                  "Début de la période de lissage"
-                                )}
-                              />
-                            </label>
-                          )}
-                          <label className="block">
-                            <span className="mb-0.5 block text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
-                              {imp.capexAllocationMode === "smoothed"
-                                ? t("shared.actionForm.capexEndDateLabel", "Fin période")
-                                : t("shared.actionForm.capexDeploymentLabel", "Date d'engagement")}
-                            </span>
-                            <input
-                              className={inputClass}
-                              type="date"
-                              value={imp.capexDeploymentDate ?? ""}
-                              onChange={(e) =>
-                                updateImpact(idx, {
-                                  capexDeploymentDate: e.target.value || undefined,
-                                })
-                              }
-                              title={
-                                imp.capexAllocationMode === "smoothed"
-                                  ? t(
-                                      "shared.actionForm.capexEndDateTitle",
-                                      "Fin de la période de lissage"
-                                    )
-                                  : t(
-                                      "shared.actionForm.capexDeploymentTitle",
-                                      "Date à laquelle le CAPEX est engagé à 100%"
-                                    )
-                              }
-                            />
-                          </label>
-                        </div>
-                      ) : (
-                        <span className="text-tertiary">—</span>
-                      )}
-                    </td>
-
-                    <td className="w-[120px] min-w-[120px] px-2 py-1.5 align-top">
-                      {imp.type === "saving" ? (
-                        <input
-                          className={inputClass}
-                          type="date"
-                          value={imp.gainDate ?? ""}
-                          onChange={(e) =>
-                            updateImpact(idx, { gainDate: e.target.value || undefined })
-                          }
-                          title={t(
-                            "shared.actionForm.gainDateTitle",
-                            "Date d'encaissement réel du gain"
-                          )}
-                        />
-                      ) : (
-                        <span className="text-tertiary">—</span>
-                      )}
-                    </td>
-
-                    <td className="w-[150px] min-w-[150px] px-2 py-1.5 align-top">
-                      {hasHierarchy ? (
-                        <HierarchyLeafSelect
-                          companyId={companyId}
-                          value={imp.hierarchyLeafId}
-                          onChange={(leafId) => updateImpact(idx, { hierarchyLeafId: leafId })}
-                          className={selectClass}
-                        />
-                      ) : (
-                        <input
-                          className={inputClass}
-                          value={imp.costCenter ?? ""}
-                          onChange={(e) =>
-                            updateImpact(idx, { costCenter: e.target.value || undefined })
-                          }
-                          placeholder={t("shared.actionForm.costCenterPlaceholder", "CC...")}
-                        />
-                      )}
-                    </td>
-
-                    <td className="w-[180px] min-w-[180px] px-2 py-1.5 align-top">
-                      <input
-                        className={inputClass}
-                        value={imp.comments?.[imp.comments.length - 1]?.text ?? ""}
-                        onChange={(e) => {
-                          const text = e.target.value;
-                          updateImpact(idx, {
-                            comments: text
-                              ? [
-                                  {
-                                    user:
-                                      owner.trim() ||
-                                      t("shared.actionForm.demoUser", "Utilisateur démo"),
-                                    ts: new Date().toISOString().slice(0, 10),
-                                    text,
-                                  },
-                                ]
-                              : [],
-                          });
-                        }}
-                        placeholder={t(
-                          "shared.actionForm.calcMethodPlaceholder",
-                          "Méthode de calcul, hypothèses..."
-                        )}
-                      />
-                    </td>
-
-                    <td className="w-[40px] min-w-[40px] px-2 py-1.5 align-top">
-                      {impacts.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeImpact(idx)}
-                          className="text-tertiary transition hover:text-bp-coral"
-                          aria-label={t(
-                            "shared.actionForm.deleteImpactRowAria",
-                            "Supprimer cette ligne d'impact"
-                          )}
-                        >
-                          ×
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       </div>
 

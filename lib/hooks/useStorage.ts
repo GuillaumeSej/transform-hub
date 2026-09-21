@@ -13,7 +13,7 @@ import {
   subscribeHierarchyNodes,
 } from "@/lib/firestore/admin";
 import { derivePnlAccounts } from "@/lib/hierarchyLogic";
-import { migrateMockLeversToActions } from "@/lib/mockActionMigration";
+import { migrateLeversImpacts } from "@/lib/leverImpactMigration";
 import type { CascadeShift } from "@/lib/engine";
 import { mockData } from "@/data/mockData";
 import type {
@@ -220,10 +220,12 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   const data = useMemo(
     () => {
       const company = companies.find((item) => item.id === companyId);
-      // Garde défensive idempotente (voir hasActionImpacts) : les leviers viennent déjà enrichis
-      // de Firestore depuis le seed, ce passage ne fait plus rien en pratique — plus de
-      // sous-leviers vivants à fusionner (voir lockedSeed()).
-      const migratedLevers = migrateMockLeversToActions(levers, []);
+      // L'ancien enrichissement démo (actions + impacts fabriqués pour les leviers à macro-valeurs
+      // seules) n'est plus appliqué à la lecture : les leviers sans impact gardent leurs valeurs
+      // manuelles.
+      // Migration idempotente à la lecture : impacts d'actions -> impacts de levier (persistée
+      // paresseusement au prochain save du levier).
+      const migratedLevers = migrateLeversImpacts(levers);
       return {
         program: programConfig.program,
         workstreams: programConfig.workstreams,

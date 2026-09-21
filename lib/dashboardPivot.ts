@@ -142,7 +142,7 @@ export const DIMENSION_REGISTRY: DimensionDef[] = [
   { key: "type", label: "Type de levier", getValue: (l) => l.type || FALLBACK_LABEL },
   {
     key: "ws",
-    label: "Workstream",
+    label: "Chantier",
     getValue: (l, ctx) =>
       ctx.workstreams?.find((w) => w.id === l.ws)?.name ?? l.ws ?? FALLBACK_LABEL,
   },
