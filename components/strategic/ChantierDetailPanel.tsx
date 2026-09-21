@@ -1725,6 +1725,14 @@ export function ChantierDetailPanel({
    *  désormais correctement EFFACER le champ plutôt que d'échouer à l'écriture (voir son
    *  commentaire ci-dessus). */
   const updateProjetWeights = async (next: ChantierAction[]) => {
+    // Re-vérifie l'habilitation ICI, pas seulement via la prop `canEdit` de `ProjetWeightsEditor` —
+    // celle-ci ne fait que désactiver l'input côté rendu (attribut HTML `disabled`), qui ne protège
+    // pas contre un événement déclenché autrement sur le même input monté (devtools, extension...).
+    // Même garde que `canEditProjetWeights` ci-dessus ; échec silencieux (pas de throw) car cet
+    // appelant n'a pas de UI d'erreur dédiée pour un cas qui ne devrait jamais survenir en usage
+    // normal (le bouton est déjà désactivé) — voir `approveMilestoneGate` pour l'équivalent qui,
+    // lui, lève une erreur car appelé depuis une action utilisateur explicite (bouton "Approuver").
+    if (!canEditProjetWeights) return;
     const changed = next.filter((a) => {
       const before = chantierActions.find((b) => b.id === a.id);
       return !!before && before.chantierWeightPct !== a.chantierWeightPct;

@@ -58,7 +58,7 @@ export function subscribeCompanies(
 }
 
 export async function saveCompany(company: Company): Promise<void> {
-  await setDoc(doc(companiesCol(), company.id), company);
+  await setDoc(doc(companiesCol(), company.id), stripUndefined(company));
   // Tenu à jour en même temps que la fiche entreprise complète : l'annuaire ne porte QUE id+nom
   // (jamais de configuration financière/RH), lisible avant authentification par l'écran de
   // connexion pour le sélecteur d'entreprise (voir lib/auth.ts, app/login/page.tsx, firestore.rules
@@ -121,8 +121,15 @@ export function subscribePrograms(
   );
 }
 
+/** Firestore refuse `undefined` (champs optionnels comme sponsor/owner/ambition) — on les retire
+ * du payload avant écriture (JSON round-trip : suffisant pour ces objets purs), même pattern que
+ * `stripUndefined` dans lib/firestore/workforce.ts. */
+function stripUndefined<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 export async function saveProgram(program: Program): Promise<void> {
-  await setDoc(doc(programsCol(), program.id), program);
+  await setDoc(doc(programsCol(), program.id), stripUndefined(program));
 }
 
 export async function deleteProgram(id: string): Promise<void> {
@@ -199,7 +206,7 @@ export function subscribeHierarchyNodes(
 }
 
 export async function saveHierarchyNode(node: HierarchyNode): Promise<void> {
-  await setDoc(doc(hierarchyNodesCol(), node.id), node);
+  await setDoc(doc(hierarchyNodesCol(), node.id), stripUndefined(node));
 }
 
 export async function deleteHierarchyNode(id: string): Promise<void> {
@@ -276,7 +283,10 @@ export function subscribeUsers(
  *  companyDirectory/UsersPanel) — ne jamais confondre les deux. */
 export async function saveUser(user: AuthUser): Promise<void> {
   const normalized = { ...user, username: user.username.trim().toLowerCase() };
-  await setDoc(doc(usersCol(), accountSlug(normalized.username, normalized.companyId)), normalized);
+  await setDoc(
+    doc(usersCol(), accountSlug(normalized.username, normalized.companyId)),
+    stripUndefined(normalized)
+  );
 }
 
 export async function deleteUser(username: string, companyId?: string | null): Promise<void> {
