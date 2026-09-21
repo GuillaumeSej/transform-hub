@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -16,6 +17,16 @@ import { Modal } from "@/components/shared/Modal";
 import { IndicatorDeltaStat } from "@/components/strategic/IndicatorDeltaStat";
 import { computeIndicatorDelta, recentMeasurementWindow } from "@/lib/axisLogic";
 import type { Indicator, IndicatorMeasurement } from "@/types";
+
+// Palette de la courbe (rendu NON-compact uniquement — la sparkline `compact` de
+// `BusinessKpiCard`/`IndicatorStatusSummary.tsx` garde son coral fixe, hors périmètre de ce round) :
+// sans cible chiffrée, coral de marque par défaut (comme avant) ; avec cible, EXACTEMENT les mêmes
+// teintes que `IndicatorDonut`/`IndicatorDeltaStat` (rag-green = noir, la marque interdisant le vert
+// littéral ; rag-amber = taupe) — la courbe devient ainsi un second lecteur du même signal de statut
+// que le camembert d'en-tête de `IndicatorCard`, plutôt qu'une couleur arbitraire déconnectée.
+const COLOR_DEFAULT = "#FF3C47";
+const COLOR_FAVORABLE = "#000000";
+const COLOR_UNFAVORABLE = "#806659";
 
 /**
  * Graphique d'un indicateur : valeurs mesurées dans le temps + ligne d'objectif. Structure
@@ -86,6 +97,39 @@ function formatValue(value: number | string, unit?: string): string {
   return unit ? `${value} ${unit}` : `${value}`;
 }
 
+/**
+ * Infobulle personnalisée du graphique — même habillage carte (bordure + ombre légère) que
+ * `InvestVsSavingsTooltip` (`components/finance/FinanceCostCharts.tsx`), seul autre point de
+ * l'appli à définir une infobulle recharts sur mesure : la boîte grise par défaut de recharts ne
+ * porte ni la typographie ni les coins carrés de la marque BearingPoint.
+ */
+function IndicatorTooltip({
+  active,
+  payload,
+  label,
+  unit,
+  labelValue,
+}: {
+  active?: boolean;
+  payload?: { value?: number | string | null }[];
+  label?: string;
+  unit?: string;
+  labelValue: string;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const raw = payload[0]?.value;
+  if (raw === undefined || raw === null) return null;
+  return (
+    <div className="rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
+      <p className="text-[11px] font-semibold text-primary">{label}</p>
+      <p className="mt-0.5 text-[12px] text-secondary">
+        {labelValue} :{" "}
+        <span className="font-semibold text-text-primary">{formatValue(raw, unit)}</span>
+      </p>
+    </div>
+  );
+}
+
 export function IndicatorChart({
   measurements,
   objectiveValue,
@@ -104,8 +148,13 @@ export function IndicatorChart({
   labelProgress,
   hideDeltaStat = false,
 }: IndicatorChartProps) {
-  // Hook appelé avant tout retour anticipé (repli qualitatif / absence de mesure).
+  // Hooks appelés avant tout retour anticipé (repli qualitatif / absence de mesure). `useId`
+  // fournit un identifiant STABLE et unique par instance pour le `<linearGradient>` du remplissage
+  // de la courbe (voir `chart` plus bas) : sans lui, deux `IndicatorChart` montés côte à côte sur
+  // la page KPI (une carte par indicateur) partageraient le même `id` de gradient SVG, et le second
+  // silencieusement écraserait/référencerait celui du premier (les `id` sont globaux au document).
   const [fullHistoryOpen, setFullHistoryOpen] = useState(false);
+  const gradientId = `indicator-gradient-${useId().replace(/:/g, "")}`;
 
   const resolvedHeight = height ?? (compact ? 48 : 200);
 
@@ -201,14 +250,28 @@ export function IndicatorChart({
 
   const data = sorted.map((m) => ({ period: m.period, value: m.value ?? null }));
 
-  // Écart signé vs la cible (round 4, point 1) : calculé sur la DERNIÈRE mesure de tout
-  // l'historique (`all`, pas `sorted`/fenêtré) — l'écart affiché ne doit pas changer selon que la
-  // fenêtre "récente" masque ou non la mesure la plus récente. `undefined` (pas d'objectif chiffré,
-  // ou dernière mesure sans valeur) : `IndicatorDeltaStat` ne rend alors rien.
-  const deltaStat =
-    !compact && !hideDeltaStat && objectiveValue !== undefined
-      ? computeIndicatorDelta({ objectiveValue, direction }, all[all.length - 1])
+  // Dernière mesure de TOUT l'historique (`all`, pas `sorted`/fenêtré) — sert à la fois à l'écart
+  // signé ci-dessous ET au nouveau rappel de valeur courante (voir `chartWithDelta` plus bas) :
+  // aucun des deux ne doit changer selon que la fenêtre "récente" masque ou non la mesure la plus
+  // récente.
+  const latestOverall = all[all.length - 1];
+
+  // Statut vs la cible (round 4, point 1 ; réutilisé round 27 pour la couleur de la courbe) —
+  // calculé INDÉPENDAMMENT de `hideDeltaStat` : ce flag ne masque que le badge `IndicatorDeltaStat`
+  // rendu par CE composant (round 7, point 3 — l'appelant affiche déjà le même signal ailleurs),
+  // il ne doit pas priver la courbe elle-même de sa couleur de statut. `undefined` (pas d'objectif
+  // chiffré, ou dernière mesure sans valeur numérique) : ni badge ni couleur de statut, la courbe
+  // retombe sur le coral de marque par défaut.
+  const statusDelta =
+    !compact && objectiveValue !== undefined
+      ? computeIndicatorDelta({ objectiveValue, direction }, latestOverall)
       : undefined;
+  const deltaStat = hideDeltaStat ? undefined : statusDelta;
+  const lineColor = !statusDelta
+    ? COLOR_DEFAULT
+    : statusDelta.favorable
+      ? COLOR_FAVORABLE
+      : COLOR_UNFAVORABLE;
 
   // Sparkline : pas d'axe visible, donc pas de domaine par défaut lisible — on le calcule pour que
   // la courbe occupe toute la hauteur disponible ET que la ligne d'objectif reste dans le cadre
@@ -222,9 +285,14 @@ export function IndicatorChart({
     compactDomain = [lo - pad, hi + pad];
   }
 
+  // `ComposedChart` (plutôt que `LineChart`) : seul conteneur recharts capable d'accueillir à la
+  // fois la `Line` d'origine (rendu `compact`, INCHANGÉ pixel pour pixel — c'est la sparkline de
+  // `BusinessKpiCard`/`IndicatorStatusSummary.tsx`, explicitement hors périmètre de ce round) et la
+  // nouvelle `Area` à remplissage dégradé du rendu normal ci-dessous, sans dupliquer toute la
+  // structure grille/axes/`ReferenceLine` commune aux deux rendus.
   const chart = (
     <ResponsiveContainer width="100%" height={resolvedHeight}>
-      <LineChart
+      <ComposedChart
         data={data}
         margin={
           compact
@@ -232,13 +300,35 @@ export function IndicatorChart({
             : { top: 4, right: 8, left: -16, bottom: 0 }
         }
       >
+        {/* Dégradé de la zone sous la courbe (rendu normal uniquement) : de la couleur de statut de
+            la courbe (`lineColor`, voir plus haut) à transparent — même esprit que les graphiques
+            Finance (`components/finance/FinanceCostCharts.tsx`), qui utilisent déjà des remplissages
+            pleins pour donner du poids visuel à une courbe/barre plutôt qu'un simple filet. */}
         {!compact && (
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={lineColor} stopOpacity={0.25} />
+              <stop offset="95%" stopColor={lineColor} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+        )}
+        {!compact && (
+          // Round 27 : grille très légèrement plus marquée (6% de noir contre 4% avant) — le
+          // rendu précédent était au bord de l'invisible sur un écran standard, ce qui participait
+          // au ressenti "pas fini" signalé par le PO ; on reste loin d'un quadrillage chargé.
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
         )}
         {compact ? (
           <XAxis dataKey="period" hide />
         ) : (
-          <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+          <XAxis
+            dataKey="period"
+            tick={{ fontSize: 11 }}
+            // Ligne d'axe très discrète plutôt qu'entièrement masquée (`axisLine={false}` avant) :
+            // ancre visuellement la courbe à une base, sans réintroduire un cadre complet.
+            axisLine={{ stroke: "rgba(0,0,0,0.1)" }}
+            tickLine={false}
+          />
         )}
         {compact ? (
           <YAxis hide domain={compactDomain} />
@@ -251,7 +341,10 @@ export function IndicatorChart({
           />
         )}
         {!compact && (
-          <Tooltip formatter={(value) => [formatValue(value as number, unit), labelValue]} />
+          <Tooltip
+            content={<IndicatorTooltip unit={unit} labelValue={labelValue} />}
+            cursor={{ stroke: lineColor, strokeWidth: 1, strokeDasharray: "4 4" }}
+          />
         )}
         {objectiveValue !== undefined && (
           <ReferenceLine
@@ -272,43 +365,85 @@ export function IndicatorChart({
             }
           />
         )}
-        <Line
-          type="monotone"
-          dataKey="value"
-          name={labelValue}
-          stroke="#FF3C47"
-          strokeWidth={compact ? 2 : 2.5}
-          // Sparkline sans points… sauf s'il n'y a QU'UNE mesure : un segment de longueur nulle ne
-          // dessine rien, la carte paraîtrait vide alors qu'elle a une valeur.
-          dot={compact ? (data.length === 1 ? { r: 2.5 } : false) : { r: 3 }}
-          activeDot={compact ? false : { r: 5 }}
-          isAnimationActive={!compact}
-          connectNulls={false}
-        />
-      </LineChart>
+        {compact ? (
+          <Line
+            type="monotone"
+            dataKey="value"
+            name={labelValue}
+            stroke="#FF3C47"
+            strokeWidth={2}
+            // Sparkline sans points… sauf s'il n'y a QU'UNE mesure : un segment de longueur nulle
+            // ne dessine rien, la carte paraîtrait vide alors qu'elle a une valeur.
+            dot={data.length === 1 ? { r: 2.5 } : false}
+            activeDot={false}
+            isAnimationActive={false}
+            connectNulls={false}
+          />
+        ) : (
+          <Area
+            type="monotone"
+            dataKey="value"
+            name={labelValue}
+            stroke={lineColor}
+            strokeWidth={2.5}
+            fill={`url(#${gradientId})`}
+            dot={{ r: 3, fill: "#fff", stroke: lineColor, strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: lineColor, stroke: "#fff", strokeWidth: 2 }}
+            isAnimationActive
+            connectNulls={false}
+          />
+        )}
+      </ComposedChart>
     </ResponsiveContainer>
   );
 
   if (compact) return chart;
 
-  // L'écart signé s'affiche AU-DESSUS du graphique, aligné à droite comme le libellé de la
-  // `ReferenceLine` juste en dessous ("insideTopRight") — même coin visuel, sans superposer du
-  // texte sur la courbe recharts (positionnement fiable en HTML plutôt qu'en overlay SVG).
-  const chartWithDelta = deltaStat ? (
-    <div className="space-y-1.5">
-      <div className="flex justify-end">
-        <IndicatorDeltaStat
-          delta={deltaStat}
-          unit={unit}
-          compact
-          labels={{ progress: labelProgress }}
-        />
+  // Rappel de la dernière valeur (nouveau, round 27) : un chiffre en gros caractères gras, même
+  // poids visuel que `BusinessKpiCard` (`text-xl font-bold`), coloré comme la courbe (`lineColor`)
+  // — pour que le graphique ne soit plus le SEUL signal visuel de la carte. Aligné à gauche pour
+  // laisser l'écart signé (`IndicatorDeltaStat`, quand affiché) au même coin droit qu'avant.
+  // Volontairement ADDITIF : ne remplace ni ne masque rien de ce qui existait (le graphique reste
+  // visible en permanence, la valeur détaillée sous le graphique dans `IndicatorCard` n'est pas
+  // retirée).
+  const latestValueNode =
+    latestOverall?.value !== undefined ? (
+      <div className="flex items-baseline gap-1.5">
+        <span
+          className="text-xl font-bold leading-none tracking-tight"
+          style={{ color: lineColor }}
+        >
+          {formatValue(latestOverall.value, unit)}
+        </span>
+        <span className="font-mono text-[11px] text-tertiary">{latestOverall.period}</span>
       </div>
+    ) : null;
+
+  const header =
+    latestValueNode || deltaStat ? (
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>{latestValueNode}</div>
+        {deltaStat && (
+          <IndicatorDeltaStat
+            delta={deltaStat}
+            unit={unit}
+            compact
+            labels={{ progress: labelProgress }}
+          />
+        )}
+      </div>
+    ) : null;
+
+  // Cadre léger (même habillage que le bloc "Objectif" voisin dans `IndicatorCard.tsx` — bordure +
+  // fond `bg-bg-surface/60`, round 27) autour du rappel de valeur + de la courbe : donne au
+  // graphique sa propre identité visuelle plutôt que de flotter nu dans la carte, sans ajouter de
+  // second `Card` imbriqué (l'appelant garde la main sur son propre habillage extérieur).
+  const chartPanel = (
+    <div className="rounded-lg border border-border bg-bg-surface/40 px-3 pb-1 pt-3">
+      {header && <div className="mb-2">{header}</div>}
       {chart}
     </div>
-  ) : (
-    chart
   );
 
-  return <>{withZoom(chartWithDelta)}</>;
+  return <>{withZoom(chartPanel)}</>;
 }
