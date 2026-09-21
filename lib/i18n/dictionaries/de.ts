@@ -1270,9 +1270,8 @@ const de: Record<string, string> = {
   // Achsen-Detailblatt
   "strategicAxes.back": "Zurück zu den Achsen",
   "strategicAxes.notFound": "Achse nicht gefunden.",
-  "strategicAxes.sponsor": "Achsen-Sponsor",
   "strategicAxes.sponsorShort": "Sponsor",
-  "strategicAxes.owner": "Verantwortlich",
+  "strategicAxes.owner": "Sponsor der Achse",
   "strategicAxes.editAxis": "Achse bearbeiten",
   "strategicAxes.editAxisModalTitle": "Achse bearbeiten",
   "strategicAxes.stageUpdated": "Stufe aktualisiert",
@@ -1695,6 +1694,10 @@ const de: Record<string, string> = {
   "staffing.endDate": "Ende",
   "staffing.action": "Betroffenes Projekt",
   "staffing.actionNone": "Kein bestimmtes Projekt",
+  "staffing.columnPerson": "Person/Präzisierung",
+  "staffing.columnFte": "VZÄ-Satz",
+  "staffing.columnProjet": "Projekt",
+  "staffing.projetSectionTitle": "Auf dieses Projekt eingesetzte VZÄ",
 
   // ─── Seite Personaleinsatz (/effectifs, Strategieplan) ────────────────────
   "effectifs.title": "Eingesetztes Personal & Budget",

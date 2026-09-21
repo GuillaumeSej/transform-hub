@@ -45,7 +45,7 @@ import {
   sumProjetBudgets,
   type ProgressBucket,
 } from "@/lib/axisLogic";
-import { aggregateLinkedKpis, resolveDeleteApproval } from "@/lib/chantierKpis";
+import { aggregateLinkedKpis, readKpi, resolveDeleteApproval } from "@/lib/chantierKpis";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import {
@@ -2671,6 +2671,12 @@ export function ChantierDetailPanel({
                   const linkedIndicatorNumber = linkedIndicator
                     ? indicatorNumbers.get(linkedIndicator.id)
                     : undefined;
+                  // Actuel/Cible du KPI rattaché (round 28) — même lecture que `SuccessKpiList`
+                  // (`readKpi`, sans `targetOverride` ici : ce n'est pas un critère de succès du
+                  // chantier avec sa propre cible, juste l'`objectiveValue` natif de l'indicateur).
+                  const linkedIndicatorReading = linkedIndicator
+                    ? readKpi(linkedIndicator, data.measurements)
+                    : undefined;
                   return (
                     <li
                       key={action.id}
@@ -2838,9 +2844,12 @@ export function ChantierDetailPanel({
                         ne sais pas si c'est vraiment au bon endroit ») : sa propre carte, MÊME
                         convention que "Livrables attendus" ci-dessus (`rounded-lg border
                         border-border bg-neutral-50/50 p-3`), placée juste avant les jalons pour
-                        l'ordre de lecture description → livrables → KPI associé → jalons →
-                        dépendances. Absente du tout si le levier n'a pas de `indicatorId` (même
-                        parti pris qu'avant l'extraction — pas de carte vide). ────────────────── */}
+                        l'ordre de lecture description → livrables → KPI associé → ETP mobilisés →
+                        jalons → dépendances. Absente du tout si le levier n'a pas de `indicatorId`
+                        (même parti pris qu'avant l'extraction — pas de carte vide). Round 28 :
+                        gagne l'actuel/cible (`readKpi`, même lecture que `SuccessKpiList`) sous le
+                        lien — rien n'est affiché quand la mesure ou la cible manque plutôt qu'une
+                        valeur fabriquée (`readKpi` encode déjà cette règle via `undefined`). ── */}
                           {action.indicatorId && (
                             <div className="mt-3 rounded-lg border border-border bg-neutral-50/50 p-3">
                               <div className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
@@ -2848,19 +2857,42 @@ export function ChantierDetailPanel({
                               </div>
                               <div className="mt-1">
                                 {linkedIndicator ? (
-                                  <button
-                                    onClick={() =>
-                                      navigateAway(`/kpi?indicator=${action.indicatorId}`)
-                                    }
-                                    className="text-[13px] font-medium text-bp-coral hover:underline"
-                                  >
-                                    {t(
-                                      "strategicChantierDetail.indicatorLink.label",
-                                      "KPI n°{n} · {name}"
-                                    )
-                                      .replace("{n}", String(linkedIndicatorNumber ?? "?"))
-                                      .replace("{name}", linkedIndicator.name)}
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() =>
+                                        navigateAway(`/kpi?indicator=${action.indicatorId}`)
+                                      }
+                                      className="text-[13px] font-medium text-bp-coral hover:underline"
+                                    >
+                                      {t(
+                                        "strategicChantierDetail.indicatorLink.label",
+                                        "KPI n°{n} · {name}"
+                                      )
+                                        .replace("{n}", String(linkedIndicatorNumber ?? "?"))
+                                        .replace("{name}", linkedIndicator.name)}
+                                    </button>
+                                    {linkedIndicatorReading?.current !== undefined &&
+                                      linkedIndicatorReading?.target !== undefined && (
+                                        <div className="mt-1 text-[11.5px] text-secondary">
+                                          {t(
+                                            "strategicChantierDetail.successKpis.current",
+                                            "Actuel"
+                                          )}{" "}
+                                          : {linkedIndicatorReading.current}
+                                          {linkedIndicator.unit ? ` ${linkedIndicator.unit}` : ""}
+                                          {" · "}
+                                          {t(
+                                            "strategicChantierDetail.successKpis.target",
+                                            "Cible"
+                                          )}{" "}
+                                          : {linkedIndicatorReading.target}
+                                          {linkedIndicator.unit ? ` ${linkedIndicator.unit}` : ""}
+                                          {linkedIndicatorReading.progressPct !== undefined
+                                            ? ` · ${linkedIndicatorReading.progressPct} %`
+                                            : ""}
+                                        </div>
+                                      )}
+                                  </>
                                 ) : (
                                   <span className="text-[13px] text-tertiary">
                                     {t(
@@ -2872,6 +2904,27 @@ export function ChantierDetailPanel({
                               </div>
                             </div>
                           )}
+
+                          {/* ── ETP mobilisés sur CE projet (round 28) — instance SCOPÉE
+                        (`scopedToActionId`) du même composant que l'onglet "Effectifs" (qui reste
+                        inchangé, vue transverse au chantier entier, voir plus bas dans ce fichier).
+                        Pas de `border` ici, même motif que le bloc "Suivi du LEVIER" juste en
+                        dessous : `ChantierStaffingEditor` dessine déjà son propre cadre, un second
+                        cadre autour ferait un double-cadre. ─────────────────────────────────── */}
+                          <div className="mt-3 rounded-lg bg-neutral-50/50 p-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+                              {t("staffing.projetSectionTitle", "ETP mobilisés sur ce projet")}
+                            </div>
+                            <div className="mt-1.5">
+                              <ChantierStaffingEditor
+                                companyId={user?.companyId ?? ""}
+                                programId={activeProgramId ?? ""}
+                                chantierId={chantier.id}
+                                chantierActions={chantierActions}
+                                scopedToActionId={action.id}
+                              />
+                            </div>
+                          </div>
 
                           {/* ── Suivi du LEVIER : jalons E0→E4, universellement pour tout levier
                         avec ou sans KPI rattaché (round 18 — l'ancien aiguillage vers un kanban

@@ -1695,6 +1695,10 @@ const es: Record<string, string> = {
   "staffing.endDate": "Fin",
   "staffing.action": "Iniciativa relacionada",
   "staffing.actionNone": "Ninguna iniciativa en particular",
+  "staffing.columnPerson": "Persona/Detalle",
+  "staffing.columnFte": "Tasa de ETC",
+  "staffing.columnProjet": "Iniciativa",
+  "staffing.projetSectionTitle": "ETC movilizados en esta iniciativa",
 
   // ─── Página Personal movilizado (/effectifs, Plan Estratégico) ────────────
   "effectifs.title": "Personal y presupuesto movilizados",

@@ -1700,6 +1700,10 @@ const en: Record<string, string> = {
   "staffing.endDate": "End",
   "staffing.action": "Related project",
   "staffing.actionNone": "No specific project",
+  "staffing.columnPerson": "Person/Detail",
+  "staffing.columnFte": "FTE rate",
+  "staffing.columnProjet": "Project",
+  "staffing.projetSectionTitle": "FTEs assigned to this project",
 
   // ─── Staffing page (/effectifs, Strategic Plan) ───────────────────────────
   "effectifs.title": "Mobilized staffing & budget",

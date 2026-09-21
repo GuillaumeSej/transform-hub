@@ -39,6 +39,14 @@ import type { ChantierAction, ChantierStaffing } from "@/types";
  * `ChantierStaffing` dans `types/index.ts` pour le raisonnement complet. Une entreprise sans base
  * ETP encore saisie n'a aucune option : le champ reste vide plutôt que de retomber sur un
  * référentiel arbitraire.
+ *
+ * Round 28 : la liste plate (un `<li>` par ligne, champs concaténés avec "·") est devenue un vrai
+ * `<table>` — une personne = une ligne, colonnes Personne/Précision, Équipe, Début, Fin, Taux ETP,
+ * et Projet quand pertinent (même convention de tableau que `StaffingDetailModal.tsx` :
+ * `overflow-x-auto rounded-md border` + `<thead className="bg-neutral-50 ...">`). Gagne aussi
+ * `scopedToActionId` : rendu une SECONDE fois (en plus de l'instance chantier existante, inchangée)
+ * directement sur la carte d'un projet/levier précis, pour y afficher SES lignes de staffing sans
+ * naviguer jusqu'à l'onglet "Effectifs" — voir `ChantierDetailPanel.tsx`.
  */
 
 const INPUT_CLASS =
@@ -68,6 +76,7 @@ export function ChantierStaffingEditor({
   programId,
   chantierId,
   chantierActions,
+  scopedToActionId,
 }: {
   companyId: string;
   programId: string;
@@ -75,6 +84,12 @@ export function ChantierStaffingEditor({
   /** Leviers du chantier (round 7) — univers du sélecteur optionnel « levier concerné » ci-dessous.
    *  Un staffing transverse au chantier reste possible en laissant le sélecteur vide. */
   chantierActions: ChantierAction[];
+  /** Scope optionnel à UN projet précis (`ChantierAction.id`) — filtre les lignes affichées à
+   *  celles dont `actionId` correspond, cache la colonne "Projet" (redondante dans ce contexte), et
+   *  pré-remplit/verrouille le sélecteur "Projet concerné" du formulaire d'ajout sur cette valeur
+   *  (toujours modifiable manuellement si l'utilisateur veut au contraire déclarer une ligne
+   *  transverse au chantier depuis cette vue — ne pas rendre le champ totalement inerte). */
+  scopedToActionId?: string;
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -90,7 +105,10 @@ export function ChantierStaffingEditor({
   const [noteDraft, setNoteDraft] = useState("");
   const [startDateDraft, setStartDateDraft] = useState("");
   const [endDateDraft, setEndDateDraft] = useState("");
-  const [actionDraft, setActionDraft] = useState("");
+  // Pré-rempli (pas verrouillé, voir doc-comment de `scopedToActionId`) sur le projet scopé dès le
+  // montage — simple valeur initiale de `useState`, jamais re-synchronisée ensuite pour ne pas
+  // écraser un choix manuel de l'utilisateur.
+  const [actionDraft, setActionDraft] = useState(scopedToActionId ?? "");
   const [saving, setSaving] = useState(false);
 
   const actionNameById = useMemo(
@@ -124,12 +142,21 @@ export function ChantierStaffingEditor({
   const entries = useMemo(
     () =>
       all
-        .filter((e) => e.chantierId === chantierId && e.programId === programId)
+        .filter(
+          (e) =>
+            e.chantierId === chantierId &&
+            e.programId === programId &&
+            (!scopedToActionId || e.actionId === scopedToActionId)
+        )
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
-    [all, chantierId, programId]
+    [all, chantierId, programId, scopedToActionId]
   );
 
   const totalFte = entries.reduce((sum, e) => sum + (e.fte || 0), 0);
+
+  // Colonne "Projet" redondante en mode scopé (toutes les lignes affichées appartiennent déjà au
+  // même projet) — et sans intérêt sur un chantier qui n'a aucun levier (`chantierActions` vide).
+  const showProjetColumn = !scopedToActionId && chantierActions.length > 0;
 
   const add = async () => {
     if (!functionDraft) {
@@ -164,7 +191,10 @@ export function ChantierStaffingEditor({
       setNoteDraft("");
       setStartDateDraft("");
       setEndDateDraft("");
-      setActionDraft("");
+      // Retombe sur le projet scopé (pas sur vide) quand ce composant est rendu depuis la carte
+      // d'un projet précis — sinon la ligne suivante saisie depuis cette même vue partirait "sans
+      // projet" par défaut, contre-intuitif pour l'utilisateur qui vient de l'ouvrir depuis là.
+      setActionDraft(scopedToActionId ?? "");
     } catch {
       showToast(t("staffing.saveError"), "", "error");
     } finally {
@@ -197,47 +227,64 @@ export function ChantierStaffingEditor({
       ) : entries.length === 0 ? (
         <p className="text-[12px] text-tertiary">{t("staffing.empty")}</p>
       ) : (
-        <ul className="mb-3 space-y-1.5">
-          {entries.map((entry) => (
-            <li
-              key={entry.id}
-              className="flex items-center gap-2 rounded-md border border-border bg-white px-2.5 py-1.5"
-            >
-              <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[12px] font-medium text-primary">
-                <span
-                  aria-hidden
-                  className={`h-2 w-2 shrink-0 rounded-full ${colorForDepartment(entry.function)}`}
-                />
-                {entry.function}
-                {entry.note && <span className="ml-1.5 text-tertiary">· {entry.note}</span>}
-                {(entry.startDate || entry.endDate) && (
-                  <span className="ml-1.5 text-tertiary">
-                    · {entry.startDate ?? "…"} → {entry.endDate ?? "…"}
-                  </span>
+        <div className="mb-3 overflow-x-auto rounded-md border border-border">
+          <table className="w-full min-w-[560px] text-left text-[12px]">
+            <thead className="bg-neutral-50 text-[11px] font-semibold uppercase tracking-wide text-secondary">
+              <tr>
+                <th className="px-2.5 py-2">{t("staffing.columnPerson", "Personne/Précision")}</th>
+                <th className="px-2.5 py-2">{t("staffing.function")}</th>
+                <th className="px-2.5 py-2">{t("staffing.startDate")}</th>
+                <th className="px-2.5 py-2">{t("staffing.endDate")}</th>
+                <th className="px-2.5 py-2 text-right">{t("staffing.columnFte", "Taux ETP")}</th>
+                {showProjetColumn && (
+                  <th className="px-2.5 py-2">{t("staffing.columnProjet", "Projet")}</th>
                 )}
-                {entry.actionId && (
-                  <span className="ml-1.5 text-tertiary">
-                    · {actionNameById.get(entry.actionId) ?? t("staffing.actionNone")}
-                  </span>
-                )}
-              </span>
-              <span className="whitespace-nowrap text-[12px] font-semibold text-primary">
-                {formatFte(entry.fte)} {t("staffing.fteUnit")}
-              </span>
-              {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => remove(entry.id)}
-                  aria-label={t("staffing.remove")}
-                  title={t("staffing.remove")}
-                  className="rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
-                >
-                  <Trash2 size={13} />
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+                {!readOnly && <th className="px-2.5 py-2" aria-hidden />}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {entries.map((entry) => (
+                <tr key={entry.id} className="bg-white text-primary">
+                  <td className="px-2.5 py-1.5 font-medium">{entry.note || "—"}</td>
+                  <td className="px-2.5 py-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        aria-hidden
+                        className={`h-2 w-2 shrink-0 rounded-full ${colorForDepartment(entry.function)}`}
+                      />
+                      {entry.function}
+                    </span>
+                  </td>
+                  <td className="px-2.5 py-1.5 text-tertiary">{entry.startDate || "—"}</td>
+                  <td className="px-2.5 py-1.5 text-tertiary">{entry.endDate || "—"}</td>
+                  <td className="px-2.5 py-1.5 text-right font-semibold">
+                    {formatFte(entry.fte)} {t("staffing.fteUnit")}
+                  </td>
+                  {showProjetColumn && (
+                    <td className="px-2.5 py-1.5 text-tertiary">
+                      {entry.actionId
+                        ? (actionNameById.get(entry.actionId) ?? t("staffing.actionNone"))
+                        : "—"}
+                    </td>
+                  )}
+                  {!readOnly && (
+                    <td className="px-2.5 py-1.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => remove(entry.id)}
+                        aria-label={t("staffing.remove")}
+                        title={t("staffing.remove")}
+                        className="rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {!readOnly && (

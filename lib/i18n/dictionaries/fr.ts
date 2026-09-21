@@ -1801,6 +1801,10 @@ const fr: Record<string, string> = {
   "staffing.endDate": "Fin",
   "staffing.action": "Projet concerné",
   "staffing.actionNone": "Aucun projet en particulier",
+  "staffing.columnPerson": "Personne/Précision",
+  "staffing.columnFte": "Taux ETP",
+  "staffing.columnProjet": "Projet",
+  "staffing.projetSectionTitle": "ETP mobilisés sur ce projet",
 
   // ─── Page Effectifs mobilisés (/effectifs, Plan Stratégique) ──────────────
   "effectifs.title": "Effectifs & budget mobilisés",
