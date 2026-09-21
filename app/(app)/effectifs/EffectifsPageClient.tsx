@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUpRight, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import {
   Bar as RBar,
+  BarChart as RBarChart,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -72,12 +73,17 @@ import type { ChantierStaffing } from "@/types";
  * voir `lib/nav-config.ts`). Une entreprise sans base ETP encore saisie voit cette page vide de
  * toute équipe, avec un message explicite plutôt qu'un référentiel arbitraire.
  *
- * Barres : pur CSS/Tailwind (largeur en %), comme les barres de `KPICard` — pas de dépendance
- * graphique pour une répartition à une dimension. Chaque barre porte la couleur PROPRE à son
- * équipe (`colorForDepartment`, lib/axisLogic.ts — même hash déterministe que `colorForChantier`)
- * plutôt qu'une couleur unique — la sélection reste signalée par le halo `ring-*` autour de la
- * piste (voir `Bar` ci-dessous), pas par un changement de couleur qui effacerait l'identité de
- * l'équipe.
+ * Comparaison PAR ÉQUIPE (round <n>, remplace l'ancienne barre CSS à ratio unique) : un
+ * `BarChart` recharts partagé par toutes les équipes, deux groupes de barres par équipe —
+ * `disponible` (seule, à gauche) puis un EMPILEMENT `mobilisé` + `écart au besoin déclaré` (une
+ * seule colonne, à droite) — voir `needVsAvailableChartData` plus bas. L'écart mobilisé/déclaré
+ * devient ainsi un segment visuellement DISTINCT plutôt qu'un pourcentage à calculer mentalement
+ * entre deux barres séparées (demande PO : « je veux voir l'écart directement »). Couleurs
+ * SÉMANTIQUES fixes (mêmes teintes que le graphique « Évolution par période » ci-dessus) plutôt
+ * que la couleur PROPRE à chaque équipe qu'utilisait l'ancienne barre CSS (`colorForDepartment`) :
+ * comparer un même segment (l'écart, en particulier) d'une équipe à l'autre exige une teinte
+ * commune, l'identité de l'équipe restant portée par le point de couleur + le libellé dans la
+ * liste texte ci-dessous, inchangée.
  *
  * Rien à voir avec les écrans RH du Plan Performance eux-mêmes : `Chantier`/`ChantierStaffing`
  * n'existent que côté stratégique, et la route est fermée aux programmes Performance (voir la
@@ -102,25 +108,6 @@ function overlapsPeriod(entry: ChantierStaffing, period: { start: string; end: s
   if (!entry.startDate) return false;
   const entryEnd = entry.endDate ?? "9999-12-31";
   return entry.startDate <= period.end && entryEnd >= period.start;
-}
-
-/** Barre horizontale simple — `pct` déjà borné par l'appelant. `fn` détermine la couleur de
- *  remplissage (identité de l'équipe, toujours visible) ; `highlighted` ajoute un halo corail
- *  autour de la piste plutôt que de remplacer la couleur — deux signaux indépendants (équipe vs
- *  sélection) qui ne se marchent pas dessus. */
-function Bar({ pct, fn, highlighted = false }: { pct: number; fn: string; highlighted?: boolean }) {
-  return (
-    <div
-      className={`h-2 w-full overflow-hidden rounded-full bg-neutral-200 ${
-        highlighted ? "ring-2 ring-bp-coral ring-offset-1" : ""
-      }`}
-    >
-      <div
-        className={`h-full rounded-full transition-all ${colorForDepartment(fn)}`}
-        style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
-      />
-    </div>
-  );
 }
 
 /** Repère "à quel niveau du drill-down budgétaire suis-je ?" pour le donut « Budget financier
@@ -283,6 +270,24 @@ export function EffectifsPageClient() {
       }))
       .sort((a, b) => b.needed - a.needed);
   }, [needTotalsByFunction, fteByDept]);
+
+  /** Projection de `needVsAvailable` pour le `BarChart` comparatif par équipe (round <n>) —
+   *  `mobilisedBase` vaut TOUJOURS `mobilised` (mobilisé est structurellement un sous-ensemble du
+   *  besoin déclaré, voir `needMetrics` dans lib/staffingNeed.ts : mêmes lignes, filtrées en plus
+   *  sur `startDate <= today` — jamais mobilisé > déclaré en usage normal, `Math.min` par
+   *  sécurité), `gapToDeclared` le reste jusqu'au besoin déclaré total. Empilées (`stackId`), ces
+   *  deux valeurs forment UNE colonne dont la hauteur totale vaut le besoin déclaré, avec le
+   *  segment mobilisé et l'écart visuellement distincts — voir le doc-comment de tête de fichier. */
+  const needVsAvailableChartData = useMemo(
+    () =>
+      needVsAvailable.map(({ fn, needed, mobilised, available }) => ({
+        fn,
+        available,
+        mobilisedBase: Math.min(mobilised, needed),
+        gapToDeclared: Math.max(needed - mobilised, 0),
+      })),
+    [needVsAvailable]
+  );
 
   /** Détail « exploitable » ouvert par clic sur le besoin OU le disponible d'une équipe (round <n>,
    *  même esprit que `StaffingPeriodBreakdown.detailScope`) — `null` = aucune modale ouverte.
@@ -862,70 +867,184 @@ export function EffectifsPageClient() {
           {needVsAvailable.length === 0 ? (
             <p className="text-sm text-text-secondary">{t("effectifs.needVsAvailable.empty")}</p>
           ) : (
-            <ul className="space-y-3">
-              {needVsAvailable.map(({ fn, needed, mobilised, available }) => {
-                const pct = available > 0 ? Math.round((needed / available) * 100) : null;
-                const overAllocated = pct !== null && pct > 100;
-                return (
-                  <li key={fn}>
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-primary">
-                        <span
-                          aria-hidden
-                          className={`h-2 w-2 rounded-full ${colorForDepartment(fn)}`}
-                        />
-                        {fn}
-                      </span>
-                      <span className="text-[12px] text-secondary">
-                        <button
-                          type="button"
-                          onClick={() => setNeedDetailScope({ kind: "need", fn })}
-                          title={t("effectifs.needVsAvailable.needDetailTitle").replace(
-                            "{team}",
-                            fn
-                          )}
-                          className="font-bold text-primary underline-offset-2 hover:text-bp-coral hover:underline"
-                        >
-                          {formatFte(needed)}
-                        </button>{" "}
-                        {t("effectifs.needVsAvailable.neededOf")}{" "}
-                        <button
-                          type="button"
-                          onClick={() => setNeedDetailScope({ kind: "available", fn })}
-                          title={t("effectifs.needVsAvailable.availableToday")}
-                          className="font-bold text-primary underline-offset-2 hover:text-bp-coral hover:underline"
-                        >
-                          {formatFte(available)}
-                        </button>{" "}
-                        {t("staffing.fteUnit")}
-                        {" · "}
-                        {t("effectifs.needVsAvailable.mobilised").toLowerCase()}{" "}
-                        <span className="font-bold text-primary">{formatFte(mobilised)}</span>
-                        {needed > 0 && (
-                          <span className="ml-1 font-bold text-primary">
-                            ({t("effectifs.needVsAvailable.staffingPct").toLowerCase()}{" "}
-                            {Math.round((mobilised / needed) * 100)}%)
-                          </span>
-                        )}
-                        {pct !== null && (
+            <>
+              {/* Comparaison par équipe (round <n>) — voir le doc-comment de tête de fichier et
+                  celui de `needVsAvailableChartData` : disponible seul à gauche, mobilisé+écart
+                  empilés dans UNE colonne à droite, pour rendre l'écart directement lisible.
+                  Pas de paragraphe de titre dédié : réutilise volontairement les clés i18n déjà
+                  existantes de cette section (`available`/`mobilised`/`needed`/`staffingPct`)
+                  plutôt que d'en ajouter de nouvelles pour ce seul libellé. */}
+              <div className="mb-5">
+                <ResponsiveContainer
+                  width="100%"
+                  height={Math.max(220, needVsAvailableChartData.length * 60)}
+                >
+                  <RBarChart
+                    data={needVsAvailableChartData}
+                    margin={{
+                      top: 4,
+                      right: 12,
+                      left: 4,
+                      bottom: needVsAvailableChartData.length > 4 ? 32 : 4,
+                    }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="rgba(0,0,0,0.04)"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="fn"
+                      tick={{ fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval={0}
+                      angle={needVsAvailableChartData.length > 4 ? -20 : 0}
+                      textAnchor={needVsAvailableChartData.length > 4 ? "end" : "middle"}
+                      height={needVsAvailableChartData.length > 4 ? 56 : 24}
+                    />
+                    <YAxis width={40} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <RTooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload || payload.length === 0) return null;
+                        const row = payload[0]?.payload as
+                          | {
+                              fn: string;
+                              available: number;
+                              mobilisedBase: number;
+                              gapToDeclared: number;
+                            }
+                          | undefined;
+                        if (!row) return null;
+                        const needed = row.mobilisedBase + row.gapToDeclared;
+                        const staffingPct =
+                          needed > 0 ? Math.round((row.mobilisedBase / needed) * 100) : null;
+                        return (
+                          <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
+                            <p className="mb-1 font-bold text-primary">{row.fn}</p>
+                            <p className="flex items-center justify-between gap-3 text-secondary">
+                              <span>{t("effectifs.needVsAvailable.available")}</span>
+                              <span className="ml-2 font-semibold text-primary">
+                                {formatFte(row.available)} {t("staffing.fteUnit")}
+                              </span>
+                            </p>
+                            <p className="flex items-center justify-between gap-3 text-secondary">
+                              <span>{t("effectifs.needVsAvailable.mobilised")}</span>
+                              <span className="ml-2 font-semibold text-primary">
+                                {formatFte(row.mobilisedBase)} {t("staffing.fteUnit")}
+                              </span>
+                            </p>
+                            <p className="flex items-center justify-between gap-3 text-secondary">
+                              <span>{t("effectifs.needVsAvailable.needed")}</span>
+                              <span className="ml-2 font-semibold text-primary">
+                                {formatFte(needed)} {t("staffing.fteUnit")}
+                              </span>
+                            </p>
+                            <p className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-1 font-bold text-primary">
+                              <span>{t("effectifs.needVsAvailable.staffingPct")}</span>
+                              <span>{staffingPct !== null ? `${staffingPct} %` : "—"}</span>
+                            </p>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
+                      formatter={(value) =>
+                        value === "available"
+                          ? t("effectifs.needVsAvailable.available")
+                          : t("effectifs.needVsAvailable.mobilised")
+                      }
+                    />
+                    <RBar dataKey="available" fill="#d4d0cd" radius={[3, 3, 0, 0]} />
+                    <RBar
+                      dataKey="mobilisedBase"
+                      stackId="combined"
+                      fill="#1a1a1a"
+                      radius={[0, 0, 3, 3]}
+                    />
+                    {/* Segment "écart au besoin déclaré" — pas d'entrée de légende dédiée
+                        (`legendType="none"`) : réutilise les clés i18n existantes de cette section
+                        plutôt que d'en ajouter une nouvelle rien que pour ce libellé (voir
+                        `RTooltip` ci-dessus, qui explique déjà l'écart via "Besoin déclaré" +
+                        "Staffing %"). La couleur reste visuellement distincte (segment clair
+                        au-dessus du segment "Mobilisé" sombre), donc l'écart reste lisible même
+                        sans légende propre. */}
+                    <RBar
+                      dataKey="gapToDeclared"
+                      stackId="combined"
+                      fill="#a99e9a"
+                      radius={[3, 3, 0, 0]}
+                      legendType="none"
+                    />
+                  </RBarChart>
+                </ResponsiveContainer>
+              </div>
+              <ul className="space-y-3">
+                {needVsAvailable.map(({ fn, needed, mobilised, available }) => {
+                  const pct = available > 0 ? Math.round((needed / available) * 100) : null;
+                  const overAllocated = pct !== null && pct > 100;
+                  return (
+                    <li key={fn}>
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-[13px] font-semibold text-primary">
                           <span
-                            className={`ml-1.5 font-bold ${overAllocated ? "text-bp-coral" : ""}`}
+                            aria-hidden
+                            className={`h-2 w-2 rounded-full ${colorForDepartment(fn)}`}
+                          />
+                          {fn}
+                        </span>
+                        <span className="text-[12px] text-secondary">
+                          <button
+                            type="button"
+                            onClick={() => setNeedDetailScope({ kind: "need", fn })}
+                            title={t("effectifs.needVsAvailable.needDetailTitle").replace(
+                              "{team}",
+                              fn
+                            )}
+                            className="font-bold text-primary underline-offset-2 hover:text-bp-coral hover:underline"
                           >
-                            ({pct}%)
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <Bar pct={pct !== null ? Math.min(pct, 100) : 0} fn={fn} />
-                    {overAllocated && (
-                      <p className="mt-1 text-[11px] font-semibold text-bp-coral">
-                        {t("effectifs.needVsAvailable.overAllocated")}
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                            {formatFte(needed)}
+                          </button>{" "}
+                          {t("effectifs.needVsAvailable.neededOf")}{" "}
+                          <button
+                            type="button"
+                            onClick={() => setNeedDetailScope({ kind: "available", fn })}
+                            title={t("effectifs.needVsAvailable.availableToday")}
+                            className="font-bold text-primary underline-offset-2 hover:text-bp-coral hover:underline"
+                          >
+                            {formatFte(available)}
+                          </button>{" "}
+                          {t("staffing.fteUnit")}
+                          {" · "}
+                          {t("effectifs.needVsAvailable.mobilised").toLowerCase()}{" "}
+                          <span className="font-bold text-primary">{formatFte(mobilised)}</span>
+                          {needed > 0 && (
+                            <span className="ml-1 font-bold text-primary">
+                              ({t("effectifs.needVsAvailable.staffingPct").toLowerCase()}{" "}
+                              {Math.round((mobilised / needed) * 100)}%)
+                            </span>
+                          )}
+                          {pct !== null && (
+                            <span
+                              className={`ml-1.5 font-bold ${overAllocated ? "text-bp-coral" : ""}`}
+                            >
+                              ({pct}%)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      {overAllocated && (
+                        <p className="mt-1 text-[11px] font-semibold text-bp-coral">
+                          {t("effectifs.needVsAvailable.overAllocated")}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
         </CardBody>
       </Card>
