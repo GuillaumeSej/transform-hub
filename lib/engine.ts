@@ -22,6 +22,7 @@ import {
 } from "@/lib/hierarchyLogic";
 import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type { LeverStatus } from "@/types";
+import { impactStatusOf } from "@/lib/impactStatus";
 
 /**
  * Portage fidèle du moteur de calcul `ENGINE` du prototype HTML historique de Guillaume
@@ -55,7 +56,7 @@ export type LeverImpactTotals = {
   capex: number;
   /** +recrutements / −départs. */
   fteNet: number;
-  /** grossAnnual − capex (règle métier "net = savings − CAPEX", ni OPEX one-off ni récurrent). */
+  /** grossAnnual − opexRec (règle métier "net = brut − OPEX récurrent" ; CAPEX et one-off exclus). */
   netAnnual: number;
 };
 
@@ -100,7 +101,8 @@ export function leverImpactTotals(lever: Lever | LeverImpact[]): LeverImpactTota
     opexRec: round2(opexRec),
     capex: round2(capex),
     fteNet: Math.round(fte * 10) / 10,
-    netAnnual: round2(gross - capex),
+    // Règle métier : net annuel = gain brut − OPEX récurrent. CAPEX et coûts one-off n'y entrent JAMAIS.
+    netAnnual: round2(gross - opexRec),
   };
 }
 
@@ -154,7 +156,7 @@ function realizationFraction(lever: Lever): number {
 }
 
 /** Somme des impacts (legacy : portés par les actions) des actions "done". `pick === "net"` :
- *  gains bruts − CAPEX UNIQUEMENT. Utilisé uniquement pour les leviers SANS impact de niveau
+ *  gains bruts − OPEX récurrent (CAPEX et one-off exclus). Utilisé uniquement pour les leviers SANS impact de niveau
  *  levier (données non migrées). */
 function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): number {
   let total = 0;
@@ -164,10 +166,14 @@ function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): nu
       if (pick === "fte") {
         if (imp.fteCount) total += imp.fteCount;
       } else if (pick === "gross") {
-        if (imp.type === "saving") total += imp.amount;
+        if (imp.type === "saving" && imp.gainRecurrence !== "oneoff") total += imp.amount;
+        else if (imp.type === "fte" && imp.fteDirection !== "hire") total += imp.amount;
       } else if (imp.type === "saving") {
-        total += imp.amount;
-      } else if (imp.nature === "capex") {
+        if (imp.gainRecurrence !== "oneoff") total += imp.amount;
+      } else if (imp.type === "fte") {
+        if (imp.fteDirection === "hire") total -= imp.amount;
+        else total += imp.amount;
+      } else if (imp.nature !== "capex" && imp.nature !== "oneoff") {
         total -= imp.amount;
       }
     }
@@ -1497,11 +1503,11 @@ export type ImpactTrajectoryPoint = {
   periodStart: string;
   /** OPEX one-off de la période (montant positif = coût). */
   opexOneOff: number;
-  /** OPEX récurrent de la période (annuel × durée) — apparaît à CHAQUE période. */
+  /** OPEX récurrent : montant annualisé, compté à la date de début et à chaque anniversaire. */
   opexRec: number;
   /** CAPEX de la période : en une fois à sa date, ou lissé de capexStartDate à capexDeploymentDate. */
   capex: number;
-  /** Gains récurrents annuels de la période (annuel × durée, à partir de gainDate). */
+  /** Gains récurrents annualisés : comptés à la date de début et à chaque anniversaire (+12 mois). */
   gains: number;
   /** Gains ponctuels (one-off) de la période — séparés, jamais agrégés aux gains annualisés. */
   oneOffGains: number;
@@ -1509,6 +1515,17 @@ export type ImpactTrajectoryPoint = {
   cumulativeNet: number;
   /** Idem `cumulativeNet` mais SANS les gains one-off (cohérent avec les totaux savings). */
   cumulativeNetRecurring: number;
+  /** Part PLANIFIÉE (statut « planned ») des montants ci-dessus — sous-ensemble de chaque colonne,
+   *  à rendre en prévisionnel ; le reste (réalisé / en cours) est effectif depuis sa date de début. */
+  planned: {
+    opexOneOff: number;
+    opexRec: number;
+    capex: number;
+    gains: number;
+    oneOffGains: number;
+  };
+  /** Net cumulé (avec ponctuels) des seuls impacts effectifs (réalisés / en cours). */
+  cumulativeNetActual: number;
   /** ETP cumulés en fin de période (+recrutements / −départs). */
   fte: number;
 };
@@ -1534,7 +1551,8 @@ const isoOfMonthIndex = (mi: number): string =>
  * dernière (min. 24 mois de fenêtre pour montrer la récurrence).
  *  - dates : gain → `gainDate ?? lever.end` ; coût → `capexDeploymentDate ?? capexStartDate ?? lever.start`
  *  - CAPEX "smoothed" : réparti uniformément sur les mois capexStartDate → capexDeploymentDate
- *  - récurrent (gain annuel, OPEX récurrent, salaire ETP) : montant/12 par mois actif
+ *  - récurrent (gain annuel, OPEX récurrent, salaire ETP) : le montant ANNUALISÉ est acquis à la
+ *    date de début puis à chaque date anniversaire (+12 mois) — jamais réparti/répété par mois
  *  - `view: "fte"` ne renseigne que la colonne ETP (les montants restent à 0).
  */
 export function impactTrajectory(
@@ -1553,11 +1571,16 @@ export function impactTrajectory(
     (l) => opts.includeCancelled || l.status !== "cancelled"
   );
 
-  type Ev = { mi: number; kind: "oneoff_cost" | "capex" | "oneoff_gain"; amount: number };
-  type Rec = { from: number; kind: "opexRec" | "gain"; annual: number };
+  type Ev = {
+    mi: number;
+    kind: "oneoff_cost" | "capex" | "oneoff_gain";
+    amount: number;
+    planned: boolean;
+  };
+  type Rec = { from: number; kind: "opexRec" | "gain"; annual: number; planned: boolean };
   const events: Ev[] = [];
   const recs: Rec[] = [];
-  const smoothed: { from: number; to: number; amount: number }[] = [];
+  const smoothed: { from: number; to: number; amount: number; planned: boolean }[] = [];
   const fteEvents: { mi: number; delta: number }[] = [];
 
   for (const lever of levers) {
@@ -1565,6 +1588,8 @@ export function impactTrajectory(
       const gainMi = monthIndexOf(imp.gainDate ?? lever.end);
       const costMi = monthIndexOf(imp.capexDeploymentDate ?? imp.capexStartDate ?? lever.start);
       const isGain = imp.type === "saving" || (imp.type === "fte" && imp.fteDirection !== "hire");
+      const planned =
+        impactStatusOf(imp, today, isGain ? (imp.gainDate ?? lever.end) : undefined) === "planned";
       if (imp.type === "fte") {
         const count = imp.fteCount ?? 0;
         fteEvents.push(
@@ -1575,24 +1600,24 @@ export function impactTrajectory(
       }
       if (isGain) {
         if (imp.type === "saving" && imp.gainRecurrence === "oneoff") {
-          events.push({ mi: gainMi, kind: "oneoff_gain", amount: imp.amount });
+          events.push({ mi: gainMi, kind: "oneoff_gain", amount: imp.amount, planned });
         } else {
-          recs.push({ from: gainMi, kind: "gain", annual: imp.amount });
+          recs.push({ from: gainMi, kind: "gain", annual: imp.amount, planned });
         }
       } else if (imp.type === "fte") {
-        recs.push({ from: costMi, kind: "opexRec", annual: imp.amount });
+        recs.push({ from: costMi, kind: "opexRec", annual: imp.amount, planned });
       } else if (imp.nature === "capex") {
         if (imp.capexAllocationMode === "smoothed" && imp.capexStartDate) {
           const from = monthIndexOf(imp.capexStartDate);
           const to = Math.max(from, monthIndexOf(imp.capexDeploymentDate ?? imp.capexStartDate));
-          smoothed.push({ from, to, amount: imp.amount });
+          smoothed.push({ from, to, amount: imp.amount, planned });
         } else {
-          events.push({ mi: costMi, kind: "capex", amount: imp.amount });
+          events.push({ mi: costMi, kind: "capex", amount: imp.amount, planned });
         }
       } else if (imp.nature === "oneoff") {
-        events.push({ mi: costMi, kind: "oneoff_cost", amount: imp.amount });
+        events.push({ mi: costMi, kind: "oneoff_cost", amount: imp.amount, planned });
       } else {
-        recs.push({ from: costMi, kind: "opexRec", annual: imp.amount });
+        recs.push({ from: costMi, kind: "opexRec", annual: imp.amount, planned });
       }
     }
   }
@@ -1610,11 +1635,13 @@ export function impactTrajectory(
   const step = granularity === "year" ? 12 : granularity === "quarter" ? 3 : 1;
   if (granularity === "year") startMi = Math.floor(startMi / 12) * 12;
   if (granularity === "quarter") startMi = Math.floor(startMi / 3) * 3;
-  const endMi = Math.max(Math.max(...marks) + 12, startMi + 23);
+  // Fenêtre : ≥ 36 mois pour montrer au moins 2 dates anniversaires des impacts récurrents.
+  const endMi = Math.max(Math.max(...marks) + 12, startMi + 35);
 
   const points: ImpactTrajectoryPoint[] = [];
   let cum = 0;
   let cumRec = 0;
+  let cumActual = 0;
   let fteCum = 0;
   let todayIndex = 0;
   const r2 = (n: number) => Math.round(n * 1000) / 1000;
@@ -1625,29 +1652,53 @@ export function impactTrajectory(
     let capex = 0;
     let gains = 0;
     let oneOffGains = 0;
+    const pl = { opexOneOff: 0, opexRec: 0, capex: 0, gains: 0, oneOffGains: 0 };
     for (const e of events) {
       if (e.mi < ps || e.mi > pe) continue;
-      if (e.kind === "capex") capex += e.amount;
-      else if (e.kind === "oneoff_cost") opexOneOff += e.amount;
-      else oneOffGains += e.amount;
+      if (e.kind === "capex") {
+        capex += e.amount;
+        if (e.planned) pl.capex += e.amount;
+      } else if (e.kind === "oneoff_cost") {
+        opexOneOff += e.amount;
+        if (e.planned) pl.opexOneOff += e.amount;
+      } else {
+        oneOffGains += e.amount;
+        if (e.planned) pl.oneOffGains += e.amount;
+      }
     }
     for (const sm of smoothed) {
       const months = sm.to - sm.from + 1;
       const overlap = Math.max(0, Math.min(pe, sm.to) - Math.max(ps, sm.from) + 1);
       capex += (sm.amount * overlap) / months;
+      if (sm.planned) pl.capex += (sm.amount * overlap) / months;
     }
     for (const r of recs) {
-      const active = Math.max(0, pe - Math.max(ps, r.from) + 1);
-      const v = (r.annual * active) / 12;
-      if (r.kind === "gain") gains += v;
-      else opexRec += v;
+      // Montant annualisé constaté à la date de début, puis « réannualisé » à chaque anniversaire.
+      let hits = 0;
+      for (let a = r.from; a <= pe; a += 12) if (a >= ps) hits++;
+      const v = r.annual * hits;
+      if (r.kind === "gain") {
+        gains += v;
+        if (r.planned) pl.gains += v;
+      } else {
+        opexRec += v;
+        if (r.planned) pl.opexRec += v;
+      }
     }
     fteCum = fteEvents.reduce((s, f) => (f.mi <= pe ? s + f.delta : s), 0);
     if (view === "fte") {
       opexOneOff = opexRec = capex = gains = oneOffGains = 0;
+      pl.opexOneOff = pl.opexRec = pl.capex = pl.gains = pl.oneOffGains = 0;
     }
     cumRec += gains - opexOneOff - opexRec - capex;
     cum += gains + oneOffGains - opexOneOff - opexRec - capex;
+    cumActual +=
+      gains -
+      pl.gains +
+      (oneOffGains - pl.oneOffGains) -
+      (opexOneOff - pl.opexOneOff) -
+      (opexRec - pl.opexRec) -
+      (capex - pl.capex);
     if (todayMi >= ps && todayMi <= pe) todayIndex = points.length;
     else if (todayMi > pe) todayIndex = points.length;
     points.push({
@@ -1665,16 +1716,27 @@ export function impactTrajectory(
       oneOffGains: r2(oneOffGains),
       cumulativeNet: r2(cum),
       cumulativeNetRecurring: r2(cumRec),
+      planned: {
+        opexOneOff: r2(pl.opexOneOff),
+        opexRec: r2(pl.opexRec),
+        capex: r2(pl.capex),
+        gains: r2(pl.gains),
+        oneOffGains: r2(pl.oneOffGains),
+      },
+      cumulativeNetActual: r2(cumActual),
       fte: Math.round(fteCum * 10) / 10,
     });
   }
   return { points, todayIndex: Math.min(points.length - 1, Math.max(0, todayIndex)) };
 }
 
-// ─── Cascade planifié → réactualisé → annulé → retard → réalisé ─────────────
+// ─── Cascade planifié → réactualisé → annulé → cible réactualisée ───────────
+
+export type WaterfallStepKey =
+  "initial" | "reforecast" | "cancelled" | "target" | "gross" | "opexRec" | "net";
 
 export type WaterfallStep = {
-  key: "initial" | "reforecast" | "cancelled" | "late" | "costs" | "expected";
+  key: WaterfallStepKey;
   label: string;
   /** "total" = barre pleine depuis 0 ; "delta" = variation signée. */
   kind: "total" | "delta";
@@ -1684,67 +1746,91 @@ export type WaterfallStep = {
 };
 
 export type SavingsWaterfall = {
+  /** Groupe A : initial → ± réactualisé → − annulé → = cible ; groupe B : brut → − OPEX → = net. */
   steps: WaterfallStep[];
-  /** Total attendu final = réactualisé − retard − coûts non provisionnés. */
-  expected: number;
+  /** Planifié initial annualisé (plan figé de TOUS les leviers, annulés inclus). */
+  initial: number;
+  /** Δ des leviers actifs réactualisés (réactualisé − plan figé). */
+  reforecastDelta: number;
+  /** Plan figé des leviers annulés (retiré de la cible). */
+  cancelled: number;
+  /** Net annualisé réactualisé (€M) = MÊME valeur que `savingsTriple(...).reforecast`
+   *  (graphe "Réalisation des économies", KPI du dashboard). */
+  target: number;
+  /** Réalisé = MÊME valeur que `savingsTriple(...).realized` (KPI "économies réalisées"). */
   realized: number;
   remaining: number;
+  /** Gain brut annualisé des leviers actifs (= net + OPEX récurrent). */
+  gross: number;
+  /** OPEX récurrent annuel des leviers actifs (déduit du brut pour obtenir le net). */
+  opexRec: number;
 };
 
 /**
- * Cascade des savings (€M) :
- *  initial (plan figé de TOUS les leviers) + Δ réactualisé (leviers actifs) − annulé (plan figé des
- *  annulés) = cible réactualisée ; − retard (reste à réaliser des leviers en retard) − coûts (OPEX
- *  one-off + récurrent des leviers actifs, non inclus dans le net) = total attendu, scindé en
- *  réalisé / reste à faire. Les leviers annulés ne comptent que dans l'étape "annulé".
+ * Cascade des économies ANNUALISÉES (€M), en deux groupes :
+ *  (a) planifié initial (plan figé, tous leviers) ± réactualisé − annulé = cible réactualisée (net) ;
+ *  (b) décomposition de cette cible : brut − OPEX récurrent = net.
+ * Règle métier : net = brut − OPEX récurrent ; le CAPEX et les coûts one-off n'y entrent jamais.
+ * Le net est celui de `savingsTriple` (scindé réalisé / reste à faire) ; le brut est dérivé
+ * (net + OPEX récurrent) et le Δ réactualisé est dérivé de l'arrondi pour que tout boucle
+ * exactement. Leviers annulés exclus de la cible.
  */
-export function savingsWaterfall(data: BeTrackData, opts: { today?: Date } = {}): SavingsWaterfall {
-  const today = opts.today ?? new Date();
+export function savingsWaterfall(data: BeTrackData): SavingsWaterfall {
   const r1 = (n: number) => Math.round(n * 10) / 10;
-  const lockedNet = (l: Lever) => l.lockedPlan?.netSavings ?? l.netSavings;
   const active = data.levers.filter((l) => l.status !== "cancelled");
-  const cancelled = data.levers.filter((l) => l.status === "cancelled");
-
-  const initial = data.levers.reduce((s, l) => s + lockedNet(l), 0);
-  const reforecastDelta = active.reduce(
-    (s, l) => s + displayedReforecastNet(l).value - lockedNet(l),
-    0
-  );
-  const cancelledAmt = cancelled.reduce((s, l) => s + lockedNet(l), 0);
-  const realized = active.reduce((s, l) => s + realizedSavings(l), 0);
-  const late = active
-    .filter((l) => isLeverLate(l, today))
-    .reduce((s, l) => s + Math.max(0, displayedReforecastNet(l).value - realizedSavings(l)), 0);
-  const costs = active.reduce((s, l) => {
-    const snap = l.reforecast ?? l.lockedPlan ?? l;
-    return s + snap.opexOneOff + snap.opexRec;
-  }, 0);
-
-  const target = initial + reforecastDelta - cancelledAmt;
-  const expected = target - late - costs;
-  const steps: WaterfallStep[] = [];
-  let cum = 0;
-  const push = (
-    key: WaterfallStep["key"],
-    label: string,
-    kind: WaterfallStep["kind"],
-    value: number
-  ) => {
-    cum = kind === "total" ? value : cum + value;
-    steps.push({ key, label, kind, value: r1(value), cumulative: r1(cum) });
-  };
-  push("initial", "Planifié initial", "total", initial);
-  push("reforecast", "Réactualisé", "delta", reforecastDelta);
-  push("cancelled", "Annulé", "delta", -cancelledAmt);
-  push("late", "En retard", "delta", -late);
-  push("costs", "Coûts", "delta", -costs);
-  push("expected", "Total attendu", "total", expected);
+  const cancelledLevers = data.levers.filter((l) => l.status === "cancelled");
+  const lockedOf = (l: Lever) => l.lockedPlan?.netSavings ?? l.netSavings;
+  const realized = r1(active.reduce((s, l) => s + realizedSavings(l), 0));
+  const target = r1(active.reduce((s, l) => s + displayedReforecastNet(l).value, 0));
+  const opexRec = r1(active.reduce((s, l) => s + leverOpexRecOf(l), 0));
+  const cancelled = r1(cancelledLevers.reduce((s, l) => s + lockedOf(l), 0));
+  const initial = r1(data.levers.reduce((s, l) => s + lockedOf(l), 0));
+  const reforecastDelta = r1(target + cancelled - initial);
+  const gross = r1(target + opexRec);
+  const steps: WaterfallStep[] = [
+    {
+      key: "initial",
+      label: "Planifié initial",
+      kind: "total",
+      value: initial,
+      cumulative: initial,
+    },
+    {
+      key: "reforecast",
+      label: "Réactualisé",
+      kind: "delta",
+      value: reforecastDelta,
+      cumulative: r1(initial + reforecastDelta),
+    },
+    { key: "cancelled", label: "Annulé", kind: "delta", value: -cancelled, cumulative: target },
+    {
+      key: "target",
+      label: "Cible réactualisée",
+      kind: "total",
+      value: target,
+      cumulative: target,
+    },
+    { key: "gross", label: "Gain brut annualisé", kind: "total", value: gross, cumulative: gross },
+    { key: "opexRec", label: "OPEX récurrent", kind: "delta", value: -opexRec, cumulative: target },
+    { key: "net", label: "Net annualisé", kind: "total", value: target, cumulative: target },
+  ];
   return {
     steps,
-    expected: r1(expected),
-    realized: r1(realized),
-    remaining: r1(expected - realized),
+    initial,
+    reforecastDelta,
+    cancelled,
+    target,
+    realized,
+    remaining: r1(target - realized),
+    gross,
+    opexRec,
   };
+}
+
+/** OPEX récurrent annuel d'un levier (snapshot réactualisé ?? plan figé ?? courant). */
+export function leverOpexRecOf(l: Lever): number {
+  const snap = l.reforecast ?? l.lockedPlan ?? l;
+  return snap.opexRec ?? 0;
 }
 
 // ─── Finance par niveau de hiérarchie ───────────────────────────────────────

@@ -102,5 +102,8 @@ export function leverImpactsToExcelRows(lever: Lever): Record<string, string | n
     "Nature de l'impact": imp.natureId ?? "",
     Technologie: imp.technology ?? "",
     Sens: imp.type === "fte" ? (imp.fteDirection === "hire" ? "Recrutement" : "Départ") : "",
+    "Statut impact": imp.status
+      ? { planned: "Planifié", done: "Réalisé", ongoing: "En cours" }[imp.status]
+      : "",
   }));
 }

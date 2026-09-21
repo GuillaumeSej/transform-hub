@@ -21,12 +21,19 @@ const toggleBtn = (active: boolean) =>
   `px-3 py-1 text-xs font-semibold ${active ? "bg-black text-white" : "bg-white text-secondary"}`;
 
 /** Trajectoire d'impact d'un levier (remplace la « courbe en J ») : barres par période
- *  (gains annualisés, gains ponctuels, OPEX récurrent, OPEX one-off, CAPEX) + cumul net,
+ *  (un impact récurrent est compté à sa date de début puis à chaque anniversaire) + cumul net,
  *  curseur « Aujourd'hui ». Vue financière ou ETP, maille mois/trimestre/année. */
 export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; height?: number }) {
   const { t } = useTranslation();
   const [view, setView] = useState<"financial" | "fte">("financial");
-  const [granularity, setGranularity] = useState<TrajectoryGranularity>("month");
+  const [picked, setPicked] = useState<TrajectoryGranularity | null>(null);
+  // Maille automatique selon la durée totale (lisibilité), modifiable par l'utilisateur.
+  const autoGranularity = useMemo<TrajectoryGranularity>(() => {
+    const n = impactTrajectory(lever, { view: "financial", granularity: "month" }).points.length;
+    return n <= 30 ? "month" : n <= 72 ? "quarter" : "year";
+  }, [lever]);
+  const granularity = picked ?? autoGranularity;
+  const setGranularity = setPicked;
 
   const traj = useMemo(
     () => impactTrajectory(lever, { view, granularity, today: new Date() }),
@@ -35,11 +42,13 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
 
   const data = traj.points.map((p) => ({
     period: p.period,
-    gains: p.gains,
-    oneOffGains: p.oneOffGains,
-    opexRec: -p.opexRec,
-    opexOneOff: -p.opexOneOff,
-    capex: -p.capex,
+    gains: p.gains - p.planned.gains,
+    oneOffGains: p.oneOffGains - p.planned.oneOffGains,
+    opexRec: -(p.opexRec - p.planned.opexRec),
+    opexOneOff: -(p.opexOneOff - p.planned.opexOneOff),
+    capex: -(p.capex - p.planned.capex),
+    gainsPlanned: p.planned.gains + p.planned.oneOffGains,
+    costsPlanned: -(p.planned.opexRec + p.planned.opexOneOff + p.planned.capex),
     cumulativeNet: p.cumulativeNet,
     cumulativeNetRecurring: p.cumulativeNetRecurring,
     fte: p.fte,
@@ -116,7 +125,10 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
                   dataKey="gains"
                   stackId="s"
                   fill="#3f9d6a"
-                  name={t("leverDetail.trajectory.gains", "Gains annualisés (récurrents)")}
+                  name={t(
+                    "leverDetail.trajectory.gains",
+                    "Gains annualisés (à la date de début, puis chaque anniversaire)"
+                  )}
                 />
                 <Bar
                   dataKey="oneOffGains"
@@ -128,7 +140,10 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
                   dataKey="opexRec"
                   stackId="s"
                   fill="#e0655a"
-                  name={t("leverDetail.trajectory.opexRec", "OPEX récurrent (chaque période)")}
+                  name={t(
+                    "leverDetail.trajectory.opexRec",
+                    "OPEX récurrent (début puis anniversaires)"
+                  )}
                 />
                 <Bar
                   dataKey="opexOneOff"
@@ -142,8 +157,26 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
                   fill="#3b82c4"
                   name={t("leverDetail.trajectory.capex", "CAPEX (ponctuel ou lissé)")}
                 />
+                <Bar
+                  dataKey="gainsPlanned"
+                  stackId="s"
+                  fill="#3f9d6a"
+                  fillOpacity={0.3}
+                  stroke="#3f9d6a"
+                  strokeDasharray="3 2"
+                  name={t("leverDetail.trajectory.gainsPlanned", "Gains planifiés (prévisionnel)")}
+                />
+                <Bar
+                  dataKey="costsPlanned"
+                  stackId="s"
+                  fill="#e0655a"
+                  fillOpacity={0.3}
+                  stroke="#e0655a"
+                  strokeDasharray="3 2"
+                  name={t("leverDetail.trajectory.costsPlanned", "Coûts planifiés (prévisionnel)")}
+                />
                 <Line
-                  type="monotone"
+                  type="stepAfter"
                   dataKey="cumulativeNet"
                   stroke="#111"
                   strokeWidth={2}
@@ -151,7 +184,7 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
                   name={t("leverDetail.trajectory.cumNet", "Net cumulé (avec ponctuels)")}
                 />
                 <Line
-                  type="monotone"
+                  type="stepAfter"
                   dataKey="cumulativeNetRecurring"
                   stroke="#111"
                   strokeDasharray="5 4"

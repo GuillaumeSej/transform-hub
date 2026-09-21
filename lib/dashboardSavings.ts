@@ -29,60 +29,94 @@ export function savingsTriple(levers: Lever[]): {
 export type WaterfallBar = {
   key: string;
   label: string;
+  /** "plan" = planifié → cible ; "decomp" = brut → OPEX → net ; "gap" = séparateur visuel. */
+  group: "plan" | "decomp" | "gap";
   /** Segment invisible (décalage) sous la barre. */
   base: number;
-  /** Total plein (initial) ou variation positive. */
+  /** Total plein ou variation positive. */
   up: number;
   /** Variation négative (valeur absolue). */
   down: number;
-  /** Uniquement pour la barre finale : réalisé / reste à faire (empilés). */
+  /** Uniquement pour la barre "Cible réactualisée" : réalisé / reste à faire (empilés). */
   realized: number;
   remaining: number;
+  /** Uniquement pour la barre "OPEX récurrent" : un montant par segment (même ordre que `segments`). */
+  seg: number[];
   /** Valeur signée d'origine (pour libellés/tooltip). */
   value: number;
 };
 
-/** Transforme `engine.savingsWaterfall` en barres Recharts (technique "base invisible"). La barre
- *  finale "Total attendu" est scindée en réalisé + reste à faire. */
-export function waterfallBars(w: SavingsWaterfall): WaterfallBar[] {
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Limite une liste de segments triés (décroissant) à `max` entrées : le reste est fusionné en
+ *  « Autres » (total conservé). */
+export function limitSegments<T extends { key: string; label: string; value: number }>(
+  segments: T[],
+  max: number,
+  otherLabel: string
+): { key: string; label: string; value: number }[] {
+  const sorted = [...segments].sort((a, b) => b.value - a.value);
+  if (sorted.length <= max) return sorted;
+  const head = sorted.slice(0, max - 1);
+  const rest = sorted.slice(max - 1).reduce((s, x) => s + x.value, 0);
+  return [...head, { key: "__others__", label: otherLabel, value: r2(rest) }];
+}
+
+/** Transforme `engine.savingsWaterfall` en barres Recharts (technique "base invisible").
+ *  Groupe A : planifié initial → ± réactualisé → − annulé → cible (réalisé + reste à faire =
+ *  savingsTriple). Séparateur. Groupe B : brut → OPEX récurrent (flottant, segmenté par nature,
+ *  entre le net et le brut) → net. Les segments sont ajustés pour que brut − OPEX = net exact. */
+export function waterfallBars(
+  w: SavingsWaterfall,
+  opexSegments: { value: number }[] = []
+): WaterfallBar[] {
   const bars: WaterfallBar[] = [];
-  let prev = 0;
+  const empty = { up: 0, down: 0, realized: 0, remaining: 0, seg: [] as number[] };
+  let prevGroup: "plan" | "decomp" | null = null;
   for (const step of w.steps) {
-    const empty = { up: 0, down: 0, realized: 0, remaining: 0 };
-    if (step.key === "expected") {
+    const group: "plan" | "decomp" =
+      step.key === "gross" || step.key === "opexRec" || step.key === "net" ? "decomp" : "plan";
+    if (prevGroup && prevGroup !== group) {
+      bars.push({ key: "gap", label: "", group: "gap", base: 0, ...empty, value: 0 });
+    }
+    prevGroup = group;
+    const common = { key: step.key, label: step.label, group, value: step.value };
+    if (step.key === "target") {
       const realized = Math.max(0, Math.min(w.realized, step.value));
       bars.push({
-        key: step.key,
-        label: step.label,
+        ...common,
         base: 0,
         ...empty,
         realized: r1(realized),
         remaining: r1(Math.max(0, step.value - realized)),
-        value: step.value,
       });
-    } else if (step.kind === "total") {
+    } else if (step.key === "opexRec") {
+      const total = Math.abs(step.value);
+      let segs = opexSegments.length > 0 ? opexSegments.map((x) => Math.max(0, x.value)) : [total];
+      // Bouclage exact : la somme des segments = |OPEX| (l'écart d'arrondi va au plus grand).
+      const gap = r2(total - segs.reduce((s, v) => s + v, 0));
+      if (gap !== 0 && segs.length > 0) {
+        const big = segs.indexOf(Math.max(...segs));
+        segs = segs.map((v, i) => (i === big ? Math.max(0, r2(v + gap)) : v));
+      }
       bars.push({
-        key: step.key,
-        label: step.label,
-        base: 0,
+        ...common,
+        base: r1(Math.max(0, step.cumulative)),
         ...empty,
-        up: step.value,
-        value: step.value,
+        seg: segs,
+      });
+    } else if (step.kind === "delta") {
+      const before = step.cumulative - step.value;
+      bars.push({
+        ...common,
+        base: r1(Math.max(0, Math.min(before, step.cumulative))),
+        ...empty,
+        up: step.value > 0 ? step.value : 0,
+        down: step.value < 0 ? Math.abs(step.value) : 0,
       });
     } else {
-      const cum = step.cumulative;
-      const lo = Math.min(prev, cum);
-      bars.push({
-        key: step.key,
-        label: step.label,
-        base: r1(Math.max(0, lo)),
-        ...empty,
-        up: step.value >= 0 ? r1(Math.abs(step.value)) : 0,
-        down: step.value < 0 ? r1(Math.abs(step.value)) : 0,
-        value: step.value,
-      });
+      bars.push({ ...common, base: 0, ...empty, up: step.value });
     }
-    prev = step.cumulative;
   }
   return bars;
 }

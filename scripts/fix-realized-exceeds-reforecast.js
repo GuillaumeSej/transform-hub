@@ -24,8 +24,8 @@
  * "Réalisé" et "net" reproduisent EXACTEMENT les formules actuelles de l'app (voir
  * lib/engine.ts::realizedSavings/doneActionImpactsTotal et
  * lib/leverConsolidate.ts::consolidateLeverFromActions, alignées PR #76/#77) :
- *   - Réalisé net à date = Σ (gains − CAPEX) des actions au statut "done" UNIQUEMENT.
- *   - Plan/Réactualisé net = Σ (gains − CAPEX) de TOUTES les actions.
+ *   - Réalisé net à date = Σ (gains − OPEX récurrent) des actions au statut "done" UNIQUEMENT.
+ *   - Plan/Réactualisé net = Σ (gains − OPEX récurrent) de TOUTES les actions.
  *   Ni l'OPEX one-off ni l'OPEX récurrent ne réduisent ni l'un ni l'autre.
  *
  * Usage — DRY RUN par défaut (aucune écriture, juste un rapport) :
@@ -118,7 +118,7 @@ function consolidateLeverFromActions(lever) {
 
   return {
     grossSavings: round2(savings),
-    netSavings: round2(savings - capex),
+    netSavings: round2(savings - opexRec), // net = brut − OPEX récurrent (CAPEX hors net)
     capex: round2(capex),
     opexOneOff: round2(opexOneOff),
     opexRec: round2(opexRec),
@@ -126,7 +126,7 @@ function consolidateLeverFromActions(lever) {
   };
 }
 
-/** Reproduit engine.realizedSavings (Σ (gains − CAPEX) des actions "done" uniquement). */
+/** Reproduit engine.realizedSavings (Σ (gains − OPEX récurrent) des actions "done" uniquement). */
 function realizedSavings(lever) {
   if (lever.status === "cancelled") return 0;
   let total = 0;
@@ -134,7 +134,7 @@ function realizedSavings(lever) {
     if (action.status !== "done") continue;
     for (const imp of action.impacts ?? []) {
       if (imp.type === "saving") total += imp.amount || 0;
-      else if (imp.nature === "capex") total -= imp.amount || 0;
+      else if (imp.type === "cost" && imp.nature === "opex_rec") total -= imp.amount || 0;
     }
   }
   return round2(total);

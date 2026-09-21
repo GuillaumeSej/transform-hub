@@ -152,10 +152,9 @@ function financialImpacts(
       entity: values.entity,
     });
   }
-  // netSavings = savings − capex (lib/leverConsolidate.ts) : seul le CAPEX est déduit du gain,
-  // l'OPEX one-off et l'OPEX récurrent sont des coûts à part qui ne réduisent plus netSavings —
-  // il faut donc rajouter `capex` (pas `opexRec`) pour reconstruire le montant brut d'origine.
-  const grossValue = Math.max(0, values.netSavings + values.capex);
+  // netSavings = brut − OPEX récurrent (lib/leverConsolidate.ts) : CAPEX et OPEX one-off n'y
+  // entrent jamais — il faut donc rajouter `opexRec` pour reconstruire le montant brut d'origine.
+  const grossValue = Math.max(0, values.netSavings + values.opexRec);
   if (grossValue > 0) {
     impacts.push({
       id: `${prefix}-SAVING`,
@@ -213,9 +212,9 @@ function migrateSubLever(sub: LegacySubLever, parent: Lever): LeverAction[] {
   const lastActionId = sortedActions.at(-1)!.id;
   const totalWeight = sortedActions.reduce((sum, action) => sum + Math.max(0, action.weight), 0);
   const equalWeight = 1 / sortedActions.length;
-  // netSavings = savings − capex (lib/leverConsolidate.ts) : l'OPEX one-off et l'OPEX récurrent ne
-  // réduisent plus netSavings, seul le CAPEX y est déduit.
-  const grossValue = Math.max(0, sub.netSavings + sub.capex);
+  // netSavings = brut − OPEX récurrent (lib/leverConsolidate.ts) : CAPEX et OPEX one-off ne
+  // réduisent jamais netSavings.
+  const grossValue = Math.max(0, sub.netSavings + sub.opexRec);
 
   return sortedActions.map((action, index) => {
     const weight = totalWeight > 0 ? Math.max(0, action.weight) / totalWeight : equalWeight;
@@ -396,11 +395,10 @@ function buildSimpleActions(lever: Lever): LeverAction[] {
       impacts: financialImpacts(
         `IMP-${lever.id}-03`,
         {
-          // L'OPEX one-off/récurrent sont portés par la 2e action et ne réduisent plus netSavings
-          // (lib/leverConsolidate.ts) — seul le CAPEX (porté par la 2e action) doit être rajouté
-          // ici pour que la somme consolidée des actions restitue exactement le netSavings du
+          // L'OPEX récurrent est porté par la 2e action et réduit netSavings (brut − OPEX rec) ;
+          // il faut le rajouter ici pour que la somme consolidée des actions restitue exactement le netSavings du
           // levier parent.
-          netSavings: lever.netSavings + lever.capex,
+          netSavings: lever.netSavings + lever.opexRec,
           capex: 0,
           opexOneOff: 0,
           opexRec: 0,
@@ -497,11 +495,11 @@ function alignActionsToLeverFinancials(actions: LeverAction[], lever: Lever): Le
     })
   );
 
-  // netSavings = savings − capex (lib/leverConsolidate.ts) : l'OPEX one-off et l'OPEX récurrent ne
-  // réduisent plus netSavings, seul le CAPEX y est déduit.
+  // netSavings = brut − OPEX récurrent (lib/leverConsolidate.ts) : CAPEX et OPEX one-off ne
+  // réduisent jamais netSavings.
   adjust(
     (impact) => impact.type === "saving",
-    lever.netSavings + lever.capex,
+    lever.netSavings + lever.opexRec,
     (amount) => ({
       id: `IMP-${lever.id}-SAVING-ADJ`,
       label: "Savings complémentaires",

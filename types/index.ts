@@ -407,6 +407,9 @@ export type LeverImpact = {
   /** Pour type="saving" — date/milestone d'encaissement réel du gain (peut être postérieure à la
    *  fin de l'action). */
   gainDate?: string; // ISO date
+  /** Statut de l'impact : planifié ; réalisé (ponctuel, a eu lieu) ; en cours (récurrent, court depuis
+   *  sa date de début). Absent = dérivé de la date de début (`impactStatusOf`, lib/impactStatus.ts). */
+  status?: "planned" | "done" | "ongoing";
   /** Commentaires libres sur cette ligne d'impact (ex. méthode de calcul, hypothèses). */
   comments?: Comment[];
 };

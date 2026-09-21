@@ -10,6 +10,7 @@ import type {
   FinancialSnapshot,
   Lever,
   ActionStatus,
+  LeverStatus,
   LeverAction,
   LeverApproval,
   LeverApprovalGate,
@@ -278,16 +279,31 @@ export function withImpactTotals(lever: Lever, refreshReforecast = false): Lever
   };
 }
 
+/** Vrai si le levier n'a aucune action (rien à évaluer) ou si TOUTES sont à 100 %. Pur. */
+export function allActionsDone(lever: Pick<Lever, "actions">): boolean {
+  const actions = lever.actions ?? [];
+  return actions.every((a) => engine.actionProgressPct(a) >= 100);
+}
+
+/** Règle du statut « Réalisé » (clé "delivered", stade 5 ; libellé configurable par entreprise) :
+ *  impossible tant que toutes les actions ne sont pas faites → « Exécuté » ("in_progress").
+ *  Renvoie le statut effectif à appliquer. Pur. */
+export function enforceDeliveredRule(lever: Pick<Lever, "actions" | "status">): LeverStatus {
+  return lever.status === "delivered" && !allActionsDone(lever) ? "in_progress" : lever.status;
+}
+
 /** Recalcule le levier parent depuis son plan d'action : avancement (pondéré, actions uniquement),
  *  `lastUpdate`, passage automatique à "delivered" à 100 %. Retourne TOUJOURS le levier à
  *  persister (avec `lastUpdate` rafraîchi). */
 function recomputeLeverProgress(lever: Lever): Lever {
   const base = withImpactTotals(lever);
   const newProgress = engine.recomputeLeverProgress(base);
-  const nextStatus =
+  let nextStatus =
     newProgress >= 100 && base.status !== "cancelled" && (base.actions?.length ?? 0) > 0
       ? "delivered"
       : base.status;
+  // Règle : « Réalisé » (delivered) exige TOUTES les actions faites ; sinon retombe à « Exécuté ».
+  if (nextStatus === "delivered" && !allActionsDone(base)) nextStatus = "in_progress";
   return {
     ...base,
     progress: newProgress,
@@ -458,10 +474,17 @@ export function updateLever(
     safePatch.status === "cancelled" && before.status !== "cancelled"
       ? { cancelledAtStage: before.status }
       : {};
+  const deliveredBlocked =
+    safePatch.status === "delivered" &&
+    before.status !== "delivered" &&
+    !allActionsDone({
+      actions: ("actions" in safePatch ? safePatch.actions : before.actions) ?? [],
+    });
   const impactsPatched = "impacts" in safePatch || "actions" in safePatch;
   const merged: Lever = {
     ...before,
     ...safePatch,
+    ...(deliveredBlocked ? { status: before.status } : {}),
     ...cancelledPatch,
     lastUpdate: nowDate(),
   };

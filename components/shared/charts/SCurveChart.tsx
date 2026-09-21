@@ -1,11 +1,12 @@
 "use client";
 
 import {
-  Area,
   CartesianGrid,
   ComposedChart,
   Legend,
   Line,
+  ReferenceDot,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -27,6 +28,7 @@ const fmtM = (v: number) => `€${Math.round(v * 10) / 10}M`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ScurveTooltip({ active, payload, label }: any) {
+  const { t } = useTranslation();
   if (!active || !payload || payload.length === 0) return null;
   const p = payload[0].payload as SCurvePoint;
   const gap = p.gap;
@@ -34,15 +36,15 @@ function ScurveTooltip({ active, payload, label }: any) {
     <div className="max-w-[280px] rounded-md border border-border bg-white px-3 py-2 text-xs shadow-lg">
       <div className="mb-1 font-semibold text-primary">{label}</div>
       <div className="flex justify-between gap-3 text-secondary">
-        <span>Plan initial</span>
+        <span>{t("chart.scurve.planned", "Plan initial")}</span>
         <span className="font-semibold text-primary">{fmtM(p.planned)}</span>
       </div>
       <div className="flex justify-between gap-3 text-secondary">
-        <span>Réactualisé</span>
+        <span>{t("chart.scurve.reforecast", "Réactualisé")}</span>
         <span className="font-semibold text-primary">{fmtM(p.reforecast)}</span>
       </div>
       <div className="flex justify-between gap-3 text-secondary">
-        <span>Réalisé</span>
+        <span>{t("chart.scurve.actual", "Réalisé")}</span>
         <span className="font-semibold text-primary">
           {p.actual === null ? "—" : fmtM(p.actual)}
         </span>
@@ -50,20 +52,16 @@ function ScurveTooltip({ active, payload, label }: any) {
       {gap && p.actual !== null && (
         <div className="mt-1.5 border-t border-border pt-1.5">
           <div className="flex justify-between gap-3 font-semibold text-primary">
-            <span>Écart réactualisé − réalisé</span>
+            <span>{t("chart.scurve.gapTotal", "Écart réactualisé − réalisé")}</span>
             <span>{fmtM(gap.total)}</span>
           </div>
           <div className="flex justify-between gap-3 text-secondary">
-            <span>dont retards</span>
+            <span>{t("chart.scurve.gapLate", "dont leviers en retard")}</span>
             <span>{fmtM(gap.late)}</span>
           </div>
           <div className="flex justify-between gap-3 text-secondary">
-            <span>dont autre (avancement)</span>
+            <span>{t("chart.scurve.gapInProgress", "dont leviers en cours dans les temps")}</span>
             <span>{fmtM(gap.other)}</span>
-          </div>
-          <div className="flex justify-between gap-3 text-tertiary">
-            <span>Annulations (mémo, hors écart)</span>
-            <span>{fmtM(gap.cancelled)}</span>
           </div>
         </div>
       )}
@@ -71,9 +69,16 @@ function ScurveTooltip({ active, payload, label }: any) {
   );
 }
 
+/** Dernier point pour lequel le réalisé est connu = période courante. */
+export function currentPointIndex(data: SCurvePoint[]): number {
+  for (let i = data.length - 1; i >= 0; i--) if (data[i].actual !== null) return i;
+  return -1;
+}
+
 /** S-Curve à 3 courbes — Plan initial (figé à L3), Réalisé à date, Réactualisé (prévision à jour,
  * éditable à partir de L4). Porté/étendu depuis le chart Chart.js `ch-scurve` du prototype legacy.
- * Clic sur un point (ou son mois) -> creuse vers les leviers qui se terminent ce mois-là.
+ * Clic sur le graphe -> `onPointClick` (l'appelant ouvre le détail de la trajectoire).
+ * L'écart réactualisé − réalisé n'est affiché que sur la période courante (badge permanent).
  *
  * Les labels des courbes sont passables en props pour la traduction (i18n). */
 export function SCurveChart({
@@ -95,15 +100,15 @@ export function SCurveChart({
   const resolvedLabelActual = labelActual ?? t("chart.scurve.actual", "Réalisé");
   const resolvedLabelPlanned = labelPlanned ?? t("chart.scurve.planned", "Plan initial");
   const resolvedLabelReforecast = labelReforecast ?? t("chart.scurve.reforecast", "Réactualisé");
-  const chartData = data.map((p) => ({
-    ...p,
-    gapBand: p.actual !== null && p.reforecast !== p.actual ? [p.actual, p.reforecast] : null,
-  }));
+  const curIdx = currentPointIndex(data);
+  const cur = curIdx >= 0 ? data[curIdx] : null;
+  const curGap =
+    cur && cur.actual !== null ? Math.round((cur.reforecast - cur.actual) * 10) / 10 : 0;
   return (
     <div>
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart
-          data={chartData}
+          data={data}
           margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
           onClick={(e) => {
             const label = e?.activeLabel;
@@ -126,19 +131,33 @@ export function SCurveChart({
             iconType="line"
             wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
           />
-          {/* Écart vertical réactualisé ↔ réalisé : bande entre les deux courbes (décomposition dans
-            le tooltip : retards / autre / annulations). */}
-          <Area
-            type="monotone"
-            dataKey="gapBand"
-            name="Écart réactualisé − réalisé"
-            stroke="none"
-            fill="#FF3C47"
-            fillOpacity={0.18}
-            activeDot={false}
-            isAnimationActive={false}
-            legendType="rect"
-          />
+          {/* Écart réactualisé ↔ réalisé : uniquement sur la période courante, avec badge visible. */}
+          {cur && cur.actual !== null && curGap !== 0 && (
+            <>
+              <ReferenceLine
+                segment={[
+                  { x: cur.month, y: cur.actual },
+                  { x: cur.month, y: cur.reforecast },
+                ]}
+                stroke="#FF3C47"
+                strokeWidth={3}
+                ifOverflow="extendDomain"
+              />
+              <ReferenceDot
+                x={cur.month}
+                y={cur.reforecast}
+                r={0}
+                ifOverflow="extendDomain"
+                label={{
+                  value: `${t("chart.scurve.gapBadge", "Écart")} ${curGap > 0 ? "−" : "+"}${fmtM(Math.abs(curGap))}`,
+                  position: "top",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  fill: "#FF3C47",
+                }}
+              />
+            </>
+          )}
           <Line
             type="monotone"
             dataKey="actual"
@@ -171,8 +190,8 @@ export function SCurveChart({
       </ResponsiveContainer>
       <p className="mt-1 text-[11px] text-tertiary">
         {t(
-          "chart.gap.explain",
-          "Écart entre le réactualisé et le réalisé : retards (leviers en retard), autre (avancement en cours) ; les annulations sont déjà retirées du réactualisé."
+          "chart.gap.explain2",
+          "L'écart (réactualisé − réalisé) est affiché sur la période courante uniquement. Cliquez sur le graphe pour le détail par chantier."
         )}
       </p>
     </div>
