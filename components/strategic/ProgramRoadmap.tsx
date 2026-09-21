@@ -317,11 +317,34 @@ export function ProgramRoadmap({
                       isProjetLate(r.action, r.progressPct)
                     ).length;
                     const totalLevierCount = chantierGroup.rows.length;
+                    // Round 27 (retour PO — l'en-tête de chantier "flotte" au-dessus des lignes de
+                    // levier sans porter le même accent qu'elles, ce qui se lit comme une "double
+                    // barre" incohérente à côté du liséré 4px de la carte d'axe) : avancement AGRÉGÉ
+                    // du chantier affiché dans l'en-tête, moyenne du `progressPct` de ses leviers —
+                    // déjà porté par `chantierGroup.rows`, aucune donnée supplémentaire à charger.
+                    // Même convention d'agrégation que `chantierMilestoneProgressPct`
+                    // (lib/axisLogic.ts, "agrégation chantier = moyenne des leviers"), recalculée ici
+                    // plutôt qu'importée pour rester cohérente avec le `progressPct` par LEVIER déjà
+                    // affiché sur chaque ligne ci-dessous (même parti pris que `ProgramRoadmapRow.
+                    // progressPct` lui-même, voir son doc-comment dans lib/axisLogic.ts).
+                    const chantierProgressPct =
+                      totalLevierCount === 0
+                        ? 0
+                        : Math.round(
+                            chantierGroup.rows.reduce((sum, r) => sum + r.progressPct, 0) /
+                              totalLevierCount
+                          );
                     return (
                       <div key={chantierGroup.chantier.id}>
-                        {/* En-tête de chantier — bouton (round 16) cliquable si `onChantierClick` est
-                          fourni, sinon reste un simple texte non interactif (comportement
-                          historique). */}
+                        {/* En-tête de chantier — round 27 : même traitement de bordure gauche
+                          accentuée (`border-l-[3px]`, couleur de l'axe) que les lignes de levier
+                          juste en dessous (patron d'identité de `ChantierGantt.tsx` : nom + méta +
+                          mini barre de progression, adapté ici pour rester un en-tête de GROUPE
+                          au-dessus de plusieurs lignes plutôt qu'un bloc par chantier isolé) —
+                          l'en-tête et les lignes forment désormais UNE seule colonne accentuée
+                          continue, plus deux traitements de bordure gauche indépendants empilés.
+                          Bouton (round 16) cliquable si `onChantierClick` est fourni, sinon reste un
+                          simple texte non interactif (comportement historique inchangé). */}
                         <button
                           type="button"
                           disabled={!onChantierClick}
@@ -330,31 +353,53 @@ export function ProgramRoadmap({
                               ? () => onChantierClick(chantierGroup.chantier.id)
                               : undefined
                           }
-                          className={`${ROW_LABEL_WIDTH} flex items-center gap-1 pl-2.5 pt-2 text-left text-[11.5px] font-semibold text-secondary transition ${
-                            onChantierClick ? "hover:bg-white/60 hover:text-primary" : ""
+                          className={`${ROW_LABEL_WIDTH} flex shrink-0 flex-col gap-1 border-l-[3px] py-1.5 pl-2 pr-2 text-left transition ${
+                            onChantierClick ? "hover:bg-white/60" : ""
                           }`}
+                          style={{ borderColor: axisColor }}
                         >
-                          <span className="truncate">
-                            {chantierGroup.chantier.name}
-                            <span className="ml-1 font-normal text-tertiary">
-                              · {chantierGroup.rows.length} {l.leviersSuffix}
+                          <div className="flex items-center gap-1">
+                            <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-primary">
+                              {chantierGroup.chantier.name}
+                              <span className="ml-1 font-normal text-tertiary">
+                                · {chantierGroup.rows.length} {l.leviersSuffix}
+                              </span>
                             </span>
-                          </span>
-                          {lateLevierCount > 0 && (
-                            <span
-                              className="flex shrink-0 items-center gap-1 rounded-full bg-rag-red-light px-1.5 py-0.5 text-[10px] font-bold text-rag-red"
-                              title={
-                                l.lateCount
-                                  ? l.lateCount
-                                      .replace("{n}", String(lateLevierCount))
-                                      .replace("{total}", String(totalLevierCount))
-                                  : undefined
-                              }
-                            >
-                              <TriangleAlert size={11} aria-hidden />
-                              {lateLevierCount}/{totalLevierCount}
+                            {lateLevierCount > 0 && (
+                              <span
+                                className="flex shrink-0 items-center gap-1 rounded-full bg-rag-red-light px-1.5 py-0.5 text-[10px] font-bold text-rag-red"
+                                title={
+                                  l.lateCount
+                                    ? l.lateCount
+                                        .replace("{n}", String(lateLevierCount))
+                                        .replace("{total}", String(totalLevierCount))
+                                    : undefined
+                                }
+                              >
+                                <TriangleAlert size={11} aria-hidden />
+                                {lateLevierCount}/{totalLevierCount}
+                              </span>
+                            )}
+                          </div>
+                          {/* Round 27 : mini barre de progression + pourcentage — même composition
+                              visuelle que la colonne d'identité de `ChantierGantt.tsx` (barre `h-1`
+                              arrondie + libellé `text-[9.5px] font-bold`), pour que l'en-tête porte
+                              une information utile au premier coup d'œil plutôt qu'un simple nom +
+                              compteur. */}
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-100">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${chantierProgressPct}%`,
+                                  backgroundColor: axisColor,
+                                }}
+                              />
+                            </div>
+                            <span className="shrink-0 text-[9.5px] font-bold text-secondary">
+                              {chantierProgressPct}%
                             </span>
-                          )}
+                          </div>
                         </button>
 
                         {chantierGroup.rows.map((row) => {
@@ -380,7 +425,16 @@ export function ProgramRoadmap({
                           return (
                             <div
                               key={row.action.id}
-                              className="flex items-stretch gap-2 border-b border-border/60 py-1.5 pl-2.5 last:border-b-0"
+                              // Round 27 : `pl-2.5` retiré — c'était une couche de retrait
+                              // redondante avec le `pl-2` déjà porté par la colonne d'identité
+                              // ci-dessous (`border-l-[3px] pl-2`), qui décalait son liséré gauche
+                              // de 10px par rapport au bord de la carte d'axe/de l'en-tête de
+                              // chantier ci-dessus. Sans ce décalage, le liséré de la ligne s'aligne
+                              // avec celui de l'en-tête (voir plus haut) — même colonne accentuée
+                              // continue, pas de second retrait qui la désolidarise. Même patron que
+                              // `ChantierGantt.tsx`, dont la ligne équivalente n'a pas ce `pl-*`
+                              // supplémentaire non plus.
+                              className="flex items-stretch gap-2 border-b border-border/60 py-1.5 last:border-b-0"
                             >
                               <div
                                 className={`${ROW_LABEL_WIDTH} shrink-0 border-l-[3px] pl-2`}

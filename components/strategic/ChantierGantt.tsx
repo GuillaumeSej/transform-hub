@@ -21,7 +21,7 @@ import {
 import {
   canStartAction,
   chantierBounds,
-  chantierMilestoneProgressPct,
+  chantierDeclaredProgress,
   type ChantierDependencyAlert,
 } from "@/lib/axisLogic";
 import type { Chantier, ChantierAction, MaturityStageConfig } from "@/types";
@@ -271,7 +271,11 @@ export function ChantierGantt({
                 const widthPct = Math.max(1.5, pctOf(bounds.end) - startPct);
                 const isAlerted = alertedChantierIds.has(chantier.id);
                 const chantierAlerts = alertsByChantier.get(chantier.id) ?? [];
-                const progressPct = chantierMilestoneProgressPct(chantier, items);
+                // Round "projet weighting" : moyenne PONDÉRÉE (`chantierDeclaredProgress`, par
+                // `ChantierAction.chantierWeightPct`) — remplace l'ancienne moyenne simple
+                // `chantierMilestoneProgressPct`, même figure que celle affichée en tête de la
+                // fiche chantier (`ChantierDetailPanel.tsx`).
+                const progressPct = chantierDeclaredProgress(chantier.id, items);
                 const lanes = packTimelineLanes(items);
                 const trackHeight = LANES_TOP + Math.max(1, lanes.length) * ACTION_LANE_HEIGHT;
                 const blockColor = isAlerted ? ALERT_COLOR : color;
