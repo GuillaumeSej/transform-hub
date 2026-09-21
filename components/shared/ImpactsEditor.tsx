@@ -188,13 +188,15 @@ export function ImpactsEditor({
   return (
     <div className="flex flex-col gap-2">
       <div className="overflow-x-auto rounded-md border border-border bg-white">
-        <table className="w-full min-w-[960px] table-fixed border-collapse text-[12px]">
+        <table className="w-full min-w-[1140px] table-fixed border-collapse text-[12px]">
           <thead className="sticky top-0 z-10 border-b border-border bg-neutral-50">
             <tr>
               <th className={thClass} style={{ width: 150 }}>
                 {t("impactsEditor.impactType", "Type d'impact")}
               </th>
-              <th className={thClass}>{t("impactsEditor.label", "Libellé")}</th>
+              <th className={thClass} style={{ minWidth: 200 }}>
+                {t("impactsEditor.label", "Libellé")}
+              </th>
               <th className={`${thClass} text-right`} style={{ width: 78 }}>
                 {t("impactsEditor.amountShort", "€M / ETP")}
               </th>
