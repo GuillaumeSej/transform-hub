@@ -38,10 +38,14 @@ function baseAxisRow(overrides: Record<string, unknown> = {}) {
 function baseChantierRow(overrides: Record<string, unknown> = {}) {
   return {
     Code: "CH1",
-    "Code Axe": "AX1",
+    "Codes Axes (séparés par ;)": "AX1",
     Nom: "Refonte du parcours achats",
     Description: "Test",
+    Pilote: "Marc Dubois",
     "Étape de maturité": "Planifié",
+    "Budget alloué": 150000,
+    "Budget consommé": 42000,
+    "ETP consommés": 2.5,
     "Dépendances (Code:type, séparées par ;)": "",
     ...overrides,
   };
@@ -58,6 +62,9 @@ function baseActionRow(overrides: Record<string, unknown> = {}) {
     "Date début": "2026-01-15",
     "Date fin": "2026-03-31",
     "Étape de maturité": "Planifié",
+    Budget: 30000,
+    "Budget consommé": 8000,
+    "Poids dans le chantier (%)": 50,
     ...overrides,
   };
 }
@@ -80,7 +87,7 @@ function baseIndicatorRow(overrides: Record<string, unknown> = {}) {
 
 function baseLivrableRow(overrides: Record<string, unknown> = {}) {
   return {
-    "Code Action": "ACT1",
+    "Code Projet": "ACT1",
     Label: "Cartographie validée en comité",
     Début: "2026-02-01",
     Fin: "2026-03-31",
@@ -137,12 +144,19 @@ describe("validateStrategicImportRows", () => {
     expect(ch1).toBeDefined();
     expect(ch2).toBeDefined();
     expect(ch1!.axisIds).toEqual([axis.id]);
+    expect(ch1!.pilote).toBe("Marc Dubois");
+    expect(ch1!.allocatedBudget).toBe(150000);
+    expect(ch1!.consumedBudget).toBe(42000);
+    expect(ch1!.consumedFte).toBe(2.5);
     // Résolution FK same-file : la dépendance de CH2 pointe vers le VRAI id alloué à CH1, pas
     // vers le Code littéral "CH1" du fichier.
     expect(ch2!.dependencies).toEqual([{ targetId: ch1!.id, type: "FS" }]);
 
     const action = result.toCreate.actions[0];
     expect(action.chantierId).toBe(ch1!.id);
+    expect(action.budget).toBe(30000);
+    expect(action.consumedBudget).toBe(8000);
+    expect(action.chantierWeightPct).toBe(50);
     expect(action.deliverables).toHaveLength(1);
     expect(action.deliverables![0].label).toBe("Cartographie validée en comité");
     expect(action.deliverables![0].phases).toHaveLength(1);
@@ -163,7 +177,7 @@ describe("validateStrategicImportRows", () => {
   it("signale une FK manquante/invalide comme erreur de ligne sans lever d'exception", () => {
     const sheets: StrategicImportRawSheets = {
       axes: [baseAxisRow()],
-      chantiers: [baseChantierRow({ "Code Axe": "AX-INCONNU" })],
+      chantiers: [baseChantierRow({ "Codes Axes (séparés par ;)": "AX-INCONNU" })],
       actions: [],
       livrables: [],
       indicateurs: [],
@@ -244,7 +258,7 @@ describe("validateStrategicImportRows", () => {
       axes: [baseAxisRow()],
       chantiers: [baseChantierRow()],
       actions: [baseActionRow()],
-      livrables: [baseLivrableRow({ "Code Action": "ACT-INCONNU" })],
+      livrables: [baseLivrableRow({ "Code Projet": "ACT-INCONNU" })],
       indicateurs: [],
     };
 
@@ -260,6 +274,122 @@ describe("validateStrategicImportRows", () => {
     expect(result.toCreate.actions[0].deliverables ?? []).toHaveLength(0);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].sheet).toBe("Livrables");
+  });
+
+  it("rattache un chantier à PLUSIEURS axes via 'Codes Axes (séparés par ;)'", () => {
+    const sheets: StrategicImportRawSheets = {
+      axes: [baseAxisRow(), baseAxisRow({ Code: "AX2", Nom: "Transformation digitale" })],
+      chantiers: [baseChantierRow({ "Codes Axes (séparés par ;)": "AX1;AX2" })],
+      actions: [],
+      livrables: [],
+      indicateurs: [],
+    };
+
+    const result = validateStrategicImportRows(
+      sheets,
+      emptyExisting(),
+      companyId,
+      programId,
+      stages
+    );
+
+    expect(result.errors).toEqual([]);
+    const ax1 = result.toCreate.axes.find((a) => a.name === "Excellence opérationnelle")!;
+    const ax2 = result.toCreate.axes.find((a) => a.name === "Transformation digitale")!;
+    expect(result.toCreate.chantiers[0].axisIds).toEqual([ax1.id, ax2.id]);
+  });
+
+  it("signale un ou plusieurs codes d'axe introuvables dans une liste multi-axes, sans bloquer les codes valides isolément", () => {
+    const sheets: StrategicImportRawSheets = {
+      axes: [baseAxisRow()],
+      chantiers: [baseChantierRow({ "Codes Axes (séparés par ;)": "AX1;AX-FANTOME" })],
+      actions: [],
+      livrables: [],
+      indicateurs: [],
+    };
+
+    const result = validateStrategicImportRows(
+      sheets,
+      emptyExisting(),
+      companyId,
+      programId,
+      stages
+    );
+
+    expect(result.toCreate.chantiers).toHaveLength(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({ sheet: "Chantiers" });
+    expect(result.errors[0].reason).toMatch(/AX-FANTOME/);
+  });
+
+  it("signale une colonne budget/ETP facultative non numérique comme erreur (Chantiers et Projets), sans bloquer quand elle est vide", () => {
+    const sheetsInvalidChantierBudget: StrategicImportRawSheets = {
+      axes: [baseAxisRow()],
+      chantiers: [baseChantierRow({ "Budget alloué": "pas un nombre" })],
+      actions: [],
+      livrables: [],
+      indicateurs: [],
+    };
+    const resultChantier = validateStrategicImportRows(
+      sheetsInvalidChantierBudget,
+      emptyExisting(),
+      companyId,
+      programId,
+      stages
+    );
+    expect(resultChantier.toCreate.chantiers).toHaveLength(0);
+    expect(resultChantier.errors).toHaveLength(1);
+    expect(resultChantier.errors[0]).toMatchObject({ sheet: "Chantiers" });
+    expect(resultChantier.errors[0].reason).toMatch(/Budget alloué/);
+
+    const sheetsInvalidActionBudget: StrategicImportRawSheets = {
+      axes: [baseAxisRow()],
+      chantiers: [baseChantierRow()],
+      actions: [baseActionRow({ Budget: "N/A" })],
+      livrables: [],
+      indicateurs: [],
+    };
+    const resultAction = validateStrategicImportRows(
+      sheetsInvalidActionBudget,
+      emptyExisting(),
+      companyId,
+      programId,
+      stages
+    );
+    expect(resultAction.toCreate.actions).toHaveLength(0);
+    expect(resultAction.errors).toHaveLength(1);
+    expect(resultAction.errors[0]).toMatchObject({ sheet: "Projets" });
+    expect(resultAction.errors[0].reason).toMatch(/Budget/);
+
+    // Champs budget/ETP tous vides : facultatifs, jamais une erreur.
+    const sheetsAllEmptyBudgets: StrategicImportRawSheets = {
+      axes: [baseAxisRow()],
+      chantiers: [
+        baseChantierRow({
+          "Budget alloué": "",
+          "Budget consommé": "",
+          "ETP consommés": "",
+          Pilote: "",
+        }),
+      ],
+      actions: [
+        baseActionRow({ Budget: "", "Budget consommé": "", "Poids dans le chantier (%)": "" }),
+      ],
+      livrables: [],
+      indicateurs: [],
+    };
+    const resultEmpty = validateStrategicImportRows(
+      sheetsAllEmptyBudgets,
+      emptyExisting(),
+      companyId,
+      programId,
+      stages
+    );
+    expect(resultEmpty.errors).toEqual([]);
+    expect(resultEmpty.toCreate.chantiers[0].allocatedBudget).toBeUndefined();
+    expect(resultEmpty.toCreate.chantiers[0].pilote).toBeUndefined();
+    expect(resultEmpty.toCreate.actions[0].budget).toBeUndefined();
+    expect(resultEmpty.toCreate.actions[0].chantierWeightPct).toBeUndefined();
   });
 
   it("ne plante jamais sur des feuilles vides", () => {

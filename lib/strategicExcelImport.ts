@@ -15,23 +15,32 @@ import type {
 } from "@/types";
 
 /**
- * Import Excel d'un plan stratégique complet (Axes → Chantiers → Actions → Livrables →
+ * Import Excel d'un plan stratégique complet (Axes → Chantiers → Projets → Livrables →
  * Indicateurs), utilisé par `StrategicImportButton` — voir plan round 4, section "Import Excel du
  * Plan Stratégique". Mirror délibéré de `lib/leverExcelImport.ts` (même technique `xlsx`, même
  * idiome `validate*Rows` -> aperçu + erreurs ligne par ligne, même `downloadTemplate` via
  * `aoa_to_sheet`/`book_append_sheet`) — quelques différences de fond documentées ci-dessous.
+ *
+ * Round 27 : la feuille anciennement "Actions" s'appelle désormais "Projets" à l'écran (rename
+ * utilisateur du round "levier -> projet" appliqué ici à l'import) — le type interne
+ * `ChantierAction` et ses champs (`chantierId`, etc.) restent inchangés, seuls le nom de feuille et
+ * les libellés affichés changent. Même round : la colonne "Code Axe" de la feuille "Chantiers"
+ * devient "Codes Axes (séparés par ;)" (un chantier peut désormais appartenir à PLUSIEURS axes,
+ * voir `Chantier.axisIds`), et des colonnes budget/ETP optionnelles apparaissent sur "Chantiers"
+ * (`allocatedBudget`/`consumedBudget`/`consumedFte`) et "Projets" (`budget`/`consumedBudget`).
  *
  * Format retenu : 5 feuilles, une ligne par entité :
  *  - "Axes" : une ligne par axe. `Code` est une clé de LIAISON propre au fichier importé (pas un
  *    champ persistant de `StrategicAxis` — contrairement au `Code` des leviers, qui EST le champ
  *    métier stocké) : elle ne sert qu'à ce que les feuilles suivantes puissent référencer la bonne
  *    ligne. Elle n'apparaît nulle part dans l'entité créée.
- *  - "Chantiers" : une ligne par chantier, rattachée à un axe via `Code Axe`. `Code` (propre à
- *    cette feuille) sert de clé de liaison pour "Actions" et pour la colonne "Dépendances" de
- *    cette même feuille.
- *  - "Actions" : une ligne par action, rattachée à un chantier via `Code Chantier`. `Code` sert de
- *    clé de liaison pour "Livrables".
- *  - "Livrables" (optionnelle) : une ligne par livrable, rattachée à une action via `Code Action`.
+ *  - "Chantiers" : une ligne par chantier, rattachée à un ou plusieurs axes via
+ *    "Codes Axes (séparés par ;)" (même convention de séparateur que la colonne "Dépendances" de
+ *    cette même feuille, voir `parseAxisCodes` ci-dessous). `Code` (propre à cette feuille) sert de
+ *    clé de liaison pour "Projets" et pour la colonne "Dépendances" de cette même feuille.
+ *  - "Projets" : une ligne par projet (type interne `ChantierAction`), rattachée à un chantier via
+ *    `Code Chantier`. `Code` sert de clé de liaison pour "Livrables".
+ *  - "Livrables" (optionnelle) : une ligne par livrable, rattachée à un projet via `Code Projet`.
  *    Simplifiée à UNE phase par ligne (`Début`/`Fin`) plutôt que d'exposer la liste `phases[]` —
  *    largement suffisant pour un import initial, une phase supplémentaire se rajoute ensuite à la
  *    main sur la fiche chantier. Un livrable n'est jamais un `toCreate` séparé : il est embarqué
@@ -39,7 +48,8 @@ import type {
  *  - "Indicateurs" : une ligne par indicateur, rattachée à un axe (`Code Axe`) OU un chantier
  *    (`Code Chantier`) — exactement l'un des deux, jamais les deux, jamais ni l'un ni l'autre
  *    (même optionnalité que `Indicator.chantierId`). Quand seul `Code Chantier` est renseigné,
- *    `axisId` est dérivé automatiquement de l'axe du chantier résolu.
+ *    `axisId` est dérivé automatiquement du PREMIER axe (`axisIds[0]`, axe "primaire" au sens
+ *    interne uniquement — voir doc-comment de `Chantier.axisIds`) du chantier résolu.
  *
  * Allocation d'id en deux passes (une seule passe mémoire, AUCUN aller-retour Firestore) : au
  * contraire des leviers (id métier `L###` nécessitant l'existant en base pour décider
@@ -48,7 +58,7 @@ import type {
  * `lib/hooks/useStrategicData.ts:129-131` — non réutilisé ici tel quel, mais même esprit avec
  * `makeId` ci-dessous). On peut donc allouer un id réel à CHAQUE ligne Axe/Chantier/Action dès sa
  * lecture, construire une map `Code (du fichier) -> id réel` par type d'entité, puis résoudre
- * TOUTES les colonnes de clé étrangère (Code Axe, Code Chantier, Code Action, et la colonne
+ * TOUTES les colonnes de clé étrangère (Codes Axes, Code Chantier, Code Projet, et la colonne
  * Dépendances) contre ces maps — y compris des références à des lignes créées dans le MÊME
  * fichier. C'est le cas d'usage réel : un axe et tous ses chantiers arrivent ensemble dans
  * l'import initial qui amorce un nouveau plan.
@@ -83,13 +93,19 @@ export const STRATEGIC_AXIS_IMPORT_HEADERS = [
 
 export const STRATEGIC_CHANTIER_IMPORT_HEADERS = [
   "Code",
-  "Code Axe",
+  "Codes Axes (séparés par ;)",
   "Nom",
   "Description",
+  "Pilote",
   "Étape de maturité",
+  "Budget alloué",
+  "Budget consommé",
+  "ETP consommés",
   "Dépendances (Code:type, séparées par ;)",
 ] as const;
 
+// Nom de constante inchangé (`ACTION`, type interne `ChantierAction`) bien que la feuille affichée
+// s'appelle désormais "Projets" — voir doc-comment de tête de fichier, round 27.
 export const STRATEGIC_ACTION_IMPORT_HEADERS = [
   "Code",
   "Code Chantier",
@@ -100,10 +116,13 @@ export const STRATEGIC_ACTION_IMPORT_HEADERS = [
   "Date début",
   "Date fin",
   "Étape de maturité",
+  "Budget",
+  "Budget consommé",
+  "Poids dans le chantier (%)",
 ] as const;
 
 export const STRATEGIC_DELIVERABLE_IMPORT_HEADERS = [
-  "Code Action",
+  "Code Projet",
   "Label",
   "Début",
   "Fin",
@@ -202,6 +221,22 @@ function numOrUndefined(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/** Nombre FACULTATIF : chaîne vide -> `{ value: undefined }` (champ non renseigné, jamais une
+ *  erreur) ; chaîne non vide mais non interprétable -> `{ error }` (même convention de message que
+ *  `"Montant (€M)" doit être un nombre` dans `lib/leverExcelImport.ts`, appliquée ici à des champs
+ *  facultatifs plutôt qu'obligatoires — seule une valeur PRÉSENTE mais invalide bloque la ligne, un
+ *  champ vide ne bloque jamais). Utilisé pour les colonnes budget/ETP des feuilles Chantiers/
+ *  Projets, toutes facultatives. */
+function parseOptionalNumberField(
+  raw: string,
+  fieldLabel: string
+): { value?: number; error?: string } {
+  if (!raw) return {};
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return { error: `"${fieldLabel}" doit être un nombre` };
+  return { value: n };
+}
+
 function isRowEmpty(row: Record<string, unknown>): boolean {
   return Object.values(row).every((v) => str(v) === "");
 }
@@ -286,9 +321,35 @@ function parseDependencies(raw: string, resolveTargetCode: (code: string) => str
   return { dependencies, unresolved };
 }
 
+/** Résout la colonne "Codes Axes (séparés par ;)" d'une ligne Chantiers contre les axes du même
+ *  fichier ou déjà en base — même convention de séparateur que `parseDependencies` ci-dessus (round
+ *  27 : remplace l'ancienne colonne "Code Axe" singulière, `Chantier.axisIds` acceptant désormais
+ *  plusieurs axes, voir son doc-comment dans types/index.ts). Un code dupliqué dans la même cellule
+ *  n'est compté qu'une fois. */
+function parseAxisCodes(
+  raw: string,
+  resolveCode: (code: string) => string | undefined
+): { axisIds: string[]; unresolved: string[] } {
+  const axisIds: string[] = [];
+  const unresolved: string[] = [];
+  raw
+    .split(";")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .forEach((code) => {
+      const id = resolveCode(code);
+      if (!id) {
+        unresolved.push(code);
+        return;
+      }
+      if (!axisIds.includes(id)) axisIds.push(id);
+    });
+  return { axisIds, unresolved };
+}
+
 // ---------- Types publics ----------
 
-export type StrategicImportSheet = "Axes" | "Chantiers" | "Actions" | "Livrables" | "Indicateurs";
+export type StrategicImportSheet = "Axes" | "Chantiers" | "Projets" | "Livrables" | "Indicateurs";
 
 export type StrategicImportError = {
   sheet: StrategicImportSheet;
@@ -421,7 +482,10 @@ export function validateStrategicImportRows(
   };
   const parsedChantiers: ParsedChantier[] = [];
   const chantierIdByCode = new Map<string, string>();
-  const chantierAxisById = new Map<string, string>(); // id réel -> axisId (pour les indicateurs)
+  // id réel -> axisIds[0] (axe "primaire" au sens interne uniquement, voir doc-comment de
+  // `Chantier.axisIds` dans types/index.ts) — pour la dérivation d'axe des indicateurs rattachés
+  // par "Code Chantier" seul.
+  const chantierAxisById = new Map<string, string>();
   const chantierCodeFirstSeenAtRow = new Map<string, number>();
 
   sheets.chantiers.forEach((row, i) => {
@@ -443,17 +507,29 @@ export function validateStrategicImportRows(
       return;
     }
 
-    const axisCodeRaw = str(row["Code Axe"]);
-    if (!axisCodeRaw) {
-      errors.push({ sheet: "Chantiers", rowNumber, reason: `"Code Axe" est obligatoire` });
-      return;
-    }
-    const axisId = resolveAxisCode(axisCodeRaw);
-    if (!axisId) {
+    const axisCodesRaw = str(row["Codes Axes (séparés par ;)"]);
+    if (!axisCodesRaw) {
       errors.push({
         sheet: "Chantiers",
         rowNumber,
-        reason: `Axe "${axisCodeRaw}" introuvable (ni dans la feuille Axes, ni en base)`,
+        reason: `"Codes Axes (séparés par ;)" est obligatoire`,
+      });
+      return;
+    }
+    const { axisIds, unresolved: unresolvedAxes } = parseAxisCodes(axisCodesRaw, resolveAxisCode);
+    if (unresolvedAxes.length > 0) {
+      errors.push({
+        sheet: "Chantiers",
+        rowNumber,
+        reason: `Axe(s) introuvable(s) (ni dans la feuille Axes, ni en base) : ${unresolvedAxes.join(", ")}`,
+      });
+      return;
+    }
+    if (axisIds.length === 0) {
+      errors.push({
+        sheet: "Chantiers",
+        rowNumber,
+        reason: `"Codes Axes (séparés par ;)" est obligatoire`,
       });
       return;
     }
@@ -475,16 +551,46 @@ export function validateStrategicImportRows(
       return;
     }
 
+    const allocatedBudgetParsed = parseOptionalNumberField(
+      str(row["Budget alloué"]),
+      "Budget alloué"
+    );
+    if (allocatedBudgetParsed.error) {
+      errors.push({ sheet: "Chantiers", rowNumber, reason: allocatedBudgetParsed.error });
+      return;
+    }
+    const consumedBudgetParsed = parseOptionalNumberField(
+      str(row["Budget consommé"]),
+      "Budget consommé"
+    );
+    if (consumedBudgetParsed.error) {
+      errors.push({ sheet: "Chantiers", rowNumber, reason: consumedBudgetParsed.error });
+      return;
+    }
+    const consumedFteParsed = parseOptionalNumberField(str(row["ETP consommés"]), "ETP consommés");
+    if (consumedFteParsed.error) {
+      errors.push({ sheet: "Chantiers", rowNumber, reason: consumedFteParsed.error });
+      return;
+    }
+
     const id = makeId("CH");
     const chantier: Chantier = {
       id,
       companyId: resolvedCompanyId,
       programId: resolvedProgramId,
-      axisIds: [axisId],
+      axisIds,
       name,
       stage,
       dependencies: [], // résolu en passe 2, une fois tous les Code de chantiers connus
       ...(str(row["Description"]) ? { description: str(row["Description"]) } : {}),
+      ...(str(row["Pilote"]) ? { pilote: str(row["Pilote"]) } : {}),
+      ...(allocatedBudgetParsed.value !== undefined
+        ? { allocatedBudget: allocatedBudgetParsed.value }
+        : {}),
+      ...(consumedBudgetParsed.value !== undefined
+        ? { consumedBudget: consumedBudgetParsed.value }
+        : {}),
+      ...(consumedFteParsed.value !== undefined ? { consumedFte: consumedFteParsed.value } : {}),
       createdAt: nowDate(),
       lastUpdate: nowDate(),
     };
@@ -496,7 +602,7 @@ export function validateStrategicImportRows(
       chantier,
     });
     chantierIdByCode.set(lowerCode, id);
-    chantierAxisById.set(id, axisId);
+    chantierAxisById.set(id, axisIds[0]);
     chantierCodeFirstSeenAtRow.set(lowerCode, rowNumber);
   });
 
@@ -521,7 +627,8 @@ export function validateStrategicImportRows(
     chantiersToCreate.push({ ...p.chantier, dependencies });
   }
 
-  // ---------- Feuille "Actions" ----------
+  // ---------- Feuille "Projets" (type interne ChantierAction, inchangé — voir doc-comment de tête
+  // de fichier, round 27) ----------
   type ParsedAction = { rowNumber: number; code: string; action: ChantierAction };
   const parsedActions: ParsedAction[] = [];
   const actionIdByCode = new Map<string, string>();
@@ -533,13 +640,13 @@ export function validateStrategicImportRows(
 
     const code = str(row["Code"]);
     if (!code) {
-      errors.push({ sheet: "Actions", rowNumber, reason: `"Code" est obligatoire` });
+      errors.push({ sheet: "Projets", rowNumber, reason: `"Code" est obligatoire` });
       return;
     }
     const lowerCode = code.toLowerCase();
     if (actionCodeFirstSeenAtRow.has(lowerCode)) {
       errors.push({
-        sheet: "Actions",
+        sheet: "Projets",
         rowNumber,
         reason: `Code "${code}" en doublon dans le fichier (déjà utilisé ligne ${actionCodeFirstSeenAtRow.get(lowerCode)})`,
       });
@@ -548,13 +655,13 @@ export function validateStrategicImportRows(
 
     const chantierCodeRaw = str(row["Code Chantier"]);
     if (!chantierCodeRaw) {
-      errors.push({ sheet: "Actions", rowNumber, reason: `"Code Chantier" est obligatoire` });
+      errors.push({ sheet: "Projets", rowNumber, reason: `"Code Chantier" est obligatoire` });
       return;
     }
     const chantierId = resolveChantierCode(chantierCodeRaw);
     if (!chantierId) {
       errors.push({
-        sheet: "Actions",
+        sheet: "Projets",
         rowNumber,
         reason: `Chantier "${chantierCodeRaw}" introuvable (ni dans la feuille Chantiers, ni en base)`,
       });
@@ -563,14 +670,14 @@ export function validateStrategicImportRows(
 
     const name = str(row["Nom"]);
     if (!name) {
-      errors.push({ sheet: "Actions", rowNumber, reason: `"Nom" est obligatoire` });
+      errors.push({ sheet: "Projets", rowNumber, reason: `"Nom" est obligatoire` });
       return;
     }
 
     const start = parseFlexibleDate(row["Date début"]);
     if (!start) {
       errors.push({
-        sheet: "Actions",
+        sheet: "Projets",
         rowNumber,
         reason: `"Date début" obligatoire et doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)`,
       });
@@ -579,7 +686,7 @@ export function validateStrategicImportRows(
     const end = parseFlexibleDate(row["Date fin"]);
     if (!end) {
       errors.push({
-        sheet: "Actions",
+        sheet: "Projets",
         rowNumber,
         reason: `"Date fin" obligatoire et doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)`,
       });
@@ -590,10 +697,34 @@ export function validateStrategicImportRows(
     const status = stageRaw ? resolveStage(stageRaw, maturityStages) : undefined;
     if (!status) {
       errors.push({
-        sheet: "Actions",
+        sheet: "Projets",
         rowNumber,
         reason: `Étape de maturité "${stageRaw}" inconnue (attendu : ${stageNamesForError(maturityStages)})`,
       });
+      return;
+    }
+
+    const budgetParsed = parseOptionalNumberField(str(row["Budget"]), "Budget");
+    if (budgetParsed.error) {
+      errors.push({ sheet: "Projets", rowNumber, reason: budgetParsed.error });
+      return;
+    }
+    const consumedBudgetParsed = parseOptionalNumberField(
+      str(row["Budget consommé"]),
+      "Budget consommé"
+    );
+    if (consumedBudgetParsed.error) {
+      errors.push({ sheet: "Projets", rowNumber, reason: consumedBudgetParsed.error });
+      return;
+    }
+    // `ChantierAction.chantierWeightPct` (voir types/index.ts) — colonne facultative, même
+    // convention de validation que les champs budget ci-dessus.
+    const weightParsed = parseOptionalNumberField(
+      str(row["Poids dans le chantier (%)"]),
+      "Poids dans le chantier (%)"
+    );
+    if (weightParsed.error) {
+      errors.push({ sheet: "Projets", rowNumber, reason: weightParsed.error });
       return;
     }
 
@@ -609,6 +740,11 @@ export function validateStrategicImportRows(
       ...(str(row["Description"]) ? { description: str(row["Description"]) } : {}),
       ...(str(row["Owner"]) ? { owner: str(row["Owner"]) } : {}),
       ...(str(row["Sponsor"]) ? { sponsor: str(row["Sponsor"]) } : {}),
+      ...(budgetParsed.value !== undefined ? { budget: budgetParsed.value } : {}),
+      ...(consumedBudgetParsed.value !== undefined
+        ? { consumedBudget: consumedBudgetParsed.value }
+        : {}),
+      ...(weightParsed.value !== undefined ? { chantierWeightPct: weightParsed.value } : {}),
     };
 
     parsedActions.push({ rowNumber, code, action });
@@ -629,9 +765,9 @@ export function validateStrategicImportRows(
     const rowNumber = i + 2;
     if (isRowEmpty(row)) return;
 
-    const actionCodeRaw = str(row["Code Action"]);
+    const actionCodeRaw = str(row["Code Projet"]);
     if (!actionCodeRaw) {
-      errors.push({ sheet: "Livrables", rowNumber, reason: `"Code Action" est obligatoire` });
+      errors.push({ sheet: "Livrables", rowNumber, reason: `"Code Projet" est obligatoire` });
       return;
     }
     const lowerActionCode = actionCodeRaw.toLowerCase();
@@ -639,7 +775,7 @@ export function validateStrategicImportRows(
       errors.push({
         sheet: "Livrables",
         rowNumber,
-        reason: `Action "${actionCodeRaw}" introuvable dans la feuille Actions de ce même fichier`,
+        reason: `Projet "${actionCodeRaw}" introuvable dans la feuille Projets de ce même fichier`,
       });
       return;
     }
@@ -869,7 +1005,9 @@ export function validateStrategicImportRows(
 export const STRATEGIC_IMPORT_SHEET_NAMES = {
   axes: "Axes",
   chantiers: "Chantiers",
-  actions: "Actions",
+  // Clé interne inchangée (`actions`, type `ChantierAction`) — nom de feuille affiché renommé en
+  // "Projets" round 27, voir doc-comment de tête de fichier.
+  actions: "Projets",
   livrables: "Livrables",
   indicateurs: "Indicateurs",
 } as const;
@@ -884,8 +1022,21 @@ export const STRATEGIC_AXIS_EXAMPLE_ROW = [
 ];
 
 export const STRATEGIC_CHANTIER_EXAMPLE_ROWS = [
-  ["CH1", "AX1", "Refonte du parcours achats", "Exemple", "Planifié", ""],
-  ["CH2", "AX1", "Digitalisation des contrats", "Exemple", "Planifié", "CH1:FS"],
+  // "AX1" seul reste une liste valide "séparée par ;" à un élément ; pour rattacher un chantier à
+  // plusieurs axes, saisir par ex. "AX1;AX2".
+  [
+    "CH1",
+    "AX1",
+    "Refonte du parcours achats",
+    "Exemple",
+    "Marc Dubois",
+    "Planifié",
+    150000,
+    42000,
+    2.5,
+    "",
+  ],
+  ["CH2", "AX1", "Digitalisation des contrats", "Exemple", "", "Planifié", "", "", "", "CH1:FS"],
 ];
 
 export const STRATEGIC_ACTION_EXAMPLE_ROW = [
@@ -898,6 +1049,9 @@ export const STRATEGIC_ACTION_EXAMPLE_ROW = [
   "2026-01-15",
   "2026-03-31",
   "Planifié",
+  30000,
+  8000,
+  50,
 ];
 
 export const STRATEGIC_DELIVERABLE_EXAMPLE_ROW = [
