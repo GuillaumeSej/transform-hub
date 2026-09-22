@@ -358,7 +358,15 @@ export function ImpactsEditor({
         return next;
       })
     );
-  const remove = (id: string) => onChange(impacts.filter((i) => i.id !== id));
+  const remove = (id: string) => {
+    if (
+      !window.confirm(
+        t("impactsEditor.confirmDelete", "Supprimer cet impact ? Cette action est irréversible.")
+      )
+    )
+      return;
+    onChange(impacts.filter((i) => i.id !== id));
+  };
   const addComment = (imp: LeverImpact, text: string) => {
     const comment: Comment = { user: user?.name ?? "?", ts: new Date().toISOString(), text };
     update(imp.id, { comments: [...(imp.comments ?? []), comment] });

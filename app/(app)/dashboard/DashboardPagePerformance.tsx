@@ -1696,7 +1696,7 @@ export function DashboardPagePerformance() {
                           <td className="px-3 py-2.5">{ss.leverCount}</td>
                           <td className="px-3 py-2.5 tabular-nums">
                             <strong>{engine.fmtCurr(ss.realized)}</strong> /{" "}
-                            {engine.fmtCurr(ss.target)}
+                            {engine.fmtCurr(ss.reforecastTarget)}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
                             <strong>{engine.fmtCurr(capexRealized)}</strong> /{" "}
@@ -1870,27 +1870,29 @@ export function DashboardPagePerformance() {
           sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)} · ${summary.progressPct}%`}
           barPct={summary.progressPct}
           barMarkerPct={
-            summary.target > 0
-              ? Math.round((summary.reforecastTarget / summary.target) * 100)
+            summary.reforecastTarget > 0
+              ? Math.round((summary.target / summary.reforecastTarget) * 100)
               : undefined
           }
           onClick={() => goToLevers({})}
         />
-        {/* 2. CAPEX & coûts one-off — engagé vs plan + % + marqueur reforecast */}
+        {/* 2. CAPEX & coûts one-off — engagé vs réactualisé + % (même convention que la carte 1 :
+            le % d'avancement se lit TOUJOURS contre le réactualisé, jamais contre le plan initial —
+            le marqueur sur la barre indique où se situe le plan initial). */}
         <KPICard
           label={t("dashboard.kpi.implementationCosts")}
           value={engine.fmtCurr(summary.engagedCosts)}
           icon={TrendingUp}
           accent="brown"
-          sub={`${t("dashboard.kpi.plan")} ${engine.fmtCurr(summary.plannedCosts)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastCosts)} · ${summary.plannedCosts > 0 ? Math.round((summary.engagedCosts / summary.plannedCosts) * 100) : 0}%`}
+          sub={`${t("dashboard.kpi.plan")} ${engine.fmtCurr(summary.plannedCosts)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastCosts)} · ${summary.reforecastCosts > 0 ? Math.round((summary.engagedCosts / summary.reforecastCosts) * 100) : 0}%`}
           barPct={
-            summary.plannedCosts > 0
-              ? Math.round((summary.engagedCosts / summary.plannedCosts) * 100)
+            summary.reforecastCosts > 0
+              ? Math.round((summary.engagedCosts / summary.reforecastCosts) * 100)
               : 0
           }
           barMarkerPct={
-            summary.plannedCosts > 0
-              ? Math.round((summary.reforecastCosts / summary.plannedCosts) * 100)
+            summary.reforecastCosts > 0
+              ? Math.round((summary.plannedCosts / summary.reforecastCosts) * 100)
               : undefined
           }
           onClick={() => router.push("/finance")}
@@ -1914,6 +1916,10 @@ export function DashboardPagePerformance() {
           icon={TriangleAlert}
           accent="amber"
           sub={`${summary.riskDelay} ${t("dashboard.kpi.riskDelay")} · ${summary.riskCostOverrun} ${t("dashboard.kpi.riskCost")} · ${summary.riskSavingsCut} ${t("dashboard.kpi.riskSavings")}`}
+          infoTooltip={t(
+            "dashboard.kpi.leversAtRiskTooltip",
+            "Le total compte chaque levier une seule fois (1 catégorie déclenchée = à risque, 2+ = critique). Les 3 catégories ci-dessous ne sont pas exclusives : un même levier peut être compté dans plusieurs à la fois (ex. en retard ET en surcoût), donc leur somme est normalement supérieure au total affiché."
+          )}
           barSegments={(() => {
             const totalRisk = summary.riskDelay + summary.riskCostOverrun + summary.riskSavingsCut;
             if (totalRisk === 0) return [];

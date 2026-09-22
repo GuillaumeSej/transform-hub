@@ -1440,7 +1440,13 @@ export type ProgramSummary = {
 
 export type WorkstreamSummary = {
   target: number;
+  /** Cible réactualisée (reforecast ?? plan figé ?? valeur courante) — même chaîne de repli que
+   *  `ProgramSummary.reforecastTarget`. C'est CETTE valeur, pas `target`, qui doit être affichée
+   *  partout où un libellé "Cible réactualisée"/"Réactualisé" est utilisé. */
+  reforecastTarget: number;
   realized: number;
+  /** Réalisé / réactualisé (jamais / plan initial — même convention que `displayedProgressPct`
+   *  et `ProgramSummary.progressPct`). */
   progressPct: number;
   capex: number;
   opex: number;

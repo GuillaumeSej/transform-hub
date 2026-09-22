@@ -67,6 +67,37 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
   const labelOf = new Map(data.map((d) => [d.key, d.period]));
   const todayKey = traj.points[traj.todayIndex]?.periodStart;
   const fmt = (v: number) => (Math.round(v * 100) / 100).toString();
+
+  // Échelle Y explicite (au lieu de l'auto-scale par défaut de recharts) : sans elle, une seule
+  // barre/valeur isolée très supérieure aux autres écrase visuellement le détail du reste du
+  // graphique ("toujours tassé", retour testeur). On calcule le domaine réel couvert par tout ce
+  // qui se trace sur cet axe (barres empilées gain/coût + ligne cumulée en vue "Impact financier",
+  // ou la seule ligne ETP en vue "Impact ETP"), avec une marge de ~12 % au-dessus/en-dessous, puis
+  // on arrondit à une valeur "ronde" (1/2/5 × 10^n) pour des graduations lisibles. `0` reste
+  // toujours dans le domaine (inclus dans les valeurs avant marge) pour que la ligne de référence
+  // à 0 (`ReferenceLine y={0}`) reste visible.
+  const yDomain = useMemo<[number, number]>(() => {
+    if (data.length === 0) return [0, 1];
+    const values =
+      view === "fte"
+        ? data.map((d) => d.fte)
+        : data.flatMap((d) => [d.gain, d.cost, d.cumulativeNet]);
+    const min = Math.min(0, ...values);
+    const max = Math.max(0, ...values);
+    if (min === 0 && max === 0) return [-1, 1];
+    const span = max - min;
+    const pad = span * 0.12 || Math.max(Math.abs(min), Math.abs(max)) * 0.12 || 1;
+    const niceBound = (v: number): number => {
+      if (v === 0) return 0;
+      const sign = Math.sign(v);
+      const abs = Math.abs(v);
+      const magnitude = Math.pow(10, Math.floor(Math.log10(abs)));
+      const norm = abs / magnitude;
+      const step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+      return sign * step * magnitude;
+    };
+    return [niceBound(min - pad), niceBound(max + pad)];
+  }, [data, view]);
   const openDetail = (key?: string) => {
     if (view !== "financial" || !key) return;
     const pt = traj.points.find((p) => p.periodStart === key);
@@ -151,6 +182,8 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
             <YAxis
               tick={{ fontSize: 10 }}
               tickFormatter={fmt}
+              domain={yDomain}
+              allowDataOverflow={false}
               label={{
                 value: view === "fte" ? "ETP" : "€M",
                 angle: -90,

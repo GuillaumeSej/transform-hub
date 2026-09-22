@@ -27,14 +27,14 @@ import {
   costRowsForPeriod,
   costsByHierarchyNode,
   investVsSavingsRowsForPeriod,
+  flattenCostImpacts,
   groupCostsByWorkstream,
-  investCostRowsBySegment,
   isInvestNature,
   sortedHierarchyLevels,
   type FinanceGranularity,
   type HierarchyCostSlice,
 } from "@/lib/financeCosts";
-import type { BeTrackData, HierarchyLevelDef, HierarchyNode } from "@/types";
+import type { BeTrackData, HierarchyLevelDef, HierarchyNode, Lever } from "@/types";
 
 /** 4 graphiques de suivi des coûts du module Finance — TOUTES les données proviennent de
  *  `data.levers[].actions[].impacts[]` via `lib/financeCosts.ts` (aucune donnée en dur). CAPEX +
@@ -53,18 +53,42 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
   const [segment, setSegment] = useState<"engaged" | "upcoming" | null>(null);
   const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
 
+  // "Engagé" doit refléter la MÊME notion que le KPI héros "CAPEX & coûts one-off" du dashboard
+  // exécutif (`engine.programSummary(data).engagedCosts`, lib/engine.ts ~ligne 277 :
+  // `implementationCosts(l) * (l.status === "delivered" ? 1 : l.progress / 100)`) — sinon les deux
+  // vues affichent un même total (même périmètre de leviers "Invest") mais des montants "engagés"
+  // différents, ce qui a été relevé comme incohérent en test métier. Avant ce fix, ce donut classait
+  // chaque ligne de coût en tout-ou-rien via des DATES (`isCostEngaged` : date de déploiement CAPEX
+  // dépassée, ou levier en cours/livré) — une notion de décaissement, différente de la notion
+  // "avancement du levier" utilisée par le KPI. On applique donc ici le même facteur d'avancement
+  // par levier (100% si livré, sinon `progress`%) à chaque ligne de coût "Invest"
+  // (`flattenCostImpacts` + `isInvestNature`, réutilisés depuis lib/financeCosts.ts), ce qui répartit
+  // CHAQUE ligne entre "engagé" et "à venir" au prorata de l'avancement plutôt qu'en bloc — le total
+  // (engagé + à venir) reste inchangé, seule la répartition change.
   const split = useMemo(() => {
-    const engagedRows = investCostRowsBySegment(data, true).map((r) => ({
-      lever: r.lever,
-      amount: r.impact.amount,
-    }));
-    const upcomingRows = investCostRowsBySegment(data, false).map((r) => ({
-      lever: r.lever,
-      amount: r.impact.amount,
-    }));
-    const engaged = round2(engagedRows.reduce((s, r) => s + r.amount, 0));
-    const upcoming = round2(upcomingRows.reduce((s, r) => s + r.amount, 0));
-    return { engagedRows, upcomingRows, engaged, upcoming, total: round2(engaged + upcoming) };
+    const investRows = flattenCostImpacts(data).filter(({ impact }) =>
+      isInvestNature(impact.nature)
+    );
+    const engagedRows: { lever: Lever; amount: number }[] = [];
+    const upcomingRows: { lever: Lever; amount: number }[] = [];
+    let engaged = 0;
+    let upcoming = 0;
+    for (const { impact, lever } of investRows) {
+      const engagedFactor = lever.status === "delivered" ? 1 : lever.progress / 100;
+      const engagedAmount = impact.amount * engagedFactor;
+      const upcomingAmount = impact.amount - engagedAmount;
+      if (engagedAmount !== 0) engagedRows.push({ lever, amount: engagedAmount });
+      if (upcomingAmount !== 0) upcomingRows.push({ lever, amount: upcomingAmount });
+      engaged += engagedAmount;
+      upcoming += upcomingAmount;
+    }
+    return {
+      engagedRows,
+      upcomingRows,
+      engaged: round2(engaged),
+      upcoming: round2(upcoming),
+      total: round2(engaged + upcoming),
+    };
   }, [data]);
 
   const groups = useMemo(() => {

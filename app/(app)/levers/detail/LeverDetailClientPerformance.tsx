@@ -57,7 +57,7 @@ import {
 } from "@/lib/leverConsolidate";
 import { mentionsHiring, reconcileLeverMovements } from "@/lib/leverMovementReconciliation";
 import { fteEffect } from "@/lib/hrEngine";
-import type { ActionStatus, Lever, Company, LeverAction, Program } from "@/types";
+import type { ActionStatus, Company, LeverAction, Program } from "@/types";
 
 const TABS = ["overview", "plan", "impact", "collab"] as const;
 type Tab = (typeof TABS)[number];
@@ -856,6 +856,10 @@ export function LeverDetailClientPerformance() {
                     "{amount}",
                     engine.fmtCurr(realGross)
                   )}
+                  title={t(
+                    "leverDetail.realizedToDateFormula",
+                    "Réalisé à date (net) = gains bruts réalisés − OPEX récurrent réalisé"
+                  )}
                   accent
                 />
                 <BigStat
@@ -1255,10 +1259,9 @@ export function LeverDetailClientPerformance() {
       {tab === "impact" && (
         <Card>
           <CardBody>
-            <SectionTitle first>{t("leverDetail.impactsTitle", "Impacts du levier")}</SectionTitle>
-            <ImpactTotalsBlock lever={lever} />
-
-            <SectionTitle>{t("leverDetail.financialImpactTitle", "Impact financier")}</SectionTitle>
+            <SectionTitle first>
+              {t("leverDetail.financialImpactTitle", "Impact financier")}
+            </SectionTitle>
             <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6">
               <Stat
                 label={t(
@@ -1273,15 +1276,21 @@ export function LeverDetailClientPerformance() {
                   provisionalHint={t("leverDetail.notYetLocked", "non figé")}
                 />
               </Stat>
-              <Stat label={t("leverDetail.realizedToDateEuro", "Réalisé à date (€)")}>
-                {engine.fmtCurr(real)}
-              </Stat>
               <Stat label={t("leverDetail.reforecastNet", "Réactualisé (net)")}>
                 <ProvisionalValue
                   amount={reforecastDisplay.value}
                   isFinal={reforecastDisplay.isReforecast}
                   provisionalHint={t("leverDetail.notYetReforecast", "non réactualisé")}
                 />
+              </Stat>
+              <Stat
+                label={t("leverDetail.realizedToDateEuro", "Réalisé à date (net)")}
+                title={t(
+                  "leverDetail.realizedToDateFormula",
+                  "Réalisé à date (net) = gains bruts réalisés − OPEX récurrent réalisé"
+                )}
+              >
+                {engine.fmtCurr(real)}
               </Stat>
               <Stat label="CAPEX">{engine.fmtCurr(consolidatedKPIs?.capex ?? lever.capex)}</Stat>
               <Stat label="One-off">
@@ -1315,41 +1324,6 @@ export function LeverDetailClientPerformance() {
                   <FteDirectionBadge value={realFte} />
                 </span>
               </Stat>
-              <div className="sm:col-span-3 lg:col-span-1">
-                <Stat label={t("leverForm.popImpacted", "Population impactée")}>
-                  {movementReconciliation.movements.length === 0 ? (
-                    <span className="font-normal text-tertiary">
-                      {t("leverDetail.popImpacted.none", "Aucun mouvement RH lié à ce levier")}
-                    </span>
-                  ) : (
-                    <span className="flex flex-col gap-1 font-normal">
-                      <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                        {t("leverDetail.popImpacted.count", "{n} mouvement(s) lié(s)").replace(
-                          "{n}",
-                          String(movementReconciliation.movements.length)
-                        )}
-                      </span>
-                      {movementReconciliation.movements.map((m) => {
-                        const mismatch = movementReconciliation.mismatchedMovements.some(
-                          (x) => x.id === m.id
-                        );
-                        return (
-                          <span key={m.id} className="flex items-center gap-1.5 text-xs">
-                            <span
-                              className={mismatch ? "font-semibold text-rag-red" : "text-primary"}
-                            >
-                              {m.label} ({m.type}, {fmtSignedFte(fteEffect(m))}, {m.status})
-                            </span>
-                            {mismatch && (
-                              <TriangleAlert size={11} className="shrink-0 text-rag-red" />
-                            )}
-                          </span>
-                        );
-                      })}
-                    </span>
-                  )}
-                </Stat>
-              </div>
             </div>
             <ImpactsEditor
               scope="fte"
@@ -1511,32 +1485,6 @@ function WeightingBanner({ actions }: { actions: LeverAction[] }) {
   );
 }
 
-function ImpactTotalsBlock({ lever }: { lever: Lever }) {
-  const { t } = useTranslation();
-  const tot = engine.leverImpactTotals(lever);
-  const version = lever.reforecast
-    ? t("leverDetail.versionReforecast", "Version réactualisée")
-    : t("leverDetail.versionPlanned", "Version planifiée");
-  return (
-    <div className="mb-4">
-      <div className="mb-2 text-[11px] font-semibold text-tertiary">
-        {t("leverDetail.latestVersion", "Dernière version")} : {version}
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat label={t("leverDetail.grossAnnual", "Gains bruts annualisés")}>
-          {engine.fmtCurr(tot.grossAnnual)}
-        </Stat>
-        <Stat label={t("leverDetail.oneOffGainsNotCounted", "Gains ponctuels (non comptés)")}>
-          {engine.fmtCurr(tot.oneOffGains)}
-        </Stat>
-        <Stat label={t("leverDetail.netGains", "Gains nets (bruts − OPEX récurrent)")} accent>
-          {engine.fmtCurr(tot.netAnnual)}
-        </Stat>
-      </div>
-    </div>
-  );
-}
-
 function SectionTitle({ children, first = false }: { children: React.ReactNode; first?: boolean }) {
   return (
     <div
@@ -1551,13 +1499,16 @@ function Stat({
   label,
   children,
   accent = false,
+  title,
 }: {
   label: string;
   children: React.ReactNode;
   accent?: boolean;
+  /** Tooltip courte (attribut HTML `title`) précisant la formule/le calcul de la valeur. */
+  title?: string;
 }) {
   return (
-    <div>
+    <div title={title}>
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
         {label}
       </div>
@@ -1576,6 +1527,7 @@ function BigStat({
   accent = false,
   sub,
   muted = false,
+  title,
 }: {
   label: string;
   value: React.ReactNode;
@@ -1585,9 +1537,11 @@ function BigStat({
   /** Rendu visuellement secondaire (plus petit, non gras) — ex. le détail CAPEX/OPEX sous les
    *  trois chiffres clés, qui ne doit pas concurrencer visuellement le bandeau exécutif. */
   muted?: boolean;
+  /** Tooltip courte (attribut HTML `title`) précisant la formule/le calcul de la valeur. */
+  title?: string;
 }) {
   return (
-    <div>
+    <div title={title}>
       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
         {label}
       </div>

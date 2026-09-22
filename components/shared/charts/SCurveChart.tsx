@@ -24,7 +24,7 @@ export type SCurvePoint = {
   gap?: { total: number; late: number; cancelled: number; other: number };
 };
 
-const fmtM = (v: number) => `€${Math.round(v * 10) / 10}M`;
+const fmtM = (v: number) => `€${(Math.round(v * 10) / 10).toFixed(1)}M`;
 
 /** Repère de l'écart réactualisé − réalisé sur la période courante (segment + badge). Partagé avec
  *  le bridge pour que les deux vues affichent exactement le même écart. À appeler comme enfant

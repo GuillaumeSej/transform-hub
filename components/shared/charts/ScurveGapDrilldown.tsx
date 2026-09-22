@@ -80,12 +80,14 @@ export function ScurveGapDrilldown({
     // uniquement) et `remaining` = écart de performance (réactualisé − planifié initial) sont déjà
     // produits par `gapEntriesAt` (lib/scurveDetail.ts) dans la convention "positif = gain, négatif
     // = perte" — pas de signe à inverser ici.
+    const gap = fmtSigned(v.after - (v.reforecast ?? 0));
     const delay = fmtSigned(v.realized);
     const perf = fmtSigned(v.remaining);
     return (
       <>
         <td className="px-2 text-right tabular-nums">{fmt(v.before)}</td>
         <td className="px-2 text-right tabular-nums">{fmt(v.reforecast ?? 0)}</td>
+        <td className={`px-2 text-right tabular-nums ${gap.cls}`}>{gap.text}</td>
         <td className="px-2 text-right tabular-nums">{fmt(v.after)}</td>
         <td className={`px-2 text-right tabular-nums ${delay.cls}`}>{delay.text}</td>
         <td className={`pl-2 text-right tabular-nums ${perf.cls}`}>{perf.text}</td>
@@ -157,6 +159,15 @@ export function ScurveGapDrilldown({
                   )}
                 >
                   {t("chart.gapDrill.reforecast", "Réactualisé")}
+                </th>
+                <th
+                  className="px-2 text-right font-medium"
+                  title={t(
+                    "chart.gapDrill.remainingGap.tooltip",
+                    "Réalisé − réactualisé (reste à faire par rapport à la cible réactualisée)."
+                  )}
+                >
+                  {t("chart.gapDrill.remainingGap", "Écart (reste à faire)")}
                 </th>
                 <th
                   className="px-2 text-right font-medium"

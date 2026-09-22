@@ -508,7 +508,9 @@ const en: Record<string, string> = {
   "leverDetail.delayActionHint":
     "Pushing back an action's end date may delay this plan: the tool will flag dependent initiatives without automatically changing their dates.",
   "leverDetail.financialImpactTitle": "Financial impact",
-  "leverDetail.realizedToDateEuro": "Realized to date (€)",
+  "leverDetail.realizedToDateEuro": "Realized to date (net)",
+  "leverDetail.realizedToDateFormula":
+    "Realized to date (net) = realized gross gains − realized recurring OPEX",
   "leverDetail.reforecastNet": "Reforecast (net)",
   "leverDetail.opexRecYear": "Recurring OPEX /yr",
   "leverDetail.impactsByActionTitle": "Impacts by action",
@@ -2178,6 +2180,7 @@ const en: Record<string, string> = {
   "impactsEditor.gain": "Gain",
   "impactsEditor.fte": "FTE",
   "impactsEditor.empty": "No impact entered.",
+  "impactsEditor.confirmDelete": "Delete this impact? This action cannot be undone.",
   "impactsEditor.kind": "Type",
   "impactsEditor.label": "Label",
   "impactsEditor.loadedSalary": "Total loaded salary (€M)",

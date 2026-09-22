@@ -489,7 +489,9 @@ const es: Record<string, string> = {
   "leverDetail.delayActionHint":
     "Retrasar la fecha de fin de una acción puede retrasar este plan: la herramienta alertará a las palancas dependientes sin modificar automáticamente sus fechas.",
   "leverDetail.financialImpactTitle": "Impacto financiero",
-  "leverDetail.realizedToDateEuro": "Realizado a la fecha (€)",
+  "leverDetail.realizedToDateEuro": "Realizado a la fecha (neto)",
+  "leverDetail.realizedToDateFormula":
+    "Realizado a la fecha (neto) = ganancias brutas realizadas − OPEX recurrente realizado",
   "leverDetail.reforecastNet": "Reactualizado (neto)",
   "leverDetail.opexRecYear": "OPEX recurrente /año",
   "leverDetail.impactsByActionTitle": "Impactos por acción",
@@ -2150,6 +2152,7 @@ const es: Record<string, string> = {
   "impactsEditor.gain": "Ganancia",
   "impactsEditor.fte": "FTE",
   "impactsEditor.empty": "Ningún impacto introducido.",
+  "impactsEditor.confirmDelete": "¿Eliminar este impacto? Esta acción es irreversible.",
   "impactsEditor.kind": "Tipo",
   "impactsEditor.label": "Etiqueta",
   "impactsEditor.loadedSalary": "Salario cargado total (€M)",

@@ -491,7 +491,9 @@ const de: Record<string, string> = {
   "leverDetail.delayActionHint":
     "Das Verschieben des Enddatums einer Maßnahme kann diesen Plan verzögern: das Tool meldet abhängige Hebel, ohne deren Termine automatisch zu ändern.",
   "leverDetail.financialImpactTitle": "Finanzielle Auswirkung",
-  "leverDetail.realizedToDateEuro": "Realisiert bis heute (€)",
+  "leverDetail.realizedToDateEuro": "Realisiert bis heute (netto)",
+  "leverDetail.realizedToDateFormula":
+    "Realisiert bis heute (netto) = realisierte Bruttogewinne − realisierte wiederkehrende OPEX",
   "leverDetail.reforecastNet": "Neu prognostiziert (netto)",
   "leverDetail.opexRecYear": "Wiederkehrende OPEX /Jahr",
   "leverDetail.impactsByActionTitle": "Auswirkungen nach Maßnahme",
@@ -2153,6 +2155,7 @@ const de: Record<string, string> = {
   "impactsEditor.gain": "Gewinn",
   "impactsEditor.fte": "VZÄ",
   "impactsEditor.empty": "Keine Auswirkung erfasst.",
+  "impactsEditor.confirmDelete": "Diese Auswirkung löschen? Diese Aktion ist unwiderruflich.",
   "impactsEditor.kind": "Typ",
   "impactsEditor.label": "Bezeichnung",
   "impactsEditor.loadedSalary": "Gesamte Vollkosten-Gehälter (€M)",

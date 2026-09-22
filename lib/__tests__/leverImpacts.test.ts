@@ -536,14 +536,24 @@ describe("savingsWaterfall & financeByHierarchyLevel", () => {
 });
 
 describe("realized with lever-level impacts", () => {
-  it("scales the latest net by action progress; delivered = 100%", () => {
+  it("counts only impacts whose status is realized (done/ongoing), not action progress", () => {
+    // Impact récurrent, date passée, pas de statut explicite -> dérivé "ongoing" (réalisé) : compte
+    // en entier, quel que soit l'avancement du plan d'action (round 7 : ce n'est plus une fraction
+    // d'avancement des actions qui scale le net réactualisé, mais une somme impact par impact).
     const l = lever({
       netSavings: 10,
-      impacts: [imp("g", { amount: 10 })],
+      impacts: [imp("g", { amount: 10, gainDate: "2020-01-01" })],
       actions: [act("a", { declaredProgressPct: 50, status: "in_progress" })],
     });
-    expect(engine.realizedSavings(l)).toBe(5);
-    expect(engine.realizedSavings({ ...l, status: "delivered" })).toBe(10);
+    expect(engine.realizedSavings(l)).toBe(10);
+    // Un impact pas encore dû (date future) n'est jamais compté, même sur un levier "delivered" —
+    // un plan d'action à 100 % ne suffit plus à afficher un réalisé égal au réactualisé.
+    const notYetDue = lever({
+      netSavings: 10,
+      status: "delivered",
+      impacts: [imp("g", { amount: 10, gainDate: "2099-01-01" })],
+    });
+    expect(engine.realizedSavings(notYetDue)).toBe(0);
     expect(engine.realizedSavings({ ...l, status: "cancelled" })).toBe(0);
   });
   it("one-off gains never enter realized / net", () => {

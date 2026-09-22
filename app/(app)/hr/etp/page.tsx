@@ -9,6 +9,8 @@ import { useToast } from "@/lib/hooks/useToast";
 import { isReadOnlyUser } from "@/lib/roleProfiles";
 import * as hr from "@/lib/hrEngine";
 import { classifyMovementExecution, EXECUTION_LABELS } from "@/lib/hrExecution";
+import { movementStatusPatch } from "@/lib/workforceLogic";
+import { computeMovementFinancials, tenureYears } from "@/lib/hrFinancials";
 import { fmtCurr } from "@/lib/engine";
 import { Button } from "@/components/shared/Button";
 import { KPICard } from "@/components/shared/KPICard";
@@ -27,6 +29,8 @@ import type {
   Employee,
   HierarchyLevelDef,
   HierarchyNode,
+  MovementStatus,
+  MovementType,
   WorkforceMovement,
 } from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -85,6 +89,18 @@ type MovementRow = {
   netImpact: number;
   movement: WorkforceMovement;
 };
+
+// Options du <select> d'édition inline des colonnes "Type"/"Statut" du tableau de suivi des
+// mouvements (voir movementColumns) — mêmes listes que `MovementForm.tsx` (source de vérité pour
+// les valeurs valides de `MovementType`/`MovementStatus`).
+const MOVEMENT_TYPES: MovementType[] = [
+  "Recrutement",
+  "Attrition",
+  "Départ forcé",
+  "Transfert entrant",
+  "Transfert sortant",
+];
+const MOVEMENT_STATUSES: MovementStatus[] = ["Réalisé", "Planifié", "À faire", "Abandonné"];
 
 function alertKindLabels(
   t: (key: string, fallback?: string) => string
@@ -268,7 +284,12 @@ export default function BaseEtpPage() {
           fte: m.fte,
           plannedDate: m.plannedDate,
           actualDate: m.actualDate ?? "—",
-          status: `${m.status}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`,
+          // Round édition inline : `status` reste la valeur métier brute (une des 4 options de
+          // `MovementStatus`), indispensable pour que le <select> d'édition inline de
+          // `EditableTable` reconnaisse la valeur courante parmi ses options — le suffixe "✓RH"
+          // (visuel uniquement) est désormais ajouté via le `render` de la colonne, pas concaténé
+          // dans la donnée (sinon la valeur ne matchait plus aucune option, voir movementColumns).
+          status: m.status,
           hrValidated: m.hrValidated,
           leverCode: lever?.code ?? "—",
           leverId: lever?.id ?? null,
@@ -522,6 +543,67 @@ export default function BaseEtpPage() {
     showToast(t("etp.toast.employeeUpdated", "Employé mis à jour"), row.employee.name, "success");
   };
 
+  /** Édition inline (double-clic) du tableau "Suivi des mouvements" — même pattern que
+   *  `handleCellUpdate` ci-dessus pour la Base ETP, réutilise le composant générique
+   *  `EditableTable`. Remplace l'ancien clic sur le libellé qui ouvrait `MovementForm` dans une
+   *  modale : ce formulaire reste utilisé uniquement pour la CRÉATION ("Nouveau mouvement"), plus
+   *  pour la modification d'un mouvement existant.
+   *  Cas particulier "type" : contrairement aux autres champs (patch direct), changer le type d'un
+   *  mouvement change le mécanisme financier sous-jacent (voir `applyType` dans `MovementForm.tsx`)
+   *  — on recalcule donc `salaryImpact`/`savings`/`cost` via `computeMovementFinancials` pour ne
+   *  pas laisser ces montants désynchronisés du nouveau type, en reprenant le salaire/l'ancienneté
+   *  de l'employé lié (ou le dernier `salaryImpact` connu pour un Recrutement sans employé). */
+  const handleMovementCellUpdate = (
+    rowId: string,
+    field: keyof MovementRow,
+    value: string | number
+  ) => {
+    const movement = wf.movements.find((m) => m.id === rowId);
+    if (!movement) return;
+    let patch: Partial<WorkforceMovement> | null = null;
+    if (field === "label") patch = { label: String(value) };
+    else if (field === "department") patch = { department: String(value) };
+    else if (field === "country") patch = { country: String(value) };
+    else if (field === "fte") patch = { fte: Number(value) };
+    else if (field === "plannedDate") patch = { plannedDate: String(value) };
+    else if (field === "actualDate") {
+      const next = String(value).trim();
+      patch = { actualDate: next && next !== "—" ? next : null };
+    } else if (field === "status") {
+      patch = movementStatusPatch(movement, String(value) as MovementStatus);
+    } else if (field === "type") {
+      const type = String(value) as MovementType;
+      const emp = movement.empId ? wf.employees.find((e) => e.id === movement.empId) : undefined;
+      const grossSalary =
+        type === "Recrutement" ? (emp?.salary ?? movement.salaryImpact) : (emp?.salary ?? 0);
+      const refDate = movement.actualDate ?? movement.plannedDate;
+      const tenure = tenureYears(emp?.hireDate, refDate);
+      const inPSE = type === "Départ forcé" ? (movement.inPSE ?? false) : false;
+      const requiresRetraining =
+        type === "Transfert entrant" || type === "Transfert sortant"
+          ? (movement.requiresRetraining ?? false)
+          : undefined;
+      const fin = computeMovementFinancials({
+        type,
+        grossSalary,
+        tenure,
+        inPSE,
+        requiresRetraining,
+      });
+      patch = {
+        type,
+        inPSE,
+        requiresRetraining,
+        salaryImpact: fin.salaryImpact,
+        savings: fin.salarySavings,
+        cost: fin.socialCost,
+      };
+    }
+    if (!patch) return;
+    data.updateWorkforceMovement(rowId, patch);
+    showToast(t("etp.toast.movementUpdated", "Mouvement mis à jour"), movement.label, "success");
+  };
+
   const departmentOptions = useMemo(
     () => Array.from(new Set(wf.departments.map((d) => d.name))).sort(),
     [wf.departments]
@@ -630,30 +712,65 @@ export default function BaseEtpPage() {
       render: (r) => <span className="font-mono text-[11px] text-secondary">{r.id}</span>,
     },
     {
+      // Round édition inline : le libellé se modifie désormais par double-clic directement dans
+      // le tableau, comme les autres colonnes éditables ci-dessous — ne déclenche plus l'ouverture
+      // de `MovementForm` en modale (réservée à la création, voir bouton "Nouveau mouvement").
       key: "label",
       label: t("etp.column.label", "Libellé"),
-      render: (r) =>
-        readOnly ? (
-          <span className="font-semibold text-primary">{r.label}</span>
-        ) : (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setMovementModal({ movement: r.movement });
-            }}
-            className="font-semibold text-bp-coral hover:underline"
-          >
-            {r.label}
-          </button>
-        ),
+      editable: true,
+      render: (r) => <span className="font-semibold text-primary">{r.label}</span>,
     },
-    { key: "type", label: t("etp.filter.type", "Type") },
-    { key: "department", label: t("hr.department", "Département") },
-    { key: "country", label: t("dashboard.country", "Pays") },
-    { key: "fte", label: t("etp.column.fte", "ETP"), align: "right" },
-    { key: "plannedDate", label: t("etp.column.plannedDate", "Date prévue") },
-    { key: "actualDate", label: t("etp.column.actualDate", "Date réelle") },
-    { key: "status", label: t("hr.status", "Statut") },
+    {
+      key: "type",
+      label: t("etp.filter.type", "Type"),
+      editable: true,
+      options: MOVEMENT_TYPES,
+    },
+    {
+      key: "department",
+      label: t("hr.department", "Département"),
+      editable: true,
+      options: departmentOptions,
+      allowCustom: true,
+    },
+    {
+      key: "country",
+      label: t("dashboard.country", "Pays"),
+      editable: true,
+      options: countryOptions,
+      allowCustom: true,
+    },
+    {
+      key: "fte",
+      label: t("etp.column.fte", "ETP"),
+      align: "right",
+      editable: true,
+      type: "number",
+    },
+    {
+      key: "plannedDate",
+      label: t("etp.column.plannedDate", "Date prévue"),
+      editable: true,
+      type: "date",
+    },
+    {
+      key: "actualDate",
+      label: t("etp.column.actualDate", "Date réelle"),
+      editable: true,
+      type: "date",
+    },
+    {
+      key: "status",
+      label: t("hr.status", "Statut"),
+      editable: true,
+      options: MOVEMENT_STATUSES,
+      render: (r) => (
+        <span>
+          {r.status}
+          {r.hrValidated && t("etp.hrValidatedSuffix", " ✓RH")}
+        </span>
+      ),
+    },
     {
       key: "hrValidated",
       label: t("etp.hrValidated", "Validé RH"),
@@ -892,11 +1009,13 @@ export default function BaseEtpPage() {
           <EditableTable
             data={filteredMovements}
             columns={movementColumns}
+            onCellUpdate={handleMovementCellUpdate}
             searchPlaceholder={t(
               "etp.searchPlaceholderMovements",
               "Rechercher (libellé, type, département...)"
             )}
             defaultSort={{ key: "plannedDate", direction: "desc" }}
+            readOnly={readOnly}
           />
         </>
       )}

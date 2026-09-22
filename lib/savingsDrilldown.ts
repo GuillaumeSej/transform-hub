@@ -284,14 +284,12 @@ export function groupEntries(
     g.reforecast += e.reforecast ?? 0;
     g.entries.push(e);
   }
+  // Pas d'arrondi ici (avant round 7 : chaque groupe était arrondi à 1 décimale AVANT d'être
+  // sommé par `drilldownTotals`, ce qui produisait un "total = somme des écarts arrondis" légèrement
+  // différent du véritable écart total — l'arrondi ne doit se faire qu'à l'AFFICHAGE final (voir
+  // `fmt()` côté composants), jamais sur une valeur intermédiaire encore utilisée dans un calcul).
   const out = Array.from(groups.values()).map((g) => ({
     ...g,
-    before: r1(g.before),
-    after: r1(g.after),
-    value: r1(g.value),
-    realized: r1(g.realized),
-    remaining: r1(g.remaining),
-    reforecast: r1(g.reforecast),
     segments: aggregateSegments(g.entries),
     entries: [...g.entries].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)),
   }));

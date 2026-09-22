@@ -150,11 +150,53 @@ export function leverActionProgress(lever: Pick<Lever, "actions">): number {
 }
 
 /** Fraction (0-1) du plan du levier considérée comme réalisée : avancement des actions ; sans
- *  action, 1 si livré sinon 0. */
+ *  action, 1 si livré sinon 0. N'est PLUS utilisée par `realizedSavings`/`realizedGrossSavings`/
+ *  `realizedFte` (round 6 — voir `impactsRealizedNet`, sommée impact par impact plutôt qu'au
+ *  prorata de l'avancement du plan d'action) ; reste utilisée par `pnlImpactDetailed` pour la
+ *  répartition du réalisé par compte P&L (portée volontairement inchangée pour ce round). */
 function realizationFraction(lever: Lever): number {
   if (lever.status === "delivered") return 1;
   if ((lever.actions ?? []).length === 0) return 0;
   return leverActionProgress(lever) / 100;
+}
+
+/** Gains bruts / OPEX récurrent / ETP RÉALISÉS À DATE, sommés directement depuis le statut de
+ *  chaque impact (`impactStatusOf` : explicite si l'utilisateur a coché/décoché "Réalisé", sinon
+ *  dérivé de la date de début) — PAS au prorata de l'avancement du plan d'action. C'est ce qui
+ *  garantit que "Réalisé à date (net)" = gains bruts réalisés − OPEX récurrent réalisé colle
+ *  exactement à ce qui est coché "Réalisé"/"En cours" dans le tableau d'impacts, et qu'un levier
+ *  n'affiche jamais 100 % tant que tous ses impacts de gain ne sont pas eux-mêmes réalisés (avant
+ *  ce changement, un plan d'action à 100 % suffisait à afficher un réalisé égal au réactualisé,
+ *  même si aucun impact n'était coché réalisé). Gains one-off et CAPEX/OPEX one-off exclus du
+ *  net (jamais dans le "net", règle métier constante — voir `leverImpactTotals`). */
+function impactsRealizedNet(
+  impacts: LeverImpact[],
+  today: Date = new Date()
+): { gross: number; opexRec: number; fte: number } {
+  let gross = 0;
+  let opexRec = 0;
+  let fte = 0;
+  for (const imp of impacts) {
+    if (impactStatusOf(imp, today) === "planned") continue; // pas encore réalisé
+    if (imp.type === "saving") {
+      if (imp.gainRecurrence !== "oneoff") gross += imp.amount;
+      if (imp.fteCount) fte += imp.fteCount;
+    } else if (imp.type === "fte") {
+      const count = imp.fteCount ?? 0;
+      if (imp.fteDirection === "hire") {
+        opexRec += imp.amount;
+        fte += count;
+      } else {
+        gross += imp.amount;
+        fte -= count;
+      }
+    } else if (imp.nature === "opex_rec") {
+      opexRec += imp.amount;
+      if (imp.fteCount) fte += imp.fteCount;
+    }
+    // CAPEX / OPEX one-off : jamais dans le net, ignorés ici comme dans `leverImpactTotals`.
+  }
+  return { gross: round2(gross), opexRec: round2(opexRec), fte: Math.round(fte * 10) / 10 };
 }
 
 /** Somme des impacts (legacy : portés par les actions) des actions "done". `pick === "net"` :
@@ -183,13 +225,14 @@ function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): nu
   return pick === "fte" ? total : Math.round(total * 100) / 100;
 }
 
-/** Réalisé net : levier avec impacts de niveau levier → dernière version nette (réactualisé,
- *  sinon plan figé, sinon impacts live) × fraction d'avancement des actions (100 % si livré) ;
- *  ancien modèle (impacts sur les actions) → somme des actions "done". Annulé → 0. */
+/** Réalisé net à date : levier avec impacts de niveau levier → gains bruts réalisés − OPEX
+ *  récurrent réalisé, sommés impact par impact (voir `impactsRealizedNet`) ; ancien modèle
+ *  (impacts sur les actions) → somme des actions "done". Annulé → 0. */
 export function realizedSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   if (lever.impacts && lever.impacts.length > 0) {
-    return round2(displayedReforecastNet(lever).value * realizationFraction(lever));
+    const { gross, opexRec } = impactsRealizedNet(lever.impacts);
+    return round2(gross - opexRec);
   }
   return doneActionImpactsTotal(lever, "net");
 }
@@ -198,8 +241,7 @@ export function realizedSavings(lever: Lever): number {
 export function realizedGrossSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   if (lever.impacts && lever.impacts.length > 0) {
-    const gross = lever.reforecast?.grossSavings ?? lever.lockedPlan?.grossSavings;
-    return round2((gross ?? leverImpactTotals(lever).grossAnnual) * realizationFraction(lever));
+    return impactsRealizedNet(lever.impacts).gross;
   }
   return doneActionImpactsTotal(lever, "gross");
 }
@@ -243,7 +285,7 @@ export function displayedProgressPct(lever: Lever): number {
 export function realizedFte(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   if (lever.impacts && lever.impacts.length > 0) {
-    return Math.round(leverImpactTotals(lever).fteNet * realizationFraction(lever) * 10) / 10;
+    return impactsRealizedNet(lever.impacts).fte;
   }
   return Math.round(doneActionImpactsTotal(lever, "fte") * 10) / 10;
 }
@@ -341,7 +383,10 @@ export function programSummary(data: BeTrackData): ProgramSummary {
   return {
     target: Math.round(target * 10) / 10,
     realized: Math.round(realized * 10) / 10,
-    progressPct: target > 0 ? Math.round((realized / target) * 100) : 0,
+    // Réalisé / réactualisé (jamais / plan initial) — même convention que `displayedProgressPct`
+    // (fiche levier) : un progrès ne peut afficher 100 % que si le réalisé égale la cible
+    // RÉACTUALISÉE, pas la cible initiale (qui peut avoir été revue depuis).
+    progressPct: reforecastTarget > 0 ? Math.round((realized / reforecastTarget) * 100) : 0,
     capex: Math.round(capex * 10) / 10,
     opex: Math.round(opex * 10) / 10,
     fteImpact,
@@ -365,13 +410,22 @@ export function programSummary(data: BeTrackData): ProgramSummary {
 export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSummary {
   const levers = data.levers.filter((l) => l.ws === wsId && l.status !== "cancelled");
   const target = levers.reduce((s, l) => s + l.netSavings, 0);
+  // Même chaîne de repli que `programSummary.reforecastTarget` — l'ancienne version renvoyait
+  // `target` (cible initiale, pas réactualisée) partout où un libellé "Cible réactualisée" était
+  // affiché (tableau "Synthèse des chantiers"), ce qui divergeait du KPI "Économies réalisées" dès
+  // qu'un levier du chantier avait un reforecast différent de sa valeur courante.
+  const reforecastTarget = levers.reduce(
+    (s, l) => s + (l.reforecast?.netSavings ?? l.lockedPlan?.netSavings ?? l.netSavings),
+    0
+  );
   const realized = levers.reduce((s, l) => s + realizedSavings(l), 0);
   const capex = levers.reduce((s, l) => s + l.capex, 0);
   const opex = levers.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
   return {
     target: Math.round(target * 10) / 10,
+    reforecastTarget: Math.round(reforecastTarget * 10) / 10,
     realized: Math.round(realized * 10) / 10,
-    progressPct: target > 0 ? Math.round((realized / target) * 100) : 0,
+    progressPct: reforecastTarget > 0 ? Math.round((realized / reforecastTarget) * 100) : 0,
     capex: Math.round(capex * 10) / 10,
     opex: Math.round(opex * 10) / 10,
     leverCount: levers.length,
@@ -1291,7 +1345,12 @@ export type SavingsSeriesPoint = {
 function isLeverLate(lever: Lever, today: Date): boolean {
   if (lever.status === "delivered" || lever.status === "cancelled") return false;
   return leverImpactsOf(lever).some((imp) => {
-    if (impactStatusOf(imp, today, lever.end) !== "planned") return false;
+    // Explicitement confirmé réalisé/en cours → jamais en retard, quelle que soit la date. On
+    // regarde `imp.status` DIRECTEMENT plutôt que `impactStatusOf` : celle-ci dérive un statut
+    // "réalisé" par défaut dès qu'une date est passée et qu'aucun statut n'a été saisi (pratique
+    // pour l'affichage des données historiques, mais l'inverse de ce qu'il faut ici — un impact
+    // jamais confirmé et dont la date est dépassée doit compter comme en retard, pas comme réalisé).
+    if (imp.status === "done" || imp.status === "ongoing") return false;
     const start = impactStartDateOf(imp) ?? lever.end;
     const d = new Date(start);
     return !Number.isNaN(d.getTime()) && d.getTime() < today.getTime();
