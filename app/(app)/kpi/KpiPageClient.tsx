@@ -433,6 +433,7 @@ function IndicatorCard({
                 labelViewFull={t("kpi.chart.viewFull")}
                 fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
                 labelProgress={t("kpi.chart.progressToTarget")}
+                labelToday={t("kpi.chart.today")}
                 // Round 7, point 3 : le camembert d'en-tête (`IndicatorDonut`) porte déjà le signal
                 // "trajectoire" — sans ce flag, `IndicatorChart` superposerait son propre
                 // `IndicatorDeltaStat` par-dessus la courbe, un 2ᵉ signal identique en double.
@@ -1091,9 +1092,12 @@ export function KpiPageClient() {
       />
 
       {/* Bascule Cartes / Tableau (nouvelle vue tabulaire, sans graphique, round "cible évolutive")
-          — les deux vues lisent le même périmètre déjà filtré, voir `kpiView` ci-dessus. */}
+          — les deux vues lisent le même périmètre déjà filtré, voir `kpiView` ci-dessus. Segmenté
+          noir/blanc (round "KPI pro") plutôt que deux puces séparées : même composant visuel que
+          la bascule Avancement/Arborescence de `StrategicAxesView.tsx`, pour une seule convention
+          de bascule d'onglet dans tout le Plan Stratégique. */}
       <div
-        className="flex flex-wrap items-center gap-2"
+        className="flex w-fit overflow-hidden rounded-md border border-border"
         role="group"
         aria-label={t("kpi.view.label", "Vue")}
       >
@@ -1101,10 +1105,10 @@ export function KpiPageClient() {
           type="button"
           onClick={() => setKpiView("cards")}
           aria-pressed={kpiView === "cards"}
-          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${
             kpiView === "cards"
-              ? "border-bp-coral bg-bp-coral text-white"
-              : "border-border bg-bg-surface text-text-secondary hover:border-bp-coral hover:text-bp-coral"
+              ? "bg-black text-white"
+              : "bg-white text-secondary hover:bg-bg-surface"
           }`}
         >
           <LayoutGrid size={13} /> {t("kpi.view.cards", "Cartes")}
@@ -1113,10 +1117,10 @@ export function KpiPageClient() {
           type="button"
           onClick={() => setKpiView("table")}
           aria-pressed={kpiView === "table"}
-          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${
             kpiView === "table"
-              ? "border-bp-coral bg-bp-coral text-white"
-              : "border-border bg-bg-surface text-text-secondary hover:border-bp-coral hover:text-bp-coral"
+              ? "bg-black text-white"
+              : "bg-white text-secondary hover:bg-bg-surface"
           }`}
         >
           <Table2 size={13} /> {t("kpi.view.table", "Tableau")}
