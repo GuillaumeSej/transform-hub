@@ -1642,6 +1642,7 @@ const de: Record<string, string> = {
   "kpi.chart.viewFull": "Vollständige Historie anzeigen",
   "kpi.chart.fullHistory": "Vollständige Historie",
   "kpi.chart.progressToTarget": "Fortschritt zum Zielwert",
+  "kpi.chart.today": "Heute",
   "kpi.latestValue": "Letzter Wert",
   "kpi.noMeasurement": "Keine Messung erfasst",
   "kpi.reportedBy": "erfasst von",

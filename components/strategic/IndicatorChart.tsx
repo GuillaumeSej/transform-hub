@@ -20,7 +20,13 @@ import {
   recentMeasurementWindow,
   resolveIndicatorTargetForPeriod,
 } from "@/lib/axisLogic";
+import { currentPeriod } from "@/lib/kpiHistory";
 import type { Indicator, IndicatorMeasurement } from "@/types";
+
+/** Couleur du marqueur "aujourd'hui" (round "KPI pro") — rouge franc, distinct de la palette de
+ *  statut de la courbe (`COLOR_DEFAULT`/`COLOR_FAVORABLE`/`COLOR_UNFAVORABLE` ci-dessous) pour
+ *  qu'il se lise comme un repère temporel neutre plutôt que comme un signal de statut. */
+const COLOR_TODAY = "#FF3C47";
 
 // Palette de la courbe (rendu NON-compact uniquement — la sparkline `compact` de
 // `BusinessKpiCard`/`IndicatorStatusSummary.tsx` garde son coral fixe, hors périmètre de ce round) :
@@ -102,6 +108,8 @@ export type IndicatorChartProps = {
    *  veut pas le tripler. Défaut `false` : comportement historique inchangé pour tous les autres
    *  appelants (modales d'historique complet comprises). */
   hideDeltaStat?: boolean;
+  /** Légende du repère "aujourd'hui" (voir `showTodayMarker` plus bas) — repli français. */
+  labelToday?: string;
 };
 
 function formatValue(value: number | string, unit?: string): string {
@@ -159,6 +167,7 @@ export function IndicatorChart({
   fullHistoryTitle = "Historique complet",
   labelProgress,
   hideDeltaStat = false,
+  labelToday = "Aujourd'hui",
 }: IndicatorChartProps) {
   // Hooks appelés avant tout retour anticipé (repli qualitatif / absence de mesure). `useId`
   // fournit un identifiant STABLE et unique par instance pour le `<linearGradient>` du remplissage
@@ -225,6 +234,7 @@ export function IndicatorChart({
             labelObjective={labelObjective}
             emptyLabel={emptyLabel}
             labelProgress={labelProgress}
+            labelToday={labelToday}
           />
         </Modal>
       </div>
@@ -267,13 +277,32 @@ export function IndicatorChart({
   // "stepAfter"` sur la `Line` qui la trace suffit alors à dessiner les marches sans recalcul
   // supplémentaire dans le rendu recharts lui-même.
   const hasSchedule = !compact && !!targetSchedule && targetSchedule.length > 0;
-  const data = sorted.map((m) => ({
+  const dataPoints = sorted.map((m) => ({
     period: m.period,
     value: m.value ?? null,
     target: hasSchedule
       ? (resolveIndicatorTargetForPeriod({ objectiveValue, targetSchedule }, m.period) ?? null)
       : null,
   }));
+
+  // Repère "aujourd'hui" (demande PO — voix) : un petit point rouge sur l'axe temporel indiquant
+  // où se situe la date du jour par rapport aux mesures affichées, avec une légende. `frequency`
+  // absente = repère non calculable, silencieusement omis (même garde-fou que le reste du fichier
+  // — jamais de valeur inventée). La période du jour n'a pas forcément de mesure associée (le
+  // relevé le plus récent est souvent en retard sur la période en cours) : si elle n'apparaît pas
+  // déjà dans `dataPoints`, on l'y insère comme point "vide" (`value: null`, `connectNulls={false}`
+  // sur la courbe l'empêche d'étirer un trait vers ce point) puis on retrie par période — même
+  // convention de tri lexicographique que partout ailleurs dans ce fichier (`period` sert de clé
+  // de tri chronologique, voir `IndicatorMeasurement.period`).
+  const todayPeriod = !compact && frequency ? currentPeriod(frequency) : undefined;
+  const hasTodayPoint = !!todayPeriod && dataPoints.some((d) => d.period === todayPeriod);
+  const data =
+    todayPeriod && !hasTodayPoint
+      ? [...dataPoints, { period: todayPeriod, value: null, target: null }].sort((a, b) =>
+          a.period.localeCompare(b.period)
+        )
+      : dataPoints;
+  const showTodayMarker = !!todayPeriod && data.some((d) => d.period === todayPeriod);
 
   // Largeur d'axe Y calculée sur le libellé le plus long (chiffre + unité) : la largeur recharts par
   // défaut (60 px) + l'ancienne marge gauche négative rognaient les valeurs/unités longues.
@@ -467,6 +496,25 @@ export function IndicatorChart({
             connectNulls
           />
         )}
+        {/* Repère "aujourd'hui" — ligne verticale invisible (`stroke="transparent"`, sert
+            uniquement à positionner le `label` sur la bonne catégorie X) portant un petit disque
+            rouge en haut du tracé (voir `renderTodayDot`) : demande PO explicite d'un « petit
+            point rouge » plutôt qu'une ligne verticale pleine, qui aurait davantage chargé le
+            graphique qu'une simple ligne de grille. Légende assortie sous le graphique
+            (`todayLegend` plus bas). */}
+        {showTodayMarker && (
+          <ReferenceLine
+            x={todayPeriod}
+            stroke="transparent"
+            label={(props: { viewBox?: { x?: number; y?: number } }) => {
+              const cx = props.viewBox?.x ?? 0;
+              const cy = props.viewBox?.y ?? 0;
+              return (
+                <circle cx={cx} cy={cy} r={4} fill={COLOR_TODAY} stroke="#fff" strokeWidth={1.5} />
+              );
+            }}
+          />
+        )}
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -516,6 +564,16 @@ export function IndicatorChart({
     <div className="rounded-lg border border-border bg-bg-surface/40 px-3 pb-1 pt-3">
       {header && <div className="mb-2">{header}</div>}
       {chart}
+      {showTodayMarker && (
+        <div className="flex items-center justify-end gap-1.5 pb-1.5 pr-1 text-[10.5px] text-tertiary">
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 shrink-0 rounded-full border border-white"
+            style={{ backgroundColor: COLOR_TODAY }}
+          />
+          {labelToday}
+        </div>
+      )}
     </div>
   );
 

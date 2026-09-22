@@ -1757,6 +1757,7 @@ const fr: Record<string, string> = {
   // Étiquette de la barre de progression-vers-la-cible affichée à côté de l'écart signé (round 4,
   // point 1 : rendre visuellement lisible un écart comme "82 % pour une cible à 80 %").
   "kpi.chart.progressToTarget": "Progression vers la cible",
+  "kpi.chart.today": "Aujourd'hui",
   "kpi.latestValue": "Dernière valeur",
   "kpi.noMeasurement": "Aucune mesure enregistrée",
   "kpi.reportedBy": "saisi par",
