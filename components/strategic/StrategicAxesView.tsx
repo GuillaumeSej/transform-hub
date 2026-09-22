@@ -20,7 +20,9 @@ import { chantierDeclaredProgress, colorForChantier } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantierAction } from "@/lib/firestore/chantierActions";
 import { saveChantier } from "@/lib/firestore/chantiers";
+import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { saveIndicator } from "@/lib/firestore/indicators";
+import { saveIndicatorMeasurement } from "@/lib/firestore/indicatorMeasurements";
 import { saveStrategicAxis } from "@/lib/firestore/strategicAxes";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
@@ -251,15 +253,15 @@ export function StrategicAxesView() {
   >(undefined);
 
   /**
-   * Écrit les entités validées par `StrategicImportButton` (round 4, point 3) — la librairie
-   * d'import (`lib/strategicExcelImport.ts`) reste pure et n'appelle jamais Firestore, c'est donc
-   * ICI, dans l'appelant, qu'on boucle sur les `save*` déjà existants. Les ids sont déjà alloués
-   * par l'importeur (voir doc-comment en tête de ce fichier) : un `Promise.all` global suffit,
-   * l'ordre d'écriture n'a aucune incidence (Firestore n'impose aucune contrainte d'intégrité
-   * référentielle). En cas d'erreur, l'exception remonte telle quelle à `StrategicImportButton`,
-   * qui affiche déjà son propre toast d'échec — pas de gestion d'erreur dupliquée ici. Les
-   * abonnements `onSnapshot` de `useStrategicData` reprennent la main automatiquement, sans état
-   * local à rafraîchir.
+   * Écrit les entités validées par `StrategicImportButton` (round 4, point 3 ; étendu round 31 aux
+   * mesures de baseline et au staffing ETP) — la librairie d'import (`lib/strategicExcelImport.ts`)
+   * reste pure et n'appelle jamais Firestore, c'est donc ICI, dans l'appelant, qu'on boucle sur les
+   * `save*` déjà existants. Les ids sont déjà alloués par l'importeur (voir doc-comment en tête de
+   * ce fichier) : un `Promise.all` global suffit, l'ordre d'écriture n'a aucune incidence
+   * (Firestore n'impose aucune contrainte d'intégrité référentielle). En cas d'erreur, l'exception
+   * remonte telle quelle à `StrategicImportButton`, qui affiche déjà son propre toast d'échec —
+   * pas de gestion d'erreur dupliquée ici. Les abonnements `onSnapshot` de `useStrategicData`
+   * reprennent la main automatiquement, sans état local à rafraîchir.
    */
   const handleImport = async (toCreate: StrategicImportPreview["toCreate"]) => {
     await Promise.all([
@@ -267,6 +269,8 @@ export function StrategicAxesView() {
       ...toCreate.chantiers.map((chantier) => saveChantier(chantier)),
       ...toCreate.actions.map((action) => saveChantierAction(action)),
       ...toCreate.indicators.map((indicator) => saveIndicator(indicator)),
+      ...toCreate.measurements.map((measurement) => saveIndicatorMeasurement(measurement)),
+      ...toCreate.staffing.map((entry) => saveChantierStaffing(entry)),
     ]);
   };
 

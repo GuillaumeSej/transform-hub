@@ -1,14 +1,17 @@
+import { currentPeriod } from "@/lib/kpiHistory";
 import type {
   Chantier,
   ChantierAction,
   ChantierDependency,
   ChantierDependencyType,
+  ChantierStaffing,
   Deliverable,
   DeliverablePhase,
   Indicator,
   IndicatorDirection,
   IndicatorFrequency,
   IndicatorKind,
+  IndicatorMeasurement,
   MaturityStageConfig,
   Role,
   StrategicAxis,
@@ -136,9 +139,31 @@ export const STRATEGIC_INDICATOR_IMPORT_HEADERS = [
   "Fréquence",
   "Objectif",
   "Valeur cible",
+  // Round 31 : "situation initiale" (Word source : tableau KPI axe/chantier, colonne "Situation
+  // initiale") — valeur de départ du KPI, distincte de la cible. Facultative et jamais bloquante
+  // même textuelle ("Non consolidé", "Base 100", voir `numOrUndefined` : une valeur non numérique
+  // est silencieusement ignorée, PAS une erreur de ligne) — voir la section "Valeur initiale" du
+  // corps de `validateStrategicImportRows` pour la mesure `IndicatorMeasurement` produite.
+  "Valeur initiale",
   "Sens",
   "Unité",
   "Rôles responsables (séparés par ;)",
+] as const;
+
+// Round 31, point 3 : feuille facultative "ETP" (mappée sur `ChantierStaffing`, types/index.ts) —
+// une entreprise sans base ETP encore saisie peut démarrer son plan stratégique sans cette feuille,
+// et l'ajouter/l'étoffer plus tard directement sur la fiche chantier (`ChantierStaffingEditor.tsx`).
+// `Fonction (équipe)` est un texte libre CENSÉ correspondre à un `Employee.department` de la base
+// ETP entreprise (voir le doc-comment de `ChantierStaffing.function`) — aucune validation stricte
+// contre cette base ici, même discipline que le champ lui-même en base.
+export const STRATEGIC_STAFFING_IMPORT_HEADERS = [
+  "Code Chantier",
+  "Code Projet",
+  "Fonction (équipe, base ETP)",
+  "Nombre d'ETP",
+  "Précision",
+  "Date début",
+  "Date fin",
 ] as const;
 
 // ---------- Libellés humains <-> valeurs internes ----------
@@ -271,6 +296,12 @@ function nowDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Horodatage complet — même format que `reportedAt` d'une mesure saisie normalement via
+ *  `useStrategicData.addMeasurement` (`new Date().toISOString()`). */
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
 /** Ids alloués pour de vrai (contrairement à `makeActionId`/`makeImpactId` côté leviers, qui
  *  génèrent des ids "de session" jetables) : ce sont ces ids qui seront écrits tels quels en base
  *  par l'appelant, via les `save*` existants. Compteur de séquence par préfixe pour garantir
@@ -287,6 +318,21 @@ function resolveStage(raw: string, stages: MaturityStageConfig[]): string | unde
   const lower = raw.toLowerCase();
   const stage = stages.find((s) => s.id.toLowerCase() === lower || s.label.toLowerCase() === lower);
   return stage?.id;
+}
+
+/** Étape de maturité FACULTATIVE (Chantiers/Projets, round 31) : contrairement à `resolveStage`
+ *  utilisé tel quel pour la feuille Axes (toujours requise, sélecteur encore actif dans
+ *  `AxisForm.tsx`), une cellule VIDE ne bloque plus la ligne — elle retombe silencieusement sur la
+ *  première étape configurée du programme, même repli que `ChantierForm.tsx`/`ChantierActionForm`
+ *  (`useState(initial?.stage ?? stages[0]?.id ?? "")`) depuis que ces deux formulaires ont retiré
+ *  leur sélecteur de stage, supplanté par le suivi J0-J4. Une valeur NON VIDE mais qui ne résout à
+ *  aucune étape connue reste, elle, une erreur bloquante (une faute de frappe ne doit pas être
+ *  avalée silencieusement). Retourne `undefined` uniquement dans ce cas d'erreur — un retour vide
+ *  faute d'étape configurée pour le programme (`stages` vide) n'est PAS une erreur ici, même
+ *  tolérance que le formulaire, qui écrirait alors `stage: ""`. */
+function resolveOptionalStage(raw: string, stages: MaturityStageConfig[]): string | undefined {
+  if (!raw) return stages[0]?.id ?? "";
+  return resolveStage(raw, stages);
 }
 
 function stageNamesForError(stages: MaturityStageConfig[]): string {
@@ -349,7 +395,8 @@ function parseAxisCodes(
 
 // ---------- Types publics ----------
 
-export type StrategicImportSheet = "Axes" | "Chantiers" | "Projets" | "Livrables" | "Indicateurs";
+export type StrategicImportSheet =
+  "Axes" | "Chantiers" | "Projets" | "Livrables" | "Indicateurs" | "ETP";
 
 export type StrategicImportError = {
   sheet: StrategicImportSheet;
@@ -363,6 +410,9 @@ export type StrategicImportRawSheets = {
   actions: Record<string, unknown>[];
   livrables: Record<string, unknown>[];
   indicateurs: Record<string, unknown>[];
+  // Facultative (round 31, point 3) — absente ou vide, elle n'affecte rien d'autre (même
+  // optionnalité que `livrables`).
+  etp: Record<string, unknown>[];
 };
 
 export type StrategicImportExistingData = {
@@ -377,6 +427,12 @@ export type StrategicImportToCreate = {
   chantiers: Chantier[];
   actions: ChantierAction[];
   indicators: Indicator[];
+  // Round 31, point 1 : mesure de baseline (colonne "Valeur initiale" de la feuille Indicateurs),
+  // une par indicateur importé dont la valeur initiale est numérique — voir la section dédiée de
+  // `validateStrategicImportRows`.
+  measurements: IndicatorMeasurement[];
+  // Round 31, point 3 : lignes de staffing de la feuille facultative "ETP".
+  staffing: ChantierStaffing[];
 };
 
 export type StrategicImportPreview = {
@@ -396,19 +452,28 @@ function findExistingByCodeOrName<T extends { id: string; name: string }>(
 }
 
 /**
- * Valide les 5 feuilles ENSEMBLE et produit un aperçu (entités prêtes à créer par type + erreurs
- * ligne par ligne) sans rien écrire — voir doc-comment en tête de fichier pour le format complet
- * et la stratégie de résolution des clés étrangères.
+ * Valide les feuilles (5 obligatoires + "ETP" facultative) ENSEMBLE et produit un aperçu (entités
+ * prêtes à créer par type + erreurs ligne par ligne) sans rien écrire — voir doc-comment en tête
+ * de fichier pour le format complet et la stratégie de résolution des clés étrangères.
+ *
+ * `importedBy` (round 31) : identifiant (username) de l'admin qui réalise l'import, reporté tel
+ * quel dans `IndicatorMeasurement.reportedBy` des mesures de baseline produites (voir la section
+ * "Indicateurs" ci-dessous) — même esprit que `companyId`/`programId`, facultatif pour ne pas
+ * casser les appels existants (tests, appelants antérieurs à ce round) : à défaut, retombe sur un
+ * libellé générique plutôt que d'écrire une chaîne vide illisible dans l'historique du KPI.
  */
 export function validateStrategicImportRows(
   sheets: StrategicImportRawSheets,
   existingData: StrategicImportExistingData,
   companyId: string | null | undefined,
   programId: string | null | undefined,
-  maturityStages: MaturityStageConfig[]
+  maturityStages: MaturityStageConfig[],
+  importedBy?: string | null
 ): StrategicImportPreview {
   const errors: StrategicImportError[] = [];
   const resolvedCompanyId = companyId ?? "";
+  const resolvedReportedBy =
+    importedBy && importedBy.trim() !== "" ? importedBy.trim() : "import-excel";
   const resolvedProgramId = programId ?? "";
 
   // ---------- Feuille "Axes" ----------
@@ -540,9 +605,11 @@ export function validateStrategicImportRows(
       return;
     }
 
+    // Facultative depuis le round 31 (voir doc-comment de `resolveOptionalStage`) : une valeur
+    // vide ne bloque plus la ligne, seule une valeur renseignée mais inconnue reste une erreur.
     const stageRaw = str(row["Étape de maturité"]);
-    const stage = stageRaw ? resolveStage(stageRaw, maturityStages) : undefined;
-    if (!stage) {
+    const stage = resolveOptionalStage(stageRaw, maturityStages);
+    if (stage === undefined) {
       errors.push({
         sheet: "Chantiers",
         rowNumber,
@@ -693,9 +760,11 @@ export function validateStrategicImportRows(
       return;
     }
 
+    // Facultative depuis le round 31 (voir doc-comment de `resolveOptionalStage`) — même repli
+    // silencieux que la feuille Chantiers ci-dessus.
     const stageRaw = str(row["Étape de maturité"]);
-    const status = stageRaw ? resolveStage(stageRaw, maturityStages) : undefined;
-    if (!status) {
+    const status = resolveOptionalStage(stageRaw, maturityStages);
+    if (status === undefined) {
       errors.push({
         sheet: "Projets",
         rowNumber,
@@ -751,6 +820,15 @@ export function validateStrategicImportRows(
     actionIdByCode.set(lowerCode, id);
     actionCodeFirstSeenAtRow.set(lowerCode, rowNumber);
   });
+
+  // Contrairement à `deliverablesByActionCode` (feuille "Livrables" ci-dessous, restreinte au
+  // MÊME fichier — voir son doc-comment), une ligne "ETP" (round 31) ne s'EMBARQUE PAS dans
+  // l'action : c'est une entité `ChantierStaffing` top-level indépendante, dont le lien à un
+  // projet EXISTANT en base est un simple champ (`actionId`), pas une écriture composée. Le repli
+  // sur `existingData.actions` est donc sûr ici, même convention que `resolveChantierCode`.
+  const resolveActionCode = (raw: string): string | undefined =>
+    actionIdByCode.get(raw.toLowerCase()) ??
+    findExistingByCodeOrName(existingData.actions, raw)?.id;
 
   // ---------- Feuille "Livrables" (optionnelle — embarquée dans l'action résolue, jamais un
   // toCreate séparé : une erreur sur une ligne Livrable n'invalide QUE ce livrable, jamais
@@ -816,6 +894,9 @@ export function validateStrategicImportRows(
 
   // ---------- Feuille "Indicateurs" ----------
   const indicatorsToCreate: Indicator[] = [];
+  // Round 31, point 1 : une mesure de baseline par ligne dont "Valeur initiale" est numérique —
+  // voir doc-comment de `STRATEGIC_INDICATOR_IMPORT_HEADERS`.
+  const measurementsToCreate: IndicatorMeasurement[] = [];
 
   sheets.indicateurs.forEach((row, i) => {
     const rowNumber = i + 2;
@@ -983,6 +1064,135 @@ export function validateStrategicImportRows(
       lastUpdate: nowDate(),
     };
     indicatorsToCreate.push(indicator);
+
+    // Round 31, point 1 : "Valeur initiale" (situation initiale du KPI, distincte de la cible
+    // "Valeur cible" ci-dessus) — `numOrUndefined` traite déjà une cellule vide OU textuelle
+    // ("Non consolidé", "Base 100", vocabulaire observé dans les documents de plan stratégique
+    // source) comme "pas de valeur", jamais comme une erreur : voir son doc-comment. Une baseline
+    // numérique produit une `IndicatorMeasurement` datée du jour de l'import (`currentPeriod`,
+    // même helper que la saisie normale d'une mesure sur la page KPI, `lib/kpiHistory.ts`) — choix
+    // délibérément simple plutôt qu'une "période de démarrage du programme" dédiée, qu'aucune
+    // colonne du fichier ne renseigne de toute façon.
+    const baselineValue = numOrUndefined(row["Valeur initiale"]);
+    if (baselineValue !== undefined) {
+      measurementsToCreate.push({
+        id: makeId("IM"),
+        companyId: resolvedCompanyId,
+        indicatorId: indicator.id,
+        period: currentPeriod(frequency),
+        value: baselineValue,
+        reportedBy: resolvedReportedBy,
+        reportedAt: nowIso(),
+      });
+    }
+  });
+
+  // ---------- Feuille "ETP" (facultative, round 31, point 3 — mappée sur `ChantierStaffing`) ----------
+  const staffingToCreate: ChantierStaffing[] = [];
+
+  sheets.etp.forEach((row, i) => {
+    const rowNumber = i + 2;
+    if (isRowEmpty(row)) return;
+
+    const chantierCodeRaw = str(row["Code Chantier"]);
+    if (!chantierCodeRaw) {
+      errors.push({ sheet: "ETP", rowNumber, reason: `"Code Chantier" est obligatoire` });
+      return;
+    }
+    const chantierId = resolveChantierCode(chantierCodeRaw);
+    if (!chantierId) {
+      errors.push({
+        sheet: "ETP",
+        rowNumber,
+        reason: `Chantier "${chantierCodeRaw}" introuvable (ni dans la feuille Chantiers, ni en base)`,
+      });
+      return;
+    }
+
+    // Lien facultatif vers un projet précis — résolu contre la feuille Projets de ce même fichier
+    // OU un projet déjà en base (voir doc-comment de `resolveActionCode` ci-dessus) ; une cellule
+    // vide laisse le staffing transverse au chantier (`ChantierStaffing.actionId` absent).
+    const actionCodeRaw = str(row["Code Projet"]);
+    let actionId: string | undefined;
+    if (actionCodeRaw) {
+      actionId = resolveActionCode(actionCodeRaw);
+      if (!actionId) {
+        errors.push({
+          sheet: "ETP",
+          rowNumber,
+          reason: `Projet "${actionCodeRaw}" introuvable (ni dans la feuille Projets, ni en base)`,
+        });
+        return;
+      }
+    }
+
+    // Texte libre censé correspondre à un `Employee.department` de la base ETP entreprise — voir
+    // doc-comment de `STRATEGIC_STAFFING_IMPORT_HEADERS`, aucune validation stricte ici.
+    const fn = str(row["Fonction (équipe, base ETP)"]);
+    if (!fn) {
+      errors.push({
+        sheet: "ETP",
+        rowNumber,
+        reason: `"Fonction (équipe, base ETP)" est obligatoire`,
+      });
+      return;
+    }
+
+    const fteRaw = str(row["Nombre d'ETP"]);
+    const fte = Number(fteRaw);
+    if (!fteRaw || !Number.isFinite(fte) || fte <= 0) {
+      errors.push({
+        sheet: "ETP",
+        rowNumber,
+        reason: `"Nombre d'ETP" doit être un nombre strictement positif`,
+      });
+      return;
+    }
+
+    // Dates indépendantes (contrairement au couple Début/Fin des Livrables, qui forme une seule
+    // phase) : chacune est facultative, une valeur présente mais non interprétable reste une
+    // erreur plutôt que d'être silencieusement ignorée (même discipline que "Date début"/
+    // "Date fin" de la feuille Projets).
+    const startRaw = str(row["Date début"]);
+    let startDate: string | undefined;
+    if (startRaw) {
+      startDate = parseFlexibleDate(startRaw);
+      if (!startDate) {
+        errors.push({
+          sheet: "ETP",
+          rowNumber,
+          reason: `"Date début" doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)`,
+        });
+        return;
+      }
+    }
+    const endRaw = str(row["Date fin"]);
+    let endDate: string | undefined;
+    if (endRaw) {
+      endDate = parseFlexibleDate(endRaw);
+      if (!endDate) {
+        errors.push({
+          sheet: "ETP",
+          rowNumber,
+          reason: `"Date fin" doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)`,
+        });
+        return;
+      }
+    }
+
+    staffingToCreate.push({
+      id: makeId("ST"),
+      companyId: resolvedCompanyId,
+      programId: resolvedProgramId,
+      chantierId,
+      function: fn,
+      fte,
+      ...(str(row["Précision"]) ? { note: str(row["Précision"]) } : {}),
+      ...(startDate ? { startDate } : {}),
+      ...(endDate ? { endDate } : {}),
+      ...(actionId ? { actionId } : {}),
+      createdAt: nowDate(),
+    });
   });
 
   return {
@@ -991,6 +1201,8 @@ export function validateStrategicImportRows(
       chantiers: chantiersToCreate,
       actions: actionsToCreate,
       indicators: indicatorsToCreate,
+      measurements: measurementsToCreate,
+      staffing: staffingToCreate,
     },
     errors,
   };
@@ -1003,6 +1215,8 @@ export function validateStrategicImportRows(
  *  Le composant `StrategicImportButton` importe `XLSX` lui-même et compose les feuilles avec ces
  *  en-têtes + exemples, exactement comme `LeverImportButton.downloadTemplate`. */
 export const STRATEGIC_IMPORT_SHEET_NAMES = {
+  // Round 31, point 4 : feuille de garde en tête de classeur — voir `STRATEGIC_IMPORT_GUIDE_ROWS`.
+  guide: "Lisez-moi",
   axes: "Axes",
   chantiers: "Chantiers",
   // Clé interne inchangée (`actions`, type `ChantierAction`) — nom de feuille affiché renommé en
@@ -1010,26 +1224,90 @@ export const STRATEGIC_IMPORT_SHEET_NAMES = {
   actions: "Projets",
   livrables: "Livrables",
   indicateurs: "Indicateurs",
+  // Round 31, point 3 — facultative, voir `STRATEGIC_STAFFING_IMPORT_HEADERS`.
+  etp: "ETP",
 } as const;
 
-export const STRATEGIC_AXIS_EXAMPLE_ROW = [
-  "AX1",
-  "Excellence opérationnelle",
-  "Exemple — à remplacer ou supprimer avant import",
-  "Marie Lefèvre",
-  "#320300",
-  "Planifié",
-  "Isabelle Roy",
+/**
+ * Contenu de la feuille "Lisez-moi" (round 31, point 4) — une ligne = une ligne de cellule A de la
+ * feuille (`aoa_to_sheet` d'un tableau à une seule colonne, largeur forcée par `StrategicImportButton`
+ * pour rester lisible). Volontairement court et scannable ("pas un mur de texte", demande PO) :
+ * l'ordre des feuilles, la convention de clé `Code`, obligatoire vs facultatif, et le workflow de
+ * pré-remplissage par IA visé par ce modèle (voir contexte du round, section "Workflow IA").
+ */
+export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
+  ["Guide d'import — Plan Stratégique BeTrack"],
+  [""],
+  ["1. Ordre des feuilles"],
+  ["Axes -> Chantiers -> Projets -> Livrables (facultative) -> Indicateurs -> ETP (facultative)."],
+  [""],
+  ['2. Clé de liaison "Code"'],
+  [
+    'Chaque feuille référence la précédente par un "Code" propre à ce fichier (jamais écrit tel quel dans BeTrack) :',
+  ],
+  [
+    '  - "Code" (Axes) est repris par "Codes Axes (séparés par ;)" (Chantiers) — un chantier peut avoir plusieurs axes.',
+  ],
+  ['  - "Code" (Chantiers) est repris par "Code Chantier" (Projets, Indicateurs, ETP).'],
+  ['  - "Code" (Projets) est repris par "Code Projet" (Livrables, ETP).'],
+  [
+    '  - "Indicateurs" se rattache à UN axe OU UN chantier : renseignez "Code Axe" OU "Code Chantier", jamais les deux.',
+  ],
+  [""],
+  ["3. Obligatoire vs facultatif"],
+  [
+    'Obligatoires : "Code"/"Nom" de chaque feuille, dates de Projets, "Étape de maturité" des Axes.',
+  ],
+  [
+    'Facultatifs : Description/Pilote/Owner/Sponsor, budgets et ETP consommés, "Étape de maturité" des Chantiers/Projets (vide = 1re étape du programme), "Valeur initiale" des Indicateurs (situation de départ du KPI), et les feuilles Livrables et ETP dans leur intégralité.',
+  ],
+  [""],
+  ["4. Workflow conseillé (pré-remplissage par IA)"],
+  [
+    'Collez le contenu de vos slides/documents de plan stratégique dans un assistant IA et demandez-lui de remplir CE modèle exact : mêmes onglets, mêmes en-têtes, en gardant les "Code" cohérents entre les feuilles. Relisez, supprimez les lignes d\'exemple, puis importez.',
+  ],
+  [""],
+  ["5. En cas d'erreur"],
+  [
+    "Une ligne en erreur n'invalide qu'elle-même : l'aperçu avant import liste chaque anomalie (feuille + numéro de ligne + raison). Corrigez et réimportez.",
+  ],
+];
+
+export const STRATEGIC_AXIS_EXAMPLE_ROWS = [
+  [
+    "AX1",
+    "Renforcer la robustesse opérationnelle",
+    "Fiabiliser les processus critiques et réduire les incidents majeurs.",
+    "Isabelle Roy",
+    "#320300",
+    "Planifié",
+  ],
+  [
+    "AX2",
+    "Accélérer la transformation digitale",
+    "Digitaliser les parcours clients et collaborateurs prioritaires.",
+    "Karim Haddad",
+    "#1F5673",
+    "Défini",
+  ],
+  [
+    "AX3",
+    "Développer l'excellence client",
+    "Améliorer la satisfaction et la fidélisation sur les segments clés.",
+    "Sophie Marchand",
+    "#2E7D32",
+    "Validé",
+  ],
 ];
 
 export const STRATEGIC_CHANTIER_EXAMPLE_ROWS = [
   // "AX1" seul reste une liste valide "séparée par ;" à un élément ; pour rattacher un chantier à
-  // plusieurs axes, saisir par ex. "AX1;AX2".
+  // plusieurs axes, saisir par ex. "AX1;AX3" (voir CH3 ci-dessous).
   [
     "CH1",
     "AX1",
-    "Refonte du parcours achats",
-    "Exemple",
+    "Industrialiser le pilotage de la donnée",
+    "Fiabiliser la collecte et la restitution des indicateurs de production.",
     "Marc Dubois",
     "Planifié",
     150000,
@@ -1037,40 +1315,140 @@ export const STRATEGIC_CHANTIER_EXAMPLE_ROWS = [
     2.5,
     "",
   ],
-  ["CH2", "AX1", "Digitalisation des contrats", "Exemple", "", "Planifié", "", "", "", "CH1:FS"],
+  [
+    "CH2",
+    "AX2",
+    "Digitaliser le parcours collaborateur",
+    "Déployer un portail RH self-service pour les demandes courantes.",
+    "Claire Fontaine",
+    "Défini",
+    90000,
+    0,
+    1,
+    "CH1:FS",
+  ],
+  [
+    "CH3",
+    "AX1;AX3",
+    "Renforcer la cybersécurité des systèmes critiques",
+    "Sécuriser les accès et les flux des applications sensibles.",
+    "Nicolas Petit",
+    "Validé",
+    220000,
+    55000,
+    "",
+    "",
+  ],
 ];
 
-export const STRATEGIC_ACTION_EXAMPLE_ROW = [
-  "ACT1",
-  "CH1",
-  "Cartographier le processus actuel",
-  "Exemple",
-  "Marc Dubois",
-  "Isabelle Roy",
-  "2026-01-15",
-  "2026-03-31",
-  "Planifié",
-  30000,
-  8000,
-  50,
+export const STRATEGIC_ACTION_EXAMPLE_ROWS = [
+  [
+    "ACT1",
+    "CH1",
+    "Cartographier les flux de données existants",
+    "État des lieux des sources et flux de données actuels.",
+    "Marc Dubois",
+    "Isabelle Roy",
+    "2026-01-15",
+    "2026-03-31",
+    "Planifié",
+    30000,
+    8000,
+    50,
+  ],
+  [
+    "ACT2",
+    "CH2",
+    "Déployer le portail RH self-service",
+    "Mise en production du portail pour congés et attestations.",
+    "Claire Fontaine",
+    "Karim Haddad",
+    "2026-02-01",
+    "2026-06-30",
+    // Étape de maturité laissée VIDE à dessein — démontre le repli silencieux sur la 1re étape du
+    // programme (round 31, "Étape de maturité" désormais facultative sur Chantiers/Projets).
+    "",
+    45000,
+    0,
+    60,
+  ],
+  [
+    "ACT3",
+    "CH1",
+    "Automatiser le reporting de production",
+    "Mise en place de tableaux de bord automatisés pour le suivi de production.",
+    "Marc Dubois",
+    "Isabelle Roy",
+    "2026-04-01",
+    "2026-09-30",
+    "Défini",
+    20000,
+    "",
+    50,
+  ],
 ];
 
-export const STRATEGIC_DELIVERABLE_EXAMPLE_ROW = [
-  "ACT1",
-  "Cartographie validée en comité",
-  "2026-02-01",
-  "2026-03-31",
+export const STRATEGIC_DELIVERABLE_EXAMPLE_ROWS = [
+  ["ACT1", "Cartographie validée en comité de pilotage", "2026-02-01", "2026-03-31"],
+  ["ACT2", "Portail RH ouvert en pilote sur un périmètre restreint", "2026-05-01", "2026-05-31"],
 ];
 
-export const STRATEGIC_INDICATOR_EXAMPLE_ROW = [
-  "AX1",
-  "",
-  "Taux d'automatisation du processus achats",
-  "Quantitatif",
-  "Trimestrielle",
-  "80% des demandes d'achat automatisées",
-  80,
-  "Plus haut vaut mieux",
-  "%",
-  "chantier_owner;strategic_lead",
+export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [
+  [
+    "AX1",
+    "",
+    "Taux de disponibilité des systèmes critiques",
+    "Quantitatif",
+    "Trimestrielle",
+    "99,5% de disponibilité en régime de croisière",
+    99.5,
+    96.8,
+    "Plus haut vaut mieux",
+    "%",
+    "cto;strategic_lead",
+  ],
+  [
+    "",
+    "CH1",
+    "Taux d'automatisation du reporting de production",
+    "Quantitatif",
+    "Trimestrielle",
+    "80% des rapports de production automatisés",
+    80,
+    25,
+    "Plus haut vaut mieux",
+    "%",
+    "chantier_owner;strategic_lead",
+  ],
+  [
+    // "Valeur cible"/"Sens" vides (indicateur qualitatif) et "Valeur initiale" TEXTUELLE
+    // ("Non consolidé", vocabulaire observé dans les documents de plan stratégique source) — ne
+    // bloque jamais la ligne, aucune mesure n'est simplement créée pour cette ligne (voir
+    // doc-comment de `STRATEGIC_INDICATOR_IMPORT_HEADERS`).
+    "AX2",
+    "",
+    "Indice de maturité digitale (baromètre interne)",
+    "Qualitatif",
+    "Semestrielle",
+    'Passer au niveau "avancé" du baromètre interne',
+    "",
+    "Non consolidé",
+    "",
+    "",
+    "strategic_lead",
+  ],
+];
+
+export const STRATEGIC_STAFFING_EXAMPLE_ROWS = [
+  [
+    "CH1",
+    "ACT1",
+    "Data & Analytics",
+    2.5,
+    "Squad data dédiée à la cartographie",
+    "2026-01-15",
+    "2026-03-31",
+  ],
+  ["CH2", "", "Ressources Humaines", 1, "Cheffe de projet RH à mi-temps", "2026-02-01", ""],
+  ["CH3", "", "Cybersécurité", 1.5, "", "", ""],
 ];

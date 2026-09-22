@@ -4,17 +4,20 @@ import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { Copy, Download, Upload } from "lucide-react";
 import {
-  STRATEGIC_ACTION_EXAMPLE_ROW,
+  STRATEGIC_ACTION_EXAMPLE_ROWS,
   STRATEGIC_ACTION_IMPORT_HEADERS,
-  STRATEGIC_AXIS_EXAMPLE_ROW,
+  STRATEGIC_AXIS_EXAMPLE_ROWS,
   STRATEGIC_AXIS_IMPORT_HEADERS,
   STRATEGIC_CHANTIER_EXAMPLE_ROWS,
   STRATEGIC_CHANTIER_IMPORT_HEADERS,
-  STRATEGIC_DELIVERABLE_EXAMPLE_ROW,
+  STRATEGIC_DELIVERABLE_EXAMPLE_ROWS,
   STRATEGIC_DELIVERABLE_IMPORT_HEADERS,
+  STRATEGIC_IMPORT_GUIDE_ROWS,
   STRATEGIC_IMPORT_SHEET_NAMES,
-  STRATEGIC_INDICATOR_EXAMPLE_ROW,
+  STRATEGIC_INDICATOR_EXAMPLE_ROWS,
   STRATEGIC_INDICATOR_IMPORT_HEADERS,
+  STRATEGIC_STAFFING_EXAMPLE_ROWS,
+  STRATEGIC_STAFFING_IMPORT_HEADERS,
   validateStrategicImportRows,
   type StrategicImportExistingData,
   type StrategicImportPreview,
@@ -189,7 +192,7 @@ export function StrategicImportButton({
 }) {
   const { showToast } = useToast();
   const { t } = useTranslation();
-  const { isGlobalAdmin, isCompanyAdmin } = useRole();
+  const { user, isGlobalAdmin, isCompanyAdmin } = useRole();
   // Comptes de l'entreprise CIBLÉE par cet import (pas nécessairement celle de l'utilisateur
   // connecté s'il est admin global — mais `companyId` est déjà la bonne portée ici, voir le prop) :
   // sert de base de rapprochement pour `computePeopleToCreate` ci-dessous, même source que
@@ -300,42 +303,66 @@ export function StrategicImportButton({
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
 
+    // Feuille de garde (round 31, point 4) — colonne unique volontairement large (`!cols`) pour
+    // rester lisible dans Excel/Google Sheets sans réglage manuel de l'utilisateur.
+    const guideSheet = XLSX.utils.aoa_to_sheet(STRATEGIC_IMPORT_GUIDE_ROWS);
+    guideSheet["!cols"] = [{ wch: 110 }];
+    XLSX.utils.book_append_sheet(wb, guideSheet, STRATEGIC_IMPORT_SHEET_NAMES.guide);
+
+    /** Largeur de colonne proportionnelle au libellé d'en-tête — évite les en-têtes tronqués à
+     *  l'ouverture du fichier (round 31, "que l'Excel soit propre") sans avoir à régler chaque
+     *  feuille à la main. */
+    const autoCols = (headers: readonly string[]) =>
+      headers.map((h) => ({ wch: Math.max(14, Math.min(48, h.length + 2)) }));
+
     const axesSheet = XLSX.utils.aoa_to_sheet([
       [...STRATEGIC_AXIS_IMPORT_HEADERS],
-      STRATEGIC_AXIS_EXAMPLE_ROW,
+      ...STRATEGIC_AXIS_EXAMPLE_ROWS,
     ]);
+    axesSheet["!cols"] = autoCols(STRATEGIC_AXIS_IMPORT_HEADERS);
     XLSX.utils.book_append_sheet(wb, axesSheet, STRATEGIC_IMPORT_SHEET_NAMES.axes);
 
     const chantiersSheet = XLSX.utils.aoa_to_sheet([
       [...STRATEGIC_CHANTIER_IMPORT_HEADERS],
       ...STRATEGIC_CHANTIER_EXAMPLE_ROWS,
     ]);
+    chantiersSheet["!cols"] = autoCols(STRATEGIC_CHANTIER_IMPORT_HEADERS);
     XLSX.utils.book_append_sheet(wb, chantiersSheet, STRATEGIC_IMPORT_SHEET_NAMES.chantiers);
 
     const actionsSheet = XLSX.utils.aoa_to_sheet([
       [...STRATEGIC_ACTION_IMPORT_HEADERS],
-      STRATEGIC_ACTION_EXAMPLE_ROW,
+      ...STRATEGIC_ACTION_EXAMPLE_ROWS,
     ]);
+    actionsSheet["!cols"] = autoCols(STRATEGIC_ACTION_IMPORT_HEADERS);
     XLSX.utils.book_append_sheet(wb, actionsSheet, STRATEGIC_IMPORT_SHEET_NAMES.actions);
 
     const livrablesSheet = XLSX.utils.aoa_to_sheet([
       [...STRATEGIC_DELIVERABLE_IMPORT_HEADERS],
-      STRATEGIC_DELIVERABLE_EXAMPLE_ROW,
+      ...STRATEGIC_DELIVERABLE_EXAMPLE_ROWS,
     ]);
+    livrablesSheet["!cols"] = autoCols(STRATEGIC_DELIVERABLE_IMPORT_HEADERS);
     XLSX.utils.book_append_sheet(wb, livrablesSheet, STRATEGIC_IMPORT_SHEET_NAMES.livrables);
 
     const indicateursSheet = XLSX.utils.aoa_to_sheet([
       [...STRATEGIC_INDICATOR_IMPORT_HEADERS],
-      STRATEGIC_INDICATOR_EXAMPLE_ROW,
+      ...STRATEGIC_INDICATOR_EXAMPLE_ROWS,
     ]);
+    indicateursSheet["!cols"] = autoCols(STRATEGIC_INDICATOR_IMPORT_HEADERS);
     XLSX.utils.book_append_sheet(wb, indicateursSheet, STRATEGIC_IMPORT_SHEET_NAMES.indicateurs);
+
+    const etpSheet = XLSX.utils.aoa_to_sheet([
+      [...STRATEGIC_STAFFING_IMPORT_HEADERS],
+      ...STRATEGIC_STAFFING_EXAMPLE_ROWS,
+    ]);
+    etpSheet["!cols"] = autoCols(STRATEGIC_STAFFING_IMPORT_HEADERS);
+    XLSX.utils.book_append_sheet(wb, etpSheet, STRATEGIC_IMPORT_SHEET_NAMES.etp);
 
     XLSX.writeFile(wb, "modele_plan_strategique.xlsx");
     showToast(
       t("strategicImport.templateDownloadedTitle", "Modèle téléchargé"),
       t(
         "strategicImport.templateDownloadedBody",
-        "5 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK), Livrables (Code Projet = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK). Supprimez les lignes d'exemple avant de remplir."
+        'Lisez-moi (guide) + 5 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK, "Étape de maturité" facultative), Livrables (Code Projet = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK, "Valeur initiale" facultative). ETP (optionnelle, Code Chantier = FK). Supprimez les lignes d\'exemple avant de remplir.'
       ),
       "success"
     );
@@ -352,9 +379,17 @@ export function StrategicImportButton({
       actions: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.actions),
       livrables: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.livrables),
       indicateurs: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.indicateurs),
+      etp: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.etp),
     };
 
-    const result = validateStrategicImportRows(sheets, data, companyId, programId, maturityStages);
+    const result = validateStrategicImportRows(
+      sheets,
+      data,
+      companyId,
+      programId,
+      maturityStages,
+      user?.username
+    );
     setFileName(file.name);
     setPreview(result);
     setCreationResult(null);
@@ -374,7 +409,13 @@ export function StrategicImportButton({
       ? p.toCreate.axes.length +
         p.toCreate.chantiers.length +
         p.toCreate.actions.length +
-        p.toCreate.indicators.length
+        p.toCreate.indicators.length +
+        // Comptées ici aussi (round 31) pour ne pas désactiver "Confirmer l'import" sur un fichier
+        // complémentaire qui n'ajoute QUE des mesures de baseline et/ou du staffing à des
+        // axes/chantiers déjà en base (repli sur `existingData`, voir doc-comment de
+        // `validateStrategicImportRows`).
+        p.toCreate.measurements.length +
+        p.toCreate.staffing.length
       : 0;
 
   const confirmImport = async () => {
@@ -556,6 +597,25 @@ export function StrategicImportButton({
                 </strong>{" "}
                 {t("strategicImport.indicatorsCountLabel", "indicateur(s) à créer")}
               </span>
+              {/* Round 31 : mesures de baseline ("Valeur initiale") et lignes de staffing ETP —
+                  masquées quand nulles pour ne pas alourdir l'aperçu d'un fichier qui n'utilise
+                  pas ces deux colonnes/feuille facultatives. */}
+              {!!preview?.toCreate.measurements.length && (
+                <span>
+                  <strong className="text-rag-green-dark">
+                    {preview.toCreate.measurements.length}
+                  </strong>{" "}
+                  {t("strategicImport.measurementsCountLabel", "mesure(s) de baseline à créer")}
+                </span>
+              )}
+              {!!preview?.toCreate.staffing.length && (
+                <span>
+                  <strong className="text-rag-green-dark">
+                    {preview.toCreate.staffing.length}
+                  </strong>{" "}
+                  {t("strategicImport.staffingCountLabel", "ligne(s) d'ETP à créer")}
+                </span>
+              )}
               <span>
                 <strong className="text-rag-red">{preview?.errors.length ?? 0}</strong>{" "}
                 {t("strategicImport.errorRow", "ligne(s) en erreur")}

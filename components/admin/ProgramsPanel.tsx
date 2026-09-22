@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowRight,
   FolderKanban,
   Gauge,
   Pencil,
@@ -20,6 +22,7 @@ import {
 } from "@/lib/firestore/admin";
 import { ensureDefaultMaturityStages } from "@/lib/firestore/maturityStageConfigs";
 import { resolveProgramType } from "@/lib/axisLogic";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MaturityStagesEditor } from "@/components/admin/MaturityStagesEditor";
@@ -137,8 +140,18 @@ export function ProgramsPanel({
   initialManagedProgramId?: string | null;
 }) {
   const { t } = useTranslation();
+  const router = useRouter();
+  const { setActiveProgramId } = useActiveProgram();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [companyUsers, setCompanyUsers] = useState<AuthUser[]>([]);
+  // Round 31, point 5 : programme stratégique tout juste créé depuis ce panneau — alimente le
+  // bandeau CTA "Importer le plan stratégique" (voir plus bas, juste après la liste). `null` tant
+  // qu'aucune création de ce type n'a eu lieu dans cette session d'écran, ou après navigation/fermeture
+  // manuelle du bandeau.
+  const [justCreatedStrategicProgram, setJustCreatedStrategicProgram] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     const unsub = subscribePrograms(
@@ -285,9 +298,38 @@ export function ProgramsPanel({
       // pourra ensuite étendre à N étapes (voir MaturityStagesEditor). Idempotent.
       if (form.type === "strategic") {
         await ensureDefaultMaturityStages(companyId, id);
+        // Round 31, point 5 : affiche juste après le CTA "Importer le plan stratégique" — voir le
+        // bandeau plus bas et son doc-comment (`goToStrategicImport`).
+        setJustCreatedStrategicProgram({ id, name: form.name });
       }
     }
     setShowForm(false);
+  };
+
+  /**
+   * CTA "Importer le plan stratégique" (round 31, point 5) — au clic sur "Nouveau programme" avec
+   * le type Stratégique, l'admin veut enchaîner directement sur l'écran "Axes stratégiques"
+   * (`StrategicAxesView`, route `/levers` pour un programme stratégique — voir son routeur
+   * `app/(app)/levers/page.tsx`) où vivent déjà "Télécharger le modèle"/"Importer un fichier"
+   * (`StrategicImportButton`). Volontairement PAS une réimplémentation de cet écran ici (risque
+   * disproportionné pour ce lot, voir le plan) : on se contente de sélectionner le programme qu'on
+   * vient de créer comme programme actif (même mécanique que `ProgramSwitcher.select`, seul autre
+   * appelant de `setActiveProgramId`) puis de naviguer vers `/levers`.
+   *
+   * Limite connue, non traitée ici (redesign hors périmètre) : `useActiveProgram` n'attribue un
+   * `activeProgram` qu'à un utilisateur ayant un `companyId` propre (voir son doc-comment,
+   * "un admin global... n'a pas de contexte entreprise cohérent") — un admin GLOBAL (seul profil
+   * habilité à atteindre CE panneau, voir doc-comment de tête de `CompanyDetailClient`) n'a jamais
+   * de `companyId` propre. Ce bouton reste donc surtout utile lorsque cette page est ouverte par
+   * une session qui EST déjà scopée sur l'entreprise du programme créé ; sinon `/levers` retombe
+   * sur la vue Plan Performance historique. Corriger ce cas de fond nécessiterait de faire porter
+   * le scope entreprise par autre chose que la session utilisateur — hors petit lot volontairement
+   * cadré ici.
+   */
+  const goToStrategicImport = (programId: string) => {
+    setActiveProgramId(programId);
+    setJustCreatedStrategicProgram(null);
+    router.push("/levers");
   };
 
   const remove = async (id: string) => {
@@ -557,6 +599,42 @@ export function ProgramsPanel({
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
             >
               {t("common.cancel", "Annuler")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Round 31, point 5 : CTA "un clic" post-création d'un Plan Stratégique — voir doc-comment
+          de `goToStrategicImport`. Fermeture manuelle (croix) ou implicite au clic sur le CTA. */}
+      {justCreatedStrategicProgram && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bp-coral/30 bg-bp-coral/5 p-4">
+          <div>
+            <div className="text-sm font-semibold text-text-primary">
+              {t("adminProgramsPanel.strategicImportCtaTitle", "Programme « {name} » créé").replace(
+                "{name}",
+                justCreatedStrategicProgram.name
+              )}
+            </div>
+            <div className="text-xs text-text-secondary">
+              {t(
+                "adminProgramsPanel.strategicImportCtaBody",
+                "Importez son plan stratégique complet (axes, chantiers, projets, indicateurs) depuis un fichier Excel."
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => goToStrategicImport(justCreatedStrategicProgram.id)}
+              className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
+            >
+              {t("adminProgramsPanel.strategicImportCtaButton", "Importer le plan stratégique")}{" "}
+              <ArrowRight size={13} />
+            </button>
+            <button
+              onClick={() => setJustCreatedStrategicProgram(null)}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
+            >
+              {t("common.close", "Fermer")}
             </button>
           </div>
         </div>

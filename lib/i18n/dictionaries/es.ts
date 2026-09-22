@@ -650,6 +650,10 @@ const es: Record<string, string> = {
   "adminProgramsPanel.actionPlanModuleLabel": "Módulo Plan de acción",
   "adminProgramsPanel.actionPlanModuleHint":
     "Activa la pestaña Plan de acción (Kanban/Gantt) en los palancas de este programa. Módulo adicional activable según las opciones contratadas por el cliente — desmarcado, las palancas de este programa no muestran esta pestaña.",
+  "adminProgramsPanel.strategicImportCtaTitle": "Programa «{name}» creado",
+  "adminProgramsPanel.strategicImportCtaBody":
+    "Importe su plan estratégico completo (ejes, proyectos, iniciativas, indicadores) desde un archivo Excel.",
+  "adminProgramsPanel.strategicImportCtaButton": "Importar el plan estratégico",
 
   // ─── shared ───────────────────────────────────────────────────────────────
   "shared.leverCount": "{n} palanca(s)",
@@ -1586,9 +1590,11 @@ const es: Record<string, string> = {
   "strategicImport.chantiersCountLabel": "proyecto(s) a crear",
   "strategicImport.actionsCountLabel": "iniciativa(s) a crear",
   "strategicImport.indicatorsCountLabel": "indicador(es) a crear",
+  "strategicImport.measurementsCountLabel": "medición(es) inicial(es) a crear",
+  "strategicImport.staffingCountLabel": "línea(s) de dotación a crear",
   "strategicImport.templateDownloadedTitle": "Plantilla descargada",
   "strategicImport.templateDownloadedBody":
-    "5 hojas: Ejes (Code = clave), Proyectos (Codes Ejes separados por ; = FK, admite varios ejes), Iniciativas (Code Proyecto = FK), Entregables (Code Iniciativa = FK, opcional), Indicadores (Code Eje O Code Proyecto = FK). Elimine las filas de ejemplo antes de completar.",
+    'Léame (guía) + 5 hojas: Ejes (Code = clave), Proyectos (Codes Ejes separados por ; = FK, admite varios ejes), Iniciativas (Code Proyecto = FK, "Etapa de madurez" opcional), Entregables (Code Iniciativa = FK, opcional), Indicadores (Code Eje O Code Proyecto = FK, "Valor inicial" opcional). Dotación (opcional, Code Proyecto = FK). Elimine las filas de ejemplo antes de completar.',
   "strategicImport.ignoredRowsNote": "{n} línea(s) ignorada(s)",
   "strategicImport.importDoneBody":
     "{axes} eje(s) · {chantiers} proyecto(s) · {actions} iniciativa(s) · {indicators} indicador(es) creado(s)",

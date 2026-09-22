@@ -706,6 +706,10 @@ const fr: Record<string, string> = {
   "adminProgramsPanel.actionPlanModuleLabel": "Module Plan d'action",
   "adminProgramsPanel.actionPlanModuleHint":
     "Active l'onglet Plan d'action (Kanban/Gantt) sur les leviers de ce programme. Module additionnel activable selon les options souscrites par le client — décoché, les leviers de ce programme n'affichent pas cet onglet.",
+  "adminProgramsPanel.strategicImportCtaTitle": "Programme « {name} » créé",
+  "adminProgramsPanel.strategicImportCtaBody":
+    "Importez son plan stratégique complet (axes, chantiers, projets, indicateurs) depuis un fichier Excel.",
+  "adminProgramsPanel.strategicImportCtaButton": "Importer le plan stratégique",
 
   // ─── shared (composants partagés) ──────────────────────────────────────────
   "shared.leverCount": "{n} levier(s)",
@@ -1691,9 +1695,11 @@ const fr: Record<string, string> = {
   "strategicImport.chantiersCountLabel": "chantier(s) à créer",
   "strategicImport.actionsCountLabel": "projet(s) à créer",
   "strategicImport.indicatorsCountLabel": "indicateur(s) à créer",
+  "strategicImport.measurementsCountLabel": "mesure(s) de baseline à créer",
+  "strategicImport.staffingCountLabel": "ligne(s) d'ETP à créer",
   "strategicImport.templateDownloadedTitle": "Modèle téléchargé",
   "strategicImport.templateDownloadedBody":
-    "5 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK), Livrables (Code Projet = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK). Supprimez les lignes d'exemple avant de remplir.",
+    'Lisez-moi (guide) + 5 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK, "Étape de maturité" facultative), Livrables (Code Projet = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK, "Valeur initiale" facultative). ETP (optionnelle, Code Chantier = FK). Supprimez les lignes d\'exemple avant de remplir.',
   "strategicImport.ignoredRowsNote": "{n} ligne(s) ignorée(s)",
   "strategicImport.importDoneBody":
     "{axes} axe(s) · {chantiers} chantier(s) · {actions} projet(s) · {indicators} indicateur(s) créé(s)",

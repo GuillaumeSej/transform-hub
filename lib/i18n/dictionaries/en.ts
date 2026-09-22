@@ -669,6 +669,10 @@ const en: Record<string, string> = {
   "adminProgramsPanel.actionPlanModuleLabel": "Action Plan module",
   "adminProgramsPanel.actionPlanModuleHint":
     "Enables the Action Plan tab (Kanban/Gantt) on this program's levers. Add-on module enabled per the client's subscribed options — unchecked, this program's levers won't show that tab.",
+  "adminProgramsPanel.strategicImportCtaTitle": 'Program "{name}" created',
+  "adminProgramsPanel.strategicImportCtaBody":
+    "Import its full strategic plan (axes, workstreams, projects, indicators) from an Excel file.",
+  "adminProgramsPanel.strategicImportCtaButton": "Import the strategic plan",
 
   // ─── shared ───────────────────────────────────────────────────────────────
   "shared.leverCount": "{n} lever(s)",
@@ -1594,9 +1598,11 @@ const en: Record<string, string> = {
   "strategicImport.chantiersCountLabel": "workstream(s) to create",
   "strategicImport.actionsCountLabel": "project(s) to create",
   "strategicImport.indicatorsCountLabel": "indicator(s) to create",
+  "strategicImport.measurementsCountLabel": "baseline measurement(s) to create",
+  "strategicImport.staffingCountLabel": "staffing row(s) to create",
   "strategicImport.templateDownloadedTitle": "Template downloaded",
   "strategicImport.templateDownloadedBody":
-    "5 sheets: Axes (Code = key), Workstreams (Axis Codes separated by ; = FK, accepts several axes), Projects (Workstream Code = FK), Deliverables (Project Code = FK, optional), Indicators (Axis Code OR Workstream Code = FK). Delete the example rows before filling in.",
+    'Read-me (guide) + 5 sheets: Axes (Code = key), Workstreams (Axis Codes separated by ; = FK, accepts several axes), Projects (Workstream Code = FK, "Maturity stage" optional), Deliverables (Project Code = FK, optional), Indicators (Axis Code OR Workstream Code = FK, "Baseline value" optional). Staffing (optional, Workstream Code = FK). Delete the example rows before filling in.',
   "strategicImport.ignoredRowsNote": "{n} row(s) ignored",
   "strategicImport.importDoneBody":
     "{axes} axis/axes · {chantiers} workstream(s) · {actions} project(s) · {indicators} indicator(s) created",

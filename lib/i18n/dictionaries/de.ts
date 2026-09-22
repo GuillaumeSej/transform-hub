@@ -653,6 +653,10 @@ const de: Record<string, string> = {
   "adminProgramsPanel.actionPlanModuleLabel": "Modul Aktionsplan",
   "adminProgramsPanel.actionPlanModuleHint":
     "Aktiviert den Tab Aktionsplan (Kanban/Gantt) für die Hebel dieses Programms. Zusatzmodul, das je nach den vom Kunden gebuchten Optionen aktivierbar ist — deaktiviert, zeigen die Hebel dieses Programms diesen Tab nicht an.",
+  "adminProgramsPanel.strategicImportCtaTitle": "Programm „{name}“ erstellt",
+  "adminProgramsPanel.strategicImportCtaBody":
+    "Importieren Sie den vollständigen strategischen Plan (Achsen, Arbeitspakete, Projekte, Indikatoren) aus einer Excel-Datei.",
+  "adminProgramsPanel.strategicImportCtaButton": "Strategischen Plan importieren",
 
   // ─── shared ───────────────────────────────────────────────────────────────
   "shared.leverCount": "{n} Hebel",
@@ -1586,9 +1590,11 @@ const de: Record<string, string> = {
   "strategicImport.chantiersCountLabel": "Arbeitspaket(e) zu erstellen",
   "strategicImport.actionsCountLabel": "Projekt(e) zu erstellen",
   "strategicImport.indicatorsCountLabel": "Indikator(en) zu erstellen",
+  "strategicImport.measurementsCountLabel": "Basiswert-Messung(en) zu erstellen",
+  "strategicImport.staffingCountLabel": "Personalzeile(n) zu erstellen",
   "strategicImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "strategicImport.templateDownloadedBody":
-    "5 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencodes getrennt durch ; = FK, mehrere Achsen möglich), Projekte (Arbeitspaketcode = FK), Ergebnisse (Projektcode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.",
+    'Lies-mich (Anleitung) + 5 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencodes getrennt durch ; = FK, mehrere Achsen möglich), Projekte (Arbeitspaketcode = FK, "Reifegrad" optional), Ergebnisse (Projektcode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK, "Ausgangswert" optional). Personal (optional, Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.',
   "strategicImport.ignoredRowsNote": "{n} Zeile(n) ignoriert",
   "strategicImport.importDoneBody":
     "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Projekt(e) · {indicators} Indikator(en) erstellt",
