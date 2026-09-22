@@ -169,6 +169,11 @@ export function WorkstreamBarDetail({
 
 const TAG_W = 48;
 const TAG_H = 16;
+/** Espace vertical entre deux tags empilés (ex. planifié initial / écart / réalisé / cible) — 3px
+ *  seulement rendait les tags difficiles à distinguer les uns des autres à taille d'écran normale
+ *  (retour testeur : "il n'y a pas de tag partout", alors qu'ils étaient bien tous présents mais
+ *  visuellement fondus les uns dans les autres). */
+const TAG_GAP = 6;
 /** Largeur minimale d'un tag en fonction du texte affiché — évite que les montants à 3+ chiffres
  *  ou avec décimales (ex. "€123.4M") ne débordent du rectangle de fond. */
 const tagWidthFor = (text: string) => Math.max(TAG_W, text.length * 6.4 + 12);
@@ -234,7 +239,7 @@ function TotalTags({
               </text>
             )}
             {tags.map((it, i) => {
-              const y = baseY - (i + 1) * (TAG_H + 3) + 2;
+              const y = baseY - (i + 1) * (TAG_H + TAG_GAP) + 2;
               const label = fmt(it.v);
               const w = tagWidthFor(label);
               return (
@@ -423,7 +428,9 @@ export function WorkstreamBarChart({
       <ResponsiveContainer width="100%" height={320}>
         <BarChart
           data={chartData}
-          margin={{ top: 64, right: CHART_MARGIN_RIGHT, left: -16, bottom: 4 }}
+          // top: assez pour empiler jusqu'à 3 tags (planifié initial / écart-retard / cible
+          // réactualisée) avec TAG_GAP entre chacun sans les rogner en haut du graphique.
+          margin={{ top: 76, right: CHART_MARGIN_RIGHT, left: -16, bottom: 4 }}
           barCategoryGap={`${CATEGORY_GAP * 100}%`}
           barSize={barW}
           // Les tags de totaux (planifié / cible / réalisé) sont dessinés au-dessus de la zone de
