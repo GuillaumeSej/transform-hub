@@ -1559,7 +1559,7 @@ const en: Record<string, string> = {
     "Consequences: {projets} project(s) and {jalons} milestone(s) will be deleted. This cannot be undone.",
   "strategicDelete.consequences.projet":
     "Consequences: the project and its {jalons} milestone(s) will be deleted. This cannot be undone.",
-  "strategicDelete.reason": "Reason for deletion",
+  "strategicDelete.reason": "Reason for deletion (optional)",
   "strategicDelete.approver.axis": "the axis owner",
   "strategicDelete.approver.chantier": "the workstream owner",
   "strategicDelete.approval.self": "You are {role}: deletion will be applied immediately.",

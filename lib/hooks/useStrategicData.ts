@@ -133,7 +133,7 @@ export type StrategicData = {
 
   createChantier: (
     input: Pick<Chantier, "axisIds" | "name" | "stage"> &
-      Partial<Pick<Chantier, "description" | "dependencies" | "confidentialityLevel">>
+      Partial<Pick<Chantier, "description" | "dependencies" | "confidentialityLevel" | "pilote">>
   ) => Promise<Chantier>;
   updateChantier: (id: string, patch: Partial<Chantier>) => Promise<void>;
   removeChantier: (id: string) => Promise<void>;

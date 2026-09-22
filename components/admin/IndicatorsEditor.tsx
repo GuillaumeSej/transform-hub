@@ -1023,6 +1023,7 @@ export function IndicatorsEditor({
           axes={axes}
           stages={stages}
           confidentialityLevels={confidentialityLevels}
+          users={users}
           initial={{ axisIds: form.axisId ? [form.axisId] : [] }}
           submitLabel={t("common.add", "Ajouter")}
           onCancel={() => setChantierModalOpen(false)}

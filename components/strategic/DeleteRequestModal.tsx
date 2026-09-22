@@ -5,8 +5,14 @@ import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
-/** Pop-up de confirmation de suppression (chantier ou projet) : conséquences, motif obligatoire,
- *  mention de l'approbation hiérarchique. `onConfirm(reason)` = handler `onRequestDelete...`. */
+/** Pop-up de confirmation de suppression (chantier ou projet) : conséquences, motif (facultatif),
+ *  mention de l'approbation hiérarchique. `onConfirm(reason)` = handler `onRequestDelete...`.
+ *
+ * Motif rendu FACULTATIF (round "chantier form") : initialement obligatoire pour activer le
+ * bouton, ce qui le laissait silencieusement désactivé — remonté comme « je ne peux pas cliquer
+ * sur Supprimer définitivement » alors que la suppression elle-même fonctionnait, faute d'un
+ * indice visible sur la raison du blocage. Le motif reste utile à l'audit (log ci-dessous) mais ne
+ * doit plus conditionner la possibilité même de supprimer/demander. */
 export function DeleteRequestModal({
   open,
   onOpenChange,
@@ -37,7 +43,7 @@ export function DeleteRequestModal({
     : t("strategicDelete.approver.chantier", "le responsable du chantier");
 
   const submit = async () => {
-    if (!reason.trim() || busy) return;
+    if (busy) return;
     setBusy(true);
     try {
       await onConfirm(reason.trim());
@@ -61,7 +67,7 @@ export function DeleteRequestModal({
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button size="sm" onClick={submit} disabled={!reason.trim() || busy}>
+          <Button size="sm" onClick={submit} disabled={busy}>
             {canApproveSelf
               ? t("strategicDelete.confirm", "Supprimer définitivement")
               : t("strategicDelete.request", "Envoyer la demande d'approbation")}

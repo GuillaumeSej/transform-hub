@@ -397,6 +397,7 @@ export function AxisDetailClient() {
           axes={data.axes}
           stages={stages}
           confidentialityLevels={confidentialityLevels}
+          users={data.users}
           submitLabel={t("strategicAxes.createChantier")}
           onCancel={() => setNewChantierOpen(false)}
           onSubmit={async (values: ChantierFormValues) => {

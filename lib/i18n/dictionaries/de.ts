@@ -1551,7 +1551,7 @@ const de: Record<string, string> = {
     "Folgen: {projets} Projekt(e) und {jalons} Meilenstein(e) werden gelöscht. Nicht rückgängig zu machen.",
   "strategicDelete.consequences.projet":
     "Folgen: das Projekt und seine {jalons} Meilenstein(e) werden gelöscht. Nicht rückgängig zu machen.",
-  "strategicDelete.reason": "Grund der Löschung",
+  "strategicDelete.reason": "Grund der Löschung (optional)",
   "strategicDelete.approver.axis": "der Verantwortliche der Achse",
   "strategicDelete.approver.chantier": "der Verantwortliche des Arbeitspakets",
   "strategicDelete.approval.self": "Sie sind {role}: die Löschung wird sofort ausgeführt.",

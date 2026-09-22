@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { Chantier, MaturityStageConfig, StrategicAxis } from "@/types";
+import { UserPicker } from "@/components/strategic/UserPicker";
+import type { AuthUser, Chantier, MaturityStageConfig, StrategicAxis } from "@/types";
 
 /**
  * Formulaire de création/édition d'un chantier. Même contrat que `AxisForm` : aucune logique
@@ -12,11 +13,17 @@ import type { Chantier, MaturityStageConfig, StrategicAxis } from "@/types";
  *
  * Les dépendances inter-chantiers ne sont PAS éditées ici : elles se posent depuis la vue Gantt,
  * où l'on voit les chantiers voisins et leurs dates (voir plan, section hiérarchie).
+ *
+ * Étape de maturité RETIRÉE de ce formulaire (demande PO, même round que le retrait du formulaire
+ * de projet, `ChantierActionForm`) : le pilotage Kanban (Défini/Validé/Planifié/Exécuté/Réalisé)
+ * est entièrement remplacé par les jalons J0→J4 du projet. `stage` reste écrit en base (champ
+ * `Chantier.stage` toujours requis par le type, potentiellement encore lu par du code ancien) mais
+ * silencieusement défaulté à la première étape du référentiel, jamais montré/éditable ici.
  */
 
 export type ChantierFormValues = Pick<
   Chantier,
-  "name" | "description" | "axisIds" | "stage" | "confidentialityLevel"
+  "name" | "description" | "axisIds" | "stage" | "confidentialityLevel" | "pilote"
 >;
 
 export function ChantierForm({
@@ -24,6 +31,7 @@ export function ChantierForm({
   axes,
   stages,
   confidentialityLevels,
+  users,
   onSubmit,
   onCancel,
   submitLabel,
@@ -33,12 +41,18 @@ export function ChantierForm({
   /** Axes du programme — un chantier appartient désormais à UN OU PLUSIEURS axes (round 24, voir
    *  `types/index.ts`). */
   axes: StrategicAxis[];
-  /** Étapes de maturité du programme (même référentiel que l'axe). */
+  /** Étapes de maturité du programme (même référentiel que l'axe) — n'alimente plus qu'un défaut
+   *  silencieux (voir doc-comment de tête), il n'y a plus de sélecteur d'étape ici. */
   stages: MaturityStageConfig[];
   /** Échelle de confidentialité de l'entreprise (`Company.confidentialityLevels`) — même
    *  sélecteur que `AxisForm`/`components/shared/LeverForm.tsx:291-300`. Absente/vide = aucun
    *  sélecteur affiché (non régressif). */
   confidentialityLevels?: string[];
+  /** Utilisateurs de l'entreprise, pour le sélecteur « Responsable de chantier » (`Chantier.pilote`,
+   *  via `UserPicker`). Absent/vide = aucun sélecteur affiché (non régressif — même parti pris que
+   *  `confidentialityLevels` ci-dessus) : certains appelants (ex. création rapide inline depuis
+   *  l'éditeur d'indicateurs) n'ont pas forcément la liste sous la main au même endroit. */
+  users?: AuthUser[];
   onSubmit: (values: ChantierFormValues) => void | Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
@@ -54,10 +68,13 @@ export function ChantierForm({
         ? [axes[0].id]
         : []
   );
-  const [stage, setStage] = useState(initial?.stage ?? stages[0]?.id ?? "");
+  // Plus de sélecteur d'étape (voir doc-comment de tête) : défaut silencieux, jamais modifié après
+  // le montage initial — même parti pris que `ChantierActionForm` pour son `status`.
+  const [stage] = useState(initial?.stage ?? stages[0]?.id ?? "");
   const [confidentialityLevel, setConfidentialityLevel] = useState(
     initial?.confidentialityLevel ?? ""
   );
+  const [pilote, setPilote] = useState<string | undefined>(initial?.pilote);
   const [submitting, setSubmitting] = useState(false);
 
   const toggleAxis = (axisId: string) => {
@@ -66,7 +83,7 @@ export function ChantierForm({
     );
   };
 
-  const canSubmit = name.trim().length > 0 && axisIds.length > 0 && stage.length > 0 && !submitting;
+  const canSubmit = name.trim().length > 0 && axisIds.length > 0 && !submitting;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -78,6 +95,7 @@ export function ChantierForm({
         // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
         ...(description.trim() ? { description: description.trim() } : {}),
         ...(confidentialityLevel ? { confidentialityLevel } : {}),
+        ...(pilote ? { pilote } : {}),
         axisIds,
         stage,
       });
@@ -109,42 +127,31 @@ export function ChantierForm({
           {axes.length === 0 ? (
             <p className="mt-1 text-xs text-text-secondary">Aucun axe disponible</p>
           ) : (
-            <div className="mt-1 flex flex-wrap gap-1.5">
+            // Liste défilante à cases à cocher (round "chantier form") — remplace les puces à
+            // bascule : l'axe d'origine (`initial.axisIds`) arrive déjà PRÉ-COCHÉ (voir l'état
+            // `axisIds` ci-dessus), l'utilisateur peut en cocher d'autres pour un chantier
+            // multi-axes sans perdre la présélection.
+            <div
+              role="group"
+              aria-label="Axes de rattachement"
+              className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2"
+            >
               {axes.map((axis) => (
-                <button
+                <label
                   key={axis.id}
-                  type="button"
-                  aria-pressed={axisIds.includes(axis.id)}
-                  onClick={() => toggleAxis(axis.id)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    axisIds.includes(axis.id)
-                      ? "bg-bp-coral text-white"
-                      : "border border-border text-text-secondary hover:bg-bg-elevated"
-                  }`}
+                  className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm text-text-primary hover:bg-bg-elevated"
                 >
+                  <input
+                    type="checkbox"
+                    checked={axisIds.includes(axis.id)}
+                    onChange={() => toggleAxis(axis.id)}
+                    className="accent-bp-coral"
+                  />
                   {axis.name}
-                </button>
+                </label>
               ))}
             </div>
           )}
-        </div>
-        <div>
-          <label className="text-xs font-medium text-text-secondary" htmlFor="chantier-stage">
-            Étape de maturité initiale
-          </label>
-          <select
-            id="chantier-stage"
-            value={stage}
-            onChange={(e) => setStage(e.target.value)}
-            className={inputClass}
-          >
-            {stages.length === 0 && <option value="">Aucune étape configurée</option>}
-            {stages.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
         </div>
         {confidentialityLevels && confidentialityLevels.length > 0 && (
           <div>
@@ -168,6 +175,16 @@ export function ChantierForm({
               ))}
             </select>
           </div>
+        )}
+        {users && users.length > 0 && (
+          <UserPicker
+            users={users}
+            value={pilote}
+            onChange={setPilote}
+            label="Responsable de chantier"
+            placeholder="Non assigné"
+            id="chantier-pilote"
+          />
         )}
       </div>
 

@@ -1655,7 +1655,7 @@ const fr: Record<string, string> = {
     "Conséquences : {projets} projet(s) et {jalons} jalon(s) rattachés seront supprimés. Action irréversible.",
   "strategicDelete.consequences.projet":
     "Conséquences : le projet et ses {jalons} jalon(s) seront supprimés. Action irréversible.",
-  "strategicDelete.reason": "Motif de la suppression",
+  "strategicDelete.reason": "Motif de la suppression (facultatif)",
   "strategicDelete.approver.axis": "le responsable de l'axe",
   "strategicDelete.approver.chantier": "le responsable du chantier",
   "strategicDelete.approval.self":
