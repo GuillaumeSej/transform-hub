@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { TriangleAlert } from "lucide-react";
+import { Layers, TriangleAlert } from "lucide-react";
 import {
   axisSponsorLabel,
   displayMilestoneId,
@@ -358,11 +358,19 @@ export function ProgramRoadmap({
                           accentuée (`border-l-[3px]`, couleur de l'axe) que les lignes de levier
                           juste en dessous (patron d'identité de `ChantierGantt.tsx` : nom + méta +
                           mini barre de progression, adapté ici pour rester un en-tête de GROUPE
-                          au-dessus de plusieurs lignes plutôt qu'un bloc par chantier isolé) —
-                          l'en-tête et les lignes forment désormais UNE seule colonne accentuée
-                          continue, plus deux traitements de bordure gauche indépendants empilés.
+                          au-dessus de plusieurs lignes plutôt qu'un bloc par chantier isolé).
                           Bouton (round 16) cliquable si `onChantierClick` est fourni, sinon reste un
-                          simple texte non interactif (comportement historique inchangé). */}
+                          simple texte non interactif (comportement historique inchangé).
+                          Round 29 (retour PO — « on ne distingue pas assez une ligne chantier d'une
+                          ligne projet ») : le round 27 faisait PARTAGER le même liséré accentué
+                          couleur d'axe à l'en-tête et aux lignes de levier pour former "une seule
+                          colonne continue" — exactement ce qui les rendait indiscernables. Le liséré
+                          couleur d'axe (`border-l-[3px]`) devient désormais l'apanage EXCLUSIF de cet
+                          en-tête (les lignes de levier ci-dessous passent à un liséré neutre fin,
+                          voir plus bas) ; un fond gris très léger (`bg-neutral-100/70`, indépendant
+                          de la couleur d'axe pour rester lisible quelle que soit sa teinte), une
+                          icône `Layers` et un nom en gras plus grand achèvent de marquer cet en-tête
+                          comme le PARENT du groupe plutôt qu'une ligne de plus dans la même colonne. */}
                         <button
                           type="button"
                           disabled={!onChantierClick}
@@ -371,13 +379,14 @@ export function ProgramRoadmap({
                               ? () => onChantierClick(chantierGroup.chantier.id)
                               : undefined
                           }
-                          className={`${ROW_LABEL_WIDTH} flex shrink-0 flex-col gap-1 border-l-[3px] py-1.5 pl-2 pr-2 text-left transition ${
-                            onChantierClick ? "hover:bg-white/60" : ""
+                          className={`${ROW_LABEL_WIDTH} flex shrink-0 flex-col gap-1 rounded-r border-l-[3px] bg-neutral-100/70 py-1.5 pl-2 pr-2 text-left transition ${
+                            onChantierClick ? "hover:bg-neutral-100" : ""
                           }`}
                           style={{ borderColor: axisColor }}
                         >
                           <div className="flex items-center gap-1">
-                            <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-primary">
+                            <Layers size={12} className="shrink-0 text-secondary" aria-hidden />
+                            <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-primary">
                               {chantierGroup.chantier.name}
                               <span className="ml-1 font-normal text-tertiary">
                                 · {chantierGroup.rows.length} {l.leviersSuffix}
@@ -445,18 +454,24 @@ export function ProgramRoadmap({
                               key={row.action.id}
                               // Round 27 : `pl-2.5` retiré — c'était une couche de retrait
                               // redondante avec le `pl-2` déjà porté par la colonne d'identité
-                              // ci-dessous (`border-l-[3px] pl-2`), qui décalait son liséré gauche
-                              // de 10px par rapport au bord de la carte d'axe/de l'en-tête de
-                              // chantier ci-dessus. Sans ce décalage, le liséré de la ligne s'aligne
-                              // avec celui de l'en-tête (voir plus haut) — même colonne accentuée
-                              // continue, pas de second retrait qui la désolidarise. Même patron que
-                              // `ChantierGantt.tsx`, dont la ligne équivalente n'a pas ce `pl-*`
-                              // supplémentaire non plus.
+                              // ci-dessous. Même patron que `ChantierGantt.tsx`, dont la ligne
+                              // équivalente n'a pas ce `pl-*` supplémentaire non plus.
+                              //
+                              // Round 29 (retour PO — distinguer chantier/projet) : le liséré
+                              // gauche couleur d'axe (`border-l-[3px]`) de cette colonne
+                              // d'identité, PARTAGÉ jusqu'ici avec l'en-tête de chantier ci-dessus
+                              // pour former "une seule colonne continue", est remplacé par un
+                              // liséré neutre plus fin (`border-l-2 border-border`) — la couleur
+                              // d'axe reste l'apanage exclusif de l'en-tête (voir son doc-comment).
+                              // `pl-3` (au lieu de `pl-2`) accentue en plus le retrait de ce nom de
+                              // projet par rapport au nom de chantier ci-dessus, pour qu'il se lise
+                              // comme un enfant indenté sous son parent plutôt qu'une ligne au même
+                              // niveau. Purement visuel : ni `ROW_LABEL_WIDTH` ni l'alignement avec
+                              // les barres du Gantt à droite ne changent.
                               className="flex items-stretch gap-2 border-b border-border/60 py-1.5 last:border-b-0"
                             >
                               <div
-                                className={`${ROW_LABEL_WIDTH} shrink-0 border-l-[3px] pl-2`}
-                                style={{ borderColor: axisColor }}
+                                className={`${ROW_LABEL_WIDTH} shrink-0 border-l-2 border-border pl-3`}
                               >
                                 {/* Round 20, point 2 : nom du levier cliquable (même destination que
                                   la barre ci-dessous, `onProjetClick`) et centré verticalement dans
@@ -466,11 +481,16 @@ export function ProgramRoadmap({
                                   ajouté À L'INTÉRIEUR de ce même élément cliquable — remplace la
                                   fraction "N/5" jugée confuse par le PO (« ça ne dit pas si je suis
                                   à J1 ou J2 ») par un repère direct, sans second gestionnaire de
-                                  clic : le badge profite du même `onClick` que le nom du levier. Le
-                                  "N%" d'avancement (posé sur la barre, plus bas) N'EST PAS retiré —
-                                  toujours utile, seulement complété par ce repère de jalon. */}
+                                  clic : le badge profite du même `onClick` que le nom du levier.
+                                  Round 29 : ce badge est désormais le SEUL repère de progression
+                                  visible sur la ligne projet — le "N%" jumeau qui vivait à côté de la
+                                  barre (plus bas) a été retiré (même info, juste réexprimée en %,
+                                  ce qui lisait comme une incohérence pour le PO). Taille de texte
+                                  légèrement réduite (`text-[10px]`, au lieu de `text-[10.5px]`) pour
+                                  accentuer l'écart avec le nom de chantier ci-dessus (`text-[12.5px]
+                                  font-bold`). */}
                                 <div
-                                  className={`flex h-full items-center gap-1.5 text-[10.5px] font-medium text-primary ${
+                                  className={`flex h-full items-center gap-1.5 text-[10px] font-medium text-primary ${
                                     rowClickable
                                       ? "cursor-pointer hover:text-bp-coral hover:underline"
                                       : ""
@@ -524,18 +544,20 @@ export function ProgramRoadmap({
                                   inlineMinWidthPct={10}
                                 />
 
-                                {/* Round 25 (retour PO) : le "N%" vivait auparavant EN `trailing`
-                                    DANS la barre — texte peint sur son propre remplissage, ce qui
-                                    entrait en collision avec les losanges de livrable désormais posés
-                                    sur la barre (voir plus bas). Déplacé à côté de la barre — même
-                                    mécanique de positionnement que le triangle "en retard" ci-dessous.
-                                    Round 26 (retour PO — "le 24% est en dessous du losange") : centré
-                                    sur la barre, ce bloc retombait dans la MÊME bande verticale que
-                                    les losanges de livrable dès que l'échéance d'un livrable coïncidait
-                                    horizontalement avec la fin du levier (cas fréquent). Remonté dans
-                                    la bande `LEVIER_LABEL_HEIGHT` réservée AU-DESSUS de la barre — les
-                                    losanges restent centrés sur la barre elle-même — donc plus aucune
-                                    collision possible, par construction. */}
+                                {/* Round 25/26 (retour PO) : bande réservée à côté de la barre, dans
+                                    `LEVIER_LABEL_HEIGHT` (AU-DESSUS de la barre, jamais dans la bande
+                                    des losanges de livrable — voir historique round 25/26 pour le
+                                    détail du repositionnement). Round 29 (retour PO — "tantôt un %,
+                                    tantôt un badge J1/J2, ce n'est pas cohérent") : le "N%" qui vivait
+                                    ici a été RETIRÉ pour les lignes PROJET — le badge "jalon courant"
+                                    posé sur le libellé (ci-dessus, colonne d'identité) porte déjà
+                                    exactement la même information (`milestoneProgressPct` dérive du
+                                    même `passedMilestones`), le répéter en pourcentage juste à côté
+                                    lisait comme deux indicateurs contradictoires. Le pourcentage reste
+                                    disponible dans `tooltipText` de la barre ci-dessus (survol) et
+                                    dans l'en-tête de chantier (`chantierProgressPct`, une moyenne
+                                    distincte, INCHANGÉE). Ce bloc ne porte donc plus que le triangle
+                                    "en retard" ci-dessous. */}
                                 <div
                                   className="pointer-events-none absolute flex items-center gap-1"
                                   style={{
@@ -545,9 +567,6 @@ export function ProgramRoadmap({
                                     marginLeft: 4,
                                   }}
                                 >
-                                  <span className="whitespace-nowrap text-[9.5px] font-bold text-secondary">
-                                    {row.progressPct}%
-                                  </span>
                                   {/* Round 25 (retour PO) : l'icône d'alerte "en retard" n'avait
                                       qu'un `title` HTML natif (pas de survol stylé, pas de nom de
                                       levier dans le message) et n'était pas cliquable. Remplacée par

@@ -69,6 +69,7 @@ import {
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
 import { ProgramRoadmap } from "@/components/strategic/ProgramRoadmap";
+import { readKpi } from "@/lib/chantierKpis";
 import type { Indicator, StrategicAxis } from "@/types";
 
 /**
@@ -575,6 +576,17 @@ export function StrategicDashboardView() {
     [axes, chantiers, indicators]
   );
 
+  /** Round 29 : suffixe "actuel / cible" d'un indicateur (`readKpi`, même lecture que
+   *  `SuccessKpiList`/`ChantierDetailPanel` — pas de `targetOverride`, ce sont des indicateurs
+   *  d'axe, sans cible propre à un critère de succès de chantier). Chaîne vide — rien n'est
+   *  fabriqué — tant que la mesure ET la cible ne sont pas toutes deux connues. */
+  const formatIndicatorReading = (indicator: Indicator): string => {
+    const reading = readKpi(indicator, measurements);
+    if (reading.current === undefined || reading.target === undefined) return "";
+    const unit = indicator.unit ? ` ${indicator.unit}` : "";
+    return ` · ${reading.current} / ${reading.target}${unit}`;
+  };
+
   // Chantiers regroupés par axe — porté depuis `StrategicAxesView.tsx`, alimente
   // `renderAxisRoadmapHeader` (légende/liste de chantiers de l'en-tête riche d'axe). Round 24 : un
   // chantier appartenant à plusieurs axes (`axisIds`) est poussé dans le bucket de CHACUN d'eux.
@@ -736,7 +748,7 @@ export function StrategicDashboardView() {
                           : "bg-neutral-100 text-secondary"
                       }`}
                     >
-                      {`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}
+                      {`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}${formatIndicatorReading(indicator)}`}
                     </button>
                   );
                 })}
@@ -1127,7 +1139,7 @@ export function StrategicDashboardView() {
                 )
                 .map((indicator) => ({
                   key: indicator.id,
-                  label: `#${indicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`,
+                  label: `#${indicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}${formatIndicatorReading(indicator)}`,
                   onClick: isIndicatorPillClickable(indicator)
                     ? () => router.push(`/kpi?indicator=${indicator.id}`)
                     : undefined,
