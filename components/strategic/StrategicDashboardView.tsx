@@ -64,6 +64,7 @@ import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { Modal } from "@/components/shared/Modal";
 import { Popover } from "@/components/shared/Popover";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
+import { IndicatorReadingBadge } from "@/components/strategic/IndicatorReadingBadge";
 import {
   BusinessKpiCards,
   IndicatorStatusSummary,
@@ -576,15 +577,35 @@ export function StrategicDashboardView() {
     [axes, chantiers, indicators]
   );
 
-  /** Round 29 : suffixe "actuel / cible" d'un indicateur (`readKpi`, même lecture que
-   *  `SuccessKpiList`/`ChantierDetailPanel` — pas de `targetOverride`, ce sont des indicateurs
-   *  d'axe, sans cible propre à un critère de succès de chantier). Chaîne vide — rien n'est
-   *  fabriqué — tant que la mesure ET la cible ne sont pas toutes deux connues. */
-  const formatIndicatorReading = (indicator: Indicator): string => {
+  /** Round 29 (puis round 30) : lecture "actuel/cible" d'un indicateur (`readKpi`, même lecture
+   *  que `SuccessKpiList`/`ChantierDetailPanel` — pas de `targetOverride`, ce sont des indicateurs
+   *  d'axe, sans cible propre à un critère de succès de chantier). `undefined` — rien n'est
+   *  fabriqué — tant que la mesure ET la cible ne sont pas toutes deux connues. Calculée une seule
+   *  fois et partagée par les deux call sites : le visuel compact `IndicatorReadingBadge` de la
+   *  puce d'axe (ci-dessous, `renderAxisRoadmapHeader`) et le texte `formatIndicatorReading` de la
+   *  liste popover "indicateurs" du bandeau récap (~ligne 1142). */
+  const getIndicatorReading = (
+    indicator: Indicator
+  ): { current: number; target: number; unit?: string } | undefined => {
     const reading = readKpi(indicator, measurements);
-    if (reading.current === undefined || reading.target === undefined) return "";
-    const unit = indicator.unit ? ` ${indicator.unit}` : "";
-    return ` · ${reading.current} / ${reading.target}${unit}`;
+    if (reading.current === undefined || reading.target === undefined) return undefined;
+    return { current: reading.current, target: reading.target, unit: indicator.unit };
+  };
+
+  /** Round 29 : suffixe "actuel / cible" d'un indicateur — UNIQUEMENT pour le call site "texte"
+   *  (item de la liste du `ChipPopover` "indicateurs", ~ligne 1142) : ce popover n'affiche que du
+   *  texte pour ses autres entrées (nom d'axe/chantier), `formatIndicatorReading` reste donc une
+   *  chaîne simple pour rester cohérent avec elles, plutôt que d'y glisser le seul item habillé de
+   *  JSX. Round 30 : libellés "Actuel"/"Cible" explicites (mêmes clés que `SuccessKpiList`) au lieu
+   *  d'un bare "/" — même motif que `IndicatorReadingBadge` (le retour utilisateur visait aussi
+   *  cette confusion), sans visuel ici puisque ce call site reste du texte plat. */
+  const formatIndicatorReading = (indicator: Indicator): string => {
+    const reading = getIndicatorReading(indicator);
+    if (!reading) return "";
+    const unit = reading.unit ? ` ${reading.unit}` : "";
+    const currentLabel = t("strategicChantierDetail.successKpis.current", "Actuel");
+    const targetLabel = t("strategicChantierDetail.successKpis.target", "Cible");
+    return ` · ${currentLabel} ${reading.current}${unit} · ${targetLabel} ${reading.target}${unit}`;
   };
 
   // Chantiers regroupés par axe — porté depuis `StrategicAxesView.tsx`, alimente
@@ -727,6 +748,10 @@ export function StrategicDashboardView() {
                 {shownIndicators.map((indicator) => {
                   const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
                   const clickable = isIndicatorPillClickable(indicator);
+                  // Round 30 : `undefined` (mesure ou cible manquante) → repli EXACT sur l'ancienne
+                  // puce "#N · nom" à une seule ligne, `IndicatorReadingBadge` ne s'affiche que
+                  // quand les deux valeurs sont connues (aucune valeur fabriquée).
+                  const reading = getIndicatorReading(indicator);
                   return (
                     <button
                       key={indicator.id}
@@ -740,7 +765,7 @@ export function StrategicDashboardView() {
                       onClick={
                         clickable ? () => router.push(`/kpi?indicator=${indicator.id}`) : undefined
                       }
-                      className={`flex min-h-[20px] max-w-[260px] shrink-0 items-center rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition ${
+                      className={`flex min-h-[20px] max-w-[260px] shrink-0 flex-col items-start justify-center gap-0.5 rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition ${
                         clickable ? "hover:bg-black hover:text-white" : "cursor-default"
                       } ${
                         atRisk
@@ -748,7 +773,17 @@ export function StrategicDashboardView() {
                           : "bg-neutral-100 text-secondary"
                       }`}
                     >
-                      {`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}${formatIndicatorReading(indicator)}`}
+                      <span>{`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}</span>
+                      {reading && (
+                        <IndicatorReadingBadge
+                          current={reading.current}
+                          target={reading.target}
+                          unit={reading.unit}
+                          status={resolveIndicatorStatus(indicator)}
+                          currentLabel={t("strategicChantierDetail.successKpis.current", "Actuel")}
+                          targetLabel={t("strategicChantierDetail.successKpis.target", "Cible")}
+                        />
+                      )}
                     </button>
                   );
                 })}
