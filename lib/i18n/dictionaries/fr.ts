@@ -1606,6 +1606,20 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.approval.approve": "Approuver",
   "strategicChantierDetail.milestones.approval.reject": "Rejeter",
 
+  // Round "actions clés du jalon" : actions personnalisées ajoutées par le pilote du projet, en
+  // plus des items fixes ci-dessous — même style de rendu (`MilestoneChecklistPanel.tsx`), mais
+  // libellé libre. Réutilisées telles quelles par l'aperçu de création (`MilestonePreviewEditor.tsx`).
+  "strategicChantierDetail.milestones.customActions.placeholder": "Nouvelle action…",
+  "strategicChantierDetail.milestones.customActions.add": "Ajouter une action",
+  "strategicChantierDetail.milestones.customActions.remove": "Supprimer cette action",
+
+  // Round "aperçu jalons création" : aperçu J0→J4 affiché dans le formulaire de création d'un
+  // projet, avant validation (`MilestonePreviewEditor.tsx`).
+  "strategicChantierDetail.milestones.preview.title": "Aperçu des jalons J0→J4",
+  "strategicChantierDetail.milestones.preview.hint":
+    "Les actions ci-dessous sont pré-remplies pour tout projet. Ajoutez des actions spécifiques à ce projet pour chaque jalon si besoin — vous pourrez aussi les ajuster plus tard.",
+  "strategicChantierDetail.milestones.preview.itemsCount": "{n} action(s)",
+
   "strategicChantierDetail.milestones.item.E0_A1": "Dépendances / prérequis satisfaits",
   "strategicChantierDetail.milestones.item.E0_A2": "Clients / commanditaire identifiés",
   "strategicChantierDetail.milestones.item.E0_B1": "Enjeux formalisés",

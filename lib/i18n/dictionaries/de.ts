@@ -1508,6 +1508,15 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.approval.approve": "Genehmigen",
   "strategicChantierDetail.milestones.approval.reject": "Ablehnen",
 
+  "strategicChantierDetail.milestones.customActions.placeholder": "Neue Aktion…",
+  "strategicChantierDetail.milestones.customActions.add": "Aktion hinzufügen",
+  "strategicChantierDetail.milestones.customActions.remove": "Diese Aktion entfernen",
+
+  "strategicChantierDetail.milestones.preview.title": "Vorschau der Meilensteine J0→J4",
+  "strategicChantierDetail.milestones.preview.hint":
+    "Die folgenden Aktionen sind für jedes Projekt vorausgefüllt. Fügen Sie bei Bedarf projektspezifische Aktionen zu jedem Meilenstein hinzu — Sie können sie auch später anpassen.",
+  "strategicChantierDetail.milestones.preview.itemsCount": "{n} Aktion(en)",
+
   "strategicChantierDetail.milestones.item.E0_A1": "Abhängigkeiten / Voraussetzungen erfüllt",
   "strategicChantierDetail.milestones.item.E0_A2": "Kunden / Auftraggeber identifiziert",
   "strategicChantierDetail.milestones.item.E0_B1": "Herausforderungen formalisiert",

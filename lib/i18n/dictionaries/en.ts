@@ -1516,6 +1516,15 @@ const en: Record<string, string> = {
   "strategicChantierDetail.milestones.approval.approve": "Approve",
   "strategicChantierDetail.milestones.approval.reject": "Reject",
 
+  "strategicChantierDetail.milestones.customActions.placeholder": "New action…",
+  "strategicChantierDetail.milestones.customActions.add": "Add an action",
+  "strategicChantierDetail.milestones.customActions.remove": "Remove this action",
+
+  "strategicChantierDetail.milestones.preview.title": "J0→J4 milestone preview",
+  "strategicChantierDetail.milestones.preview.hint":
+    "The actions below are pre-filled for every project. Add project-specific actions to any milestone if needed — you can also adjust them later.",
+  "strategicChantierDetail.milestones.preview.itemsCount": "{n} action(s)",
+
   "strategicChantierDetail.milestones.item.E0_A1": "Dependencies / prerequisites satisfied",
   "strategicChantierDetail.milestones.item.E0_A2": "Clients / sponsor identified",
   "strategicChantierDetail.milestones.item.E0_B1": "Stakes formalized",

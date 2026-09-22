@@ -14,6 +14,7 @@ import {
 } from "@/components/strategic/StaffingDraftTable";
 import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
 import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
+import { MilestonePreviewEditor } from "@/components/strategic/MilestonePreviewEditor";
 import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
 import { ProjetWeightsEditor } from "@/components/strategic/ProjetWeightsEditor";
 import { DeleteRequestModal } from "@/components/strategic/DeleteRequestModal";
@@ -84,6 +85,8 @@ import type {
   Deliverable,
   DeliverablePhase,
   Indicator,
+  MilestoneCustomAction,
+  MilestoneId,
   ProjetKanbanStatus,
   MaturityStageConfig,
 } from "@/types";
@@ -895,9 +898,15 @@ function ChantierActionForm({
    *  `ChantierDetailPanel.tsx`, l'`onSubmit` du "Nouveau projet"). Volontairement PAS ajouté à
    *  `ChantierActionFormValues` : ce type est aussi celui de l'édition, où ce brouillon n'a pas de
    *  sens (le staffing s'y modifie via le vrai `ChantierStaffingEditor`, pas via ce formulaire). */
+  /** `draftCustomMilestoneActions` : actions personnalisées ajoutées jalon par jalon dans l'aperçu
+   *  J0→J4 ci-dessous (round "aperçu jalons création", `MilestonePreviewEditor`) — vide si
+   *  `showStaffingDraft` est `false`, ou si l'utilisateur n'a rien ajouté. Même discipline que
+   *  `draftStaffing` : bufferisé en mémoire ici, converti par l'appelant en
+   *  `ChantierAction.customMilestoneActions` une fois le projet réellement créé/approuvé. */
   onSubmit: (
     values: ChantierActionFormValues,
-    draftStaffing: StaffingDraftRow[]
+    draftStaffing: StaffingDraftRow[],
+    draftCustomMilestoneActions: Partial<Record<MilestoneId, MilestoneCustomAction[]>>
   ) => void | Promise<void>;
   onCancel: () => void;
   labels: ChantierActionFormLabels;
@@ -943,6 +952,12 @@ function ChantierActionForm({
   // (l'édition ne passe pas `showStaffingDraft`, donc ne rend jamais `StaffingDraftTable` et ne lit
   // jamais cet état).
   const [staffingDraft, setStaffingDraft] = useState<StaffingDraftRow[]>([]);
+  // Brouillon d'actions personnalisées J0→J4 (round "aperçu jalons création", `showStaffingDraft`
+  // uniquement, même garde que `staffingDraft` ci-dessus) — jamais réinitialisé depuis `initial`
+  // pour la même raison : l'édition ne rend jamais `MilestonePreviewEditor`.
+  const [customMilestoneActionsDraft, setCustomMilestoneActionsDraft] = useState<
+    Partial<Record<MilestoneId, MilestoneCustomAction[]>>
+  >({});
   const [description, setDescription] = useState(initial?.description ?? "");
   // Un champ de saisie PAR livrable (plus de convention « une ligne = un livrable »), chacun
   // portant ses propres sous-étapes temporelles.
@@ -1064,7 +1079,8 @@ function ChantierActionForm({
           ...(parsedDeliverables.length > 0 ? { deliverables: parsedDeliverables } : {}),
           ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
         },
-        staffingDraft
+        staffingDraft,
+        customMilestoneActionsDraft
       );
     } catch (error) {
       // `onSubmit` (fourni par l'appelant) porte déjà son propre try/catch + `showToast` autour de
@@ -1208,6 +1224,19 @@ function ChantierActionForm({
             />
           </div>
         </div>
+      )}
+
+      {/* ── Aperçu J0→J4 (round "aperçu jalons création") — SEULEMENT à la création, même garde
+        que le brouillon ETP ci-dessus : retour PO explicite, « je veux voir et ajuster les actions
+        de chaque jalon AVANT de valider la création de mon projet ». Structure fixe en lecture
+        seule (`MILESTONE_CHECKLISTS`, inchangée pour tout projet) + actions personnalisées
+        bufferisées ici, converties par l'appelant en `ChantierAction.customMilestoneActions` une
+        fois le projet réellement créé/approuvé (voir `MilestonePreviewEditor.tsx`). ───────────── */}
+      {showStaffingDraft && (
+        <MilestonePreviewEditor
+          value={customMilestoneActionsDraft}
+          onChange={setCustomMilestoneActionsDraft}
+        />
       )}
 
       <div>
@@ -2552,21 +2581,35 @@ export function ChantierDetailPanel({
                   showStaffingDraft={actionForm.mode === "create"}
                   labels={actionFormLabels}
                   onCancel={() => setActionForm(null)}
-                  onSubmit={async (values, draftStaffing) => {
+                  onSubmit={async (values, draftStaffing, draftCustomMilestoneActions) => {
                     try {
                       if (actionForm.mode === "edit" && actionForm.actionId) {
                         await data.updateChantierAction(actionForm.actionId, values);
                         showToast(t("strategicAxes.actionUpdated"), values.name, "success");
                       } else {
+                        // `customMilestoneActions` (round "aperçu jalons création") n'est ajouté
+                        // que si l'utilisateur a réellement saisi au moins une action dans l'aperçu
+                        // — jamais une clé vide `{}` par défaut, même discipline "clés OMISES" que
+                        // le reste de ce formulaire (voir `ChantierActionForm`'s `submit`).
+                        const hasCustomMilestoneActions =
+                          Object.keys(draftCustomMilestoneActions).length > 0;
                         const action = {
                           ...values,
                           chantierId: chantier.id,
                           id: newProjetId(),
                           companyId: user?.companyId ?? "",
+                          ...(hasCustomMilestoneActions
+                            ? { customMilestoneActions: draftCustomMilestoneActions }
+                            : {}),
                         } as ChantierAction;
                         // Côté demande d'approbation, `action.id` (pré-généré ci-dessus) EST l'id
                         // définitif du projet une fois approuvé (`applyApprovedPayload`, cas
                         // "projet_create") : c'est celui-là qu'on rattache aux lignes ETP du payload.
+                        // `customMilestoneActions` posé directement sur `action` ci-dessus voyage
+                        // avec elle sans plomberie supplémentaire : `applyApprovedPayload` pousse
+                        // `payload.action` tel quel dans `effects.saveActions` (vérifié, contrairement
+                        // au brouillon ETP round 29, qui a besoin d'un champ de payload séparé car
+                        // `ChantierStaffing` est une collection distincte).
                         const pendingStaffing = draftStaffing.map((row) =>
                           draftRowToStaffing(row, {
                             companyId: user?.companyId ?? "",
@@ -2583,6 +2626,9 @@ export function ChantierDetailPanel({
                             const created = await data.createChantierAction({
                               ...values,
                               chantierId: chantier.id,
+                              ...(hasCustomMilestoneActions
+                                ? { customMilestoneActions: draftCustomMilestoneActions }
+                                : {}),
                             });
                             // Révèle immédiatement le nouveau projet (retour PO : « je ne vois pas
                             // où renseigner J0/J1/J2 » après création) — ses jalons E0→E4 sont déjà
@@ -3042,6 +3088,11 @@ export function ChantierDetailPanel({
                                   data.chantiers,
                                   data.chantierActions
                                 )}
+                                customActions={
+                                  action.customMilestoneActions?.[
+                                    actionMilestones.currentMilestone
+                                  ] ?? []
+                                }
                                 users={data.users}
                                 onChange={(nextItems) => {
                                   updateActionMilestones(action.id, {
@@ -3051,6 +3102,41 @@ export function ChantierDetailPanel({
                                       ...actionMilestones.checklists,
                                       [actionMilestones.currentMilestone]: nextItems,
                                     },
+                                  });
+                                }}
+                                // Round "actions clés du jalon" : ajout/suppression bufferisés nulle
+                                // part — écriture Firestore immédiate comme le reste de ce panneau
+                                // (`onChange` ci-dessus), jamais de `undefined` dans le patch (une
+                                // clé de jalon vidée de toute action est simplement omise, même
+                                // discipline que `ChantierMilestoneState.checklists`).
+                                onAddCustomAction={(label) => {
+                                  const milestoneId = actionMilestones.currentMilestone;
+                                  const newAction: MilestoneCustomAction = {
+                                    id: `CUSTOM-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+                                    label,
+                                  };
+                                  const existing =
+                                    action.customMilestoneActions?.[milestoneId] ?? [];
+                                  data.updateChantierAction(action.id, {
+                                    customMilestoneActions: {
+                                      ...action.customMilestoneActions,
+                                      [milestoneId]: [...existing, newAction],
+                                    },
+                                  });
+                                }}
+                                onRemoveCustomAction={(id) => {
+                                  const milestoneId = actionMilestones.currentMilestone;
+                                  const remaining = (
+                                    action.customMilestoneActions?.[milestoneId] ?? []
+                                  ).filter((a) => a.id !== id);
+                                  const nextByMilestone = { ...action.customMilestoneActions };
+                                  if (remaining.length > 0) {
+                                    nextByMilestone[milestoneId] = remaining;
+                                  } else {
+                                    delete nextByMilestone[milestoneId];
+                                  }
+                                  data.updateChantierAction(action.id, {
+                                    customMilestoneActions: nextByMilestone,
                                   });
                                 }}
                                 milestoneApproval={action.milestoneApproval}

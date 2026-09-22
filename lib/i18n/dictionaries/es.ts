@@ -1506,6 +1506,15 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.approval.approve": "Aprobar",
   "strategicChantierDetail.milestones.approval.reject": "Rechazar",
 
+  "strategicChantierDetail.milestones.customActions.placeholder": "Nueva acción…",
+  "strategicChantierDetail.milestones.customActions.add": "Añadir una acción",
+  "strategicChantierDetail.milestones.customActions.remove": "Eliminar esta acción",
+
+  "strategicChantierDetail.milestones.preview.title": "Vista previa de los hitos J0→J4",
+  "strategicChantierDetail.milestones.preview.hint":
+    "Las acciones siguientes están precargadas para todo proyecto. Añada acciones específicas de este proyecto a cualquier hito si es necesario — también podrá ajustarlas más tarde.",
+  "strategicChantierDetail.milestones.preview.itemsCount": "{n} acción(es)",
+
   "strategicChantierDetail.milestones.item.E0_A1": "Dependencias / requisitos previos satisfechos",
   "strategicChantierDetail.milestones.item.E0_A2": "Clientes / comanditario identificados",
   "strategicChantierDetail.milestones.item.E0_B1": "Retos formalizados",

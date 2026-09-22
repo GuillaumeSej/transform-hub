@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { UserPicker } from "@/components/strategic/UserPicker";
 import {
@@ -14,6 +16,7 @@ import type {
   AuthUser,
   ChantierMilestoneApproval,
   MilestoneChecklistItem,
+  MilestoneCustomAction,
   MilestoneId,
 } from "@/types";
 
@@ -113,8 +116,11 @@ export function MilestoneChecklistPanel({
   milestoneId,
   items,
   autoFlags,
+  customActions,
   users,
   onChange,
+  onAddCustomAction,
+  onRemoveCustomAction,
   milestoneApproval,
   canSubmitApproval,
   canApproveMilestone,
@@ -131,15 +137,30 @@ export function MilestoneChecklistPanel({
    *  l'appelant (`resolveMilestoneAutoFlags`, round 12 : renvoie un nombre plutôt qu'un
    *  `ChecklistFlag`). */
   autoFlags: Record<string, number>;
+  /** Actions personnalisées AJOUTÉES par le pilote du projet pour CE jalon (round "actions clés du
+   *  jalon", voir `MilestoneCustomAction`, types/index.ts) — typiquement
+   *  `action.customMilestoneActions?.[milestoneId] ?? []`. Rendues dans le MÊME style qu'un item
+   *  fixe manuel (barre de progression 0-100), mais avec un libellé LIBRE (`custom.label`, jamais
+   *  une clé i18n) et un bouton de suppression. */
+  customActions: MilestoneCustomAction[];
   users: AuthUser[];
   onChange: (nextItems: MilestoneChecklistItem[]) => void;
+  /** Ajoute une action personnalisée à CE jalon (libellé libre) — n'est rendu appelable (voir
+   *  `canSubmitApproval` ci-dessous) qu'au propriétaire du projet ou à un admin, cohérent avec qui
+   *  contrôle déjà les autres saisies de ce panneau. */
+  onAddCustomAction: (label: string) => void;
+  /** Retire une action personnalisée de CE jalon (par id) — même habilitation que
+   *  `onAddCustomAction`. */
+  onRemoveCustomAction: (id: string) => void;
   /** Demande de validation en cours sur CE projet, quel que soit son jalon cible (voir
    *  `ChantierAction.milestoneApproval`) — `undefined` = pas de demande en cours. */
   milestoneApproval?: ChantierMilestoneApproval;
   /** Propriétaire du projet ou admin (voir `requestMilestoneApproval`, lib/axisLogic.ts) : seul cas
    *  où le bouton "Valider le jalon" est rendu (mirroir du `canSubmitApproval` de
    *  `LeverDetailClientPerformance.tsx`, qui masque de même le bouton "Soumettre pour validation"
-   *  plutôt que de le désactiver pour un non-habilité). */
+   *  plutôt que de le désactiver pour un non-habilité). Réutilisé pour gater l'ajout/la suppression
+   *  d'actions personnalisées : seul qui pourrait soumettre le jalon peut aussi en modifier la
+   *  liste d'actions clés. */
   canSubmitApproval: boolean;
   /** `strategic_lead` du chantier parent ou admin (voir `approveMilestoneGate`) — affiche le bouton
    *  "Approuver" sur une demande en cours. */
@@ -153,6 +174,7 @@ export function MilestoneChecklistPanel({
 }) {
   const { t } = useTranslation();
   const defs = MILESTONE_CHECKLISTS[milestoneId];
+  const [newCustomLabel, setNewCustomLabel] = useState("");
 
   const findStored = (itemId: string) => items.find((i) => i.itemId === itemId);
 
@@ -167,13 +189,147 @@ export function MilestoneChecklistPanel({
     onChange(next);
   };
 
-  // Fusion défs + valeurs live (auto) / valeurs stockées (manuel) — c'est CE tableau qu'on passe à
-  // `canPassMilestone`, jamais `items` brut (qui ignore les items auto). Extrait dans
-  // `lib/axisLogic.ts` (round "jalon validation gate") : `requestMilestoneApproval` doit appliquer
-  // EXACTEMENT la même fusion pour que le bouton ci-dessous et le verrou serveur ne divergent jamais.
-  const mergedItems = mergeMilestoneChecklistItems(milestoneId, items, autoFlags);
+  const handleAddCustomAction = () => {
+    const label = newCustomLabel.trim();
+    if (!label) return;
+    onAddCustomAction(label);
+    setNewCustomLabel("");
+  };
+
+  // Fusion défs + valeurs live (auto) / valeurs stockées (manuel) / actions personnalisées — c'est
+  // CE tableau qu'on passe à `canPassMilestone`, jamais `items` brut (qui ignore les items auto et
+  // personnalisés). Extrait dans `lib/axisLogic.ts` (round "jalon validation gate") :
+  // `requestMilestoneApproval` doit appliquer EXACTEMENT la même fusion pour que le bouton
+  // ci-dessous et le verrou serveur ne divergent jamais.
+  const mergedItems = mergeMilestoneChecklistItems(milestoneId, items, autoFlags, customActions);
 
   const { canPass, reasons } = canPassMilestone(milestoneId, mergedItems);
+
+  /** Rendu d'UN item manuel éditable (0-100 + plan d'action si partiel) — factorisé pour être
+   *  partagé entre les items FIXES (`defs`, libellé i18n) et les actions PERSONNALISÉES (libellé
+   *  libre + bouton de suppression optionnel). `label` est déjà résolu par l'appelant (soit
+   *  `t(def.i18nKey)`, soit `custom.label` tel quel — jamais traduit, voir `MilestoneCustomAction`). */
+  const renderManualItemRow = (itemId: string, label: ReactNode, onRemove?: () => void) => {
+    const stored = findStored(itemId);
+    const pct = stored?.progressPct;
+    const bucket = progressBucket(pct);
+    const isPartial = bucket === "amber";
+
+    const patchActionPlan = (
+      fieldPatch: Partial<NonNullable<MilestoneChecklistItem["actionPlan"]>>
+    ) =>
+      patchManualItem(itemId, {
+        actionPlan: {
+          description: stored?.actionPlan?.description ?? "",
+          ...stored?.actionPlan,
+          ...fieldPatch,
+        },
+      });
+
+    const handlePctChange = (raw: string) => {
+      if (raw.trim() === "") {
+        patchManualItem(itemId, { progressPct: undefined });
+        return;
+      }
+      const parsed = Number(raw);
+      if (Number.isNaN(parsed)) return;
+      patchManualItem(itemId, { progressPct: Math.max(0, Math.min(100, parsed)) });
+    };
+
+    return (
+      <div key={itemId} className="space-y-2">
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+          <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-primary sm:flex-1">
+            <span className="min-w-0 flex-1">{label}</span>
+            {onRemove && (
+              <button
+                type="button"
+                onClick={onRemove}
+                aria-label={t("strategicChantierDetail.milestones.customActions.remove")}
+                title={t("strategicChantierDetail.milestones.customActions.remove")}
+                className="shrink-0 rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
+          </span>
+          <div className="flex items-center gap-2 sm:w-56 sm:shrink-0">
+            <span
+              aria-hidden
+              className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${BUCKET_DOT_CLASS[bucket]}`}
+            />
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={5}
+              inputMode="numeric"
+              value={pct ?? ""}
+              onChange={(e) => handlePctChange(e.target.value)}
+              placeholder="—"
+              aria-label={t("strategicChantierDetail.milestones.actionPlan.progressAriaLabel")}
+              className={`w-20 flex-1 rounded-md border-2 px-2 py-1.5 text-center text-[12.5px] font-semibold outline-none transition focus:border-bp-coral ${BUCKET_INPUT_CLASS[bucket]}`}
+            />
+            <span className="shrink-0 text-[11px] text-tertiary">%</span>
+          </div>
+        </div>
+
+        {isPartial && (
+          <div className="space-y-2 rounded-md border border-rag-amber-light bg-rag-amber-light/20 p-3">
+            <div>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("strategicChantierDetail.milestones.actionPlan.description")}
+              </label>
+              <textarea
+                rows={2}
+                value={stored?.actionPlan?.description ?? ""}
+                onChange={(e) => patchActionPlan({ description: e.target.value })}
+                className={INPUT_CLASS}
+              />
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="sm:flex-1">
+                <UserPicker
+                  users={users}
+                  value={stored?.actionPlan?.owner}
+                  onChange={(username) => patchActionPlan({ owner: username })}
+                  label={t("strategicChantierDetail.milestones.actionPlan.owner")}
+                  id={`milestone-owner-${itemId}`}
+                />
+              </div>
+              <div>
+                <label
+                  className="text-xs font-medium text-text-secondary"
+                  htmlFor={`milestone-due-${itemId}`}
+                >
+                  {t("strategicChantierDetail.milestones.actionPlan.dueDate")}
+                </label>
+                <input
+                  id={`milestone-due-${itemId}`}
+                  type="date"
+                  value={stored?.actionPlan?.dueDate ?? ""}
+                  onChange={(e) => patchActionPlan({ dueDate: e.target.value })}
+                  className={SMALL_INPUT_CLASS}
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-1.5 text-[11.5px] font-medium text-secondary">
+              <input
+                type="checkbox"
+                checked={stored?.resolved ?? false}
+                onChange={(e) =>
+                  patchManualItem(itemId, {
+                    resolved: e.target.checked,
+                  })
+                }
+              />
+              {t("strategicChantierDetail.milestones.actionPlan.markResolved")}
+            </label>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -198,117 +354,47 @@ export function MilestoneChecklistPanel({
             );
           }
 
-          const stored = findStored(def.itemId);
-          const pct = stored?.progressPct;
-          const bucket = progressBucket(pct);
-          const isPartial = bucket === "amber";
-
-          const patchActionPlan = (
-            fieldPatch: Partial<NonNullable<MilestoneChecklistItem["actionPlan"]>>
-          ) =>
-            patchManualItem(def.itemId, {
-              actionPlan: {
-                description: stored?.actionPlan?.description ?? "",
-                ...stored?.actionPlan,
-                ...fieldPatch,
-              },
-            });
-
-          const handlePctChange = (raw: string) => {
-            if (raw.trim() === "") {
-              patchManualItem(def.itemId, { progressPct: undefined });
-              return;
-            }
-            const parsed = Number(raw);
-            if (Number.isNaN(parsed)) return;
-            patchManualItem(def.itemId, { progressPct: Math.max(0, Math.min(100, parsed)) });
-          };
-
-          return (
-            <div key={def.itemId} className="space-y-2">
-              <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-                <span className="text-[12.5px] font-medium text-primary sm:flex-1">
-                  {t(def.i18nKey)}
-                </span>
-                <div className="flex items-center gap-2 sm:w-56 sm:shrink-0">
-                  <span
-                    aria-hidden
-                    className={`inline-block h-3.5 w-3.5 shrink-0 rounded-full ${BUCKET_DOT_CLASS[bucket]}`}
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={5}
-                    inputMode="numeric"
-                    value={pct ?? ""}
-                    onChange={(e) => handlePctChange(e.target.value)}
-                    placeholder="—"
-                    aria-label={t(
-                      "strategicChantierDetail.milestones.actionPlan.progressAriaLabel"
-                    )}
-                    className={`w-20 flex-1 rounded-md border-2 px-2 py-1.5 text-center text-[12.5px] font-semibold outline-none transition focus:border-bp-coral ${BUCKET_INPUT_CLASS[bucket]}`}
-                  />
-                  <span className="shrink-0 text-[11px] text-tertiary">%</span>
-                </div>
-              </div>
-
-              {isPartial && (
-                <div className="space-y-2 rounded-md border border-rag-amber-light bg-rag-amber-light/20 p-3">
-                  <div>
-                    <label className="text-xs font-medium text-text-secondary">
-                      {t("strategicChantierDetail.milestones.actionPlan.description")}
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={stored?.actionPlan?.description ?? ""}
-                      onChange={(e) => patchActionPlan({ description: e.target.value })}
-                      className={INPUT_CLASS}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <div className="sm:flex-1">
-                      <UserPicker
-                        users={users}
-                        value={stored?.actionPlan?.owner}
-                        onChange={(username) => patchActionPlan({ owner: username })}
-                        label={t("strategicChantierDetail.milestones.actionPlan.owner")}
-                        id={`milestone-owner-${def.itemId}`}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        className="text-xs font-medium text-text-secondary"
-                        htmlFor={`milestone-due-${def.itemId}`}
-                      >
-                        {t("strategicChantierDetail.milestones.actionPlan.dueDate")}
-                      </label>
-                      <input
-                        id={`milestone-due-${def.itemId}`}
-                        type="date"
-                        value={stored?.actionPlan?.dueDate ?? ""}
-                        onChange={(e) => patchActionPlan({ dueDate: e.target.value })}
-                        className={SMALL_INPUT_CLASS}
-                      />
-                    </div>
-                  </div>
-                  <label className="flex items-center gap-1.5 text-[11.5px] font-medium text-secondary">
-                    <input
-                      type="checkbox"
-                      checked={stored?.resolved ?? false}
-                      onChange={(e) =>
-                        patchManualItem(def.itemId, {
-                          resolved: e.target.checked,
-                        })
-                      }
-                    />
-                    {t("strategicChantierDetail.milestones.actionPlan.markResolved")}
-                  </label>
-                </div>
-              )}
-            </div>
-          );
+          return renderManualItemRow(def.itemId, t(def.i18nKey));
         })}
+
+        {/* ── Actions personnalisées de CE jalon (round "actions clés du jalon") — même rendu
+          qu'un item fixe manuel ci-dessus, seul le libellé (libre, jamais i18n) et le bouton de
+          suppression diffèrent. Le bouton de suppression n'apparaît que pour qui pourrait aussi
+          soumettre le jalon (`canSubmitApproval`), la saisie de progression reste ouverte à tous
+          comme pour les items fixes (ce panneau ne gate déjà aucune autre saisie). ─────────── */}
+        {customActions.map((custom) =>
+          renderManualItemRow(
+            custom.id,
+            custom.label,
+            canSubmitApproval ? () => onRemoveCustomAction(custom.id) : undefined
+          )
+        )}
+
+        {canSubmitApproval && (
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              value={newCustomLabel}
+              onChange={(e) => setNewCustomLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddCustomAction();
+                }
+              }}
+              placeholder={t("strategicChantierDetail.milestones.customActions.placeholder")}
+              aria-label={t("strategicChantierDetail.milestones.customActions.placeholder")}
+              className={`${SMALL_INPUT_CLASS} mt-0 flex-1`}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAddCustomAction}
+              disabled={newCustomLabel.trim().length === 0}
+            >
+              <Plus size={12} /> {t("strategicChantierDetail.milestones.customActions.add")}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="border-t border-border pt-3">
