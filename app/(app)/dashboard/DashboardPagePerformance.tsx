@@ -1483,13 +1483,31 @@ export function DashboardPagePerformance() {
                 : activeView.id === "function"
                   ? functionBars
                   : programBars
-            : (
-                pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
-                  programs,
-                  hierarchyLevels,
-                  hierarchyNodes,
-                }) as PivotRow[]
-              ).map((row) => ({ label: row.label, realized: row.value, target: 0 }))
+            : // `pivotByDimensions` renvoie `PivotRow[]` pour 1 dimension (a `.value`) mais
+              // `Marimekko2DColumn[]` pour 2 (a `.totalSavings`/`.segments`, pas `.value`) — ce
+              // widget ("workstream-breakdown", `WorkstreamBarChart`) ne sait afficher qu'UNE
+              // barre par ligne, jamais la ventilation par segment (réservée au widget "marimekko",
+              // `MarimekkoChart`, cas "marimekko" ci-dessus). Un cast aveugle en `PivotRow[]` sur le
+              // cas 2 dimensions lisait `.value` — `undefined` sur ce type — d'où des montants
+              // manquants sur certaines barres (celles issues d'une vue personnalisée à 2
+              // dimensions) alors que d'autres (vues 1 dimension) s'affichaient normalement. On
+              // choisit ici le bon champ selon le nombre de dimensions réel plutôt que de deviner
+              // par un cast.
+              activeView.dimensions.length === 2
+              ? (
+                  pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
+                    programs,
+                    hierarchyLevels,
+                    hierarchyNodes,
+                  }) as engine.Marimekko2DColumn[]
+                ).map((col) => ({ label: col.label, realized: col.totalSavings, target: 0 }))
+              : (
+                  pivotByDimensions(filteredData, activeView.metric, activeView.dimensions, {
+                    programs,
+                    hierarchyLevels,
+                    hierarchyNodes,
+                  }) as PivotRow[]
+                ).map((row) => ({ label: row.label, realized: row.value, target: 0 }))
           : [];
         return renderWidgetShell(
           instance,

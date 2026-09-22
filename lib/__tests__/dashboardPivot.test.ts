@@ -209,6 +209,30 @@ describe("dashboardPivot — pivotByDimensions (1 dimension)", () => {
     const rows = pivotByDimensions(data, "netSavings", ["country"]) as PivotRow[];
     expect(rows.find((r) => r.key === "France")?.value).toBe(6);
   });
+
+  // Un levier sans pays/géographie/entité précis n'est pas "non renseigné" (un champ oublié) au
+  // sens des autres dimensions (levier, type, owner...) : c'est un périmètre mondial, "Global" est
+  // le libellé attendu (demande PO explicite) — jamais "—"/vide/un libellé différent selon l'écran,
+  // et surtout jamais un montant manquant (le bug live original).
+  it("groups levers with a blank geography under 'Global', with their amount intact, not 'Non renseigné'", () => {
+    const data = makeData([
+      { ...baseLever, id: "L001", country: "", netSavings: 5 },
+      { ...baseLever, id: "L002", country: "", netSavings: 3 },
+      { ...baseLever, id: "L003", country: "France", netSavings: 1 },
+    ]);
+    const rows = pivotByDimensions(data, "netSavings", ["country"]) as PivotRow[];
+    const global = rows.find((r) => r.key === "Global");
+    expect(global).toBeDefined();
+    expect(global?.value).toBe(8);
+    expect(rows.some((r) => r.key === "Non renseigné")).toBe(false);
+  });
+
+  it("still falls back to 'Non renseigné' (not 'Global') for a non-geographic dimension left blank", () => {
+    const data = makeData([{ ...baseLever, id: "L001", function: "", netSavings: 5 }]);
+    const rows = pivotByDimensions(data, "netSavings", ["function"]) as PivotRow[];
+    expect(rows.find((r) => r.key === "Non renseigné")?.value).toBe(5);
+    expect(rows.some((r) => r.key === "Global")).toBe(false);
+  });
 });
 
 describe("dashboardPivot — pivotByDimensions (2 dimensions)", () => {

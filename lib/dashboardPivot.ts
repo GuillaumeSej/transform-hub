@@ -129,9 +129,16 @@ export interface DimensionDef {
   key: string;
   label: string;
   getValue: (lever: Lever, ctx: PivotContext) => string;
+  /** Libellé de repli quand `getValue` renvoie vide, spécifique à CETTE dimension — remplace
+   *  `FALLBACK_LABEL` par défaut. Utilisé pour les dimensions géographiques (geography/country/
+   *  entity) : un levier sans pays précis n'est pas "non renseigné" au sens d'un champ oublié,
+   *  c'est un levier dont le périmètre est mondial/multi-pays — "Global" est le libellé attendu
+   *  (demande PO explicite), jamais un "—"/"Non attribué" différent selon l'écran. */
+  fallbackLabel?: string;
 }
 
 const FALLBACK_LABEL = "Non renseigné";
+const GEOGRAPHY_FALLBACK_LABEL = "Global";
 
 /** Dimensions sélectionnables — ancrées sur les champs catégoriels réels du levier, dans le même
  *  esprit que les `FilterDef` de `app/(app)/levers/page.tsx` (paire clé + libellé + accesseur de
@@ -148,9 +155,24 @@ export const DIMENSION_REGISTRY: DimensionDef[] = [
   },
   { key: "owner", label: "Owner", getValue: (l) => l.owner || FALLBACK_LABEL },
   { key: "sponsor", label: "Sponsor", getValue: (l) => l.sponsor || FALLBACK_LABEL },
-  { key: "geography", label: "Géographie", getValue: (l) => l.geography || FALLBACK_LABEL },
-  { key: "country", label: "Pays", getValue: (l) => l.country || FALLBACK_LABEL },
-  { key: "entity", label: "Entité", getValue: (l) => l.entity || FALLBACK_LABEL },
+  {
+    key: "geography",
+    label: "Géographie",
+    getValue: (l) => l.geography ?? "",
+    fallbackLabel: GEOGRAPHY_FALLBACK_LABEL,
+  },
+  {
+    key: "country",
+    label: "Pays",
+    getValue: (l) => l.country ?? "",
+    fallbackLabel: GEOGRAPHY_FALLBACK_LABEL,
+  },
+  {
+    key: "entity",
+    label: "Entité",
+    getValue: (l) => l.entity ?? "",
+    fallbackLabel: GEOGRAPHY_FALLBACK_LABEL,
+  },
   { key: "function", label: "Fonction", getValue: (l) => l.function || FALLBACK_LABEL },
   { key: "risk", label: "Risque", getValue: (l) => l.risk || FALLBACK_LABEL },
   {
@@ -244,7 +266,7 @@ function groupByDimension(
   const map = new Map<string, Lever[]>();
   levers.forEach((l) => {
     const raw = dim.getValue(l, ctx);
-    const key = raw && raw.trim() !== "" ? raw : FALLBACK_LABEL;
+    const key = raw && raw.trim() !== "" ? raw : (dim.fallbackLabel ?? FALLBACK_LABEL);
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(l);
   });

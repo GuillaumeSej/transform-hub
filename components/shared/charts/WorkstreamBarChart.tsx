@@ -269,90 +269,6 @@ function TotalTags({
   );
 }
 
-/** Légendes sur le côté : pour la dernière barre, une pastille de la couleur du segment reliée
- *  par un petit trait au segment (gris = cible réactualisée, rouge = réalisé, pointillé = planifié
- *  initial). Positions verticales espacées d'au moins 16 px pour éviter tout chevauchement. */
-function SideCallouts({
-  data,
-  hasPlanned,
-  labels,
-  barW,
-}: {
-  data: ChartDatum[];
-  hasPlanned: boolean;
-  labels: [string, string, string];
-  barW: number;
-}) {
-  const centers = useCategoryCenters(data.length);
-  const yScale = useYAxisScale();
-  const plot = usePlotArea();
-  const last = data[data.length - 1];
-  if (!centers || !yScale || !plot || !last || !Number.isFinite(plot.x + plot.width)) return null;
-  const cx = centers[data.length - 1];
-  const barRight = cx + barW / 2 + 4;
-  const yTop = (v: number) => (yScale(v) as number) ?? 0;
-  const stackTop = Math.max(last.target, last.realized);
-  const items = [
-    {
-      key: "t",
-      label: labels[0],
-      y: (yTop(last.realized) + yTop(stackTop)) / 2,
-      color: "rgba(107,93,87,0.6)",
-      dashed: false,
-      show: last.target > last.realized,
-    },
-    {
-      key: "r",
-      label: labels[1],
-      y: (yTop(0) + yTop(last.realized)) / 2,
-      color: "#FF3C47",
-      dashed: false,
-      show: true,
-    },
-    {
-      key: "p",
-      label: labels[2],
-      y: yTop(last.planned ?? 0),
-      color: "#320300",
-      dashed: true,
-      show: hasPlanned && last.planned !== undefined,
-    },
-  ]
-    .filter((i) => i.show)
-    .sort((a, b) => a.y - b.y);
-  const labelY: number[] = [];
-  items.forEach((it, i) => {
-    labelY.push(i === 0 ? it.y : Math.max(it.y, labelY[i - 1] + 16));
-  });
-  const xText = plot.x + plot.width + 18;
-  return (
-    <g>
-      {items.map((it, i) => (
-        <g key={it.key}>
-          <polyline
-            points={`${barRight},${it.y} ${plot.x + plot.width + 4},${labelY[i]} ${xText - 8},${labelY[i]}`}
-            fill="none"
-            stroke="#6B5D57"
-            strokeWidth={0.75}
-            strokeDasharray={it.dashed ? "3 2" : undefined}
-          />
-          <circle
-            cx={xText - 4}
-            cy={labelY[i]}
-            r={4}
-            fill={it.dashed ? "#fff" : it.color}
-            stroke={it.dashed ? "#320300" : "none"}
-            strokeDasharray={it.dashed ? "2 1.5" : undefined}
-          />
-          <text x={xText + 6} y={labelY[i] + 3.5} fontSize={11} fontWeight={600} fill="#1A1A1A">
-            {it.label}
-          </text>
-        </g>
-      ))}
-    </g>
-  );
-}
-
 /** Savings réalisés vs cible par dimension (workstream, pays, département).
  *
  *  Chaque barre = cible (hauteur totale) avec remplissage coral (réalisé) empilé en bas — la
@@ -535,24 +451,19 @@ export function WorkstreamBarChart({
               legendType="plainline"
             />
           )}
-          {/* Tags/callouts : leur position dans ce JSX n'a AUCUN effet sur l'ordre de peinture réel
-              — Recharts range `<Customized>` sur une couche de z-index fixe (`recharts-customized-
-              wrapper`), systématiquement rendue AVANT celle des `<Bar>` (`recharts-zIndex-layer_1xx`
-              et au-delà), quel que soit l'ordre déclaré ici. C'est pour cette raison que le montant
-              "réalisé" ne peut plus être écrit à l'intérieur du segment coral (voir `TotalTags`) :
-              il serait invisible, recouvert par le remplissage de la barre peint après. */}
+          {/* Tags de montant : leur position dans ce JSX n'a AUCUN effet sur l'ordre de peinture
+              réel — Recharts range `<Customized>` sur une couche de z-index fixe
+              (`recharts-customized-wrapper`), systématiquement rendue AVANT celle des `<Bar>`
+              (`recharts-zIndex-layer_1xx` et au-delà), quel que soit l'ordre déclaré ici. C'est
+              pour cette raison que le montant "réalisé" ne peut plus être écrit à l'intérieur du
+              segment coral (voir `TotalTags`) : il serait invisible, recouvert par le remplissage
+              de la barre peint après.
+              (Round <n> : l'ancien `SideCallouts`, qui dupliquait sur la dernière barre uniquement
+              les libellés déjà donnés par la `<Legend>` ci-dessus, a été retiré — sa position fixe
+              en marge droite pouvait chevaucher le tag de montant de cette même dernière barre,
+              donnant l'impression d'un montant "coupé"/sans détail au bout du graphe.) */}
           <Customized
             component={() => <TotalTags data={chartData} hasPlanned={hasPlanned} fmt={fmt} />}
-          />
-          <Customized
-            component={() => (
-              <SideCallouts
-                data={chartData}
-                hasPlanned={hasPlanned}
-                labels={[resolvedLabelTarget, resolvedLabelRealized, resolvedLabelPlanned]}
-                barW={barW}
-              />
-            )}
           />
         </BarChart>
       </ResponsiveContainer>
