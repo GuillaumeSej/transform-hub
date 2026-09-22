@@ -51,7 +51,9 @@ export function HrKPICard({
       <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-tertiary">
         {label}
         {infoTooltip && (
-          <Tooltip text={infoTooltip}>
+          // position="bottom" : la carte a `overflow-hidden`, une tooltip "top" s'ouvrant au-dessus
+          // de l'icône (tout en haut de la carte) est rognée/invisible — voir KPICard.tsx.
+          <Tooltip text={infoTooltip} position="bottom">
             <Info size={11} className="shrink-0 text-tertiary" />
           </Tooltip>
         )}

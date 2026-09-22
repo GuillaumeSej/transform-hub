@@ -99,7 +99,11 @@ export function KPICard({
           <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-secondary">
             {label}
             {infoTooltip && (
-              <Tooltip text={infoTooltip}>
+              // position="bottom" : la carte a `overflow-hidden` (avant:absolute du liseré de
+              // couleur) — une tooltip "top" (par défaut) s'ouvrant au-dessus de l'icône, tout en
+              // haut de la carte, était rognée/invisible (rien à afficher au-dessus de sa propre
+              // bordure supérieure). "bottom" reste dans les limites de la carte.
+              <Tooltip text={infoTooltip} position="bottom">
                 <Info
                   size={12}
                   className="shrink-0 text-tertiary"
