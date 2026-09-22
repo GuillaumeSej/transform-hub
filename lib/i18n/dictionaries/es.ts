@@ -1721,6 +1721,8 @@ const es: Record<string, string> = {
   "staffing.columnFte": "Tasa de ETC",
   "staffing.columnProjet": "Iniciativa",
   "staffing.projetSectionTitle": "ETC movilizados en esta iniciativa",
+  "staffing.draftHint":
+    "Estas líneas se guardarán en cuanto se cree (o se apruebe) la iniciativa.",
 
   // ─── Página Personal movilizado (/effectifs, Plan Estratégico) ────────────
   "effectifs.title": "Personal y presupuesto movilizados",

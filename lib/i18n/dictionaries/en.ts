@@ -1726,6 +1726,7 @@ const en: Record<string, string> = {
   "staffing.columnFte": "FTE rate",
   "staffing.columnProjet": "Project",
   "staffing.projetSectionTitle": "FTEs assigned to this project",
+  "staffing.draftHint": "These rows will be saved once the project is created (or approved).",
 
   // ─── Staffing page (/effectifs, Strategic Plan) ───────────────────────────
   "effectifs.title": "Mobilized staffing & budget",

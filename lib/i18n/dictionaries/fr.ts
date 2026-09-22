@@ -1835,6 +1835,8 @@ const fr: Record<string, string> = {
   "staffing.columnFte": "Taux ETP",
   "staffing.columnProjet": "Projet",
   "staffing.projetSectionTitle": "ETP mobilisés sur ce projet",
+  "staffing.draftHint":
+    "Ces lignes seront enregistrées dès la création (ou la validation) du projet.",
 
   // ─── Page Effectifs mobilisés (/effectifs, Plan Stratégique) ──────────────
   "effectifs.title": "Effectifs & budget mobilisés",

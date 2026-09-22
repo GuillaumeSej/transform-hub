@@ -8,6 +8,7 @@ import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Modal } from "@/components/shared/Modal";
 import { ChantierStaffingEditor, formatFte } from "@/components/strategic/ChantierStaffingEditor";
+import { StaffingDraftTable, type StaffingDraftRow } from "@/components/strategic/StaffingDraftTable";
 import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
 import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
 import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
@@ -60,6 +61,7 @@ import { cn } from "@/lib/utils";
 import { addDays, parseISO } from "@/lib/dateUtils";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantier } from "@/lib/firestore/chantiers";
+import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
@@ -75,6 +77,7 @@ import type {
   Chantier,
   ChantierAction,
   ChantierMilestoneState,
+  ChantierStaffing,
   Deliverable,
   DeliverablePhase,
   Indicator,
@@ -339,6 +342,10 @@ type ChantierActionFormLabels = {
    *  que `staffing.fteUnit` (`ChantierStaffingEditor.tsx`), ce formulaire n'appelant pas `t()`
    *  lui-même (tous ses libellés lui arrivent déjà traduits via `labels`). */
   fteUnit: string;
+  /** Titre de la section "ETP mobilisés" du brouillon de staffing (round 29, création uniquement)
+   *  — même clé i18n que le titre affiché sur la fiche projet déjà créée (`staffing.projetSectionTitle`,
+   *  voir plus bas dans ce fichier), gardé cohérent entre les deux moments. */
+  staffingSectionTitle: string;
   description: string;
   deliverables: string;
   deliverablesHint: string;
@@ -811,6 +818,29 @@ function AddDeliverableForm({
  * n'aiguille plus aucun système de suivi (voir `ChantierAction.indicatorId`). RACI par livrable
  * retiré (jugé peu pertinent par le PO, voir `RaciEditor`/`RaciChips`, supprimés).
  */
+/** Convertit une ligne du brouillon ETP de création (`StaffingDraftTable.tsx`, round 29) en vraie
+ *  `ChantierStaffing` rattachée à un projet réel. Même génération d'id que la fonction homonyme
+ *  (non exportée) de `ChantierStaffingEditor.tsx` — dupliquée ici à l'identique plutôt
+ *  qu'exportée, cette dernière n'ayant pas vocation à devenir une API publique de ce fichier. */
+function draftRowToStaffing(
+  row: StaffingDraftRow,
+  ids: { companyId: string; programId: string; chantierId: string; actionId: string }
+): ChantierStaffing {
+  return {
+    id: `ST-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    companyId: ids.companyId,
+    programId: ids.programId,
+    chantierId: ids.chantierId,
+    actionId: ids.actionId,
+    function: row.function,
+    fte: row.fte,
+    ...(row.note ? { note: row.note } : {}),
+    ...(row.startDate ? { startDate: row.startDate } : {}),
+    ...(row.endDate ? { endDate: row.endDate } : {}),
+    createdAt: new Date().toISOString().slice(0, 10),
+  };
+}
+
 function ChantierActionForm({
   initial,
   stages,
@@ -820,6 +850,8 @@ function ChantierActionForm({
   currency,
   chantierAllocatedBudget,
   plannedFte,
+  companyId,
+  showStaffingDraft = false,
   onSubmit,
   onCancel,
   labels,
@@ -850,7 +882,27 @@ function ChantierActionForm({
    *  `BudgetVsActualBar` ETP ci-dessous, pendant de `chantierAllocatedBudget` pour l'ETP. `undefined`
    *  (nouveau levier pas encore créé, donc sans `actionId` à interroger) traité comme `0`. */
   plannedFte?: number;
-  onSubmit: (values: ChantierActionFormValues) => void | Promise<void>;
+  /** Entreprise active — nécessaire au tableau ETP brouillon (`StaffingDraftTable`, round 29) pour
+   *  résoudre les équipes proposables (`useCompanyDepartments`), exactement comme
+   *  `ChantierStaffingEditor` en a besoin ailleurs sur cette fiche. Non lu quand
+   *  `showStaffingDraft` est `false` (mode édition, voir ce prop). */
+  companyId: string;
+  /** `true` UNIQUEMENT depuis l'appel "Nouveau projet" (round 29 — retour PO : « il me faut le
+   *  tableau ETP directement dans le formulaire de création, pas juste un total »). `false` en
+   *  édition : le projet existe déjà, son VRAI tableau ETP (`ChantierStaffingEditor`, avec
+   *  `scopedToActionId`) est déjà affiché ailleurs sur cette même fiche, pas la peine d'en dupliquer
+   *  un second, buffé, ici. */
+  showStaffingDraft?: boolean;
+  /** `draftStaffing` : lignes ETP saisies dans le tableau brouillon ci-dessus (vide si
+   *  `showStaffingDraft` est `false`, ou si l'utilisateur n'a rien ajouté) — l'appelant les convertit
+   *  en vraies `ChantierStaffing` une fois le projet réellement créé/approuvé (voir
+   *  `ChantierDetailPanel.tsx`, l'`onSubmit` du "Nouveau projet"). Volontairement PAS ajouté à
+   *  `ChantierActionFormValues` : ce type est aussi celui de l'édition, où ce brouillon n'a pas de
+   *  sens (le staffing s'y modifie via le vrai `ChantierStaffingEditor`, pas via ce formulaire). */
+  onSubmit: (
+    values: ChantierActionFormValues,
+    draftStaffing: StaffingDraftRow[]
+  ) => void | Promise<void>;
   onCancel: () => void;
   labels: ChantierActionFormLabels;
 }) {
@@ -878,6 +930,10 @@ function ChantierActionForm({
   const [consumedFteInput, setConsumedFteInput] = useState(
     initial?.consumedFte !== undefined ? String(initial.consumedFte) : ""
   );
+  // Brouillon ETP (round 29, `showStaffingDraft` uniquement) — jamais réinitialisé depuis `initial`
+  // (l'édition ne passe pas `showStaffingDraft`, donc ne rend jamais `StaffingDraftTable` et ne lit
+  // jamais cet état).
+  const [staffingDraft, setStaffingDraft] = useState<StaffingDraftRow[]>([]);
   const [description, setDescription] = useState(initial?.description ?? "");
   // Un champ de saisie PAR livrable (plus de convention « une ligne = un livrable »), chacun
   // portant ses propres sous-étapes temporelles.
@@ -982,27 +1038,30 @@ function ChantierActionForm({
       // Clés OMISES (jamais `undefined`) quand vides : `setDoc` rejette toute valeur `undefined`,
       // voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx` — c'est la
       // cause racine du bug "le formulaire ne fait rien" sur un champ optionnel laissé vide.
-      await onSubmit({
-        name: name.trim(),
-        ...(description.trim() ? { description: description.trim() } : {}),
-        ...(owner ? { owner } : {}),
-        ...(sponsor ? { sponsor } : {}),
-        start,
-        end,
-        status,
-        ...(indicatorId ? { indicatorId } : {}),
-        ...(parsedBudget !== undefined && !Number.isNaN(parsedBudget)
-          ? { budget: parsedBudget }
-          : {}),
-        ...(parsedConsumedBudget !== undefined && !Number.isNaN(parsedConsumedBudget)
-          ? { consumedBudget: parsedConsumedBudget }
-          : {}),
-        ...(parsedConsumedFte !== undefined && !Number.isNaN(parsedConsumedFte)
-          ? { consumedFte: parsedConsumedFte }
-          : {}),
-        ...(parsedDeliverables.length > 0 ? { deliverables: parsedDeliverables } : {}),
-        ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
-      });
+      await onSubmit(
+        {
+          name: name.trim(),
+          ...(description.trim() ? { description: description.trim() } : {}),
+          ...(owner ? { owner } : {}),
+          ...(sponsor ? { sponsor } : {}),
+          start,
+          end,
+          status,
+          ...(indicatorId ? { indicatorId } : {}),
+          ...(parsedBudget !== undefined && !Number.isNaN(parsedBudget)
+            ? { budget: parsedBudget }
+            : {}),
+          ...(parsedConsumedBudget !== undefined && !Number.isNaN(parsedConsumedBudget)
+            ? { consumedBudget: parsedConsumedBudget }
+            : {}),
+          ...(parsedConsumedFte !== undefined && !Number.isNaN(parsedConsumedFte)
+            ? { consumedFte: parsedConsumedFte }
+            : {}),
+          ...(parsedDeliverables.length > 0 ? { deliverables: parsedDeliverables } : {}),
+          ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
+        },
+        staffingDraft
+      );
     } catch (error) {
       // `onSubmit` (fourni par l'appelant) porte déjà son propre try/catch + `showToast` autour de
       // l'écriture Firestore réelle — ce catch est un filet de sécurité pour ne jamais laisser une
@@ -1167,6 +1226,24 @@ function ChantierActionForm({
           />
         </div>
       </div>
+
+      {/* ── Brouillon ETP (round 29) — SEULEMENT à la création : retour PO explicite, « il me faut
+        le tableau ETP directement dans le formulaire, comme sur la fiche d'un projet déjà créé »
+        (jusque-là un simple champ "ETP consommés" ci-dessus). Buffé en mémoire (`staffingDraft`) :
+        converti en vraies lignes `ChantierStaffing` par l'appelant une fois le projet
+        réellement créé/approuvé, jamais écrit directement par ce formulaire. ────────────────── */}
+      {showStaffingDraft && (
+        <div>
+          <span className="text-xs font-medium text-secondary">{labels.staffingSectionTitle}</span>
+          <div className="mt-1">
+            <StaffingDraftTable
+              companyId={companyId}
+              rows={staffingDraft}
+              onChange={setStaffingDraft}
+            />
+          </div>
+        </div>
+      )}
 
       <div>
         <label className="text-xs font-medium text-secondary" htmlFor="ca-description">
@@ -1967,6 +2044,7 @@ export function ChantierDetailPanel({
     consumedBudget: t("strategicChantierDetail.actionForm.consumedBudgetLabel"),
     consumedFte: t("strategicChantierDetail.actionForm.consumedFteLabel"),
     fteUnit: t("staffing.fteUnit"),
+    staffingSectionTitle: t("staffing.projetSectionTitle", "ETP mobilisés sur ce projet"),
     submit: t("common.save"),
     cancel: t("common.cancel"),
   };
@@ -2515,9 +2593,11 @@ export function ChantierDetailPanel({
                   plannedFte={
                     actionForm.actionId ? plannedFteByAction.get(actionForm.actionId) : undefined
                   }
+                  companyId={user?.companyId ?? ""}
+                  showStaffingDraft={actionForm.mode === "create"}
                   labels={actionFormLabels}
                   onCancel={() => setActionForm(null)}
-                  onSubmit={async (values) => {
+                  onSubmit={async (values, draftStaffing) => {
                     try {
                       if (actionForm.mode === "edit" && actionForm.actionId) {
                         await data.updateChantierAction(actionForm.actionId, values);
@@ -2529,8 +2609,47 @@ export function ChantierDetailPanel({
                           id: newProjetId(),
                           companyId: user?.companyId ?? "",
                         } as ChantierAction;
-                        const outcome = await createProjetFlow(sa, chantier, action, () =>
-                          data.createChantierAction({ ...values, chantierId: chantier.id })
+                        // Côté demande d'approbation, `action.id` (pré-généré ci-dessus) EST l'id
+                        // définitif du projet une fois approuvé (`applyApprovedPayload`, cas
+                        // "projet_create") : c'est celui-là qu'on rattache aux lignes ETP du payload.
+                        const pendingStaffing = draftStaffing.map((row) =>
+                          draftRowToStaffing(row, {
+                            companyId: user?.companyId ?? "",
+                            programId: activeProgramId ?? "",
+                            chantierId: chantier.id,
+                            actionId: action.id,
+                          })
+                        );
+                        const outcome = await createProjetFlow(
+                          sa,
+                          chantier,
+                          action,
+                          async () => {
+                            const created = await data.createChantierAction({
+                              ...values,
+                              chantierId: chantier.id,
+                            });
+                            // Révèle immédiatement le nouveau projet (retour PO : « je ne vois pas
+                            // où renseigner J0/J1/J2 » après création) — ses jalons E0→E4 sont déjà
+                            // là, juste repliés sous ce même bandeau accordéon.
+                            openLevier(created.id);
+                            // Côté création DIRECTE, `created.id` (généré par
+                            // `data.createChantierAction`, INDÉPENDANT de `action.id` ci-dessus —
+                            // voir le commentaire de tête de `newProjetId`) est le SEUL id réel du
+                            // projet : les lignes ETP s'y rattachent, jamais à `action.id`.
+                            for (const row of draftStaffing) {
+                              await saveChantierStaffing(
+                                draftRowToStaffing(row, {
+                                  companyId: user?.companyId ?? "",
+                                  programId: activeProgramId ?? "",
+                                  chantierId: chantier.id,
+                                  actionId: created.id,
+                                })
+                              );
+                            }
+                            return created;
+                          },
+                          pendingStaffing
                         );
                         showToast(
                           outcome === "pending"

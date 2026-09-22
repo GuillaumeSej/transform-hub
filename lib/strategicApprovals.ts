@@ -13,6 +13,7 @@ import type {
   AuthUser,
   Chantier,
   ChantierAction,
+  ChantierStaffing,
   Indicator,
   IndicatorMeasurement,
   MilestoneId,
@@ -61,8 +62,12 @@ export type MilestoneApprovalPayload = {
   fromMilestone?: MilestoneId;
 };
 export type KpiValueApprovalPayload = { period: string; value?: number; note?: string };
-/** `action` complet (avec son `id` déjà généré : l'application est idempotente). */
-export type ProjetCreateApprovalPayload = { action: ChantierAction };
+/** `action` complet (avec son `id` déjà généré : l'application est idempotente). `staffing`
+ *  (round 29, optionnel) : lignes ETP bufferisées dans le formulaire de création
+ *  (`StaffingDraftTable.tsx`) — déjà des `ChantierStaffing` complètes, `actionId` = `action.id`
+ *  ci-dessus. Absent/vide pour toute demande d'avant round 29 (relecture d'anciennes demandes en
+ *  base) — traité comme une liste vide partout où lu. */
+export type ProjetCreateApprovalPayload = { action: ChantierAction; staffing?: ChantierStaffing[] };
 export type DeleteApprovalPayload = { name?: string };
 export type StrategicApprovalPayload =
   | MilestoneApprovalPayload
@@ -319,6 +324,10 @@ export type ApprovalEffects = {
   deleteChantierIds: string[];
   saveMeasurements: IndicatorMeasurement[];
   saveIndicators: Indicator[];
+  /** Lignes ETP à écrire (round 29) — alimenté uniquement par `"projet_create"` quand la demande
+   *  approuvée porte un `payload.staffing` (voir `ProjetCreateApprovalPayload`). Vide dans tous les
+   *  autres cas, y compris pour les demandes d'avant round 29. */
+  saveStaffing: ChantierStaffing[];
 };
 
 function emptyEffects(): ApprovalEffects {
@@ -328,6 +337,7 @@ function emptyEffects(): ApprovalEffects {
     deleteChantierIds: [],
     saveMeasurements: [],
     saveIndicators: [],
+    saveStaffing: [],
   };
 }
 
@@ -427,11 +437,18 @@ export function applyApprovedPayload(
       return effects;
     }
     case "projet_create": {
-      const { action } = approval.payload as ProjetCreateApprovalPayload;
+      const { action, staffing } = approval.payload as ProjetCreateApprovalPayload;
       if (!data.chantiers.some((c) => c.id === action.chantierId)) {
         throw new Error("Chantier introuvable : il a peut-être été supprimé");
       }
       effects.saveActions.push({ ...action, companyId: approval.companyId });
+      // Round 29 : le brouillon ETP saisi à la création (absent des demandes antérieures) suit le
+      // projet — `actionId`/`companyId` réaffirmés sur `action.id`/`approval.companyId` (même
+      // logique défensive que `saveActions` ci-dessus) plutôt que de faire confiance à ce que le
+      // payload portait déjà.
+      for (const s of staffing ?? []) {
+        effects.saveStaffing.push({ ...s, actionId: action.id, companyId: approval.companyId });
+      }
       return effects;
     }
     case "projet_delete": {

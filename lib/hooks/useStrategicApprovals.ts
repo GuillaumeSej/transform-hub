@@ -38,6 +38,7 @@ import {
 } from "@/lib/firestore/strategicApprovals";
 import { saveChantierAction, deleteChantierAction } from "@/lib/firestore/chantierActions";
 import { deleteChantier } from "@/lib/firestore/chantiers";
+import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { saveIndicator } from "@/lib/firestore/indicators";
 import { saveIndicatorMeasurement } from "@/lib/firestore/indicatorMeasurements";
 import { appendAuditEntries } from "@/lib/firestore/levers";
@@ -71,6 +72,7 @@ async function runEffects(effects: ApprovalEffects): Promise<void> {
   for (const id of effects.deleteChantierIds) await deleteChantier(id);
   for (const m of effects.saveMeasurements) await saveIndicatorMeasurement(m);
   for (const i of effects.saveIndicators) await saveIndicator(i);
+  for (const s of effects.saveStaffing) await saveChantierStaffing(s);
 }
 
 export type UseStrategicApprovalsArgs = {

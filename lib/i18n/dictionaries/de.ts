@@ -1721,6 +1721,8 @@ const de: Record<string, string> = {
   "staffing.columnFte": "VZÄ-Satz",
   "staffing.columnProjet": "Projekt",
   "staffing.projetSectionTitle": "Auf dieses Projekt eingesetzte VZÄ",
+  "staffing.draftHint":
+    "Diese Zeilen werden gespeichert, sobald das Projekt erstellt (oder genehmigt) ist.",
 
   // ─── Seite Personaleinsatz (/effectifs, Strategieplan) ────────────────────
   "effectifs.title": "Eingesetztes Personal & Budget",

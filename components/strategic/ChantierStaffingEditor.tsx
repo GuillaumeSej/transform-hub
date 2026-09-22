@@ -59,8 +59,10 @@ function newStaffingId(): string {
 }
 
 /** Saisie numérique tolérante à la virgule décimale. `null` = invalide (vide compris) : un ETP
- *  doit être strictement positif, une ligne à 0 ETP n'aurait aucun sens dans les agrégats. */
-function parseFte(raw: string): number | null {
+ *  doit être strictement positif, une ligne à 0 ETP n'aurait aucun sens dans les agrégats.
+ *  Exportée (round 29) pour être réutilisée telle quelle par `StaffingDraftTable.tsx`, qui a
+ *  besoin de la même règle de validation côté brouillon local (formulaire de création de projet). */
+export function parseFte(raw: string): number | null {
   const parsed = Number(raw.trim().replace(",", "."));
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
   return parsed;

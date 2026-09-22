@@ -14,7 +14,7 @@ import type {
   StrategicApprovalPayload,
   StrategicApprovalTarget,
 } from "@/lib/strategicApprovals";
-import type { AuthUser, Chantier, ChantierAction, Indicator } from "@/types";
+import type { AuthUser, Chantier, ChantierAction, ChantierStaffing, Indicator } from "@/types";
 
 export type ApprovalGate = {
   needsApproval: (kind: StrategicApprovalKind, target: StrategicApprovalTarget) => boolean;
@@ -93,12 +93,25 @@ export async function deleteFlow(
   return "applied";
 }
 
-/** Création d'un projet : `projet_create` (validation du responsable de l'axe) ou création directe. */
+/**
+ * Création d'un projet : `projet_create` (validation du responsable de l'axe) ou création directe.
+ *
+ * `staffing` (round 29) : lignes ETP bufferisées dans le formulaire de création
+ * (`StaffingDraftTable.tsx`), déjà converties en `ChantierStaffing` avec `actionId` = `action.id`
+ * (l'id pré-généré de ce même appel, voir `newProjetId` ci-dessous). Optionnel/par défaut vide :
+ * tous les appelants existants (avant round 29) continuent de fonctionner sans rien changer.
+ * Chemin direct : ignoré ici, c'est `createDirect` (fourni par l'appelant) qui les écrit — cette
+ * fonction n'a pas accès à l'id RÉEL généré côté direct (`data.createChantierAction` génère le
+ * sien, indépendant de `action.id`, voir le commentaire de tête de `newProjetId`). Chemin demande :
+ * embarqué dans le payload, appliqué par `applyApprovedPayload` (`lib/strategicApprovals.ts`) une
+ * fois la demande approuvée, puisque `action.id` EST alors l'id définitif du projet.
+ */
 export async function createProjetFlow(
   gate: ApprovalGate | null | undefined,
   chantier: Pick<Chantier, "id" | "name">,
   action: ChantierAction,
-  createDirect: () => Promise<unknown>
+  createDirect: () => Promise<unknown>,
+  staffing: ChantierStaffing[] = []
 ): Promise<FlowOutcome> {
   const target: StrategicApprovalTarget = {
     type: "chantier",
@@ -106,7 +119,10 @@ export async function createProjetFlow(
     name: chantier.name,
   };
   if (gate && gate.needsApproval("projet_create", target)) {
-    await gate.request("projet_create", target, { action });
+    await gate.request("projet_create", target, {
+      action,
+      ...(staffing.length ? { staffing } : {}),
+    });
     return "pending";
   }
   await createDirect();
