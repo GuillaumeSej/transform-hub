@@ -171,7 +171,17 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
         </p>
       ) : (
         <ResponsiveContainer width="100%" height={height}>
-          <ComposedChart data={data} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
+          {/* stackOffset="sign" est OBLIGATOIRE ici : sans lui, Recharts empile "gain" et "cost"
+              cumulativement dans l'ordre de déclaration (comme un stacked bar classique) au lieu de
+              diverger par signe autour de 0 — dès que |cost| < gain sur une période, la barre coût
+              se retrouvait rendue entre `gain` et `gain + cost` (donc AU-DESSUS de l'axe, empilée
+              sur le vert) au lieu de partir de 0 vers le bas. "sign" force le stack positif à partir
+              de 0 vers le haut et le stack négatif à partir de 0 vers le bas, indépendamment. */}
+          <ComposedChart
+            data={data}
+            stackOffset="sign"
+            margin={{ top: 16, right: 16, left: 0, bottom: 0 }}
+          >
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="key"
