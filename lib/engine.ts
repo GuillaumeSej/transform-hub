@@ -1326,6 +1326,17 @@ export type SavingsSeriesGap = {
   late: number;
   cancelled: number;
   other: number;
+  /** Équivalents NON ARRONDIS de `total`/`adjustment`/`delay` ci-dessus — à utiliser par tout
+   *  appelant qui va lui-même SOMMER ce point avec d'autres (ex. `gapEntriesAt` dans
+   *  `lib/scurveDetail.ts`, rejoué une fois PAR LEVIER puis sommé par `groupEntries`/
+   *  `drilldownTotals`, lib/savingsDrilldown.ts). Sommer les valeurs déjà arrondies à 0,1 M€
+   *  produit un total qui dérive du véritable écart global (calculé, lui, sur tous les leviers
+   *  d'un coup et arrondi une seule fois) — même principe que le commentaire de tête de
+   *  `savingsDrilldown.ts::groupEntries` ("l'arrondi ne doit se faire qu'à l'affichage final"),
+   *  appliqué ici à la source plutôt qu'en aval. */
+  totalRaw: number;
+  adjustmentRaw: number;
+  delayRaw: number;
 };
 export type SavingsSeriesPoint = {
   month: string;
@@ -1441,8 +1452,21 @@ export function savingsSeries(
             late: r1(-late),
             other: r1(-other),
             cancelled: r1(cancelledMemo[i]),
+            totalRaw: cumActual - planned[i],
+            adjustmentRaw: reforecast[i] - planned[i],
+            delayRaw: -(late + other),
           }
-        : { total: 0, adjustment: 0, delay: 0, late: 0, other: 0, cancelled: 0 },
+        : {
+            total: 0,
+            adjustment: 0,
+            delay: 0,
+            late: 0,
+            other: 0,
+            cancelled: 0,
+            totalRaw: 0,
+            adjustmentRaw: 0,
+            delayRaw: 0,
+          },
     };
   });
   if (granularity === "month") return monthly;
@@ -1648,7 +1672,15 @@ export type ImpactTrajectoryPoint = {
   oneOffGains: number;
   /** Cumul net gains récurrents + one-off − OPEX − CAPEX (vue trésorerie/J-curve). */
   cumulativeNet: number;
-  /** Idem `cumulativeNet` mais SANS les gains one-off (cohérent avec les totaux savings). */
+  /** Net cumulé au sens SAVINGS (gains récurrents − OPEX récurrent, JAMAIS CAPEX/OPEX one-off —
+   *  même convention que `netAnnual`/`realizedSavings`, voir leur commentaire), PAS une vue
+   *  trésorerie comme `cumulativeNet` ci-dessus. C'est cette cohérence qui permet à
+   *  `leverConsolidate.ts::leverJCurve` de comparer directement son point final à
+   *  `realizedSavings(lever)`/`netSavings` (même dénominateur) pour dériver `ratio` — inclure
+   *  CAPEX/OPEX one-off ici (comme un temps, bug corrigé) désynchronisait le "Réalisé (net)" affiché
+   *  (dérivé de ce champ via le J-curve) de la Progression (dérivée, elle, de `realizedSavings`),
+   *  un même levier pouvant alors afficher 100% de progression pour un "Réalisé (net)" très inférieur
+   *  au "Réactualisé (net)". */
   cumulativeNetRecurring: number;
   /** Part PLANIFIÉE (statut « planned ») des montants ci-dessus — sous-ensemble de chaque colonne,
    *  à rendre en prévisionnel ; le reste (réalisé / en cours) est effectif depuis sa date de début. */
@@ -1917,7 +1949,7 @@ export function impactTrajectory(
       opexOneOff = opexRec = capex = gains = oneOffGains = 0;
       pl.opexOneOff = pl.opexRec = pl.capex = pl.gains = pl.oneOffGains = 0;
     }
-    cumRec += gains - opexOneOff - opexRec - capex;
+    cumRec += gains - opexRec;
     cum += gains + oneOffGains - opexOneOff - opexRec - capex;
     cumActual +=
       gains -

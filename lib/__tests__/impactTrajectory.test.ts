@@ -74,6 +74,49 @@ describe("impactTrajectory — lissage des gains annualisés", () => {
       amount: 1.2,
     });
   });
+
+  // Reproduit le levier ORG-002 (bug live) : gains bruts 1.1M, CAPEX 200K, OPEX one-off 40K,
+  // OPEX récurrent quasi nul — `cumulativeNetRecurring` doit rester cohérent avec la convention
+  // "net savings" (netAnnual/realizedSavings, JAMAIS CAPEX/OPEX one-off), pas avec la vue
+  // trésorerie de `cumulativeNet` (qui, elle, les inclut légitimement).
+  it("cumulativeNetRecurring exclut CAPEX et OPEX one-off (convention 'savings', pas trésorerie)", () => {
+    const impacts: LeverImpact[] = [
+      {
+        id: "G",
+        label: "Gain",
+        amount: 1.1,
+        type: "saving",
+        nature: "opex_rec",
+        gainRecurrence: "annual",
+        gainDate: "2026-01-01",
+      } as LeverImpact,
+      {
+        id: "C",
+        label: "Investissement",
+        amount: 0.2,
+        type: "cost",
+        nature: "capex",
+        capexAllocationMode: "one_shot",
+        capexDeploymentDate: "2026-01-01",
+      } as LeverImpact,
+      {
+        id: "O",
+        label: "Mise en oeuvre",
+        amount: 0.04,
+        type: "cost",
+        nature: "oneoff",
+        costDate: "2026-01-01",
+      } as LeverImpact,
+    ];
+    const { points } = impactTrajectory(lever(impacts), { granularity: "month" });
+    const jan = points.find((p) => p.periodStart === "2026-01-01");
+    // cumulativeNet (vue trésorerie) encaisse bien le coût de l'investissement...
+    expect(jan?.cumulativeNet).toBeCloseTo(1.1 - 0.2 - 0.04, 5);
+    // ...mais cumulativeNetRecurring (vue "savings", comparée à netAnnual/realizedSavings) ne doit
+    // PAS baisser à cause d'un investissement ponctuel (CAPEX/OPEX one-off) : seul le gain
+    // récurrent (1.1, OPEX récurrent nul ici) doit y figurer, exactement comme `netAnnual`.
+    expect(jan?.cumulativeNetRecurring).toBeCloseTo(1.1, 5);
+  });
 });
 
 describe("impactKinds — type fusionné et dates", () => {

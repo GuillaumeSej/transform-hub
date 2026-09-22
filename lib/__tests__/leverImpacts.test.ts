@@ -410,9 +410,14 @@ describe("impactTrajectory (J-curve)", () => {
     expect(at("Sep 2026").oneOffGains).toBe(0);
     expect(at("Sep 2026").gains).toBe(0);
   });
-  it("cumulative differs by one-off gains and fte/todayIndex work", () => {
+  it("cumulativeNet (trésorerie) vs cumulativeNetRecurring (savings) and fte/todayIndex work", () => {
     const last = t.points[t.points.length - 1];
-    expect(last.cumulativeNet - last.cumulativeNetRecurring).toBe(5);
+    // cumulativeNet (vue trésorerie) = gains + oneOffGains − opexOneOff − opexRec − capex.
+    // cumulativeNetRecurring (vue savings, cohérente avec netAnnual/realizedSavings) = gains −
+    // opexRec seulement (jamais CAPEX/OPEX one-off, voir le doc-comment du type dans engine.ts).
+    // opexRec s'annule dans la différence (présent identiquement des deux côtés) : il ne reste que
+    // oneOffGains − opexOneOff − capex = 5 (gain "g1") − 2 (coût "oo") − 18 (capex "cx" + "cx1").
+    expect(last.cumulativeNet - last.cumulativeNetRecurring).toBeCloseTo(5 - 2 - 18, 5);
     expect(at("Dec 2026").fte).toBe(-4);
     expect(t.points[t.todayIndex].period).toBe("May 2026");
     expect(

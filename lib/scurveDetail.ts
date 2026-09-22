@@ -69,9 +69,14 @@ export function gapEntriesAt(
       before: p.planned,
       after: p.actual,
       reforecast: p.reforecast,
-      value: p.gap.total,
-      realized: p.gap.delay,
-      remaining: p.gap.adjustment,
+      // Valeurs NON ARRONDIES (`*Raw`) : cette fonction est rejouée une fois PAR LEVIER puis
+      // sommée par `groupEntries`/`drilldownTotals` (lib/savingsDrilldown.ts), qui arrondissent
+      // déjà une seule fois à l'AFFICHAGE final — sommer des valeurs pré-arrondies ici ferait
+      // dériver ce total de l'écart global affiché sur le graphe (calculé, lui, sur tous les
+      // leviers d'un coup). Voir le doc-comment de `SavingsSeriesGap` dans lib/engine.ts.
+      value: p.gap.totalRaw,
+      realized: p.gap.delayRaw,
+      remaining: p.gap.adjustmentRaw,
       segments: [],
     });
   }
