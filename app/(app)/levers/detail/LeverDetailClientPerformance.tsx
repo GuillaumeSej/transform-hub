@@ -52,7 +52,6 @@ import { ActionWeightsEditor } from "@/components/shared/ActionWeightsEditor";
 import {
   consolidateLeverFromActions,
   leverGrossRealizedToDate,
-  leverJCurve,
   resolveLockedPlanNet,
 } from "@/lib/leverConsolidate";
 import { mentionsHiring, reconcileLeverMovements } from "@/lib/leverMovementReconciliation";
@@ -178,19 +177,7 @@ export function LeverDetailClientPerformance() {
     [lever, alerts, riskThresholds]
   );
 
-  // Exercice fiscal du Programme moderne réel du levier (lever.programId), avec repli sur
-  // data.program.fyStart/fyEnd (legacy ProgramConfig) si l'entreprise n'a pas encore de Programme
-  // moderne pour ce levier — mêmes `programs` déjà résolus plus haut (subscribePrograms) pour
-  // actionPlanEnabled/lifecycle, pas de nouvelle souscription.
-  const leverProgram = programs.find((p) => p.id === lever?.programId);
-  const jCurveFyStart = leverProgram?.fyStart ?? data.program.fyStart;
-  const jCurveFyEnd = leverProgram?.fyEnd ?? data.program.fyEnd;
-
-  // J-Curve + consolidation — hooks doivent être avant tout return conditionnel
-  const jCurveData = useMemo(
-    () => (lever ? leverJCurve(lever, jCurveFyStart, jCurveFyEnd) : []),
-    [lever, jCurveFyStart, jCurveFyEnd]
-  );
+  // Consolidation — hook doit être avant tout return conditionnel
   const consolidatedKPIs = useMemo(
     () => (lever ? consolidateLeverFromActions(lever) : undefined),
     [lever]
@@ -248,16 +235,12 @@ export function LeverDetailClientPerformance() {
   // Idem pour le bouton "Soumettre pour validation" (voir requestLeverApproval) : seul le
   // porteur du levier ou un admin peut initier une demande.
   const canSubmitApproval = !!user && (isAnyAdmin(user) || isLeverOwnedBy(lever, user));
-  // Réalisé à date : aligné sur la courbe en J (somme bottom-up des actions "done" à leur
-  // deliveredDate, voir `leverJCurve`) quand le levier a des actions chiffrées. `engine.realizedSavings`
-  // (repli utilisé quand `jCurveActualToDate` est indisponible — vue non consolidée, ou levier sans
-  // action chiffrée) calcule strictement la même chose (somme des impacts nets des actions "done",
-  // 0 pour un levier sans action chiffrée) : les deux ne peuvent plus diverger — le "Réalisé" n'est
-  // JAMAIS estimé depuis la progression % du levier, uniquement depuis son plan d'actions.
-  const jCurveActualToDate = consolidatedKPIs
-    ? [...jCurveData].reverse().find((p) => p.actual !== null)?.actual
-    : undefined;
-  const real = jCurveActualToDate ?? engine.realizedSavings(lever);
+  // Réalisé à date (net) = gains bruts réalisés − OPEX récurrent réalisé (`engine.realizedSavings`),
+  // exactement la même formule et la même somme d'impacts que celle utilisée pour le % de
+  // progression (`engine.displayedProgressPct`) — jamais une projection proratée sur une courbe
+  // plan (ancien calcul via `leverJCurve`/`jCurveActualToDate`, qui pouvait afficher un "net" plus
+  // élevé que les gains bruts réalisés eux-mêmes, cf. bug ACME SC-002 22/09).
+  const real = engine.realizedSavings(lever);
   // Gains BRUTS réalisés à date (avant déduction des coûts) — même périmètre que `real` (net) :
   // somme des impacts "saving" des actions "done" (0 pour un levier sans action chiffrée).
   const realGross = consolidatedKPIs
