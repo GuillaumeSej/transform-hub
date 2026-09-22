@@ -1305,22 +1305,23 @@ function fiscalMonthIndex(dateStr: string, fyStart: Date): number {
  *                     du réajustement du plan lui-même, indépendant de l'exécution — positif si la
  *                     cible a été relevée, négatif si elle a été abaissée) ;
  *                   `delay`      (« écart de retard ») = réalisé − réactualisé (écart d'exécution par
- *                     rapport à la CIBLE réactualisée) — mais UNIQUEMENT la part imputable à des
- *                     leviers ayant au moins un impact dont la date est dépassée sans être marqué
- *                     "Réalisé"/"En cours" (voir `isLeverLate`, retard d'EXÉCUTION des impacts, pas du
- *                     plan d'action) ; `other` porte le reste de l'écart d'exécution (leviers non en
- *                     retard mais tout de même sous la cible réactualisée à date), non affiché par
- *                     défaut.
+ *                     rapport à la CIBLE réactualisée), EN ENTIER — dans cette courbe cumulative, ce
+ *                     qui n'est pas encore réalisé mais n'est pas en retard apparaîtra de toute façon
+ *                     dans le réalisé d'une période ultérieure, donc pas besoin de distinguer une part
+ *                     "leviers réellement en retard" d'un reste "juste pas encore dû" : tout écart
+ *                     réactualisé − réalisé à un instant t compte comme retard pour ce graphe. `late`/
+ *                     `other` restent calculés séparément (utiles ailleurs, ex. `isLeverLate`) mais
+ *                     `delay` est leur somme, jamais l'un seul.
  *                 `cancelled` est un mémo (plan des leviers annulés échus, hors `total` car déjà
  *                 retirés du réactualisé).
  * Les dates hors exercice sont rattachées à la première/dernière période (comme avant).
  */
 export type SavingsSeriesGap = {
-  /** Écart total : réalisé − planifié initial = `adjustment` + `delay` (+ `other`, non affiché). */
+  /** Écart total : réalisé − planifié initial = `adjustment` + `delay` (identité exacte). */
   total: number;
   /** Écart de performance (réajustement du plan) : réactualisé − planifié initial. */
   adjustment: number;
-  /** Écart de retard (leviers réellement en retard uniquement) : réalisé − réactualisé, part "late". */
+  /** Écart de retard : réalisé − réactualisé (écart d'exécution complet, voir doc-comment ci-dessus). */
   delay: number;
   late: number;
   cancelled: number;
@@ -1431,7 +1432,12 @@ export function savingsSeries(
         ? {
             total: r1(cumActual - planned[i]),
             adjustment: r1(reforecast[i] - planned[i]),
-            delay: r1(-late),
+            // Écart de retard = réactualisé − réalisé, EN ENTIER (pas seulement la part des
+            // leviers réellement en retard) : dans cette courbe cumulative, ce qui n'est pas
+            // encore réalisé mais n'est pas en retard finira de toute façon par apparaître dans le
+            // réalisé d'une période ultérieure — le distinguer n'apporte rien ici. `total` =
+            // `adjustment` + `delay` exactement (identité, plus de résidu caché).
+            delay: r1(-(late + other)),
             late: r1(-late),
             other: r1(-other),
             cancelled: r1(cancelledMemo[i]),

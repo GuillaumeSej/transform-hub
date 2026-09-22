@@ -1915,7 +1915,6 @@ export function DashboardPagePerformance() {
           value={String(summary.atRisk + summary.critical)}
           icon={TriangleAlert}
           accent="amber"
-          sub={`${summary.riskDelay} ${t("dashboard.kpi.riskDelay")} · ${summary.riskCostOverrun} ${t("dashboard.kpi.riskCost")} · ${summary.riskSavingsCut} ${t("dashboard.kpi.riskSavings")}`}
           infoTooltip={t(
             "dashboard.kpi.leversAtRiskTooltip",
             "Le total compte chaque levier une seule fois (1 catégorie déclenchée = à risque, 2+ = critique). Les 3 catégories ci-dessous ne sont pas exclusives : un même levier peut être compté dans plusieurs à la fois (ex. en retard ET en surcoût), donc leur somme est normalement supérieure au total affiché."
@@ -1940,7 +1939,6 @@ export function DashboardPagePerformance() {
           label={t("dashboard.kpi.fteImpacted")}
           value={String(summary.fteImpact)}
           icon={Users}
-          sub={`${engine.fmtInt(summary.suppressionsRealized)} / ${engine.fmtInt(summary.suppressionsPlanned)} ${t("dashboard.kpi.suppressions")} · ${summary.suppressionsPlanned > 0 ? Math.round((summary.suppressionsRealized / summary.suppressionsPlanned) * 100) : 0}%`}
           barPct={
             summary.suppressionsPlanned > 0
               ? Math.round((summary.suppressionsRealized / summary.suppressionsPlanned) * 100)

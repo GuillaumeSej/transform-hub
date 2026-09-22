@@ -2051,7 +2051,7 @@ const en: Record<string, string> = {
   "chart.gapDrill.actual.tooltip": "Amount actually realized to date.",
   "chart.gapDrill.delay": "Delay gap",
   "chart.gapDrill.delay.tooltip":
-    "Realized − reforecast, only for levers with at least one unrealized impact past its due date (genuine execution delay, not just a late action plan).",
+    "Reforecast − realized: what's not yet realized against the reforecast target at this period (month by month, anything not late will be realized later anyway).",
   "chart.gapDrill.adjustment": "Performance gap",
   "chart.gapDrill.adjustment.tooltip":
     "Reforecast − initial plan (effect of the plan adjustment itself: positive if the target was raised, negative if it was lowered).",

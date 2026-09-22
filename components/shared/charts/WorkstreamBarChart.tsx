@@ -208,7 +208,9 @@ function TotalTags({
   if (!centers || !yScale) return null;
   const yOf = (v: number) => (yScale(v) as number) ?? 0;
   return (
-    <g>
+    // pointerEvents="none" : rendu APRÈS les <Bar> (pour rester visible par-dessus), donc sans ça
+    // le texte "réalisé" à l'intérieur d'une barre intercepterait son clic à la place de la barre.
+    <g pointerEvents="none">
       {data.map((d, di) => {
         const cx = centers[di];
         const stackTop = Math.max(d.target, d.realized);
@@ -493,19 +495,6 @@ export function WorkstreamBarChart({
               </ul>
             )}
           />
-          <Customized
-            component={() => <TotalTags data={chartData} hasPlanned={hasPlanned} fmt={fmt} />}
-          />
-          <Customized
-            component={() => (
-              <SideCallouts
-                data={chartData}
-                hasPlanned={hasPlanned}
-                labels={[resolvedLabelTarget, resolvedLabelRealized, resolvedLabelPlanned]}
-                barW={barW}
-              />
-            )}
-          />
           {/* Barre réalisé (bas de la pile) — coral */}
           <Bar
             dataKey="realized"
@@ -556,6 +545,25 @@ export function WorkstreamBarChart({
               legendType="plainline"
             />
           )}
+          {/* Tags/callouts déclarés APRÈS les <Bar> : Recharts peint les enfants dans l'ordre du
+              JSX, donc les placer avant les barres (comme précédemment) faisait peindre les barres
+              PAR-DESSUS — masquant en particulier le montant "réalisé" écrit en blanc À L'INTÉRIEUR
+              du segment coral quand il est assez haut (`realizedInside`), invisible sous le
+              remplissage de la barre peinte ensuite. Retour testeur : "les premiers bar charts,
+              j'ai pas de tag" — le tag existait, il était juste caché. */}
+          <Customized
+            component={() => <TotalTags data={chartData} hasPlanned={hasPlanned} fmt={fmt} />}
+          />
+          <Customized
+            component={() => (
+              <SideCallouts
+                data={chartData}
+                hasPlanned={hasPlanned}
+                labels={[resolvedLabelTarget, resolvedLabelRealized, resolvedLabelPlanned]}
+                barW={barW}
+              />
+            )}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -1723,8 +1723,7 @@ const es: Record<string, string> = {
   "staffing.columnFte": "Tasa de ETC",
   "staffing.columnProjet": "Iniciativa",
   "staffing.projetSectionTitle": "ETC movilizados en esta iniciativa",
-  "staffing.draftHint":
-    "Estas líneas se guardarán en cuanto se cree (o se apruebe) la iniciativa.",
+  "staffing.draftHint": "Estas líneas se guardarán en cuanto se cree (o se apruebe) la iniciativa.",
 
   // ─── Página Personal movilizado (/effectifs, Plan Estratégico) ────────────
   "effectifs.title": "Personal y presupuesto movilizados",
@@ -2309,7 +2308,7 @@ const es: Record<string, string> = {
   "chart.gapDrill.actual.tooltip": "Importe efectivamente realizado a la fecha.",
   "chart.gapDrill.delay": "Desviación de retraso",
   "chart.gapDrill.delay.tooltip":
-    "Realizado − reactualizado, solo para palancas con al menos un impacto no realizado cuya fecha ya pasó (retraso de ejecución real, no solo un plan de acción atrasado).",
+    "Reprevisto − realizado: lo que aún no se ha realizado frente al objetivo reprevisto en este periodo (mes a mes, lo que no está retrasado se realizará más adelante de todos modos).",
   "chart.gapDrill.adjustment": "Desviación de rendimiento",
   "chart.gapDrill.adjustment.tooltip":
     "Reactualizado − plan inicial (efecto del reajuste del propio plan: positivo si el objetivo se elevó, negativo si se redujo).",

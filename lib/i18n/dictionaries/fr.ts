@@ -2195,7 +2195,7 @@ const fr: Record<string, string> = {
   "chart.gapDrill.actual.tooltip": "Montant effectivement réalisé à date.",
   "chart.gapDrill.delay": "Écart de retard",
   "chart.gapDrill.delay.tooltip":
-    "Réalisé − réactualisé, uniquement pour les leviers ayant au moins un impact non réalisé dont la date est dépassée (retard d'exécution réel, pas juste un plan d'action en retard).",
+    "Réactualisé − réalisé : ce qui n'est pas encore réalisé par rapport à la cible réactualisée à cette période (mois par mois, ce qui n'est pas en retard sera de toute façon réalisé plus tard).",
   "chart.gapDrill.adjustment": "Écart de performance",
   "chart.gapDrill.adjustment.tooltip":
     "Réactualisé − planifié initial (effet du réajustement du plan lui-même : positif si la cible a été relevée, négatif si elle a été abaissée).",

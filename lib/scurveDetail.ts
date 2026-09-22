@@ -44,8 +44,8 @@ export function savingsSeriesByWorkstream(
  *  globale ; l'écart étant additif, la somme des leviers = `gap.total` de la courbe). Champs de
  *  `DrilldownEntry` réutilisés pour partager le regroupement chantier / géographie : before =
  *  planifié initial cumulé, after = réalisé cumulé, reforecast = réactualisé cumulé, value = écart
- *  total, realized = écart de retard (réalisé − réactualisé, leviers réellement en retard
- *  uniquement), remaining = écart de performance (réactualisé − planifié initial). */
+ *  total, realized = écart de retard (réalisé − réactualisé, en entier), remaining = écart de
+ *  performance (réactualisé − planifié initial). */
 export function gapEntriesAt(
   data: BeTrackData,
   granularity: engine.TimeGranularity,

@@ -462,10 +462,11 @@ describe("savingsSeries: single source for S-curve and bridge", () => {
     expect(p.gap.total).toBeCloseTo((p.actual ?? 0) - p.planned, 1);
     // adjustment ("écart de performance") = réactualisé − planifié initial.
     expect(p.gap.adjustment).toBeCloseTo(p.reforecast - p.planned, 1);
-    // Le levier A est en retard (impact non réalisé, date dépassée) et sous-performe : delay < 0.
+    // delay = réalisé − réactualisé EN ENTIER (round 8 : plus filtré aux seuls leviers "en retard").
+    expect(p.gap.delay).toBeCloseTo((p.actual ?? 0) - p.reforecast, 1);
     expect(p.gap.delay).toBeLessThan(0);
-    // Identité de construction : total = adjustment + delay + other (jamais affiché mais toujours vrai).
-    expect(p.gap.total).toBeCloseTo(p.gap.adjustment + p.gap.delay + p.gap.other, 1);
+    // Identité de construction : total = adjustment + delay exactement (plus de résidu "other").
+    expect(p.gap.total).toBeCloseTo(p.gap.adjustment + p.gap.delay, 1);
     expect(s[10].actual).toBeNull();
   });
 });

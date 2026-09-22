@@ -2313,7 +2313,7 @@ const de: Record<string, string> = {
   "chart.gapDrill.actual.tooltip": "Bisher tatsächlich realisierter Betrag.",
   "chart.gapDrill.delay": "Verzugsabweichung",
   "chart.gapDrill.delay.tooltip":
-    "Realisiert − aktualisiert, nur für Hebel mit mindestens einer nicht realisierten Wirkung, deren Termin überschritten ist (echter Ausführungsverzug, nicht nur ein verspäteter Aktionsplan).",
+    "Neuprognose − realisiert: was gegenüber dem Neuprognose-Ziel in dieser Periode noch nicht realisiert ist (Monat für Monat — was nicht verspätet ist, wird ohnehin später realisiert).",
   "chart.gapDrill.adjustment": "Leistungsabweichung",
   "chart.gapDrill.adjustment.tooltip":
     "Aktualisiert − Ursprungsplan (Effekt der Plananpassung selbst: positiv, wenn das Ziel angehoben wurde, negativ, wenn es gesenkt wurde).",

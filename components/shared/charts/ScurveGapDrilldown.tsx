@@ -76,18 +76,17 @@ export function ScurveGapDrilldown({
     remaining: number;
     reforecast?: number;
   }) => {
-    // `realized` = écart de retard (réalisé − réactualisé, leviers réellement en retard
-    // uniquement) et `remaining` = écart de performance (réactualisé − planifié initial) sont déjà
-    // produits par `gapEntriesAt` (lib/scurveDetail.ts) dans la convention "positif = gain, négatif
-    // = perte" — pas de signe à inverser ici.
-    const gap = fmtSigned(v.after - (v.reforecast ?? 0));
+    // `realized` = écart de retard (réactualisé − réalisé, en entier) et `remaining` = écart de
+    // performance (réactualisé − planifié initial) sont déjà produits par `gapEntriesAt`
+    // (lib/scurveDetail.ts) dans la convention "positif = gain, négatif = perte" — pas de signe à
+    // inverser ici. Pas de colonne "écart" séparée : dans cette courbe cumulative, réactualisé −
+    // réalisé EST l'écart de retard, il n'y a rien d'autre à afficher en plus.
     const delay = fmtSigned(v.realized);
     const perf = fmtSigned(v.remaining);
     return (
       <>
         <td className="px-2 text-right tabular-nums">{fmt(v.before)}</td>
         <td className="px-2 text-right tabular-nums">{fmt(v.reforecast ?? 0)}</td>
-        <td className={`px-2 text-right tabular-nums ${gap.cls}`}>{gap.text}</td>
         <td className="px-2 text-right tabular-nums">{fmt(v.after)}</td>
         <td className={`px-2 text-right tabular-nums ${delay.cls}`}>{delay.text}</td>
         <td className={`pl-2 text-right tabular-nums ${perf.cls}`}>{perf.text}</td>
@@ -163,15 +162,6 @@ export function ScurveGapDrilldown({
                 <th
                   className="px-2 text-right font-medium"
                   title={t(
-                    "chart.gapDrill.remainingGap.tooltip",
-                    "Réalisé − réactualisé (reste à faire par rapport à la cible réactualisée)."
-                  )}
-                >
-                  {t("chart.gapDrill.remainingGap", "Écart (reste à faire)")}
-                </th>
-                <th
-                  className="px-2 text-right font-medium"
-                  title={t(
                     "chart.gapDrill.actual.tooltip",
                     "Montant effectivement réalisé à date."
                   )}
@@ -182,7 +172,7 @@ export function ScurveGapDrilldown({
                   className="px-2 text-right font-medium"
                   title={t(
                     "chart.gapDrill.delay.tooltip",
-                    "Réalisé − réactualisé, uniquement pour les leviers ayant au moins un impact non réalisé dont la date est dépassée (retard d'exécution réel, pas juste un plan d'action en retard)."
+                    "Réactualisé − réalisé : ce qui n'est pas encore réalisé par rapport à la cible réactualisée à cette période (mois par mois, ce qui n'est pas en retard sera de toute façon réalisé plus tard)."
                   )}
                 >
                   {t("chart.gapDrill.delay", "Écart de retard")}
