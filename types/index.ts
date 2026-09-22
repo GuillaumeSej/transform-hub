@@ -414,6 +414,17 @@ export type LeverImpact = {
   endDate?: string; // ISO date
   /** Commentaires libres sur cette ligne d'impact (ex. méthode de calcul, hypothèses). */
   comments?: Comment[];
+  /** Validation finance du passage à "Réalisé" (status "done"/"ongoing") : quand un profil non-finance
+   *  coche "Réalisé", la ligne passe en "pending" jusqu'à décision d'un profil finance ; un profil
+   *  finance qui coche lui-même passe directement en "approved". Absent = impact jamais coché réalisé,
+   *  ou coché avant l'introduction de ce workflow (traité comme approuvé, compat rétroactive). */
+  realizedApproval?: {
+    status: "pending" | "approved" | "rejected";
+    requestedBy?: string; // AuthUser.name
+    requestedAt?: string; // ISO datetime
+    decidedBy?: string; // AuthUser.name
+    decidedAt?: string; // ISO datetime
+  };
 };
 
 /** @deprecated Renommé `LeverImpact` — les impacts sont désormais portés par le levier

@@ -47,15 +47,13 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
 
   // Clé d'axe = début de période (unique, triable) ; libellé affiché via tickFormatter : une même
   // période occupe donc toujours la même position pour les barres, les lignes et le curseur.
+  // Simplifié à 2 barres (gains / coûts), chacune partant de l'axe des abscisses (0) — le détail
+  // par catégorie (CAPEX, OPEX, gain récurrent/one-off…) s'obtient au clic (`PeriodDetail`).
   const data = traj.points.map((p) => ({
     key: p.periodStart,
     period: p.period,
-    gain: p.gains + p.oneOffGains - p.planned.gains - p.planned.oneOffGains,
-    opex: -(p.opexRec + p.opexOneOff - p.planned.opexRec - p.planned.opexOneOff),
-    capex: -(p.capex - p.planned.capex),
-    gainPlanned: p.planned.gains + p.planned.oneOffGains,
-    opexPlanned: -(p.planned.opexRec + p.planned.opexOneOff),
-    capexPlanned: -p.planned.capex,
+    gain: p.gains + p.oneOffGains,
+    cost: -(p.opexRec + p.opexOneOff + p.capex),
     cumulativeNet: p.cumulativeNet,
     fte: p.fte,
   }));
@@ -75,9 +73,12 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
   };
 
   const CATS = [
-    { key: "gain", label: t("leverDetail.trajectory.legendGain", "Gain"), color: "#3f9d6a" },
-    { key: "opex", label: "OPEX", color: "#e0655a" },
-    { key: "capex", label: "CAPEX", color: "#3b82c4" },
+    { key: "gain", label: t("leverDetail.trajectory.legendGains", "Gains"), color: "#3f9d6a" },
+    {
+      key: "cost",
+      label: t("leverDetail.trajectory.legendCosts", "Coûts (OPEX + CAPEX)"),
+      color: "#e0655a",
+    },
   ];
 
   return (
@@ -166,32 +167,7 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
             {view === "financial" ? (
               <>
                 <Bar dataKey="gain" fill="#3f9d6a" {...barProps} />
-                <Bar dataKey="opex" fill="#e0655a" {...barProps} />
-                <Bar dataKey="capex" fill="#3b82c4" {...barProps} />
-                <Bar
-                  dataKey="gainPlanned"
-                  fill="#3f9d6a"
-                  fillOpacity={0.3}
-                  stroke="#3f9d6a"
-                  strokeDasharray="3 2"
-                  {...barProps}
-                />
-                <Bar
-                  dataKey="opexPlanned"
-                  fill="#e0655a"
-                  fillOpacity={0.3}
-                  stroke="#e0655a"
-                  strokeDasharray="3 2"
-                  {...barProps}
-                />
-                <Bar
-                  dataKey="capexPlanned"
-                  fill="#3b82c4"
-                  fillOpacity={0.3}
-                  stroke="#3b82c4"
-                  strokeDasharray="3 2"
-                  {...barProps}
-                />
+                <Bar dataKey="cost" fill="#e0655a" {...barProps} />
                 <Line
                   type="monotone"
                   dataKey="cumulativeNet"

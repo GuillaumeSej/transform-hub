@@ -1,4 +1,5 @@
-import type { LeverImpact } from "@/types";
+import type { AuthUser, LeverImpact } from "@/types";
+import { hasRole } from "@/lib/roleProfiles";
 
 export type ImpactStatus = NonNullable<LeverImpact["status"]>;
 
@@ -42,4 +43,78 @@ export function impactStatusOf(
   const d = new Date(start);
   if (Number.isNaN(d.getTime()) || d > today) return "planned";
   return isRecurringImpact(imp) ? "ongoing" : "done";
+}
+
+/** Un profil finance peut décider (approuver/rejeter) la validation d'un impact réalisé. */
+export function canDecideImpactRealized(
+  user: Pick<AuthUser, "profiles"> | null | undefined
+): boolean {
+  return hasRole(user, "finance");
+}
+
+/** L'impact est-il coché "Réalisé" en attente de validation finance ? */
+export function isImpactRealizedPending(imp: LeverImpact): boolean {
+  const status = impactStatusOf(imp);
+  return (status === "done" || status === "ongoing") && imp.realizedApproval?.status === "pending";
+}
+
+/**
+ * Patch à appliquer quand un utilisateur coche/décoche "Réalisé" sur une ligne d'impact.
+ * - Décoche (retour à "planned") → on efface l'approbation en cours.
+ * - Coche, profil finance → validé directement ("approved").
+ * - Coche, autre profil (lever/CTO/resp. de chantier…) → passe "pending", en attente d'un profil
+ *   finance (voir `canDecideImpactRealized`/`isImpactRealizedPending`).
+ */
+export function realizedTogglePatch(
+  imp: LeverImpact,
+  checked: boolean,
+  user: Pick<AuthUser, "profiles" | "name"> | null | undefined
+): Partial<LeverImpact> {
+  if (!checked) {
+    return { status: "planned", realizedApproval: undefined };
+  }
+  const status = coerceImpactStatus(imp, "done");
+  const now = new Date().toISOString();
+  if (canDecideImpactRealized(user)) {
+    return {
+      status,
+      realizedApproval: {
+        status: "approved",
+        decidedBy: user?.name,
+        decidedAt: now,
+      },
+    };
+  }
+  return {
+    status,
+    realizedApproval: {
+      status: "pending",
+      requestedBy: user?.name,
+      requestedAt: now,
+    },
+  };
+}
+
+/** Décision finance sur une ligne en attente ("approved"/"rejected"). Rejeter repasse l'impact en
+ *  "planned" (le statut "Réalisé" n'est valide qu'une fois approuvé). */
+export function decideImpactRealized(
+  imp: LeverImpact,
+  decision: "approved" | "rejected",
+  user: Pick<AuthUser, "profiles" | "name"> | null | undefined
+): Partial<LeverImpact> {
+  const now = new Date().toISOString();
+  if (decision === "rejected") {
+    return {
+      status: "planned",
+      realizedApproval: { status: "rejected", decidedBy: user?.name, decidedAt: now },
+    };
+  }
+  return {
+    realizedApproval: {
+      ...imp.realizedApproval,
+      status: "approved",
+      decidedBy: user?.name,
+      decidedAt: now,
+    },
+  };
 }
