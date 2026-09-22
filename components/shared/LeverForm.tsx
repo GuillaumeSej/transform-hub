@@ -766,7 +766,21 @@ export function LeverForm({
           )}
         </p>
       )}
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+        {t("leverForm.impactFinancialGroup", "Impact financier (hors ETP)")}
+      </p>
       <ImpactsEditor
+        scope="financial"
+        impacts={impacts}
+        onChange={(next) => set("impacts", next)}
+        company={company}
+        canEdit
+      />
+      <p className="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+        {t("leverForm.impactFteGroup", "Impact ETP")}
+      </p>
+      <ImpactsEditor
+        scope="fte"
         impacts={impacts}
         onChange={(next) => set("impacts", next)}
         company={company}

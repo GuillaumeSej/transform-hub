@@ -1257,16 +1257,9 @@ export function LeverDetailClientPerformance() {
           <CardBody>
             <SectionTitle first>{t("leverDetail.impactsTitle", "Impacts du levier")}</SectionTitle>
             <ImpactTotalsBlock lever={lever} />
-            <ImpactsEditor
-              impacts={lever.impacts ?? []}
-              company={company}
-              canEdit={!readOnly}
-              readOnly={readOnly}
-              onChange={(next) => data.updateLever(lever.id, { impacts: next })}
-            />
 
             <SectionTitle>{t("leverDetail.financialImpactTitle", "Impact financier")}</SectionTitle>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-6">
               <Stat
                 label={t(
                   "leverDetail.lockedPlanNet",
@@ -1298,9 +1291,17 @@ export function LeverDetailClientPerformance() {
                 {engine.fmtCurr(consolidatedKPIs?.opexRec ?? lever.opexRec)}
               </Stat>
             </div>
+            <ImpactsEditor
+              scope="financial"
+              impacts={lever.impacts ?? []}
+              company={company}
+              canEdit={!readOnly}
+              readOnly={readOnly}
+              onChange={(next) => data.updateLever(lever.id, { impacts: next })}
+            />
 
             <SectionTitle>{t("leverDetail.hrImpactTitle", "Impact RH")}</SectionTitle>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Stat label={t("leverForm.fteImpact", "Impact estimé (ETP)")}>
                 <span className="inline-flex flex-wrap items-center">
                   {fmtSignedFte(leverFteForBadge)}
@@ -1350,6 +1351,14 @@ export function LeverDetailClientPerformance() {
                 </Stat>
               </div>
             </div>
+            <ImpactsEditor
+              scope="fte"
+              impacts={lever.impacts ?? []}
+              company={company}
+              canEdit={!readOnly}
+              readOnly={readOnly}
+              onChange={(next) => data.updateLever(lever.id, { impacts: next })}
+            />
 
             {/* Panneau de réconciliation ETP levier ↔ mouvements RH (audit issue #1) — même
                 langage visuel que les alertes de dépendances ci-dessus (badge rond

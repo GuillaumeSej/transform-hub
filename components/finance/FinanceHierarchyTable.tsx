@@ -12,8 +12,39 @@ import {
   type FinanceSortKey,
 } from "@/lib/dashboardSavings";
 import { sortedHierarchyLevels } from "@/lib/financeCosts";
+import { impactDatesOf } from "@/lib/impactKinds";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { BeTrackData, HierarchyLevelDef, HierarchyNode } from "@/types";
+import type { BeTrackData, HierarchyLevelDef, HierarchyNode, Lever } from "@/types";
+
+/** Années couvertes par un levier — dates de ses lignes d'impact (début/fin), ou à défaut la
+ *  période du levier lui-même (leviers sans impact chiffré). Approximation volontaire : un levier
+ *  qui déborde sur plusieurs années matche chacune d'elles (pas de répartition € par année). */
+function yearOf(d?: string): number | undefined {
+  if (!d) return undefined;
+  const y = new Date(d).getFullYear();
+  return Number.isNaN(y) ? undefined : y;
+}
+
+function addRange(years: Set<number>, from?: number, to?: number) {
+  if (from === undefined && to === undefined) return;
+  const lo = from ?? to!;
+  const hi = to ?? from!;
+  for (let y = Math.min(lo, hi); y <= Math.max(lo, hi); y++) years.add(y);
+}
+
+function leverYears(l: Lever): number[] {
+  const years = new Set<number>();
+  const imps = engine.leverImpactsOf(l);
+  if (imps.length === 0) {
+    addRange(years, yearOf(l.start), yearOf(l.end));
+    return Array.from(years);
+  }
+  for (const imp of imps) {
+    const { start, end } = impactDatesOf(imp);
+    addRange(years, yearOf(start), yearOf(end));
+  }
+  return Array.from(years);
+}
 
 const COLUMNS: { key: Exclude<FinanceSortKey, "label">; label: string }[] = [
   { key: "planned", label: "Planifié initial" },
@@ -46,6 +77,29 @@ export function FinanceHierarchyTable({
   });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  // Filtre années : ensemble vide = toutes les années (case décochée globalement = pas de filtre).
+  const allYears = useMemo(() => {
+    const years = new Set<number>();
+    for (const l of data.levers) leverYears(l).forEach((y) => years.add(y));
+    return Array.from(years).sort((a, b) => a - b);
+  }, [data.levers]);
+  const [selectedYears, setSelectedYears] = useState<Set<number>>(new Set());
+  const yearFilterActive = selectedYears.size > 0;
+  const toggleYear = (y: number) =>
+    setSelectedYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(y)) next.delete(y);
+      else next.add(y);
+      return next;
+    });
+  const filteredData = useMemo<BeTrackData>(() => {
+    if (!yearFilterActive) return data;
+    return {
+      ...data,
+      levers: data.levers.filter((l) => leverYears(l).some((y) => selectedYears.has(y))),
+    };
+  }, [data, yearFilterActive, selectedYears]);
+
   const levelIdx = Math.max(
     0,
     levels.findIndex((l) => l.key === levelKey)
@@ -55,15 +109,18 @@ export function FinanceHierarchyTable({
 
   const company = useMemo(() => ({ hierarchyLevels }), [hierarchyLevels]);
   const parents = useMemo(
-    () => (level ? engine.financeByHierarchyLevel(data, company, level.order, hierarchyNodes) : []),
-    [data, company, level, hierarchyNodes]
+    () =>
+      level
+        ? engine.financeByHierarchyLevel(filteredData, company, level.order, hierarchyNodes)
+        : [],
+    [filteredData, company, level, hierarchyNodes]
   );
   const children = useMemo(
     () =>
       childLevel
-        ? engine.financeByHierarchyLevel(data, company, childLevel.order, hierarchyNodes)
+        ? engine.financeByHierarchyLevel(filteredData, company, childLevel.order, hierarchyNodes)
         : [],
-    [data, company, childLevel, hierarchyNodes]
+    [filteredData, company, childLevel, hierarchyNodes]
   );
   const tree = useMemo(() => {
     const t0 = attachChildren(parents, children, hierarchyNodes);
@@ -142,6 +199,42 @@ export function FinanceHierarchyTable({
         }
       />
       <CardBody>
+        {allYears.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+              {t("finance.hierarchyTable.yearFilter", "Années")}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedYears(new Set())}
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                !yearFilterActive
+                  ? "border-bp-coral bg-bp-coral text-white"
+                  : "border-border bg-white text-secondary hover:bg-neutral-100"
+              }`}
+            >
+              {t("finance.hierarchyTable.allYears", "Toutes")}
+            </button>
+            {allYears.map((y) => (
+              <label
+                key={y}
+                className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                  selectedYears.has(y)
+                    ? "border-bp-coral bg-bp-coral/10 text-bp-coral"
+                    : "border-border bg-white text-secondary hover:bg-neutral-100"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="h-3 w-3 accent-bp-coral"
+                  checked={selectedYears.has(y)}
+                  onChange={() => toggleYear(y)}
+                />
+                {y}
+              </label>
+            ))}
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

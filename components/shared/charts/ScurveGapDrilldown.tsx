@@ -108,12 +108,12 @@ export function ScurveGapDrilldown({
   return (
     <section>
       <h3 className="mb-1 text-sm font-bold text-primary">
-        {t("chart.gapDrill.title", "Origine de l'écart réactualisé − réalisé")} · {month}
+        {t("chart.gapDrill.title", "Origine de l'écart planifié initial − réalisé")} · {month}
       </h3>
       <p className="mb-3 text-xs text-secondary">
         {t(
           "chart.gapDrill.intro",
-          "Écart cumulé à cette période (réactualisé − réalisé), par chantier ou par géographie. Même règle que la courbe : la somme des lignes = l'écart affiché."
+          "Écart cumulé à cette période (planifié initial − réalisé), décomposé en écart de réajustement (planifié initial − réactualisé, sur/sous-performance) et écart de retard (réactualisé − réalisé), par chantier ou par géographie. Même règle que la courbe : la somme des lignes = l'écart affiché."
         )}
       </p>
       <DrilldownDimensionControls {...dimState} />
@@ -128,16 +128,16 @@ export function ScurveGapDrilldown({
               <tr className="text-left text-[11px] uppercase tracking-wide text-tertiary">
                 <th className="pb-2 font-medium">{dimLabel}</th>
                 <th className="px-2 text-right font-medium">
-                  {t("chart.scurve.reforecast", "Réactualisé")}
+                  {t("chart.gapDrill.plannedInitial", "Planifié initial")}
                 </th>
                 <th className="px-2 text-right font-medium">
                   {t("chart.scurve.actual", "Réalisé")}
                 </th>
                 <th className="px-2 text-right font-medium">
-                  {t("chart.gapDrill.late", "dont en retard")}
+                  {t("chart.gapDrill.delay", "dont écart de retard")}
                 </th>
                 <th className="px-2 text-right font-medium">
-                  {t("chart.gapDrill.onTime", "dont dans les temps")}
+                  {t("chart.gapDrill.adjustment", "dont écart de réajustement")}
                 </th>
                 <th className="pl-2 text-right font-medium">
                   {t("chart.waterfall.drill.delta", "Écart")}

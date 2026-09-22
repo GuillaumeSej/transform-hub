@@ -2174,12 +2174,15 @@ const fr: Record<string, string> = {
   "chart.scurveDetail.modeReforecast": "Réactualisé cumulé",
   "chart.scurveDetail.period": "Période",
   "chart.scurveDetail.seeLevers": "Voir les leviers",
-  "chart.gapDrill.title": "Origine de l'écart réactualisé − réalisé",
+  "chart.gapDrill.title": "Origine de l'écart planifié initial − réalisé",
   "chart.gapDrill.intro":
-    "Écart cumulé à cette période (réactualisé − réalisé), par chantier ou par géographie. Même règle que la courbe : la somme des lignes = l'écart affiché.",
+    "Écart cumulé à cette période (planifié initial − réalisé), décomposé en écart de réajustement (planifié initial − réactualisé, sur/sous-performance) et écart de retard (réactualisé − réalisé), par chantier ou par géographie. Même règle que la courbe : la somme des lignes = l'écart affiché.",
   "chart.gapDrill.empty": "Aucun écart à cette période.",
   "chart.gapDrill.late": "dont en retard",
   "chart.gapDrill.onTime": "dont dans les temps",
+  "chart.gapDrill.plannedInitial": "Planifié initial",
+  "chart.gapDrill.delay": "dont écart de retard",
+  "chart.gapDrill.adjustment": "dont écart de réajustement",
   "chart.clickForDetails": "Cliquer pour plus de détails",
   "dashboard.workstreamTable.targetNote":
     "Réalisé par rapport à la cible réactualisée (dernière version de la cible).",

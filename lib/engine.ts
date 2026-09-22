@@ -1221,12 +1221,28 @@ function fiscalMonthIndex(dateStr: string, fyStart: Date): number {
  *  - reforecast : net réactualisé (repli plan figé, net courant), cumulé à la date de fin ;
  *  - actual     : réalisé (`realizedSavings`) cumulé à `deliveredDate`, sinon min(fin, aujourd'hui) —
  *                 donc le cumul à date == `programSummary.realized` ; null pour les périodes futures ;
- *  - gap        : écart réactualisé − réalisé cumulé par période, ventilé en `late` (leviers en retard :
- *                 action en retard ou fin dépassée non livrée), `other` (le reste) ; `cancelled` est un
- *                 mémo (plan des leviers annulés échus, hors `total` car déjà retirés du réactualisé).
+ *  - gap        : écart PLANIFIÉ INITIAL − RÉALISÉ cumulé par période (`total`), décomposé en 2 écarts
+ *                 successifs qui s'additionnent à `total` :
+ *                   `adjustment` = planifié initial − réactualisé (sur/sous-performance : l'effet du
+ *                     réajustement du plan lui-même, indépendant de l'exécution) ;
+ *                   `delay`      = réactualisé − réalisé (écart d'exécution par rapport à la CIBLE
+ *                     réactualisée), lui-même ventilé en `late` (leviers en retard : action en retard
+ *                     ou fin dépassée non livrée) et `other` (le reste).
+ *                 `cancelled` est un mémo (plan des leviers annulés échus, hors `total` car déjà
+ *                 retirés du réactualisé).
  * Les dates hors exercice sont rattachées à la première/dernière période (comme avant).
  */
-export type SavingsSeriesGap = { total: number; late: number; cancelled: number; other: number };
+export type SavingsSeriesGap = {
+  /** Écart total : planifié initial − réalisé = `adjustment` + `delay`. */
+  total: number;
+  /** Écart dû au réajustement du plan : planifié initial − réactualisé. */
+  adjustment: number;
+  /** Écart dû à l'exécution : réactualisé − réalisé = `late` + `other`. */
+  delay: number;
+  late: number;
+  cancelled: number;
+  other: number;
+};
 export type SavingsSeriesPoint = {
   month: string;
   planned: number;
@@ -1315,12 +1331,14 @@ export function savingsSeries(
       actualDelta: r1(actualDelta[i]),
       gap: shown
         ? {
-            total: r1(late + other),
+            total: r1(planned[i] - cumActual),
+            adjustment: r1(planned[i] - reforecast[i]),
+            delay: r1(late + other),
             late: r1(late),
             other: r1(other),
             cancelled: r1(cancelledMemo[i]),
           }
-        : { total: 0, late: 0, other: 0, cancelled: 0 },
+        : { total: 0, adjustment: 0, delay: 0, late: 0, other: 0, cancelled: 0 },
     };
   });
   if (granularity === "month") return monthly;
