@@ -1356,6 +1356,33 @@ describe("mergeMilestoneChecklistItems", () => {
     const merged = mergeMilestoneChecklistItems("E2", [{ itemId: "E2-B1", progressPct: 100 }], {});
     expect(merged.find((i) => i.itemId === "E2-B1")).toEqual({ itemId: "E2-B1", progressPct: 100 });
   });
+
+  it("appends custom actions after the fixed items, reading their stored answer like a manual item", () => {
+    const merged = mergeMilestoneChecklistItems(
+      "E2",
+      [{ itemId: "CUSTOM-1", progressPct: 40 }],
+      {},
+      [{ id: "CUSTOM-1", label: "Migrer la base clients" }]
+    );
+    // Toujours après les items fixes du jalon (E2-B1/B2/B3).
+    expect(merged.map((i) => i.itemId)).toEqual(["E2-B1", "E2-B2", "E2-B3", "CUSTOM-1"]);
+    expect(merged.find((i) => i.itemId === "CUSTOM-1")).toEqual({
+      itemId: "CUSTOM-1",
+      progressPct: 40,
+    });
+  });
+
+  it("treats an unanswered custom action like an unanswered manual item (no progressPct)", () => {
+    const merged = mergeMilestoneChecklistItems("E2", [], {}, [
+      { id: "CUSTOM-1", label: "Migrer la base clients" },
+    ]);
+    expect(merged.find((i) => i.itemId === "CUSTOM-1")).toEqual({ itemId: "CUSTOM-1" });
+  });
+
+  it("defaults to no custom actions when the 4th argument is omitted (backward compatible)", () => {
+    const merged = mergeMilestoneChecklistItems("E2", [], {});
+    expect(merged.map((i) => i.itemId)).toEqual(["E2-B1", "E2-B2", "E2-B3"]);
+  });
 });
 
 describe("isStrategicLeadOf", () => {
@@ -1435,6 +1462,49 @@ describe("requestMilestoneApproval", () => {
         [action]
       )
     ).toThrow();
+  });
+
+  it("blocks the request when a custom action of the current milestone is incomplete", () => {
+    const action = actionReadyForE2({
+      customMilestoneActions: { E2: [{ id: "CUSTOM-1", label: "Migrer la base clients" }] },
+      // Tous les items FIXES du jalon sont à 100 (voir actionReadyForE2), mais l'action
+      // personnalisée n'a encore aucune réponse dans checklists.E2 — doit bloquer comme n'importe
+      // quel item fixe manuel non répondu.
+    });
+    expect(() =>
+      requestMilestoneApproval(
+        action,
+        { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
+        [],
+        [action]
+      )
+    ).toThrow();
+  });
+
+  it("allows the request once the custom action is also at 100%", () => {
+    const action = actionReadyForE2({
+      customMilestoneActions: { E2: [{ id: "CUSTOM-1", label: "Migrer la base clients" }] },
+      milestones: {
+        currentMilestone: "E2",
+        passedMilestones: ["E0", "E1"],
+        checklists: {
+          E2: [
+            { itemId: "E2-B1", progressPct: 100 },
+            { itemId: "E2-B2", progressPct: 100 },
+            { itemId: "E2-B3", progressPct: 100 },
+            { itemId: "CUSTOM-1", progressPct: 100 },
+          ],
+        },
+      },
+    });
+    expect(() =>
+      requestMilestoneApproval(
+        action,
+        { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
+        [],
+        [action]
+      )
+    ).not.toThrow();
   });
 
   it("throws when canPassMilestone is not satisfied for the current milestone (prerequisite gate)", () => {

@@ -990,6 +990,31 @@ export type ChantierMilestoneState = {
   checklists: Partial<Record<MilestoneId, MilestoneChecklistItem[]>>;
 };
 
+/**
+ * Item de check-list AJOUTÉ PAR L'UTILISATEUR pour un jalon d'un projet précis (round "actions
+ * clés du jalon", demande PO explicite) — complète les items FIXES de `MILESTONE_CHECKLISTS`
+ * (lib/milestoneChecklist.ts, mêmes pour tous les projets de l'entreprise) par des actions
+ * CONCRÈTES propres à CE projet, que le référentiel générique ne peut pas deviner à l'avance
+ * (ex. "Migrer la base clients" sur un jalon "Exécuté" n'a de sens que pour CE projet précis).
+ *
+ * Contrairement à un `ChecklistItemDef` (lib/milestoneChecklist.ts), `label` est du texte LIBRE
+ * (pas une clé i18n) : cet item n'existe QUE sur ce projet, il n'y a rien à traduire dans les 4
+ * langues de l'app pour un texte que son auteur a saisi lui-même dans sa propre langue.
+ *
+ * La PROGRESSION d'un item personnalisé (`progressPct`/`actionPlan`/`resolved`) est stockée
+ * EXACTEMENT comme celle d'un item fixe manuel : dans `ChantierMilestoneState.checklists[jalon]`,
+ * une entrée `MilestoneChecklistItem` dont `itemId` référence `MilestoneCustomAction.id` — voir
+ * `lib/axisLogic.ts::mergeMilestoneChecklistItems`, qui fusionne items fixes + personnalisés dans
+ * une seule liste avant `canPassMilestone` (un item personnalisé bloque le passage de jalon
+ * exactement comme un item fixe non complété, aucun traitement de faveur).
+ */
+export type MilestoneCustomAction = {
+  /** Identifiant stable, opaque, généré à la création (jamais reconstruit depuis `label`) — sert
+   *  de clé de fusion avec les réponses stockées dans `checklists[jalon]`. */
+  id: string;
+  label: string;
+};
+
 /** Un chantier = un regroupement d'actions concrètes qui font avancer un axe. Niveau
  *  intermédiaire absent du modèle Performance : c'est lui qui structure le Gantt (un bloc de
  *  Gantt = un chantier, pas une action isolée). */
@@ -1162,6 +1187,15 @@ export type ChantierAction = {
    *  `indicatorId` — l'ancien aiguillage vers un kanban 3-états pour les leviers sans KPI a été
    *  supprimé (le PO a tranché pour un système unique, plus simple à piloter). */
   milestones?: ChantierMilestoneState;
+  /** Actions personnalisées de check-list AJOUTÉES par le pilote de CE projet, PAR JALON — voir
+   *  `MilestoneCustomAction` pour le raisonnement complet. `Partial` comme
+   *  `ChantierMilestoneState.checklists` : un jalon sans action personnalisée n'a simplement
+   *  aucune entrée ici. Typiquement renseigné à la CRÉATION du projet (aperçu J0→J4 avant
+   *  validation, voir `ChantierActionForm`), mais reste modifiable ensuite comme le reste de la
+   *  fiche — rien n'empêche d'ajouter une action personnalisée à un jalon pas encore atteint après
+   *  coup. Absent = aucune personnalisation, comportement historique inchangé (seuls les items
+   *  fixes de `MILESTONE_CHECKLISTS` comptent). */
+  customMilestoneActions?: Partial<Record<MilestoneId, MilestoneCustomAction[]>>;
   /** Demande de validation de jalon en cours — voir `ChantierMilestoneApproval` ci-dessus. Non
    *  défini = pas de demande en cours. Le SEUL chemin légitime pour faire progresser
    *  `milestones.currentMilestone`/`passedMilestones` une fois `canPassMilestone` satisfait (voir

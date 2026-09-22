@@ -21,6 +21,7 @@ import type {
   IndicatorRiskStatus,
   MaturityStageConfig,
   MilestoneChecklistItem,
+  MilestoneCustomAction,
   MilestoneId,
   Program,
   ProgramType,
@@ -895,27 +896,41 @@ export function canPassMilestone(
 /**
  * Fusionne les items d'un jalon donné — réponses manuelles STOCKÉES (typiquement
  * `action.milestones.checklists[milestoneId]`) + valeurs LIVE des items automatiques (typiquement
- * `resolveMilestoneAutoFlags(milestoneId, action, allChantiers, allActions)`) — dans l'ordre de
- * `MILESTONE_CHECKLISTS[milestoneId]`. Seule source de vérité pour cette fusion (round "jalon
- * validation gate") : consommée aussi bien par `MilestoneChecklistPanel.tsx` (calcul du bouton
- * "Valider le jalon", qui a déjà les deux moitiés sous forme de props) que par `canPassMilestone`/
- * `requestMilestoneApproval` ci-dessous (le PRÉREQUIS avant de pouvoir même soumettre une demande de
- * validation) — les deux ne doivent jamais diverger sur ce qui compte comme "complet". Reprend
- * exactement la logique locale `mergedItems` qu'avait `MilestoneChecklistPanel.tsx` avant ce round,
- * extraite ici pour que les deux appelants ne puissent plus diverger.
+ * `resolveMilestoneAutoFlags(milestoneId, action, allChantiers, allActions)`) + actions
+ * PERSONNALISÉES de ce projet (round "actions clés du jalon", typiquement
+ * `action.customMilestoneActions?.[milestoneId]`) — dans l'ordre : items fixes de
+ * `MILESTONE_CHECKLISTS[milestoneId]` puis actions personnalisées. Seule source de vérité pour
+ * cette fusion (round "jalon validation gate") : consommée aussi bien par
+ * `MilestoneChecklistPanel.tsx` (calcul du bouton "Valider le jalon", qui a déjà les trois moitiés
+ * sous forme de props) que par `canPassMilestone`/`requestMilestoneApproval` ci-dessous (le
+ * PRÉREQUIS avant de pouvoir même soumettre une demande de validation) — les deux ne doivent
+ * jamais diverger sur ce qui compte comme "complet". Reprend exactement la logique locale
+ * `mergedItems` qu'avait `MilestoneChecklistPanel.tsx` avant ce round, extraite ici pour que les
+ * deux appelants ne puissent plus diverger.
+ *
+ * `customActions` par défaut à `[]` — un appelant qui ignore encore ce paramètre (code écrit avant
+ * son introduction) continue de fonctionner exactement comme avant, sans aucune action
+ * personnalisée mêlée au calcul. Une action personnalisée bloque `canPassMilestone` exactement
+ * comme un item fixe non complété, aucun traitement de faveur : voir le doc-comment de
+ * `MilestoneCustomAction` (types/index.ts).
  */
 export function mergeMilestoneChecklistItems(
   milestoneId: MilestoneId,
   storedItems: MilestoneChecklistItem[],
-  autoFlags: Record<string, number>
+  autoFlags: Record<string, number>,
+  customActions: MilestoneCustomAction[] = []
 ): MilestoneChecklistItem[] {
-  return MILESTONE_CHECKLISTS[milestoneId].map((def) =>
+  const fixed = MILESTONE_CHECKLISTS[milestoneId].map((def) =>
     def.auto
       ? autoFlags[def.itemId] !== undefined
         ? { itemId: def.itemId, progressPct: autoFlags[def.itemId] }
         : { itemId: def.itemId }
       : (storedItems.find((i) => i.itemId === def.itemId) ?? { itemId: def.itemId })
   );
+  const custom = customActions.map(
+    (c) => storedItems.find((i) => i.itemId === c.id) ?? { itemId: c.id }
+  );
+  return [...fixed, ...custom];
 }
 
 // ─── Jalon — porte de validation (round "jalon validation gate") ──────────────────────────────
@@ -982,7 +997,13 @@ export function requestMilestoneApproval(
   }
   const autoFlags = resolveMilestoneAutoFlags(currentMilestone, action, allChantiers, allActions);
   const storedItems = action.milestones?.checklists[currentMilestone] ?? [];
-  const mergedItems = mergeMilestoneChecklistItems(currentMilestone, storedItems, autoFlags);
+  const customActions = action.customMilestoneActions?.[currentMilestone] ?? [];
+  const mergedItems = mergeMilestoneChecklistItems(
+    currentMilestone,
+    storedItems,
+    autoFlags,
+    customActions
+  );
   const { canPass, reasons } = canPassMilestone(currentMilestone, mergedItems);
   if (!canPass) {
     throw new Error(
