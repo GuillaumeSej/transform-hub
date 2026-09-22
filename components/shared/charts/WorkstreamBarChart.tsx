@@ -191,9 +191,9 @@ function useCategoryCenters(count: number): number[] | null {
 }
 
 /** Tags de totaux, centrés au-dessus de chaque barre en colonne alignée (jamais côte à côte, donc
- *  aucun chevauchement) : planifié initial (contour pointillé) au-dessus, cible réactualisée
- *  (gris) en dessous. Le réalisé est écrit DANS le segment coral quand il est assez haut, sinon il
- *  rejoint la colonne de tags. */
+ *  aucun chevauchement) : planifié initial (contour pointillé) au sommet, cible réactualisée (gris)
+ *  au milieu, réalisé (corail) au plus près de la barre — toujours en tag externe, jamais écrit à
+ *  l'intérieur du segment (voir commentaire plus bas sur les couches de rendu Recharts). */
 function TotalTags({
   data,
   hasPlanned,
@@ -208,38 +208,28 @@ function TotalTags({
   if (!centers || !yScale) return null;
   const yOf = (v: number) => (yScale(v) as number) ?? 0;
   return (
-    // pointerEvents="none" : rendu APRÈS les <Bar> (pour rester visible par-dessus), donc sans ça
-    // le texte "réalisé" à l'intérieur d'une barre intercepterait son clic à la place de la barre.
+    // pointerEvents="none" : les tags ne doivent jamais intercepter le clic sur une barre.
     <g pointerEvents="none">
       {data.map((d, di) => {
         const cx = centers[di];
         const stackTop = Math.max(d.target, d.realized);
         const top =
           hasPlanned && d.planned !== undefined ? Math.max(stackTop, d.planned) : stackTop;
-        const realizedH = yOf(0) - yOf(d.realized);
-        const realizedInside = realizedH >= 18;
-        // De bas en haut, à partir du sommet de la barre la plus haute.
+        // Le "réalisé" est TOUJOURS un tag externe (jamais écrit à l'intérieur du segment coral) :
+        // Recharts peint `<Customized>` sur une couche de z-index FIXE, systématiquement AVANT les
+        // `<Bar>`, quel que soit leur ordre dans le JSX — un texte "à l'intérieur" de la barre se
+        // retrouvait donc invisible, recouvert par le remplissage de la barre peinte après (retour
+        // testeur : "les premiers bar charts, j'ai pas de tag" sur les leviers avec un réalisé assez
+        // grand pour déclencher l'ancien mode "à l'intérieur").
         const tags: { key: string; v: number; fill: string; dashed?: boolean }[] = [
           { key: "t", v: d.target, fill: "#6B5D57" },
+          { key: "r", v: d.realized, fill: "#FF3C47" },
         ];
-        if (!realizedInside) tags.push({ key: "r", v: d.realized, fill: "#FF3C47" });
         if (hasPlanned && d.planned !== undefined)
           tags.push({ key: "p", v: d.planned, fill: "#fff", dashed: true });
         const baseY = yOf(top) - 4;
         return (
           <g key={d.label}>
-            {realizedInside && (
-              <text
-                x={cx}
-                y={yOf(d.realized / 2) + 4}
-                textAnchor="middle"
-                fontSize={11}
-                fontWeight={800}
-                fill="#fff"
-              >
-                {fmt(d.realized)}
-              </text>
-            )}
             {tags.map((it, i) => {
               const y = baseY - (i + 1) * (TAG_H + TAG_GAP) + 2;
               const label = fmt(it.v);
@@ -545,12 +535,12 @@ export function WorkstreamBarChart({
               legendType="plainline"
             />
           )}
-          {/* Tags/callouts déclarés APRÈS les <Bar> : Recharts peint les enfants dans l'ordre du
-              JSX, donc les placer avant les barres (comme précédemment) faisait peindre les barres
-              PAR-DESSUS — masquant en particulier le montant "réalisé" écrit en blanc À L'INTÉRIEUR
-              du segment coral quand il est assez haut (`realizedInside`), invisible sous le
-              remplissage de la barre peinte ensuite. Retour testeur : "les premiers bar charts,
-              j'ai pas de tag" — le tag existait, il était juste caché. */}
+          {/* Tags/callouts : leur position dans ce JSX n'a AUCUN effet sur l'ordre de peinture réel
+              — Recharts range `<Customized>` sur une couche de z-index fixe (`recharts-customized-
+              wrapper`), systématiquement rendue AVANT celle des `<Bar>` (`recharts-zIndex-layer_1xx`
+              et au-delà), quel que soit l'ordre déclaré ici. C'est pour cette raison que le montant
+              "réalisé" ne peut plus être écrit à l'intérieur du segment coral (voir `TotalTags`) :
+              il serait invisible, recouvert par le remplissage de la barre peint après. */}
           <Customized
             component={() => <TotalTags data={chartData} hasPlanned={hasPlanned} fmt={fmt} />}
           />
