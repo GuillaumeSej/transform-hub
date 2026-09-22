@@ -137,14 +137,13 @@ export function SavingsWaterfallChart({
     () =>
       bars.map((b) => {
         const row: Record<string, number | string | number[]> = { ...b, anchor: 0.001 };
-        b.seg.forEach((v, i) => (row[`s${i}`] = v));
+        // Barre "OPEX récurrent" : un seul bloc uni (montant total), pas de détail par nature —
+        // ce détail reste disponible dans le popup au clic (SavingsStepDrilldownModal).
+        row.opexTotal = b.seg.reduce((s, v) => s + v, 0);
         return row;
       }),
     [bars]
   );
-  const segCount = bars.find((b) => b.key === "opexRec")?.seg.length ?? 0;
-  const segLabel = (i: number) =>
-    segments[i]?.label ?? t("chart.waterfall.step.opexRec", "OPEX récurrent");
 
   if (bars.length === 0) {
     return (
@@ -237,8 +236,11 @@ export function SavingsWaterfallChart({
     const xScale = useXAxisScale();
     const yScale = useYAxisScale();
     if (!xScale || !yScale) return null;
-    const bw = (xScale as unknown as { bandwidth?: () => number }).bandwidth;
-    const band = typeof bw === "function" ? bw.call(xScale) : 0;
+    // Recharts 3 : `useXAxisScale` ne renvoie que `scale.map` (une fonction nue), sans
+    // `.bandwidth()` — on dérive donc la largeur de bande de l'écart entre deux catégories
+    // consécutives (espacement uniforme), seule façon fiable d'obtenir la vraie largeur de bande.
+    const positions = bars.map((b) => (xScale(b.label) as number) ?? 0);
+    const band = bars.length > 1 ? Math.abs(positions[1] - positions[0]) : 0;
     // Recharts : marge de `BAR_GAP` × bande de chaque côté de la barre.
     const half = band * (1 - 2 * BAR_GAP) * 0.5;
     return (
@@ -247,8 +249,8 @@ export function SavingsWaterfallChart({
           const next = bars[i + 1];
           if (b.key === "gap" || next.key === "gap") return null;
           const y = (yScale(endLevel(b)) as number) ?? 0;
-          const x1 = ((xScale(b.label) as number) ?? 0) + band / 2 + half;
-          const x2 = ((xScale(next.label) as number) ?? 0) + band / 2 - half;
+          const x1 = positions[i] + band / 2 + half;
+          const x2 = positions[i + 1] + band / 2 - half;
           return (
             <line
               key={`${b.key}-${i}`}
@@ -309,33 +311,13 @@ export function SavingsWaterfallChart({
             {label}
           </span>
         ))}
-        <span
-          className="inline-flex items-center gap-1 font-semibold"
-          style={{ color: WATERFALL_COLORS.up }}
-        >
-          +
-          <span className="font-normal text-secondary">
-            {t("chart.waterfall.favorable", "Favorable")}
-          </span>
+        <span className="inline-flex items-center gap-1">
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-sm"
+            style={{ background: WATERFALL_COLORS.down }}
+          />
+          {t("chart.waterfall.step.opexRec", "OPEX récurrent")}
         </span>
-        <span
-          className="inline-flex items-center gap-1 font-semibold"
-          style={{ color: WATERFALL_COLORS.down }}
-        >
-          −
-          <span className="font-normal text-secondary">
-            {t("chart.waterfall.unfavorable", "Défavorable")}
-          </span>
-        </span>
-        {Array.from({ length: segCount }).map((_, i) => (
-          <span key={i} className="inline-flex items-center gap-1">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-sm"
-              style={{ background: OPEX_SEGMENT_COLORS[i % OPEX_SEGMENT_COLORS.length] }}
-            />
-            {segCount > 1 ? `OPEX · ${segLabel(i)}` : segLabel(i)}
-          </span>
-        ))}
       </div>
       <HoverDetailsHint enabled={clickable}>
         <ResponsiveContainer width="100%" height={height}>
@@ -396,15 +378,15 @@ export function SavingsWaterfallChart({
             >
               <LabelList dataKey="remaining" content={segLabel2("remaining", "#1A1A1A")} />
             </Bar>
-            {Array.from({ length: segCount }).map((_, i) => (
-              <Bar
-                key={i}
-                dataKey={`s${i}`}
-                stackId="w"
-                fill={OPEX_SEGMENT_COLORS[i % OPEX_SEGMENT_COLORS.length]}
-                isAnimationActive={false}
-              />
-            ))}
+            {/* OPEX récurrent : un seul bloc uni dans le graphique (le détail par nature reste
+                disponible dans le popup au clic, cf. SavingsStepDrilldownModal). */}
+            <Bar
+              dataKey="opexTotal"
+              stackId="w"
+              fill={WATERFALL_COLORS.down}
+              isAnimationActive={false}
+              {...outline}
+            />
             {/* Ancre de hauteur nulle au sommet de chaque pile : porte l'étiquette de valeur. */}
             <Bar dataKey="anchor" stackId="w" fill="transparent" isAnimationActive={false}>
               <LabelList dataKey="anchor" content={renderLabel} />

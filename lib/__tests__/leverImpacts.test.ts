@@ -430,7 +430,9 @@ describe("savingsSeries: single source for S-curve and bridge", () => {
     netSavings: 10,
     end: "2026-04-30",
     actions: [act("a", { end: "2026-04-30", status: "in_progress", declaredProgressPct: 40 })],
-    impacts: [imp("g", { amount: 10 })],
+    // status explicite "planned" + date passée (< today = 2026-08-15) : impact non réalisé alors
+    // que sa date est dépassée → fait basculer le levier "en retard" (isLeverLate, engine.ts).
+    impacts: [imp("g", { amount: 10, gainDate: "2026-04-30", status: "planned" })],
   });
   const done = lever({
     id: "B",
@@ -453,12 +455,17 @@ describe("savingsSeries: single source for S-curve and bridge", () => {
       actual: expect.anything(),
     });
   });
-  it("gap splits late vs other and adds up", () => {
+  it("gap is signed réalisé − planifié (positif = gain, négatif = perte) and splits performance/delay", () => {
     const s = engine.savingsSeries(d, "month", today);
     const p = s[7];
-    expect(p.gap.total).toBeCloseTo(p.reforecast - (p.actual ?? 0), 1);
-    expect(p.gap.late).toBeGreaterThan(0);
-    expect(p.gap.total).toBeCloseTo(p.gap.late + p.gap.other, 1);
+    // total = réalisé − planifié initial (jamais réactualisé − réalisé comme avant le round 5).
+    expect(p.gap.total).toBeCloseTo((p.actual ?? 0) - p.planned, 1);
+    // adjustment ("écart de performance") = réactualisé − planifié initial.
+    expect(p.gap.adjustment).toBeCloseTo(p.reforecast - p.planned, 1);
+    // Le levier A est en retard (impact non réalisé, date dépassée) et sous-performe : delay < 0.
+    expect(p.gap.delay).toBeLessThan(0);
+    // Identité de construction : total = adjustment + delay + other (jamais affiché mais toujours vrai).
+    expect(p.gap.total).toBeCloseTo(p.gap.adjustment + p.gap.delay + p.gap.other, 1);
     expect(s[10].actual).toBeNull();
   });
 });

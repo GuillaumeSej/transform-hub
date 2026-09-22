@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { MessageSquare } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Check, ChevronLeft, ChevronRight, MessageSquare, Pencil } from "lucide-react";
 import { HierarchyLeafSelect } from "@/components/shared/HierarchyLeafSelect";
 import { Popover } from "@/components/shared/Popover";
 import { subscribeHierarchyNodes } from "@/lib/firestore/admin";
@@ -31,8 +32,15 @@ import type { Comment, Company, HierarchyNode, LeverImpact } from "@/types";
 const inputClass =
   "w-full min-w-0 truncate rounded-sm border border-transparent bg-transparent px-1 py-1 text-[12px] hover:border-border focus:border-bp-coral focus:bg-white focus:outline-none disabled:cursor-default disabled:hover:border-transparent disabled:text-primary";
 const invalidClass = "!border-bp-coral bg-bp-coral/5";
+// `truncate` (au lieu de `whitespace-nowrap` seul) : en `table-fixed`, un intitulé plus large que
+// sa colonne débordait visuellement sur l'en-tête voisin (texte qui se chevauche) faute de
+// troncature — chaque `<th>` porte désormais aussi un `title=` avec le libellé complet au survol.
 const thClass =
-  "whitespace-nowrap px-1 py-1.5 text-left text-[9.5px] font-semibold uppercase tracking-wide text-tertiary";
+  "truncate px-1 py-1.5 text-left text-[9.5px] font-semibold uppercase tracking-wide text-tertiary";
+// Scrollbar horizontale toujours visible et assez épaisse pour un scroll à la souris (le
+// scrollbar global de app/globals.css est fine/discrète) — cf. Tâche 2.B.
+const scrollShellClass =
+  "impacts-editor-scroll overflow-x-auto rounded-md border border-border bg-white";
 
 const TYPE_STYLE: Record<ImpactTypeKey, string> = {
   fte: "bg-violet-100 text-violet-700",
@@ -146,7 +154,19 @@ function formatCommentTs(iso: string): string {
   });
 }
 
-/** Bouton commentaire compact (icône + compteur) ouvrant un popover liste + ajout. */
+/** Bouton commentaire compact (icône + compteur) ouvrant un popover liste + ajout.
+ *
+ * N'utilise PAS le `Popover` partagé (positionnement `absolute` simple) : ce bouton vit dans le
+ * tableau d'impacts, lui-même enveloppé dans un conteneur `overflow-x-auto` (Tâche 2.B, scroll
+ * horizontal). Or dès qu'un ancêtre fixe `overflow-x`, le navigateur bascule aussi `overflow-y` en
+ * `auto` (règle CSS overflow — impossible d'avoir l'un `auto` et l'autre `visible`), ce qui rogne
+ * verticalement tout panneau `position: absolute` qui déborderait de la hauteur du tableau : le
+ * popover de commentaires pouvait ainsi devenir invisible (pas juste débordant à droite) dès qu'il
+ * s'ouvrait près du bas du tableau — confirmé en inspectant le rendu (le panneau existait dans le
+ * DOM mais son ancêtre `.impacts-editor-scroll` le clippait). On rend donc ce panneau via un portail
+ * (`createPortal` → `document.body`), en `position: fixed` calculée depuis le rect du déclencheur :
+ * il sort ainsi complètement du conteneur scrollable et ne peut plus être rogné, tout en restant
+ * ancré par sa droite (déclencheur proche du bord droit du tableau, cf. Tâche 2.C). */
 function CommentsCell({
   comments,
   onAdd,
@@ -158,74 +178,121 @@ function CommentsCell({
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState("");
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const count = comments.length;
+
+  const openPanel = () => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) setPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (
+        triggerRef.current &&
+        !triggerRef.current.contains(target) &&
+        panelRef.current &&
+        !panelRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   return (
-    <Popover
-      trigger={({ toggle }) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggle();
-          }}
-          title={t("impactsEditor.comments", "Commentaires")}
-          className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10.5px] font-semibold ${
-            count > 0
-              ? "border-bp-coral/30 bg-bp-coral/10 text-bp-coral"
-              : "border-border bg-white text-tertiary hover:bg-neutral-100"
-          }`}
-        >
-          <MessageSquare size={11} />
-          {count > 0 && count}
-        </button>
-      )}
-      panelClassName="w-72"
-    >
-      <div className="flex flex-col gap-2">
-        {comments.length === 0 ? (
-          <p className="text-[11px] text-tertiary">
-            {t("impactsEditor.noComments", "Aucun commentaire.")}
-          </p>
-        ) : (
-          <ul className="flex max-h-48 flex-col gap-1.5 overflow-y-auto">
-            {[...comments]
-              .sort((a, b) => (a.ts < b.ts ? 1 : -1))
-              .map((c, i) => (
-                <li key={i} className="rounded-sm bg-neutral-50 px-2 py-1 text-[11px]">
-                  <div className="mb-0.5 flex items-center justify-between gap-2 text-[10px] text-tertiary">
-                    <span className="font-semibold text-secondary">{c.user}</span>
-                    <span>{formatCommentTs(c.ts)}</span>
-                  </div>
-                  <p className="whitespace-pre-wrap text-primary">{c.text}</p>
-                </li>
-              ))}
-          </ul>
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (open) setOpen(false);
+          else openPanel();
+        }}
+        title={t("impactsEditor.comments", "Commentaires")}
+        className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10.5px] font-semibold ${
+          count > 0
+            ? "border-bp-coral/30 bg-bp-coral/10 text-bp-coral"
+            : "border-border bg-white text-tertiary hover:bg-neutral-100"
+        }`}
+      >
+        <MessageSquare size={11} />
+        {count > 0 && count}
+      </button>
+      {open &&
+        pos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="dialog"
+            onClick={(e) => e.stopPropagation()}
+            style={{ top: pos.top, right: pos.right }}
+            className="fixed z-50 w-72 rounded-md border border-border bg-white p-2.5 text-left shadow-lg"
+          >
+            <div className="flex flex-col gap-2">
+              {comments.length === 0 ? (
+                <p className="text-[11px] text-tertiary">
+                  {t("impactsEditor.noComments", "Aucun commentaire.")}
+                </p>
+              ) : (
+                <ul className="flex max-h-48 flex-col gap-1.5 overflow-y-auto">
+                  {[...comments]
+                    .sort((a, b) => (a.ts < b.ts ? 1 : -1))
+                    .map((c, i) => (
+                      <li key={i} className="rounded-sm bg-neutral-50 px-2 py-1 text-[11px]">
+                        <div className="mb-0.5 flex items-center justify-between gap-2 text-[10px] text-tertiary">
+                          <span className="font-semibold text-secondary">{c.user}</span>
+                          <span>{formatCommentTs(c.ts)}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap text-primary">{c.text}</p>
+                      </li>
+                    ))}
+                </ul>
+              )}
+              {canComment && (
+                <div className="flex flex-col gap-1 border-t border-border pt-2">
+                  <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder={t("impactsEditor.addComment", "Ajouter un commentaire…")}
+                    rows={2}
+                    className="w-full resize-none rounded-sm border border-border px-1.5 py-1 text-[11px] focus:border-bp-coral focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={!draft.trim()}
+                    onClick={() => {
+                      if (!draft.trim()) return;
+                      onAdd(draft.trim());
+                      setDraft("");
+                    }}
+                    className="self-end rounded-sm bg-bp-coral px-2 py-0.5 text-[10.5px] font-semibold text-white disabled:opacity-40"
+                  >
+                    {t("common.add", "Ajouter")}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
         )}
-        {canComment && (
-          <div className="flex flex-col gap-1 border-t border-border pt-2">
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={t("impactsEditor.addComment", "Ajouter un commentaire…")}
-              rows={2}
-              className="w-full resize-none rounded-sm border border-border px-1.5 py-1 text-[11px] focus:border-bp-coral focus:outline-none"
-            />
-            <button
-              type="button"
-              disabled={!draft.trim()}
-              onClick={() => {
-                if (!draft.trim()) return;
-                onAdd(draft.trim());
-                setDraft("");
-              }}
-              className="self-end rounded-sm bg-bp-coral px-2 py-0.5 text-[10.5px] font-semibold text-white disabled:opacity-40"
-            >
-              {t("common.add", "Ajouter")}
-            </button>
-          </div>
-        )}
-      </div>
-    </Popover>
+    </>
   );
 }
 
@@ -257,7 +324,25 @@ export function ImpactsEditor({
   const showGeo = !!(geoLevel && companyId);
   const isFteScope = scope === "fte";
   const rows = impacts.filter((imp) => (impactTypeOf(imp) === "fte") === isFteScope);
+  // Colonne crayon/coche (édition par ligne) en plus de la colonne suppression quand éditable.
   const colCount = (isFteScope ? 6 : 8) + (showGeo ? 1 : 0) + (editable ? 1 : 0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollBy = (dx: number) => scrollRef.current?.scrollBy({ left: dx, behavior: "smooth" });
+  // Mode "édition par ligne" (Tâche 2.D) : une ligne est éditable soit parce que l'utilisateur a
+  // cliqué sur le crayon, soit parce qu'elle vient d'être créée (sinon impossible à remplir).
+  const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
+  const startEditing = (id: string) =>
+    setEditingIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  const stopEditing = (id: string) =>
+    setEditingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   const futureMsg = t(
     "impactsEditor.statusFutureWarn",
     "Impact réalisé : la date de début est dans le futur."
@@ -301,56 +386,104 @@ export function ImpactsEditor({
   );
   const star = <span className="text-bp-coral">*</span>;
 
+  const thImpactType = t("impactsEditor.impactType", "Type d'impact");
+  const thLabel = t("impactsEditor.label", "Libellé");
+  const thAmount = isFteScope ? "ETP" : t("impactsEditor.amountShort", "€M");
+  const thNature = t("impactsEditor.nature", "Nature");
+  const thDestination = t("impactsEditor.destination", "Destination");
+  const thGeo = geoLevel?.label ?? t("impactsEditor.geography", "Géographie");
+  const thTechno = t("impactsEditor.technologyShort", "Techno.");
+  const thStart = t("impactsEditor.startDate", "Début");
+  const thEnd = t("impactsEditor.endDate", "Fin");
+  const thComments = t("impactsEditor.comments", "Commentaires");
+  const thStatus = t("impactsEditor.status", "Statut");
+  const requiredSuffix = t("impactsEditor.requiredSuffix", "(obligatoire)");
+
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto rounded-md border border-border bg-white">
+      <style>{`
+        .impacts-editor-scroll{scrollbar-width:auto;scrollbar-color:var(--n-400) var(--n-100);}
+        .impacts-editor-scroll::-webkit-scrollbar{height:12px;}
+        .impacts-editor-scroll::-webkit-scrollbar-track{background:var(--n-100);}
+        .impacts-editor-scroll::-webkit-scrollbar-thumb{background:var(--n-400);border-radius:999px;border:2px solid var(--n-100);}
+        .impacts-editor-scroll::-webkit-scrollbar-thumb:hover{background:var(--n-500);}
+      `}</style>
+      <div className="flex items-center justify-end gap-1">
+        <button
+          type="button"
+          onClick={() => scrollBy(-240)}
+          aria-label={t("impactsEditor.scrollLeft", "Défiler vers la gauche")}
+          title={t("impactsEditor.scrollLeft", "Défiler vers la gauche")}
+          className="rounded-sm border border-border bg-white p-0.5 text-tertiary hover:bg-neutral-100 hover:text-primary"
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={() => scrollBy(240)}
+          aria-label={t("impactsEditor.scrollRight", "Défiler vers la droite")}
+          title={t("impactsEditor.scrollRight", "Défiler vers la droite")}
+          className="rounded-sm border border-border bg-white p-0.5 text-tertiary hover:bg-neutral-100 hover:text-primary"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
+      <div ref={scrollRef} className={scrollShellClass}>
         <table
           className={`w-full ${isFteScope ? "min-w-[860px]" : "min-w-[1180px]"} table-fixed border-collapse text-[12px]`}
         >
           <thead className="sticky top-0 z-10 border-b border-border bg-neutral-50">
             <tr>
-              <th className={thClass} style={{ width: isFteScope ? 96 : 150 }}>
-                {t("impactsEditor.impactType", "Type d'impact")}
+              <th className={thClass} style={{ width: isFteScope ? 96 : 150 }} title={thImpactType}>
+                {thImpactType}
               </th>
-              <th className={thClass} style={{ minWidth: 200 }}>
-                {t("impactsEditor.label", "Libellé")}
+              <th className={thClass} style={{ minWidth: 200 }} title={thLabel}>
+                {thLabel}
               </th>
-              <th className={`${thClass} text-right`} style={{ width: 78 }}>
-                {isFteScope ? "ETP" : t("impactsEditor.amountShort", "€M")}
+              <th className={`${thClass} text-right`} style={{ width: 78 }} title={thAmount}>
+                {thAmount}
               </th>
               {!isFteScope && (
                 <>
-                  <th className={thClass} style={{ width: 104 }}>
-                    {t("impactsEditor.nature", "Nature")} {star}
+                  <th
+                    className={thClass}
+                    style={{ width: 104 }}
+                    title={`${thNature} ${requiredSuffix}`}
+                  >
+                    {thNature} {star}
                   </th>
-                  <th className={thClass} style={{ width: 112 }}>
-                    {t("impactsEditor.destination", "Destination")} {star}
+                  <th
+                    className={thClass}
+                    style={{ width: 112 }}
+                    title={`${thDestination} ${requiredSuffix}`}
+                  >
+                    {thDestination} {star}
                   </th>
                 </>
               )}
               {showGeo && (
-                <th className={thClass} style={{ width: 96 }}>
-                  {geoLevel?.label ?? t("impactsEditor.geography", "Géographie")}
+                <th className={thClass} style={{ width: 96 }} title={thGeo}>
+                  {thGeo}
                 </th>
               )}
               {!isFteScope && (
-                <th className={thClass} style={{ width: 84 }}>
-                  {t("impactsEditor.technologyShort", "Techno.")}
+                <th className={thClass} style={{ width: 84 }} title={thTechno}>
+                  {thTechno}
                 </th>
               )}
-              <th className={thClass} style={{ width: 108 }}>
-                {t("impactsEditor.startDate", "Début")}
+              <th className={thClass} style={{ width: 108 }} title={thStart}>
+                {thStart}
               </th>
-              <th className={thClass} style={{ width: 108 }}>
-                {t("impactsEditor.endDate", "Fin")}
+              <th className={thClass} style={{ width: 108 }} title={thEnd}>
+                {thEnd}
               </th>
-              <th className={thClass} style={{ width: 44 }}>
-                {t("impactsEditor.comments", "Commentaires")}
+              <th className={thClass} style={{ width: 44 }} title={thComments}>
+                {thComments}
               </th>
-              <th className={thClass} style={{ width: 140 }}>
-                {t("impactsEditor.status", "Statut")}
+              <th className={thClass} style={{ width: 140 }} title={thStatus}>
+                {thStatus}
               </th>
-              {editable && <th className={thClass} style={{ width: 26 }} />}
+              {editable && <th className={thClass} style={{ width: 56 }} />}
             </tr>
           </thead>
           <tbody>
@@ -378,6 +511,9 @@ export function ImpactsEditor({
               const pending = isImpactRealizedPending(imp);
               const rejected =
                 imp.realizedApproval?.status === "rejected" && uiStatus === "planned";
+              // Mode "édition par ligne" (Tâche 2.D) : lecture seule tant que la ligne n'est pas
+              // passée en édition via le crayon (ou vient d'être créée, cf. bouton "+ Ajouter").
+              const rowEditable = editable && editingIds.has(imp.id);
               return (
                 <tr
                   key={imp.id}
@@ -394,7 +530,7 @@ export function ImpactsEditor({
                       ) : (
                         <select
                           className={`min-w-0 flex-1 cursor-pointer truncate rounded-full border-0 px-1.5 py-0.5 text-[11px] font-semibold focus:outline-none focus:ring-1 focus:ring-bp-coral disabled:cursor-default ${TYPE_STYLE[key]}`}
-                          disabled={!editable}
+                          disabled={!rowEditable}
                           aria-label={t("impactsEditor.impactType", "Type d'impact")}
                           value={key}
                           onChange={(e) =>
@@ -410,7 +546,7 @@ export function ImpactsEditor({
                       )}
                       {isCapex && (
                         <Segmented
-                          disabled={!editable}
+                          disabled={!rowEditable}
                           value={imp.capexAllocationMode ?? "one_shot"}
                           options={[
                             {
@@ -439,7 +575,7 @@ export function ImpactsEditor({
                       )}
                       {isFte && (
                         <Segmented
-                          disabled={!editable}
+                          disabled={!rowEditable}
                           value={imp.fteDirection ?? "hire"}
                           options={[
                             {
@@ -471,7 +607,7 @@ export function ImpactsEditor({
                   <td className="px-1 py-1">
                     <input
                       className={inputClass}
-                      disabled={!editable}
+                      disabled={!rowEditable}
                       value={imp.label}
                       title={imp.label}
                       placeholder={t("impactsEditor.untitled", "Impact sans libellé")}
@@ -486,7 +622,7 @@ export function ImpactsEditor({
                         step="0.1"
                         min={0}
                         placeholder="0"
-                        disabled={!editable}
+                        disabled={!rowEditable}
                         aria-label={t("impactsEditor.fteCount", "Nombre d'ETP")}
                         value={imp.fteCount ?? ""}
                         onChange={(e) =>
@@ -502,7 +638,7 @@ export function ImpactsEditor({
                         step="0.01"
                         min={0}
                         placeholder="0"
-                        disabled={!editable}
+                        disabled={!rowEditable}
                         aria-label={t("impactsEditor.amount", "Montant (€M)")}
                         value={imp.amount || ""}
                         onChange={(e) =>
@@ -516,7 +652,7 @@ export function ImpactsEditor({
                       <td className="px-1 py-1">
                         <select
                           className={`${inputClass} ${missing.includes("nature") ? invalidClass : ""}`}
-                          disabled={!editable}
+                          disabled={!rowEditable}
                           required
                           aria-invalid={missing.includes("nature")}
                           value={imp.natureId ?? ""}
@@ -533,7 +669,7 @@ export function ImpactsEditor({
                         </select>
                       </td>
                       <td className="px-1 py-1">
-                        {editable && companyId ? (
+                        {rowEditable && companyId ? (
                           <HierarchyLeafSelect
                             companyId={companyId}
                             value={imp.hierarchyLeafId}
@@ -543,7 +679,7 @@ export function ImpactsEditor({
                         ) : (
                           <input
                             className={inputClass}
-                            disabled={!editable}
+                            disabled={!rowEditable}
                             value={imp.costCenter ?? ""}
                             onChange={(e) =>
                               update(imp.id, { costCenter: e.target.value || undefined })
@@ -561,7 +697,7 @@ export function ImpactsEditor({
                           (l) => l.key
                         )}
                         value={imp.geographyLeafId}
-                        disabled={!editable}
+                        disabled={!rowEditable}
                         onChange={(v) => update(imp.id, { geographyLeafId: v })}
                       />
                     </td>
@@ -570,7 +706,7 @@ export function ImpactsEditor({
                     <td className="px-1 py-1">
                       <input
                         className={inputClass}
-                        disabled={!editable}
+                        disabled={!rowEditable}
                         value={imp.technology ?? ""}
                         title={imp.technology ?? ""}
                         onChange={(e) =>
@@ -583,7 +719,7 @@ export function ImpactsEditor({
                     <input
                       className={`${inputClass} text-[11px]`}
                       type="date"
-                      disabled={!editable}
+                      disabled={!rowEditable}
                       aria-label={t("impactsEditor.startDate", "Début")}
                       value={dates.start ?? ""}
                       onChange={(e) =>
@@ -596,7 +732,7 @@ export function ImpactsEditor({
                       <input
                         className={`${inputClass} text-[11px]`}
                         type="date"
-                        disabled={!editable}
+                        disabled={!rowEditable}
                         aria-label={t("impactsEditor.endDate", "Fin")}
                         value={dates.end ?? ""}
                         onChange={(e) =>
@@ -622,7 +758,7 @@ export function ImpactsEditor({
                       >
                         <input
                           type="checkbox"
-                          disabled={!editable}
+                          disabled={!rowEditable}
                           checked={uiStatus === "done"}
                           onChange={(e) =>
                             update(imp.id, realizedTogglePatch(imp, e.target.checked, user))
@@ -690,16 +826,39 @@ export function ImpactsEditor({
                     </div>
                   </td>
                   {editable && (
-                    <td className="px-0.5 py-1 text-center">
-                      <button
-                        type="button"
-                        onClick={() => remove(imp.id)}
-                        aria-label={t("common.delete", "Supprimer")}
-                        title={t("common.delete", "Supprimer")}
-                        className="text-[15px] leading-none text-tertiary opacity-0 transition hover:text-bp-coral focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
-                      >
-                        ×
-                      </button>
+                    <td className="px-0.5 py-1">
+                      <div className="flex items-center justify-center gap-1">
+                        {rowEditable ? (
+                          <button
+                            type="button"
+                            onClick={() => stopEditing(imp.id)}
+                            aria-label={t("common.validate", "Valider")}
+                            title={t("common.validate", "Valider")}
+                            className="rounded-sm p-0.5 text-emerald-700 hover:bg-emerald-50"
+                          >
+                            <Check size={14} />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startEditing(imp.id)}
+                            aria-label={t("common.edit", "Modifier")}
+                            title={t("common.edit", "Modifier")}
+                            className="rounded-sm p-0.5 text-tertiary hover:bg-neutral-100 hover:text-primary"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => remove(imp.id)}
+                          aria-label={t("common.delete", "Supprimer")}
+                          title={t("common.delete", "Supprimer")}
+                          className="text-[15px] leading-none text-tertiary opacity-0 transition hover:text-bp-coral focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                        >
+                          ×
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -713,9 +872,11 @@ export function ImpactsEditor({
         <div>
           <button
             type="button"
-            onClick={() =>
-              onChange([...impacts, isFteScope ? emptyFteImpact() : emptyFinancialImpact()])
-            }
+            onClick={() => {
+              const newImpact = isFteScope ? emptyFteImpact() : emptyFinancialImpact();
+              startEditing(newImpact.id);
+              onChange([...impacts, newImpact]);
+            }}
             className="inline-flex items-center gap-1 rounded-md bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
           >
             +{" "}

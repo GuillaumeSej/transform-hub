@@ -1002,11 +1002,11 @@ export function DashboardPagePerformance() {
           </Card>
         );
       case "risk-center": {
-        // Résumé agrégé (badge replié) : total des alertes non résolues + des cascades de
-        // dépendances en violation — SANS distinguer les deux sources, volontairement (voir
-        // spec produit), juste un compte de risque global + un compte "critique" (rouge/bloquant)
-        // pour la couleur du badge.
-        const totalAtRisk = filteredAlerts.length + depAlerts.length;
+        // Résumé agrégé (badge replié) : total des alertes non résolues (les cascades de
+        // dépendances, AUTO-DEP-*, sont déjà générées par `generateAlerts` et donc déjà comprises
+        // dans `filteredAlerts` — ne pas les rajouter une 2e fois via `depAlerts`, sous peine de
+        // double comptage). `depAlerts` reste utilisé séparément pour sa propre section ci-dessous.
+        const totalAtRisk = filteredAlerts.length;
         const criticalCount = alertCounts.red + depAlerts.filter((a) => a.delayDays > 30).length;
         const depSeverity = (days: number) => {
           if (days > 30) return { label: t("dep.blocking"), cls: "bg-rag-red-light text-rag-red" };
@@ -2199,12 +2199,17 @@ export function DashboardPagePerformance() {
         </div>
       </Modal>
 
-      {/* Grille unique — tous les widgets sur la même page, sans onglets ni sections */}
+      {/* Grille unique — tous les widgets sur la même page, sans onglets ni sections.
+          "Alertes & Dépendances" (risk-center) est toujours rendu en dernier, quelle que soit sa
+          position dans `layout` (ordre par défaut ou personnalisé par glisser-déposer) — tri
+          d'affichage uniquement, l'état `layout`/les indices de drag-and-drop ne sont pas modifiés. */}
       <div
         data-dashboard-widget-grid
         className="grid grid-cols-1 grid-flow-row-dense gap-4 sm:grid-cols-2 lg:grid-cols-4"
       >
-        {layout.map((instance) => renderWidget(instance))}
+        {[...layout]
+          .sort((a, b) => (a.type === "risk-center" ? 1 : b.type === "risk-center" ? -1 : 0))
+          .map((instance) => renderWidget(instance))}
       </div>
     </div>
   );

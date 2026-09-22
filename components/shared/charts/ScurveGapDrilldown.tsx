@@ -17,9 +17,20 @@ import type { HierarchyLevelDef, HierarchyNode, Workstream } from "@/types";
 
 const fmt = (v: number) => `€${Math.round(v * 10) / 10}M`;
 
-/** Détail de l'écart réactualisé − réalisé à une période, regroupé par chantier ou par niveau
- *  géographique (mêmes contrôles et même regroupement que le détail de la Cascade des économies).
- *  Entrées produites par `gapEntriesAt` (lib/scurveDetail.ts). */
+/** Formatte un écart signé (+/−) avec sa couleur (vert = gain, rouge = perte), cohérent avec le
+ *  reste de l'app (`text-rag-green-dark` / `text-rag-red`). */
+const fmtSigned = (v: number) => {
+  const r = Math.round(v * 10) / 10;
+  const sign = r > 0 ? "+" : r < 0 ? "−" : "";
+  const abs = Math.abs(r);
+  const cls = r > 0 ? "text-rag-green-dark" : r < 0 ? "text-rag-red" : "text-tertiary";
+  return { text: `${sign}€${abs}M`, cls };
+};
+
+/** Détail de l'écart réalisé − planifié initial à une période (signé : positif = gain, négatif =
+ *  perte), regroupé par chantier ou par niveau géographique (mêmes contrôles et même regroupement
+ *  que le détail de la Cascade des économies). Entrées produites par `gapEntriesAt`
+ *  (lib/scurveDetail.ts). */
 export function ScurveGapDrilldown({
   month,
   entries,
@@ -63,16 +74,24 @@ export function ScurveGapDrilldown({
     after: number;
     realized: number;
     remaining: number;
-    value: number;
-  }) => (
-    <>
-      <td className="px-2 text-right tabular-nums">{fmt(v.before)}</td>
-      <td className="px-2 text-right tabular-nums">{fmt(v.after)}</td>
-      <td className="px-2 text-right tabular-nums">{fmt(v.realized)}</td>
-      <td className="px-2 text-right tabular-nums">{fmt(v.remaining)}</td>
-      <td className="pl-2 text-right font-semibold tabular-nums">{fmt(v.value)}</td>
-    </>
-  );
+    reforecast?: number;
+  }) => {
+    // `realized` = écart de retard (réalisé − réactualisé, leviers réellement en retard
+    // uniquement) et `remaining` = écart de performance (réactualisé − planifié initial) sont déjà
+    // produits par `gapEntriesAt` (lib/scurveDetail.ts) dans la convention "positif = gain, négatif
+    // = perte" — pas de signe à inverser ici.
+    const delay = fmtSigned(v.realized);
+    const perf = fmtSigned(v.remaining);
+    return (
+      <>
+        <td className="px-2 text-right tabular-nums">{fmt(v.before)}</td>
+        <td className="px-2 text-right tabular-nums">{fmt(v.reforecast ?? 0)}</td>
+        <td className="px-2 text-right tabular-nums">{fmt(v.after)}</td>
+        <td className={`px-2 text-right tabular-nums ${delay.cls}`}>{delay.text}</td>
+        <td className={`pl-2 text-right tabular-nums ${perf.cls}`}>{perf.text}</td>
+      </>
+    );
+  };
 
   const renderRow = (g: DrilldownGroup) => {
     const open = expanded.has(g.id);
@@ -107,15 +126,9 @@ export function ScurveGapDrilldown({
 
   return (
     <section>
-      <h3 className="mb-1 text-sm font-bold text-primary">
+      <h3 className="mb-3 text-sm font-bold text-primary">
         {t("chart.gapDrill.title", "Origine de l'écart planifié initial − réalisé")} · {month}
       </h3>
-      <p className="mb-3 text-xs text-secondary">
-        {t(
-          "chart.gapDrill.intro",
-          "Écart cumulé à cette période (planifié initial − réalisé), décomposé en écart de réajustement (planifié initial − réactualisé, sur/sous-performance) et écart de retard (réactualisé − réalisé), par chantier ou par géographie. Même règle que la courbe : la somme des lignes = l'écart affiché."
-        )}
-      </p>
       <DrilldownDimensionControls {...dimState} />
       {groups.length === 0 ? (
         <p className="py-6 text-center text-sm text-tertiary">
@@ -127,20 +140,50 @@ export function ScurveGapDrilldown({
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-tertiary">
                 <th className="pb-2 font-medium">{dimLabel}</th>
-                <th className="px-2 text-right font-medium">
+                <th
+                  className="px-2 text-right font-medium"
+                  title={t(
+                    "chart.gapDrill.plannedInitial.tooltip",
+                    "Plan figé du levier (ou valeur courante si pas encore figé), cumulé à sa date de fin."
+                  )}
+                >
                   {t("chart.gapDrill.plannedInitial", "Planifié initial")}
                 </th>
-                <th className="px-2 text-right font-medium">
+                <th
+                  className="px-2 text-right font-medium"
+                  title={t(
+                    "chart.gapDrill.reforecast.tooltip",
+                    "Cible réactualisée du levier (reforecast, ou plan figé, ou valeur courante), cumulée à sa date de fin."
+                  )}
+                >
+                  {t("chart.gapDrill.reforecast", "Réactualisé")}
+                </th>
+                <th
+                  className="px-2 text-right font-medium"
+                  title={t(
+                    "chart.gapDrill.actual.tooltip",
+                    "Montant effectivement réalisé à date."
+                  )}
+                >
                   {t("chart.scurve.actual", "Réalisé")}
                 </th>
-                <th className="px-2 text-right font-medium">
-                  {t("chart.gapDrill.delay", "dont écart de retard")}
+                <th
+                  className="px-2 text-right font-medium"
+                  title={t(
+                    "chart.gapDrill.delay.tooltip",
+                    "Réalisé − réactualisé, uniquement pour les leviers ayant au moins un impact non réalisé dont la date est dépassée (retard d'exécution réel, pas juste un plan d'action en retard)."
+                  )}
+                >
+                  {t("chart.gapDrill.delay", "Écart de retard")}
                 </th>
-                <th className="px-2 text-right font-medium">
-                  {t("chart.gapDrill.adjustment", "dont écart de réajustement")}
-                </th>
-                <th className="pl-2 text-right font-medium">
-                  {t("chart.waterfall.drill.delta", "Écart")}
+                <th
+                  className="pl-2 text-right font-medium"
+                  title={t(
+                    "chart.gapDrill.adjustment.tooltip",
+                    "Réactualisé − planifié initial (effet du réajustement du plan lui-même : positif si la cible a été relevée, négatif si elle a été abaissée)."
+                  )}
+                >
+                  {t("chart.gapDrill.adjustment", "Écart de performance")}
                 </th>
               </tr>
             </thead>

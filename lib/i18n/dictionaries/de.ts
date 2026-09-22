@@ -9,6 +9,8 @@ const de: Record<string, string> = {
   "common.cancel": "Abbrechen",
   "common.delete": "Löschen",
   "common.add": "Hinzufügen",
+  "common.edit": "Bearbeiten",
+  "common.validate": "Bestätigen",
   "common.close": "Schließen",
   "common.search": "Suchen",
   "common.choose": "Auswählen…",
@@ -2169,6 +2171,9 @@ const de: Record<string, string> = {
   "impactsEditor.close": "Schließen",
   "impactsEditor.edit": "Bearbeiten",
   "impactsEditor.view": "Details",
+  "impactsEditor.requiredSuffix": "(erforderlich)",
+  "impactsEditor.scrollLeft": "Nach links scrollen",
+  "impactsEditor.scrollRight": "Nach rechts scrollen",
   "impactsEditor.smoothed": "Verteilt",
   "impactsEditor.capexStart": "Periodenbeginn",
   "impactsEditor.capexEnd": "Periodenende",
@@ -2245,8 +2250,6 @@ const de: Record<string, string> = {
   "chart.waterfall.step.opexRec": "− Wiederkehrende OPEX",
   "chart.waterfall.step.net": "= Annualisiertes Netto",
   "chart.waterfall.opex.others": "Sonstige",
-  "chart.waterfall.favorable": "Günstig",
-  "chart.waterfall.unfavorable": "Ungünstig",
   "chart.waterfall.opex.unspecified": "Art nicht angegeben",
   "chart.waterfall.opex.fte": "Einstellungen (FTE)",
   "chart.waterfall.opex.other": "Nicht aufgeschlüsselt",
@@ -2297,8 +2300,18 @@ const de: Record<string, string> = {
   "chart.gapDrill.late": "davon verspätet",
   "chart.gapDrill.onTime": "davon im Zeitplan",
   "chart.gapDrill.plannedInitial": "Ursprungsplan",
-  "chart.gapDrill.delay": "davon Verzugsabweichung",
-  "chart.gapDrill.adjustment": "davon Anpassungsabweichung",
+  "chart.gapDrill.plannedInitial.tooltip":
+    "Festgeschriebener Plan des Hebels (oder aktueller Wert, falls noch nicht festgeschrieben), kumuliert bis zu seinem Enddatum.",
+  "chart.gapDrill.reforecast": "Aktualisiert",
+  "chart.gapDrill.reforecast.tooltip":
+    "Aktualisiertes Ziel des Hebels (Reforecast, oder festgeschriebener Plan, oder aktueller Wert), kumuliert bis zu seinem Enddatum.",
+  "chart.gapDrill.actual.tooltip": "Bisher tatsächlich realisierter Betrag.",
+  "chart.gapDrill.delay": "Verzugsabweichung",
+  "chart.gapDrill.delay.tooltip":
+    "Realisiert − aktualisiert, nur für Hebel mit mindestens einer nicht realisierten Wirkung, deren Termin überschritten ist (echter Ausführungsverzug, nicht nur ein verspäteter Aktionsplan).",
+  "chart.gapDrill.adjustment": "Leistungsabweichung",
+  "chart.gapDrill.adjustment.tooltip":
+    "Aktualisiert − Ursprungsplan (Effekt der Plananpassung selbst: positiv, wenn das Ziel angehoben wurde, negativ, wenn es gesenkt wurde).",
   "chart.clickForDetails": "Für mehr Details klicken",
   "dashboard.workstreamTable.targetNote":
     "Realisiert im Verhältnis zum neu prognostizierten Ziel (letzte Version des Ziels).",

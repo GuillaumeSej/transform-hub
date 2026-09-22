@@ -22,7 +22,9 @@ import {
 } from "@/lib/hierarchyLogic";
 import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type { LeverStatus } from "@/types";
-import { impactStatusOf } from "@/lib/impactStatus";
+import { impactStartDateOf, impactStatusOf } from "@/lib/impactStatus";
+import { impactDatesOf } from "@/lib/impactKinds";
+import { isActiveMovement } from "@/lib/workforceLogic";
 
 /**
  * Portage fidèle du moteur de calcul `ENGINE` du prototype HTML historique de Guillaume
@@ -225,8 +227,8 @@ export function displayedReforecastNet(lever: Lever): { value: number; isReforec
 /** Progression % affichée d'un levier — SEULE et UNIQUE formule utilisée partout où une
  *  "progression" de levier est montrée à l'utilisateur (bandeau Overview de la fiche détail,
  *  liste des leviers, page Workstreams) : `réalisé net à date / réactualisé net`, jamais le champ
- *  brut `lever.progress` (moyenne pondérée du statut des actions — sert encore aux automatismes de
- *  cycle de vie et de retard, `recomputeLeverProgress`/`scheduleGap`, mais plus à l'affichage).
+ *  brut `lever.progress` (moyenne pondérée du statut des actions — sert encore à l'automatisme de
+ *  cycle de vie `recomputeLeverProgress`, mais plus à l'affichage ni au calcul du risque).
  *  Si le ratio est négatif (réalisé négatif, ou réactualisé négatif), on affiche 0 % plutôt qu'un
  *  pourcentage négatif dénué de sens — dès qu'il redevient positif, le vrai pourcentage s'affiche
  *  (pas de plafond à 100 : un levier qui dépasse sa cible réactualisée peut légitimement afficher
@@ -256,19 +258,6 @@ function implementationCosts(snapshot: { capex: number; opexOneOff: number }): n
   return snapshot.capex + snapshot.opexOneOff;
 }
 
-/** Retard planning d'un levier in_progress : écart entre progression attendue (proportion du
- *  temps écoulé start→end) et progression réelle. Même logique que underperformers().
- *  `now` est calculé à chaque appel (Date.now() par défaut) plutôt que figé au chargement du
- *  module, pour que le retard affiché reste réellement temps réel sur une session longue. */
-function scheduleGap(lever: Lever, now: number = Date.now()): number {
-  if (lever.status !== "in_progress") return 0;
-  const start = new Date(lever.start).getTime();
-  const end = new Date(lever.end).getTime();
-  if (end <= start) return 0;
-  const expected = Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
-  return expected - lever.progress;
-}
-
 export function programSummary(data: BeTrackData): ProgramSummary {
   const active = data.levers.filter((l) => l.status !== "cancelled");
   const target = active.reduce((s, l) => s + l.netSavings, 0);
@@ -294,22 +283,56 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     0
   );
 
-  // Catégories de risque dérivées (un levier peut cumuler plusieurs catégories).
-  const now = Date.now();
-  const riskDelay = active.filter((l) => scheduleGap(l, now) > 10).length;
-  const riskCostOverrun = active.filter(
-    (l) =>
-      l.reforecast &&
-      l.lockedPlan &&
-      implementationCosts(l.reforecast) > implementationCosts(l.lockedPlan)
-  ).length;
-  const riskSavingsCut = active.filter(
-    (l) => l.reforecast && l.lockedPlan && l.reforecast.netSavings < l.lockedPlan.netSavings
-  ).length;
+  // Catégories de risque dérivées EN DIRECT des mêmes signaux que le système d'alertes
+  // (`underperformers`/écart CAPEX/écart savings), plutôt que du champ déclaratif `Lever.risk` —
+  // ce dernier n'est jamais recalculé/persisté ailleurs dans l'app (reste figé à sa valeur d'import),
+  // alors que le reste de l'UI (liste des leviers, fiche détail) recalcule le risque à la volée via
+  // `computeLeverRisk`/`generateAlerts`. `atRisk`/`critical`/`onTrack` sont donc désormais dérivés du
+  // NOMBRE de catégories de risque déclenchées par chaque levier (0 = onTrack, 1 = atRisk, 2+ =
+  // critical), pour rester cohérents avec le détail affiché sous la carte KPI plutôt que de montrer
+  // un total déconnecté. `riskDelay` utilise `underperformers` (retard du plan d'action — le SEUL
+  // mécanisme de détection de retard utilisé par les alertes), pas l'ancienne heuristique
+  // progression attendue/`lever.progress` brut, abandonnée partout ailleurs.
+  const lateLeverIds = new Set(underperformers(data).map((l) => l.id));
+  const costOverrunLeverIds = new Set(
+    active
+      .filter(
+        (l) =>
+          l.reforecast &&
+          l.lockedPlan &&
+          implementationCosts(l.reforecast) > implementationCosts(l.lockedPlan)
+      )
+      .map((l) => l.id)
+  );
+  const savingsCutLeverIds = new Set(
+    active
+      .filter(
+        (l) => l.reforecast && l.lockedPlan && l.reforecast.netSavings < l.lockedPlan.netSavings
+      )
+      .map((l) => l.id)
+  );
+  const riskDelay = active.filter((l) => lateLeverIds.has(l.id)).length;
+  const riskCostOverrun = costOverrunLeverIds.size;
+  const riskSavingsCut = savingsCutLeverIds.size;
+  const riskCategoryCount = new Map<string, number>();
+  const bumpRisk = (id: string) => riskCategoryCount.set(id, (riskCategoryCount.get(id) ?? 0) + 1);
+  lateLeverIds.forEach(bumpRisk);
+  costOverrunLeverIds.forEach(bumpRisk);
+  savingsCutLeverIds.forEach(bumpRisk);
+  const atRisk = active.filter((l) => riskCategoryCount.get(l.id) === 1).length;
+  const critical = active.filter((l) => (riskCategoryCount.get(l.id) ?? 0) >= 2).length;
+  const onTrack = active.filter((l) => !riskCategoryCount.has(l.id)).length;
 
   // Suppressions de postes (mouvements RH type "Départ forcé" — départs contraints /
-  // licenciements, distincts de l'attrition volontaire), en ETP.
-  const suppressionMoves = data.workforce.movements.filter((m) => m.type === "Départ forcé");
+  // licenciements, distincts de l'attrition volontaire), en ETP. Scopés aux mouvements ACTIFS
+  // (exclut "Abandonné", cohérent avec `reconcileLeverMovements`/le Dashboard RH — l'ancien filtre ne
+  // les excluait pas) et rattachés à un levier du périmètre ACTIF (`active`) — un mouvement lié à un
+  // levier annulé/hors périmètre ne doit pas gonfler ce compteur programme.
+  const activeLeverIds = new Set(active.map((l) => l.id));
+  const linkedActiveMovements = data.workforce.movements.filter(
+    (m) => isActiveMovement(m) && activeLeverIds.has(m.leverId)
+  );
+  const suppressionMoves = linkedActiveMovements.filter((m) => m.type === "Départ forcé");
   const suppressionsPlanned = suppressionMoves.reduce((s, m) => s + m.fte, 0);
   const suppressionsRealized = suppressionMoves
     .filter((m) => m.status === "Réalisé")
@@ -323,9 +346,9 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     opex: Math.round(opex * 10) / 10,
     fteImpact,
     leverCount: active.length,
-    onTrack: active.filter((l) => l.risk === "low").length,
-    atRisk: active.filter((l) => l.risk === "medium" || l.risk === "high").length,
-    critical: active.filter((l) => l.risk === "critical").length,
+    onTrack,
+    atRisk,
+    critical,
     delivered: data.levers.filter((l) => l.status === "delivered").length,
     reforecastTarget: Math.round(reforecastTarget * 10) / 10,
     plannedCosts: Math.round(plannedCosts * 10) / 10,
@@ -1221,23 +1244,29 @@ function fiscalMonthIndex(dateStr: string, fyStart: Date): number {
  *  - reforecast : net réactualisé (repli plan figé, net courant), cumulé à la date de fin ;
  *  - actual     : réalisé (`realizedSavings`) cumulé à `deliveredDate`, sinon min(fin, aujourd'hui) —
  *                 donc le cumul à date == `programSummary.realized` ; null pour les périodes futures ;
- *  - gap        : écart PLANIFIÉ INITIAL − RÉALISÉ cumulé par période (`total`), décomposé en 2 écarts
- *                 successifs qui s'additionnent à `total` :
- *                   `adjustment` = planifié initial − réactualisé (sur/sous-performance : l'effet du
- *                     réajustement du plan lui-même, indépendant de l'exécution) ;
- *                   `delay`      = réactualisé − réalisé (écart d'exécution par rapport à la CIBLE
- *                     réactualisée), lui-même ventilé en `late` (leviers en retard : action en retard
- *                     ou fin dépassée non livrée) et `other` (le reste).
+ *  - gap        : écart RÉALISÉ − PLANIFIÉ INITIAL cumulé par période (`total`) — signe positif =
+ *                 gain (on fait mieux que prévu), signe négatif = perte (on fait moins bien que
+ *                 prévu). Décomposé en 2 écarts successifs qui s'additionnent à `total` :
+ *                   `adjustment` (« écart de performance ») = réactualisé − planifié initial (effet
+ *                     du réajustement du plan lui-même, indépendant de l'exécution — positif si la
+ *                     cible a été relevée, négatif si elle a été abaissée) ;
+ *                   `delay`      (« écart de retard ») = réalisé − réactualisé (écart d'exécution par
+ *                     rapport à la CIBLE réactualisée) — mais UNIQUEMENT la part imputable à des
+ *                     leviers ayant au moins un impact dont la date est dépassée sans être marqué
+ *                     "Réalisé"/"En cours" (voir `isLeverLate`, retard d'EXÉCUTION des impacts, pas du
+ *                     plan d'action) ; `other` porte le reste de l'écart d'exécution (leviers non en
+ *                     retard mais tout de même sous la cible réactualisée à date), non affiché par
+ *                     défaut.
  *                 `cancelled` est un mémo (plan des leviers annulés échus, hors `total` car déjà
  *                 retirés du réactualisé).
  * Les dates hors exercice sont rattachées à la première/dernière période (comme avant).
  */
 export type SavingsSeriesGap = {
-  /** Écart total : planifié initial − réalisé = `adjustment` + `delay`. */
+  /** Écart total : réalisé − planifié initial = `adjustment` + `delay` (+ `other`, non affiché). */
   total: number;
-  /** Écart dû au réajustement du plan : planifié initial − réactualisé. */
+  /** Écart de performance (réajustement du plan) : réactualisé − planifié initial. */
   adjustment: number;
-  /** Écart dû à l'exécution : réactualisé − réalisé = `late` + `other`. */
+  /** Écart de retard (leviers réellement en retard uniquement) : réalisé − réactualisé, part "late". */
   delay: number;
   late: number;
   cancelled: number;
@@ -1253,10 +1282,20 @@ export type SavingsSeriesPoint = {
   gap: SavingsSeriesGap;
 };
 
+/** Un levier est "en retard" au sens de l'écart de trajectoire (S-curve/Finance) SI ET SEULEMENT SI
+ *  au moins un de ses impacts a une date de début déjà passée sans être marqué "Réalisé"/"En cours" —
+ *  un vrai retard d'EXÉCUTION des impacts chiffrés, pas un proxy sur les actions ou la date de fin du
+ *  levier. Distinct de `underperformers`/`isActionLate` (retard du PLAN D'ACTION, utilisé par les
+ *  alertes et le KPI "Leviers à risque") : ici on regarde si l'argent/l'ETP attendu à telle date a
+ *  effectivement été constaté comme réalisé, indépendamment du statut des actions. */
 function isLeverLate(lever: Lever, today: Date): boolean {
   if (lever.status === "delivered" || lever.status === "cancelled") return false;
-  if ((lever.actions ?? []).some((a) => isActionLate(a, today))) return true;
-  return new Date(lever.end).getTime() < today.getTime();
+  return leverImpactsOf(lever).some((imp) => {
+    if (impactStatusOf(imp, today, lever.end) !== "planned") return false;
+    const start = impactStartDateOf(imp) ?? lever.end;
+    const d = new Date(start);
+    return !Number.isNaN(d.getTime()) && d.getTime() < today.getTime();
+  });
 }
 
 export function savingsSeries(
@@ -1331,11 +1370,11 @@ export function savingsSeries(
       actualDelta: r1(actualDelta[i]),
       gap: shown
         ? {
-            total: r1(planned[i] - cumActual),
-            adjustment: r1(planned[i] - reforecast[i]),
-            delay: r1(late + other),
-            late: r1(late),
-            other: r1(other),
+            total: r1(cumActual - planned[i]),
+            adjustment: r1(reforecast[i] - planned[i]),
+            delay: r1(-late),
+            late: r1(-late),
+            other: r1(-other),
             cancelled: r1(cancelledMemo[i]),
           }
         : { total: 0, adjustment: 0, delay: 0, late: 0, other: 0, cancelled: 0 },
@@ -1973,21 +2012,51 @@ export type FinanceHierarchyRow = {
 
 export const UNATTRIBUTED_NODE_ID = "__unattributed__";
 
+/** Plage [année min, année max] couverte par un impact (début/fin) — `null` si aucune date. */
+function impactYearRange(imp: LeverImpact): [number, number] | null {
+  const { start, end } = impactDatesOf(imp);
+  const y1 = start ? new Date(start).getFullYear() : undefined;
+  const y2 = end ? new Date(end).getFullYear() : y1;
+  if (y1 === undefined && y2 === undefined) return null;
+  if (Number.isNaN(y1 as number) && Number.isNaN(y2 as number)) return null;
+  const lo = y1 ?? (y2 as number);
+  const hi = y2 ?? (y1 as number);
+  return [Math.min(lo, hi), Math.max(lo, hi)];
+}
+
+/** L'impact couvre-t-il au moins une des années demandées ? */
+function impactMatchesYears(imp: LeverImpact, years: Set<number>): boolean {
+  const range = impactYearRange(imp);
+  if (!range) return false;
+  for (let y = range[0]; y <= range[1]; y++) if (years.has(y)) return true;
+  return false;
+}
+
 /**
  * Finance (€M) par nœud du niveau `levelOrder` (`HierarchyLevelDef.order`) de l'arborescence
  * financière : chaque levier est rattaché via `hierarchyLeafId` (ou celui de ses impacts, au prorata
  * du |montant net| de chaque impact) puis remonté à l'ancêtre du niveau demandé via `parentId`.
  * Une feuille plus macro que le niveau demandé reste sur son propre nœud. Sans rattachement :
  * ligne "Non attribué". Le total de toutes les lignes égale la somme des leviers.
+ *
+ * `opts.years` (optionnel) restreint aux impacts dont la date (début/fin) couvre au moins une des
+ * années données : un levier sans AUCUN impact dans ces années est totalement exclu (poids nul), et
+ * pour un levier partiellement couvert, tous les montants (planifié initial, réactualisé, réalisé,
+ * en retard) sont mis à l'échelle de la part de son poids d'impacts qui tombe dans ces années —
+ * seul `planifié initial` (`lockedPlan`, un scalaire figé au niveau levier, jamais décomposé par
+ * impact) est nécessairement une approximation proportionnelle ; réactualisé/réalisé suivent le
+ * même prorata pour rester cohérents entre colonnes plutôt que de mélanger une colonne exacte et une
+ * colonne approximée.
  */
 export function financeByHierarchyLevel(
   data: BeTrackData,
   company: { hierarchyLevels?: HierarchyLevelDef[] } | null | undefined,
   levelOrder: number,
   nodes: HierarchyNode[],
-  opts: { today?: Date } = {}
+  opts: { today?: Date; years?: Set<number> } = {}
 ): FinanceHierarchyRow[] {
   const today = opts.today ?? new Date();
+  const years = opts.years && opts.years.size > 0 ? opts.years : null;
   const levels = company?.hierarchyLevels ?? [];
   const financial = nodesForDomain(nodes, "financial");
   const targetKey = levels.find((lv) => lv.order === levelOrder)?.key;
@@ -2036,17 +2105,40 @@ export function financeByHierarchyLevel(
     if (shares.size === 0) shares.set(l.hierarchyLeafId, 1);
     const totalW = Array.from(shares.values()).reduce((s, v) => s + v, 0) || 1;
 
-    for (const [leafId, w] of Array.from(shares.entries())) {
-      const f = w / totalW;
+    // Filtre années : ne garde que le poids des impacts qui couvrent une des années sélectionnées,
+    // et met tous les montants du levier à l'échelle de ce sous-poids (voir docstring de la fonction).
+    let leafShares = shares;
+    let scale = 1;
+    if (years) {
+      const yearShares = new Map<string | undefined, number>();
+      for (const imp of imps) {
+        const w = Math.abs(impactSignedAmount(imp) ?? 0);
+        if (w === 0 || !impactMatchesYears(imp, years)) continue;
+        const key = imp.hierarchyLeafId ?? l.hierarchyLeafId;
+        yearShares.set(key, (yearShares.get(key) ?? 0) + w);
+      }
+      const yearW = Array.from(yearShares.values()).reduce((s, v) => s + v, 0);
+      if (yearW === 0) continue; // aucun impact de ce levier dans les années sélectionnées
+      leafShares = yearShares;
+      scale = yearW / totalW;
+    }
+    const scaledLocked = locked * scale;
+    const scaledRefo = refo * scale;
+    const scaledReal = real * scale;
+    const scaledLate = late * scale;
+    const leafTotalW = Array.from(leafShares.values()).reduce((s, v) => s + v, 0) || 1;
+
+    for (const [leafId, w] of Array.from(leafShares.entries())) {
+      const f = w / leafTotalW;
       const node = resolveNode(leafId);
       const row = node
         ? rowFor(node.id, node.code, node.label)
         : rowFor(UNATTRIBUTED_NODE_ID, "", "Non attribué");
-      row.planned += locked * f;
-      row.reforecast += refo * f;
-      if (isCancelled) row.cancelled += locked * f;
-      row.late += late * f;
-      row.realized += real * f;
+      row.planned += scaledLocked * f;
+      row.reforecast += scaledRefo * f;
+      if (isCancelled) row.cancelled += scaledLocked * f;
+      row.late += scaledLate * f;
+      row.realized += scaledReal * f;
     }
   }
   return Array.from(rows.values())

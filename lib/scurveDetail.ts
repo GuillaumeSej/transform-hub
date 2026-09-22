@@ -39,12 +39,13 @@ export function savingsSeriesByWorkstream(
     .filter((s) => s.planned.some((v) => v !== 0) || s.actualDelta.some((v) => v !== 0));
 }
 
-/** Détail de l'écart PLANIFIÉ INITIAL − RÉALISÉ à une période, par levier. `savingsSeries` est
- *  rejoué sur chaque levier isolé (mêmes règles que la courbe globale ; l'écart étant additif, la
- *  somme des leviers = `gap.total` de la courbe). Champs de `DrilldownEntry` réutilisés pour
- *  partager le regroupement chantier / géographie : before = planifié initial cumulé, after =
- *  réalisé cumulé, value = écart total, realized = dont écart de retard (réactualisé − réalisé),
- *  remaining = dont écart de réajustement (planifié initial − réactualisé, sur/sous-performance). */
+/** Détail de l'écart RÉALISÉ − PLANIFIÉ INITIAL à une période, par levier (signe positif = gain,
+ *  négatif = perte). `savingsSeries` est rejoué sur chaque levier isolé (mêmes règles que la courbe
+ *  globale ; l'écart étant additif, la somme des leviers = `gap.total` de la courbe). Champs de
+ *  `DrilldownEntry` réutilisés pour partager le regroupement chantier / géographie : before =
+ *  planifié initial cumulé, after = réalisé cumulé, reforecast = réactualisé cumulé, value = écart
+ *  total, realized = écart de retard (réalisé − réactualisé, leviers réellement en retard
+ *  uniquement), remaining = écart de performance (réactualisé − planifié initial). */
 export function gapEntriesAt(
   data: BeTrackData,
   granularity: engine.TimeGranularity,
@@ -67,6 +68,7 @@ export function gapEntriesAt(
       geography: l.geography,
       before: p.planned,
       after: p.actual,
+      reforecast: p.reforecast,
       value: p.gap.total,
       realized: p.gap.delay,
       remaining: p.gap.adjustment,

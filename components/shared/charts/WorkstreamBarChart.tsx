@@ -167,8 +167,11 @@ export function WorkstreamBarDetail({
   );
 }
 
-const TAG_W = 44;
-const TAG_H = 14;
+const TAG_W = 48;
+const TAG_H = 16;
+/** Largeur minimale d'un tag en fonction du texte affiché — évite que les montants à 3+ chiffres
+ *  ou avec décimales (ex. "€123.4M") ne débordent du rectangle de fond. */
+const tagWidthFor = (text: string) => Math.max(TAG_W, text.length * 6.4 + 12);
 /** Marge de catégorie (part de la bande, de chaque côté) : largeur de barre = bande × (1 − 2×gap). */
 const CATEGORY_GAP = 0.1;
 const CHART_MARGIN_RIGHT = 128;
@@ -210,7 +213,7 @@ function TotalTags({
         const realizedInside = realizedH >= 18;
         // De bas en haut, à partir du sommet de la barre la plus haute.
         const tags: { key: string; v: number; fill: string; dashed?: boolean }[] = [
-          { key: "t", v: d.target, fill: "rgba(107,93,87,0.9)" },
+          { key: "t", v: d.target, fill: "#6B5D57" },
         ];
         if (!realizedInside) tags.push({ key: "r", v: d.realized, fill: "#FF3C47" });
         if (hasPlanned && d.planned !== undefined)
@@ -231,28 +234,33 @@ function TotalTags({
               </text>
             )}
             {tags.map((it, i) => {
-              const y = baseY - (i + 1) * (TAG_H + 2) + 2;
+              const y = baseY - (i + 1) * (TAG_H + 3) + 2;
+              const label = fmt(it.v);
+              const w = tagWidthFor(label);
               return (
                 <g key={it.key}>
+                  {/* Fond systématiquement opaque (blanc pour le tag "planifié", couleur pleine
+                      sinon) pour rester lisible quelle que soit la couleur derrière. */}
                   <rect
-                    x={cx - TAG_W / 2}
+                    x={cx - w / 2}
                     y={y}
-                    width={TAG_W}
+                    width={w}
                     height={TAG_H}
                     rx={3}
-                    fill={it.fill}
-                    stroke={it.dashed ? "#320300" : "none"}
+                    fill={it.dashed ? "#ffffff" : it.fill}
+                    stroke={it.dashed ? "#320300" : "rgba(0,0,0,0.15)"}
+                    strokeWidth={it.dashed ? 1.25 : 0.75}
                     strokeDasharray={it.dashed ? "3 2" : undefined}
                   />
                   <text
                     x={cx}
-                    y={y + 10.2}
+                    y={y + TAG_H / 2 + 3.6}
                     textAnchor="middle"
-                    fontSize={10}
-                    fontWeight={700}
+                    fontSize={11}
+                    fontWeight={800}
                     fill={it.dashed ? "#320300" : "#fff"}
                   >
-                    {fmt(it.v)}
+                    {label}
                   </text>
                 </g>
               );
@@ -415,9 +423,13 @@ export function WorkstreamBarChart({
       <ResponsiveContainer width="100%" height={320}>
         <BarChart
           data={chartData}
-          margin={{ top: 52, right: CHART_MARGIN_RIGHT, left: -16, bottom: 4 }}
+          margin={{ top: 64, right: CHART_MARGIN_RIGHT, left: -16, bottom: 4 }}
           barCategoryGap={`${CATEGORY_GAP * 100}%`}
           barSize={barW}
+          // Les tags de totaux (planifié / cible / réalisé) sont dessinés au-dessus de la zone de
+          // tracé via `<Customized>` : sans `overflow: visible` sur le <svg> racine, ils pouvaient
+          // être rognés par le viewport SVG quand une barre est proche du haut du graphique.
+          style={{ overflow: "visible" }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
           <XAxis

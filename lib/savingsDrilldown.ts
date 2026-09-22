@@ -38,6 +38,9 @@ export type DrilldownEntry = {
   value: number;
   realized: number;
   remaining: number;
+  /** Réactualisé — uniquement renseigné par le détail de la trajectoire des économies
+   *  (`gapEntriesAt`, lib/scurveDetail.ts) ; absent (undefined) pour les autres drilldowns. */
+  reforecast?: number;
   segments: OpexSegment[];
 };
 
@@ -194,6 +197,7 @@ export type DrilldownGroup = {
   value: number;
   realized: number;
   remaining: number;
+  reforecast: number;
   segments: OpexSegment[];
   entries: DrilldownEntry[];
 };
@@ -266,6 +270,7 @@ export function groupEntries(
         value: 0,
         realized: 0,
         remaining: 0,
+        reforecast: 0,
         segments: [],
         entries: [],
       };
@@ -276,6 +281,7 @@ export function groupEntries(
     g.value += e.value;
     g.realized += e.realized;
     g.remaining += e.remaining;
+    g.reforecast += e.reforecast ?? 0;
     g.entries.push(e);
   }
   const out = Array.from(groups.values()).map((g) => ({
@@ -285,6 +291,7 @@ export function groupEntries(
     value: r1(g.value),
     realized: r1(g.realized),
     remaining: r1(g.remaining),
+    reforecast: r1(g.reforecast),
     segments: aggregateSegments(g.entries),
     entries: [...g.entries].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)),
   }));
@@ -296,7 +303,7 @@ export function groupEntries(
 }
 
 export function drilldownTotals(groups: DrilldownGroup[]) {
-  const sum = (k: "before" | "after" | "value" | "realized" | "remaining") =>
+  const sum = (k: "before" | "after" | "value" | "realized" | "remaining" | "reforecast") =>
     r1(groups.reduce((s, g) => s + g[k], 0));
   return {
     before: sum("before"),
@@ -304,5 +311,6 @@ export function drilldownTotals(groups: DrilldownGroup[]) {
     value: sum("value"),
     realized: sum("realized"),
     remaining: sum("remaining"),
+    reforecast: sum("reforecast"),
   };
 }

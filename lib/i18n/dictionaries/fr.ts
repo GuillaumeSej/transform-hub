@@ -35,6 +35,8 @@ const fr: Record<string, string> = {
   "common.cancel": "Annuler",
   "common.delete": "Supprimer",
   "common.add": "Ajouter",
+  "common.edit": "Modifier",
+  "common.validate": "Valider",
   "common.close": "Fermer",
   "common.search": "Rechercher",
   "common.choose": "Choisir…",
@@ -2181,8 +2183,18 @@ const fr: Record<string, string> = {
   "chart.gapDrill.late": "dont en retard",
   "chart.gapDrill.onTime": "dont dans les temps",
   "chart.gapDrill.plannedInitial": "Planifié initial",
-  "chart.gapDrill.delay": "dont écart de retard",
-  "chart.gapDrill.adjustment": "dont écart de réajustement",
+  "chart.gapDrill.plannedInitial.tooltip":
+    "Plan figé du levier (ou valeur courante si pas encore figé), cumulé à sa date de fin.",
+  "chart.gapDrill.reforecast": "Réactualisé",
+  "chart.gapDrill.reforecast.tooltip":
+    "Cible réactualisée du levier (reforecast, ou plan figé, ou valeur courante), cumulée à sa date de fin.",
+  "chart.gapDrill.actual.tooltip": "Montant effectivement réalisé à date.",
+  "chart.gapDrill.delay": "Écart de retard",
+  "chart.gapDrill.delay.tooltip":
+    "Réalisé − réactualisé, uniquement pour les leviers ayant au moins un impact non réalisé dont la date est dépassée (retard d'exécution réel, pas juste un plan d'action en retard).",
+  "chart.gapDrill.adjustment": "Écart de performance",
+  "chart.gapDrill.adjustment.tooltip":
+    "Réactualisé − planifié initial (effet du réajustement du plan lui-même : positif si la cible a été relevée, négatif si elle a été abaissée).",
   "chart.clickForDetails": "Cliquer pour plus de détails",
   "dashboard.workstreamTable.targetNote":
     "Réalisé par rapport à la cible réactualisée (dernière version de la cible).",
@@ -2332,6 +2344,9 @@ const fr: Record<string, string> = {
   "impactsEditor.close": "Fermer",
   "impactsEditor.edit": "Modifier",
   "impactsEditor.view": "Détail",
+  "impactsEditor.requiredSuffix": "(obligatoire)",
+  "impactsEditor.scrollLeft": "Défiler vers la gauche",
+  "impactsEditor.scrollRight": "Défiler vers la droite",
   "impactsEditor.smoothed": "Lissé",
   "impactsEditor.capexStart": "Début de période",
   "impactsEditor.capexEnd": "Fin de période",
@@ -2393,8 +2408,6 @@ const fr: Record<string, string> = {
   "chart.waterfall.step.opexRec": "− OPEX récurrent",
   "chart.waterfall.step.net": "= Net annualisé",
   "chart.waterfall.opex.others": "Autres",
-  "chart.waterfall.favorable": "Favorable",
-  "chart.waterfall.unfavorable": "Défavorable",
   "chart.waterfall.opex.unspecified": "Nature non précisée",
   "chart.waterfall.opex.fte": "Recrutements (ETP)",
   "chart.waterfall.opex.other": "Non détaillé",

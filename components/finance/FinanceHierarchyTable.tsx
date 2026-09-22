@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Download } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
+import { Popover } from "@/components/shared/Popover";
 import * as engine from "@/lib/engine";
 import {
   attachChildren,
@@ -92,13 +93,12 @@ export function FinanceHierarchyTable({
       else next.add(y);
       return next;
     });
-  const filteredData = useMemo<BeTrackData>(() => {
-    if (!yearFilterActive) return data;
-    return {
-      ...data,
-      levers: data.levers.filter((l) => leverYears(l).some((y) => selectedYears.has(y))),
-    };
-  }, [data, yearFilterActive, selectedYears]);
+  const yearsButtonLabel = useMemo(() => {
+    if (!yearFilterActive) return t("finance.hierarchyTable.allYears", "Toutes les années");
+    const sorted = Array.from(selectedYears).sort((a, b) => a - b);
+    if (sorted.length <= 2) return sorted.join(", ");
+    return `${sorted.length} ${t("finance.hierarchyTable.yearsSelected", "années sélectionnées")}`;
+  }, [selectedYears, yearFilterActive, t]);
 
   const levelIdx = Math.max(
     0,
@@ -108,19 +108,27 @@ export function FinanceHierarchyTable({
   const childLevel = levels[levelIdx + 1];
 
   const company = useMemo(() => ({ hierarchyLevels }), [hierarchyLevels]);
+  // `financeByHierarchyLevel` restreint aux montants (planifié/réactualisé/réalisé/en retard) des
+  // impacts qui couvrent réellement les années sélectionnées — pas un simple filtre de leviers
+  // entiers — donc un levier partiellement dans les années choisies n'apparaît qu'au prorata.
+  const yearsOpt = yearFilterActive ? selectedYears : undefined;
   const parents = useMemo(
     () =>
       level
-        ? engine.financeByHierarchyLevel(filteredData, company, level.order, hierarchyNodes)
+        ? engine.financeByHierarchyLevel(data, company, level.order, hierarchyNodes, {
+            years: yearsOpt,
+          })
         : [],
-    [filteredData, company, level, hierarchyNodes]
+    [data, company, level, hierarchyNodes, yearsOpt]
   );
   const children = useMemo(
     () =>
       childLevel
-        ? engine.financeByHierarchyLevel(filteredData, company, childLevel.order, hierarchyNodes)
+        ? engine.financeByHierarchyLevel(data, company, childLevel.order, hierarchyNodes, {
+            years: yearsOpt,
+          })
         : [],
-    [filteredData, company, childLevel, hierarchyNodes]
+    [data, company, childLevel, hierarchyNodes, yearsOpt]
   );
   const tree = useMemo(() => {
     const t0 = attachChildren(parents, children, hierarchyNodes);
@@ -204,35 +212,64 @@ export function FinanceHierarchyTable({
             <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
               {t("finance.hierarchyTable.yearFilter", "Années")}
             </span>
-            <button
-              type="button"
-              onClick={() => setSelectedYears(new Set())}
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                !yearFilterActive
-                  ? "border-bp-coral bg-bp-coral text-white"
-                  : "border-border bg-white text-secondary hover:bg-neutral-100"
-              }`}
+            <Popover
+              align="start"
+              trigger={({ open, toggle }) => (
+                <button
+                  type="button"
+                  onClick={toggle}
+                  aria-expanded={open}
+                  aria-haspopup="menu"
+                  aria-label={
+                    yearFilterActive
+                      ? `${t("finance.hierarchyTable.yearFilter", "Années")} (${selectedYears.size})`
+                      : t("finance.hierarchyTable.yearFilter", "Années")
+                  }
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition ${
+                    yearFilterActive
+                      ? "border-bp-coral bg-bp-coral/10 text-bp-coral"
+                      : "border-border bg-white text-secondary hover:bg-neutral-100"
+                  }`}
+                >
+                  {yearsButtonLabel}
+                  <ChevronDown
+                    size={12}
+                    className={yearFilterActive ? "text-bp-coral" : "text-tertiary"}
+                  />
+                </button>
+              )}
             >
-              {t("finance.hierarchyTable.allYears", "Toutes")}
-            </button>
-            {allYears.map((y) => (
-              <label
-                key={y}
-                className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                  selectedYears.has(y)
-                    ? "border-bp-coral bg-bp-coral/10 text-bp-coral"
-                    : "border-border bg-white text-secondary hover:bg-neutral-100"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  className="h-3 w-3 accent-bp-coral"
-                  checked={selectedYears.has(y)}
-                  onChange={() => toggleYear(y)}
-                />
-                {y}
-              </label>
-            ))}
+              <div className="flex items-center justify-between border-b border-border px-1 pb-1.5 text-[11px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSelectedYears(new Set())}
+                  disabled={!yearFilterActive}
+                  className="text-bp-coral hover:underline disabled:opacity-40"
+                >
+                  {t("finance.hierarchyTable.allYears", "Toutes les années")}
+                </button>
+              </div>
+              <div className="max-h-[240px] overflow-y-auto pt-1">
+                {allYears.map((y) => (
+                  <label
+                    key={y}
+                    role="menuitemcheckbox"
+                    aria-checked={selectedYears.has(y)}
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs font-medium text-secondary transition hover:bg-neutral-50"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 accent-bp-coral"
+                      checked={selectedYears.has(y)}
+                      onChange={() => toggleYear(y)}
+                    />
+                    <span className={selectedYears.has(y) ? "font-semibold text-primary" : ""}>
+                      {y}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </Popover>
           </div>
         )}
         <div className="overflow-x-auto">

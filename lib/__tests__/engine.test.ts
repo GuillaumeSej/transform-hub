@@ -982,6 +982,7 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
 
   it("suppressions aggregate FTE of 'Départ forcé' movements, realized = status Réalisé", () => {
     const data = makeData({
+      levers: [{ ...baseLever, id: "L001" }],
       workforce: {
         totalFTE: 200,
         massSalary: 15,

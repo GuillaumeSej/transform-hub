@@ -49,11 +49,18 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
   // période occupe donc toujours la même position pour les barres, les lignes et le curseur.
   // Simplifié à 2 barres (gains / coûts), chacune partant de l'axe des abscisses (0) — le détail
   // par catégorie (CAPEX, OPEX, gain récurrent/one-off…) s'obtient au clic (`PeriodDetail`).
+  // Invariant visuel : gains toujours ≥ 0 (barre au-dessus de l'axe, vert), coûts toujours ≤ 0
+  // (barre sous l'axe, rouge) — jamais l'inverse. Par construction, `p.gains`/`p.oneOffGains` et
+  // `p.opexRec`/`p.opexOneOff`/`p.capex` sont des sommes de `imp.amount`, un montant saisi ≥ 0
+  // (input `min={0}` dans ImpactsEditor) : les sommes ne peuvent donc pas être négatives. Le
+  // clamp ci-dessous est une garde défensive (jamais censée changer la valeur) plutôt qu'un
+  // correctif de données : si elle se déclenchait un jour, ce serait le signe d'un vrai bug de
+  // données en amont (ex. montant négatif injecté hors UI) à investiguer, pas à masquer.
   const data = traj.points.map((p) => ({
     key: p.periodStart,
     period: p.period,
-    gain: p.gains + p.oneOffGains,
-    cost: -(p.opexRec + p.opexOneOff + p.capex),
+    gain: Math.max(0, p.gains + p.oneOffGains),
+    cost: Math.min(0, -(p.opexRec + p.opexOneOff + p.capex)),
     cumulativeNet: p.cumulativeNet,
     fte: p.fte,
   }));
@@ -266,7 +273,11 @@ function PeriodDetail({ point }: { point: ImpactTrajectoryPoint }) {
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 font-semibold tabular-nums">
+                <span
+                  className={`shrink-0 font-semibold tabular-nums ${
+                    g.sign === "+" ? "text-rag-green-dark" : "text-rag-red"
+                  }`}
+                >
                   {g.sign}
                   {fmtAmt(it.amount)}
                 </span>

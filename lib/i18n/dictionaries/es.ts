@@ -8,6 +8,8 @@ const es: Record<string, string> = {
   "common.cancel": "Cancelar",
   "common.delete": "Eliminar",
   "common.add": "Añadir",
+  "common.edit": "Editar",
+  "common.validate": "Validar",
   "common.close": "Cerrar",
   "common.search": "Buscar",
   "common.choose": "Elegir…",
@@ -2165,6 +2167,9 @@ const es: Record<string, string> = {
   "impactsEditor.close": "Cerrar",
   "impactsEditor.edit": "Editar",
   "impactsEditor.view": "Detalle",
+  "impactsEditor.requiredSuffix": "(obligatorio)",
+  "impactsEditor.scrollLeft": "Desplazar a la izquierda",
+  "impactsEditor.scrollRight": "Desplazar a la derecha",
   "impactsEditor.smoothed": "Distribuido",
   "impactsEditor.capexStart": "Inicio del período",
   "impactsEditor.capexEnd": "Fin del período",
@@ -2241,8 +2246,6 @@ const es: Record<string, string> = {
   "chart.waterfall.step.opexRec": "− OPEX recurrente",
   "chart.waterfall.step.net": "= Neto anualizado",
   "chart.waterfall.opex.others": "Otros",
-  "chart.waterfall.favorable": "Favorable",
-  "chart.waterfall.unfavorable": "Desfavorable",
   "chart.waterfall.opex.unspecified": "Naturaleza sin especificar",
   "chart.waterfall.opex.fte": "Contrataciones (FTE)",
   "chart.waterfall.opex.other": "Sin detallar",
@@ -2293,8 +2296,18 @@ const es: Record<string, string> = {
   "chart.gapDrill.late": "de los cuales retrasados",
   "chart.gapDrill.onTime": "de los cuales en plazo",
   "chart.gapDrill.plannedInitial": "Plan inicial",
-  "chart.gapDrill.delay": "de los cuales desviación de retraso",
-  "chart.gapDrill.adjustment": "de los cuales desviación de reajuste",
+  "chart.gapDrill.plannedInitial.tooltip":
+    "Plan fijado de la palanca (o valor actual si aún no está fijado), acumulado a su fecha de fin.",
+  "chart.gapDrill.reforecast": "Reactualizado",
+  "chart.gapDrill.reforecast.tooltip":
+    "Objetivo reactualizado de la palanca (reforecast, o plan fijado, o valor actual), acumulado a su fecha de fin.",
+  "chart.gapDrill.actual.tooltip": "Importe efectivamente realizado a la fecha.",
+  "chart.gapDrill.delay": "Desviación de retraso",
+  "chart.gapDrill.delay.tooltip":
+    "Realizado − reactualizado, solo para palancas con al menos un impacto no realizado cuya fecha ya pasó (retraso de ejecución real, no solo un plan de acción atrasado).",
+  "chart.gapDrill.adjustment": "Desviación de rendimiento",
+  "chart.gapDrill.adjustment.tooltip":
+    "Reactualizado − plan inicial (efecto del reajuste del propio plan: positivo si el objetivo se elevó, negativo si se redujo).",
   "chart.clickForDetails": "Haga clic para más detalles",
   "dashboard.workstreamTable.targetNote":
     "Realizado respecto al objetivo reactualizado (última versión del objetivo).",

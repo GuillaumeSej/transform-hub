@@ -12,6 +12,8 @@ const en: Record<string, string> = {
   "common.cancel": "Cancel",
   "common.delete": "Delete",
   "common.add": "Add",
+  "common.edit": "Edit",
+  "common.validate": "Validate",
   "common.close": "Close",
   "common.search": "Search",
   "common.choose": "Choose…",
@@ -2038,8 +2040,18 @@ const en: Record<string, string> = {
   "chart.gapDrill.late": "of which late",
   "chart.gapDrill.onTime": "of which on time",
   "chart.gapDrill.plannedInitial": "Initial plan",
-  "chart.gapDrill.delay": "of which delay gap",
-  "chart.gapDrill.adjustment": "of which adjustment gap",
+  "chart.gapDrill.plannedInitial.tooltip":
+    "Locked plan of the lever (or current value if not yet locked), cumulated to its end date.",
+  "chart.gapDrill.reforecast": "Reforecast",
+  "chart.gapDrill.reforecast.tooltip":
+    "Reforecast target of the lever (or locked plan, or current value), cumulated to its end date.",
+  "chart.gapDrill.actual.tooltip": "Amount actually realized to date.",
+  "chart.gapDrill.delay": "Delay gap",
+  "chart.gapDrill.delay.tooltip":
+    "Realized − reforecast, only for levers with at least one unrealized impact past its due date (genuine execution delay, not just a late action plan).",
+  "chart.gapDrill.adjustment": "Performance gap",
+  "chart.gapDrill.adjustment.tooltip":
+    "Reforecast − initial plan (effect of the plan adjustment itself: positive if the target was raised, negative if it was lowered).",
   "chart.clickForDetails": "Click for more details",
   "dashboard.workstreamTable.targetNote":
     "Realized versus the reforecast target (latest version of the target).",
@@ -2184,6 +2196,9 @@ const en: Record<string, string> = {
   "impactsEditor.close": "Close",
   "impactsEditor.edit": "Edit",
   "impactsEditor.view": "Details",
+  "impactsEditor.requiredSuffix": "(required)",
+  "impactsEditor.scrollLeft": "Scroll left",
+  "impactsEditor.scrollRight": "Scroll right",
   "impactsEditor.smoothed": "Smoothed",
   "impactsEditor.capexStart": "Period start",
   "impactsEditor.capexEnd": "Period end",
@@ -2255,8 +2270,6 @@ const en: Record<string, string> = {
   "chart.waterfall.step.opexRec": "− Recurring OPEX",
   "chart.waterfall.step.net": "= Annualized net",
   "chart.waterfall.opex.others": "Others",
-  "chart.waterfall.favorable": "Favorable",
-  "chart.waterfall.unfavorable": "Unfavorable",
   "chart.waterfall.opex.unspecified": "Unspecified nature",
   "chart.waterfall.opex.fte": "Hires (FTE)",
   "chart.waterfall.opex.other": "Not detailed",
