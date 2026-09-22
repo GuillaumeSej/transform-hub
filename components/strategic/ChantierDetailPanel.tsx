@@ -8,7 +8,10 @@ import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Modal } from "@/components/shared/Modal";
 import { ChantierStaffingEditor, formatFte } from "@/components/strategic/ChantierStaffingEditor";
-import { StaffingDraftTable, type StaffingDraftRow } from "@/components/strategic/StaffingDraftTable";
+import {
+  StaffingDraftTable,
+  type StaffingDraftRow,
+} from "@/components/strategic/StaffingDraftTable";
 import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
 import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
 import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
@@ -849,7 +852,6 @@ function ChantierActionForm({
   indicators,
   currency,
   chantierAllocatedBudget,
-  plannedFte,
   companyId,
   showStaffingDraft = false,
   onSubmit,
@@ -876,12 +878,6 @@ function ChantierActionForm({
    *  budgets leviers (`otherActions` + ce formulaire) ne le dépasse pas. `undefined` = pas de
    *  plafond, aucune validation. */
   chantierAllocatedBudget?: number;
-  /** ETP PLANIFIÉS de CE LEVIER (round <n>) — somme des lignes `ChantierStaffing` rattachées à son
-   *  `actionId`, déjà calculée par l'appelant (`plannedFteByAction`, voir son commentaire) : ce
-   *  formulaire n'a pas accès à `data.staffing`, seulement à ce total. Sert de "planned" à la
-   *  `BudgetVsActualBar` ETP ci-dessous, pendant de `chantierAllocatedBudget` pour l'ETP. `undefined`
-   *  (nouveau levier pas encore créé, donc sans `actionId` à interroger) traité comme `0`. */
-  plannedFte?: number;
   /** Entreprise active — nécessaire au tableau ETP brouillon (`StaffingDraftTable`, round 29) pour
    *  résoudre les équipes proposables (`useCompanyDepartments`), exactement comme
    *  `ChantierStaffingEditor` en a besoin ailleurs sur cette fiche. Non lu quand
@@ -912,7 +908,14 @@ function ChantierActionForm({
   const [sponsor, setSponsor] = useState<string | undefined>(initial?.sponsor);
   const [start, setStart] = useState(initial?.start ?? today);
   const [end, setEnd] = useState(initial?.end ?? addDays(today, 30));
-  const [status, setStatus] = useState(initial?.status ?? stages[0]?.id ?? "");
+  // Round <n> : le champ "Étape" (MaturityStageConfig, Défini/Validé/Planifié/Exécuté/Réalisé)
+  // n'est plus saisi dans ce formulaire — retour PO : le suivi d'un projet passe désormais
+  // ENTIÈREMENT par ses jalons J0→J4 (`ChantierAction.milestones`), cette étape historique n'a
+  // plus aucun rôle dans l'affichage (voir `chantierProgress()`, lib/axisLogic.ts, qui la
+  // consommait mais n'est plus appelé nulle part depuis round 18/26 — laissé dans le code pour
+  // compat des documents existants). `status` reste dans le TYPE (encore requis) et vaut
+  // silencieusement la première étape configurée, sans jamais être exposé/modifiable ici.
+  const [status] = useState(initial?.status ?? stages[0]?.id ?? "");
   // KPI optionnel du levier (round 8) — round 18 : purement informatif, n'aiguille plus aucun
   // système de suivi (tout levier progresse via les jalons E0→E4, avec ou sans KPI rattaché).
   const [indicatorId, setIndicatorId] = useState<string | undefined>(initial?.indicatorId);
@@ -927,9 +930,15 @@ function ChantierActionForm({
   const [consumedBudgetInput, setConsumedBudgetInput] = useState(
     initial?.consumedBudget !== undefined ? String(initial.consumedBudget) : ""
   );
-  const [consumedFteInput, setConsumedFteInput] = useState(
-    initial?.consumedFte !== undefined ? String(initial.consumedFte) : ""
-  );
+  // Round <n> : le champ "ETP consommés" (un seul nombre déclaratif) a été retiré de ce
+  // formulaire — la table ETP scopée au projet (`StaffingDraftTable` à la création,
+  // `ChantierStaffingEditor scopedToActionId` en édition, round 28/29) est désormais la SEULE
+  // source pour le suivi ETP du projet, plus précise (qui/équipe/dates/taux) et déjà affichée à
+  // l'écran juste après. `ChantierAction.consumedFte` reste dans le type (compat des documents
+  // existants) mais n'est plus jamais écrit par CE formulaire, ni en création ni en édition —
+  // `updateChantierAction` fusionne son patch sur le document existant (jamais un remplacement
+  // intégral), une valeur déjà enregistrée n'est donc pas effacée en éditant un projet via ce
+  // formulaire pour un autre champ.
   // Brouillon ETP (round 29, `showStaffingDraft` uniquement) — jamais réinitialisé depuis `initial`
   // (l'édition ne passe pas `showStaffingDraft`, donc ne rend jamais `StaffingDraftTable` et ne lit
   // jamais cet état).
@@ -965,8 +974,6 @@ function ChantierActionForm({
   const trimmedConsumedBudget = consumedBudgetInput.trim();
   const parsedConsumedBudget =
     trimmedConsumedBudget === "" ? undefined : Number(trimmedConsumedBudget);
-  const trimmedConsumedFte = consumedFteInput.trim();
-  const parsedConsumedFte = trimmedConsumedFte === "" ? undefined : Number(trimmedConsumedFte);
 
   const canSubmit = !requiredFieldsMissing && !submitting && !budgetExceeds;
 
@@ -1054,9 +1061,6 @@ function ChantierActionForm({
           ...(parsedConsumedBudget !== undefined && !Number.isNaN(parsedConsumedBudget)
             ? { consumedBudget: parsedConsumedBudget }
             : {}),
-          ...(parsedConsumedFte !== undefined && !Number.isNaN(parsedConsumedFte)
-            ? { consumedFte: parsedConsumedFte }
-            : {}),
           ...(parsedDeliverables.length > 0 ? { deliverables: parsedDeliverables } : {}),
           ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
         },
@@ -1102,23 +1106,6 @@ function ChantierActionForm({
           label={`${labels.sponsor} ${labels.optional}`}
           id="ca-sponsor"
         />
-        <div>
-          <label className="text-xs font-medium text-secondary" htmlFor="ca-stage">
-            {labels.stage}
-          </label>
-          <select
-            id="ca-stage"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className={INPUT_CLASS}
-          >
-            {stages.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
         <div>
           <label className="text-xs font-medium text-secondary" htmlFor="ca-indicator">
             {labels.indicator} {labels.optional}
@@ -1175,9 +1162,10 @@ function ChantierActionForm({
             className={INPUT_CLASS}
           />
         </div>
-        {/* ── Consommé du levier (round <n>) — pendants déclaratifs de "budget" ci-dessus pour
-          `ChantierAction.consumedBudget`/`consumedFte`, EXACTE même discipline de saisie
-          (bufferisé jusqu'au submit, comme le reste de ce formulaire). ─────────────────────── */}
+        {/* ── Consommé du levier (round <n>) — pendant déclaratif de "budget" ci-dessus pour
+          `ChantierAction.consumedBudget`, EXACTE même discipline de saisie (bufferisé jusqu'au
+          submit, comme le reste de ce formulaire). Pas d'équivalent ETP ici : voir la note sur
+          `consumedFte` près de sa déclaration d'état plus haut dans ce composant. ────────────── */}
         <div>
           <label className="text-xs font-medium text-secondary" htmlFor="ca-consumed-budget">
             {labels.consumedBudget} {labels.optional}
@@ -1200,29 +1188,6 @@ function ChantierActionForm({
                 : 0
             }
             formatValue={(n) => formatBudgetAmount(n, currency)}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-secondary" htmlFor="ca-consumed-fte">
-            {labels.consumedFte} {labels.optional}
-          </label>
-          <input
-            id="ca-consumed-fte"
-            type="number"
-            inputMode="decimal"
-            value={consumedFteInput}
-            onChange={(e) => setConsumedFteInput(e.target.value)}
-            className={INPUT_CLASS}
-          />
-          <BudgetVsActualBar
-            className="mt-2"
-            planned={plannedFte ?? 0}
-            consumed={
-              parsedConsumedFte !== undefined && !Number.isNaN(parsedConsumedFte)
-                ? parsedConsumedFte
-                : 0
-            }
-            formatValue={(n) => `${formatFte(n)} ${labels.fteUnit}`}
           />
         </div>
       </div>
@@ -1569,25 +1534,18 @@ export function ChantierDetailPanel({
   );
 
   // ETP PLANIFIÉS (round <n>) — pendant de `sumProjetBudgets`/`allocatedBudget` pour l'ETP : il
-  // n'existe pas de champ "ETP cible" déclaratif sur `Chantier`/`ChantierAction` (contrairement au
-  // budget), le seul planifié disponible est la somme des lignes de staffing (`ChantierStaffing`,
-  // même collection que `ChantierStaffingEditor.tsx`, déjà abonnée via `data.staffing`). Sert de
-  // "planned" à la `BudgetVsActualBar` ETP ci-dessous, chantier ET par levier (une ligne de staffing
-  // SANS `actionId` compte dans le total chantier mais dans AUCUN total levier — staffing transverse,
-  // même lecture que `ChantierStaffingEditor`).
+  // n'existe pas de champ "ETP cible" déclaratif sur `Chantier` (contrairement au budget), le seul
+  // planifié disponible est la somme des lignes de staffing (`ChantierStaffing`, même collection
+  // que `ChantierStaffingEditor.tsx`, déjà abonnée via `data.staffing`). Sert de "planned" à la
+  // `BudgetVsActualBar` ETP du CHANTIER ci-dessous (round <n> : le pendant PAR LEVIER a été retiré
+  // avec le champ "ETP consommés" de `ChantierActionForm`, voir sa note — la table ETP scopée au
+  // projet fait déjà foi pour ce niveau, une comparaison planifié/consommé redondante n'y a plus sa
+  // place).
   const chantierStaffing = useMemo(
     () => (chantier ? data.staffing.filter((s) => s.chantierId === chantier.id) : []),
     [data.staffing, chantier]
   );
   const plannedFteTotal = chantierStaffing.reduce((sum, s) => sum + (s.fte || 0), 0);
-  const plannedFteByAction = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const s of chantierStaffing) {
-      if (!s.actionId) continue;
-      map.set(s.actionId, (map.get(s.actionId) ?? 0) + (s.fte || 0));
-    }
-    return map;
-  }, [chantierStaffing]);
 
   // KPI proposables au sélecteur optionnel d'un levier (round 8) — même filtre que `KpiPageClient.tsx`
   // (`grouped` useMemo, `macro`/`byChantier`) : indicateurs macro d'UN DES AXES du chantier (pas de
@@ -2590,9 +2548,6 @@ export function ChantierDetailPanel({
                   indicators={chantierAvailableIndicators}
                   currency={activeProgram?.currency}
                   chantierAllocatedBudget={chantier.allocatedBudget}
-                  plannedFte={
-                    actionForm.actionId ? plannedFteByAction.get(actionForm.actionId) : undefined
-                  }
                   companyId={user?.companyId ?? ""}
                   showStaffingDraft={actionForm.mode === "create"}
                   labels={actionFormLabels}
