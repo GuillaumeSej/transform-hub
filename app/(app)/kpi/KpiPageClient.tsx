@@ -2,19 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  CalendarClock,
-  Hash,
-  LayoutGrid,
-  ListChecks,
-  Lock,
-  LineChart,
-  Pencil,
-  Plus,
-  Table2,
-  Target,
-  X,
-} from "lucide-react";
+import { LayoutGrid, Lock, LineChart, Pencil, Plus, Table2, Target, X } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import type { DropdownGroup, DropdownOption } from "@/components/shared/Dropdown";
@@ -22,6 +10,7 @@ import { MultiSelect } from "@/components/shared/MultiSelect";
 import { parseFilterValues, serializeFilterValues } from "@/lib/filterUtils";
 import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
+import { IndicatorProgressDetail } from "@/components/strategic/IndicatorProgressDetail";
 import {
   BusinessKpiCards,
   IndicatorStatusSummary,
@@ -34,14 +23,12 @@ import {
   resolveIndicatorStatus,
   resolveUserFullName,
 } from "@/lib/axisLogic";
+import { canFillIndicatorValue, currentPeriod, parseNumber } from "@/lib/kpiHistory";
+import { IndicatorMetaLine } from "@/components/strategic/IndicatorMetaLine";
 import {
-  canFillIndicatorValue,
-  currentPeriod,
-  filterByYear,
-  availableYears,
-  parseNumber,
-  type YearSelection,
-} from "@/lib/kpiHistory";
+  YearSegmentedControl,
+  useYearSelection,
+} from "@/components/strategic/YearSegmentedControl";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
 import { KpiTableView } from "@/components/strategic/KpiTableView";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -142,15 +129,21 @@ function IndicatorCard({
   // tout, je veux choisir l'année sur chaque indicateur spécifiquement"). Même défaut (année
   // courante) et même logique de bornes (`availableYears`) que l'ancien sélecteur de page, mais
   // calculée sur les mesures DE CET indicateur uniquement plutôt que sur tout le programme.
-  const [year, setYear] = useState<YearSelection>(() => new Date().getFullYear());
-  const currentYear = new Date().getFullYear();
-  const yearOptions = useMemo(() => availableYears(measurements), [measurements]);
-  const showYearPicker = yearOptions.some((y) => y < currentYear);
-  const yearMeasurements = useMemo(() => filterByYear(measurements, year), [measurements, year]);
+  // Sélecteur partagé (`YearSegmentedControl`) : années issues des mesures + « Historique
+  // complet », visible seulement si plusieurs années ont des données.
+  const {
+    year,
+    setYear,
+    options: yearOptions,
+    visible: showYearPicker,
+    filtered: yearMeasurements,
+  } = useYearSelection(measurements, () => new Date().getFullYear());
   // Écart signé + progression vers la cible (round 6, point 6) : `undefined` sans objectif chiffré
   // ou sans mesure numérique exploitable — même garde-fou que `BusinessKpiCard`, rien à afficher
   // plutôt qu'un écart inventé.
-  const delta = computeIndicatorDelta(indicator, latest);
+  // Avancement mesuré depuis la valeur initiale (baseline = 1re mesure de TOUT l'historique de
+  // l'indicateur, jamais la sélection d'année) — voir `computeIndicatorDelta`.
+  const delta = computeIndicatorDelta(indicator, latest, measurements);
 
   // ── Brouillon de mesure ────────────────────────────────────────────────────────────────────
   const [period, setPeriod] = useState(() => currentPeriod(indicator.frequency));
@@ -342,30 +335,19 @@ function IndicatorCard({
       <Card className="mb-0">
         <CardHeader
           title={
-            <span className="flex flex-wrap items-center gap-2">
-              {number !== undefined && (
-                <span
-                  className="rounded-full bg-bp-coral/10 px-1.5 py-0.5 text-[10px] font-bold text-bp-coral"
-                  aria-label={`${t("kpi.indicatorNumber")} ${number}`}
-                >
-                  #{number}
-                </span>
-              )}
-              <span className="text-sm">{indicator.name}</span>
-              <span
-                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                  quantitative
-                    ? "border-bp-coral/25 bg-bp-coral/10 text-bp-coral"
-                    : "border-border bg-bg-surface text-text-secondary"
-                }`}
-              >
-                {quantitative ? <Hash size={10} /> : <ListChecks size={10} />}
-                {t(`kpi.kind.${indicator.kind}`)}
+            <span className="flex min-w-0 flex-col gap-1">
+              <span className="flex items-baseline gap-2">
+                {number !== undefined && (
+                  <span
+                    className="shrink-0 font-mono text-xs font-semibold tabular-nums text-bp-coral"
+                    aria-label={`${t("kpi.indicatorNumber")} ${number}`}
+                  >
+                    #{number}
+                  </span>
+                )}
+                <span className="text-sm">{indicator.name}</span>
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-bg-surface px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-                <CalendarClock size={10} />
-                {t(`kpi.frequency.${indicator.frequency}`)}
-              </span>
+              <IndicatorMetaLine indicator={indicator} />
             </span>
           }
           actions={
@@ -391,30 +373,7 @@ function IndicatorCard({
                   plutôt qu'un sélecteur unique en tête de page qui affectait auparavant TOUTES les
                   cartes simultanément. */}
               {showYearPicker && (
-                <div
-                  className="flex flex-wrap items-center gap-1.5"
-                  role="group"
-                  aria-label={t("kpi.year.label", "Année")}
-                >
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                    {t("kpi.year.label", "Année")}
-                  </span>
-                  {[...yearOptions, "all" as const].map((y) => (
-                    <button
-                      key={y}
-                      type="button"
-                      onClick={() => setYear(y)}
-                      aria-pressed={year === y}
-                      className={`cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
-                        year === y
-                          ? "border-bp-coral bg-bp-coral text-white"
-                          : "border-border bg-bg-surface text-text-secondary hover:border-bp-coral hover:text-bp-coral"
-                      }`}
-                    >
-                      {y === "all" ? t("kpi.year.all", "Historique") : y}
-                    </button>
-                  ))}
-                </div>
+                <YearSegmentedControl years={yearOptions} value={year} onChange={setYear} />
               )}
               {/* Fenêtré par défaut sur les dernières périodes (calibré par `frequency`, voir
                 `axisLogic.recentMeasurementWindow`) : sur un plan pluriannuel, empiler tout
@@ -436,6 +395,7 @@ function IndicatorCard({
                 fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
                 labelProgress={t("kpi.chart.progressToTarget")}
                 labelToday={t("kpi.chart.today")}
+                baselineMeasurements={measurements}
                 // Round 7, point 3 : le camembert d'en-tête (`IndicatorDonut`) porte déjà le signal
                 // "trajectoire" — sans ce flag, `IndicatorChart` superposerait son propre
                 // `IndicatorDeltaStat` par-dessus la courbe, un 2ᵉ signal identique en double.
@@ -461,6 +421,9 @@ function IndicatorCard({
                   <span>{t("kpi.noMeasurement")}</span>
                 )}
               </div>
+              {/* Avancement vers la cible finale (chiffre principal) + palier courant — voir
+                  `IndicatorProgressDetail`. */}
+              <IndicatorProgressDetail delta={delta} unit={indicator.unit} />
               <IndicatorHistoryTable indicator={indicator} measurements={yearMeasurements} />
             </div>
 
@@ -1089,6 +1052,10 @@ export function KpiPageClient() {
   // filtré (`grouped`/`orphans`/`measurements`), aucune donnée séparée n'est chargée pour la vue
   // Tableau.
   const [kpiView, setKpiView] = useState<"cards" | "table">("cards");
+  // Année de la vue Tableau (sélecteur partagé `YearSegmentedControl`) : « Actuel »/« Cible » y
+  // sont lus sur la dernière mesure DE L'ANNÉE choisie. Défaut = historique complet, soit la
+  // dernière mesure connue (comportement historique de la vue).
+  const tableYear = useYearSelection(measurements, "all");
 
   const renderCard = (indicator: Indicator) => (
     <IndicatorCard
@@ -1334,11 +1301,20 @@ export function KpiPageClient() {
             </p>
           )}
 
+          {kpiView === "table" && tableYear.visible && (
+            <YearSegmentedControl
+              years={tableYear.options}
+              value={tableYear.year}
+              onChange={tableYear.setYear}
+            />
+          )}
+
           {kpiView === "table" ? (
             <KpiTableView
               grouped={grouped}
               orphans={orphans}
-              measurements={measurements}
+              measurements={tableYear.filtered}
+              baselineMeasurements={measurements}
               labels={{
                 axisUnknown: t("kpi.axisUnknown"),
                 indicator: t("kpi.table.indicator"),

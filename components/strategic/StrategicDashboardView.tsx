@@ -76,6 +76,7 @@ import {
 } from "@/components/strategic/IndicatorStatusSummary";
 import { ProgramRoadmap } from "@/components/strategic/ProgramRoadmap";
 import { readKpi } from "@/lib/chantierKpis";
+import { formatCompactCurrency, formatPercent } from "@/lib/formatCompactAmount";
 import type { Indicator, StrategicAxis } from "@/types";
 
 /**
@@ -150,6 +151,7 @@ function DashboardStatChip({
   tone = "neutral",
   accent,
   size = "sm",
+  alert,
 }: {
   icon: LucideIcon;
   /** Chaîne déjà formatée acceptée en plus d'un nombre brut — round 7, point 2 : la puce budget
@@ -167,6 +169,11 @@ function DashboardStatChip({
    *  alloué" du bandeau, qui doit se distinguer des 3 autres compteurs. Défaut `"sm"` = comportement
    *  historique, inchangé pour tout autre appelant. */
   size?: "sm" | "lg";
+  /** Signal de dépassement (retour PO, remplace l'ancien encadré "Budget prévisionnel du
+   *  programme") : quand fourni, la valeur passe en corail (`--bp-coral`, même token que les
+   *  autres signaux "à risque" de ce dashboard) précédée d'une petite icône d'alerte ; la chaîne
+   *  sert de libellé accessible à l'icône. Le détail des chiffres est dans `BudgetChipTooltip`. */
+  alert?: string;
 }) {
   const accentStyles = tone === "neutral" && accent ? CHIP_ACCENTS[accent] : null;
   return (
@@ -193,8 +200,18 @@ function DashboardStatChip({
         />
       </span>
       <span
-        className={`${size === "lg" ? "text-[12.5px] font-bold" : ""} ${tone === "amber" ? "text-rag-amber" : "text-primary"}`}
+        className={`inline-flex items-center gap-1 ${size === "lg" ? "text-[12.5px] font-bold" : ""} ${
+          tone === "amber" ? "text-rag-amber" : alert ? "text-bp-coral" : "text-primary"
+        }`}
       >
+        {alert && (
+          <TriangleAlert
+            size={12}
+            className="shrink-0 text-bp-coral"
+            aria-label={alert}
+            role="img"
+          />
+        )}
         {value}
       </span>
       <span className={size === "lg" ? "uppercase tracking-wide" : ""}>{label}</span>
@@ -276,6 +293,47 @@ function ChipPopover({
   );
 }
 
+/** Infobulle de la puce "Budget alloué" (retour PO) — explique au survol ET au focus clavier
+ *  (`group-focus-within`, le déclencheur de `ChipPopover` est un `<button>`) les chiffres comparés
+ *  au budget prévisionnel du programme. Purement CSS, même rendu que `components/shared/Tooltip.tsx`
+ *  (fond sombre, flèche) mais multi-lignes et accessible au clavier, ce que `Tooltip` ne gère pas.
+ *  Sans `lines` (aucun budget prévisionnel déclaré), rend la puce telle quelle. */
+function BudgetChipTooltip({
+  lines,
+  children,
+}: {
+  lines?: { text: string; over: boolean }[];
+  children: ReactNode;
+}) {
+  if (!lines || lines.length === 0) return <>{children}</>;
+  return (
+    <span className="group/budgettip relative inline-flex">
+      {children}
+      <span
+        role="tooltip"
+        className="pointer-events-none invisible absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[300px] -translate-x-1/2 rounded-md bg-neutral-800 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-focus-within/budgettip:visible group-focus-within/budgettip:opacity-100 group-hover/budgettip:visible group-hover/budgettip:opacity-100 group-hover/budgettip:delay-200"
+      >
+        {lines.map((line) => (
+          <span key={line.text} className="flex items-start gap-1.5 py-0.5">
+            {line.over && (
+              <TriangleAlert
+                size={11}
+                className="mt-[2px] shrink-0 text-bp-coral-pink"
+                aria-hidden
+              />
+            )}
+            <span>{line.text}</span>
+          </span>
+        ))}
+        <span
+          aria-hidden
+          className="absolute left-1/2 top-full -translate-x-1/2 border-[5px] border-transparent border-t-neutral-800"
+        />
+      </span>
+    </span>
+  );
+}
+
 /** Nombre de puces d'indicateur affichées dans l'en-tête riche d'axe de la feuille de route
  *  (round 17, porté depuis `StrategicAxesView.tsx` — voir `renderAxisRoadmapHeader` ci-dessous)
  *  avant repli sur une puce "+N". Round 19 (retour PO) : les puces affichent désormais `#N ·
@@ -289,7 +347,7 @@ const MAX_CARD_INDICATOR_CHIPS = 5;
 export function StrategicDashboardView() {
   const { user } = useRole();
   const { activeProgram, activeProgramId, programs, loading: programsLoading } = useActiveProgram();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
   const strategic = useStrategicData(user?.companyId ?? null, activeProgramId, user);
@@ -371,6 +429,59 @@ export function StrategicDashboardView() {
       activeProgram ? sumProgramProjetBudgets(activeProgram.id, chantiers, chantierActions) : 0,
     [activeProgram, chantiers, chantierActions]
   );
+
+  /** Comparaison au budget PRÉVISIONNEL du programme (`Program.budget`) pour la puce "Budget
+   *  alloué" (remplace l'ancien encadré "Budget prévisionnel du programme" de l'en-tête). Trois
+   *  chiffres distincts sont en jeu :
+   *   - `Program.budget` : budget prévisionnel TOTAL déclaré par l'admin (ProgramsPanel.tsx) ;
+   *   - `allocatedBudgetTotal` : somme des `Chantier.allocatedBudget` (budget alloué aux chantiers,
+   *     le montant affiché par la puce) ;
+   *   - `programBudgetActualTotal` : somme des budgets PROJETS (`ChantierAction.budget`), celle que
+   *     comparait l'ancien encadré et qui déclenche l'alerte synthétique d'AppShell.
+   *  Chacune des deux sommes est comparée au prévisionnel ; la puce passe en alerte si l'une OU
+   *  l'autre le dépasse. `undefined` tant qu'aucun budget prévisionnel n'est déclaré. */
+  const programBudgetCheck = useMemo(() => {
+    const forecast = activeProgram?.budget;
+    if (!activeProgram || forecast === undefined) return undefined;
+    const fmt = (value: number) => formatCompactCurrency(value, activeProgram.currency, locale, 2);
+    const describe = (
+      amount: number,
+      overKey: string,
+      overFallback: string,
+      withinKey: string,
+      withinFallback: string
+    ) => {
+      const over = amount > forecast;
+      const diff = amount - forecast;
+      const text = (over ? t(overKey, overFallback) : t(withinKey, withinFallback))
+        .replace("{amount}", fmt(amount))
+        .replace("{forecast}", fmt(forecast))
+        .replace("{diff}", `+${fmt(diff)}`)
+        .replace(
+          "{pct}",
+          // Prévisionnel à 0 : pas de % calculable, tiret plutôt qu'un "Infinity %".
+          forecast > 0 ? `+${formatPercent(diff / forecast, locale, 1)}` : "—"
+        );
+      return { text, over };
+    };
+    const lines = [
+      describe(
+        allocatedBudgetTotal,
+        "strategicDashboard.budgetTooltip.allocatedOver",
+        "Budget alloué {amount} > budget prévisionnel {forecast} ({diff}, {pct})",
+        "strategicDashboard.budgetTooltip.allocatedWithin",
+        "Budget alloué {amount} sur {forecast} prévus"
+      ),
+      describe(
+        programBudgetActualTotal,
+        "strategicDashboard.budgetTooltip.projetsOver",
+        "Budgets des projets {amount} > budget prévisionnel {forecast} ({diff}, {pct})",
+        "strategicDashboard.budgetTooltip.projetsWithin",
+        "Budgets des projets {amount} sur {forecast} prévus"
+      ),
+    ];
+    return { over: lines.some((line) => line.over), lines };
+  }, [activeProgram, allocatedBudgetTotal, programBudgetActualTotal, locale, t]);
 
   /** Numérotation globale 3-5-15 des indicateurs (`numberIndicators`, lib/axisLogic.ts) — alimente
    *  UNIQUEMENT la liste de la puce "indicateurs" du bandeau d'en-tête (round 12) : chaque ligne
@@ -1144,27 +1255,11 @@ export function StrategicDashboardView() {
               </div>
             </div>
           )}
-          {/* Round 28 : budget prévisionnel TOTAL du programme (`Program.budget`, réglé par un
-              admin dans ProgramsPanel.tsx) vs somme réelle des budgets leviers
-              (`sumProgramProjetBudgets`) — même convention "masqué si absent" que le bandeau
-              Ambition ci-dessus (pas de placeholder fabriqué tant que l'admin n'a pas renseigné ce
-              budget total). Réutilise `BudgetVsActualBar`, déjà utilisé plus bas pour le budget par
-              axe/chantier, pour rester visuellement cohérent plutôt que d'inventer un nouveau
-              visuel — son badge "Dépassé" intégré signale directement le dépassement. */}
-          {activeProgram.budget !== undefined && (
-            <div className="mt-3 max-w-md rounded-lg border border-border bg-bg-elevated px-4 py-2.5">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
-                {t("strategicDashboard.programBudgetLabel")}
-              </div>
-              <div className="mt-1">
-                <BudgetVsActualBar
-                  planned={activeProgram.budget}
-                  consumed={programBudgetActualTotal}
-                  formatValue={(value) => `${value.toLocaleString()} ${activeProgram.currency}`}
-                />
-              </div>
-            </div>
-          )}
+          {/* Round 28 → retrait (retour PO) : l'ancien encadré "Budget prévisionnel du programme"
+              (`BudgetVsActualBar` somme projets / `Program.budget`) n'est plus affiché ici — le
+              dépassement est désormais signalé directement sur la puce "Budget alloué" ci-dessous
+              (montant corail + icône d'alerte + infobulle détaillant les comparaisons), voir
+              `programBudgetCheck`. */}
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <ChipPopover
               chip={
@@ -1223,34 +1318,44 @@ export function StrategicDashboardView() {
                     : undefined,
                 }))}
             />
-            <ChipPopover
-              chip={
-                <DashboardStatChip
-                  icon={Wallet}
-                  value={`${allocatedBudgetTotal.toLocaleString()} ${activeProgram.currency}`}
-                  label={t("strategicDashboard.allocatedBudget")}
-                  accent="orange"
-                  size="lg"
-                />
-              }
-              title={t("strategicDashboard.popover.budgetTitle")}
-              emptyLabel={t("strategicDashboard.popover.emptyBudget")}
-              items={axisBudgets.map(({ axis, total }) => ({
-                key: axis.id,
-                // Round 13, point 2 : deux segments (nom d'axe / montant) en JSX plutôt qu'une
-                // seule chaîne interpolée — le montant reste sur la même ligne, aligné à droite,
-                // quelle que soit la longueur du nom d'axe (qui tronque plutôt que de wrapper).
-                label: (
-                  <span className="flex w-full items-center justify-between gap-2">
-                    <span className="truncate">{axis.name}</span>
-                    <span className="shrink-0 whitespace-nowrap font-semibold text-primary">
-                      {total.toLocaleString()} {activeProgram.currency}
+            <BudgetChipTooltip lines={programBudgetCheck?.lines}>
+              <ChipPopover
+                chip={
+                  <DashboardStatChip
+                    icon={Wallet}
+                    value={`${allocatedBudgetTotal.toLocaleString()} ${activeProgram.currency}`}
+                    label={t("strategicDashboard.allocatedBudget")}
+                    accent="orange"
+                    size="lg"
+                    alert={
+                      programBudgetCheck?.over
+                        ? t(
+                            "strategicDashboard.budgetTooltip.overrunTitle",
+                            "Budget prévisionnel dépassé"
+                          )
+                        : undefined
+                    }
+                  />
+                }
+                title={t("strategicDashboard.popover.budgetTitle")}
+                emptyLabel={t("strategicDashboard.popover.emptyBudget")}
+                items={axisBudgets.map(({ axis, total }) => ({
+                  key: axis.id,
+                  // Round 13, point 2 : deux segments (nom d'axe / montant) en JSX plutôt qu'une
+                  // seule chaîne interpolée — le montant reste sur la même ligne, aligné à droite,
+                  // quelle que soit la longueur du nom d'axe (qui tronque plutôt que de wrapper).
+                  label: (
+                    <span className="flex w-full items-center justify-between gap-2">
+                      <span className="truncate">{axis.name}</span>
+                      <span className="shrink-0 whitespace-nowrap font-semibold text-primary">
+                        {total.toLocaleString()} {activeProgram.currency}
+                      </span>
                     </span>
-                  </span>
-                ),
-                onClick: () => router.push("/levers"),
-              }))}
-            />
+                  ),
+                  onClick: () => router.push("/levers"),
+                }))}
+              />
+            </BudgetChipTooltip>
           </div>
         </div>
         {/* Personnalisation : desktop uniquement, comme sur le dashboard exécutif (le

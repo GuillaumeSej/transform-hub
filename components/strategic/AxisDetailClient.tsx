@@ -27,7 +27,12 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { isReadOnlyUser } from "@/lib/roleProfiles";
-import type { Indicator } from "@/types";
+import type { Indicator, IndicatorMeasurement } from "@/types";
+import { IndicatorMetaLine } from "@/components/strategic/IndicatorMetaLine";
+import {
+  YearSegmentedControl,
+  useYearSelection,
+} from "@/components/strategic/YearSegmentedControl";
 
 /**
  * Fiche d'identité d'un axe stratégique — servie sur la même route que la fiche levier
@@ -170,83 +175,14 @@ export function AxisDetailClient() {
    *  un autre `<button>` — la zone graphique stoppe donc explicitement la propagation du clic
    *  (`stopPropagation` ci-dessous) pour que l'ouverture de son historique complet ne déclenche pas
    *  AUSSI une navigation vers la fiche KPI. */
-  const renderIndicator = (indicator: Indicator) => {
-    const measures = data.measurements.filter((m) => m.indicatorId === indicator.id);
-    const latest = latestMeasurement(indicator.id, data.measurements);
-    const clickable = isIndicatorClickable(indicator);
-    return (
-      <div
-        key={indicator.id}
-        role={clickable ? "button" : undefined}
-        tabIndex={clickable ? 0 : undefined}
-        onClick={clickable ? () => router.push(`/kpi?indicator=${indicator.id}`) : undefined}
-        onKeyDown={
-          clickable
-            ? (e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  router.push(`/kpi?indicator=${indicator.id}`);
-                }
-              }
-            : undefined
-        }
-        className={`rounded-lg border border-border bg-white p-3.5 transition-colors ${
-          clickable ? "cursor-pointer hover:border-black" : ""
-        }`}
-      >
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-primary">{indicator.name}</div>
-            <div className="mt-0.5 text-[11px] text-tertiary">
-              {t("strategicAxes.objective")} : {indicator.objective} ·{" "}
-              {t(`strategicAxes.freq.${indicator.frequency}`)}
-            </div>
-          </div>
-          <IndicatorStatusBadge
-            status={resolveIndicatorStatus(indicator)}
-            label={t(
-              resolveIndicatorStatus(indicator) === "at_risk"
-                ? "indicatorStatus.atRisk"
-                : "indicatorStatus.onTrack"
-            )}
-            title={
-              resolveIndicatorStatus(indicator) === "at_risk"
-                ? t("strategicAxes.atRiskTooltip")
-                : undefined
-            }
-          />
-        </div>
-
-        <div className="mt-2 text-[11px] text-secondary">
-          {t("strategicAxes.latestValue")} :{" "}
-          <strong className="text-primary">
-            {latest?.value !== undefined
-              ? `${latest.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
-              : (latest?.note ?? t("strategicAxes.noMeasurement"))}
-          </strong>
-          {latest && <span className="text-tertiary"> · {latest.period}</span>}
-        </div>
-
-        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-          <IndicatorChart
-            measurements={measures}
-            objectiveValue={indicator.objectiveValue}
-            direction={indicator.direction}
-            unit={indicator.unit}
-            qualitative={indicator.kind === "qualitative"}
-            frequency={indicator.frequency}
-            height={160}
-            labelValue={t("strategicAxes.chartValue")}
-            labelObjective={t("strategicAxes.chartObjective")}
-            emptyLabel={t("strategicAxes.chartEmpty")}
-            labelViewFull={t("kpi.chart.viewFull")}
-            fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
-            labelProgress={t("kpi.chart.progressToTarget")}
-          />
-        </div>
-      </div>
-    );
-  };
+  const renderIndicator = (indicator: Indicator) => (
+    <AxisIndicatorCard
+      key={indicator.id}
+      indicator={indicator}
+      measures={data.measurements.filter((m) => m.indicatorId === indicator.id)}
+      clickable={isIndicatorClickable(indicator)}
+    />
+  );
 
   const macroIndicators = axisIndicators.filter((i) => !i.chantierId);
 
@@ -485,6 +421,96 @@ export function AxisDetailClient() {
           />
         )}
       </Modal>
+    </div>
+  );
+}
+
+/** Carte d'un indicateur de la fiche d'axe — LECTURE SEULE, navigable vers la fiche KPI (voir le
+ *  doc-comment de `renderIndicator`). Composant à part pour porter son propre état : la sélection
+ *  d'année (`YearSegmentedControl`, partagé avec la page KPI), affichée seulement si les mesures
+ *  couvrent plusieurs années. Défaut = historique complet (comportement historique de la fiche). */
+function AxisIndicatorCard({
+  indicator,
+  measures,
+  clickable,
+}: {
+  indicator: Indicator;
+  /** Mesures DE CET indicateur uniquement. */
+  measures: IndicatorMeasurement[];
+  clickable: boolean;
+}) {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const latest = latestMeasurement(indicator.id, measures);
+  const { year, setYear, options, visible, filtered } = useYearSelection(measures, "all");
+  const status = resolveIndicatorStatus(indicator);
+  return (
+    <div
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? () => router.push(`/kpi?indicator=${indicator.id}`) : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                router.push(`/kpi?indicator=${indicator.id}`);
+              }
+            }
+          : undefined
+      }
+      className={`rounded-lg border border-border bg-white p-3.5 transition-colors ${
+        clickable ? "cursor-pointer hover:border-black" : ""
+      }`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-primary">{indicator.name}</div>
+          <IndicatorMetaLine indicator={indicator} className="mt-1" />
+          <div className="mt-1 text-[11px] text-tertiary">
+            {t("strategicAxes.objective")} : {indicator.objective}
+          </div>
+        </div>
+        <IndicatorStatusBadge
+          status={status}
+          label={t(status === "at_risk" ? "indicatorStatus.atRisk" : "indicatorStatus.onTrack")}
+          title={status === "at_risk" ? t("strategicAxes.atRiskTooltip") : undefined}
+        />
+      </div>
+
+      <div className="mt-2 text-[11px] text-secondary">
+        {t("strategicAxes.latestValue")} :{" "}
+        <strong className="text-primary">
+          {latest?.value !== undefined
+            ? `${latest.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
+            : (latest?.note ?? t("strategicAxes.noMeasurement"))}
+        </strong>
+        {latest && <span className="text-tertiary"> · {latest.period}</span>}
+      </div>
+
+      {/* Zone interactive (sélecteur d'année + graphique) : ne déclenche pas la navigation. */}
+      <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
+        {visible && <YearSegmentedControl years={options} value={year} onChange={setYear} />}
+        <IndicatorChart
+          measurements={filtered}
+          objectiveValue={indicator.objectiveValue}
+          direction={indicator.direction}
+          unit={indicator.unit}
+          qualitative={indicator.kind === "qualitative"}
+          frequency={indicator.frequency}
+          height={160}
+          windowMeasurements={year === "all" ? "recent" : "all"}
+          labelValue={t("strategicAxes.chartValue")}
+          labelObjective={t("strategicAxes.chartObjective")}
+          emptyLabel={t("strategicAxes.chartEmpty")}
+          labelViewFull={t("kpi.chart.viewFull")}
+          fullHistoryTitle={`${t("kpi.chart.fullHistory")} — ${indicator.name}`}
+          labelProgress={t("kpi.chart.progressToTarget")}
+          targetSchedule={indicator.targetSchedule}
+          baselineMeasurements={measures}
+        />
+      </div>
     </div>
   );
 }

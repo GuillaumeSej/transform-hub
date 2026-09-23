@@ -3107,7 +3107,7 @@ export function ChantierDetailPanel({
                                           : {linkedIndicatorReading.target}
                                           {linkedIndicator.unit ? ` ${linkedIndicator.unit}` : ""}
                                           {linkedIndicatorReading.progressPct !== undefined
-                                            ? ` · ${linkedIndicatorReading.progressPct} %`
+                                            ? ` · ${linkedIndicatorReading.approximate ? "≈" : ""}${linkedIndicatorReading.progressPct} %`
                                             : ""}
                                         </div>
                                       )}

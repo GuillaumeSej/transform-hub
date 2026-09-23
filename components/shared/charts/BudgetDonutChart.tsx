@@ -1,7 +1,7 @@
 "use client";
 
-import { memo, useCallback, useState } from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer, Sector, Tooltip, type PieProps } from "recharts";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { Cell, Pie, PieChart, Sector, Tooltip, type PieProps } from "recharts";
 import { useLatestCallback, useStableValue } from "@/lib/hooks/useStableChartData";
 
 /** Même palette que `GeoDonutChart` — catégorielle, tons de marque, déjà validée sur fond clair.
@@ -36,7 +36,9 @@ function renderActiveShape(props: unknown): JSX.Element {
       cx={p.cx}
       cy={p.cy}
       innerRadius={p.innerRadius}
-      outerRadius={p.outerRadius + 6}
+      // Agrandissement proportionnel au rayon (plutôt que +6px fixes) : le donut est désormais
+      // dimensionné selon son conteneur, et l'écart avec l'arc "consommé" est lui aussi relatif.
+      outerRadius={p.outerRadius + Math.max(3, (p.outerRadius / 0.86) * ACTIVE_GROW_RATIO * 0.9)}
       startAngle={p.startAngle}
       endAngle={p.endAngle}
       fill={p.fill}
@@ -86,10 +88,60 @@ function renderTooltip(
   );
 }
 
+/** Géométrie du donut, calculée à partir de la taille RÉELLE de la zone de dessin (mesurée sur le
+ *  conteneur, voir `useMeasuredWidth`) — tous les rayons sont des fractions de `R`, pour que
+ *  l'anneau, l'éventuel anneau "consommé" et le trou central grandissent/rétrécissent ensemble.
+ *
+ *  Refonte (retour PO : texte central illisible, superposé à l'ancien anneau "consommé" noir qui
+ *  était NESTÉ DANS le trou) : l'anneau consommé est désormais un arc FIN placé AUTOUR de l'anneau
+ *  principal, jamais à l'intérieur — le trou central est entièrement réservé au texte. L'écart
+ *  entre les deux anneaux (0.86R → 0.92R) absorbe l'agrandissement de la part survolée
+ *  (`ACTIVE_GROW_RATIO`), qui ne vient donc jamais toucher l'arc consommé. */
+const ACTIVE_GROW_RATIO = 0.05;
+function donutGeometry(size: number, withConsumedRing: boolean) {
+  const R = Math.max(0, size / 2 - 2);
+  const outerRadius = withConsumedRing ? R * 0.86 : R * (1 - ACTIVE_GROW_RATIO);
+  const innerRadius = withConsumedRing ? R * 0.66 : outerRadius * 0.64;
+  return {
+    outerRadius,
+    innerRadius,
+    consumedInnerRadius: R * 0.92,
+    consumedOuterRadius: R * 0.98,
+    // Carré inscrit dans le trou (côté r·√2 ≈ 1.41r) moins une marge : la boîte de texte centrale
+    // ne peut PAS déborder sur l'anneau, quelle que soit la largeur de la carte.
+    textBox: innerRadius * 1.34,
+  };
+}
+
+/** Largeur mesurée d'un élément (ResizeObserver) — `null` tant que la première mesure n'a pas eu
+ *  lieu, pour ne dessiner le donut qu'UNE fois à sa taille réelle (un premier rendu à une taille
+ *  provisoire puis un second à la bonne taille relancerait l'animation d'entrée du `Pie`).
+ *  Environnement sans mise en page (jsdom) : largeur 0 ⇒ repli sur `fallback`. */
+function useMeasuredWidth(fallback: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const w = Math.floor(el.clientWidth);
+      setWidth(w > 0 ? w : fallback);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fallback]);
+  return [ref, width] as const;
+}
+
 /** Zone de dessin Recharts du donut, MÉMOÏSÉE : ne se re-rend que si ses entrées changent
  *  réellement (jamais sur un simple survol — voir le commentaire au-dessus de `stableData` dans
- *  `BudgetDonutChart`), pour ne pas interrompre l'animation d'entrée du `Pie`. */
+ *  `BudgetDonutChart`), pour ne pas interrompre l'animation d'entrée du `Pie`. `size` ne change
+ *  qu'au redimensionnement effectif du conteneur. */
 const DonutPlot = memo(function DonutPlot({
+  size,
   data,
   innerRingData,
   showConsumedRing,
@@ -98,6 +150,7 @@ const DonutPlot = memo(function DonutPlot({
   onActiveIndexChange,
   tooltipContent,
 }: {
+  size: number;
   data: BudgetDonutSlice[];
   innerRingData: { name: string; value: number; fill: string }[];
   showConsumedRing: boolean;
@@ -106,57 +159,60 @@ const DonutPlot = memo(function DonutPlot({
   onActiveIndexChange: (index: number | undefined) => void;
   tooltipContent: (props: { active?: boolean; payload?: unknown }) => JSX.Element | null;
 }) {
+  const g = donutGeometry(size, showConsumedRing);
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <PieChart>
+    <PieChart width={size} height={size}>
+      <Pie
+        data={data}
+        dataKey="value"
+        nameKey="name"
+        cx="50%"
+        cy="50%"
+        innerRadius={g.innerRadius}
+        outerRadius={g.outerRadius}
+        paddingAngle={1}
+        activeShape={renderActiveShape as PieProps["activeShape"]}
+        onMouseEnter={(_, index) => onActiveIndexChange(index)}
+        onMouseLeave={() => onActiveIndexChange(undefined)}
+        onClick={(d) => {
+          const name = (d as { name?: string })?.name;
+          if (name) onSliceClick(name);
+        }}
+        cursor={clickable ? "pointer" : undefined}
+      >
+        {data.map((entry, i) => (
+          <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
+        ))}
+      </Pie>
+      {/* Arc "consommé vs restant" : second `Pie` FIN, AUTOUR de l'anneau principal (voir
+          `donutGeometry`) — plus jamais dans le trou central, réservé au texte. Pas d'animation
+          (`isAnimationActive={false}`) ni de tooltip (`tooltipType="none"`, ses parts n'ont pas de
+          nom lisible — le consommé est déjà détaillé au centre, en légende et dans le tooltip). */}
+      {showConsumedRing && (
         <Pie
-          data={data}
+          data={innerRingData}
           dataKey="value"
           nameKey="name"
-          innerRadius={55}
-          outerRadius={90}
-          paddingAngle={1}
-          activeShape={renderActiveShape as PieProps["activeShape"]}
-          onMouseEnter={(_, index) => onActiveIndexChange(index)}
-          onMouseLeave={() => onActiveIndexChange(undefined)}
-          onClick={(d) => {
-            const name = (d as { name?: string })?.name;
-            if (name) onSliceClick(name);
-          }}
-          cursor={clickable ? "pointer" : undefined}
+          cx="50%"
+          cy="50%"
+          innerRadius={g.consumedInnerRadius}
+          outerRadius={g.consumedOuterRadius}
+          isAnimationActive={false}
+          tooltipType="none"
         >
-          {data.map((entry, i) => (
-            <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
+          {innerRingData.map((entry) => (
+            <Cell key={entry.name} fill={entry.fill} />
           ))}
         </Pie>
-        {/* Round 16 : second `Pie` NESTÉ dans le MÊME `PieChart`/`ResponsiveContainer` que
-            l'anneau existant, à un rayon plus petit qui tient DANS le trou de celui-ci
-            (`innerRadius=55` ci-dessus ⇒ un rayon extérieur de 46 laisse un espace visible
-            entre les deux anneaux). Pas d'animation (`isAnimationActive={false}`) pour éviter
-            une ré-animation disgracieuse à chaque re-render du parent. */}
-        {showConsumedRing && (
-          <Pie
-            data={innerRingData}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={28}
-            outerRadius={46}
-            isAnimationActive={false}
-          >
-            {innerRingData.map((entry) => (
-              <Cell key={entry.name} fill={entry.fill} />
-            ))}
-          </Pie>
-        )}
-        <Tooltip content={tooltipContent} />
-      </PieChart>
-    </ResponsiveContainer>
+      )}
+      <Tooltip content={tooltipContent} />
+    </PieChart>
   );
 });
 
 /**
  * Donut GÉNÉRIQUE de répartition budgétaire (round 12, redesign visuel round 13) — patron recharts
- * minimal (`Pie`/`Cell`/`Tooltip`/`ResponsiveContainer`) mais délibérément PAS spécialisé : ni
+ * minimal (`Pie`/`Cell`/`Tooltip`, taille mesurée sur le conteneur) mais délibérément PAS spécialisé : ni
  * unité, ni devise, ni domaine en dur — `formatValue` est fourni par l'appelant (ex. `"€2,3M"`,
  * `"120 j.h"`), contrairement à `GeoDonutChart` qui fige `€…M` dans son `Tooltip`. Plusieurs agents
  * réutilisent ce composant pour des ventilations budgétaires différentes (budget de chantier par
@@ -208,6 +264,10 @@ export function BudgetDonutChart({
   total: totalOverride,
   consumedTotal: consumedTotalOverride,
   clickHint,
+  size = "md",
+  formatCenterValue,
+  centerTotalLabel,
+  centerConsumedPctLabel,
 }: {
   data: BudgetDonutSlice[];
   formatValue: (value: number) => string;
@@ -215,7 +275,8 @@ export function BudgetDonutChart({
   /** Libellé secondaire optionnel affiché sous le total, au centre de l'anneau (ex. "Total") —
    *  round 13. Omis par défaut : les 3 appelants existants n'ont pas besoin de le fournir. */
   centerLabel?: string;
-  /** Round 16 : affiche un second anneau, plus petit, à l'intérieur du trou de l'anneau existant,
+  /** Round 16 : affiche un second anneau fin (autour de l'anneau principal depuis la refonte du
+   *  texte central — voir `donutGeometry`),
    *  résumant `consommé` vs `restant` (ou `consommé` seul en rouge si dépassement) sur l'ensemble
    *  de `data`. Omis par défaut (`false`/`undefined`) : les 3 appelants existants n'ont pas à le
    *  fournir et gardent le rendu à anneau unique inchangé. */
@@ -236,8 +297,25 @@ export function BudgetDonutChart({
   /** Consigne affichée en bas du tooltip quand une part est cliquable (ex. "Cliquez pour
    *  détailler") — optionnelle, purement additive, omise par défaut. */
   clickHint?: string;
+  /** Taille MAXIMALE du donut : `"md"` (défaut, 220px — rendu historique des appelants existants)
+   *  ou `"lg"` (300px, carte où le donut est le visuel principal). Dans les deux cas le donut se
+   *  réduit à la largeur réelle de son conteneur si elle est plus petite (mesurée, pas un
+   *  breakpoint), et toute la géométrie (anneaux, trou, texte) suit. */
+  size?: "md" | "lg";
+  /** Formatage COMPACT des montants affichés au centre (ex. `"7,7 M€"`) — `formatValue` sinon.
+   *  La légende et le tooltip gardent toujours `formatValue` (montant complet). */
+  formatCenterValue?: (value: number) => string;
+  /** Mode `showConsumedRing` : ligne sous le montant consommé, construite à partir du total
+   *  formaté (ex. "sur 23,6 M€ alloués"). Omis : `"/ <total>"` (rendu historique). */
+  centerTotalLabel?: (formattedTotal: string) => string;
+  /** Mode `showConsumedRing` : troisième ligne centrale à partir du ratio consommé/total
+   *  (ex. "33 % consommé"). Omise si non fournie. */
+  centerConsumedPctLabel?: (ratio: number) => string;
 }): JSX.Element {
   const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
+  const maxSize = size === "lg" ? 300 : 220;
+  const [plotRef, measuredWidth] = useMeasuredWidth(maxSize);
+  const plotSize = measuredWidth === null ? null : Math.min(maxSize, measuredWidth);
   // Somme brute de `data` — dénominateur des % par part (tooltip + légende) et périmètre réel
   // dessiné par l'anneau EXTÉRIEUR (`Pie` principal, toujours rendu depuis `data` tel quel, jamais
   // depuis un total en override) : ces % doivent continuer à représenter "part de CE slice dans la
@@ -286,63 +364,96 @@ export function BudgetDonutChart({
     [sliceTotal, latestFormatValue, consumedLabel, clickable, clickHint]
   );
 
+  const formatCenter = formatCenterValue ?? formatValue;
+  const geometry = plotSize === null ? null : donutGeometry(plotSize, !!showConsumedRing);
+  // Typographie centrale proportionnelle au trou (bornée) : le montant principal reste lisible sur
+  // un grand donut sans jamais déborder du carré inscrit (`textBox`) sur un petit.
+  const hole = geometry?.innerRadius ?? 0;
+  const valueFontSize = Math.round(Math.min(26, Math.max(14, hole * 0.26)));
+  const subFontSize = Math.round(Math.min(12, Math.max(10, hole * 0.12)) * 10) / 10;
+
   return (
-    <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-center">
-      {/* Zone de dessin du donut — `relative` pour superposer le total en absolu par-dessus, sans
-          jamais laisser un composant recharts (légende, notamment) modifier sa géométrie interne. */}
-      <div className="relative w-full shrink-0 sm:w-[220px]">
-        <DonutPlot
-          data={stableData}
-          innerRingData={stableInnerRingData}
-          showConsumedRing={!!showConsumedRing}
-          clickable={clickable}
-          onSliceClick={handleSliceClick}
-          onActiveIndexChange={setActiveIndex}
-          tooltipContent={tooltipContent}
-        />
-        {/* Total au centre de l'anneau (round 13) — dans la zone vide laissée par `innerRadius`.
-            `pointer-events-none` pour ne jamais intercepter les clics/hover destinés aux parts du
-            donut en dessous.
-            Round 14 (PO) : rien ne contraignait jusqu'ici la largeur de ce total — un `formatValue`
-            long (ex. "17 350 000 EUR") pouvait dépasser visuellement du cercle intérieur, surtout si
-            l'anneau grossit un jour. `innerRadius={55}` ci-dessus ⇒ diamètre intérieur 110px ; le
-            conteneur ci-dessous est plafonné à 90px (110px moins une marge de sécurité pour ne
-            jamais toucher l'anneau) et `text-base` (au lieu de `text-lg`) réduit encore le risque de
-            dépassement à cette taille pour une valeur longue — l'emballe/tronque proprement
-            (`break-words`) plutôt que de déborder si elle est malgré tout trop longue. À ajuster de
-            concert si `innerRadius` change. */}
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <div className="max-w-[90px] px-1 text-center leading-tight">
-            {/* Round 16 : quand `showConsumedRing` est actif, la ligne unique ci-dessous cède la
-                place à un affichage compact à deux lignes (consommé en gras, puis "/ total" en
-                plus petit et atténué) — `text-sm` (au lieu de `text-base`) pour que les DEUX
-                lignes tiennent confortablement dans la même largeur `max-w-[90px]`. Sans
-                `showConsumedRing`, comportement à ligne unique strictement inchangé (round 13/14). */}
-            {showConsumedRing ? (
-              <>
+    <div
+      className={`flex flex-col items-center gap-4 ${
+        size === "lg" ? "md:flex-row md:items-center md:gap-6" : "sm:flex-row sm:items-center"
+      }`}
+    >
+      {/* Zone de dessin du donut — carrée, largeur mesurée (`useMeasuredWidth`) : le donut occupe
+          toute la largeur disponible jusqu'à `maxSize`. `relative` pour superposer le texte central
+          en absolu, sans jamais laisser un composant recharts modifier sa géométrie interne. */}
+      <div
+        ref={plotRef}
+        className={`relative w-full shrink-0 ${
+          size === "lg" ? "max-w-[300px] md:w-[45%] md:min-w-[200px]" : "max-w-[220px] sm:w-[220px]"
+        }`}
+        style={{ height: plotSize ?? maxSize }}
+      >
+        {plotSize !== null && (
+          <DonutPlot
+            size={plotSize}
+            data={stableData}
+            innerRingData={stableInnerRingData}
+            showConsumedRing={!!showConsumedRing}
+            clickable={clickable}
+            onSliceClick={handleSliceClick}
+            onActiveIndexChange={setActiveIndex}
+            tooltipContent={tooltipContent}
+          />
+        )}
+        {/* Texte central — contenu dans le carré inscrit du trou (`geometry.textBox`, calculé
+            depuis `innerRadius`) : il ne peut pas chevaucher un anneau, à aucune largeur de carte.
+            `pointer-events-none` pour ne jamais intercepter les clics/hover destinés aux parts. */}
+        {geometry && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div
+              className="flex flex-col items-center justify-center overflow-hidden text-center leading-tight"
+              style={{ width: geometry.textBox, maxHeight: geometry.textBox }}
+            >
+              {showConsumedRing ? (
+                <>
+                  <span
+                    className={`block break-words font-bold tabular-nums ${
+                      overBudget ? "text-rag-red" : "text-primary"
+                    }`}
+                    style={{ fontSize: valueFontSize, lineHeight: 1.1 }}
+                  >
+                    {formatCenter(consumedTotal)}
+                  </span>
+                  <span
+                    className="mt-1 block break-words text-secondary"
+                    style={{ fontSize: subFontSize }}
+                  >
+                    {centerTotalLabel
+                      ? centerTotalLabel(formatCenter(total))
+                      : `/ ${formatCenter(total)}`}
+                  </span>
+                  {centerConsumedPctLabel && total > 0 && (
+                    <span
+                      className={`mt-0.5 block break-words font-semibold ${
+                        overBudget ? "text-rag-red" : "text-tertiary"
+                      }`}
+                      style={{ fontSize: subFontSize }}
+                    >
+                      {centerConsumedPctLabel(consumedTotal / total)}
+                    </span>
+                  )}
+                </>
+              ) : (
                 <span
-                  className={`block break-words text-sm font-bold ${
-                    overBudget ? "text-rag-red" : "text-primary"
-                  }`}
+                  className="block break-words font-bold tabular-nums text-primary"
+                  style={{ fontSize: Math.min(valueFontSize, 18), lineHeight: 1.15 }}
                 >
-                  {formatValue(consumedTotal)}
+                  {formatCenter(total)}
                 </span>
-                <span className="block break-words text-[10px] text-tertiary">
-                  / {formatValue(total)}
+              )}
+              {centerLabel && (
+                <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                  {centerLabel}
                 </span>
-              </>
-            ) : (
-              <span className="break-words text-base font-bold text-primary">
-                {formatValue(total)}
-              </span>
-            )}
-            {centerLabel && (
-              <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                {centerLabel}
-              </span>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Légende maison (round 13) — pastille de couleur, nom (tronqué si trop long), valeur

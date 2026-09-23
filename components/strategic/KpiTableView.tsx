@@ -3,6 +3,7 @@
 import { Fragment } from "react";
 import {
   computeIndicatorDelta,
+  formatIndicatorProgress,
   latestMeasurement,
   progressBucket,
   resolveIndicatorStatus,
@@ -10,6 +11,8 @@ import {
   type ProgressBucket,
 } from "@/lib/axisLogic";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
+import { IndicatorMetaLine } from "@/components/strategic/IndicatorMetaLine";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Chantier, Indicator, IndicatorMeasurement, StrategicAxis } from "@/types";
 
 /** Couleur d'accent de ligne selon la progression vers la cible (`ProgressBucket`, même 3 seaux
@@ -51,6 +54,7 @@ export function KpiTableView({
   grouped,
   orphans,
   measurements,
+  baselineMeasurements,
   labels,
 }: {
   grouped: {
@@ -60,6 +64,9 @@ export function KpiTableView({
   }[];
   orphans: Indicator[];
   measurements: IndicatorMeasurement[];
+  /** Historique COMPLET (non filtré par année) d'où est tirée la valeur initiale du calcul
+   *  d'avancement — voir `computeIndicatorDelta`. Défaut : `measurements`. */
+  baselineMeasurements?: IndicatorMeasurement[];
   labels: {
     axisUnknown: string;
     indicator: string;
@@ -72,6 +79,7 @@ export function KpiTableView({
     noValue: string;
   };
 }) {
+  const { t } = useTranslation();
   const th =
     "sticky top-0 z-10 border-b border-border bg-bg-surface px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-tertiary whitespace-nowrap";
   const td = "px-3 py-2.5 text-sm text-text-primary align-top";
@@ -90,11 +98,13 @@ export function KpiTableView({
       ? resolveIndicatorTargetForPeriod(indicator, latest.period)
       : undefined;
     const status = resolveIndicatorStatus(indicator);
-    // Accent "dans la cible / sur la trajectoire / à risque" (round "KPI pro") : dérivé de la
-    // progression EFFECTIVE vers la cible (`computeIndicatorDelta.progressPct`), rebucketé par
-    // `progressBucket` — jamais une nouvelle échelle de couleur, voir doc-comment en tête de
-    // fichier. `undefined` (pas d'objectif chiffré ou pas de mesure exploitable) reste neutre.
-    const bucket = progressBucket(computeIndicatorDelta(indicator, latest)?.progressPct);
+    // Accent "dans la cible / sur la trajectoire / à risque" (round "KPI pro") : dérivé de
+    // l'avancement vers la cible du PALIER courant (`progressToStepPct`, contexte du statut),
+    // rebucketé par `progressBucket` — jamais une nouvelle échelle de couleur, voir doc-comment en
+    // tête de fichier. `undefined` (pas d'objectif chiffré ou pas de mesure exploitable) reste
+    // neutre. La colonne "Avancement" affiche, elle, l'avancement vers la cible FINALE.
+    const delta = computeIndicatorDelta(indicator, latest, baselineMeasurements ?? measurements);
+    const bucket = progressBucket(delta?.progressToStepPct);
 
     return (
       <tr
@@ -106,6 +116,7 @@ export function KpiTableView({
         <td className={td}>
           <div className="font-medium">{indicator.name}</div>
           {chantierName && <div className="text-[11px] text-text-secondary">{chantierName}</div>}
+          <IndicatorMetaLine indicator={indicator} className="mt-1" />
         </td>
         <td className={`${td} font-semibold ${VALUE_COLOR[bucket]}`}>{current}</td>
         <td className={td}>
@@ -115,6 +126,28 @@ export function KpiTableView({
           {indicator.objectiveValue !== undefined
             ? `${indicator.objectiveValue}${unitSuffix}`
             : "—"}
+        </td>
+        <td className={`${td} tabular-nums`}>
+          {delta ? (
+            <>
+              <div className="font-semibold">
+                {formatIndicatorProgress(delta.progressToFinalPct, delta.approximate)}
+              </div>
+              {delta.stepPeriod && (
+                <div className="text-[11px] text-text-secondary">
+                  {t("kpi.progress.step", "Palier")} {delta.stepPeriod} :{" "}
+                  {formatIndicatorProgress(delta.progressToStepPct, delta.stepApproximate)}
+                </div>
+              )}
+              {delta.approximate && (
+                <div className="text-[10px] italic text-tertiary">
+                  {t("kpi.progress.approxShort", "approx.")}
+                </div>
+              )}
+            </>
+          ) : (
+            "—"
+          )}
         </td>
         <td className={td}>
           <IndicatorStatusBadge
@@ -136,6 +169,7 @@ export function KpiTableView({
               <th className={th}>{labels.current}</th>
               <th className={th}>{labels.target}</th>
               <th className={th}>{labels.finalTarget}</th>
+              <th className={th}>{t("kpi.progress.label", "Avancement")}</th>
               <th className={th}>{labels.status}</th>
             </tr>
           </thead>

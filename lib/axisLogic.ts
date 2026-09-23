@@ -171,6 +171,50 @@ export function resolveIndicatorTargetForPeriod(
   return applicable ?? indicator.objectiveValue;
 }
 
+/** Même résolution que `resolveIndicatorTargetForPeriod`, mais renvoie aussi la PÉRIODE du palier
+ *  retenu (`period` absent = cible finale `objectiveValue`, cible fixe ou repli hors trajectoire) —
+ *  pour l'affichage "Palier 2026-Q2 : 80% (cible 70)". */
+export function resolveIndicatorTargetStepForPeriod(
+  indicator: Pick<Indicator, "objectiveValue" | "targetSchedule">,
+  period: string
+): { value: number; period?: string } | undefined {
+  const schedule = indicator.targetSchedule;
+  const final =
+    indicator.objectiveValue !== undefined ? { value: indicator.objectiveValue } : undefined;
+  if (!schedule || schedule.length === 0) return final;
+  const sorted = [...schedule].sort((a, b) => a.period.localeCompare(b.period));
+  if (period > sorted[sorted.length - 1].period) return final;
+  let applicable: { value: number; period: string } | undefined;
+  for (const step of sorted) {
+    if (step.period <= period) applicable = { value: step.value, period: step.period };
+    else break;
+  }
+  return applicable ?? final;
+}
+
+/** Mesure de BASELINE ("Valeur initiale") d'un indicateur : sa mesure NUMÉRIQUE la plus ancienne
+ *  (période la plus petite au sens lexicographique ; à période égale, la plus anciennement saisie
+ *  via `reportedAt`). Aucun drapeau dédié n'existe sur `IndicatorMeasurement` : l'import Excel
+ *  (`lib/strategicExcelImport.ts`, colonne "Valeur initiale") crée simplement une première mesure,
+ *  c'est donc la convention "première mesure = situation initiale" qui fait foi. */
+export function baselineMeasurement(
+  indicatorId: string,
+  measurements: IndicatorMeasurement[]
+): IndicatorMeasurement | undefined {
+  let first: IndicatorMeasurement | undefined;
+  for (const m of measurements) {
+    if (m.indicatorId !== indicatorId || m.value === undefined) continue;
+    if (
+      !first ||
+      m.period < first.period ||
+      (m.period === first.period && m.reportedAt < first.reportedAt)
+    ) {
+      first = m;
+    }
+  }
+  return first;
+}
+
 /** Statut EFFECTIF d'un indicateur : la surcharge manuelle du responsable prime toujours sur le
  *  statut calculé. Seul point de vérité pour l'affichage — ne jamais lire `indicator.status` nu. */
 export function resolveIndicatorStatus(
@@ -181,35 +225,100 @@ export function resolveIndicatorStatus(
 
 /** Écart signé d'un indicateur par rapport à sa cible, dérivé de sa dernière mesure — pendant
  *  du binaire `computeIndicatorStatus` mais avec une AMPLITUDE plutôt qu'un simple booléen, pour
- *  l'affichage "82% vs cible 80%" (round 4, point 1 : rendre l'écart visuellement lisible). */
+ *  l'affichage "82% vs cible 80%" (round 4, point 1 : rendre l'écart visuellement lisible).
+ *
+ *  AVANCEMENT (règle validée PO) — mesuré depuis la situation INITIALE (baseline, voir
+ *  `baselineMeasurement`) et non plus depuis zéro :
+ *
+ *      avancement = (valeur actuelle − valeur initiale) / (cible − valeur initiale) × 100
+ *
+ *  La formule couvre naturellement les deux sens : pour "down", cible < initiale, numérateur et
+ *  dénominateur sont tous deux négatifs quand l'indicateur s'améliore. Calculée DEUX fois : vers la
+ *  cible du PALIER courant (`progressToStepPct`, contexte du statut) et vers la cible FINALE
+ *  (`progressToFinalPct`, chiffre principal affiché comme "avancement").
+ *
+ *  Repli APPROXIMATIF (`approximate`/`stepApproximate` = true) quand la formule n'est pas
+ *  applicable — pas de baseline connue, ou baseline égale à la cible (dénominateur nul) : on
+ *  revient à l'ancien ratio (`valeur / cible` pour "up", `cible / valeur` pour "down").
+ *  Une seule mesure qui EST la baseline donne un avancement exact de 0 (rien n'a encore bougé).
+ *
+ *  Bornes : les champs `progress*Pct` sont PLANCHÉS à 0 (un recul sous la situation initiale
+ *  s'affiche 0%) mais JAMAIS plafonnés à 100 (un dépassement s'affiche p. ex. 112%) ; les valeurs
+ *  brutes, non bornées (négatives comprises), restent disponibles dans `rawProgress*Pct`. Les
+ *  anneaux/barres visuels plafonnent eux-mêmes leur remplissage à 100%. */
 export type IndicatorDelta = {
-  /** `latest.value - objectiveValue`, signé (positif = au-dessus de la cible). */
+  /** `latest.value - cible du palier courant`, signé (positif = au-dessus de la cible). */
   delta: number;
-  /** `delta / objectiveValue * 100`, signé ; 0 si `objectiveValue` vaut 0 (évite une division par
+  /** `delta / cible du palier * 100`, signé ; 0 si cette cible vaut 0 (évite une division par
    *  zéro plutôt que de produire `Infinity`/`NaN`). */
   deltaPct: number;
-  /** Progression vers la cible, 0-100, TOUJOURS bornée. Cadrage sensible au sens d'amélioration :
-   *  pour "up" (plus haut vaut mieux), `valeur / objectif` ; pour "down" (plus bas vaut mieux), le
-   *  cadrage est INVERSÉ (`objectif / valeur`), sans quoi une valeur descendant sous la cible
-   *  afficherait une progression qui DIMINUE alors que l'indicateur s'améliore. */
+  /** Rétrocompatibilité : alias de `progressToFinalPct` (avancement vers la cible FINALE). */
   progressPct: number;
-  /** `true` si l'écart va dans le bon sens — même convention de signe que `computeIndicatorStatus`
-   *  ("down" : `delta <= 0` est favorable ; sinon `delta >= 0`). */
+  /** Avancement vers la cible finale (`objectiveValue`), plancher 0, sans plafond. */
+  progressToFinalPct: number;
+  /** Idem, brut (non borné, peut être négatif). */
+  rawProgressToFinalPct: number;
+  /** Avancement vers la cible du palier courant, plancher 0, sans plafond. */
+  progressToStepPct: number;
+  /** Idem, brut (non borné, peut être négatif). */
+  rawProgressToStepPct: number;
+  /** Cible du palier applicable à la période de la dernière mesure (= `finalTarget` pour une cible
+   *  fixe, ou hors trajectoire). */
+  stepTarget: number;
+  /** Période du palier retenu ; `undefined` quand `stepTarget` est la cible finale. */
+  stepPeriod?: string;
+  /** Cible finale (`objectiveValue`, repli sur `stepTarget` si absente). */
+  finalTarget: number;
+  /** Valeur initiale (baseline) utilisée, `undefined` si inconnue. */
+  baseline?: number;
+  /** `true` si `progressToFinalPct` provient du repli ratio (pas de baseline exploitable). */
+  approximate: boolean;
+  /** Idem pour `progressToStepPct`. */
+  stepApproximate: boolean;
+  /** `true` si l'écart va dans le bon sens vs le PALIER — même convention de signe que
+   *  `computeIndicatorStatus` ("down" : `delta <= 0` est favorable ; sinon `delta >= 0`). */
   favorable: boolean;
 };
 
+/** Ancien ratio d'avancement (repli sans baseline) : `valeur / cible` ("up") ou `cible / valeur`
+ *  ("down", cadrage inversé), gardé non borné. */
+function ratioProgress(value: number, target: number, isDown: boolean): number {
+  if (isDown) return value !== 0 ? (target / value) * 100 : target === 0 ? 100 : 0;
+  return target !== 0 ? (value / target) * 100 : value >= 0 ? 100 : 0;
+}
+
+/** Avancement depuis la baseline vers `target` — voir le doc-comment de `IndicatorDelta`. */
+function progressFromBaseline(
+  value: number,
+  target: number,
+  baseline: number | undefined,
+  isDown: boolean
+): { raw: number; approximate: boolean } {
+  if (baseline === undefined || baseline === target) {
+    return { raw: ratioProgress(value, target, isDown), approximate: true };
+  }
+  return { raw: ((value - baseline) / (target - baseline)) * 100, approximate: false };
+}
+
 /** `undefined` avec les MÊMES garde-fous que `computeIndicatorStatus` : pas d'objectif chiffré, ou
  *  pas de mesure exploitable (absente ou sans valeur numérique) — rien à afficher plutôt qu'un
- *  écart inventé. */
+ *  écart inventé.
+ *
+ *  `history` : mesures de l'indicateur (tout l'historique, filtré sur `latest.indicatorId`) d'où
+ *  est extraite la baseline (`baselineMeasurement`). Absent = pas de baseline → avancement
+ *  approximatif (repli ratio). */
 export function computeIndicatorDelta(
   indicator: Pick<Indicator, "objectiveValue" | "direction" | "targetSchedule">,
-  latest: IndicatorMeasurement | undefined
+  latest: IndicatorMeasurement | undefined,
+  history?: IndicatorMeasurement[]
 ): IndicatorDelta | undefined {
   if (!latest || latest.value === undefined) return undefined;
   // Round "cible évolutive" : écart à la cible du PALIER courant (période de la mesure), pas
   // toujours la cible finale — voir `resolveIndicatorTargetForPeriod`.
-  const objective = resolveIndicatorTargetForPeriod(indicator, latest.period);
-  if (objective === undefined) return undefined;
+  const step = resolveIndicatorTargetStepForPeriod(indicator, latest.period);
+  if (step === undefined) return undefined;
+  const objective = step.value;
+  const finalTarget = indicator.objectiveValue ?? objective;
 
   const value = latest.value;
   const isDown = indicator.direction === "down";
@@ -218,20 +327,36 @@ export function computeIndicatorDelta(
   const deltaPct = objective !== 0 ? (delta / objective) * 100 : 0;
   const favorable = isDown ? delta <= 0 : delta >= 0;
 
-  const rawProgress = isDown
-    ? value !== 0
-      ? (objective / value) * 100
-      : objective === 0
-        ? 100
-        : 0
-    : objective !== 0
-      ? (value / objective) * 100
-      : value >= 0
-        ? 100
-        : 0;
-  const progressPct = Math.max(0, Math.min(100, rawProgress));
+  const baseline = history
+    ? baselineMeasurement(latest.indicatorId, [...history, latest])?.value
+    : undefined;
 
-  return { delta, deltaPct, progressPct, favorable };
+  const toStep = progressFromBaseline(value, objective, baseline, isDown);
+  const toFinal = progressFromBaseline(value, finalTarget, baseline, isDown);
+  const progressToFinalPct = Math.max(0, toFinal.raw);
+
+  return {
+    delta,
+    deltaPct,
+    progressPct: progressToFinalPct,
+    progressToFinalPct,
+    rawProgressToFinalPct: toFinal.raw,
+    progressToStepPct: Math.max(0, toStep.raw),
+    rawProgressToStepPct: toStep.raw,
+    stepTarget: objective,
+    stepPeriod: step.period,
+    finalTarget,
+    baseline,
+    approximate: toFinal.approximate,
+    stepApproximate: toStep.approximate,
+    favorable,
+  };
+}
+
+/** Libellé d'un avancement d'indicateur : arrondi, suffixe "%", préfixe "≈" si approximatif (repli
+ *  sans baseline, voir `IndicatorDelta.approximate`). */
+export function formatIndicatorProgress(pct: number, approximate = false): string {
+  return `${approximate ? "≈" : ""}${Math.round(pct)}%`;
 }
 
 /** Cumul des dernières valeurs mesurées des indicateurs QUANTITATIFS de la liste — l'agrégat
@@ -480,7 +605,11 @@ export function chantierAtRiskIndicators(
     .filter((indicator) => resolveIndicatorStatus(indicator) === "at_risk")
     .map((indicator) => ({
       indicator,
-      delta: computeIndicatorDelta(indicator, latestMeasurement(indicator.id, measurements)),
+      delta: computeIndicatorDelta(
+        indicator,
+        latestMeasurement(indicator.id, measurements),
+        measurements
+      ),
     }));
 }
 

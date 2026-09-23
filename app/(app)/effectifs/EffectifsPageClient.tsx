@@ -37,6 +37,7 @@ import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { formatCompactCurrency, formatPercent } from "@/lib/formatCompactAmount";
 import type { ChantierStaffing } from "@/types";
 
 /**
@@ -145,7 +146,7 @@ function BudgetDrillBreadcrumb({ currentIndex }: { currentIndex: number }) {
 }
 
 export function EffectifsPageClient() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const router = useRouter();
   const { user, loading: roleLoading } = useRole();
   const {
@@ -650,10 +651,29 @@ export function EffectifsPageClient() {
               <BudgetDonutChart
                 data={budgetDrillSlices}
                 formatValue={formatAllocatedBudget}
+                // Donut principal de la carte : grande taille (jusqu'à 300px, réduite à la largeur
+                // réelle de la carte), montants COMPACTS au centre (ex. "7,7 M €") — les montants
+                // complets restent dans la légende et le tooltip.
+                size="lg"
+                formatCenterValue={(value) =>
+                  formatCompactCurrency(value, activeProgram.currency, locale)
+                }
+                // Niveau 1 : le centre se lit "7,7 M € / sur 23,6 M € alloués / 33 % consommé" —
+                // plus de libellé "CONSOMMÉ / ALLOUÉ" en capitales, redondant avec ces lignes.
                 centerLabel={
-                  budgetDrillPath.length === 0
-                    ? t("effectifs.moneyBudget.centerLabelConsumed")
-                    : t("effectifs.moneyBudget.centerLabel")
+                  budgetDrillPath.length === 0 ? undefined : t("effectifs.moneyBudget.centerLabel")
+                }
+                centerTotalLabel={(formattedTotal) =>
+                  t("effectifs.moneyBudget.centerOfTotal", "sur {total} alloués").replace(
+                    "{total}",
+                    formattedTotal
+                  )
+                }
+                centerConsumedPctLabel={(ratio) =>
+                  t("effectifs.moneyBudget.centerConsumedPct", "{pct} consommé").replace(
+                    "{pct}",
+                    formatPercent(ratio, locale)
+                  )
                 }
                 showConsumedRing={budgetDrillPath.length === 0}
                 consumedLabel={t("effectifs.moneyBudget.consumedTooltipSuffix")}

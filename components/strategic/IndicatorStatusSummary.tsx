@@ -11,6 +11,7 @@ import { Sigma } from "lucide-react";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
 import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
+import { IndicatorProgressDetail } from "@/components/strategic/IndicatorProgressDetail";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import {
   computeIndicatorDelta,
@@ -23,11 +24,15 @@ import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTa
 import { IndicatorValueModal } from "@/components/strategic/IndicatorValueModal";
 import {
   canFillIndicatorValue,
-  filterByYear,
   isMarketKpi,
   type IndicatorValueInput,
   type YearSelection,
 } from "@/lib/kpiHistory";
+import { IndicatorMetaLine } from "@/components/strategic/IndicatorMetaLine";
+import {
+  YearSegmentedControl,
+  useYearSelection,
+} from "@/components/strategic/YearSegmentedControl";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type {
   AuthUser,
@@ -670,7 +675,10 @@ function BusinessKpiCard({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [fillOpen, setFillOpen] = useState(false);
   const canFill = !!user && !!addMeasurement && canFillIndicatorValue(indicator, user);
-  const yearMeasurements = useMemo(() => filterByYear(measurements, year), [measurements, year]);
+  // Année de la modale d'historique (sélecteur partagé `YearSegmentedControl`) — initialisée sur
+  // l'année fournie par l'appelant (défaut : historique complet).
+  const modalYear = useYearSelection(measurements, year);
+  const yearMeasurements = modalYear.filtered;
 
   const latest = latestMeasurement(indicator.id, measurements);
   const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
@@ -680,7 +688,7 @@ function BusinessKpiCard({
   // Écart signé + progression vers la cible (round 4, point 1) : `undefined` (pas d'objectif
   // chiffré, ou dernière mesure sans valeur numérique) → `IndicatorDeltaStat` ne rend rien, la
   // carte retombe sur son seul libellé d'objectif texte déjà affiché plus bas.
-  const delta = computeIndicatorDelta(indicator, latest);
+  const delta = computeIndicatorDelta(indicator, latest, measurements);
 
   // Une carte sans aucune mesure n'ouvre rien : la modale n'aurait qu'un graphique vide à montrer.
   const hasHistory = measurements.length > 0;
@@ -710,6 +718,8 @@ function BusinessKpiCard({
           : indicator.objective}
         {latest ? ` · ${latest.period}` : ""}
       </div>
+      {/* Avancement vers la cible finale + palier courant (les deux cibles visibles). */}
+      <IndicatorProgressDetail delta={delta} unit={indicator.unit} compact className="mt-1" />
     </>
   );
 
@@ -758,6 +768,16 @@ function BusinessKpiCard({
           title={`${l.fullHistory} — ${indicator.name}`}
           maxWidth="820px"
         >
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <IndicatorMetaLine indicator={indicator} />
+            {modalYear.visible && (
+              <YearSegmentedControl
+                years={modalYear.options}
+                value={modalYear.year}
+                onChange={modalYear.setYear}
+              />
+            )}
+          </div>
           <IndicatorChart
             measurements={yearMeasurements}
             objectiveValue={indicator.objectiveValue}
@@ -771,6 +791,8 @@ function BusinessKpiCard({
             labelObjective={l.chartObjective}
             emptyLabel={l.noValue}
             labelProgress={l.progressToTarget}
+            targetSchedule={indicator.targetSchedule}
+            baselineMeasurements={measurements}
           />
           <IndicatorHistoryTable indicator={indicator} measurements={yearMeasurements} />
         </Modal>

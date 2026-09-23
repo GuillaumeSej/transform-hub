@@ -1871,6 +1871,15 @@ const en: Record<string, string> = {
   "kpi.chart.viewFull": "View full history",
   "kpi.chart.fullHistory": "Full history",
   "kpi.chart.progressToTarget": "Progress toward target",
+  "kpi.progress.label": "Progress",
+  "kpi.progress.toFinalShort": "toward final target",
+  "kpi.progress.step": "Step",
+  "kpi.progress.targetShort": "target",
+  "kpi.progress.stepTarget": "Step target",
+  "kpi.progress.finalTarget": "Final target",
+  "kpi.progress.baseline": "Initial value",
+  "kpi.progress.approxNote": "approx. — no usable initial value",
+  "kpi.progress.approxShort": "approx.",
   "kpi.chart.today": "Today",
   "kpi.latestValue": "Latest value",
   "kpi.noMeasurement": "No measurement recorded",
@@ -1906,6 +1915,8 @@ const en: Record<string, string> = {
   "kpi.history.entered": "entered",
   "kpi.year.label": "Year",
   "kpi.year.all": "History",
+  "kpi.meta.label": "Indicator characteristics",
+  "kpi.meta.unit": "Unit",
   "kpi.view.label": "View",
   "kpi.view.cards": "Cards",
   "kpi.view.table": "Table",
@@ -2022,6 +2033,8 @@ const en: Record<string, string> = {
   "effectifs.moneyBudget.levelChantier": "Work package",
   "effectifs.moneyBudget.levelProjet": "Initiative",
   "effectifs.moneyBudget.centerLabelConsumed": "Consumed / allocated",
+  "effectifs.moneyBudget.centerOfTotal": "of {total} allocated",
+  "effectifs.moneyBudget.centerConsumedPct": "{pct} consumed",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consumed",
 
   // ─── FTE breakdown (round 7 — StaffingPeriodBreakdown.tsx; merged round 22 with the former
@@ -2109,6 +2122,15 @@ const en: Record<string, string> = {
   // Round 28: forecasted total program budget (`Program.budget`) vs actual sum of lever budgets,
   // under the Ambition banner.
   "strategicDashboard.programBudgetLabel": "Program forecasted budget",
+  "strategicDashboard.budgetTooltip.overrunTitle": "Forecasted budget exceeded",
+  "strategicDashboard.budgetTooltip.allocatedOver":
+    "Allocated budget {amount} > forecasted budget {forecast} ({diff}, {pct})",
+  "strategicDashboard.budgetTooltip.allocatedWithin":
+    "Allocated budget {amount} of {forecast} forecasted",
+  "strategicDashboard.budgetTooltip.projetsOver":
+    "Project budgets {amount} > forecasted budget {forecast} ({diff}, {pct})",
+  "strategicDashboard.budgetTooltip.projetsWithin":
+    "Project budgets {amount} of {forecast} forecasted",
   "strategicDashboard.popover.axesTitle": "Strategic axes",
   "strategicDashboard.popover.chantiersTitle": "Work packages",
   "strategicDashboard.popover.indicatorsTitle": "Indicators",

@@ -14,6 +14,7 @@ import {
   TimelineBar,
   TimelineGridColumns,
   TimelineHeaderRow,
+  TimelineProgressGauge,
   TimelineScaleToggle,
   hexToRgb,
   withAlpha,
@@ -312,9 +313,18 @@ export function ChantierGantt({
                         >
                           {chantier.name}
                         </span>
-                        <span className="truncate text-[11px] text-secondary">
-                          {items.length} {l.actionsSuffix} · {l.progress}{" "}
-                          <span className="font-bold text-primary">{progressPct}%</span>
+                        {/* Même indicateur compact (mini-jauge + % tabulaire, emplacement fixe
+                            en fin de colonne) que la feuille de route programme. */}
+                        <span className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-secondary">
+                            {items.length} {l.actionsSuffix} · {l.progress}
+                          </span>
+                          <TimelineProgressGauge
+                            pct={progressPct}
+                            color={blockColor}
+                            ariaLabel={`${chantier.name} · ${l.progress}`}
+                            strong
+                          />
                         </span>
                       </button>
 

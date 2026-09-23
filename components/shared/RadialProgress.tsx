@@ -10,6 +10,8 @@ export function RadialProgress({
   trackColor = "#F0F0F0",
   label,
   sublabel,
+  showUncapped = false,
+  valuePrefix = "",
 }: {
   pct: number;
   size?: number;
@@ -18,8 +20,14 @@ export function RadialProgress({
   trackColor?: string;
   label?: string;
   sublabel?: string;
+  /** L'anneau reste TOUJOURS plafonné à 100% ; avec ce flag, le chiffre central affiche la valeur
+   *  réelle au-delà (ex. 112%) au lieu de la valeur plafonnée. */
+  showUncapped?: boolean;
+  /** Préfixe du chiffre central (ex. "≈" pour une valeur approximative). */
+  valuePrefix?: string;
 }) {
   const clamped = Math.max(0, Math.min(100, pct));
+  const shown = showUncapped ? Math.max(0, pct) : clamped;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - clamped / 100);
@@ -54,9 +62,13 @@ export function RadialProgress({
           dominantBaseline="central"
           transform={`rotate(90 ${size / 2} ${size / 2})`}
           className="fill-primary font-bold"
-          style={{ fontSize: size * 0.22 }}
+          style={{
+            fontSize:
+              size * ((valuePrefix ? 1 : 0) + String(Math.round(shown)).length > 3 ? 0.18 : 0.22),
+          }}
         >
-          {Math.round(clamped)}%
+          {valuePrefix}
+          {Math.round(shown)}%
         </text>
       </svg>
       {label && <div className="text-center text-[11px] font-bold text-primary">{label}</div>}

@@ -1888,6 +1888,15 @@ const es: Record<string, string> = {
   "kpi.chart.viewFull": "Ver el historial completo",
   "kpi.chart.fullHistory": "Historial completo",
   "kpi.chart.progressToTarget": "Progreso hacia el objetivo",
+  "kpi.progress.label": "Avance",
+  "kpi.progress.toFinalShort": "hacia el objetivo final",
+  "kpi.progress.step": "Etapa",
+  "kpi.progress.targetShort": "objetivo",
+  "kpi.progress.stepTarget": "Objetivo de etapa",
+  "kpi.progress.finalTarget": "Objetivo final",
+  "kpi.progress.baseline": "Valor inicial",
+  "kpi.progress.approxNote": "aprox. — sin valor inicial utilizable",
+  "kpi.progress.approxShort": "aprox.",
   "kpi.chart.today": "Hoy",
   "kpi.latestValue": "Último valor",
   "kpi.noMeasurement": "Ninguna medida registrada",
@@ -1923,6 +1932,8 @@ const es: Record<string, string> = {
   "kpi.history.entered": "registró",
   "kpi.year.label": "Año",
   "kpi.year.all": "Historial",
+  "kpi.meta.label": "Características del indicador",
+  "kpi.meta.unit": "Unidad",
   "kpi.view.label": "Vista",
   "kpi.view.cards": "Tarjetas",
   "kpi.view.table": "Tabla",
@@ -2044,6 +2055,8 @@ const es: Record<string, string> = {
   "effectifs.moneyBudget.levelChantier": "Proyecto",
   "effectifs.moneyBudget.levelProjet": "Palanca",
   "effectifs.moneyBudget.centerLabelConsumed": "Consumido / asignado",
+  "effectifs.moneyBudget.centerOfTotal": "de {total} asignados",
+  "effectifs.moneyBudget.centerConsumedPct": "{pct} consumido",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consumido",
 
   // ─── Reparto de ETC (ronda 7 — StaffingPeriodBreakdown.tsx; fusionada en la ronda 22 con la
@@ -2136,6 +2149,15 @@ const es: Record<string, string> = {
   // Ronda 28: presupuesto previsional total del programa (`Program.budget`) frente a la suma real
   // de los presupuestos de los frentes, bajo el banner Ambición.
   "strategicDashboard.programBudgetLabel": "Presupuesto previsional del programa",
+  "strategicDashboard.budgetTooltip.overrunTitle": "Presupuesto previsional superado",
+  "strategicDashboard.budgetTooltip.allocatedOver":
+    "Presupuesto asignado {amount} > presupuesto previsional {forecast} ({diff}, {pct})",
+  "strategicDashboard.budgetTooltip.allocatedWithin":
+    "Presupuesto asignado {amount} de {forecast} previstos",
+  "strategicDashboard.budgetTooltip.projetsOver":
+    "Presupuestos de proyectos {amount} > presupuesto previsional {forecast} ({diff}, {pct})",
+  "strategicDashboard.budgetTooltip.projetsWithin":
+    "Presupuestos de proyectos {amount} de {forecast} previstos",
   "strategicDashboard.popover.axesTitle": "Ejes estratégicos",
   "strategicDashboard.popover.chantiersTitle": "Frentes de trabajo",
   "strategicDashboard.popover.indicatorsTitle": "Indicadores",

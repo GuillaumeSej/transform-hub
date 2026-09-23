@@ -27,10 +27,14 @@ export function aggregateLinkedKpis(
 export type KpiReading = {
   current?: number;
   target?: number;
+  /** Avancement (arrondi) vers la cible finale, depuis la baseline — voir `computeIndicatorDelta`.
+   *  Plancher 0, sans plafond (un dépassement s'affiche > 100). */
   progressPct?: number;
+  /** `true` si `progressPct` est un repli approximatif (pas de baseline exploitable). */
+  approximate?: boolean;
 };
 
-/** Valeur actuelle / cible / % d'atteinte d'un KPI. `targetOverride` = cible propre au critère de
+/** Valeur actuelle / cible / % d'avancement d'un KPI. `targetOverride` = cible propre au critère de
  *  succès du chantier (sinon `objectiveValue` de l'indicateur). */
 export function readKpi(
   indicator: Indicator,
@@ -43,9 +47,15 @@ export function readKpi(
   if (target === undefined || current === undefined) return { current, target };
   const delta = computeIndicatorDelta(
     { objectiveValue: target, direction: indicator.direction },
-    latest
+    latest,
+    measurements
   );
-  return { current, target, progressPct: delta ? Math.round(delta.progressPct) : undefined };
+  return {
+    current,
+    target,
+    progressPct: delta ? Math.round(delta.progressToFinalPct) : undefined,
+    approximate: delta?.approximate,
+  };
 }
 
 export type DeleteApprovalInfo = {

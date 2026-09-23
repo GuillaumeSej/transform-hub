@@ -76,7 +76,7 @@ export function SuccessKpiList({
       <span className="text-[11.5px] text-secondary">
         {t("strategicChantierDetail.successKpis.current", "Actuel")} : {fmt(r.current)} ·{" "}
         {t("strategicChantierDetail.successKpis.target", "Cible")} : {fmt(r.target)}
-        {r.progressPct !== undefined ? ` · ${r.progressPct} %` : ""}
+        {r.progressPct !== undefined ? ` · ${r.approximate ? "≈" : ""}${r.progressPct} %` : ""}
         {" · "}
         <span
           className={

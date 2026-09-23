@@ -3,7 +3,7 @@
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { IndicatorDelta } from "@/lib/axisLogic";
+import { formatIndicatorProgress, type IndicatorDelta } from "@/lib/axisLogic";
 
 /**
  * Écart signé d'un indicateur par rapport à sa cible + barre de progression vers cette cible.
@@ -44,7 +44,9 @@ export function IndicatorDeltaStat({
   const { t } = useTranslation();
   if (!delta) return null;
 
-  const { delta: value, deltaPct, progressPct, favorable } = delta;
+  // Chiffre principal = avancement vers la CIBLE FINALE (depuis la valeur initiale) ; l'écart signé
+  // (`delta`) reste mesuré vs le palier courant, comme le statut.
+  const { delta: value, deltaPct, progressToFinalPct: progressPct, favorable } = delta;
 
   // Mêmes classes que IndicatorStatusBadge (bg-rag-*-light + text-rag-*[-dark]) : un écart
   // favorable/défavorable est visuellement le même signal qu'un statut on_track/at_risk.
@@ -74,12 +76,25 @@ export function IndicatorDeltaStat({
 
   const progressLabel =
     labels?.progress ?? t("kpi.chart.progressToTarget", "Progression vers la cible");
-  const roundedProgress = Math.round(progressPct);
+  const roundedProgress = formatIndicatorProgress(progressPct, delta.approximate);
+  const stepLine = delta.stepPeriod
+    ? `${t("kpi.progress.step", "Palier")} ${delta.stepPeriod} : ${formatIndicatorProgress(
+        delta.progressToStepPct,
+        delta.stepApproximate
+      )} (${t("kpi.progress.targetShort", "cible")} ${delta.stepTarget}${unit ? ` ${unit}` : ""})`
+    : undefined;
 
   return (
     <div
       className={cn("flex flex-col gap-1", className)}
-      title={`${formattedValue} ${formattedPct} · ${progressLabel} : ${roundedProgress}%`}
+      title={`${formattedValue} ${formattedPct} · ${progressLabel} : ${roundedProgress} (${t(
+        "kpi.progress.finalTarget",
+        "Cible finale"
+      )} ${delta.finalTarget}${unit ? ` ${unit}` : ""})${stepLine ? ` · ${stepLine}` : ""}${
+        delta.approximate
+          ? ` · ${t("kpi.progress.approxNote", "approx. — sans valeur initiale exploitable")}`
+          : ""
+      }`}
     >
       <div
         className={cn(
@@ -106,13 +121,16 @@ export function IndicatorDeltaStat({
         <div className={cn("h-1 flex-1 overflow-hidden rounded-full", tone.track)}>
           <div
             className={cn("h-full rounded-full transition-[width]", tone.bar)}
-            style={{ width: `${progressPct}%` }}
+            style={{ width: `${Math.min(100, progressPct)}%` }}
           />
         </div>
-        <span className="w-8 flex-shrink-0 text-right text-[10px] font-semibold tabular-nums text-tertiary">
-          {roundedProgress}%
+        <span className="w-10 flex-shrink-0 text-right text-[10px] font-semibold tabular-nums text-tertiary">
+          {roundedProgress}
         </span>
       </div>
+      {!compact && stepLine && (
+        <span className="text-[10px] tabular-nums text-tertiary">{stepLine}</span>
+      )}
     </div>
   );
 }

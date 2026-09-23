@@ -23,6 +23,7 @@ import {
   TimelineGridColumns,
   TimelineHeaderRow,
   TimelineMarker,
+  TimelineProgressGauge,
   TimelineScaleToggle,
   hexToRgb,
   withAlpha,
@@ -90,7 +91,9 @@ export type ProgramRoadmapLabels = {
   currentMilestone?: string;
 };
 
-const ROW_LABEL_WIDTH = "w-72";
+// `w-80` (au lieu de `w-72`) : place pour l'indicateur d'avancement compact
+// (`TimelineProgressGauge`) en fin de colonne d'identité, sans rogner le nom des projets.
+const ROW_LABEL_WIDTH = "w-80";
 
 /** Couleur de repli quand l'axe n'a pas de couleur choisie — même taupe BearingPoint que
  *  `ChantierGantt.tsx` (`FALLBACK_COLOR`), dupliqué ici plutôt qu'exporté depuis ce fichier (pas de
@@ -451,9 +454,19 @@ export function ProgramRoadmap({
                                 </span>
                               )}
                             </div>
-                            <div className="truncate pl-[19px] text-[11px] text-secondary">
-                              {totalLevierCount} {l.leviersSuffix} · {l.progress}{" "}
-                              <span className="font-bold text-primary">{chantierProgressPct}%</span>
+                            {/* Avancement du chantier dans le MÊME emplacement fixe (fin de
+                                colonne) que celui des lignes projet ci-dessous — colonne de %
+                                alignée verticalement sur tout le chantier. */}
+                            <div className="flex items-center gap-2 pl-[19px]">
+                              <span className="min-w-0 flex-1 truncate text-[11px] text-secondary">
+                                {totalLevierCount} {l.leviersSuffix} · {l.progress}
+                              </span>
+                              <TimelineProgressGauge
+                                pct={chantierProgressPct}
+                                color={chantierColor}
+                                ariaLabel={`${chantierGroup.chantier.name} · ${l.progress}`}
+                                strong
+                              />
                             </div>
                           </button>
 
@@ -526,8 +539,10 @@ export function ProgramRoadmap({
                               // sous un filet guide fin, police nettement agrandie (10px → 12.5px).
                               className="flex items-stretch gap-2 border-b border-border/60 bg-white/80 py-1 last:border-b-0"
                             >
-                              <div className={`${ROW_LABEL_WIDTH} shrink-0 pl-3`}>
-                                <div className="h-full border-l-2 border-border pl-3">
+                              <div
+                                className={`${ROW_LABEL_WIDTH} flex shrink-0 items-stretch pl-3 pr-2`}
+                              >
+                                <div className="min-w-0 flex-1 border-l-2 border-border pl-3">
                                   {/* Round 20, point 2 : nom du levier cliquable (même destination que
                                   la barre ci-dessous, `onProjetClick`) et centré verticalement dans
                                   sa colonne — la ligne parente est `flex items-stretch`, ce label
@@ -571,6 +586,16 @@ export function ProgramRoadmap({
                                       )}
                                     </span>
                                   </div>
+                                </div>
+                                {/* Avancement du projet — MÊME valeur que le remplissage de sa
+                                    barre (`row.progressPct`), dans l'emplacement fixe de fin de
+                                    colonne partagé avec l'en-tête de chantier (colonne alignée). */}
+                                <div className="ml-2 flex shrink-0 items-center">
+                                  <TimelineProgressGauge
+                                    pct={row.progressPct}
+                                    color={chantierColor}
+                                    ariaLabel={`${row.action.name} · ${l.progress}`}
+                                  />
                                 </div>
                               </div>
 

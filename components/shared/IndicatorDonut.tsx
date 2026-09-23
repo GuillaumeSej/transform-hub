@@ -1,7 +1,8 @@
 "use client";
 
 import { RadialProgress } from "@/components/shared/RadialProgress";
-import type { IndicatorDelta } from "@/lib/axisLogic";
+import { formatIndicatorProgress, type IndicatorDelta } from "@/lib/axisLogic";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
  * Camembert (jauge circulaire) d'UN indicateur — round 7, point 3 : remplace le trio
@@ -23,8 +24,9 @@ import type { IndicatorDelta } from "@/lib/axisLogic";
  *    (anneau vide) plutôt qu'un plantage ; `aria-label`/`title` disent explicitement « aucune
  *    donnée » pour ne pas laisser croire à un score réel de 0%.
  *
- * Le pourcentage affiché est TOUJOURS `delta.progressPct`, tel que fourni par l'appelant via
- * `computeIndicatorDelta(indicator, latestMeasurement)` — aucun nouveau calcul ici.
+ * Le pourcentage affiché est TOUJOURS `delta.progressToFinalPct` (avancement vers la cible finale
+ * depuis la baseline), tel que fourni par l'appelant via `computeIndicatorDelta(indicator, latest,
+ * history)` — aucun nouveau calcul ici. Préfixe "≈" si `delta.approximate`.
  */
 
 // Mêmes teintes que `IndicatorDeltaStat.tsx` (text-rag-green-dark / bg-rag-green-light pour
@@ -58,10 +60,25 @@ export function IndicatorDonut({
     noData: labels?.noData ?? "Aucune donnée",
   };
 
+  const { t } = useTranslation();
   const tone = !delta ? NO_DATA : delta.favorable ? FAVORABLE : UNFAVORABLE;
-  const pct = delta ? delta.progressPct : 0;
+  // Chiffre principal = avancement vers la CIBLE FINALE (depuis la baseline) ; l'anneau plafonne
+  // à 100% mais le chiffre affiche la valeur réelle (ex. 112%).
+  const pct = delta ? delta.progressToFinalPct : 0;
   const statusLabel = !delta ? l.noData : delta.favorable ? l.onTrack : l.atRisk;
-  const title = delta ? `${statusLabel} · ${Math.round(pct)}%` : statusLabel;
+  const title = delta
+    ? `${statusLabel} · ${formatIndicatorProgress(delta.progressToFinalPct, delta.approximate)} ${t(
+        "kpi.progress.toFinalShort",
+        "vers la cible finale"
+      )}${
+        delta.stepPeriod
+          ? ` · ${t("kpi.progress.step", "Palier")} ${delta.stepPeriod} : ${formatIndicatorProgress(
+              delta.progressToStepPct,
+              delta.stepApproximate
+            )}`
+          : ""
+      }${delta.approximate ? ` (${t("kpi.progress.approxNote", "approx. — sans valeur initiale exploitable")})` : ""}`
+    : statusLabel;
 
   return (
     <div role="img" aria-label={title} title={title} className={className}>
@@ -71,6 +88,8 @@ export function IndicatorDonut({
         strokeWidth={strokeWidth}
         color={tone.color}
         trackColor={tone.trackColor}
+        showUncapped
+        valuePrefix={delta?.approximate ? "≈" : ""}
       />
     </div>
   );

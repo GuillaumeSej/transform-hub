@@ -1973,6 +1973,15 @@ const fr: Record<string, string> = {
   // Étiquette de la barre de progression-vers-la-cible affichée à côté de l'écart signé (round 4,
   // point 1 : rendre visuellement lisible un écart comme "82 % pour une cible à 80 %").
   "kpi.chart.progressToTarget": "Progression vers la cible",
+  "kpi.progress.label": "Avancement",
+  "kpi.progress.toFinalShort": "vers la cible finale",
+  "kpi.progress.step": "Palier",
+  "kpi.progress.targetShort": "cible",
+  "kpi.progress.stepTarget": "Cible palier",
+  "kpi.progress.finalTarget": "Cible finale",
+  "kpi.progress.baseline": "Valeur initiale",
+  "kpi.progress.approxNote": "approx. — sans valeur initiale exploitable",
+  "kpi.progress.approxShort": "approx.",
   "kpi.chart.today": "Aujourd'hui",
   "kpi.latestValue": "Dernière valeur",
   "kpi.noMeasurement": "Aucune mesure enregistrée",
@@ -2010,6 +2019,8 @@ const fr: Record<string, string> = {
   "kpi.history.entered": "a saisi",
   "kpi.year.label": "Année",
   "kpi.year.all": "Historique",
+  "kpi.meta.label": "Caractéristiques de l'indicateur",
+  "kpi.meta.unit": "Unité",
   // ─── Bascule Cartes / Tableau + colonnes de la vue tabulaire (round "cible évolutive") ───
   "kpi.view.label": "Vue",
   "kpi.view.cards": "Cartes",
@@ -2143,6 +2154,8 @@ const fr: Record<string, string> = {
   // `centerLabel` ci-dessus, toujours utilisé tel quel par la modale de drill-down par chantier) et
   // mot "consommé" injecté dans la légende/le tooltip de l'anneau intérieur.
   "effectifs.moneyBudget.centerLabelConsumed": "Consommé / alloué",
+  "effectifs.moneyBudget.centerOfTotal": "sur {total} alloués",
+  "effectifs.moneyBudget.centerConsumedPct": "{pct} consommé",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consommé",
 
   // ─── Répartition des ETP (round 7 — StaffingPeriodBreakdown.tsx ; fusionnée round 22 avec
@@ -2242,6 +2255,15 @@ const fr: Record<string, string> = {
   // Round 28 : résumé budget prévisionnel total du programme (`Program.budget`) vs somme réelle
   // des budgets leviers, sous le bandeau Ambition.
   "strategicDashboard.programBudgetLabel": "Budget prévisionnel du programme",
+  "strategicDashboard.budgetTooltip.overrunTitle": "Budget prévisionnel dépassé",
+  "strategicDashboard.budgetTooltip.allocatedOver":
+    "Budget alloué {amount} > budget prévisionnel {forecast} ({diff}, {pct})",
+  "strategicDashboard.budgetTooltip.allocatedWithin":
+    "Budget alloué {amount} sur {forecast} prévus",
+  "strategicDashboard.budgetTooltip.projetsOver":
+    "Budgets des projets {amount} > budget prévisionnel {forecast} ({diff}, {pct})",
+  "strategicDashboard.budgetTooltip.projetsWithin":
+    "Budgets des projets {amount} sur {forecast} prévus",
   "strategicDashboard.popover.axesTitle": "Axes stratégiques",
   "strategicDashboard.popover.chantiersTitle": "Chantiers",
   "strategicDashboard.popover.indicatorsTitle": "Indicateurs",

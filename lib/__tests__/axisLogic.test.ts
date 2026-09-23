@@ -22,8 +22,10 @@ import {
   chantierShadesByAxis,
   chantierShadesForAxis,
   AXIS_FALLBACK_COLOR,
+  baselineMeasurement,
   computeIndicatorDelta,
   computeIndicatorStatus,
+  formatIndicatorProgress,
   countOnTrackAtRisk,
   isChantierLate,
   isProjetLate,
@@ -817,7 +819,9 @@ describe("computeIndicatorDelta", () => {
     expect(delta?.delta).toBe(2);
     expect(delta?.deltaPct).toBeCloseTo(2.5);
     expect(delta?.favorable).toBe(true);
-    expect(delta?.progressPct).toBeCloseTo(100); // 82/80 clampé à 100
+    // Sans historique (pas de baseline) : repli ratio 82/80, approximatif, NON plafonné à 100.
+    expect(delta?.progressPct).toBeCloseTo(102.5);
+    expect(delta?.approximate).toBe(true);
   });
 
   it("computes an unfavorable delta for an 'up' indicator below its objective, progress under 100", () => {
@@ -836,10 +840,10 @@ describe("computeIndicatorDelta", () => {
     expect(delta?.favorable).toBe(false);
     expect(delta?.progressPct).toBeCloseTo(50);
 
-    // Valeur déjà sous la cible : favorable, progrès clampé à 100 (pas 200%).
+    // Valeur déjà sous la cible : favorable, repli ratio 5/2 = 250% (plus de plafond à 100).
     const better = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-03", 2));
     expect(better?.favorable).toBe(true);
-    expect(better?.progressPct).toBe(100);
+    expect(better?.progressPct).toBe(250);
   });
 
   it("returns undefined when there is no measurement (same guard as computeIndicatorStatus)", () => {
@@ -881,6 +885,119 @@ describe("computeIndicatorDelta", () => {
     // Mesure Q3 (au-delà du dernier palier déclaré) : replie sur la cible finale (75).
     const q3 = computeIndicatorDelta(indicator, makeMeasurement("IND001", "2026-Q3", 72));
     expect(q3?.delta).toBe(-3); // 72 - 75
+  });
+});
+
+describe("computeIndicatorDelta — avancement depuis la valeur initiale", () => {
+  it("up: (current - initial) / (target - initial) with a baseline", () => {
+    const indicator = makeIndicator({ direction: "up", objectiveValue: 80 });
+    const history = [
+      makeMeasurement("IND001", "2026-01", 50), // baseline
+      makeMeasurement("IND001", "2026-02", 60),
+      makeMeasurement("IND001", "2026-03", 65),
+    ];
+    const delta = computeIndicatorDelta(indicator, history[2], history);
+    expect(delta?.baseline).toBe(50);
+    expect(delta?.approximate).toBe(false);
+    expect(delta?.progressToFinalPct).toBeCloseTo(50); // (65-50)/(80-50)
+    expect(delta?.progressPct).toBeCloseTo(50); // alias rétrocompatible
+    expect(delta?.finalTarget).toBe(80);
+    expect(delta?.stepTarget).toBe(80);
+    expect(delta?.stepPeriod).toBeUndefined();
+  });
+
+  it("down: works naturally when target < initial", () => {
+    const indicator = makeIndicator({ direction: "down", objectiveValue: 10 });
+    const history = [
+      makeMeasurement("IND001", "2026-01", 30),
+      makeMeasurement("IND001", "2026-03", 25),
+    ];
+    const delta = computeIndicatorDelta(indicator, history[1], history);
+    expect(delta?.progressToFinalPct).toBeCloseTo(25); // (25-30)/(10-30)
+    expect(delta?.approximate).toBe(false);
+    expect(delta?.favorable).toBe(false);
+  });
+
+  it("falls back to the ratio formula (approximate) without baseline or when baseline equals target", () => {
+    const indicator = makeIndicator({ direction: "up", objectiveValue: 80 });
+    const latest = makeMeasurement("IND001", "2026-03", 40);
+    const noHistory = computeIndicatorDelta(indicator, latest);
+    expect(noHistory?.approximate).toBe(true);
+    expect(noHistory?.progressToFinalPct).toBeCloseTo(50); // 40/80
+    expect(noHistory?.baseline).toBeUndefined();
+
+    const history = [makeMeasurement("IND001", "2026-01", 80), latest];
+    const sameAsTarget = computeIndicatorDelta(indicator, latest, history);
+    expect(sameAsTarget?.baseline).toBe(80);
+    expect(sameAsTarget?.approximate).toBe(true);
+    expect(sameAsTarget?.progressToFinalPct).toBeCloseTo(50);
+  });
+
+  it("does not cap above 100 when the target is exceeded", () => {
+    const indicator = makeIndicator({ direction: "up", objectiveValue: 60 });
+    const history = [
+      makeMeasurement("IND001", "2026-01", 10),
+      makeMeasurement("IND001", "2026-03", 66),
+    ];
+    const delta = computeIndicatorDelta(indicator, history[1], history);
+    expect(delta?.progressToFinalPct).toBeCloseTo(112); // (66-10)/(60-10)
+    expect(formatIndicatorProgress(delta!.progressToFinalPct)).toBe("112%");
+  });
+
+  it("returns 0 when nothing moved (single measurement = baseline) and floors regressions at 0", () => {
+    const indicator = makeIndicator({ direction: "up", objectiveValue: 80 });
+    const only = makeMeasurement("IND001", "2026-01", 50);
+    const single = computeIndicatorDelta(indicator, only, [only]);
+    expect(single?.progressToFinalPct).toBe(0);
+    expect(single?.approximate).toBe(false);
+
+    const history = [only, makeMeasurement("IND001", "2026-03", 44)];
+    const worse = computeIndicatorDelta(indicator, history[1], history);
+    expect(worse?.progressToFinalPct).toBe(0);
+    expect(worse?.rawProgressToFinalPct).toBeCloseTo(-20); // (44-50)/(80-50)
+  });
+
+  it("computes progress to the current step AND to the final target", () => {
+    const indicator = makeIndicator({
+      direction: "up",
+      objectiveValue: 100,
+      targetSchedule: [
+        { period: "2026-Q1", value: 60 },
+        { period: "2026-Q2", value: 80 },
+      ],
+    });
+    const history = [
+      makeMeasurement("IND001", "2025-Q4", 40),
+      makeMeasurement("IND001", "2026-Q2", 70),
+    ];
+    const delta = computeIndicatorDelta(indicator, history[1], history);
+    expect(delta?.stepTarget).toBe(80);
+    expect(delta?.stepPeriod).toBe("2026-Q2");
+    expect(delta?.finalTarget).toBe(100);
+    expect(delta?.progressToStepPct).toBeCloseTo(75); // (70-40)/(80-40)
+    expect(delta?.progressToFinalPct).toBeCloseTo(50); // (70-40)/(100-40)
+    expect(delta?.stepApproximate).toBe(false);
+    // Statut / écart signé : toujours vs le palier.
+    expect(delta?.delta).toBe(-10);
+    expect(computeIndicatorStatus(indicator, history)).toBe("at_risk");
+  });
+
+  it("formats approximate progress with a ≈ prefix", () => {
+    expect(formatIndicatorProgress(49.6, true)).toBe("≈50%");
+    expect(formatIndicatorProgress(49.4)).toBe("49%");
+  });
+});
+
+describe("baselineMeasurement", () => {
+  it("returns the earliest numeric measurement of the indicator", () => {
+    const ms = [
+      makeMeasurement("IND001", "2026-03", 70),
+      makeMeasurement("IND001", "2026-01", undefined), // qualitative-only, ignorée
+      makeMeasurement("IND001", "2026-02", 55),
+      makeMeasurement("IND002", "2025-01", 1),
+    ];
+    expect(baselineMeasurement("IND001", ms)?.value).toBe(55);
+    expect(baselineMeasurement("IND003", ms)).toBeUndefined();
   });
 });
 

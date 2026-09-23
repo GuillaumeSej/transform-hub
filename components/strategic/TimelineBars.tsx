@@ -562,6 +562,56 @@ export function TimelineBar({
 }
 
 /**
+ * Indicateur d'avancement COMPACT pour la colonne d'identité d'une ligne de Gantt (retour PO — « on
+ * ne lit pas le % de chaque projet ») : mini-jauge 36×4px remplie de la nuance du chantier + valeur
+ * "N%" en chiffres tabulaires, alignée à droite dans un emplacement de LARGEUR FIXE — posé en fin de
+ * ligne (`shrink-0`), il forme une colonne verticalement alignée d'une ligne à l'autre (projets ET
+ * en-têtes de chantier), quelle que soit la longueur du nom à sa gauche.
+ */
+export function TimelineProgressGauge({
+  pct,
+  color,
+  ariaLabel,
+  strong = false,
+}: {
+  /** 0-100 — même valeur que le remplissage de la barre correspondante. */
+  pct: number;
+  color: string;
+  ariaLabel: string;
+  /** Texte en gras/noir (en-tête de chantier) plutôt qu'en secondaire (ligne projet). */
+  strong?: boolean;
+}) {
+  const clamped = Math.min(100, Math.max(0, Math.round(pct)));
+  return (
+    <span
+      role="img"
+      aria-label={`${ariaLabel} ${clamped}%`}
+      title={`${ariaLabel} ${clamped}%`}
+      className="flex shrink-0 items-center gap-1.5"
+    >
+      <span
+        aria-hidden
+        className="relative h-1 w-9 overflow-hidden rounded-full"
+        style={{ backgroundColor: withAlpha(color, 0.2) }}
+      >
+        <span
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ width: `${clamped}%`, backgroundColor: color }}
+        />
+      </span>
+      <span
+        aria-hidden
+        className={`w-8 text-right text-[11px] tabular-nums ${
+          strong ? "font-bold text-primary" : "font-semibold text-secondary"
+        }`}
+      >
+        {clamped}%
+      </span>
+    </span>
+  );
+}
+
+/**
  * UN repère ponctuel (petit losange plein), positionné en pourcentage sur la piste temporelle —
  * pendant de `TimelineBar` pour un événement DATÉ mais SANS durée (ex. l'échéance d'un livrable), là
  * où `TimelineBar` suppose toujours une plage `left`→`left+width`. Primitive pure : ne connaît que

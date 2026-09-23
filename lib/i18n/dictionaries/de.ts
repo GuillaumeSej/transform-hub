@@ -1888,6 +1888,15 @@ const de: Record<string, string> = {
   "kpi.chart.viewFull": "Vollständige Historie anzeigen",
   "kpi.chart.fullHistory": "Vollständige Historie",
   "kpi.chart.progressToTarget": "Fortschritt zum Zielwert",
+  "kpi.progress.label": "Fortschritt",
+  "kpi.progress.toFinalShort": "zum Endziel",
+  "kpi.progress.step": "Etappe",
+  "kpi.progress.targetShort": "Ziel",
+  "kpi.progress.stepTarget": "Etappenziel",
+  "kpi.progress.finalTarget": "Endziel",
+  "kpi.progress.baseline": "Ausgangswert",
+  "kpi.progress.approxNote": "ca. — kein verwertbarer Ausgangswert",
+  "kpi.progress.approxShort": "ca.",
   "kpi.chart.today": "Heute",
   "kpi.latestValue": "Letzter Wert",
   "kpi.noMeasurement": "Keine Messung erfasst",
@@ -1923,6 +1932,8 @@ const de: Record<string, string> = {
   "kpi.history.entered": "erfasste",
   "kpi.year.label": "Jahr",
   "kpi.year.all": "Verlauf",
+  "kpi.meta.label": "Merkmale des Indikators",
+  "kpi.meta.unit": "Einheit",
   "kpi.view.label": "Ansicht",
   "kpi.view.cards": "Karten",
   "kpi.view.table": "Tabelle",
@@ -2047,6 +2058,8 @@ const de: Record<string, string> = {
   "effectifs.moneyBudget.byChantierEmpty":
     "Kein Arbeitspaket mit zugewiesenem Budget auf dieser Achse.",
   "effectifs.moneyBudget.centerLabelConsumed": "Verbraucht / zugewiesen",
+  "effectifs.moneyBudget.centerOfTotal": "von {total} zugewiesen",
+  "effectifs.moneyBudget.centerConsumedPct": "{pct} verbraucht",
   "effectifs.moneyBudget.consumedTooltipSuffix": "verbraucht",
 
   // ─── VZÄ-Verteilung (Runde 7 — StaffingPeriodBreakdown.tsx; Runde 22 mit der ehemaligen Karte
@@ -2139,6 +2152,15 @@ const de: Record<string, string> = {
   // Runde 28: geplantes Gesamtbudget des Programms (`Program.budget`) vs. tatsächliche Summe der
   // Arbeitspaket-Budgets, unter dem Ambition-Banner.
   "strategicDashboard.programBudgetLabel": "Geplantes Programmbudget",
+  "strategicDashboard.budgetTooltip.overrunTitle": "Geplantes Budget überschritten",
+  "strategicDashboard.budgetTooltip.allocatedOver":
+    "Zugewiesenes Budget {amount} > geplantes Budget {forecast} ({diff}, {pct})",
+  "strategicDashboard.budgetTooltip.allocatedWithin":
+    "Zugewiesenes Budget {amount} von {forecast} geplant",
+  "strategicDashboard.budgetTooltip.projetsOver":
+    "Projektbudgets {amount} > geplantes Budget {forecast} ({diff}, {pct})",
+  "strategicDashboard.budgetTooltip.projetsWithin":
+    "Projektbudgets {amount} von {forecast} geplant",
   "strategicDashboard.popover.axesTitle": "Strategische Achsen",
   "strategicDashboard.popover.chantiersTitle": "Arbeitspakete",
   "strategicDashboard.popover.indicatorsTitle": "Indikatoren",

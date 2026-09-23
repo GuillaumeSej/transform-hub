@@ -109,6 +109,9 @@ export type IndicatorChartProps = {
    *  veut pas le tripler. Défaut `false` : comportement historique inchangé pour tous les autres
    *  appelants (modales d'historique complet comprises). */
   hideDeltaStat?: boolean;
+  /** Historique COMPLET de l'indicateur (non filtré par année), d'où est tirée la valeur initiale
+   *  (baseline) du calcul d'avancement — voir `computeIndicatorDelta`. Défaut : `measurements`. */
+  baselineMeasurements?: IndicatorMeasurement[];
   /** Légende du repère "aujourd'hui" (voir `showTodayMarker` plus bas) — repli français. */
   labelToday?: string;
 };
@@ -168,6 +171,7 @@ export function IndicatorChart({
   fullHistoryTitle: fullHistoryTitleProp,
   labelProgress: labelProgressProp,
   hideDeltaStat = false,
+  baselineMeasurements,
   labelToday: labelTodayProp,
 }: IndicatorChartProps) {
   // Libellés fournis par l'appelant, sinon repli sur le dictionnaire i18n actif.
@@ -246,6 +250,7 @@ export function IndicatorChart({
             emptyLabel={emptyLabel}
             labelProgress={labelProgress}
             labelToday={labelToday}
+            baselineMeasurements={baselineMeasurements}
           />
         </Modal>
       </div>
@@ -341,7 +346,11 @@ export function IndicatorChart({
   // retombe sur le coral de marque par défaut.
   const statusDelta =
     !compact && objectiveValue !== undefined
-      ? computeIndicatorDelta({ objectiveValue, direction }, latestOverall)
+      ? computeIndicatorDelta(
+          { objectiveValue, direction, targetSchedule },
+          latestOverall,
+          baselineMeasurements ?? all
+        )
       : undefined;
   const deltaStat = hideDeltaStat ? undefined : statusDelta;
   const lineColor = !statusDelta
