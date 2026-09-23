@@ -2279,7 +2279,7 @@ const fr: Record<string, string> = {
   "effectifs.staffingRate.thresholds.save": "Enregistrer",
   "effectifs.staffingRate.thresholds.cancel": "Annuler",
   "effectifs.staffingRate.thresholds.hint":
-    "Enregistrés sur votre profil. Aperçu en direct sur le graphique et la heatmap.",
+    "Appliqués à toute l'entreprise. Aperçu en direct sur le graphique et la heatmap.",
   "effectifs.staffingRate.thresholds.error.invalid": "Saisissez deux nombres.",
   "effectifs.staffingRate.thresholds.error.tenseRange":
     "Le seuil « tendu » doit être supérieur à 0 %.",
@@ -2287,10 +2287,14 @@ const fr: Record<string, string> = {
     "Le seuil « tendu » doit être inférieur au seuil « sur-staffé ».",
   "effectifs.staffingRate.thresholds.error.overMax":
     "Le seuil « sur-staffé » ne peut pas dépasser {max} %.",
-  "effectifs.staffingRate.thresholds.saved": "Seuils enregistrés",
-  "effectifs.staffingRate.thresholds.saveError": "Seuils non enregistrés sur votre profil",
-  "effectifs.staffingRate.thresholds.saveErrorDetail":
-    "Ils sont conservés uniquement sur ce navigateur.",
+  "effectifs.staffingRate.thresholds.saved": "Seuils enregistrés pour l'entreprise",
+  "effectifs.staffingRate.thresholds.saveError": "Seuils non enregistrés",
+  "effectifs.staffingRate.thresholds.saveErrorDetail": "Vérifiez votre connexion puis réessayez.",
+  "effectifs.staffingRate.thresholds.readOnly": "Paramètre défini par la direction",
+  "effectifs.staffingRate.thresholds.close": "Fermer",
+  "adminCompanies.displaySettings.title": "Paramètres d'affichage",
+  "adminCompanies.displaySettings.description":
+    "Seuils du taux de staffing (page Budget & effectifs), appliqués à tous les utilisateurs de l'entreprise.",
   "effectifs.staffingRate.chartEmpty": "Aucune mobilisation datée pour ces filtres.",
   "effectifs.staffingRate.detailTitle": "Qui est mobilisé où — {period}",
   "effectifs.staffingRate.projetChantierCol": "Projet / chantier",

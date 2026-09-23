@@ -29,6 +29,7 @@ import { HierarchyEditor } from "@/components/admin/HierarchyEditor";
 import { ProgramsPanel } from "@/components/admin/ProgramsPanel";
 import { ProgramConfigEditor } from "@/components/admin/ProgramConfigEditor";
 import { CompanyDataHistoryPanel } from "@/components/admin/CompanyDataHistoryPanel";
+import { CompanyDisplaySettingsPanel } from "@/components/admin/CompanyDisplaySettingsPanel";
 import { StrategicPlanOnboarding } from "@/components/admin/StrategicPlanOnboarding";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { normalizeRoleClearance } from "@/lib/confidentiality";
@@ -368,6 +369,7 @@ export default function CompanyDetailClient() {
                   ? t("adminCompanies.saving", "Enregistrement…")
                   : t("common.save", "Enregistrer")}
               </button>
+              <CompanyDisplaySettingsPanel companyId={company.id} />
             </div>
           )}
           {tab === "configuration" && <ProgramConfigEditor companyId={company.id} />}

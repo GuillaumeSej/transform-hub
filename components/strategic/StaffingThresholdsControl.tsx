@@ -25,18 +25,23 @@ const parse = (d: Draft): StaffingThresholds => ({
  * Bouton « Seuils » + popover d'édition des seuils du taux de staffing (tendu / sur-staffé).
  * Aperçu en direct : tant que le popover est ouvert et la saisie valide, `onPreview` reçoit les
  * seuils saisis (le parent recolore graphique / heatmap / popup) ; `onPreview(null)` à la
- * fermeture. `onSave` persiste (profil utilisateur, voir useStaffingThresholds).
+ * fermeture. `onSave` persiste (paramètre de l'ENTREPRISE, voir useStaffingThresholds).
+ * `readOnly` (profil non habilité) : le popover affiche seulement les valeurs en vigueur et la
+ * mention « Paramètre défini par la direction », sans champ ni bouton d'enregistrement.
  */
 export function StaffingThresholdsControl({
   value,
   onSave,
   onPreview,
   saving = false,
+  readOnly = false,
 }: {
   value: StaffingThresholds;
-  onSave: (next: StaffingThresholds) => Promise<unknown> | void;
+  /** Résultat `false` = échec d'enregistrement : le popover reste ouvert avec la saisie. */
+  onSave: (next: StaffingThresholds) => Promise<boolean | void> | void;
   onPreview?: (next: StaffingThresholds | null) => void;
   saving?: boolean;
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -85,9 +90,9 @@ export function StaffingThresholdsControl({
   };
 
   const submit = async () => {
-    if (error !== null) return;
-    await onSave(parsed);
-    close();
+    if (error !== null || readOnly) return;
+    const ok = await onSave(parsed);
+    if (ok !== false) close();
   };
 
   const errorText =
@@ -123,78 +128,111 @@ export function StaffingThresholdsControl({
           <p className="mb-2 text-[12px] font-bold text-primary">
             {t("effectifs.staffingRate.thresholds.title", "Seuils du taux de staffing")}
           </p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submit();
-            }}
-          >
-            <label className="mb-2 flex items-center justify-between gap-2 text-[12px] text-secondary">
-              {t("effectifs.staffingRate.thresholds.tense", "Seuil « tendu » (%)")}
-              <input
-                type="number"
-                inputMode="decimal"
-                min={1}
-                max={STAFFING_THRESHOLD_MAX}
-                step={1}
-                value={draft.tense}
-                onChange={(e) => update({ ...draft, tense: e.target.value })}
-                aria-invalid={error === "tenseRange" || error === "order"}
-                className={inputClass}
-              />
-            </label>
-            <label className="mb-2 flex items-center justify-between gap-2 text-[12px] text-secondary">
-              {t("effectifs.staffingRate.thresholds.over", "Seuil « sur-staffé » (%)")}
-              <input
-                type="number"
-                inputMode="decimal"
-                min={1}
-                max={STAFFING_THRESHOLD_MAX}
-                step={1}
-                value={draft.over}
-                onChange={(e) => update({ ...draft, over: e.target.value })}
-                aria-invalid={error === "overMax" || error === "order"}
-                className={inputClass}
-              />
-            </label>
-            {errorText ? (
-              <p role="alert" className="mb-2 text-[11px] font-semibold text-bp-coral">
-                {errorText}
-              </p>
-            ) : (
-              <p className="mb-2 text-[11px] text-tertiary">
+          {readOnly ? (
+            <>
+              <dl className="mb-2 space-y-1 text-[12px] text-secondary">
+                <div className="flex items-center justify-between gap-2">
+                  <dt>{t("effectifs.staffingRate.thresholds.tense", "Seuil « tendu » (%)")}</dt>
+                  <dd className="font-semibold tabular-nums text-primary">{value.tense} %</dd>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <dt>{t("effectifs.staffingRate.thresholds.over", "Seuil « sur-staffé » (%)")}</dt>
+                  <dd className="font-semibold tabular-nums text-primary">{value.over} %</dd>
+                </div>
+              </dl>
+              <p className="mb-3 text-[11px] text-tertiary">
                 {t(
-                  "effectifs.staffingRate.thresholds.hint",
-                  "Enregistrés sur votre profil. Aperçu en direct sur le graphique et la heatmap."
+                  "effectifs.staffingRate.thresholds.readOnly",
+                  "Paramètre défini par la direction"
                 )}
               </p>
-            )}
-            <button
-              type="button"
-              onClick={() => update(toDraft(DEFAULT_STAFFING_THRESHOLDS))}
-              className="mb-3 text-[11px] font-semibold text-secondary underline-offset-2 hover:text-primary hover:underline"
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={close}
+                  className="h-7 rounded-sm border border-border bg-white px-3 text-[12px] font-semibold text-secondary hover:border-black hover:text-primary"
+                >
+                  {t("effectifs.staffingRate.thresholds.close", "Fermer")}
+                </button>
+              </div>
+            </>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submit();
+              }}
             >
-              {t("effectifs.staffingRate.thresholds.reset", "Réinitialiser ({tense} % / {over} %)")
-                .replace("{tense}", String(DEFAULT_STAFFING_THRESHOLDS.tense))
-                .replace("{over}", String(DEFAULT_STAFFING_THRESHOLDS.over))}
-            </button>
-            <div className="flex justify-end gap-2">
+              <label className="mb-2 flex items-center justify-between gap-2 text-[12px] text-secondary">
+                {t("effectifs.staffingRate.thresholds.tense", "Seuil « tendu » (%)")}
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={1}
+                  max={STAFFING_THRESHOLD_MAX}
+                  step={1}
+                  value={draft.tense}
+                  onChange={(e) => update({ ...draft, tense: e.target.value })}
+                  aria-invalid={error === "tenseRange" || error === "order"}
+                  className={inputClass}
+                />
+              </label>
+              <label className="mb-2 flex items-center justify-between gap-2 text-[12px] text-secondary">
+                {t("effectifs.staffingRate.thresholds.over", "Seuil « sur-staffé » (%)")}
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={1}
+                  max={STAFFING_THRESHOLD_MAX}
+                  step={1}
+                  value={draft.over}
+                  onChange={(e) => update({ ...draft, over: e.target.value })}
+                  aria-invalid={error === "overMax" || error === "order"}
+                  className={inputClass}
+                />
+              </label>
+              {errorText ? (
+                <p role="alert" className="mb-2 text-[11px] font-semibold text-bp-coral">
+                  {errorText}
+                </p>
+              ) : (
+                <p className="mb-2 text-[11px] text-tertiary">
+                  {t(
+                    "effectifs.staffingRate.thresholds.hint",
+                    "Appliqués à toute l'entreprise. Aperçu en direct sur le graphique et la heatmap."
+                  )}
+                </p>
+              )}
               <button
                 type="button"
-                onClick={close}
-                className="h-7 rounded-sm border border-border bg-white px-3 text-[12px] font-semibold text-secondary hover:border-black hover:text-primary"
+                onClick={() => update(toDraft(DEFAULT_STAFFING_THRESHOLDS))}
+                className="mb-3 text-[11px] font-semibold text-secondary underline-offset-2 hover:text-primary hover:underline"
               >
-                {t("effectifs.staffingRate.thresholds.cancel", "Annuler")}
+                {t(
+                  "effectifs.staffingRate.thresholds.reset",
+                  "Réinitialiser ({tense} % / {over} %)"
+                )
+                  .replace("{tense}", String(DEFAULT_STAFFING_THRESHOLDS.tense))
+                  .replace("{over}", String(DEFAULT_STAFFING_THRESHOLDS.over))}
               </button>
-              <button
-                type="submit"
-                disabled={error !== null || saving}
-                className="h-7 rounded-sm bg-black px-3 text-[12px] font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {t("effectifs.staffingRate.thresholds.save", "Enregistrer")}
-              </button>
-            </div>
-          </form>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={close}
+                  className="h-7 rounded-sm border border-border bg-white px-3 text-[12px] font-semibold text-secondary hover:border-black hover:text-primary"
+                >
+                  {t("effectifs.staffingRate.thresholds.cancel", "Annuler")}
+                </button>
+                <button
+                  type="submit"
+                  disabled={error !== null || saving}
+                  className="h-7 rounded-sm bg-black px-3 text-[12px] font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {t("effectifs.staffingRate.thresholds.save", "Enregistrer")}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
     </div>

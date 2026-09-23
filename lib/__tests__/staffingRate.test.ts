@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { periodBoundsForDate } from "@/lib/staffingNeed";
 import {
   availableForTeam,
+  canEditStaffingThresholds,
   DEFAULT_STAFFING_THRESHOLDS,
   filterStaffingByAxes,
   filterStaffingByTeam,
@@ -102,6 +103,8 @@ describe("staffingRate", () => {
   it("validation / normalisation des seuils", () => {
     expect(validateStaffingThresholds({ tense: 85, over: 100 })).toBeNull();
     expect(validateStaffingThresholds({ tense: 1, over: 300 })).toBeNull();
+    expect(validateStaffingThresholds({ tense: 20, over: 60 })).toBeNull();
+    expect(normalizeStaffingThresholds({ tense: 20, over: 60 })).toEqual({ tense: 20, over: 60 });
     expect(validateStaffingThresholds({ tense: 0, over: 100 })).toBe("tenseRange");
     expect(validateStaffingThresholds({ tense: 100, over: 100 })).toBe("order");
     expect(validateStaffingThresholds({ tense: 90, over: 80 })).toBe("order");
@@ -258,5 +261,18 @@ describe("staffingRate", () => {
     expect(finance.teams).toEqual([]);
     expect(finance.ratePct).toBe(0);
     expect(finance.level).toBe("ok");
+  });
+
+  it("édition des seuils d'entreprise réservée à la direction et aux admins", () => {
+    const withRole = (role: string) => ({ profiles: [{ role }] }) as never;
+    expect(canEditStaffingThresholds(withRole("cto"))).toBe(true);
+    expect(canEditStaffingThresholds(withRole("strategic_lead"))).toBe(true);
+    expect(canEditStaffingThresholds(withRole("program_owner"))).toBe(true);
+    expect(canEditStaffingThresholds(withRole("program_sponsor"))).toBe(true);
+    expect(canEditStaffingThresholds({ profiles: [], isCompanyAdmin: true })).toBe(true);
+    expect(canEditStaffingThresholds({ profiles: [], isGlobalAdmin: true })).toBe(true);
+    expect(canEditStaffingThresholds(withRole("hr"))).toBe(false);
+    expect(canEditStaffingThresholds(withRole("chantier_owner"))).toBe(false);
+    expect(canEditStaffingThresholds(null)).toBe(false);
   });
 });

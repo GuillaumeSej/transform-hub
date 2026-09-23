@@ -289,17 +289,6 @@ export async function saveUser(user: AuthUser): Promise<void> {
   );
 }
 
-/** Mise à jour PAR L'UTILISATEUR LUI-MÊME de ses seuils de taux de staffing (seul champ
- *  `preferences` modifiable sur son propre document, voir firestore.rules). `slug` = accountSlug. */
-export async function saveUserStaffingThresholds(
-  slug: string,
-  thresholds: { tense: number; over: number }
-): Promise<void> {
-  await updateDoc(doc(usersCol(), slug), {
-    "preferences.staffingThresholds": { tense: thresholds.tense, over: thresholds.over },
-  });
-}
-
 export async function deleteUser(username: string, companyId?: string | null): Promise<void> {
   await deleteDoc(doc(usersCol(), accountSlug(username, companyId)));
 }

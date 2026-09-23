@@ -2177,7 +2177,7 @@ const es: Record<string, string> = {
   "effectifs.staffingRate.thresholds.save": "Guardar",
   "effectifs.staffingRate.thresholds.cancel": "Cancelar",
   "effectifs.staffingRate.thresholds.hint":
-    "Guardados en su perfil. Vista previa en directo en el gráfico y el mapa de calor.",
+    "Se aplican a toda la empresa. Vista previa en directo en el gráfico y el mapa de calor.",
   "effectifs.staffingRate.thresholds.error.invalid": "Introduzca dos números.",
   "effectifs.staffingRate.thresholds.error.tenseRange":
     "El umbral «tenso» debe ser superior a 0 %.",
@@ -2185,9 +2185,15 @@ const es: Record<string, string> = {
     "El umbral «tenso» debe ser inferior al umbral «sobreasignado».",
   "effectifs.staffingRate.thresholds.error.overMax":
     "El umbral «sobreasignado» no puede superar el {max} %.",
-  "effectifs.staffingRate.thresholds.saved": "Umbrales guardados",
-  "effectifs.staffingRate.thresholds.saveError": "Umbrales no guardados en su perfil",
-  "effectifs.staffingRate.thresholds.saveErrorDetail": "Solo se conservan en este navegador.",
+  "effectifs.staffingRate.thresholds.saved": "Umbrales guardados para la empresa",
+  "effectifs.staffingRate.thresholds.saveError": "Umbrales no guardados",
+  "effectifs.staffingRate.thresholds.saveErrorDetail":
+    "Compruebe su conexión e inténtelo de nuevo.",
+  "effectifs.staffingRate.thresholds.readOnly": "Parámetro definido por la dirección",
+  "effectifs.staffingRate.thresholds.close": "Cerrar",
+  "adminCompanies.displaySettings.title": "Parámetros de visualización",
+  "adminCompanies.displaySettings.description":
+    "Umbrales de la tasa de staffing (página Presupuesto y efectivos), aplicados a todos los usuarios de la empresa.",
   "effectifs.staffingRate.chartEmpty": "Ninguna movilización fechada para estos filtros.",
   "effectifs.staffingRate.detailTitle": "Quién está movilizado dónde — {period}",
   "effectifs.staffingRate.projetChantierCol": "Proyecto / iniciativa",

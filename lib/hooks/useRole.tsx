@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getAuthInstance } from "@/lib/firebase";
 import { accountSlugFromEmail, resolveAuthUserProfile } from "@/lib/auth";
-import type { AuthUser, ProfileAssignment, Role, UserPreferences } from "@/types";
+import type { AuthUser, ProfileAssignment, Role } from "@/types";
 
 type RoleContextValue = {
   /** Round multi-profils : le "premier" rôle métier de l'utilisateur, pour l'affichage simple
@@ -28,9 +28,6 @@ type RoleContextValue = {
   loading: boolean;
   login: (user: AuthUser) => void;
   logout: () => void;
-  /** Met à jour LOCALEMENT les préférences de l'utilisateur connecté (après écriture Firestore,
-   *  ou en optimiste) — voir lib/hooks/useStaffingThresholds.ts. */
-  updatePreferences: (patch: Partial<UserPreferences>) => void;
 };
 
 const RoleContext = createContext<RoleContextValue | null>(null);
@@ -81,10 +78,6 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     void signOut(getAuthInstance());
   }, []);
 
-  const updatePreferences = useCallback((patch: Partial<UserPreferences>) => {
-    setUser((prev) => (prev ? { ...prev, preferences: { ...prev.preferences, ...patch } } : prev));
-  }, []);
-
   return (
     <RoleContext.Provider
       value={{
@@ -96,7 +89,6 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         loading,
         login,
         logout,
-        updatePreferences,
       }}
     >
       {children}

@@ -2149,7 +2149,7 @@ const en: Record<string, string> = {
   "effectifs.staffingRate.thresholds.save": "Save",
   "effectifs.staffingRate.thresholds.cancel": "Cancel",
   "effectifs.staffingRate.thresholds.hint":
-    "Saved to your profile. Live preview on the chart and heatmap.",
+    "Applied to the whole company. Live preview on the chart and heatmap.",
   "effectifs.staffingRate.thresholds.error.invalid": "Enter two numbers.",
   "effectifs.staffingRate.thresholds.error.tenseRange":
     'The "tight" threshold must be greater than 0%.',
@@ -2157,9 +2157,14 @@ const en: Record<string, string> = {
     'The "tight" threshold must be lower than the "over-staffed" threshold.',
   "effectifs.staffingRate.thresholds.error.overMax":
     'The "over-staffed" threshold cannot exceed {max}%.',
-  "effectifs.staffingRate.thresholds.saved": "Thresholds saved",
-  "effectifs.staffingRate.thresholds.saveError": "Thresholds not saved to your profile",
-  "effectifs.staffingRate.thresholds.saveErrorDetail": "They are kept in this browser only.",
+  "effectifs.staffingRate.thresholds.saved": "Thresholds saved for the company",
+  "effectifs.staffingRate.thresholds.saveError": "Thresholds not saved",
+  "effectifs.staffingRate.thresholds.saveErrorDetail": "Check your connection and try again.",
+  "effectifs.staffingRate.thresholds.readOnly": "Setting defined by management",
+  "effectifs.staffingRate.thresholds.close": "Close",
+  "adminCompanies.displaySettings.title": "Display settings",
+  "adminCompanies.displaySettings.description":
+    "Staffing rate thresholds (Budget & headcount page), applied to all users of the company.",
   "effectifs.staffingRate.chartEmpty": "No dated mobilisation for these filters.",
   "effectifs.staffingRate.detailTitle": "Who is mobilised where — {period}",
   "effectifs.staffingRate.projetChantierCol": "Project / work package",

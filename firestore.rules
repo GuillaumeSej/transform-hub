@@ -169,13 +169,9 @@ service cloud.firestore {
         || accountSlug == currentUsername()
         || belongsToCompany(docCompanyId(resource.data));
       allow create: if isSuperAdmin() || isCompanyAdmin(docCompanyId(request.resource.data));
-      // Un utilisateur peut mettre à jour ses PROPRES préférences d'affichage (champ `preferences`
-      // uniquement — ex. seuils du taux de staffing), jamais son profil/ses droits.
       allow update: if isSuperAdmin()
         || (isCompanyAdmin(docCompanyId(resource.data))
-            && docCompanyId(request.resource.data) == docCompanyId(resource.data))
-        || (isSignedIn() && accountSlug == currentUsername()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['preferences']));
+            && docCompanyId(request.resource.data) == docCompanyId(resource.data));
       allow delete: if isSuperAdmin() || isCompanyAdmin(docCompanyId(resource.data));
     }
 

@@ -2178,7 +2178,7 @@ const de: Record<string, string> = {
   "effectifs.staffingRate.thresholds.save": "Speichern",
   "effectifs.staffingRate.thresholds.cancel": "Abbrechen",
   "effectifs.staffingRate.thresholds.hint":
-    "In Ihrem Profil gespeichert. Live-Vorschau in Diagramm und Heatmap.",
+    "Gelten für das gesamte Unternehmen. Live-Vorschau in Diagramm und Heatmap.",
   "effectifs.staffingRate.thresholds.error.invalid": "Geben Sie zwei Zahlen ein.",
   "effectifs.staffingRate.thresholds.error.tenseRange":
     "Die Schwelle „angespannt“ muss größer als 0 % sein.",
@@ -2186,10 +2186,15 @@ const de: Record<string, string> = {
     "Die Schwelle „angespannt“ muss kleiner als die Schwelle „überbesetzt“ sein.",
   "effectifs.staffingRate.thresholds.error.overMax":
     "Die Schwelle „überbesetzt“ darf {max} % nicht überschreiten.",
-  "effectifs.staffingRate.thresholds.saved": "Schwellenwerte gespeichert",
-  "effectifs.staffingRate.thresholds.saveError": "Schwellenwerte nicht im Profil gespeichert",
+  "effectifs.staffingRate.thresholds.saved": "Schwellenwerte für das Unternehmen gespeichert",
+  "effectifs.staffingRate.thresholds.saveError": "Schwellenwerte nicht gespeichert",
   "effectifs.staffingRate.thresholds.saveErrorDetail":
-    "Sie werden nur in diesem Browser beibehalten.",
+    "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+  "effectifs.staffingRate.thresholds.readOnly": "Von der Geschäftsleitung festgelegter Parameter",
+  "effectifs.staffingRate.thresholds.close": "Schließen",
+  "adminCompanies.displaySettings.title": "Anzeigeeinstellungen",
+  "adminCompanies.displaySettings.description":
+    "Schwellenwerte der Staffing-Quote (Seite Budget & Personal), gültig für alle Benutzer des Unternehmens.",
   "effectifs.staffingRate.chartEmpty": "Kein datierter Einsatz für diese Filter.",
   "effectifs.staffingRate.detailTitle": "Wer ist wo eingesetzt — {period}",
   "effectifs.staffingRate.projetChantierCol": "Projekt / Handlungsfeld",

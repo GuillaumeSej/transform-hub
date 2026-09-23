@@ -149,8 +149,14 @@ export function StaffingRateSection({
   const [heatmapYear, setHeatmapYear] = useState(currentYear);
   const [detail, setDetail] = useState<DetailState | null>(null);
 
-  // Seuils tendu / sur-staffé : préférence utilisateur (profil), aperçu en direct pendant l'édition.
-  const { thresholds: savedThresholds, save: saveThresholds, saving } = useStaffingThresholds();
+  // Seuils tendu / sur-staffé : paramètre d'affichage de l'ENTREPRISE (modifiable par la
+  // direction, lecture seule pour les autres), aperçu en direct pendant l'édition.
+  const {
+    thresholds: savedThresholds,
+    save: saveThresholds,
+    saving,
+    canEdit: canEditThresholds,
+  } = useStaffingThresholds();
   const [previewThresholds, setPreviewThresholds] = useState<StaffingThresholds | null>(null);
   const thresholds = previewThresholds ?? savedThresholds;
   const legendText = t("effectifs.staffingRate.legend")
@@ -417,6 +423,7 @@ export function StaffingRateSection({
                       onSave={saveThresholds}
                       onPreview={setPreviewThresholds}
                       saving={saving}
+                      readOnly={!canEditThresholds}
                     />
                   </div>
                 </div>

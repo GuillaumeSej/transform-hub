@@ -1,4 +1,5 @@
-import type { ChantierStaffing } from "@/types";
+import type { AuthUser, ChantierStaffing, Role } from "@/types";
+import { hasAnyRole, isAnyAdmin } from "@/lib/roleProfiles";
 import {
   averageFte,
   nextPeriodStart,
@@ -23,14 +24,15 @@ import {
  *                  département) — instantané, jamais filtré par axe ;
  *  - taux        = mobilisé / disponible, en % arrondi ; null si disponible nul.
  *
- * Seuils (configurables par utilisateur, `StaffingThresholds`, défaut 85 / 100) :
+ * Seuils (paramètre d'affichage PAR ENTREPRISE, `StaffingThresholds`, défaut 85 / 100) :
  * > sur-staffé = sur-staffé ; tendu–sur-staffé = tendu ; < tendu = OK.
  */
 
 export type StaffingRateLevel = "over" | "tense" | "ok" | "none";
 
-/** Seuils d'alerte en % : OK < `tense` ≤ tendu ≤ `over` < sur-staffé. Préférence utilisateur
- *  (`AuthUser.preferences.staffingThresholds`), défaut `DEFAULT_STAFFING_THRESHOLDS`. */
+/** Seuils d'alerte en % : OK < `tense` ≤ tendu ≤ `over` < sur-staffé. Paramètre d'affichage de
+ *  l'entreprise (`leverMeta/{companyId}__displaySettings`, voir
+ *  lib/firestore/companyDisplaySettings.ts), défaut `DEFAULT_STAFFING_THRESHOLDS`. */
 export type StaffingThresholds = { tense: number; over: number };
 
 export const STAFFING_TENSE_THRESHOLD = 85;
@@ -55,6 +57,22 @@ export function validateStaffingThresholds(t: {
   if (t.tense >= t.over) return "order";
   if (t.over > STAFFING_THRESHOLD_MAX) return "overMax";
   return null;
+}
+
+/** Profils habilités à MODIFIER les seuils de l'entreprise (« paramètre défini par la
+ *  direction ») : CTO, pilote stratégique, owner/sponsor de programme — plus les admins (global ou
+ *  d'entreprise). Les autres utilisateurs les voient en lecture seule. */
+export const STAFFING_THRESHOLDS_EDITOR_ROLES: readonly Role[] = [
+  "cto",
+  "strategic_lead",
+  "program_owner",
+  "program_sponsor",
+];
+
+export function canEditStaffingThresholds(
+  user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
+): boolean {
+  return isAnyAdmin(user) || hasAnyRole(user, STAFFING_THRESHOLDS_EDITOR_ROLES);
 }
 
 /** Normalise une valeur lue (Firestore / localStorage, donc non fiable) : seuils valides ou défaut. */

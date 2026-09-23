@@ -122,7 +122,6 @@ export async function resolveAuthUserProfile(slug: string): Promise<AuthUser> {
     companyId: data.companyId ?? null,
     confidentialityClearance: data.confidentialityClearance,
     direction: data.direction,
-    preferences: data.preferences,
   };
 }
 
