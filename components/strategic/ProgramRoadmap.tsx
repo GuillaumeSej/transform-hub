@@ -138,6 +138,15 @@ const LEVIER_BAR_HEIGHT = 30;
 // bas — pas de recadrage/chevauchement avec la ligne précédente.
 const LEVIER_LABEL_HEIGHT = 14;
 
+// Refonte visuelle Gantt (retour PO — « les projets sont écrits trop petit, la double barre des
+// chantiers est moche ») : la ligne de CHANTIER devient une vraie ligne d'EN-TÊTE pleine largeur
+// (bandeau teinté de la couleur d'axe sur la colonne d'identité ET la piste temporelle), portant UNE
+// seule barre pleine couleur d'axe couvrant la portée du chantier (premier début → dernière fin de
+// ses projets). Plus de liséré gauche couleur d'axe doublé avec celui de la carte d'axe, plus de
+// mini-jauge d'avancement sous le nom (l'avancement est écrit en clair dans la méta).
+const CHANTIER_ROW_HEIGHT = 44;
+const CHANTIER_BAR_HEIGHT = 12;
+
 type ChantierGroup = { chantier: Chantier; rows: ProgramRoadmapRow[] };
 type AxisGroup = { axis: StrategicAxis; chantierGroups: ChantierGroup[] };
 
@@ -352,82 +361,102 @@ export function ProgramRoadmap({
                             chantierGroup.rows.reduce((sum, r) => sum + r.progressPct, 0) /
                               totalLevierCount
                           );
+                    // Portée du chantier = premier début → dernière fin de ses projets (dates ISO,
+                    // comparables lexicographiquement) — même dérivation que `chantierBounds`.
+                    const chantierStart = chantierGroup.rows.reduce(
+                      (min, r) => (r.start < min ? r.start : min),
+                      chantierGroup.rows[0].start
+                    );
+                    const chantierEnd = chantierGroup.rows.reduce(
+                      (max, r) => (r.end > max ? r.end : max),
+                      chantierGroup.rows[0].end
+                    );
+                    const chantierStartPct = pctOf(chantierStart);
+                    const chantierWidthPct = Math.max(1.2, pctOf(chantierEnd) - chantierStartPct);
                     return (
                       <div key={chantierGroup.chantier.id}>
-                        {/* En-tête de chantier — round 27 : même traitement de bordure gauche
-                          accentuée (`border-l-[3px]`, couleur de l'axe) que les lignes de levier
-                          juste en dessous (patron d'identité de `ChantierGantt.tsx` : nom + méta +
-                          mini barre de progression, adapté ici pour rester un en-tête de GROUPE
-                          au-dessus de plusieurs lignes plutôt qu'un bloc par chantier isolé).
-                          Bouton (round 16) cliquable si `onChantierClick` est fourni, sinon reste un
-                          simple texte non interactif (comportement historique inchangé).
-                          Round 29 (retour PO — « on ne distingue pas assez une ligne chantier d'une
-                          ligne projet ») : le round 27 faisait PARTAGER le même liséré accentué
-                          couleur d'axe à l'en-tête et aux lignes de levier pour former "une seule
-                          colonne continue" — exactement ce qui les rendait indiscernables. Le liséré
-                          couleur d'axe (`border-l-[3px]`) devient désormais l'apanage EXCLUSIF de cet
-                          en-tête (les lignes de levier ci-dessous passent à un liséré neutre fin,
-                          voir plus bas) ; un fond gris très léger (`bg-neutral-100/70`, indépendant
-                          de la couleur d'axe pour rester lisible quelle que soit sa teinte), une
-                          icône `Layers` et un nom en gras plus grand achèvent de marquer cet en-tête
-                          comme le PARENT du groupe plutôt qu'une ligne de plus dans la même colonne. */}
-                        <button
-                          type="button"
-                          disabled={!onChantierClick}
-                          onClick={
-                            onChantierClick
-                              ? () => onChantierClick(chantierGroup.chantier.id)
-                              : undefined
-                          }
-                          className={`${ROW_LABEL_WIDTH} flex shrink-0 flex-col gap-1 rounded-r border-l-[3px] bg-neutral-100/70 py-1.5 pl-2 pr-2 text-left transition ${
-                            onChantierClick ? "hover:bg-neutral-100" : ""
-                          }`}
-                          style={{ borderColor: axisColor }}
+                        {/* En-tête de chantier — refonte visuelle (retour PO : chantier/projet
+                          indiscernables, "double barre" disgracieuse) : ligne d'EN-TÊTE pleine
+                          largeur, bandeau teinté de la couleur d'axe (colonne d'identité + piste),
+                          nom en gras 13.5px, méta "N projets · Avancement N%" en clair, et UNE seule
+                          barre pleine couleur d'axe sur la portée du chantier. Remplace le liséré
+                          gauche 3px (doublé avec celui de la carte d'axe) et la mini-jauge
+                          d'avancement des rounds 27/29. Bouton (round 16) cliquable si
+                          `onChantierClick` est fourni, sinon simple texte non interactif. */}
+                        <div
+                          className="flex items-stretch gap-2 border-b border-border"
+                          style={{ backgroundColor: withAlpha(axisColor, 0.13) }}
                         >
-                          <div className="flex items-center gap-1">
-                            <Layers size={12} className="shrink-0 text-secondary" aria-hidden />
-                            <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-primary">
-                              {chantierGroup.chantier.name}
-                              <span className="ml-1 font-normal text-tertiary">
-                                · {chantierGroup.rows.length} {l.leviersSuffix}
-                              </span>
-                            </span>
-                            {lateLevierCount > 0 && (
-                              <span
-                                className="flex shrink-0 items-center gap-1 rounded-full bg-rag-red-light px-1.5 py-0.5 text-[10px] font-bold text-rag-red"
-                                title={
-                                  l.lateCount
-                                    ? l.lateCount
-                                        .replace("{n}", String(lateLevierCount))
-                                        .replace("{total}", String(totalLevierCount))
-                                    : undefined
-                                }
-                              >
-                                <TriangleAlert size={11} aria-hidden />
-                                {lateLevierCount}/{totalLevierCount}
-                              </span>
-                            )}
-                          </div>
-                          {/* Round 27 : mini barre de progression + pourcentage — même composition
-                              visuelle que la colonne d'identité de `ChantierGantt.tsx` (barre `h-1`
-                              arrondie + libellé `text-[9.5px] font-bold`), pour que l'en-tête porte
-                              une information utile au premier coup d'œil plutôt qu'un simple nom +
-                              compteur. */}
-                          <div className="flex items-center gap-1.5">
-                            <div className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-100">
-                              <div
-                                className="h-full rounded-full"
-                                style={{
-                                  width: `${chantierProgressPct}%`,
-                                  backgroundColor: axisColor,
-                                }}
+                          <button
+                            type="button"
+                            disabled={!onChantierClick}
+                            onClick={
+                              onChantierClick
+                                ? () => onChantierClick(chantierGroup.chantier.id)
+                                : undefined
+                            }
+                            className={`${ROW_LABEL_WIDTH} flex shrink-0 flex-col justify-center gap-0.5 py-1.5 pl-2.5 pr-2 text-left transition ${
+                              onChantierClick ? "hover:bg-black/[0.03]" : ""
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Layers
+                                size={13}
+                                className="shrink-0"
+                                style={{ color: axisColor }}
+                                aria-hidden
                               />
+                              <span
+                                className="min-w-0 flex-1 truncate text-[13.5px] font-bold text-primary"
+                                title={chantierGroup.chantier.name}
+                              >
+                                {chantierGroup.chantier.name}
+                              </span>
+                              {lateLevierCount > 0 && (
+                                <span
+                                  className="flex shrink-0 items-center gap-1 rounded-full bg-rag-red-light px-1.5 py-0.5 text-[10px] font-bold text-rag-red"
+                                  title={
+                                    l.lateCount
+                                      ? l.lateCount
+                                          .replace("{n}", String(lateLevierCount))
+                                          .replace("{total}", String(totalLevierCount))
+                                      : undefined
+                                  }
+                                >
+                                  <TriangleAlert size={11} aria-hidden />
+                                  {lateLevierCount}/{totalLevierCount}
+                                </span>
+                              )}
                             </div>
-                            <span className="shrink-0 text-[9.5px] font-bold text-secondary">
-                              {chantierProgressPct}%
-                            </span>
+                            <div className="truncate pl-[19px] text-[11px] text-secondary">
+                              {totalLevierCount} {l.leviersSuffix} · {l.progress}{" "}
+                              <span className="font-bold text-primary">{chantierProgressPct}%</span>
+                            </div>
+                          </button>
+
+                          <div className="relative flex-1" style={{ height: CHANTIER_ROW_HEIGHT }}>
+                            <TimelineGridColumns columns={columns} />
+                            <TimelineBar
+                              left={chantierStartPct}
+                              width={chantierWidthPct}
+                              top={(CHANTIER_ROW_HEIGHT - CHANTIER_BAR_HEIGHT) / 2}
+                              height={CHANTIER_BAR_HEIGHT}
+                              color={axisColor}
+                              variant="bracket"
+                              roundedClassName="rounded-sm"
+                              onClick={
+                                onChantierClick
+                                  ? () => onChantierClick(chantierGroup.chantier.id)
+                                  : undefined
+                              }
+                              ariaLabel={chantierGroup.chantier.name}
+                              tooltipText={`${chantierGroup.chantier.name} · ${formatTimelineDay(
+                                chantierStart
+                              )} → ${formatTimelineDay(chantierEnd)} · ${l.progress} ${chantierProgressPct}%`}
+                              label={chantierGroup.chantier.name}
+                            />
                           </div>
-                        </button>
+                        </div>
 
                         {chantierGroup.rows.map((row) => {
                           const startPct = pctOf(row.start);
@@ -468,12 +497,14 @@ export function ProgramRoadmap({
                               // comme un enfant indenté sous son parent plutôt qu'une ligne au même
                               // niveau. Purement visuel : ni `ROW_LABEL_WIDTH` ni l'alignement avec
                               // les barres du Gantt à droite ne changent.
-                              className="flex items-stretch gap-2 border-b border-border/60 py-1.5 last:border-b-0"
+                              // Refonte visuelle : ligne de projet sur fond blanc (contraste net avec
+                              // le bandeau teinté de l'en-tête de chantier au-dessus), nom indenté
+                              // sous un filet guide fin, police nettement agrandie (10px → 12.5px).
+                              className="flex items-stretch gap-2 border-b border-border/60 bg-white/80 py-1 last:border-b-0"
                             >
-                              <div
-                                className={`${ROW_LABEL_WIDTH} shrink-0 border-l-2 border-border pl-3`}
-                              >
-                                {/* Round 20, point 2 : nom du levier cliquable (même destination que
+                              <div className={`${ROW_LABEL_WIDTH} shrink-0 pl-3`}>
+                                <div className="h-full border-l-2 border-border pl-3">
+                                  {/* Round 20, point 2 : nom du levier cliquable (même destination que
                                   la barre ci-dessous, `onProjetClick`) et centré verticalement dans
                                   sa colonne — la ligne parente est `flex items-stretch`, ce label
                                   collait donc en haut sans ce centrage propre.
@@ -489,30 +520,33 @@ export function ProgramRoadmap({
                                   légèrement réduite (`text-[10px]`, au lieu de `text-[10.5px]`) pour
                                   accentuer l'écart avec le nom de chantier ci-dessus (`text-[12.5px]
                                   font-bold`). */}
-                                <div
-                                  className={`flex h-full items-center gap-1.5 text-[10px] font-medium text-primary ${
-                                    rowClickable
-                                      ? "cursor-pointer hover:text-bp-coral hover:underline"
-                                      : ""
-                                  }`}
-                                  title={row.action.name}
-                                  onClick={
-                                    rowClickable
-                                      ? () => onProjetClick!(row.chantier.id, row.action.id)
-                                      : undefined
-                                  }
-                                >
-                                  <span className="min-w-0 flex-1 truncate">{row.action.name}</span>
-                                  <span
-                                    className="shrink-0 rounded-full border border-border bg-neutral-50 px-1.5 py-0.5 text-[9.5px] font-bold text-secondary"
-                                    title={`${l.currentMilestone} : ${displayMilestoneId(
-                                      row.action.milestones?.currentMilestone ?? "E0"
-                                    )}`}
+                                  <div
+                                    className={`flex h-full items-center gap-1.5 text-[12.5px] font-medium text-primary ${
+                                      rowClickable
+                                        ? "cursor-pointer hover:text-bp-coral hover:underline"
+                                        : ""
+                                    }`}
+                                    title={row.action.name}
+                                    onClick={
+                                      rowClickable
+                                        ? () => onProjetClick!(row.chantier.id, row.action.id)
+                                        : undefined
+                                    }
                                   >
-                                    {displayMilestoneId(
-                                      row.action.milestones?.currentMilestone ?? "E0"
-                                    )}
-                                  </span>
+                                    <span className="min-w-0 flex-1 truncate">
+                                      {row.action.name}
+                                    </span>
+                                    <span
+                                      className="shrink-0 rounded-full border border-border bg-neutral-50 px-1.5 py-0.5 text-[10px] font-bold text-secondary"
+                                      title={`${l.currentMilestone} : ${displayMilestoneId(
+                                        row.action.milestones?.currentMilestone ?? "E0"
+                                      )}`}
+                                    >
+                                      {displayMilestoneId(
+                                        row.action.milestones?.currentMilestone ?? "E0"
+                                      )}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
 
@@ -528,8 +562,7 @@ export function ProgramRoadmap({
                                   top={LEVIER_LABEL_HEIGHT}
                                   height={LEVIER_BAR_HEIGHT}
                                   color={axisColor}
-                                  variant="solid"
-                                  progressPct={row.progressPct}
+                                  variant="soft"
                                   onClick={
                                     rowClickable
                                       ? () => onProjetClick!(row.chantier.id, row.action.id)
@@ -540,7 +573,8 @@ export function ProgramRoadmap({
                                     row.end
                                   )} · ${l.progress} ${row.progressPct}%`}
                                   label={row.action.name}
-                                  labelClassName="min-w-0 flex-1 truncate text-[9.5px] font-semibold"
+                                  labelClassName="min-w-0 flex-1 truncate text-[11px] font-medium"
+                                  besideLabelClassName="text-[11px] leading-[30px] text-secondary"
                                   inlineMinWidthPct={10}
                                 />
 

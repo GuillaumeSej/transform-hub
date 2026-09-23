@@ -259,3 +259,70 @@ export function ownerActionSummary(
     return (a.nextDueDate ?? "9999-12-31").localeCompare(b.nextDueDate ?? "9999-12-31");
   });
 }
+
+// ─── Avancement des mouvements par dimension (widget "movement-progress", proposition) ─────────
+
+export type MovementProgressDimension = "program" | "department" | "country";
+
+/** Ordre d'affichage (empilement + légende) des 5 statuts du widget "Avancement des mouvements". */
+export const MOVEMENT_PROGRESS_STATUS_ORDER: MovementExecutionStatus[] = [
+  "realized",
+  "overdue",
+  "dueSoon",
+  "later",
+  "abandoned",
+];
+
+export type MovementProgressRow = {
+  key: string;
+  label: string;
+  total: number;
+  /** Nombre de mouvements par statut (compteurs = longueur de `movementsByStatus[status]`). */
+  counts: Record<MovementExecutionStatus, number>;
+  /** Mouvements derrière chaque segment — alimente le drill-down "qui a fait quoi". */
+  movementsByStatus: Record<MovementExecutionStatus, WorkforceMovement[]>;
+};
+
+/** Regroupe les mouvements par programme / département / pays et les répartit dans les 5 statuts
+ *  d'exécution (`classifyMovementExecution` : Abandonné, Réalisé, En retard = date prévue passée,
+ *  À venir ≤ 90 j, À venir > 90 j). Contrairement à `movementBreakdownByDimension`
+ *  (lib/hrEngine.ts), les mouvements abandonnés sont CONSERVÉS (segment dédié). Tri : total
+ *  décroissant puis libellé. */
+export function movementProgressByDimension(
+  movements: WorkforceMovement[],
+  dimension: MovementProgressDimension,
+  programLabels: Record<string, string> = {},
+  today: string = HR_TODAY,
+  dueSoonDays = 90
+): MovementProgressRow[] {
+  const rows = new Map<string, MovementProgressRow>();
+  for (const movement of movements) {
+    const raw =
+      dimension === "program"
+        ? movement.programId
+          ? (programLabels[movement.programId] ?? movement.programId)
+          : ""
+        : dimension === "department"
+          ? movement.department
+          : movement.country;
+    const key = raw || "Non renseigné";
+    let row = rows.get(key);
+    if (!row) {
+      row = {
+        key,
+        label: key,
+        total: 0,
+        counts: { realized: 0, overdue: 0, dueSoon: 0, later: 0, abandoned: 0 },
+        movementsByStatus: emptyMovementsByStatus(),
+      };
+      rows.set(key, row);
+    }
+    const status = classifyMovementExecution(movement, today, dueSoonDays);
+    row.counts[status] += 1;
+    row.movementsByStatus[status].push(movement);
+    row.total += 1;
+  }
+  return Array.from(rows.values()).sort(
+    (a, b) => b.total - a.total || a.label.localeCompare(b.label, "fr")
+  );
+}

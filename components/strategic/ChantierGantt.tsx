@@ -103,18 +103,17 @@ const ACTION_LANE_HEIGHT = 32;
 /** Hauteur réelle d'une barre d'action DANS son couloir (le couloir laisse un peu d'air
  *  au-dessus/en dessous, comme l'espacement `LANES_TOP` ci-dessous). */
 const ACTION_BAR_HEIGHT = 24;
-// Round 24 (Phase 3, fix C) : le bloc macro de chantier n'est plus une barre pleine hauteur
-// (40px, contour + contenu en ligne) mais un simple "bracket" fin (`TimelineBar` variant
-// "bracket") — le nom du chantier et son avancement sont DÉJÀ affichés dans la colonne
-// d'identité à gauche (voir plus bas), la barre pleine faisait doublon. 7px choisi dans la
-// fourchette demandée (6-8px) : assez épais pour rester cliquable/visible, assez fin pour ne
-// plus se lire comme une "deuxième barre" à côté des couloirs de projet pleins en dessous.
-const CHANTIER_BAR_HEIGHT = 7;
-/** Espace vertical entre le bracket de chantier et le premier couloir de projet — resserré par
- *  rapport à l'ancien `+ 6` (qui suivait une barre de 40px) mais toujours un espace visible
- *  distinct, pour que les couloirs ne collent pas directement sous le bracket. */
-const CHANTIER_BAR_GAP = 8;
-const LANES_TOP = CHANTIER_BAR_HEIGHT + CHANTIER_BAR_GAP;
+// Refonte visuelle (retour PO — « projets écrits trop petit, double barre des chantiers moche ») :
+// chaque chantier est désormais rendu en DEUX bandes superposées :
+//  - une ligne d'EN-TÊTE (bandeau teinté de la couleur d'axe, pleine largeur) portant le nom du
+//    chantier en gras et UNE seule barre pleine couleur d'axe sur sa portée (plus de liséré gauche
+//    + mini-jauge + "bracket" fin qui se lisaient comme une double barre) ;
+//  - en dessous, les couloirs de PROJETS (barres claires `variant="soft"`, texte 11px lisible),
+//    légèrement indentés.
+const CHANTIER_HEADER_HEIGHT = 40;
+const CHANTIER_BAR_HEIGHT = 12;
+/** Petit espace au-dessus du premier couloir de projets. */
+const LANES_TOP = 4;
 
 export function ChantierGantt({
   chantiers,
@@ -281,111 +280,104 @@ export function ChantierGantt({
                 const blockColor = isAlerted ? ALERT_COLOR : color;
 
                 return (
-                  <div
-                    key={chantier.id}
-                    className="flex items-stretch gap-2 border-b border-border py-1.5 last:border-b-0"
-                  >
-                    {/* Colonne d'identité du chantier */}
+                  <div key={chantier.id} className="border-b border-border last:border-b-0">
+                    {/* ── En-tête de chantier : bandeau teinté + barre unique pleine couleur ── */}
                     <div
-                      className={`${ROW_LABEL_WIDTH} shrink-0 border-l-[3px] pl-2`}
-                      style={{ borderColor: blockColor }}
+                      className="flex items-stretch gap-2"
+                      style={{ backgroundColor: withAlpha(blockColor, 0.13) }}
                     >
-                      <div
-                        className="truncate text-[11.5px] font-semibold text-primary"
-                        title={chantier.name}
+                      <button
+                        type="button"
+                        onClick={() => openChantier(chantier)}
+                        className={`${ROW_LABEL_WIDTH} flex shrink-0 flex-col justify-center gap-0.5 py-1 pl-2.5 pr-2 text-left transition hover:bg-black/[0.03]`}
                       >
-                        {chantier.name}
-                      </div>
-                      <div className="truncate text-[10px] text-tertiary">
-                        {items.length} {l.actionsSuffix}
-                      </div>
-                      <div className="mt-1 flex items-center gap-1.5">
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-100">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${progressPct}%`,
-                              backgroundColor: blockColor,
-                            }}
-                          />
-                        </div>
-                        <span className="shrink-0 text-[9.5px] font-bold text-secondary">
-                          {progressPct}%
+                        <span
+                          className="truncate text-[13.5px] font-bold text-primary"
+                          title={chantier.name}
+                        >
+                          {chantier.name}
                         </span>
+                        <span className="truncate text-[11px] text-secondary">
+                          {items.length} {l.actionsSuffix} · {l.progress}{" "}
+                          <span className="font-bold text-primary">{progressPct}%</span>
+                        </span>
+                      </button>
+
+                      <div className="relative flex-1" style={{ height: CHANTIER_HEADER_HEIGHT }}>
+                        <TimelineGridColumns columns={columns} />
+                        <TimelineBar
+                          left={startPct}
+                          width={widthPct}
+                          top={(CHANTIER_HEADER_HEIGHT - CHANTIER_BAR_HEIGHT) / 2}
+                          height={CHANTIER_BAR_HEIGHT}
+                          color={blockColor}
+                          variant="bracket"
+                          roundedClassName="rounded-sm"
+                          ringed={isAlerted}
+                          onClick={() => openChantier(chantier)}
+                          ariaLabel={chantier.name}
+                          tooltipText={`${chantier.name} · ${formatTimelineDay(bounds.start)} → ${formatTimelineDay(
+                            bounds.end
+                          )} · ${l.progress} ${progressPct}%${
+                            chantierAlerts.length > 0
+                              ? ` · ${l.alerted} : ${chantierAlerts.map((a) => a.message).join(" ; ")}`
+                              : ""
+                          }`}
+                          label={chantier.name}
+                        />
                       </div>
                     </div>
 
-                    <div className="relative flex-1" style={{ height: trackHeight }}>
-                      {/* Grille de colonnes */}
-                      <TimelineGridColumns columns={columns} />
-
-                      {/* Bloc macro du chantier (maille exécutive) — fin "bracket" de portée (round
-                          24, fix C) : nom + avancement restent affichés une seule fois, dans la
-                          colonne d'identité à gauche, pas ici. Cliquable/infobulle inchangés. */}
-                      <TimelineBar
-                        left={startPct}
-                        width={widthPct}
-                        top={0}
-                        height={CHANTIER_BAR_HEIGHT}
-                        color={blockColor}
-                        variant="bracket"
-                        ringed={isAlerted}
-                        onClick={() => openChantier(chantier)}
-                        ariaLabel={chantier.name}
-                        tooltipText={`${chantier.name} · ${formatTimelineDay(bounds.start)} → ${formatTimelineDay(
-                          bounds.end
-                        )} · ${l.progress} ${progressPct}%${
-                          chantierAlerts.length > 0
-                            ? ` · ${l.alerted} : ${chantierAlerts.map((a) => a.message).join(" ; ")}`
-                            : ""
-                        }`}
-                        label={chantier.name}
-                      />
-
-                      {/* Actions individuelles (maille fine), NOMMÉES — même pop-up au clic. */}
-                      {lanes.map((lane, laneIndex) =>
-                        lane.map((action) => {
-                          const aStart = pctOf(action.start);
-                          const aWidth = Math.max(0.8, pctOf(action.end) - aStart);
-                          const top = LANES_TOP + laneIndex * ACTION_LANE_HEIGHT;
-                          // Prérequis go/no-go (round 4, point 5) — purement informatif : le badge
-                          // cadenas et la raison en infobulle n'empêchent AUCUNE transition.
-                          const startInfo = canStartAction(action, effectiveAllActions, stages);
-                          return (
-                            <TimelineBar
-                              key={action.id}
-                              left={aStart}
-                              width={aWidth}
-                              top={top}
-                              height={ACTION_BAR_HEIGHT}
-                              color={blockColor}
-                              variant="solid"
-                              roundedClassName="rounded-sm"
-                              // Sous ~14 % de la piste, un nom écrit dans la barre serait réduit à
-                              // « D… » : on le rabat alors juste à droite de la barre. Seuil en
-                              // POURCENTAGE de largeur, indépendant de la hauteur de la barre —
-                              // inchangé malgré l'agrandissement round 4 (voir doc-comment plus haut).
-                              inlineMinWidthPct={14}
-                              onClick={() => onActionClick?.(action, chantier)}
-                              ariaLabel={action.name}
-                              tooltipText={`${action.name} · ${formatTimelineDay(action.start)} → ${formatTimelineDay(
-                                action.end
-                              )}${action.owner ? ` · ${action.owner}` : ""}${
-                                startInfo.blocked
-                                  ? ` · ${l.blockedBy} ${startInfo.reasons.join(", ")}`
-                                  : ""
-                              }`}
-                              label={action.name}
-                              labelClassName="min-w-0 flex-1 truncate text-[9.5px] font-medium leading-none"
-                              icon={
-                                startInfo.blocked ? (
-                                  <Lock size={9} className="shrink-0" aria-hidden />
-                                ) : undefined
-                              }
-                            />
-                          );
-                        })
-                      )}
+                    {/* ── Couloirs de projets (maille fine), NOMMÉS — même pop-up au clic ── */}
+                    <div className="flex items-stretch gap-2 bg-white/80 pb-1">
+                      <div className={`${ROW_LABEL_WIDTH} shrink-0 pl-3`}>
+                        <div className="h-full border-l-2 border-border" />
+                      </div>
+                      <div className="relative flex-1" style={{ height: trackHeight }}>
+                        <TimelineGridColumns columns={columns} />
+                        {lanes.map((lane, laneIndex) =>
+                          lane.map((action) => {
+                            const aStart = pctOf(action.start);
+                            const aWidth = Math.max(0.8, pctOf(action.end) - aStart);
+                            const top = LANES_TOP + laneIndex * ACTION_LANE_HEIGHT;
+                            // Prérequis go/no-go (round 4, point 5) — purement informatif : le
+                            // badge cadenas et la raison en infobulle n'empêchent AUCUNE transition.
+                            const startInfo = canStartAction(action, effectiveAllActions, stages);
+                            return (
+                              <TimelineBar
+                                key={action.id}
+                                left={aStart}
+                                width={aWidth}
+                                top={top}
+                                height={ACTION_BAR_HEIGHT}
+                                color={blockColor}
+                                variant="soft"
+                                roundedClassName="rounded-sm"
+                                // Sous ~14 % de la piste, un nom écrit dans la barre serait réduit
+                                // à « D… » : on le rabat alors juste à droite de la barre.
+                                inlineMinWidthPct={14}
+                                onClick={() => onActionClick?.(action, chantier)}
+                                ariaLabel={action.name}
+                                tooltipText={`${action.name} · ${formatTimelineDay(action.start)} → ${formatTimelineDay(
+                                  action.end
+                                )}${action.owner ? ` · ${action.owner}` : ""}${
+                                  startInfo.blocked
+                                    ? ` · ${l.blockedBy} ${startInfo.reasons.join(", ")}`
+                                    : ""
+                                }`}
+                                label={action.name}
+                                labelClassName="min-w-0 flex-1 truncate text-[11px] font-medium leading-none"
+                                besideLabelClassName="text-[11px] leading-[24px] text-secondary"
+                                icon={
+                                  startInfo.blocked ? (
+                                    <Lock size={10} className="shrink-0" aria-hidden />
+                                  ) : undefined
+                                }
+                              />
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

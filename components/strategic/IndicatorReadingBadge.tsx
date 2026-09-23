@@ -1,5 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import type { IndicatorRiskStatus } from "@/types";
+import { INDICATOR_STATUS_TONE } from "@/components/strategic/IndicatorStatusBadge";
 
 /**
  * Mini visuel "valeur actuelle → cible" d'un indicateur, affiché à l'intérieur de la puce d'axe de
@@ -44,35 +45,31 @@ export function IndicatorReadingBadge({
   targetLabel: string;
   className?: string;
 }) {
-  const dotColor = status === "at_risk" ? "bg-rag-amber" : "bg-rag-green";
-  const currentColor = status === "at_risk" ? "text-rag-amber" : "text-rag-green-dark";
-  const suffix = unit ? ` ${unit}` : "";
+  // Refonte visuelle (retour PO — « la case est trop grosse ») : plus de boîte grisée à deux
+  // lignes par valeur ni de pastille de couleur redondante (le statut est désormais porté par
+  // `IndicatorStatusBadge` juste à côté, avec son libellé explicite). Une seule ligne compacte
+  // « Actuel 12 u → Cible 20 u », valeurs à 12px (lisibles), l'unité toujours séparée du nombre
+  // par un espace, la valeur actuelle teintée par la palette partagée `INDICATOR_STATUS_TONE`.
+  const suffix = unit ? ` ${unit}` : "";
 
   return (
     <span
-      className={`mt-1 flex min-w-0 items-center gap-2 whitespace-nowrap rounded-md bg-black/[0.03] px-2 py-1.5 ${
-        className ?? ""
-      }`}
+      className={`flex min-w-0 items-baseline gap-1 whitespace-nowrap leading-none ${className ?? ""}`}
     >
-      <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dotColor}`} />
-      <span className="flex flex-col items-start leading-tight">
-        <span className="text-[9px] font-semibold uppercase tracking-wide opacity-60">
-          {currentLabel}
-        </span>
-        <span className={`text-[13px] font-bold ${currentColor}`}>
-          {current}
-          {suffix}
-        </span>
+      <span className="text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
+        {currentLabel}
       </span>
-      <ArrowRight aria-hidden="true" size={13} className="mt-2.5 shrink-0 opacity-35" />
-      <span className="flex flex-col items-start leading-tight">
-        <span className="text-[9px] font-semibold uppercase tracking-wide opacity-60">
-          {targetLabel}
-        </span>
-        <span className="text-[13px] font-bold text-text-primary opacity-90">
-          {target}
-          {suffix}
-        </span>
+      <span className={`text-[12px] font-bold ${INDICATOR_STATUS_TONE[status].text}`}>
+        {current}
+        {suffix}
+      </span>
+      <ArrowRight aria-hidden="true" size={11} className="shrink-0 self-center text-tertiary" />
+      <span className="text-[9.5px] font-semibold uppercase tracking-wide text-tertiary">
+        {targetLabel}
+      </span>
+      <span className="text-[12px] font-bold text-primary">
+        {target}
+        {suffix}
       </span>
     </span>
   );

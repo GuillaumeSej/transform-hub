@@ -1,5 +1,6 @@
 "use client";
 
+import { INDICATOR_STATUS_TONE } from "@/components/strategic/IndicatorStatusBadge";
 import { PendingKpiValues } from "@/components/strategic/PendingKpiValues";
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -123,10 +124,16 @@ export function IndicatorStatusSummary({
             aria-label={`${l.onTrack} ${Math.round(onTrackPct)}% · ${l.atRisk} ${Math.round(atRiskPct)}%`}
           >
             {onTrackPct > 0 && (
-              <div className="h-full bg-rag-green" style={{ width: `${onTrackPct}%` }} />
+              <div
+                className={`h-full ${INDICATOR_STATUS_TONE.on_track.bar}`}
+                style={{ width: `${onTrackPct}%` }}
+              />
             )}
             {atRiskPct > 0 && (
-              <div className="h-full bg-rag-red" style={{ width: `${atRiskPct}%` }} />
+              <div
+                className={`h-full ${INDICATOR_STATUS_TONE.at_risk.bar}`}
+                style={{ width: `${atRiskPct}%` }}
+              />
             )}
           </div>
         </Link>

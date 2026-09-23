@@ -45,6 +45,11 @@ import {
 } from "@/components/shared/charts/FteWaterfallChart";
 import { DepartmentMovementsChart } from "@/components/shared/charts/HrBreakdownCharts";
 import { MovementBreakdownMergedChart } from "@/components/shared/charts/MovementBreakdownMergedChart";
+import {
+  MovementProgressByDimensionChart,
+  movementProgressStatusLabel,
+} from "@/components/shared/charts/MovementProgressByDimensionChart";
+import { MovementDetailDrilldownModal } from "@/components/shared/MovementDetailDrilldownModal";
 import { ExecutionStatusChart } from "@/components/shared/charts/HrExecutionCharts";
 import { MovementStatusMatrix } from "@/components/shared/charts/MovementStatusMatrix";
 import { ForcedDepartureStatusChart } from "@/components/shared/charts/ForcedDepartureStatusChart";
@@ -86,10 +91,12 @@ import { forcedDeparturesBySocialScheme } from "@/lib/hrSocialPlan";
 import {
   EXECUTION_LABELS,
   movementStatusByType,
+  movementProgressByDimension,
   movementStatusGroups,
   ownerActionSummary,
   salaryExecutionByDimension,
   type ExecutionDimension,
+  type MovementProgressDimension,
 } from "@/lib/hrExecution";
 import {
   HR_METRIC_REGISTRY,
@@ -172,6 +179,13 @@ export default function HrDashboardPage() {
   // fournit son propre titre + la liste des `WorkforceMovement[]` déjà calculée derrière la
   // barre/segment cliqué (pas de recalcul ici).
   const [drilldownModal, setDrilldownModal] = useState<{
+    title: string;
+    movements: WorkforceMovement[];
+  } | null>(null);
+  // Drill-down détaillé ("qui a fait quoi") du widget "Avancement des mouvements par {dimension}"
+  // — voir `components/shared/MovementDetailDrilldownModal.tsx`. État séparé de `drilldownModal`
+  // car la modale affiche un tableau plus riche (programme / département / pays / dates / statut).
+  const [progressDrilldown, setProgressDrilldown] = useState<{
     title: string;
     movements: WorkforceMovement[];
   } | null>(null);
@@ -1024,13 +1038,8 @@ export default function HrDashboardPage() {
               actions={timeControls}
             />
             <CardBody>
+              {/* Légende cliquable + détail de période épinglé intégrés au graphique. */}
               <SavingsPeriodCumulChart buckets={savingsSeries} />
-              <p className="mt-2 text-[11px] text-tertiary">
-                {t(
-                  "hr.widget.savingsPeriodCumulHint",
-                  "Barres violettes = réalisé + prévision par période · barres taupe = plan initial · courbes = cumuls correspondants"
-                )}
-              </p>
             </CardBody>
           </Card>
         );
@@ -1425,6 +1434,80 @@ export default function HrDashboardPage() {
                 {t(
                   "hr.widget.movementsMergedHint",
                   "Proposition à l'étude (regroupe les 2 vues dimension/période ci-dessus, mêmes données) — bascule interne pour comparer avant de décider de garder l'une, l'autre, ou les deux."
+                )}
+              </p>
+            </CardBody>
+          </Card>
+        );
+      }
+      case "movement-progress": {
+        // Avancement des mouvements (5 statuts d'exécution) par programme / département / pays —
+        // mêmes données filtrées que les widgets voisins (`filteredMovements`), dimension
+        // persistée dans `instance.view` comme `department-breakdown`.
+        const dimension: MovementProgressDimension =
+          instance.view === "department" || instance.view === "country" ? instance.view : "program";
+        const programLabels = Object.fromEntries(
+          programs.map((program) => [program.id, program.name])
+        );
+        const rows = movementProgressByDimension(filteredMovements, dimension, programLabels);
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title={t(
+                "hr.widget.movementProgress",
+                "Avancement des mouvements par {dim} (proposition)"
+              ).replace(
+                "{dim}",
+                dimension === "country"
+                  ? t("hr.dimLower.country", "pays")
+                  : dimension === "department"
+                    ? t("hr.dimLower.department", "département")
+                    : t("hr.dimLower.program", "programme")
+              )}
+              actions={
+                <ViewToggle
+                  options={[
+                    { value: "program", label: t("dashboard.program", "Programme") },
+                    { value: "department", label: t("hr.department", "Département") },
+                    { value: "country", label: t("dashboard.country", "Pays") },
+                  ]}
+                  value={dimension}
+                  onChange={(next) =>
+                    updateLayout(setHrWidgetView(layout, instance.instanceId, next))
+                  }
+                />
+              }
+            />
+            <CardBody>
+              <MovementProgressByDimensionChart
+                data={rows}
+                onSegmentClick={(row, status) =>
+                  setProgressDrilldown(
+                    status === null
+                      ? {
+                          title: t("hr.drilldown.dimensionTitle", "Mouvements — {label}").replace(
+                            "{label}",
+                            row.label
+                          ),
+                          movements: Object.values(row.movementsByStatus).flat(),
+                        }
+                      : {
+                          title: t(
+                            "hr.drilldown.dimensionStatusTitle",
+                            "Mouvements — {label} · {status}"
+                          )
+                            .replace("{label}", row.label)
+                            .replace("{status}", movementProgressStatusLabel(t, status)),
+                          movements: row.movementsByStatus[status],
+                        }
+                  )
+                }
+              />
+              <p className="mt-2 text-[11px] text-tertiary">
+                {t(
+                  "hr.widget.movementProgressHint",
+                  "Proposition à l'étude — cliquer sur un segment (ou sur le nom d'un groupe) pour voir le détail des mouvements. « À venir » = ni réalisé, ni abandonné, ni en retard, selon la date prévue."
                 )}
               </p>
             </CardBody>
@@ -2125,6 +2208,16 @@ export default function HrDashboardPage() {
         onOpenChange={(open) => !open && setDrilldownModal(null)}
         title={drilldownModal?.title ?? ""}
         movements={drilldownModal?.movements ?? []}
+      />
+
+      {/* Drill-down détaillé ("qui a fait quoi") — widget "Avancement des mouvements par
+          {dimension}", voir `progressDrilldown` ci-dessus. */}
+      <MovementDetailDrilldownModal
+        open={progressDrilldown !== null}
+        onOpenChange={(open) => !open && setProgressDrilldown(null)}
+        title={progressDrilldown?.title ?? ""}
+        movements={progressDrilldown?.movements ?? []}
+        programLabels={Object.fromEntries(programs.map((program) => [program.id, program.name]))}
       />
     </div>
   );

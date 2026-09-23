@@ -8,6 +8,7 @@
  * (pont ETP). Le composant se contente de tracer.
  */
 
+import { useState } from "react";
 import {
   Bar,
   BarChart,
@@ -45,6 +46,7 @@ const TYPE_COLORS: Record<MovementType, string> = {
 
 const COLOR_SAVINGS = "#421799"; // bp-purple : actual + forecast
 const COLOR_PLAN = "#CCC1BD"; // warm-gray : plan
+const COLOR_PLAN_LINE = "#A99E9A"; // warm-taupe : cumul plan (plus lisible que le warm-gray en trait fin)
 const COLOR_ENR = "#FF3C47"; // coral : ENR par période
 const COLOR_ENR_CUMUL = "#991D1F"; // red-brick : cumul ENR
 const COLOR_NET_POS = "#421799"; // bp-purple : économie nette positive
@@ -59,14 +61,44 @@ const fmtEtp = (v: number) => v.toLocaleString("fr-FR");
 // 1. Économies salariales (Actual + Forecast vs Plan) + cumul — double échelle Y
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 
+/** Écart signé en M€ (« +0.3 M€ » / « −0.2 M€ »). */
+const fmtSignedMEur = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtMEur(Math.abs(v))}`;
+
+type SavingsSeriesGroup = "actual" | "plan";
+
+/** Pastille de légende combinée : une barre (valeur par période) + un trait (cumul). */
+function BarLineSwatch({ color, dashed }: { color: string; dashed?: boolean }) {
+  return (
+    <svg width="26" height="12" viewBox="0 0 26 12" aria-hidden="true" className="shrink-0">
+      <rect x="0" y="2" width="8" height="10" fill={color} />
+      <line
+        x1="11"
+        y1="6"
+        x2="26"
+        y2="6"
+        stroke={color}
+        strokeWidth={2}
+        strokeDasharray={dashed ? "4 3" : undefined}
+      />
+    </svg>
+  );
+}
+
 export function SavingsPeriodCumulChart({
   buckets,
-  height = 320,
+  height = 300,
 }: {
   buckets: SalarySavingsBucket[];
   height?: number;
 }) {
   const { t } = useTranslation();
+  // Séries masquées via la légende cliquable (chaque groupe = barre période + courbe cumul).
+  const [hidden, setHidden] = useState<Record<SavingsSeriesGroup, boolean>>({
+    actual: false,
+    plan: false,
+  });
+  // Période épinglée par un clic sur le graphique (détail affiché sous le graphique).
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
 
   if (buckets.length === 0) {
     return (
@@ -76,72 +108,233 @@ export function SavingsPeriodCumulChart({
     );
   }
 
+  const selected = buckets.find((b) => b.label === selectedLabel) ?? null;
+
+  const labelActual = t("shared.hrGooduelleCharts.legendActualForecast", "Réalisé + prévision");
+  const labelPlan = t("shared.hrGooduelleCharts.legendPlan", "Plan initial");
+  const labelPeriod = t("shared.hrGooduelleCharts.axisPeriod", "Par période");
+  const labelCumul = t("shared.hrGooduelleCharts.axisCumul", "Cumul");
+  const labelGap = t("shared.hrGooduelleCharts.gapVsPlan", "Écart vs plan");
+
+  const groups: { key: SavingsSeriesGroup; label: string; color: string; dashed?: boolean }[] = [
+    { key: "actual", label: labelActual, color: COLOR_SAVINGS },
+    { key: "plan", label: labelPlan, color: COLOR_PLAN_LINE, dashed: true },
+  ];
+
+  const toggle = (key: SavingsSeriesGroup) => setHidden((h) => ({ ...h, [key]: !h[key] }));
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const onChartClick = (state: any) => {
+    const label = state?.activeLabel;
+    if (typeof label !== "string" && typeof label !== "number") return;
+    const key = String(label);
+    setSelectedLabel((prev) => (prev === key ? null : key));
+  };
+
+  // Barres des périodes non sélectionnées estompées quand une période est épinglée.
+  const cellOpacity = (b: SalarySavingsBucket) =>
+    selected && b.label !== selected.label ? 0.35 : 1;
+
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={buckets} margin={{ top: 8, right: 8, left: 0, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-        <XAxis
-          dataKey="label"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          angle={-25}
-          textAnchor="end"
-          height={40}
-        />
-        <YAxis
-          yAxisId="period"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={fmtMEur}
-        />
-        <YAxis
-          yAxisId="cumul"
-          orientation="right"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={fmtMEur}
-        />
-        <Tooltip
-          formatter={(value, name) => [fmtMEur(Number(value)), String(name)]}
-          labelStyle={{ fontSize: 11, fontWeight: 600 }}
-        />
-        <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" iconType="rect" />
-        <Bar
-          yAxisId="period"
-          dataKey="actualPlusForecast"
-          name={t("shared.hrGooduelleCharts.actualForecastPeriod", "Réalisé + prévision — période")}
-          fill={COLOR_SAVINGS}
-        />
-        <Bar
-          yAxisId="period"
-          dataKey="plan"
-          name={t("shared.hrGooduelleCharts.planPeriod", "Plan initial — période")}
-          fill={COLOR_PLAN}
-        />
-        <Line
-          yAxisId="cumul"
-          type="monotone"
-          dataKey="cumulActualForecast"
-          name={t("shared.hrGooduelleCharts.cumulActualForecast", "Cumul réalisé + prévision")}
-          stroke={COLOR_SAVINGS}
-          strokeWidth={2}
-          dot={{ r: 3 }}
-        />
-        <Line
-          yAxisId="cumul"
-          type="monotone"
-          dataKey="cumulPlan"
-          name={t("shared.hrGooduelleCharts.cumulPlan", "Cumul plan initial")}
-          stroke={COLOR_PLAN}
-          strokeWidth={1.5}
-          strokeDasharray="5 4"
-          dot={false}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div>
+      {/* Légende compacte et cliquable : 2 groupes, clé barre/courbe expliquée une seule fois. */}
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px]">
+        <div className="flex flex-wrap items-center gap-1">
+          {groups.map((g) => {
+            const off = hidden[g.key];
+            return (
+              <button
+                key={g.key}
+                type="button"
+                onClick={() => toggle(g.key)}
+                aria-pressed={!off}
+                title={t(
+                  "shared.hrGooduelleCharts.legendToggle",
+                  "Cliquer pour masquer / afficher"
+                )}
+                className={`flex items-center gap-1.5 rounded-sm border px-2 py-0.5 transition-colors hover:bg-neutral-50 ${
+                  off
+                    ? "border-dashed border-border text-tertiary line-through opacity-60"
+                    : "border-border text-primary"
+                }`}
+              >
+                <BarLineSwatch color={off ? "#C4C4C4" : g.color} dashed={g.dashed} />
+                <span>{g.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <span className="text-tertiary">
+          {t("shared.hrGooduelleCharts.legendKey", "Barre = par période · Courbe = cumul")}
+        </span>
+      </div>
+      {/* Libellés d'axes explicites (double échelle). */}
+      <div className="flex justify-between px-1 text-[10px] font-medium text-tertiary">
+        <span>← {labelPeriod} (M€)</span>
+        <span>{labelCumul} (M€) →</span>
+      </div>
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart
+          data={buckets}
+          margin={{ top: 8, right: 8, left: 0, bottom: 20 }}
+          onClick={onChartClick}
+          style={{ cursor: "pointer" }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            angle={-25}
+            textAnchor="end"
+            height={40}
+          />
+          <YAxis
+            yAxisId="period"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={fmtMEur}
+          />
+          <YAxis
+            yAxisId="cumul"
+            orientation="right"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={fmtMEur}
+          />
+          <Tooltip
+            formatter={(value, name) => [fmtMEur(Number(value)), String(name)]}
+            labelStyle={{ fontSize: 11, fontWeight: 600 }}
+            contentStyle={{ fontSize: 11 }}
+          />
+          {selected && (
+            <ReferenceLine
+              yAxisId="period"
+              x={selected.label}
+              stroke="rgba(0,0,0,0.35)"
+              strokeDasharray="3 3"
+            />
+          )}
+          <Bar
+            yAxisId="period"
+            dataKey="actualPlusForecast"
+            name={`${labelActual} — ${labelPeriod.toLowerCase()}`}
+            fill={COLOR_SAVINGS}
+            hide={hidden.actual}
+            cursor="pointer"
+          >
+            {buckets.map((b) => (
+              <Cell key={b.label} fill={COLOR_SAVINGS} fillOpacity={cellOpacity(b)} />
+            ))}
+          </Bar>
+          <Bar
+            yAxisId="period"
+            dataKey="plan"
+            name={`${labelPlan} — ${labelPeriod.toLowerCase()}`}
+            fill={COLOR_PLAN}
+            hide={hidden.plan}
+            cursor="pointer"
+          >
+            {buckets.map((b) => (
+              <Cell key={b.label} fill={COLOR_PLAN} fillOpacity={cellOpacity(b)} />
+            ))}
+          </Bar>
+          <Line
+            yAxisId="cumul"
+            type="monotone"
+            dataKey="cumulActualForecast"
+            name={`${labelCumul} ${labelActual.toLowerCase()}`}
+            stroke={COLOR_SAVINGS}
+            strokeWidth={2}
+            dot={{ r: 3 }}
+            hide={hidden.actual}
+          />
+          <Line
+            yAxisId="cumul"
+            type="monotone"
+            dataKey="cumulPlan"
+            name={`${labelCumul} ${labelPlan.toLowerCase()}`}
+            stroke={COLOR_PLAN_LINE}
+            strokeWidth={1.5}
+            strokeDasharray="5 4"
+            dot={false}
+            hide={hidden.plan}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+      {/* Détail épinglé de la période cliquée. */}
+      {selected ? (
+        <div className="mt-1 border border-border bg-neutral-50 px-3 py-2 text-xs">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-primary">{selected.label}</span>
+              <span className="rounded-sm border border-border px-1.5 py-px text-[10px] text-secondary">
+                {selected.isFuture
+                  ? t("shared.hrGooduelleCharts.badgeForecast", "Prévision")
+                  : t("shared.hrGooduelleCharts.badgeActual", "Réalisé")}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedLabel(null)}
+              className="text-[11px] text-tertiary underline-offset-2 hover:text-primary hover:underline"
+            >
+              {t("common.close", "Fermer")}
+            </button>
+          </div>
+          <table className="w-full tabular-nums">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wide text-tertiary">
+                <th className="py-0.5 text-left font-medium" />
+                <th className="py-0.5 text-right font-medium">{labelPeriod}</th>
+                <th className="py-0.5 text-right font-medium">{labelCumul}</th>
+              </tr>
+            </thead>
+            <tbody className="text-secondary">
+              <tr>
+                <td className="py-0.5">
+                  <span className="inline-flex items-center gap-1.5">
+                    <BarLineSwatch color={COLOR_SAVINGS} />
+                    {labelActual}
+                  </span>
+                </td>
+                <td className="py-0.5 text-right">{fmtMEur(selected.actualPlusForecast)}</td>
+                <td className="py-0.5 text-right">{fmtMEur(selected.cumulActualForecast)}</td>
+              </tr>
+              <tr>
+                <td className="py-0.5">
+                  <span className="inline-flex items-center gap-1.5">
+                    <BarLineSwatch color={COLOR_PLAN_LINE} dashed />
+                    {labelPlan}
+                  </span>
+                </td>
+                <td className="py-0.5 text-right">{fmtMEur(selected.plan)}</td>
+                <td className="py-0.5 text-right">{fmtMEur(selected.cumulPlan)}</td>
+              </tr>
+              <tr className="border-t border-border font-semibold text-primary">
+                <td className="pt-1">{labelGap}</td>
+                <td className="pt-1 text-right">
+                  {fmtSignedMEur(selected.actualPlusForecast - selected.plan)}
+                </td>
+                <td className="pt-1 text-right">
+                  {fmtSignedMEur(selected.cumulActualForecast - selected.cumulPlan)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="mt-1 text-[11px] text-tertiary">
+          {t(
+            "shared.hrGooduelleCharts.clickPeriodHint",
+            "Cliquez sur une période pour épingler son détail."
+          )}
+        </p>
+      )}
+    </div>
   );
 }
 

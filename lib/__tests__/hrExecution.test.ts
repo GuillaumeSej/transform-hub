@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyMovementAction,
   classifyMovementExecution,
+  movementProgressByDimension,
   movementStatusByType,
   movementStatusGroups,
   ownerActionSummary,
@@ -169,5 +170,44 @@ describe("ownerActionSummary", () => {
     expect(recrutement.movementsByStatus.realized.map((m) => m.id).sort()).toEqual(["M1", "M2"]);
     expect(recrutement.movementsByStatus.abandoned.map((m) => m.id)).toEqual(["M3"]);
     expect(recrutement.movementsByStatus.overdue).toEqual([]);
+  });
+});
+
+describe("movementProgressByDimension", () => {
+  const today = "2026-06-22";
+  const sample = [
+    movement({ id: "A", status: "Abandonné", department: "IT", plannedDate: "2026-01-01" }),
+    movement({ id: "R", status: "Réalisé", department: "IT", plannedDate: "2026-01-01" }),
+    movement({ id: "O", status: "Planifié", department: "IT", plannedDate: "2026-06-21" }),
+    // Pile 90 jours après `today` → ≤ 90 j ; 91 jours → > 90 j.
+    movement({ id: "S", status: "À faire", department: "IT", plannedDate: "2026-09-20" }),
+    movement({ id: "L", status: "Planifié", department: "IT", plannedDate: "2026-09-21" }),
+    movement({ id: "T", status: "Planifié", department: "HR", plannedDate: "2026-06-22" }),
+  ];
+
+  it("buckets movements into the 5 statuses with the 90-day boundary", () => {
+    const rows = movementProgressByDimension(sample, "department", {}, today);
+    const itRow = rows.find((row) => row.label === "IT")!;
+    expect(itRow.counts).toEqual({ abandoned: 1, realized: 1, overdue: 1, dueSoon: 1, later: 1 });
+    expect(itRow.total).toBe(5);
+    expect(itRow.movementsByStatus.dueSoon.map((m) => m.id)).toEqual(["S"]);
+    expect(itRow.movementsByStatus.later.map((m) => m.id)).toEqual(["L"]);
+    // Date prévue = aujourd'hui → pas en retard, à venir ≤ 90 j.
+    expect(rows.find((row) => row.label === "HR")!.counts.dueSoon).toBe(1);
+  });
+
+  it("sorts groups by total and supports program / country dimensions", () => {
+    const rows = movementProgressByDimension(sample, "department", {}, today);
+    expect(rows.map((row) => row.label)).toEqual(["IT", "HR"]);
+    const byProgram = movementProgressByDimension(
+      [...sample, movement({ id: "X", programId: undefined })],
+      "program",
+      { p1: "Transformation 2026" },
+      today
+    );
+    expect(byProgram.map((row) => row.label)).toEqual(["Transformation 2026", "Non renseigné"]);
+    const byCountry = movementProgressByDimension(sample, "country", {}, today);
+    expect(byCountry).toHaveLength(1);
+    expect(byCountry[0].total).toBe(6);
   });
 });

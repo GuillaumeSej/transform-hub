@@ -15,6 +15,7 @@ import {
   resolveHrActiveCustomView,
   migrateFteWidgetsToFullWidth,
   migrateMovementsMergedWidget,
+  migrateMovementProgressWidget,
   type HrWidgetInstance,
 } from "@/lib/hrDashboardWidgets";
 
@@ -269,6 +270,30 @@ describe("hrDashboardWidgets — movements-merged migration", () => {
     const before = legacyLayout();
     const after = migrateMovementsMergedWidget(before, false);
     expect(after.slice(0, before.length)).toEqual(before);
+  });
+});
+
+describe("hrDashboardWidgets — movement-progress migration", () => {
+  const legacyLayout = (): HrWidgetInstance[] =>
+    buildHrDefaultLayout().filter((w) => w.type !== "movement-progress");
+
+  it("inserts movement-progress right after movements-merged, once", () => {
+    const before = legacyLayout();
+    const after = migrateMovementProgressWidget(before, false);
+    expect(after).toHaveLength(before.length + 1);
+    const mergedIndex = after.findIndex((w) => w.type === "movements-merged");
+    expect(after[mergedIndex + 1].type).toBe("movement-progress");
+    expect(after[mergedIndex + 1].view).toBe("program");
+    expect(migrateMovementProgressWidget(before, true)).toBe(before);
+    expect(migrateMovementProgressWidget(buildHrDefaultLayout(), false)).toEqual(
+      buildHrDefaultLayout()
+    );
+  });
+
+  it("appends at the end when movements-merged was removed", () => {
+    const before = legacyLayout().filter((w) => w.type !== "movements-merged");
+    const after = migrateMovementProgressWidget(before, false);
+    expect(after[after.length - 1].type).toBe("movement-progress");
   });
 });
 

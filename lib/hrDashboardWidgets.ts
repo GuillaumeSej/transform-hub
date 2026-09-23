@@ -54,7 +54,8 @@ export type HrWidgetType =
   | "pse-summary"
   | "department-table"
   | "movements-table"
-  | "movements-merged";
+  | "movements-merged"
+  | "movement-progress";
 
 /** Une configuration de vue construite par l'utilisateur pour un widget RH du builder générique
  *  (voir `lib/hrDashboardPivot.ts` pour `HR_METRIC_REGISTRY`/`HR_DIMENSION_REGISTRY`) — une seule
@@ -222,6 +223,19 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     icon: "FlaskConical",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
+  },
+  {
+    // Nouveau (proposition) — avancement des mouvements (5 statuts d'exécution) par programme /
+    // département / pays, barres horizontales empilées cliquables ("qui a fait quoi"). Positionné
+    // juste après "movements-merged" — voir
+    // `components/shared/charts/MovementProgressByDimensionChart.tsx` et
+    // `migrateMovementProgressWidget` plus bas pour les layouts déjà personnalisés.
+    type: "movement-progress",
+    label: "Avancement des mouvements par dimension (proposition)",
+    icon: "FlaskConical",
+    defaultSpan: "XL",
+    allowedSpans: ["M", "L", "XL"],
+    defaultView: "program",
   },
 ];
 
@@ -473,6 +487,32 @@ export function migrateMovementsMergedWidget(
   ];
 }
 
+/** Clé séparée pour la migration one-shot qui ajoute `movement-progress` aux layouts persistés
+ *  (Sept 2026, proposition). Même convention que `HR_MOVEMENTS_MERGED_MIGRATION_KEY`. */
+const HR_MOVEMENT_PROGRESS_MIGRATION_KEY = "betrack_hr_dashboard_movement_progress_migration_v1";
+
+/** Ajoute une instance de `movement-progress` juste APRÈS `movements-merged` (ou en fin de layout
+ *  si ce dernier a été supprimé), une seule fois — idempotent et non destructif, même logique que
+ *  `migrateMovementsMergedWidget` ci-dessus. */
+export function migrateMovementProgressWidget(
+  layout: HrWidgetInstance[],
+  migrationAlreadyApplied: boolean
+): HrWidgetInstance[] {
+  if (migrationAlreadyApplied) return layout;
+  if (layout.some((w) => w.type === "movement-progress")) return layout;
+  const def = getHrWidgetDef("movement-progress");
+  if (!def) return layout;
+  const instance: HrWidgetInstance = {
+    instanceId: "movement-progress",
+    type: "movement-progress",
+    span: def.defaultSpan,
+    ...(def.defaultView ? { view: def.defaultView } : {}),
+  };
+  const mergedIndex = layout.findIndex((w) => w.type === "movements-merged");
+  if (mergedIndex === -1) return [...layout, instance];
+  return [...layout.slice(0, mergedIndex + 1), instance, ...layout.slice(mergedIndex + 1)];
+}
+
 const isBrowser = () => typeof window !== "undefined";
 
 function isValidHrInstance(value: unknown): value is HrWidgetInstance {
@@ -525,6 +565,7 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
       window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
       window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
       window.localStorage.setItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY, "1");
+      window.localStorage.setItem(HR_MOVEMENT_PROGRESS_MIGRATION_KEY, "1");
       return buildHrDefaultLayout();
     }
     const parsed: unknown = JSON.parse(raw);
@@ -532,6 +573,7 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
       window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
       window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
       window.localStorage.setItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY, "1");
+      window.localStorage.setItem(HR_MOVEMENT_PROGRESS_MIGRATION_KEY, "1");
       return buildHrDefaultLayout();
     }
     const migrationAlreadyApplied = window.localStorage.getItem(HR_GOODUELLE_MIGRATION_KEY) === "1";
@@ -539,19 +581,29 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
       window.localStorage.getItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY) === "1";
     const movementsMergedAlreadyApplied =
       window.localStorage.getItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY) === "1";
+    const movementProgressAlreadyApplied =
+      window.localStorage.getItem(HR_MOVEMENT_PROGRESS_MIGRATION_KEY) === "1";
     const sanitized = (parsed as HrWidgetInstance[]).map(sanitizeHrInstance);
-    // Chaîne les trois migrations : ajout des widgets Gooduelle (si absents), puis passage en
+    // Chaîne les migrations : ajout des widgets Gooduelle (si absents), puis passage en
     // pleine largeur de fte-waterfall/fte-execution-status (si encore à leur ancien span "M"),
     // puis ajout de movements-merged en fin de layout (si absent).
     const gooduelleMigrated = migrateHrGooduelleWidgets(sanitized, migrationAlreadyApplied);
     const fteMigrated = migrateFteWidgetsToFullWidth(gooduelleMigrated, fteFullWidthAlreadyApplied);
-    const migrated = migrateMovementsMergedWidget(fteMigrated, movementsMergedAlreadyApplied);
-    if (!migrationAlreadyApplied || !fteFullWidthAlreadyApplied || !movementsMergedAlreadyApplied) {
+    const mergedMigrated = migrateMovementsMergedWidget(fteMigrated, movementsMergedAlreadyApplied);
+    // … puis ajout de movement-progress juste après movements-merged (si absent).
+    const migrated = migrateMovementProgressWidget(mergedMigrated, movementProgressAlreadyApplied);
+    if (
+      !migrationAlreadyApplied ||
+      !fteFullWidthAlreadyApplied ||
+      !movementsMergedAlreadyApplied ||
+      !movementProgressAlreadyApplied
+    ) {
       window.localStorage.setItem(HR_LAYOUT_KEY, JSON.stringify(migrated));
     }
     window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
     window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
     window.localStorage.setItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY, "1");
+    window.localStorage.setItem(HR_MOVEMENT_PROGRESS_MIGRATION_KEY, "1");
     return migrated;
   } catch {
     return buildHrDefaultLayout();
@@ -565,6 +617,7 @@ export function saveHrDashboardLayout(layout: HrWidgetInstance[]): void {
     window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
     window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
     window.localStorage.setItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY, "1");
+    window.localStorage.setItem(HR_MOVEMENT_PROGRESS_MIGRATION_KEY, "1");
   } catch (err) {
     console.error(
       "[betrack storage] échec d'écriture localStorage pour le layout dashboard RH :",

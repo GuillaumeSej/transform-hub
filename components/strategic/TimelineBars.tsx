@@ -362,8 +362,12 @@ export function TimelineBar({
    *  portée" (ex. le bloc macro d'un chantier dans `ChantierGantt.tsx`, quand le nom/l'avancement
    *  sont déjà affichés ailleurs dans une colonne d'identité dédiée) : remplissage plein, SANS
    *  bordure ni contenu en ligne (icône/label/fin de ligne jamais rendus, même si `label` est
-   *  fourni — requis par le type mais alors utilisé uniquement pour `aria-label`/l'infobulle). */
-  variant?: "outline" | "solid" | "bracket";
+   *  fourni — requis par le type mais alors utilisé uniquement pour `aria-label`/l'infobulle).
+   *  Refonte visuelle Gantt (retour PO — distinguer chantier/projet) : `"soft"` — barre de PROJET
+   *  sous une ligne d'en-tête de chantier : teinte claire unique de la couleur d'axe + filet fin de
+   *  la même teinte, texte sombre (`text-primary`). Pas de surcouche d'avancement (une seule
+   *  couleur, jamais d'effet "double barre") — l'avancement vit dans l'infobulle/le badge jalon. */
+  variant?: "outline" | "solid" | "bracket" | "soft";
   /** 0-100 — surcouche d'avancement à gauche. Pertinent pour `variant="outline"` (surcouche sur fond
    *  translucide) ET, round 19, pour `variant="solid"` (remplissage à deux tons — voir le
    *  doc-comment de `TimelineBar` ci-dessus). Omis pour un `"solid"` : remplissage plat inchangé.
@@ -386,6 +390,7 @@ export function TimelineBar({
   // la barre) — c'est un simple repère de portée, le nom/l'avancement vivent déjà dans la colonne
   // d'identité de l'appelant.
   const isBracket = variant === "bracket";
+  const isSoft = variant === "soft";
   const inline = !isBracket && width >= inlineMinWidthPct;
   // Round 25 : piste neutre + remplissage plein — voir doc-comment de `TimelineBar` ci-dessus. Gated
   // sur les DEUX conditions : un `variant="solid"` sans `progressPct` (actions de
@@ -412,7 +417,7 @@ export function TimelineBar({
               }
             : undefined
         }
-        className={`relative w-full overflow-hidden ${roundedClassName} ${variant === "outline" ? "border" : ""} ${
+        className={`relative w-full overflow-hidden ${roundedClassName} ${variant === "outline" || isSoft ? "border" : ""} ${
           solidWithTrack ? "bg-neutral-100" : ""
         } ${
           onClick
@@ -426,10 +431,22 @@ export function TimelineBar({
             : variant === "solid"
               ? withAlpha(color, 0.9)
               : isBracket
-                ? withAlpha(color, 0.85)
-                : withAlpha(color, 0.16),
-          borderColor: variant === "outline" ? withAlpha(color, 0.65) : undefined,
-          color: variant === "solid" ? readableTextColor(color) : undefined,
+                ? color
+                : isSoft
+                  ? withAlpha(color, 0.2)
+                  : withAlpha(color, 0.16),
+          borderColor:
+            variant === "outline"
+              ? withAlpha(color, 0.65)
+              : isSoft
+                ? withAlpha(color, 0.45)
+                : undefined,
+          color:
+            variant === "solid"
+              ? readableTextColor(color)
+              : isSoft
+                ? "var(--text-primary)"
+                : undefined,
         }}
       >
         {variant === "outline" && progressPct !== undefined && (

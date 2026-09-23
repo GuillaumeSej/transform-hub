@@ -66,6 +66,11 @@ import { Popover } from "@/components/shared/Popover";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
 import { IndicatorReadingBadge } from "@/components/strategic/IndicatorReadingBadge";
 import {
+  INDICATOR_STATUS_TONE,
+  IndicatorStatusBadge,
+  IndicatorStatusLegend,
+} from "@/components/strategic/IndicatorStatusBadge";
+import {
   BusinessKpiCards,
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
@@ -735,10 +740,22 @@ export function StrategicDashboardView() {
             puces nue au-dessus d'un vrai bloc structuré. DOM inchangé (indicateurs puis budget),
             logique de clic/données intacte. */}
         <div className="mt-2.5 flex flex-col gap-1.5 border-t border-border pt-2 text-[10.5px]">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-            {t("strategicAxes.indicatorsCount")}
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+              {t("strategicAxes.indicatorsCount")}
+            </span>
+            {/* Légende des statuts (refonte visuelle indicateurs) : le code couleur des puces
+                ci-dessous se lit d'un coup d'œil, sans survol. */}
+            {axisIndicators.length > 0 && (
+              <IndicatorStatusLegend
+                labels={{
+                  on_track: t("indicatorStatus.onTrack"),
+                  at_risk: t("indicatorStatus.atRisk"),
+                }}
+              />
+            )}
+          </div>
+          <div className="flex flex-wrap items-stretch gap-1.5">
             {axisIndicators.length === 0 ? (
               <span className="text-[11px] italic text-tertiary">
                 {t("strategicAxes.noIndicatorsShort")}
@@ -746,12 +763,23 @@ export function StrategicDashboardView() {
             ) : (
               <>
                 {shownIndicators.map((indicator) => {
-                  const atRisk = resolveIndicatorStatus(indicator) === "at_risk";
+                  const status = resolveIndicatorStatus(indicator);
+                  const atRisk = status === "at_risk";
+                  const statusLabel = t(
+                    atRisk ? "indicatorStatus.atRisk" : "indicatorStatus.onTrack"
+                  );
                   const clickable = isIndicatorPillClickable(indicator);
-                  // Round 30 : `undefined` (mesure ou cible manquante) → repli EXACT sur l'ancienne
-                  // puce "#N · nom" à une seule ligne, `IndicatorReadingBadge` ne s'affiche que
-                  // quand les deux valeurs sont connues (aucune valeur fabriquée).
+                  // Round 30 : `undefined` (mesure ou cible manquante) → pas de ligne de lecture,
+                  // `IndicatorReadingBadge` ne s'affiche que quand les deux valeurs sont connues
+                  // (aucune valeur fabriquée).
                   const reading = getIndicatorReading(indicator);
+                  // Refonte visuelle (retour PO — « la case est trop grosse, les couleurs ne sont
+                  // pas jolies, on ne sait pas si c'est à risque ou sur la trajectoire ») : la puce
+                  // n'est plus un gros bloc entièrement teinté selon le statut, mais une carte
+                  // neutre compacte (fond blanc, filet fin) dont le statut est porté par une
+                  // pastille explicite "Sur la trajectoire" / "À risque" (`IndicatorStatusBadge`
+                  // taille "xs", palette partagée `INDICATOR_STATUS_TONE`) + un liséré gauche de
+                  // la même teinte — lisible sans survol, infobulle en complément.
                   return (
                     <button
                       key={indicator.id}
@@ -759,27 +787,39 @@ export function StrategicDashboardView() {
                       disabled={!clickable}
                       title={
                         atRisk
-                          ? `${indicator.name} — ${t("indicatorStatus.atRisk")}`
-                          : indicator.name
+                          ? `${indicator.name} — ${statusLabel} : ${t("strategicAxes.atRiskTooltip")}`
+                          : `${indicator.name} — ${statusLabel}`
                       }
                       onClick={
                         clickable ? () => router.push(`/kpi?indicator=${indicator.id}`) : undefined
                       }
-                      className={`flex min-h-[20px] max-w-[280px] shrink-0 flex-col items-start justify-center gap-0.5 rounded-lg px-2.5 py-1.5 text-left text-[10.5px] font-bold leading-tight transition ${
-                        clickable ? "hover:brightness-95" : "cursor-default"
-                      } ${
-                        atRisk
-                          ? "bg-rag-amber-light text-rag-amber"
-                          : "bg-neutral-100 text-secondary"
+                      className={`flex max-w-[300px] shrink-0 flex-col items-start gap-1 rounded-md border border-border border-l-[3px] bg-white px-2 py-1.5 text-left leading-tight transition ${
+                        clickable ? "hover:border-neutral-300 hover:shadow-sm" : "cursor-default"
                       }`}
+                      style={{
+                        borderLeftColor: INDICATOR_STATUS_TONE[status].hex,
+                      }}
                     >
-                      <span className="truncate">{`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}</span>
+                      <span className="flex w-full min-w-0 items-center gap-1.5">
+                        <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-primary">
+                          <span className="font-bold text-tertiary">
+                            #{globalIndicatorNumbers.get(indicator.id) ?? "?"}
+                          </span>{" "}
+                          {indicator.name}
+                        </span>
+                        <IndicatorStatusBadge
+                          status={status}
+                          label={statusLabel}
+                          size="xs"
+                          title={atRisk ? t("strategicAxes.atRiskTooltip") : statusLabel}
+                        />
+                      </span>
                       {reading && (
                         <IndicatorReadingBadge
                           current={reading.current}
                           target={reading.target}
                           unit={reading.unit}
-                          status={resolveIndicatorStatus(indicator)}
+                          status={status}
                           currentLabel={t("strategicChantierDetail.successKpis.current", "Actuel")}
                           targetLabel={t("strategicChantierDetail.successKpis.target", "Cible")}
                         />
@@ -789,7 +829,7 @@ export function StrategicDashboardView() {
                 })}
                 {hiddenIndicatorsCount > 0 && (
                   <span
-                    className="flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
+                    className="flex h-5 shrink-0 items-center self-center rounded-full bg-neutral-100 px-1.5 text-[10px] font-semibold text-secondary"
                     title={`+${hiddenIndicatorsCount} ${t("strategicAxes.indicatorsCount")}`}
                   >
                     +{hiddenIndicatorsCount}
