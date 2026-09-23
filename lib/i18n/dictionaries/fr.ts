@@ -1623,6 +1623,9 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.preview.hint":
     "Les actions ci-dessous sont pré-remplies pour tout projet. Ajoutez des actions spécifiques à ce projet pour chaque jalon si besoin — vous pourrez aussi les ajuster plus tard.",
   "strategicChantierDetail.milestones.preview.itemsCount": "{n} action(s)",
+  "strategicChantierDetail.milestones.preview.excludeItem": "Exclure cette action pour ce projet",
+  "strategicChantierDetail.milestones.preview.excludedTitle": "Actions exclues pour ce projet",
+  "strategicChantierDetail.milestones.preview.restoreItem": "Réintégrer",
 
   "strategicChantierDetail.milestones.item.E0_A1": "Dépendances / prérequis satisfaits",
   "strategicChantierDetail.milestones.item.E0_A2": "Clients / commanditaire identifiés",

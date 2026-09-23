@@ -1383,6 +1383,50 @@ describe("mergeMilestoneChecklistItems", () => {
     const merged = mergeMilestoneChecklistItems("E2", [], {});
     expect(merged.map((i) => i.itemId)).toEqual(["E2-B1", "E2-B2", "E2-B3"]);
   });
+
+  // ─── Exclusion d'items fixes par projet (round "exclusion jalons création") ────────────────────
+
+  it("drops an excluded fixed item from the merged list entirely", () => {
+    const merged = mergeMilestoneChecklistItems("E2", [], {}, [], ["E2-B2"]);
+    expect(merged.map((i) => i.itemId)).toEqual(["E2-B1", "E2-B3"]);
+  });
+
+  it("is a no-op when the excluded itemId does not exist on this milestone", () => {
+    const merged = mergeMilestoneChecklistItems("E2", [], {}, [], ["NOT-A-REAL-ITEM"]);
+    expect(merged.map((i) => i.itemId)).toEqual(["E2-B1", "E2-B2", "E2-B3"]);
+  });
+
+  it("defaults to no exclusion when the 5th argument is omitted (backward compatible)", () => {
+    const merged = mergeMilestoneChecklistItems("E2", [], {}, []);
+    expect(merged.map((i) => i.itemId)).toEqual(["E2-B1", "E2-B2", "E2-B3"]);
+  });
+
+  it("combines exclusion of a fixed item with custom actions appended normally", () => {
+    const merged = mergeMilestoneChecklistItems(
+      "E2",
+      [{ itemId: "CUSTOM-1", progressPct: 40 }],
+      {},
+      [{ id: "CUSTOM-1", label: "Migrer la base clients" }],
+      ["E2-B2"]
+    );
+    expect(merged.map((i) => i.itemId)).toEqual(["E2-B1", "E2-B3", "CUSTOM-1"]);
+  });
+
+  it("never lets an excluded item block canPassMilestone, since it is simply absent from the merged list", () => {
+    // E2-B1/B3 répondus à 100, E2-B2 exclu (jamais répondu) — sans l'exclusion ça bloquerait
+    // (`canPassMilestone` exige 100 sur CHAQUE item, voir son propre describe ci-dessus).
+    const merged = mergeMilestoneChecklistItems(
+      "E2",
+      [
+        { itemId: "E2-B1", progressPct: 100 },
+        { itemId: "E2-B3", progressPct: 100 },
+      ],
+      {},
+      [],
+      ["E2-B2"]
+    );
+    expect(canPassMilestone("E2", merged)).toEqual({ canPass: true, reasons: [] });
+  });
 });
 
 describe("isStrategicLeadOf", () => {
@@ -1493,6 +1537,31 @@ describe("requestMilestoneApproval", () => {
             { itemId: "E2-B2", progressPct: 100 },
             { itemId: "E2-B3", progressPct: 100 },
             { itemId: "CUSTOM-1", progressPct: 100 },
+          ],
+        },
+      },
+    });
+    expect(() =>
+      requestMilestoneApproval(
+        action,
+        { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
+        [],
+        [action]
+      )
+    ).not.toThrow();
+  });
+
+  it("never blocks on an excluded fixed item, even though it was never answered", () => {
+    const action = actionReadyForE2({
+      excludedMilestoneItems: { E2: ["E2-B2"] },
+      milestones: {
+        currentMilestone: "E2",
+        passedMilestones: ["E0", "E1"],
+        checklists: {
+          // E2-B2 (exclu pour ce projet) n'a jamais été répondu — sans l'exclusion ça bloquerait.
+          E2: [
+            { itemId: "E2-B1", progressPct: 100 },
+            { itemId: "E2-B3", progressPct: 100 },
           ],
         },
       },

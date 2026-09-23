@@ -1196,6 +1196,30 @@ export type ChantierAction = {
    *  coup. Absent = aucune personnalisation, comportement historique inchangé (seuls les items
    *  fixes de `MILESTONE_CHECKLISTS` comptent). */
   customMilestoneActions?: Partial<Record<MilestoneId, MilestoneCustomAction[]>>;
+  /** Items FIXES du catalogue (`MILESTONE_CHECKLISTS`, lib/milestoneChecklist.ts) dont CE projet
+   *  s'exempte, PAR JALON (demande PO explicite : « il faut pouvoir retirer des actions déjà
+   *  présentes dans les jalons J, on ne peut aujourd'hui qu'en ajouter ») — pendant EXCLUSIF de
+   *  `customMilestoneActions` ci-dessus : celui-là AJOUTE des actions propres au projet, celui-ci
+   *  RETIRE des actions du référentiel commun, uniquement pour ce projet précis. Le catalogue
+   *  GLOBAL `MILESTONE_CHECKLISTS` n'est jamais modifié : un autre projet continue de voir l'item
+   *  exclu ici. Chaque valeur est un `itemId` de `MILESTONE_CHECKLISTS[jalon][i].itemId` (ex.
+   *  "E1-B2") — jamais un id d'action personnalisée (`MilestoneCustomAction.id`), qui n'a pas sa
+   *  place ici (une action personnalisée se retire simplement en la supprimant, voir
+   *  `onRemoveCustomAction`).
+   *
+   *  Consommé par `lib/axisLogic.ts::mergeMilestoneChecklistItems` (filtre les items fixes exclus
+   *  AVANT de fusionner) — donc aussi, en aval, par `canPassMilestone`/`requestMilestoneApproval`
+   *  (un item exclu n'existe simplement plus dans la liste fusionnée, il ne peut donc jamais
+   *  bloquer un passage de jalon) et par `MilestoneChecklistPanel.tsx` (fiche du projet réel : un
+   *  item exclu n'est JAMAIS affiché, pas même en lecture seule).
+   *
+   *  Typiquement renseigné à la CRÉATION du projet (aperçu J0→J4, voir `MilestonePreviewEditor.tsx`
+   *  et son couple `excludedValue`/`onExcludedChange`) — portée volontairement limitée à la
+   *  création : aucune UI n'est prévue pour réintégrer après coup un item exclu sur un projet déjà
+   *  créé (rien ne l'EMPÊCHE techniquement, ce champ reste un simple patch comme un autre, mais le
+   *  besoin exprimé par le PO s'arrête à la création). Absent = aucune exclusion, comportement
+   *  historique inchangé (tous les items fixes du référentiel s'appliquent). */
+  excludedMilestoneItems?: Partial<Record<MilestoneId, string[]>>;
   /** Demande de validation de jalon en cours — voir `ChantierMilestoneApproval` ci-dessus. Non
    *  défini = pas de demande en cours. Le SEUL chemin légitime pour faire progresser
    *  `milestones.currentMilestone`/`passedMilestones` une fois `canPassMilestone` satisfait (voir

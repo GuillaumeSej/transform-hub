@@ -1520,6 +1520,11 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.preview.hint":
     "Die folgenden Aktionen sind für jedes Projekt vorausgefüllt. Fügen Sie bei Bedarf projektspezifische Aktionen zu jedem Meilenstein hinzu — Sie können sie auch später anpassen.",
   "strategicChantierDetail.milestones.preview.itemsCount": "{n} Aktion(en)",
+  "strategicChantierDetail.milestones.preview.excludeItem":
+    "Diese Aktion für dieses Projekt ausschließen",
+  "strategicChantierDetail.milestones.preview.excludedTitle":
+    "Für dieses Projekt ausgeschlossene Aktionen",
+  "strategicChantierDetail.milestones.preview.restoreItem": "Wiederherstellen",
 
   "strategicChantierDetail.milestones.item.E0_A1": "Abhängigkeiten / Voraussetzungen erfüllt",
   "strategicChantierDetail.milestones.item.E0_A2": "Kunden / Auftraggeber identifiziert",

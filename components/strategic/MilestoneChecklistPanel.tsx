@@ -117,6 +117,7 @@ export function MilestoneChecklistPanel({
   items,
   autoFlags,
   customActions,
+  excludedItemIds,
   users,
   onChange,
   onAddCustomAction,
@@ -143,6 +144,14 @@ export function MilestoneChecklistPanel({
    *  fixe manuel (barre de progression 0-100), mais avec un libellé LIBRE (`custom.label`, jamais
    *  une clé i18n) et un bouton de suppression. */
   customActions: MilestoneCustomAction[];
+  /** `itemId` des items FIXES exclus de CE projet pour ce jalon (voir
+   *  `ChantierAction.excludedMilestoneItems`, types/index.ts) — typiquement
+   *  `action.excludedMilestoneItems?.[milestoneId] ?? []`. Ces items sont retirés à la fois du
+   *  rendu ci-dessous (jamais affichés, même en lecture seule) et de la fusion passée à
+   *  `canPassMilestone` (un item exclu ne peut jamais bloquer un passage de jalon, il n'existe
+   *  simplement plus pour ce projet). Exclusion posée à la CRÉATION du projet uniquement (voir
+   *  `MilestonePreviewEditor.tsx`) : ce panneau ne propose aucune UI pour la modifier après coup. */
+  excludedItemIds: string[];
   users: AuthUser[];
   onChange: (nextItems: MilestoneChecklistItem[]) => void;
   /** Ajoute une action personnalisée à CE jalon (libellé libre) — n'est rendu appelable (voir
@@ -201,7 +210,13 @@ export function MilestoneChecklistPanel({
   // personnalisés). Extrait dans `lib/axisLogic.ts` (round "jalon validation gate") :
   // `requestMilestoneApproval` doit appliquer EXACTEMENT la même fusion pour que le bouton
   // ci-dessous et le verrou serveur ne divergent jamais.
-  const mergedItems = mergeMilestoneChecklistItems(milestoneId, items, autoFlags, customActions);
+  const mergedItems = mergeMilestoneChecklistItems(
+    milestoneId,
+    items,
+    autoFlags,
+    customActions,
+    excludedItemIds
+  );
 
   const { canPass, reasons } = canPassMilestone(milestoneId, mergedItems);
 
@@ -335,6 +350,10 @@ export function MilestoneChecklistPanel({
     <div className="space-y-5">
       <div className="space-y-3">
         {defs.map((def) => {
+          // Item fixe exclu par ce projet à sa création (`excludedItemIds`, voir le doc-comment du
+          // prop) : jamais rendu, même en lecture seule — pour ce projet, c'est comme s'il
+          // n'existait pas dans le référentiel.
+          if (excludedItemIds.includes(def.itemId)) return null;
           if (def.auto) {
             const pct = autoFlags[def.itemId];
             const bucket = progressBucket(pct);
