@@ -3,6 +3,8 @@
 import { ArrowUpRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/shared/Modal";
+import { MovementNetBalanceSummary } from "@/components/shared/MovementNetBalanceSummary";
+import { movementNetBalance } from "@/lib/hrMovementBalance";
 import { etpMovementDeepLink } from "@/lib/hrMovementLink";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { WorkforceMovement } from "@/types";
@@ -49,6 +51,7 @@ export function MovementDrilldownModal({
         </p>
       ) : (
         <div className="flex flex-col gap-3">
+          <MovementNetBalanceSummary balance={movementNetBalance(movements)} />
           {movements.length >= 2 && (
             <button
               type="button"

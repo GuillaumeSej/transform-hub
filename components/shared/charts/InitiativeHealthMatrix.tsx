@@ -3,6 +3,7 @@
 import { toggleInSelection } from "@/lib/filterUtils";
 import { useState } from "react";
 import type { LeverHealthGroup, LeverHealthStatus } from "@/lib/leverHealth";
+import { groupBlockWidth, useAdaptiveGroupColumns } from "@/lib/hooks/useAdaptiveGroupColumns";
 
 const HEALTH_STYLE: Record<LeverHealthStatus, string> = {
   onTrack: "bg-[#3f9b62]",
@@ -27,6 +28,12 @@ const HEALTH_ORDER: LeverHealthStatus[] = ["critical", "watch", "onTrack", "canc
  * volontairement exclu (statut résiduel, pas un niveau de santé qu'on cherche à filtrer). */
 const FILTERABLE_HEALTH: LeverHealthStatus[] = ["critical", "watch", "onTrack"];
 
+/** Géométrie des rectangles de leviers (largeur fixe). Le nombre de colonnes par bloc s'adapte
+ * à la largeur disponible / au nombre de groupes (cf. `computeGroupColumns`) : peu de groupes →
+ * blocs élargis sur plusieurs colonnes au lieu d'une longue pile verticale ; beaucoup de
+ * groupes → une colonne par bloc (défilement horizontal en dernier recours). */
+const GRID = { cellWidth: 186, cellGap: 4, groupGap: 12, groupChrome: 14, minCols: 1, maxCols: 4 };
+
 export function InitiativeHealthMatrix({
   groups,
   labels,
@@ -39,6 +46,10 @@ export function InitiativeHealthMatrix({
   // Filtre de statut géré localement au composant (chips cliquables, même pattern que les
   // compteurs de sévérité du widget Alertes) : tableau vide = aucun filtre actif (multi-sélection).
   const [statusFilter, setStatusFilter] = useState<LeverHealthStatus[]>([]);
+  // Colonnes calculées sur les groupes non filtrés : la disposition reste stable quand on
+  // bascule les puces de filtre.
+  const maxCells = groups.reduce((max, group) => Math.max(max, group.cells.length), 0);
+  const { ref, cols } = useAdaptiveGroupColumns({ ...GRID, groupCount: groups.length, maxCells });
 
   if (groups.length === 0) {
     return <p className="py-10 text-center text-sm text-tertiary">{labels.empty}</p>;
@@ -79,14 +90,20 @@ export function InitiativeHealthMatrix({
           );
         })}
       </div>
-      <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-max items-start gap-3">
-          {filteredGroups.map((group) => {
+      <div ref={ref} className="overflow-x-auto pb-1">
+        <div className="flex min-w-max items-start justify-center gap-3">
+          {filteredGroups.map((group, index) => {
             const cells = [...group.cells].sort(
               (a, b) => HEALTH_ORDER.indexOf(a.health) - HEALTH_ORDER.indexOf(b.health)
             );
+            // Largeur du bloc = ses propres leviers (non filtrés, pour rester stable), plafonnée à `cols`.
+            const groupCols = Math.max(GRID.minCols, Math.min(cols, groups[index].cells.length));
             return (
-              <div key={group.key} className="w-[200px] shrink-0">
+              <div
+                key={group.key}
+                className="shrink-0"
+                style={{ width: groupBlockWidth(groupCols, GRID) }}
+              >
                 <div
                   className="mb-1.5 line-clamp-2 text-center text-[10.5px] font-semibold text-secondary"
                   title={group.label}
@@ -96,7 +113,10 @@ export function InitiativeHealthMatrix({
                 <div className="text-center text-[10px] text-tertiary">
                   {group.cells.filter((cell) => cell.health !== "cancelled").length}
                 </div>
-                <div className="mt-1.5 flex flex-col gap-1 rounded-sm border border-sky-100 bg-sky-50 p-1.5">
+                <div
+                  className="mt-1.5 grid gap-1 rounded-sm border border-sky-100 bg-sky-50 p-1.5"
+                  style={{ gridTemplateColumns: `repeat(${groupCols}, minmax(0, 1fr))` }}
+                >
                   {cells.map(({ lever, health, computedRisk, activeAlertCount }) => (
                     <button
                       key={lever.id}

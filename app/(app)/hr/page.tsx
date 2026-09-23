@@ -50,6 +50,7 @@ import {
   movementProgressStatusLabel,
 } from "@/components/shared/charts/MovementProgressByDimensionChart";
 import { MovementDetailDrilldownModal } from "@/components/shared/MovementDetailDrilldownModal";
+import { MovementAlertsSummaryModal } from "@/components/shared/MovementAlertsSummaryModal";
 import { ExecutionStatusChart } from "@/components/shared/charts/HrExecutionCharts";
 import { MovementStatusMatrix } from "@/components/shared/charts/MovementStatusMatrix";
 import { ForcedDepartureStatusChart } from "@/components/shared/charts/ForcedDepartureStatusChart";
@@ -189,6 +190,9 @@ export default function HrDashboardPage() {
     title: string;
     movements: WorkforceMovement[];
   } | null>(null);
+  // Synthèse des alertes mouvements (components/shared/MovementAlertsSummaryModal.tsx) — ouverte
+  // AVANT toute navigation depuis le bandeau d'alertes. `null` = fermée ; `kind: null` = toutes.
+  const [alertsModal, setAlertsModal] = useState<{ kind: MovementAlertKind | null } | null>(null);
 
   // ─── Sélecteur de programme (source unique = collection Firestore multi-programmes) ─────
   // Le dashboard RH s'abonne à la même collection `programs` que le dashboard exécutif (voir
@@ -1105,7 +1109,7 @@ export default function HrDashboardPage() {
               <p className="mt-2 text-[11px] text-tertiary">
                 {t(
                   "hr.widget.movementRhythmHint",
-                  "Barres = flux de mouvements · point/courbe = net ETP cible, transferts neutralisés · axes centrés sur zéro"
+                  "Net ETP cible : transferts neutralisés (effectif total inchangé) · les deux axes sont centrés sur zéro"
                 )}
               </p>
             </CardBody>
@@ -1729,14 +1733,19 @@ export default function HrDashboardPage() {
       {alerts.length > 0 && (
         <div className="mb-4 rounded-lg border border-rag-amber-light bg-rag-amber-light/30 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-primary">
+            <button
+              type="button"
+              onClick={() => setAlertsModal({ kind: null })}
+              className="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
+            >
               <TriangleAlert size={14} className="text-rag-amber" />{" "}
               {t("hr.alertsCount", "{n} alerte(s) mouvement").replace("{n}", String(alerts.length))}
-            </span>
+            </button>
             {alertCounts.map(({ kind, count }) => (
               <button
                 key={kind}
-                onClick={() => goToEtp({ f_alert: ALERT_LABELS[kind] })}
+                type="button"
+                onClick={() => setAlertsModal({ kind })}
                 className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition hover:border-black ${
                   kind === "overdue" || kind === "leverMismatch"
                     ? "border-rag-red-light bg-rag-red-light/60 text-rag-red"
@@ -1756,12 +1765,13 @@ export default function HrDashboardPage() {
             ))}
             {alerts.length > 3 && (
               <button
-                onClick={() => router.push("/hr/etp")}
+                type="button"
+                onClick={() => setAlertsModal({ kind: null })}
                 className="text-xs font-medium text-bp-coral hover:underline"
               >
-                {t("hr.seeMoreAlerts", "Voir les {n} autres dans la Base ETP →").replace(
+                {t("hr.alertsModal.seeAll", "Voir la synthèse des {n} alertes →").replace(
                   "{n}",
-                  String(alerts.length - 3)
+                  String(alerts.length)
                 )}
               </button>
             )}
@@ -2217,6 +2227,17 @@ export default function HrDashboardPage() {
         onOpenChange={(open) => !open && setProgressDrilldown(null)}
         title={progressDrilldown?.title ?? ""}
         movements={progressDrilldown?.movements ?? []}
+        programLabels={Object.fromEntries(programs.map((program) => [program.id, program.name]))}
+      />
+
+      {/* Synthèse des alertes mouvements — voir `alertsModal` ci-dessus. */}
+      <MovementAlertsSummaryModal
+        open={alertsModal !== null}
+        onOpenChange={(open) => !open && setAlertsModal(null)}
+        alerts={alerts}
+        initialKind={alertsModal?.kind ?? null}
+        kindLabels={ALERT_LABELS}
+        levers={data.levers}
         programLabels={Object.fromEntries(programs.map((program) => [program.id, program.name]))}
       />
     </div>

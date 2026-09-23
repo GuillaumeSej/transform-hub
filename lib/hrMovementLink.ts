@@ -1,3 +1,5 @@
+import { serializeFilterValues } from "@/lib/filterUtils";
+
 /**
  * Mécanisme UNIQUE "voir ce(s) mouvement(s) précis dans la Base ETP" — réutilisé par tous les
  * points d'entrée cliquables du Dashboard RH (matrice de statut des mouvements, drill-down de la
@@ -18,5 +20,20 @@ export function etpMovementDeepLink(movementIds: string[]): string {
   const ids = Array.from(new Set(movementIds.filter(Boolean)));
   const params = new URLSearchParams({ tab: "mouvements" });
   if (ids.length > 0) params.set("movementIds", ids.join(","));
+  return `/hr/etp?${params.toString()}`;
+}
+
+/**
+ * Lien vers l'onglet "Suivi des mouvements" de la Base ETP filtré sur une ou plusieurs catégories
+ * d'alerte (filtre `f_alert` de la barre de filtres "mouvements"). Le paramètre est préfixé par le
+ * namespace `mov_` et sérialisé comme le fait `useMultiFilterBarState` (valeurs encodées, séparées
+ * par des virgules) — `labels` sont les libellés affichés du filtre (`hr.alert.*`), car c'est la
+ * valeur que `FilterDef.getValue` compare. Contrairement à `etpMovementDeepLink`, le filtre reste
+ * visible et modifiable dans la barre de filtres.
+ */
+export function etpAlertFilterLink(labels: string[]): string {
+  const values = Array.from(new Set(labels.filter(Boolean)));
+  const params = new URLSearchParams({ tab: "mouvements" });
+  if (values.length > 0) params.set("mov_f_alert", serializeFilterValues(values));
   return `/hr/etp?${params.toString()}`;
 }

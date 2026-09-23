@@ -33,6 +33,11 @@ import { movementRhythmAxisDomains } from "@/lib/hrTimeSeries";
 import type { FteBridgeSummary } from "@/lib/hrEngine";
 import type { MovementType, WorkforceMovement } from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { formatSignedFr, movementNetBalance } from "@/lib/hrMovementBalance";
+import {
+  MovementNetBalanceSummary,
+  netBalanceColor,
+} from "@/components/shared/MovementNetBalanceSummary";
 
 /** Palette 5-types alignée sur les tokens dataviz BeTrack / BearingPoint : famille rouge,
  *  taupes et violet de secours. Vert et orange sont volontairement exclus par la charte. */
@@ -519,8 +524,15 @@ export function NetEconomyChart({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
-// 4. Rythme des mouvements — 5 stackId (+/−) + point net + courbe cumul
+// 4. Rythme des mouvements — 5 stackId (+/−) + courbe cumul net (bilan net en infobulle)
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+type LastPointLabelProps = {
+  index?: number;
+  x?: number | string;
+  y?: number | string;
+  value?: unknown;
+};
 
 export function MovementRhythmChart({
   buckets,
@@ -561,118 +573,176 @@ export function MovementRhythmChart({
     if (row?.label && onBarClick) onBarClick(row.label, row.movements ?? []);
   };
 
+  const etp = t("etp.column.fte", "ETP");
+  const typeSeries: { key: MovementType; label: string }[] = [
+    { key: "Recrutement", label: t("chart.movementType.recruitments", "Recrutements") },
+    { key: "Attrition", label: t("chart.movementType.attrition", "Attrition") },
+    { key: "Départ forcé", label: t("chart.movementType.forcedDepartures", "Départs forcés") },
+    {
+      key: "Transfert entrant",
+      label: t("chart.movementType.transfersIn", "Transferts entrants"),
+    },
+    {
+      key: "Transfert sortant",
+      label: t("chart.movementType.transfersOut", "Transferts sortants"),
+    },
+  ];
+  const labelCumulLine = t(
+    "shared.hrGooduelleCharts.cumulNetCurve",
+    "Cumul net ETP (courbe, échelle de droite)"
+  );
+  const lastIndex = data.length - 1;
+
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart
-        data={data}
-        stackOffset="sign"
-        margin={{ top: 8, right: 8, left: 0, bottom: 20 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-        <XAxis
-          dataKey="label"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          angle={-25}
-          textAnchor="end"
-          height={40}
-        />
-        <YAxis
-          yAxisId="period"
-          domain={axisDomains.period}
-          allowDataOverflow
-          allowDecimals={false}
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={fmtEtp}
-        />
-        <YAxis
-          yAxisId="cumul"
-          domain={axisDomains.cumulative}
-          allowDataOverflow
-          orientation="right"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={fmtEtp}
-        />
-        <Tooltip
-          formatter={(value, name) => [
-            `${fmtEtp(Number(value))} ${t("etp.column.fte", "ETP")}`,
-            String(name),
-          ]}
-          labelStyle={{ fontSize: 11, fontWeight: 600 }}
-        />
-        <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
-        <ReferenceLine yAxisId="period" y={0} stroke="rgba(0,0,0,0.35)" />
-        <Bar
-          dataKey="Recrutement"
-          yAxisId="period"
-          stackId="mouv"
-          fill={TYPE_COLORS["Recrutement"]}
-          name={t("chart.movementType.recruitments", "Recrutements")}
-          onClick={handleBarClick}
-          cursor={onBarClick ? "pointer" : undefined}
-        />
-        <Bar
-          yAxisId="period"
-          dataKey="Attrition"
-          stackId="mouv"
-          fill={TYPE_COLORS["Attrition"]}
-          name={t("chart.movementType.attrition", "Attrition")}
-          onClick={handleBarClick}
-          cursor={onBarClick ? "pointer" : undefined}
-        />
-        <Bar
-          dataKey="Départ forcé"
-          yAxisId="period"
-          stackId="mouv"
-          fill={TYPE_COLORS["Départ forcé"]}
-          name={t("chart.movementType.forcedDepartures", "Départs forcés")}
-          onClick={handleBarClick}
-          cursor={onBarClick ? "pointer" : undefined}
-        />
-        <Bar
-          dataKey="Transfert entrant"
-          yAxisId="period"
-          stackId="mouv"
-          fill={TYPE_COLORS["Transfert entrant"]}
-          name={t("chart.movementType.transfersIn", "Transferts entrants")}
-          onClick={handleBarClick}
-          cursor={onBarClick ? "pointer" : undefined}
-        />
-        <Bar
-          dataKey="Transfert sortant"
-          yAxisId="period"
-          stackId="mouv"
-          fill={TYPE_COLORS["Transfert sortant"]}
-          name={t("chart.movementType.transfersOut", "Transferts sortants")}
-          onClick={handleBarClick}
-          cursor={onBarClick ? "pointer" : undefined}
-        />
-        <Line
-          yAxisId="period"
-          type="monotone"
-          dataKey="net"
-          name={t("shared.hrGooduelleCharts.netTargetFte", "Net ETP cible (hors transferts)")}
-          stroke="transparent"
-          strokeWidth={0}
-          dot={{ r: 6, fill: "white", stroke: "#320300", strokeWidth: 2.5 }}
-          activeDot={{ r: 7, fill: "white", stroke: "#320300", strokeWidth: 3 }}
-        />
-        <Line
-          yAxisId="cumul"
-          type="monotone"
-          dataKey="cumulNet"
-          name={t("shared.hrGooduelleCharts.cumulNet", "Cumul net")}
-          stroke={COLOR_INK}
-          strokeWidth={2}
-          dot={{ r: 3, fill: COLOR_INK }}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div>
+      {/* Libellés d'axes explicites (double échelle, zéros alignés). */}
+      <div className="flex justify-between px-1 text-[10px] font-medium text-tertiary">
+        <span>
+          ← {t("shared.hrGooduelleCharts.axisMovementsPerPeriod", "Mouvements par période")} ({etp})
+        </span>
+        <span>
+          {t("shared.hrGooduelleCharts.axisCumulNetFte", "Cumul net")} ({etp}) →
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart
+          data={data}
+          stackOffset="sign"
+          margin={{ top: 8, right: 8, left: 0, bottom: 20 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            angle={-25}
+            textAnchor="end"
+            height={40}
+          />
+          <YAxis
+            yAxisId="period"
+            domain={axisDomains.period}
+            allowDataOverflow
+            allowDecimals={false}
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={fmtEtp}
+          />
+          <YAxis
+            yAxisId="cumul"
+            domain={axisDomains.cumulative}
+            allowDataOverflow
+            orientation="right"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={fmtEtp}
+          />
+          <Tooltip
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload as (typeof data)[number] | undefined;
+              if (!row) return null;
+              return (
+                <div className="max-w-[320px] rounded-md border border-border bg-white px-3 py-2 text-xs shadow-sm">
+                  <div className="mb-1 font-semibold text-primary">{row.label}</div>
+                  <div className="space-y-0.5">
+                    {typeSeries
+                      .filter((s) => row[s.key] !== 0)
+                      .map((s) => (
+                        <div key={s.key} className="flex items-center justify-between gap-3">
+                          <span className="inline-flex items-center gap-1.5 text-secondary">
+                            <span
+                              aria-hidden
+                              className="inline-block h-2 w-2 rounded-[2px]"
+                              style={{ backgroundColor: TYPE_COLORS[s.key] }}
+                            />
+                            {s.label}
+                          </span>
+                          <span className="tabular-nums text-secondary">
+                            {formatSignedFr(row[s.key])} {etp}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                  <div className="mt-1.5 border-t border-border pt-1.5">
+                    <MovementNetBalanceSummary
+                      balance={movementNetBalance(row.movements)}
+                      compact
+                    />
+                    <div className="mt-0.5 text-tertiary">
+                      {t(
+                        "shared.hrGooduelleCharts.cumulNetSinceStart",
+                        "Cumul net depuis le début de la plage : {v} ETP"
+                      ).replace("{v}", formatSignedFr(row.cumulNet))}
+                    </div>
+                  </div>
+                  {onBarClick && row.movements.length > 0 && (
+                    <div className="mt-1 text-[10.5px] italic text-tertiary">
+                      {t(
+                        "shared.hrGooduelleCharts.clickForDetail",
+                        "Cliquez sur la barre pour voir le détail des mouvements."
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
+          <ReferenceLine yAxisId="period" y={0} stroke="rgba(0,0,0,0.35)" />
+          {typeSeries.map((s) => (
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              yAxisId="period"
+              stackId="mouv"
+              fill={TYPE_COLORS[s.key]}
+              name={s.label}
+              onClick={handleBarClick}
+              cursor={onBarClick ? "pointer" : undefined}
+            />
+          ))}
+          {/* Une seule courbe : le cumul net ETP (échelle de droite), petits points pleins, valeur
+           *  affichée uniquement au dernier point. Le net de chaque période n'est plus tracé (ancien
+           *  « rond blanc ») : il figure dans l'infobulle et la modale sous « Bilan net ». */}
+          <Line
+            yAxisId="cumul"
+            type="monotone"
+            dataKey="cumulNet"
+            name={labelCumulLine}
+            stroke={COLOR_INK}
+            strokeWidth={2}
+            dot={{ r: 2.5, fill: COLOR_INK, strokeWidth: 0 }}
+            activeDot={{ r: 4, fill: COLOR_INK, strokeWidth: 0 }}
+            label={(props: LastPointLabelProps) =>
+              props.index === lastIndex ? (
+                <text
+                  x={Number(props.x)}
+                  y={Number(props.y) - 8}
+                  textAnchor="end"
+                  fontSize={10.5}
+                  fontWeight={700}
+                  fill={netBalanceColor(Number(props.value)) ?? COLOR_INK}
+                >
+                  {formatSignedFr(Number(props.value))} {etp}
+                </text>
+              ) : (
+                <g />
+              )
+            }
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <p className="mt-1 text-[11px] text-tertiary">
+        {t(
+          "shared.hrGooduelleCharts.movementRhythmCaption",
+          "Barres : ETP par type de mouvement (au-dessus de 0 = entrées, en dessous = sorties). Courbe : cumul net ETP depuis le début de la plage. Survolez une barre pour son bilan net, cliquez pour le détail."
+        )}
+      </p>
+    </div>
   );
 }
 

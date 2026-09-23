@@ -341,8 +341,8 @@ export function movementRhythmAxisDomains(
  *  - Négatives (en-dessous de 0) : Attrition (orange), Départs forcés (rouge)
  *  - Nulles nettement (colonnes empilées visuellement) : Transferts entrants/sortants (gris)
  *
- *  Le "net" est la somme algébrique des cinq barres visibles. Un point noir marque le net
- *  période, une ligne noire relie les cumuls. */
+ *  Le "net" (transferts neutralisés) n'est plus tracé : il est affiché comme "Bilan net" dans
+ *  l'infobulle et la modale (`lib/hrMovementBalance.ts`). Seule la courbe du cumul net est tracée. */
 export function movementRhythmSeries(
   movements: WorkforceMovement[],
   granularity: BridgeGranularity,

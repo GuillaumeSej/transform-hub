@@ -3,6 +3,8 @@
 import { ArrowUpRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/shared/Modal";
+import { MovementNetBalanceSummary } from "@/components/shared/MovementNetBalanceSummary";
+import { movementNetBalance } from "@/lib/hrMovementBalance";
 import {
   MOVEMENT_PROGRESS_COLORS,
   movementProgressStatusLabel,
@@ -54,6 +56,7 @@ export function MovementDetailDrilldownModal({
         </p>
       ) : (
         <div className="flex flex-col gap-3">
+          <MovementNetBalanceSummary balance={movementNetBalance(sorted)} />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[12px] text-secondary">
               {t("hr.movementProgress.count", "{n} mouvement(s)").replace(

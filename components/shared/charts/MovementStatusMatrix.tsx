@@ -4,6 +4,7 @@ import { Ban, CalendarDays, Check, Clock, TriangleAlert, type LucideIcon } from 
 import type { MovementExecutionStatus, MovementStatusGroup } from "@/lib/hrExecution";
 import { EXECUTION_LABELS } from "@/lib/hrExecution";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { groupBlockWidth, useAdaptiveGroupColumns } from "@/lib/hooks/useAdaptiveGroupColumns";
 
 const STYLE: Record<MovementExecutionStatus, string> = {
   realized: "bg-[#421799]",
@@ -40,6 +41,15 @@ const ICON_COLOR: Record<MovementExecutionStatus, string> = {
 };
 const ORDER: MovementExecutionStatus[] = ["overdue", "dueSoon", "later", "realized", "abandoned"];
 
+/** Géométrie fixe des tuiles (taille constante quel que soit le nombre de colonnes). Le nombre
+ * de colonnes par bloc s'adapte à la largeur disponible / au nombre de groupes (cf.
+ * `computeGroupColumns`) : peu de groupes (ex. vue Programme) → blocs larges et bas au lieu
+ * d'une haute colonne collée à gauche ; beaucoup de groupes → colonnes compactes (4 tuiles). */
+const GRID = { cellWidth: 20, cellGap: 4, groupGap: 12, groupChrome: 14, minCols: 4, maxCols: 20 };
+const CELL_HEIGHT = 21;
+/** Largeur mini d'un bloc pour garder le libellé du groupe lisible. */
+const MIN_BLOCK_WIDTH = 104;
+
 /** Matrice proche du widget Santé des initiatives : une tuile par mouvement, groupée selon la
  * dimension choisie, avec statut temporel dérivé et drill-down direct. */
 export function MovementStatusMatrix({
@@ -52,6 +62,8 @@ export function MovementStatusMatrix({
   getInitiativeLabel?: (leverId: string) => string;
 }) {
   const { t } = useTranslation();
+  const maxCells = groups.reduce((max, group) => Math.max(max, group.cells.length), 0);
+  const { ref, cols } = useAdaptiveGroupColumns({ ...GRID, groupCount: groups.length, maxCells });
   if (groups.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-tertiary">
@@ -59,22 +71,34 @@ export function MovementStatusMatrix({
       </p>
     );
   }
-  const maxRows = Math.max(...groups.map((group) => Math.ceil(group.cells.length / 4)));
+  const maxRows = Math.max(...groups.map((group) => Math.ceil(group.cells.length / cols)));
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-max items-end gap-2">
+      <div ref={ref} className="overflow-x-auto pb-1">
+        <div className="flex min-w-max items-end justify-center gap-3">
           {groups.map((group) => {
             const cells = [...group.cells].sort(
               (a, b) => ORDER.indexOf(a.execution) - ORDER.indexOf(b.execution)
             );
+            // Chaque bloc prend juste la largeur de ses tuiles (plafonnée à `cols`) : un petit
+            // groupe reste étroit plutôt qu'un grand bloc vide ; hauteur commune (maxRows).
+            const groupCols = Math.max(GRID.minCols, Math.min(cols, cells.length));
             return (
-              <div key={group.key} className="w-[104px] shrink-0">
+              <div
+                key={group.key}
+                className="shrink-0"
+                style={{ width: Math.max(MIN_BLOCK_WIDTH, groupBlockWidth(groupCols, GRID)) }}
+              >
                 <div
-                  className="flex items-end rounded-sm border border-sky-100 bg-sky-50 p-1.5"
-                  style={{ minHeight: `${maxRows * 25 + 12}px` }}
+                  className="flex items-end justify-center rounded-sm border border-sky-100 bg-sky-50 p-1.5"
+                  style={{
+                    minHeight: `${maxRows * (CELL_HEIGHT + GRID.cellGap) - GRID.cellGap + 12 + 2}px`,
+                  }}
                 >
-                  <div className="grid w-full grid-cols-4 gap-1">
+                  <div
+                    className="grid gap-1"
+                    style={{ gridTemplateColumns: `repeat(${groupCols}, ${GRID.cellWidth}px)` }}
+                  >
                     {cells.map(({ movement, execution }) => {
                       const StatusIcon = ICON[execution];
                       return (

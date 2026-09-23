@@ -21,7 +21,7 @@ import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable
 import { type FilterDef } from "@/components/shared/FilterBar";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
-import { matchesFilter } from "@/lib/filterUtils";
+import { matchesAnyFilter, matchesFilter } from "@/lib/filterUtils";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import type {
@@ -194,6 +194,19 @@ export default function BaseEtpPage() {
     const map = new Map<string, hr.MovementAlertKind>();
     // movementAlerts est trié par priorité : la première alerte d'un mouvement est la plus grave
     for (const a of alerts) if (!map.has(a.movement.id)) map.set(a.movement.id, a.kind);
+    return map;
+  }, [alerts]);
+  // TOUTES les catégories d'alerte d'un mouvement (pas seulement la plus grave) — utilisé par le
+  // filtre `f_alert` du tableau des mouvements : un mouvement à la fois "En retard" et
+  // "Désynchronisé levier" doit ressortir sur l'un OU l'autre filtre (lien "Voir dans la page
+  // détaillée" de la synthèse des alertes du Dashboard RH, voir `etpAlertFilterLink`).
+  const alertKindsByMovement = useMemo(() => {
+    const map = new Map<string, Set<hr.MovementAlertKind>>();
+    for (const a of alerts) {
+      const kinds = map.get(a.movement.id) ?? new Set<hr.MovementAlertKind>();
+      kinds.add(a.kind);
+      map.set(a.movement.id, kinds);
+    }
     return map;
   }, [alerts]);
 
@@ -512,11 +525,25 @@ export default function BaseEtpPage() {
     }
     return movementRows.filter((row) =>
       Object.entries(movementActiveFilters).every(([key, value]) => {
+        if (key === "f_alert") {
+          const kinds = alertKindsByMovement.get(row.id);
+          const labels = kinds
+            ? Array.from(kinds, (kind) => alertKindLabel(ALERT_LABELS, kind))
+            : [alertKindLabel(ALERT_LABELS, null)];
+          return matchesAnyFilter(labels, value);
+        }
         const def = movementFilterDefs.find((d) => d.key === key);
         return !def || matchesFilter(def.getValue(row), value);
       })
     );
-  }, [movementRows, movementActiveFilters, movementFilterDefs, highlightedMovementIds]);
+  }, [
+    movementRows,
+    movementActiveFilters,
+    movementFilterDefs,
+    highlightedMovementIds,
+    alertKindsByMovement,
+    ALERT_LABELS,
+  ]);
 
   const toValidateCount = alerts.filter((a) => a.kind === "toValidate").length;
   const plannedCount = wf.movements.filter((m) => m.status !== "Réalisé").length;

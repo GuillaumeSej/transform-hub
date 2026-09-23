@@ -856,10 +856,34 @@ export function fteTrajectory(
 
 export type MovementAlertKind = "overdue" | "due" | "toValidate" | "leverMismatch";
 
+/** Détail STRUCTURÉ d'une alerte (en plus du `message` FR prêt à afficher) — permet à l'UI
+ *  (ex. `components/shared/MovementAlertsSummaryModal.tsx`) de présenter les valeurs comparées
+ *  (jours de retard, date de fin du levier, sens ETP…) et de les traduire sans reparser le texte. */
+export type MovementAlertDetail =
+  | { reason: "toValidate"; actualDate: string }
+  | { reason: "overdue"; daysLate: number }
+  | { reason: "due"; daysLeft: number }
+  | { reason: "leverCancelled"; leverCode: string; leverName: string }
+  | {
+      reason: "afterLeverEnd";
+      leverCode: string;
+      leverName: string;
+      leverEnd: string;
+      plannedDate: string;
+    }
+  | {
+      reason: "signMismatch";
+      leverCode: string;
+      leverName: string;
+      movementFte: number;
+      leverFte: number;
+    };
+
 export type MovementAlert = {
   movement: WorkforceMovement;
   kind: MovementAlertKind;
   message: string;
+  detail?: MovementAlertDetail;
 };
 
 const DUE_WINDOW_DAYS = 7;
@@ -878,6 +902,7 @@ export function movementAlerts(
         movement: m,
         kind: "toValidate",
         message: `${m.label} — réalisé le ${m.actualDate ?? m.plannedDate}, en attente de validation RH`,
+        detail: { reason: "toValidate", actualDate: m.actualDate ?? m.plannedDate },
       });
       continue;
     }
@@ -889,12 +914,14 @@ export function movementAlerts(
           movement: m,
           kind: "overdue",
           message: `${m.label} — échéance dépassée de ${-days} j (prévu le ${m.plannedDate})`,
+          detail: { reason: "overdue", daysLate: -days },
         });
       } else if (days <= DUE_WINDOW_DAYS) {
         alerts.push({
           movement: m,
           kind: "due",
           message: `${m.label} — échéance dans ${days} j (${m.plannedDate})`,
+          detail: { reason: "due", daysLeft: days },
         });
       }
     }
@@ -906,12 +933,20 @@ export function movementAlerts(
           movement: m,
           kind: "leverMismatch",
           message: `${m.label} — le levier ${lever.code} est annulé, mouvement à requalifier`,
+          detail: { reason: "leverCancelled", leverCode: lever.code, leverName: lever.name },
         });
       } else if (lever.end < m.plannedDate && STATUS_ORDER[lever.status] < STATUS_ORDER.delivered) {
         alerts.push({
           movement: m,
           kind: "leverMismatch",
           message: `${m.label} — planifié le ${m.plannedDate}, après la fin du levier ${lever.code} (${lever.end})`,
+          detail: {
+            reason: "afterLeverEnd",
+            leverCode: lever.code,
+            leverName: lever.name,
+            leverEnd: lever.end,
+            plannedDate: m.plannedDate,
+          },
         });
       }
     }
@@ -929,6 +964,13 @@ export function movementAlerts(
           movement: m,
           kind: "leverMismatch",
           message: `${m.label} — sens (${effect > 0 ? "+" : ""}${effect} ETP) contraire à l'impact visé du levier ${lever.code} (${lever.fteImpact > 0 ? "+" : ""}${lever.fteImpact} ETP)`,
+          detail: {
+            reason: "signMismatch",
+            leverCode: lever.code,
+            leverName: lever.name,
+            movementFte: effect,
+            leverFte: lever.fteImpact,
+          },
         });
       }
     }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { etpMovementDeepLink } from "@/lib/hrMovementLink";
+import { parseFilterValues } from "@/lib/filterUtils";
+import { etpAlertFilterLink, etpMovementDeepLink } from "@/lib/hrMovementLink";
 
 describe("hrMovementLink — etpMovementDeepLink", () => {
   it("builds a link to the movements tab with a single movement id", () => {
@@ -20,5 +21,22 @@ describe("hrMovementLink — etpMovementDeepLink", () => {
 
   it("omits the movementIds param entirely when given no ids", () => {
     expect(etpMovementDeepLink([])).toBe("/hr/etp?tab=mouvements");
+  });
+});
+
+describe("hrMovementLink — etpAlertFilterLink", () => {
+  it("targets the movements tab with the namespaced alert filter, readable by the filter bar", () => {
+    const link = etpAlertFilterLink(["En retard", "Désynchronisé levier"]);
+    const params = new URLSearchParams(link.split("?")[1]);
+    expect(link.startsWith("/hr/etp?")).toBe(true);
+    expect(params.get("tab")).toBe("mouvements");
+    expect(parseFilterValues(params.get("mov_f_alert"))).toEqual([
+      "En retard",
+      "Désynchronisé levier",
+    ]);
+  });
+
+  it("omits the filter when no category is given", () => {
+    expect(etpAlertFilterLink([])).toBe("/hr/etp?tab=mouvements");
   });
 });

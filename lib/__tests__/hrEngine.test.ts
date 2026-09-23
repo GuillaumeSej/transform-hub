@@ -625,6 +625,13 @@ describe("hrEngine — movementAlerts (garde-fou signe/montant)", () => {
     const flagged = alerts.find((a) => a.movement.id === "M1" && a.kind === "leverMismatch");
     expect(flagged).toBeDefined();
     expect(flagged?.message).toContain("sens");
+    expect(flagged?.detail).toEqual({
+      reason: "signMismatch",
+      leverCode: "L001",
+      leverName: lever.name,
+      movementFte: 1,
+      leverFte: -6,
+    });
   });
 
   it("does not flag a movement whose direction matches its lever's targeted fteImpact", () => {
@@ -655,5 +662,64 @@ describe("hrEngine — movementAlerts (garde-fou signe/montant)", () => {
     });
     const alerts = movementAlerts(makeWorkforce({ movements: [movement] }), [lever], "2026-06-01");
     expect(alerts.some((a) => a.movement.id === "M1")).toBe(false);
+  });
+});
+
+describe("hrEngine — movementAlerts (détail structuré)", () => {
+  it("exposes days late / days left for overdue and due movements", () => {
+    const lever = makeLever({ id: "L001", code: "L001", fteImpact: -6, end: "2026-12-31" });
+    const late = makeMovement({
+      id: "M1",
+      leverId: "L001",
+      type: "Départ forcé",
+      status: "Planifié",
+      plannedDate: "2026-05-22",
+      actualDate: null,
+    });
+    const soon = makeMovement({
+      id: "M2",
+      leverId: "L001",
+      type: "Départ forcé",
+      status: "Planifié",
+      plannedDate: "2026-06-04",
+      actualDate: null,
+    });
+    const alerts = movementAlerts(
+      makeWorkforce({ movements: [late, soon] }),
+      [lever],
+      "2026-06-01"
+    );
+    expect(alerts.find((a) => a.movement.id === "M1")?.detail).toEqual({
+      reason: "overdue",
+      daysLate: 10,
+    });
+    expect(alerts.find((a) => a.movement.id === "M2")?.detail).toEqual({
+      reason: "due",
+      daysLeft: 3,
+    });
+  });
+
+  it("exposes both dates when a movement is planned after its lever's end", () => {
+    const lever = makeLever({
+      id: "L001",
+      code: "L001",
+      fteImpact: -6,
+      end: "2026-09-30",
+      status: "in_progress",
+    });
+    const m = makeMovement({
+      id: "M1",
+      leverId: "L001",
+      type: "Départ forcé",
+      status: "Planifié",
+      plannedDate: "2026-11-15",
+      actualDate: null,
+    });
+    const alerts = movementAlerts(makeWorkforce({ movements: [m] }), [lever], "2026-06-01");
+    expect(alerts.find((a) => a.kind === "leverMismatch")?.detail).toMatchObject({
+      reason: "afterLeverEnd",
+      leverEnd: "2026-09-30",
+      plannedDate: "2026-11-15",
+    });
   });
 });
