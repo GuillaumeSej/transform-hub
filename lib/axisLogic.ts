@@ -1585,22 +1585,22 @@ export function programBlockedActions(
 
 // ─── Couleur déterministe par chantier (round 8) ───────────────────────────────────────────────
 
-/** Palette catégorielle fixe (Tailwind, fond plein) — classes `bg-*-500` de la palette Tailwind
- *  par défaut, pas de token `bp-*` de marque (déjà réservés à d'autres usages). Purement
+/** Palette catégorielle fixe (fond plein) — couleurs de la CHARTE BearingPoint uniquement (classes
+ *  arbitraires `bg-[#hex]`, littérales pour le JIT Tailwind), alignées sur `CHANTIER_COLOR_HEX_PALETTE`. Purement
  *  catégorielle, sans rapport avec un statut à-risque (`rag-*`). Ordre arbitraire mais stable :
  *  ne jamais réordonner ce tableau, `colorForChantier`/`colorForDepartment` en dépendent pour
  *  rester déterministes dans le temps. */
 const CHANTIER_COLOR_PALETTE = [
-  "bg-blue-500",
-  "bg-emerald-500",
-  "bg-violet-500",
-  "bg-pink-500",
-  "bg-amber-500",
-  "bg-indigo-500",
-  "bg-teal-500",
-  "bg-orange-500",
-  "bg-rose-500",
-  "bg-cyan-500",
+  "bg-[#421799]",
+  "bg-[#FF3C47]",
+  "bg-[#806659]",
+  "bg-[#FF797B]",
+  "bg-[#320300]",
+  "bg-[#A99E9A]",
+  "bg-[#991D1F]",
+  "bg-[#FFB1B5]",
+  "bg-[#1A1A1A]",
+  "bg-[#CCC1BD]",
 ] as const;
 
 /**
@@ -1646,16 +1646,16 @@ export function colorForDepartment(departmentName: string): string {
  *  qu'un même chantier/équipe affiche la MÊME couleur en CSS (barres plates existantes) et en
  *  Recharts (nouveaux graphiques). */
 const CHANTIER_COLOR_HEX_PALETTE = [
-  "#3b82f6", // bg-blue-500
-  "#10b981", // bg-emerald-500
-  "#8b5cf6", // bg-violet-500
-  "#ec4899", // bg-pink-500
-  "#f59e0b", // bg-amber-500
-  "#6366f1", // bg-indigo-500
-  "#14b8a6", // bg-teal-500
-  "#f97316", // bg-orange-500
-  "#f43f5e", // bg-rose-500
-  "#06b6d4", // bg-cyan-500
+  "#421799", // --bp-purple
+  "#FF3C47", // --bp-coral
+  "#806659", // --bp-warm-brown
+  "#FF797B", // --bp-coral-pink
+  "#320300", // --bp-deep-red
+  "#A99E9A", // --bp-warm-taupe
+  "#991D1F", // --bp-red-brick
+  "#FFB1B5", // --bp-light-pink
+  "#1A1A1A", // encre
+  "#CCC1BD", // --bp-warm-gray
 ] as const;
 
 /** Équivalent hex de `colorForChantier` — même hash, même index, même ordre de palette — pour les

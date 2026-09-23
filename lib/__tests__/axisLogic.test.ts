@@ -2261,8 +2261,8 @@ describe("colorForChantier", () => {
   });
 
   it("returns a non-empty Tailwind background class for any id", () => {
-    expect(colorForChantier("CH1")).toMatch(/^bg-\w+-500$/);
-    expect(colorForChantier("")).toMatch(/^bg-\w+-500$/);
+    expect(colorForChantier("CH1")).toMatch(/^bg-\[#[0-9A-F]{6}\]$/);
+    expect(colorForChantier("")).toMatch(/^bg-\[#[0-9A-F]{6}\]$/);
   });
 });
 
