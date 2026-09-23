@@ -1489,7 +1489,7 @@ const en: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint": "Fill in the name and dates to save.",
   "strategicChantierDetail.actionForm.budgetLabel": "Project budget",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "The total of the project budgets would exceed the workstream's allocated budget.",
+    "This project brings the workstream's total project budgets above its allocated budget — the workstream and axis owners will see it during validation.",
   "strategicChantierDetail.actionForm.consumedBudgetLabel": "Consumed project budget",
   "strategicChantierDetail.actionForm.consumedFteLabel": "Consumed project FTEs",
   "strategicChantierDetail.successCriteria.placeholder": "We'll be happy in [year] if...",

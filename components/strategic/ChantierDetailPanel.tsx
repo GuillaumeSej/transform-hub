@@ -980,6 +980,11 @@ function ChantierActionForm({
   const projectedLeviersBudgetTotal =
     otherLeviersBudgetSum +
     (parsedBudget !== undefined && !Number.isNaN(parsedBudget) ? parsedBudget : 0);
+  // `budgetExceeds` reste calculé (signal utile, affiché en information près du champ budget
+  // ci-dessous) mais NE bloque plus jamais la création/l'enregistrement du projet (retour PO : un
+  // dépassement de budget est possible, ce n'est pas une erreur — les responsables du chantier et
+  // de l'axe le verront à la validation de la double approbation "projet_create", voir
+  // `lib/strategicApprovals.ts`). Même principe déjà appliqué au consommé juste en dessous.
   const budgetExceeds =
     chantierAllocatedBudget !== undefined && projectedLeviersBudgetTotal > chantierAllocatedBudget;
 
@@ -990,7 +995,7 @@ function ChantierActionForm({
   const parsedConsumedBudget =
     trimmedConsumedBudget === "" ? undefined : Number(trimmedConsumedBudget);
 
-  const canSubmit = !requiredFieldsMissing && !submitting && !budgetExceeds;
+  const canSubmit = !requiredFieldsMissing && !submitting;
 
   const patchDeliverable = (id: string, patch: Partial<Deliverable>) =>
     setDeliverables((list) => list.map((d) => (d.id === id ? { ...d, ...patch } : d)));
@@ -1177,6 +1182,11 @@ function ChantierActionForm({
             onChange={(e) => setBudgetInput(e.target.value)}
             className={INPUT_CLASS}
           />
+          {/* Information, pas un blocage (voir `budgetExceeds` ci-dessus) : le dépassement est
+              possible, il sera simplement visible des responsables à la validation. */}
+          {budgetExceeds && (
+            <p className="mt-1.5 text-[11px] text-tertiary">{labels.budgetExceedsChantier}</p>
+          )}
         </div>
         {/* ── Consommé du levier (round <n>) — pendant déclaratif de "budget" ci-dessus pour
           `ChantierAction.consumedBudget`, EXACTE même discipline de saisie (bufferisé jusqu'au
@@ -1363,10 +1373,8 @@ function ChantierActionForm({
             {labels.cancel}
           </Button>
         </div>
-        {!canSubmit && !submitting && (
-          <p className="mt-1.5 text-[11px] text-tertiary">
-            {requiredFieldsMissing ? labels.missingHint : labels.budgetExceedsChantier}
-          </p>
+        {!canSubmit && !submitting && requiredFieldsMissing && (
+          <p className="mt-1.5 text-[11px] text-tertiary">{labels.missingHint}</p>
         )}
       </div>
     </div>

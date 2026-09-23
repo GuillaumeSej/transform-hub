@@ -9,6 +9,8 @@
 import { requestMilestoneApproval as requestMilestoneApprovalLogic } from "@/lib/axisLogic";
 import { submitIndicatorValue, type IndicatorValueInput } from "@/lib/kpiHistory";
 import type {
+  ProjetCreateApprovalPayload,
+  ProjetCreateStage,
   StrategicApproval,
   StrategicApprovalKind,
   StrategicApprovalPayload,
@@ -17,7 +19,14 @@ import type {
 import type { AuthUser, Chantier, ChantierAction, ChantierStaffing, Indicator } from "@/types";
 
 export type ApprovalGate = {
-  needsApproval: (kind: StrategicApprovalKind, target: StrategicApprovalTarget) => boolean;
+  /** `stage` : uniquement significatif pour `"projet_create"` (double validation, voir l'en-tête
+   *  de `lib/strategicApprovals.ts`) — permet à `createProjetFlow` de tester séparément le palier
+   *  "chantier" (pilote) et le palier "axis" (responsable de l'axe). Ignoré pour les autres kinds. */
+  needsApproval: (
+    kind: StrategicApprovalKind,
+    target: StrategicApprovalTarget,
+    stage?: ProjetCreateStage
+  ) => boolean;
   request: (
     kind: StrategicApprovalKind,
     target: StrategicApprovalTarget,
@@ -94,7 +103,20 @@ export async function deleteFlow(
 }
 
 /**
- * Création d'un projet : `projet_create` (validation du responsable de l'axe) ou création directe.
+ * Création d'un projet : DOUBLE validation séquentielle — pilote du chantier PUIS responsable de
+ * l'axe (voir l'en-tête de `lib/strategicApprovals.ts`, section "Double validation de
+ * projet_create") — ou création directe si l'acteur satisfait déjà les DEUX paliers (il en est un
+ * des deux ET l'autre aussi, ou il est admin/strategic_lead).
+ *
+ * On ne demande QUE les paliers que l'acteur ne peut pas lui-même trancher :
+ *  - s'il ne satisfait ni l'un ni l'autre : demande palier "chantier" (1er palier) — l'approbation
+ *    du pilote enchaînera ensuite automatiquement la 2e demande, palier "axis"
+ *    (`nextProjetCreateApproval`, appelé par `useStrategicApprovals.decide()`) ;
+ *  - s'il EST déjà le pilote (ou qu'aucun palier "chantier" distinct n'existe, cascade vers l'axe
+ *    quand le chantier n'a pas de pilote renseigné — voir `resolveApprover`) mais pas responsable
+ *    d'axe : demande DIRECTEMENT le palier "axis", sans repasser par un palier "chantier" déjà
+ *    implicitement satisfait par son propre geste de création ;
+ *  - s'il satisfait les deux (ou admin/strategic_lead) : création immédiate, aucune demande.
  *
  * `staffing` (round 29) : lignes ETP bufferisées dans le formulaire de création
  * (`StaffingDraftTable.tsx`), déjà converties en `ChantierStaffing` avec `actionId` = `action.id`
@@ -104,11 +126,12 @@ export async function deleteFlow(
  * fonction n'a pas accès à l'id RÉEL généré côté direct (`data.createChantierAction` génère le
  * sien, indépendant de `action.id`, voir le commentaire de tête de `newProjetId`). Chemin demande :
  * embarqué dans le payload, appliqué par `applyApprovedPayload` (`lib/strategicApprovals.ts`) une
- * fois la demande approuvée, puisque `action.id` EST alors l'id définitif du projet.
+ * fois la demande du palier "axis" approuvée, puisque `action.id` EST alors l'id définitif du
+ * projet (le palier "chantier", lui, n'a jamais d'effet de création direct : voir cette fonction).
  */
 export async function createProjetFlow(
   gate: ApprovalGate | null | undefined,
-  chantier: Pick<Chantier, "id" | "name">,
+  chantier: Pick<Chantier, "id" | "name" | "pilote">,
   action: ChantierAction,
   createDirect: () => Promise<unknown>,
   staffing: ChantierStaffing[] = []
@@ -118,11 +141,26 @@ export async function createProjetFlow(
     id: chantier.id,
     name: chantier.name,
   };
-  if (gate && gate.needsApproval("projet_create", target)) {
-    await gate.request("projet_create", target, {
-      action,
-      ...(staffing.length ? { staffing } : {}),
-    });
+  if (!gate) {
+    await createDirect();
+    return "applied";
+  }
+  const payloadFor = (stage: ProjetCreateStage): ProjetCreateApprovalPayload => ({
+    action,
+    stage,
+    ...(staffing.length ? { staffing } : {}),
+  });
+  // Pas de pilote renseigné : `resolveApprover` fait déjà cascader le palier "chantier" vers
+  // l'axe (mêmes usernames) — démarrer directement au palier terminal "axis" évite de créer un
+  // premier palier qui résoudrait identique au second (comportement historique à un seul palier,
+  // inchangé quand le chantier n'a pas de pilote).
+  const firstStage: ProjetCreateStage = chantier.pilote ? "chantier" : "axis";
+  if (gate.needsApproval("projet_create", target, firstStage)) {
+    await gate.request("projet_create", target, payloadFor(firstStage));
+    return "pending";
+  }
+  if (firstStage === "chantier" && gate.needsApproval("projet_create", target, "axis")) {
+    await gate.request("projet_create", target, payloadFor("axis"));
     return "pending";
   }
   await createDirect();

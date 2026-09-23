@@ -5,6 +5,7 @@ import {
   applyRequestSideEffects,
   buildApproval,
   needsApproval,
+  nextProjetCreateApproval,
   type ApprovalEffects,
   type StrategicApproval,
   type StrategicApprovalData,
@@ -90,7 +91,7 @@ function gateFor(actor: AuthUser) {
   const store: StrategicApproval[] = [];
   const effects: ApprovalEffects[] = [];
   const gate: ApprovalGate = {
-    needsApproval: (kind, target) => needsApproval(kind, actor, target, data),
+    needsApproval: (kind, target, stage) => needsApproval(kind, actor, target, data, stage),
     request: async (kind, target, payload, reason) => {
       const a = buildApproval({
         kind,
@@ -184,26 +185,110 @@ describe("delete flow", () => {
   });
 });
 
-describe("projet create flow", () => {
+describe("projet create flow — double validation (chantier puis axe)", () => {
   const created = { ...projet, id: "CA-new", name: "Nouveau" };
-  it("responsable de chantier : demande projet_create, pas de création ; approbation sauvegarde l'action ; refus sans effet", async () => {
-    const { gate, store } = gateFor(user("bob", "chantier_owner"));
+
+  it("contributeur : demande palier chantier (pilote), pas de création ; refus sans effet", async () => {
+    const { gate, store } = gateFor(user("carl", "chantier_contributor"));
     const create = vi.fn();
     expect(await createProjetFlow(gate, chantier, created, create)).toBe("pending");
     expect(create).not.toHaveBeenCalled();
-    expect(store[0].kind).toBe("projet_create");
-    expect(
-      applyApprovedPayload({ ...store[0], status: "approved" }, data).saveActions[0]
-    ).toMatchObject({ id: "CA-new" });
+    expect(store[0]).toMatchObject({
+      kind: "projet_create",
+      payload: { stage: "chantier" },
+      approverUsernames: ["bob"],
+    });
     expect(
       applyRejectedPayload({ ...store[0], status: "rejected" }, data).saveActions
     ).toHaveLength(0);
   });
-  it("responsable de l'axe : création directe", async () => {
-    const { gate } = gateFor(user("alice", "axis_sponsor"));
+
+  it("le pilote lui-même : palier chantier implicite, demande directement le palier axe", async () => {
+    const { gate, store } = gateFor(user("bob", "chantier_owner"));
+    const create = vi.fn();
+    expect(await createProjetFlow(gate, chantier, created, create)).toBe("pending");
+    expect(create).not.toHaveBeenCalled();
+    expect(store[0]).toMatchObject({
+      kind: "projet_create",
+      payload: { stage: "axis" },
+      approverUsernames: ["alice"],
+    });
+    // Palier terminal : l'approbation crée réellement le projet.
+    expect(
+      applyApprovedPayload({ ...store[0], status: "approved" }, data).saveActions[0]
+    ).toMatchObject({ id: "CA-new" });
+  });
+
+  it("responsable de l'axe (≠ pilote) : doit quand même demander le palier chantier au pilote", async () => {
+    const { gate, store } = gateFor(user("alice", "axis_sponsor"));
+    const create = vi.fn(async () => undefined);
+    expect(await createProjetFlow(gate, chantier, created, create)).toBe("pending");
+    expect(create).not.toHaveBeenCalled();
+    expect(store[0]).toMatchObject({ payload: { stage: "chantier" }, approverUsernames: ["bob"] });
+  });
+
+  it("admin/strategic_lead : les deux paliers sont déjà satisfaits, création immédiate", async () => {
+    const { gate, store } = gateFor(user("lea", "strategic_lead"));
     const create = vi.fn(async () => undefined);
     expect(await createProjetFlow(gate, chantier, created, create)).toBe("applied");
     expect(create).toHaveBeenCalledOnce();
+    expect(store).toHaveLength(0);
+  });
+
+  it("chantier sans pilote : un seul palier (axe), comme l'ancien schéma", async () => {
+    const noPilote = { ...chantier, pilote: undefined } as unknown as Chantier;
+    const d = { ...data, chantiers: [noPilote] };
+    const gateForData = (actor: AuthUser) => {
+      const store: StrategicApproval[] = [];
+      const g: ApprovalGate = {
+        needsApproval: (kind, target, stage) => needsApproval(kind, actor, target, d, stage),
+        request: async (kind, target, payload, reason) => {
+          const a = buildApproval({
+            kind,
+            target,
+            payload,
+            reason,
+            companyId: "c",
+            programId: "P1",
+            requester: actor,
+            data: d,
+          });
+          store.push(a);
+          return a;
+        },
+      };
+      return { gate: g, store };
+    };
+    const { gate, store } = gateForData(user("carl", "chantier_contributor"));
+    const create = vi.fn();
+    expect(await createProjetFlow(gate, noPilote, created, create)).toBe("pending");
+    expect(store).toHaveLength(1);
+    expect(store[0].payload).toMatchObject({ stage: "axis" });
+    expect(
+      applyApprovedPayload({ ...store[0], status: "approved" }, d).saveActions[0]
+    ).toMatchObject({ id: "CA-new" });
+  });
+
+  it("chaîne complète : le pilote valide, ça enchaîne sur l'axe, puis l'axe valide -> création", async () => {
+    const { gate, store } = gateFor(user("carl", "chantier_contributor"));
+    const create = vi.fn();
+    expect(await createProjetFlow(gate, chantier, created, create)).toBe("pending");
+    const stage1 = { ...store[0], status: "approved" as const, decidedBy: "bob" };
+    // Le palier "chantier" approuvé ne crée rien...
+    expect(applyApprovedPayload(stage1, data).saveActions).toHaveLength(0);
+    // ...mais enchaîne sur une 2e demande, palier "axis", vers le responsable de l'axe.
+    const stage2 = nextProjetCreateApproval(stage1, data);
+    expect(stage2).toMatchObject({
+      kind: "projet_create",
+      payload: { stage: "axis" },
+      approverUsernames: ["alice"],
+      requestedBy: "carl",
+    });
+    // Ce n'est qu'à l'approbation de CE palier que le projet est réellement créé.
+    expect(
+      applyApprovedPayload({ ...stage2!, status: "approved", decidedBy: "alice" }, data)
+        .saveActions[0]
+    ).toMatchObject({ id: "CA-new" });
   });
 });
 

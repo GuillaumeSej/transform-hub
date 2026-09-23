@@ -1578,7 +1578,7 @@ const fr: Record<string, string> = {
     "Renseignez le nom et les dates pour enregistrer.",
   "strategicChantierDetail.actionForm.budgetLabel": "Budget du projet",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "Le total des budgets des projets dépasserait le budget alloué du chantier.",
+    "Ce projet porte le total des budgets des projets du chantier au-delà du budget alloué — les responsables du chantier et de l'axe le verront à la validation.",
   "strategicChantierDetail.actionForm.consumedBudgetLabel": "Budget consommé du projet",
   "strategicChantierDetail.actionForm.consumedFteLabel": "ETP consommés du projet",
   "strategicChantierDetail.successCriteria.placeholder": "On sera content en [année] si...",

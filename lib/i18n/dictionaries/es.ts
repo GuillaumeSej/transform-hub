@@ -1478,7 +1478,7 @@ const es: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint": "Complete el nombre y las fechas para guardar.",
   "strategicChantierDetail.actionForm.budgetLabel": "Presupuesto de la iniciativa",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "El total de los presupuestos de las iniciativas superaría el presupuesto asignado del proyecto.",
+    "Este proyecto lleva el total de los presupuestos de las iniciativas del proyecto por encima del presupuesto asignado — los responsables del proyecto y del eje lo verán durante la validación.",
   "strategicChantierDetail.actionForm.consumedBudgetLabel":
     "Presupuesto consumido de la iniciativa",
   "strategicChantierDetail.actionForm.consumedFteLabel": "ETC consumidos de la iniciativa",

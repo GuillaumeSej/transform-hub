@@ -20,12 +20,19 @@
  *        target  { type: "axe"|"chantier"|"projet"|"indicateur", id, name? }
  *        payload milestone      { targetMilestone, fromMilestone? }   target = projet
  *                kpi_value      { period, value?, note? }             target = indicateur
- *                projet_create  { action: ChantierAction (id déjà généré) }  target = chantier parent
+ *                projet_create  { action: ChantierAction (id déjà généré), stage? }
+ *                                                                      target = chantier parent
  *                projet_delete  { name? }                             target = projet
  *                chantier_delete{ name? }                             target = chantier
  *        Écrit la demande + une entrée d'audit ; pour "milestone" pose aussi
  *        `ChantierAction.milestoneApproval` (marqueur "en attente" de l'UI existante).
  *   sa.approve(id, comment?) => Promise<void>   applique l'effet (jalon/KPI/création/suppression)
+ *        "projet_create" DOUBLE validation (voir l'en-tête de `lib/strategicApprovals.ts`) :
+ *        l'approbation du palier `stage: "chantier"` NE crée PAS le projet — elle enchaîne
+ *        automatiquement la 2e demande (palier "axis", `nextProjetCreateApproval`), ou crée le
+ *        projet directement si ce 2e palier s'avère inutile/indécidable (voir cette fonction).
+ *        Seule l'approbation du palier "axis" (ou d'une demande sans `stage`, format d'avant cette
+ *        fonctionnalité) crée réellement le projet.
  *   sa.reject(id, comment)   => Promise<void>   commentaire OBLIGATOIRE
  * Toutes les méthodes lèvent une Error (message FR) si non habilité / périmé / déjà traité.
  */
@@ -52,7 +59,10 @@ import {
   buildApprovalAuditEntry,
   canDecide,
   needsApproval as needsApprovalLogic,
+  nextProjetCreateApproval,
   type ApprovalEffects,
+  type ProjetCreateApprovalPayload,
+  type ProjetCreateStage,
   type StrategicApproval,
   type StrategicApprovalData,
   type StrategicApprovalKind,
@@ -137,8 +147,8 @@ export function useStrategicApprovals({
   );
 
   const needsApproval = useCallback(
-    (kind: StrategicApprovalKind, target: StrategicApprovalTarget) =>
-      needsApprovalLogic(kind, user, target, dataRef.current),
+    (kind: StrategicApprovalKind, target: StrategicApprovalTarget, stage?: ProjetCreateStage) =>
+      needsApprovalLogic(kind, user, target, dataRef.current, stage),
     [user]
   );
 
@@ -186,6 +196,9 @@ export function useStrategicApprovals({
         decisionComment: comment?.trim() || undefined,
       };
       // Effets d'abord : s'ils échouent (cible disparue, jalon périmé), la demande reste en attente.
+      // "projet_create" palier "chantier" : `applyApprovedPayload` ne crée RIEN pour ce palier (voir
+      // ce fichier) — le chaînage vers le palier "axis" (ou la création directe si ce 2e palier est
+      // inutile) se fait juste en dessous, une fois la décision persistée.
       await runEffects(
         status === "approved"
           ? applyApprovedPayload(decided, dataRef.current)
@@ -199,6 +212,27 @@ export function useStrategicApprovals({
         decisionComment: decided.decisionComment,
       });
       logAudit(saved, status);
+      if (status === "approved" && saved.kind === "projet_create") {
+        const payload = saved.payload as ProjetCreateApprovalPayload;
+        if (payload.stage === "chantier") {
+          // Double validation (voir l'en-tête de lib/strategicApprovals.ts) : le pilote du chantier
+          // vient de valider — enchaîne automatiquement la 2e demande (palier "axis"), sauf si elle
+          // serait inutile/indécidable (`nextProjetCreateApproval`), auquel cas le projet est créé
+          // directement ici même (effet "axis" appliqué avec le même payload).
+          const next = nextProjetCreateApproval(saved, dataRef.current);
+          if (next) {
+            await saveStrategicApproval(next);
+            logAudit(next, "requested");
+          } else {
+            await runEffects(
+              applyApprovedPayload(
+                { ...saved, payload: { ...payload, stage: "axis" as const } },
+                dataRef.current
+              )
+            );
+          }
+        }
+      }
     },
     [user, logAudit]
   );
