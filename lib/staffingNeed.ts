@@ -1,6 +1,6 @@
 import type { ChantierStaffing } from "@/types";
 
-export type NeedGranularity = "quarterly" | "semiannual" | "annual";
+export type NeedGranularity = "monthly" | "quarterly" | "semiannual" | "annual";
 
 export type PeriodBounds = { label: string; start: string; end: string };
 
@@ -33,6 +33,9 @@ export function periodBoundsForDate(isoDate: string, g: NeedGranularity): Period
   const y = +isoDate.slice(0, 4);
   const m0 = +isoDate.slice(5, 7) - 1;
   if (g === "annual") return { label: String(y), start: iso(y, 0, 1), end: iso(y, 11, 31) };
+  if (g === "monthly") {
+    return { label: `${y}-${pad(m0 + 1)}`, start: iso(y, m0, 1), end: iso(y, m0, lastDay(y, m0)) };
+  }
   if (g === "semiannual") {
     const s = m0 <= 5 ? 1 : 2;
     const sm = s === 1 ? 0 : 6;
@@ -45,7 +48,7 @@ export function periodBoundsForDate(isoDate: string, g: NeedGranularity): Period
   return { label: `${y}-Q${q}`, start: iso(y, sm, 1), end: iso(y, em, lastDay(y, em)) };
 }
 
-function nextPeriodStart(end: string): string {
+export function nextPeriodStart(end: string): string {
   return new Date((dayNum(end) + 1) * DAY_MS).toISOString().slice(0, 10);
 }
 

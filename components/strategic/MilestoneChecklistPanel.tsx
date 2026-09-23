@@ -1,16 +1,18 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Plus, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
+import { MilestoneTransitionBadge } from "@/components/strategic/MilestoneTransitionBadge";
 import { UserPicker } from "@/components/strategic/UserPicker";
 import {
   canPassMilestone,
+  displayMilestoneId,
   mergeMilestoneChecklistItems,
   progressBucket,
   type ProgressBucket,
 } from "@/lib/axisLogic";
-import { MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
+import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type {
   AuthUser,
@@ -179,11 +181,19 @@ export function MilestoneChecklistPanel({
   canRejectMilestoneApproval: boolean;
   onRequestApproval: () => void;
   onApproveMilestone: () => void;
-  onRejectMilestoneApproval: () => void;
+  /** `comment` : motif de refus optionnel saisi dans le panneau (round "passage de jalon
+   *  explicite") — vide/absent = refus sans commentaire. */
+  onRejectMilestoneApproval: (comment?: string) => void;
 }) {
   const { t } = useTranslation();
   const defs = MILESTONE_CHECKLISTS[milestoneId];
   const [newCustomLabel, setNewCustomLabel] = useState("");
+  // Refus en 2 temps (round "passage de jalon explicite") : « Refuser » ouvre un commentaire
+  // OPTIONNEL, « Confirmer le refus » l'envoie.
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectComment, setRejectComment] = useState("");
+  const nextMilestone = MILESTONE_ORDER[MILESTONE_ORDER.indexOf(milestoneId) + 1] as
+    MilestoneId | undefined;
 
   const findStored = (itemId: string) => items.find((i) => i.itemId === itemId);
 
@@ -417,37 +427,144 @@ export function MilestoneChecklistPanel({
       </div>
 
       <div className="border-t border-border pt-3">
+        {/* Round "passage de jalon explicite" : à 100 %, le panneau dit TOUJOURS ce qui se passe
+            ensuite — demande à envoyer (propriétaire/admin), attente de confirmation (tous), ou
+            confirmation/refus (responsable du chantier/admin). Jamais d'avancée automatique. */}
         {milestoneApproval ? (
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-rag-amber-light px-2.5 py-1 text-[11px] font-semibold text-rag-amber">
-              {t("strategicChantierDetail.milestones.approval.pendingBadge")}
-            </div>
-            <p className="text-[11px] text-tertiary">
-              {t("strategicChantierDetail.milestones.approval.requestedMeta")
-                .replace("{user}", milestoneApproval.requestedBy)
-                .replace("{date}", new Date(milestoneApproval.requestedAt).toLocaleDateString())}
-            </p>
-            {(canApproveMilestone || canRejectMilestoneApproval) && (
-              <div className="flex items-center gap-2">
+            <MilestoneTransitionBadge
+              state={{
+                status: "pending",
+                from: milestoneId,
+                to: milestoneApproval.targetMilestone,
+                requestedBy: milestoneApproval.requestedBy,
+                requestedAt: milestoneApproval.requestedAt,
+              }}
+              users={users}
+            />
+            {!canApproveMilestone && (
+              <p className="text-[11px] text-tertiary">
+                {t(
+                  "strategicChantierDetail.milestones.transition.waitingOwner",
+                  "Le responsable du chantier doit confirmer le passage en {milestone}."
+                ).replace("{milestone}", displayMilestoneId(milestoneApproval.targetMilestone))}
+              </p>
+            )}
+            {(canApproveMilestone || canRejectMilestoneApproval) && !rejecting && (
+              <div className="flex flex-wrap items-center gap-2">
                 {canApproveMilestone && (
                   <Button variant="primary" size="sm" onClick={onApproveMilestone}>
-                    {t("strategicChantierDetail.milestones.approval.approve")}
+                    <CheckCircle2 size={12} />{" "}
+                    {t(
+                      "strategicChantierDetail.milestones.transition.confirm",
+                      "Confirmer le passage en {milestone}"
+                    ).replace("{milestone}", displayMilestoneId(milestoneApproval.targetMilestone))}
                   </Button>
                 )}
                 {canRejectMilestoneApproval && (
-                  <Button variant="ghost" size="sm" onClick={onRejectMilestoneApproval}>
-                    {t("strategicChantierDetail.milestones.approval.reject")}
+                  <Button variant="ghost" size="sm" onClick={() => setRejecting(true)}>
+                    {canApproveMilestone
+                      ? t("strategicChantierDetail.milestones.transition.refuse", "Refuser")
+                      : t(
+                          "strategicChantierDetail.milestones.transition.cancel",
+                          "Annuler la demande"
+                        )}
                   </Button>
                 )}
               </div>
             )}
+            {rejecting && (
+              <div className="space-y-1.5">
+                <textarea
+                  value={rejectComment}
+                  onChange={(e) => setRejectComment(e.target.value)}
+                  rows={2}
+                  placeholder={t(
+                    "strategicChantierDetail.milestones.transition.refuseComment",
+                    "Commentaire (optionnel)"
+                  )}
+                  aria-label={t(
+                    "strategicChantierDetail.milestones.transition.refuseComment",
+                    "Commentaire (optionnel)"
+                  )}
+                  className={`${INPUT_CLASS} mt-0 text-[12px]`}
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      onRejectMilestoneApproval(rejectComment.trim() || undefined);
+                      setRejecting(false);
+                      setRejectComment("");
+                    }}
+                  >
+                    {t(
+                      "strategicChantierDetail.milestones.transition.refuseConfirm",
+                      "Confirmer le refus"
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setRejecting(false);
+                      setRejectComment("");
+                    }}
+                  >
+                    {t("common.cancel", "Annuler")}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
+        ) : canPass && !nextMilestone ? (
+          <p className="text-[11px] font-semibold text-rag-green-dark">
+            {t(
+              "strategicChantierDetail.milestones.transition.final",
+              "Dernier jalon ({milestone}) atteint : check-list complète."
+            ).replace("{milestone}", displayMilestoneId(milestoneId))}
+          </p>
+        ) : !canSubmitApproval ? (
+          canPass &&
+          nextMilestone && (
+            <div className="space-y-1">
+              <MilestoneTransitionBadge
+                state={{ status: "ready", from: milestoneId, to: nextMilestone }}
+              />
+              <p className="text-[11px] text-tertiary">
+                {t(
+                  "strategicChantierDetail.milestones.transition.readyNotOwner",
+                  "Le responsable du projet doit demander la validation du passage en {milestone}."
+                ).replace("{milestone}", displayMilestoneId(nextMilestone))}
+              </p>
+            </div>
+          )
         ) : (
-          canSubmitApproval && (
+          nextMilestone && (
             <>
+              {canPass && (
+                <div className="mb-1.5">
+                  <MilestoneTransitionBadge
+                    state={{ status: "ready", from: milestoneId, to: nextMilestone }}
+                  />
+                </div>
+              )}
               <Button variant="primary" size="sm" onClick={onRequestApproval} disabled={!canPass}>
-                {t("strategicChantierDetail.milestones.actionPlan.validate")}
+                <Send size={12} />{" "}
+                {t(
+                  "strategicChantierDetail.milestones.transition.request",
+                  "Demander la validation du passage en {milestone}"
+                ).replace("{milestone}", displayMilestoneId(nextMilestone))}
               </Button>
+              {canPass && (
+                <p className="mt-1.5 text-[11px] text-tertiary">
+                  {t(
+                    "strategicChantierDetail.milestones.transition.requestHint",
+                    "Le responsable du chantier recevra la demande et devra confirmer le passage."
+                  )}
+                </p>
+              )}
               {!canPass && (
                 <div className="mt-1.5 text-[11px] text-tertiary">
                   <p>{t("strategicChantierDetail.milestones.actionPlan.missingHint")}</p>

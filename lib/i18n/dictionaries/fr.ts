@@ -1805,6 +1805,29 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.approval.requestedMeta": "Demandé par {user} le {date}",
   "strategicChantierDetail.milestones.approval.approve": "Approuver",
   "strategicChantierDetail.milestones.approval.reject": "Rejeter",
+  "strategicChantierDetail.milestones.transition.pending": "En attente de confirmation",
+  "strategicChantierDetail.milestones.transition.requestedMeta": "Demandé par {user} le {date}",
+  "strategicChantierDetail.milestones.transition.ready": "Check-list {milestone} complète",
+  "strategicChantierDetail.milestones.transition.readyHint":
+    "Le passage en {milestone} peut être demandé",
+  "strategicChantierDetail.milestones.transition.waitingOwner":
+    "Le responsable du chantier doit confirmer le passage en {milestone}.",
+  "strategicChantierDetail.milestones.transition.confirm": "Confirmer le passage en {milestone}",
+  "strategicChantierDetail.milestones.transition.refuse": "Refuser",
+  "strategicChantierDetail.milestones.transition.cancel": "Annuler la demande",
+  "strategicChantierDetail.milestones.transition.refuseComment": "Commentaire (optionnel)",
+  "strategicChantierDetail.milestones.transition.refuseConfirm": "Confirmer le refus",
+  "strategicChantierDetail.milestones.transition.final":
+    "Dernier jalon ({milestone}) atteint : check-list complète.",
+  "strategicChantierDetail.milestones.transition.readyNotOwner":
+    "Le responsable du projet doit demander la validation du passage en {milestone}.",
+  "strategicChantierDetail.milestones.transition.request":
+    "Demander la validation du passage en {milestone}",
+  "strategicChantierDetail.milestones.transition.requestHint":
+    "Le responsable du chantier recevra la demande et devra confirmer le passage.",
+  "strategicChantierDetail.milestones.transition.confirmed": "Passage de jalon confirmé",
+  "strategicChantierDetail.milestones.transition.refuseOpen": "Refuser…",
+  "strategicChantierDetail.milestones.transition.cancelOpen": "Annuler la demande…",
 
   // Round "actions clés du jalon" : actions personnalisées ajoutées par le pilote du projet, en
   // plus des items fixes ci-dessous — même style de rendu (`MilestoneChecklistPanel.tsx`), mais
@@ -2028,6 +2051,8 @@ const fr: Record<string, string> = {
   "kpi.view.cards": "Cartes",
   "kpi.view.table": "Tableau",
   "kpi.table.indicator": "Indicateur",
+  "kpi.table.baseline": "Référence",
+  "kpi.table.baselineHint": "Valeur au début du plan stratégique",
   "kpi.table.current": "Actuel",
   "kpi.table.target": "Cible",
   "kpi.table.finalTarget": "Cible finale",
@@ -2100,6 +2125,25 @@ const fr: Record<string, string> = {
   "staffing.projetSectionTitle": "ETP mobilisés sur ce projet",
   "staffing.draftHint":
     "Ces lignes seront enregistrées dès la création (ou la validation) du projet.",
+  "staffing.teamPlaceholder": "À définir",
+  "staffing.ftePlaceholder": "ex. 0,5",
+  "staffing.datesMissing": "Dates à compléter",
+  "staffing.edit": "Modifier cette ligne",
+  "staffing.editing": "Modification de la ligne",
+  "staffing.editingMissingDates":
+    "Modification de la ligne — complétez les dates de début et de fin.",
+  "staffing.saveEdit": "Enregistrer",
+  "staffing.validation.teamRequired": "Choisissez une équipe.",
+  "staffing.validation.fteRequired": "Indiquez le nombre d'ETP.",
+  "staffing.validation.fteInvalid":
+    "Le nombre d'ETP doit être un nombre strictement positif (ex. 0,5).",
+  "staffing.validation.startRequired": "La date de début est obligatoire.",
+  "staffing.validation.startInvalid": "Date de début invalide.",
+  "staffing.validation.endRequired": "La date de fin est obligatoire.",
+  "staffing.validation.endInvalid": "Date de fin invalide.",
+  "staffing.validation.endBeforeStart":
+    "La date de fin doit être postérieure ou égale à la date de début.",
+  "staffing.validation.outsideProject": "Attention : ces dates sortent de la période du projet.",
 
   // ─── Page Effectifs mobilisés (/effectifs, Plan Stratégique) ──────────────
   "effectifs.title": "Effectifs & budget mobilisés",
@@ -2183,6 +2227,45 @@ const fr: Record<string, string> = {
   "staffingPeriod.granularity.quarterly": "Trimestre",
   "staffingPeriod.granularity.semiannual": "Semestre",
   "staffingPeriod.granularity.annual": "Année",
+  // Taux de staffing (mobilisé / disponible) — StaffingRateSection, lib/staffingRate.ts.
+  "staffingPeriod.granularity.monthly": "Mois",
+  "effectifs.staffingRate.title": "Mobilisé vs disponible (base ETP)",
+  "effectifs.staffingRate.hint":
+    "ETP moyens sur la période : lignes de staffing (en cours ou planifiées) dont les dates recoupent la période, pondérées par la durée. Disponible : instantané actuel de la base ETP. Taux de staffing = mobilisé / disponible.",
+  "effectifs.staffingRate.rate": "Taux de staffing",
+  "effectifs.staffingRate.available": "Disponible",
+  "effectifs.staffingRate.mobilised": "Mobilisé",
+  "effectifs.staffingRate.seriesTitle": "Évolution par période (ETP moyens)",
+  "effectifs.staffingRate.headline":
+    "{period} : mobilisé {mobilised} ETP / disponible {available} ETP",
+  "effectifs.staffingRate.periodCol": "Période",
+  "effectifs.staffingRate.level.over": "Sur-staffé",
+  "effectifs.staffingRate.level.tense": "Tendu",
+  "effectifs.staffingRate.level.ok": "OK",
+  "effectifs.staffingRate.level.none": "—",
+  "effectifs.staffingRate.legend": "> 100 % sur-staffé · 85–100 % tendu · < 85 % OK",
+  "effectifs.staffingRate.axisFilter": "Axes",
+  "effectifs.staffingRate.allAxes": "Tous les axes",
+  "effectifs.staffingRate.axisFilterHint":
+    "Seules les mobilisations sur les projets des chantiers des axes sélectionnés sont comptées ; le disponible reste celui de l'équipe.",
+  "effectifs.staffingRate.heatmapTitle": "Taux de staffing par équipe et par mois",
+  "effectifs.staffingRate.teamCol": "Équipe",
+  "effectifs.staffingRate.prevYear": "Année précédente",
+  "effectifs.staffingRate.nextYear": "Année suivante",
+  "effectifs.staffingRate.cellTooltip": "Mobilisé {mobilised} ETP / disponible {available} ETP",
+  "effectifs.staffingRate.topProjets": "Principaux projets",
+  "effectifs.staffingRate.noAvailability": "Aucun disponible dans la base ETP pour cette équipe",
+  "effectifs.staffingRate.cellDetailTitle": "{team} — {period}",
+  "effectifs.staffingRate.projetCol": "Projet",
+  "effectifs.staffingRate.chantierCol": "Chantier",
+  "effectifs.staffingRate.fteCol": "ETP moyens",
+  "effectifs.staffingRate.transverse": "(transverse au chantier)",
+  "effectifs.staffingRate.unknownProjet": "Projet inconnu",
+  "effectifs.staffingRate.cellDetailEmpty": "Aucune mobilisation sur cette période.",
+  "effectifs.staffingRate.overTeamsNow": "{n} équipe(s) sur-staffée(s) en {period}",
+  "effectifs.staffingRate.empty":
+    "Aucune équipe dans la base ETP ni aucune ligne de staffing datée.",
+  "effectifs.staffingRate.teamClickHint": "Voir les employés disponibles de l'équipe",
   "staffingPeriod.empty": "Aucun ETP daté pour cette granularité.",
   "staffingPeriod.undatedNote":
     "{n} ligne(s) d'ETP sans date de début, non représentée(s) dans cette vue.",

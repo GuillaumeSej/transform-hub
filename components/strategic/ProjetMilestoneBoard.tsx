@@ -1,16 +1,18 @@
 "use client";
 
 import { TriangleAlert } from "lucide-react";
+import { MilestoneTransitionBadge } from "@/components/strategic/MilestoneTransitionBadge";
 import {
   displayMilestoneId,
   isProjetLate,
   milestoneProgressPct,
+  milestoneTransitionState,
   progressBucket,
   type ProgressBucket,
 } from "@/lib/axisLogic";
 import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Chantier, ChantierAction, MilestoneId } from "@/types";
+import type { AuthUser, Chantier, ChantierAction, MilestoneId } from "@/types";
 
 /**
  * Vue E0→E4 par axe — widget dashboard "chantier-health" (round 8, remplace `ChantierHealthMatrix`,
@@ -92,12 +94,16 @@ export function ProjetCard({
   chantierColor,
   onProjetClick,
   clickable = true,
+  users,
 }: ProjetBoardCard & {
   onProjetClick: (chantierId: string, focusActionId?: string) => void;
   /** Round 25 (RBAC `chantier_contributor`) — le projet reste rendu (couleur, avancement, statut
    *  "en retard") mais devient inerte au clic quand `false`. Défaut `true` : comportement
    *  historique inchangé pour tout appelant qui ne le passe pas. */
   clickable?: boolean;
+  /** Utilisateurs (nom affiché du demandeur d'un passage de jalon en attente). Optionnel : repli
+   *  sur le username. */
+  users?: Pick<AuthUser, "username" | "name">[];
 }) {
   const { t } = useTranslation();
   // Round 19, point 3 : avancement PROPRE de ce levier (jalons pondérés `milestoneProgressPct`,
@@ -118,6 +124,10 @@ export function ProjetCard({
   // "En retard" (ton `rag-red`), volontairement DISTINCTE de la pastille rouge `CARD_PROGRESS_PILL_CLASS`
   // déjà utilisée pour un avancement 0-33% (deux signaux différents, jamais fusionnés).
   const late = isProjetLate(action, progressPct);
+  // Round "passage de jalon explicite" : demande de passage en attente de confirmation du pilote
+  // du chantier — pastille corail-rose (qui/quand en infobulle). Seul l'état "pending" est rendu
+  // ici (pas "ready" : sans `autoFlags`, ce composant ne peut pas l'établir de façon fiable).
+  const transition = milestoneTransitionState(action);
   return (
     <button
       type="button"
@@ -157,6 +167,9 @@ export function ProjetCard({
             <TriangleAlert size={10} aria-hidden />
             {t("strategicDashboard.projetBoard.late", "En retard")}
           </span>
+        )}
+        {transition.status === "pending" && (
+          <MilestoneTransitionBadge state={transition} users={users} compact />
         )}
       </span>
       <span className="w-full truncate pl-3.5 text-[10.5px] text-tertiary" title={chantier.name}>
@@ -201,6 +214,7 @@ export function ProjetMilestoneBoard({
   labels,
   onProjetClick,
   clickableActionIds = "all",
+  users,
 }: {
   groups: ProjetBoardGroup[];
   /** `emptyColumn` : placeholder discret d'une colonne de jalon sans levier — un texte plutôt que
@@ -210,6 +224,8 @@ export function ProjetMilestoneBoard({
   /** Round 25 (RBAC `chantier_contributor`) — voir `StrategicData.clickableActionIds`,
    *  lib/hooks/useStrategicData.ts. Défaut `"all"` (comportement historique inchangé). */
   clickableActionIds?: Set<string> | "all";
+  /** Nom affiché du demandeur d'un passage de jalon en attente (voir `ProjetCard.users`). */
+  users?: Pick<AuthUser, "username" | "name">[];
 }) {
   const { t } = useTranslation();
   const isActionClickable = (actionId: string) =>
@@ -290,6 +306,7 @@ export function ProjetMilestoneBoard({
                         chantierColor={card.chantierColor}
                         onProjetClick={onProjetClick}
                         clickable={isActionClickable(card.action.id)}
+                        users={users}
                       />
                     ))
                   )}

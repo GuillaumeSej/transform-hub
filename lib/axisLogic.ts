@@ -1187,8 +1187,14 @@ export function approveMilestoneGate(
     throw new Error(`Le projet "${action.id}" n'a pas de demande de validation de jalon en cours`);
   }
   const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
+  // Round "passage de jalon explicite" : le responsable (pilote) du CHANTIER est l'approbateur
+  // nominal d'un jalon (`resolveApprover("milestone", …)`, lib/strategicApprovals.ts) — il doit
+  // pouvoir confirmer aussi par ce chemin direct (demande posée sans `StrategicApproval`, typiquement
+  // quand il est lui-même le propriétaire du projet), pas seulement le `strategic_lead`.
   const authorized =
-    isAnyAdmin(user) || (!!parentChantier && isStrategicLeadOf(parentChantier, user));
+    isAnyAdmin(user) ||
+    (!!parentChantier &&
+      (isStrategicLeadOf(parentChantier, user) || parentChantier.pilote === user.username));
   if (!authorized) {
     throw new Error(`Vous n'êtes pas habilité à approuver cette demande de validation de jalon`);
   }
@@ -1231,11 +1237,72 @@ export function rejectMilestoneApproval(
   const authorized =
     isAnyAdmin(user) ||
     action.owner === user.username ||
-    (!!parentChantier && isStrategicLeadOf(parentChantier, user));
+    (!!parentChantier &&
+      (isStrategicLeadOf(parentChantier, user) || parentChantier.pilote === user.username));
   if (!authorized) {
     throw new Error(`Vous n'êtes pas habilité à rejeter cette demande de validation de jalon`);
   }
   return { milestoneApproval: undefined };
+}
+
+/**
+ * État de TRANSITION de jalon d'un projet (round "passage de jalon explicite") — répond à « que se
+ * passe-t-il maintenant ? » quand la check-list du jalon courant atteint 100 % :
+ *  - `"pending"`     une demande de passage est en cours (`action.milestoneApproval`) : le projet
+ *                    attend la confirmation du responsable du chantier (prioritaire sur tout le
+ *                    reste — même si la check-list a régressé depuis) ;
+ *  - `"ready"`       la check-list du jalon courant est complète (`canPassMilestone`, même fusion
+ *                    que `requestMilestoneApproval`) et il existe un jalon suivant : la demande
+ *                    « Demander la validation du passage en J{n+1} » peut être envoyée ;
+ *  - `"final"`       check-list complète mais déjà au dernier jalon (J4) : plus rien à demander ;
+ *  - `"in_progress"` check-list incomplète.
+ * Aucune avancée automatique : ce n'est qu'un état dérivé, la demande reste un geste explicite.
+ *
+ * `autoFlags` : valeurs LIVE des items automatiques du jalon courant (`resolveMilestoneAutoFlags`).
+ * Un appelant qui n'a pas `allChantiers`/`allActions` sous la main peut l'omettre — mode dégradé
+ * SÛR : un item auto sans valeur compte comme non répondu, donc jamais de faux `"ready"`.
+ */
+export type MilestoneTransitionState =
+  | { status: "in_progress"; from: MilestoneId; to?: MilestoneId }
+  | { status: "ready"; from: MilestoneId; to: MilestoneId }
+  | { status: "final"; from: MilestoneId }
+  | {
+      status: "pending";
+      from: MilestoneId;
+      to: MilestoneId;
+      requestedBy: string;
+      requestedAt: string;
+    };
+
+export function milestoneTransitionState(
+  action: Pick<
+    ChantierAction,
+    "milestones" | "milestoneApproval" | "customMilestoneActions" | "excludedMilestoneItems"
+  >,
+  autoFlags: Record<string, number> = {}
+): MilestoneTransitionState {
+  const from = action.milestones?.currentMilestone ?? "E0";
+  const next = MILESTONE_ORDER[MILESTONE_ORDER.indexOf(from) + 1] as MilestoneId | undefined;
+  if (action.milestoneApproval) {
+    return {
+      status: "pending",
+      from,
+      to: action.milestoneApproval.targetMilestone,
+      requestedBy: action.milestoneApproval.requestedBy,
+      requestedAt: action.milestoneApproval.requestedAt,
+    };
+  }
+  const merged = mergeMilestoneChecklistItems(
+    from,
+    action.milestones?.checklists[from] ?? [],
+    autoFlags,
+    action.customMilestoneActions?.[from] ?? [],
+    action.excludedMilestoneItems?.[from] ?? []
+  );
+  const { canPass } = canPassMilestone(from, merged);
+  if (!canPass)
+    return next ? { status: "in_progress", from, to: next } : { status: "in_progress", from };
+  return next ? { status: "ready", from, to: next } : { status: "final", from };
 }
 
 /** Un des 3 buckets d'affichage discrets d'un `progressPct` (0-100, voir

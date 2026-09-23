@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Users } from "lucide-react";
+import { Pencil, Plus, Save, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/shared/Button";
+import {
+  EMPTY_STAFFING_LINE,
+  MissingDatesBadge,
+  StaffingLineFields,
+  type StaffingLineFormValue,
+} from "@/components/strategic/StaffingLineFields";
 import {
   deleteChantierStaffing,
   saveChantierStaffing,
@@ -14,11 +20,16 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { isReadOnlyUser } from "@/lib/roleProfiles";
+import {
+  isStaffingLineMissingDates,
+  parseFte,
+  validateStaffingLine,
+} from "@/lib/staffingLineValidation";
 import type { ChantierAction, ChantierStaffing } from "@/types";
 
 /**
  * Bloc « ETP mobilisés » d'une fiche chantier : la liste des lignes de staffing du chantier
- * (une équipe + un volume d'ETP par ligne) et le mini-formulaire d'ajout.
+ * (une équipe + un volume d'ETP par ligne) et le mini-formulaire d'ajout/édition.
  *
  * Volontairement AUTONOME — il ne reçoit que les quatre identifiants de son contexte et gère
  * lui-même son abonnement Firestore et ses écritures. Motif : il est rendu à l'intérieur de la
@@ -29,28 +40,21 @@ import type { ChantierAction, ChantierStaffing } from "@/types";
  * (round 13) : léger abonnement supplémentaire, mais garde le composant capable de fonctionner
  * seul sans dépendre d'un pré-chargement fait par l'appelant.
  *
- * Édition : ajout + suppression seulement, pas de modification en place — une ligne n'a que deux
- * champs signifiants, la corriger revient à la ressaisir (même parti pris que
- * `useStrategicData.createStaffing`, qui n'expose pas non plus d'`updateStaffing`).
+ * Round 13 : le sélecteur d'équipe liste les départements RÉELS de la base ETP entreprise
+ * (`useCompanyDepartments`, Plan Performance) — voir la note de tête de section `ChantierStaffing`
+ * dans `types/index.ts`.
  *
- * Round 13 : le sélecteur d'équipe listait auparavant 9 fonctions figées (`StaffingFunction`,
- * retirée de `types/index.ts`) ; il liste désormais les départements RÉELS de la base ETP
- * entreprise (`useCompanyDepartments`, Plan Performance) — voir la note de tête de section
- * `ChantierStaffing` dans `types/index.ts` pour le raisonnement complet. Une entreprise sans base
- * ETP encore saisie n'a aucune option : le champ reste vide plutôt que de retomber sur un
- * référentiel arbitraire.
+ * Round 28 : vrai `<table>` — une personne = une ligne, colonnes Personne/Précision, Équipe, Début,
+ * Fin, Taux ETP, et Projet quand pertinent. Gagne aussi `scopedToActionId` : rendu une SECONDE fois
+ * directement sur la carte d'un projet/levier précis — voir `ChantierDetailPanel.tsx`.
  *
- * Round 28 : la liste plate (un `<li>` par ligne, champs concaténés avec "·") est devenue un vrai
- * `<table>` — une personne = une ligne, colonnes Personne/Précision, Équipe, Début, Fin, Taux ETP,
- * et Projet quand pertinent (même convention de tableau que `StaffingDetailModal.tsx` :
- * `overflow-x-auto rounded-md border` + `<thead className="bg-neutral-50 ...">`). Gagne aussi
- * `scopedToActionId` : rendu une SECONDE fois (en plus de l'instance chantier existante, inchangée)
- * directement sur la carte d'un projet/levier précis, pour y afficher SES lignes de staffing sans
- * naviguer jusqu'à l'onglet "Effectifs" — voir `ChantierDetailPanel.tsx`.
+ * Règles de saisie (retour PO) : équipe JAMAIS pré-remplie (« À définir », choix obligatoire),
+ * ETP vide par défaut et obligatoire (> 0, virgule acceptée), dates de début ET de fin obligatoires
+ * (fin ≥ début), avertissement non bloquant si hors période du projet — voir
+ * `lib/staffingLineValidation.ts` (partagé avec `StaffingDraftTable.tsx`). Une ligne existante peut
+ * désormais être MODIFIÉE en place (crayon, ou badge « Dates à compléter » pour les lignes
+ * historiques sans dates) : le formulaire se recharge avec ses valeurs et exige les mêmes règles.
  */
-
-const INPUT_CLASS =
-  "mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral";
 
 /** Même politique d'id que `useStrategicData` (suffixe aléatoire) : jamais affiché, seulement une
  *  clé de document stable, et pas de lecture préalable de la collection pour trouver un numéro. */
@@ -58,20 +62,17 @@ function newStaffingId(): string {
   return `ST-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Saisie numérique tolérante à la virgule décimale. `null` = invalide (vide compris) : un ETP
- *  doit être strictement positif, une ligne à 0 ETP n'aurait aucun sens dans les agrégats.
- *  Exportée (round 29) pour être réutilisée telle quelle par `StaffingDraftTable.tsx`, qui a
- *  besoin de la même règle de validation côté brouillon local (formulaire de création de projet). */
-export function parseFte(raw: string): number | null {
-  const parsed = Number(raw.trim().replace(",", "."));
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return parsed;
-}
+/** Ré-export (compat) : la règle vit désormais dans `lib/staffingLineValidation.ts`, partagée avec
+ *  `StaffingDraftTable.tsx` et testée unitairement. */
+export { parseFte };
 
 /** Formatage court : 1 et non 1.0, 0,5 et non 0.5 (locale d'affichage du navigateur). */
 export function formatFte(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
 }
+
+const SELECT_CLASS =
+  "mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral";
 
 export function ChantierStaffingEditor({
   companyId,
@@ -84,13 +85,13 @@ export function ChantierStaffingEditor({
   programId: string;
   chantierId: string;
   /** Leviers du chantier (round 7) — univers du sélecteur optionnel « levier concerné » ci-dessous.
-   *  Un staffing transverse au chantier reste possible en laissant le sélecteur vide. */
+   *  Un staffing transverse au chantier reste possible en laissant le sélecteur vide. Sert aussi à
+   *  retrouver les dates du projet sélectionné (avertissement « hors période »). */
   chantierActions: ChantierAction[];
   /** Scope optionnel à UN projet précis (`ChantierAction.id`) — filtre les lignes affichées à
    *  celles dont `actionId` correspond, cache la colonne "Projet" (redondante dans ce contexte), et
-   *  pré-remplit/verrouille le sélecteur "Projet concerné" du formulaire d'ajout sur cette valeur
-   *  (toujours modifiable manuellement si l'utilisateur veut au contraire déclarer une ligne
-   *  transverse au chantier depuis cette vue — ne pas rendre le champ totalement inerte). */
+   *  pré-remplit le sélecteur "Projet concerné" du formulaire d'ajout sur cette valeur (toujours
+   *  modifiable manuellement). */
   scopedToActionId?: string;
 }) {
   const { t } = useTranslation();
@@ -102,19 +103,17 @@ export function ChantierStaffingEditor({
 
   const [all, setAll] = useState<ChantierStaffing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [functionDraft, setFunctionDraft] = useState("");
-  const [fteDraft, setFteDraft] = useState("1");
-  const [noteDraft, setNoteDraft] = useState("");
-  const [startDateDraft, setStartDateDraft] = useState("");
-  const [endDateDraft, setEndDateDraft] = useState("");
-  // Pré-rempli (pas verrouillé, voir doc-comment de `scopedToActionId`) sur le projet scopé dès le
-  // montage — simple valeur initiale de `useState`, jamais re-synchronisée ensuite pour ne pas
-  // écraser un choix manuel de l'utilisateur.
+  const [form, setForm] = useState<StaffingLineFormValue>(EMPTY_STAFFING_LINE);
+  // Pré-rempli (pas verrouillé) sur le projet scopé — simple valeur initiale, jamais re-synchronisée.
   const [actionDraft, setActionDraft] = useState(scopedToActionId ?? "");
+  /** Ligne en cours de modification (`null` = mode ajout). */
+  const [editing, setEditing] = useState<ChantierStaffing | null>(null);
+  /** Change à chaque réinitialisation du formulaire → remonte `StaffingLineFields` (état « touché »). */
+  const [formKey, setFormKey] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  const actionNameById = useMemo(
-    () => new Map(chantierActions.map((a) => [a.id, a.name])),
+  const actionById = useMemo(
+    () => new Map(chantierActions.map((a) => [a.id, a])),
     [chantierActions]
   );
 
@@ -133,13 +132,6 @@ export function ChantierStaffingEditor({
     });
     return unsub;
   }, [companyId]);
-
-  // Présélectionne la première équipe dès que la base ETP répond, plutôt que de laisser le champ
-  // vide en permanence — ne réagit qu'à l'arrivée de la PREMIÈRE liste non vide (pas à chaque
-  // mise à jour) pour ne jamais écraser une sélection déjà faite par l'utilisateur.
-  useEffect(() => {
-    if (!functionDraft && departmentNames.length > 0) setFunctionDraft(departmentNames[0]);
-  }, [departmentNames, functionDraft]);
 
   const entries = useMemo(
     () =>
@@ -160,43 +152,70 @@ export function ChantierStaffingEditor({
   // même projet) — et sans intérêt sur un chantier qui n'a aucun levier (`chantierActions` vide).
   const showProjetColumn = !scopedToActionId && chantierActions.length > 0;
 
-  const add = async () => {
-    if (!functionDraft) {
-      showToast(t("staffing.functionRequired"), "", "error");
-      return;
-    }
-    const fte = parseFte(fteDraft);
-    if (fte === null) {
-      showToast(t("staffing.fteInvalid"), "", "error");
-      return;
-    }
-    const note = noteDraft.trim();
-    const startDate = startDateDraft.trim();
-    const endDate = endDateDraft.trim();
+  const selectedAction = actionDraft ? actionById.get(actionDraft) : undefined;
+  const validation = validateStaffingLine(
+    form,
+    selectedAction ? { start: selectedAction.start, end: selectedAction.end } : null
+  );
+
+  const resetForm = () => {
+    setForm(EMPTY_STAFFING_LINE);
+    setEditing(null);
+    // Retombe sur le projet scopé (pas sur vide) quand ce composant est rendu depuis la carte
+    // d'un projet précis.
+    setActionDraft(scopedToActionId ?? "");
+    setFormKey((k) => k + 1);
+  };
+
+  const startEdit = (entry: ChantierStaffing) => {
+    setEditing(entry);
+    setForm({
+      team: entry.function ?? "",
+      fte: entry.fte ? String(entry.fte).replace(".", ",") : "",
+      note: entry.note ?? "",
+      startDate: entry.startDate ?? "",
+      endDate: entry.endDate ?? "",
+    });
+    setActionDraft(entry.actionId ?? "");
+    setFormKey((k) => k + 1);
+  };
+
+  const submit = async () => {
+    if (!validation.valid || validation.fte === null) return;
+    const note = form.note.trim();
+    const base: ChantierStaffing = editing
+      ? {
+          id: editing.id,
+          companyId: editing.companyId,
+          programId: editing.programId,
+          chantierId: editing.chantierId,
+          createdAt: editing.createdAt,
+          function: "",
+          fte: 0,
+        }
+      : {
+          id: newStaffingId(),
+          companyId,
+          programId,
+          chantierId,
+          createdAt: new Date().toISOString().slice(0, 10),
+          function: "",
+          fte: 0,
+        };
     setSaving(true);
     try {
+      // `setDoc` remplace le document : un champ optionnel vidé en édition est bien retiré.
+      // Champs optionnels OMIS plutôt que passés à `undefined` : Firestore rejette `undefined`.
       await saveChantierStaffing({
-        id: newStaffingId(),
-        companyId,
-        programId,
-        chantierId,
-        function: functionDraft,
-        fte,
-        // Champs optionnels OMIS plutôt que passés à `undefined` : Firestore rejette `undefined`.
+        ...base,
+        function: form.team,
+        fte: validation.fte,
+        startDate: form.startDate.trim(),
+        endDate: form.endDate.trim(),
         ...(note !== "" ? { note } : {}),
-        ...(startDate !== "" ? { startDate } : {}),
-        ...(endDate !== "" ? { endDate } : {}),
         ...(actionDraft !== "" ? { actionId: actionDraft } : {}),
-        createdAt: new Date().toISOString().slice(0, 10),
       });
-      setFteDraft("1");
-      setNoteDraft("");
-      setStartDateDraft("");
-      setEndDateDraft("");
-      // Retombe sur le projet scopé (pas sur vide) quand ce composant est rendu depuis la carte
-      // d'un projet précis — sinon la ligne suivante saisie depuis cette même vue partirait "sans
-      // projet" par défaut, contre-intuitif pour l'utilisateur qui vient de l'ouvrir depuis là.
-      setActionDraft(scopedToActionId ?? "");
+      resetForm();
     } catch {
       showToast(t("staffing.saveError"), "", "error");
     } finally {
@@ -207,6 +226,7 @@ export function ChantierStaffingEditor({
   const remove = async (id: string) => {
     try {
       await deleteChantierStaffing(id);
+      if (editing?.id === id) resetForm();
     } catch {
       showToast(t("staffing.saveError"), "", "error");
     }
@@ -246,7 +266,10 @@ export function ChantierStaffingEditor({
             </thead>
             <tbody className="divide-y divide-border">
               {entries.map((entry) => (
-                <tr key={entry.id} className="bg-white text-primary">
+                <tr
+                  key={entry.id}
+                  className={`text-primary ${editing?.id === entry.id ? "bg-bp-coral/5" : "bg-white"}`}
+                >
                   <td className="px-2.5 py-1.5 font-medium">{entry.note || "—"}</td>
                   <td className="px-2.5 py-1.5">
                     <span className="flex items-center gap-1.5">
@@ -254,23 +277,42 @@ export function ChantierStaffingEditor({
                         aria-hidden
                         className={`h-2 w-2 shrink-0 rounded-full ${colorForDepartment(entry.function)}`}
                       />
-                      {entry.function}
+                      {entry.function || t("staffing.teamPlaceholder", "À définir")}
                     </span>
                   </td>
-                  <td className="px-2.5 py-1.5 text-tertiary">{entry.startDate || "—"}</td>
-                  <td className="px-2.5 py-1.5 text-tertiary">{entry.endDate || "—"}</td>
+                  {isStaffingLineMissingDates(entry) ? (
+                    // Données antérieures à la règle « dates obligatoires » : un seul badge sur
+                    // les deux colonnes plutôt qu'une date partielle — clic = édition de la ligne.
+                    <td colSpan={2} className="px-2.5 py-1.5 text-tertiary">
+                      <MissingDatesBadge onClick={readOnly ? undefined : () => startEdit(entry)} />
+                    </td>
+                  ) : (
+                    <>
+                      <td className="px-2.5 py-1.5 text-tertiary">{entry.startDate}</td>
+                      <td className="px-2.5 py-1.5 text-tertiary">{entry.endDate}</td>
+                    </>
+                  )}
                   <td className="px-2.5 py-1.5 text-right font-semibold">
-                    {formatFte(entry.fte)} {t("staffing.fteUnit")}
+                    {formatFte(entry.fte || 0)} {t("staffing.fteUnit")}
                   </td>
                   {showProjetColumn && (
                     <td className="px-2.5 py-1.5 text-tertiary">
                       {entry.actionId
-                        ? (actionNameById.get(entry.actionId) ?? t("staffing.actionNone"))
+                        ? (actionById.get(entry.actionId)?.name ?? t("staffing.actionNone"))
                         : "—"}
                     </td>
                   )}
                   {!readOnly && (
-                    <td className="px-2.5 py-1.5 text-right">
+                    <td className="whitespace-nowrap px-2.5 py-1.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(entry)}
+                        aria-label={t("staffing.edit", "Modifier cette ligne")}
+                        title={t("staffing.edit", "Modifier cette ligne")}
+                        className="rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-primary"
+                      >
+                        <Pencil size={13} />
+                      </button>
                       <button
                         type="button"
                         onClick={() => remove(entry.id)}
@@ -290,95 +332,61 @@ export function ChantierStaffingEditor({
       )}
 
       {!readOnly && (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <label className="block text-[11px] font-medium text-secondary">
-              {t("staffing.function")}
-              {departmentNames.length > 0 ? (
-                <select
-                  value={functionDraft}
-                  onChange={(e) => setFunctionDraft(e.target.value)}
-                  className={INPUT_CLASS}
-                >
-                  {departmentNames.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                // Aucune équipe dans la base ETP entreprise (module RH, `/hr/etp`) : rien à
-                // proposer — plutôt qu'un référentiel arbitraire, on renvoie explicitement vers la
-                // base ETP à compléter d'abord (round 13, voir doc-comment de tête de fichier).
-                <p className={`${INPUT_CLASS} bg-neutral-50 text-tertiary`}>
-                  {t("staffing.noDepartments")}
-                </p>
+        <>
+          {editing && (
+            <p className="mb-2 text-[11px] font-semibold text-secondary">
+              {isStaffingLineMissingDates(editing)
+                ? t(
+                    "staffing.editingMissingDates",
+                    "Modification de la ligne — complétez les dates de début et de fin."
+                  )
+                : t("staffing.editing", "Modification de la ligne")}
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+            <StaffingLineFields
+              key={formKey}
+              value={form}
+              onChange={setForm}
+              validation={validation}
+              departmentNames={departmentNames}
+              showAllErrors={editing !== null}
+              extraFields={
+                <label className="block text-[11px] font-medium text-secondary">
+                  {t("staffing.action")}
+                  <select
+                    value={actionDraft}
+                    onChange={(e) => setActionDraft(e.target.value)}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="">{t("staffing.actionNone")}</option>
+                    {chantierActions.map((action) => (
+                      <option key={action.id} value={action.id}>
+                        {action.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              }
+            />
+            <div className="flex items-end gap-1.5 sm:flex-col sm:justify-end">
+              {editing && (
+                <Button variant="ghost" size="sm" onClick={resetForm} disabled={saving}>
+                  {t("common.cancel", "Annuler")}
+                </Button>
               )}
-            </label>
-            <label className="block text-[11px] font-medium text-secondary">
-              {t("staffing.fte")}
-              <input
-                value={fteDraft}
-                onChange={(e) => setFteDraft(e.target.value)}
-                inputMode="decimal"
-                placeholder="1"
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="block text-[11px] font-medium text-secondary">
-              {t("staffing.note")}
-              <input
-                value={noteDraft}
-                onChange={(e) => setNoteDraft(e.target.value)}
-                placeholder={t("staffing.notePlaceholder")}
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="block text-[11px] font-medium text-secondary">
-              {t("staffing.startDate")}
-              <input
-                type="date"
-                value={startDateDraft}
-                onChange={(e) => setStartDateDraft(e.target.value)}
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="block text-[11px] font-medium text-secondary">
-              {t("staffing.endDate")}
-              <input
-                type="date"
-                value={endDateDraft}
-                onChange={(e) => setEndDateDraft(e.target.value)}
-                className={INPUT_CLASS}
-              />
-            </label>
-            <label className="block text-[11px] font-medium text-secondary">
-              {t("staffing.action")}
-              <select
-                value={actionDraft}
-                onChange={(e) => setActionDraft(e.target.value)}
-                className={INPUT_CLASS}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={submit}
+                disabled={saving || departmentNames.length === 0 || !validation.valid}
               >
-                <option value="">{t("staffing.actionNone")}</option>
-                {chantierActions.map((action) => (
-                  <option key={action.id} value={action.id}>
-                    {action.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {editing ? <Save size={12} /> : <Plus size={12} />}{" "}
+                {editing ? t("staffing.saveEdit", "Enregistrer") : t("staffing.add")}
+              </Button>
+            </div>
           </div>
-          <div className="flex items-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={add}
-              disabled={saving || departmentNames.length === 0}
-            >
-              <Plus size={12} /> {t("staffing.add")}
-            </Button>
-          </div>
-        </div>
+        </>
       )}
       {!readOnly && <p className="mt-1.5 text-[11px] text-tertiary">{t("staffing.hint")}</p>}
     </div>

@@ -2,6 +2,7 @@
 
 import { Fragment } from "react";
 import {
+  baselineMeasurement,
   computeIndicatorDelta,
   formatIndicatorProgress,
   latestMeasurement,
@@ -91,6 +92,10 @@ export function KpiTableView({
       latest?.value !== undefined
         ? `${latest.value}${unitSuffix}`
         : (latest?.note ?? labels.noValue);
+    // Référence = valeur au début du plan stratégique : la plus ancienne mesure chiffrée de
+    // l'historique COMPLET (jamais bornée par le filtre d'année), même formatage que "Actuel".
+    const baseline = baselineMeasurement(indicator.id, baselineMeasurements ?? measurements);
+    const baselineText = baseline?.value !== undefined ? `${baseline.value}${unitSuffix}` : "—";
     // Cible APPLICABLE à la période de la dernière mesure — sans mesure, rien à résoudre (pas de
     // repli sur "aujourd'hui" : on ne sait pas quelle période comparer), voir le doc-comment du
     // composant.
@@ -118,6 +123,7 @@ export function KpiTableView({
           {chantierName && <div className="text-[11px] text-text-secondary">{chantierName}</div>}
           <IndicatorMetaLine indicator={indicator} className="mt-1" />
         </td>
+        <td className={td}>{baselineText}</td>
         <td className={`${td} font-semibold ${VALUE_COLOR[bucket]}`}>{current}</td>
         <td className={td}>
           {currentTarget !== undefined ? `${currentTarget}${unitSuffix}` : "—"}
@@ -166,6 +172,12 @@ export function KpiTableView({
           <thead>
             <tr>
               <th className={th}>{labels.indicator}</th>
+              <th
+                className={th}
+                title={t("kpi.table.baselineHint", "Valeur au début du plan stratégique")}
+              >
+                {t("kpi.table.baseline", "Référence")}
+              </th>
               <th className={th}>{labels.current}</th>
               <th className={th}>{labels.target}</th>
               <th className={th}>{labels.finalTarget}</th>

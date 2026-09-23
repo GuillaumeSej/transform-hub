@@ -1726,6 +1726,29 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.approval.requestedMeta": "Solicitado por {user} el {date}",
   "strategicChantierDetail.milestones.approval.approve": "Aprobar",
   "strategicChantierDetail.milestones.approval.reject": "Rechazar",
+  "strategicChantierDetail.milestones.transition.pending": "Pendiente de confirmación",
+  "strategicChantierDetail.milestones.transition.requestedMeta": "Solicitado por {user} el {date}",
+  "strategicChantierDetail.milestones.transition.ready": "Checklist {milestone} completa",
+  "strategicChantierDetail.milestones.transition.readyHint":
+    "Se puede solicitar el paso a {milestone}",
+  "strategicChantierDetail.milestones.transition.waitingOwner":
+    "El responsable del frente de trabajo debe confirmar el paso a {milestone}.",
+  "strategicChantierDetail.milestones.transition.confirm": "Confirmar el paso a {milestone}",
+  "strategicChantierDetail.milestones.transition.refuse": "Rechazar",
+  "strategicChantierDetail.milestones.transition.cancel": "Anular la solicitud",
+  "strategicChantierDetail.milestones.transition.refuseComment": "Comentario (opcional)",
+  "strategicChantierDetail.milestones.transition.refuseConfirm": "Confirmar el rechazo",
+  "strategicChantierDetail.milestones.transition.final":
+    "Último hito ({milestone}) alcanzado: checklist completa.",
+  "strategicChantierDetail.milestones.transition.readyNotOwner":
+    "El responsable del proyecto debe solicitar la validación del paso a {milestone}.",
+  "strategicChantierDetail.milestones.transition.request":
+    "Solicitar la validación del paso a {milestone}",
+  "strategicChantierDetail.milestones.transition.requestHint":
+    "El responsable del frente de trabajo recibirá la solicitud y deberá confirmar el paso.",
+  "strategicChantierDetail.milestones.transition.confirmed": "Paso de hito confirmado",
+  "strategicChantierDetail.milestones.transition.refuseOpen": "Rechazar…",
+  "strategicChantierDetail.milestones.transition.cancelOpen": "Anular la solicitud…",
 
   "strategicChantierDetail.milestones.customActions.placeholder": "Nueva acción…",
   "strategicChantierDetail.milestones.customActions.add": "Añadir una acción",
@@ -1940,6 +1963,8 @@ const es: Record<string, string> = {
   "kpi.view.cards": "Tarjetas",
   "kpi.view.table": "Tabla",
   "kpi.table.indicator": "Indicador",
+  "kpi.table.baseline": "Referencia",
+  "kpi.table.baselineHint": "Valor al inicio del plan estratégico",
   "kpi.table.current": "Actual",
   "kpi.table.target": "Objetivo",
   "kpi.table.finalTarget": "Objetivo final",
@@ -2009,6 +2034,25 @@ const es: Record<string, string> = {
   "staffing.columnProjet": "Iniciativa",
   "staffing.projetSectionTitle": "ETC movilizados en esta iniciativa",
   "staffing.draftHint": "Estas líneas se guardarán en cuanto se cree (o se apruebe) la iniciativa.",
+  "staffing.teamPlaceholder": "Por definir",
+  "staffing.ftePlaceholder": "p. ej. 0,5",
+  "staffing.datesMissing": "Fechas por completar",
+  "staffing.edit": "Editar esta línea",
+  "staffing.editing": "Edición de la línea",
+  "staffing.editingMissingDates": "Edición de la línea — complete las fechas de inicio y fin.",
+  "staffing.saveEdit": "Guardar",
+  "staffing.validation.teamRequired": "Seleccione un equipo.",
+  "staffing.validation.fteRequired": "Indique el número de ETC.",
+  "staffing.validation.fteInvalid":
+    "El número de ETC debe ser estrictamente positivo (p. ej. 0,5).",
+  "staffing.validation.startRequired": "La fecha de inicio es obligatoria.",
+  "staffing.validation.startInvalid": "Fecha de inicio no válida.",
+  "staffing.validation.endRequired": "La fecha de fin es obligatoria.",
+  "staffing.validation.endInvalid": "Fecha de fin no válida.",
+  "staffing.validation.endBeforeStart":
+    "La fecha de fin debe ser igual o posterior a la fecha de inicio.",
+  "staffing.validation.outsideProject":
+    "Atención: estas fechas quedan fuera del periodo del proyecto.",
 
   // ─── Página Personal movilizado (/effectifs, Plan Estratégico) ────────────
   "effectifs.title": "Personal y presupuesto movilizados",
@@ -2081,6 +2125,45 @@ const es: Record<string, string> = {
   "staffingPeriod.granularity.quarterly": "Trimestre",
   "staffingPeriod.granularity.semiannual": "Semestre",
   "staffingPeriod.granularity.annual": "Año",
+  // Taux de staffing (mobilisé / disponible) — StaffingRateSection, lib/staffingRate.ts.
+  "staffingPeriod.granularity.monthly": "Mes",
+  "effectifs.staffingRate.title": "Movilizado vs disponible (base de ETC)",
+  "effectifs.staffingRate.hint":
+    "ETC medios en el periodo: líneas de staffing (en curso o planificadas) cuyas fechas se solapan con el periodo, ponderadas por la duración. Disponible: instantánea actual de la base de ETC. Tasa de staffing = movilizado / disponible.",
+  "effectifs.staffingRate.rate": "Tasa de staffing",
+  "effectifs.staffingRate.available": "Disponible",
+  "effectifs.staffingRate.mobilised": "Movilizado",
+  "effectifs.staffingRate.seriesTitle": "Evolución por periodo (ETC medios)",
+  "effectifs.staffingRate.headline":
+    "{period}: movilizado {mobilised} ETC / disponible {available} ETC",
+  "effectifs.staffingRate.periodCol": "Periodo",
+  "effectifs.staffingRate.level.over": "Sobreasignado",
+  "effectifs.staffingRate.level.tense": "Tenso",
+  "effectifs.staffingRate.level.ok": "OK",
+  "effectifs.staffingRate.level.none": "—",
+  "effectifs.staffingRate.legend": "> 100 % sobreasignado · 85–100 % tenso · < 85 % OK",
+  "effectifs.staffingRate.axisFilter": "Ejes",
+  "effectifs.staffingRate.allAxes": "Todos los ejes",
+  "effectifs.staffingRate.axisFilterHint":
+    "Solo se cuentan las movilizaciones en proyectos de las iniciativas de los ejes seleccionados; el disponible sigue siendo el del equipo.",
+  "effectifs.staffingRate.heatmapTitle": "Tasa de staffing por equipo y por mes",
+  "effectifs.staffingRate.teamCol": "Equipo",
+  "effectifs.staffingRate.prevYear": "Año anterior",
+  "effectifs.staffingRate.nextYear": "Año siguiente",
+  "effectifs.staffingRate.cellTooltip": "Movilizado {mobilised} ETC / disponible {available} ETC",
+  "effectifs.staffingRate.topProjets": "Proyectos principales",
+  "effectifs.staffingRate.noAvailability": "Sin disponibilidad en la base de ETC para este equipo",
+  "effectifs.staffingRate.cellDetailTitle": "{team} — {period}",
+  "effectifs.staffingRate.projetCol": "Proyecto",
+  "effectifs.staffingRate.chantierCol": "Iniciativa",
+  "effectifs.staffingRate.fteCol": "ETC medios",
+  "effectifs.staffingRate.transverse": "(transversal a la iniciativa)",
+  "effectifs.staffingRate.unknownProjet": "Proyecto desconocido",
+  "effectifs.staffingRate.cellDetailEmpty": "Ninguna movilización en este periodo.",
+  "effectifs.staffingRate.overTeamsNow": "{n} equipo(s) sobreasignado(s) en {period}",
+  "effectifs.staffingRate.empty":
+    "Ningún equipo en la base de ETC ni ninguna línea de staffing con fecha.",
+  "effectifs.staffingRate.teamClickHint": "Ver los empleados disponibles del equipo",
   "staffingPeriod.empty": "No hay ETC con fecha para esta granularidad.",
   "staffingPeriod.undatedNote":
     "{n} línea(s) de dotación sin fecha de inicio, no mostradas en esta vista.",

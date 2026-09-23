@@ -2,7 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronDown, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  Lock,
+  Pencil,
+  Plus,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { BudgetVsActualBar } from "@/components/shared/BudgetVsActualBar";
 import { Button } from "@/components/shared/Button";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -16,6 +25,7 @@ import { EffortScoringGrid } from "@/components/strategic/EffortScoringGrid";
 import { MilestoneChecklistPanel } from "@/components/strategic/MilestoneChecklistPanel";
 import { MilestonePreviewEditor } from "@/components/strategic/MilestonePreviewEditor";
 import { MilestoneStepper } from "@/components/strategic/MilestoneStepper";
+import { MilestoneTransitionBadge } from "@/components/strategic/MilestoneTransitionBadge";
 import { ProjetWeightsEditor } from "@/components/strategic/ProjetWeightsEditor";
 import { DeleteRequestModal } from "@/components/strategic/DeleteRequestModal";
 import { SuccessKpiList } from "@/components/strategic/SuccessKpiList";
@@ -45,6 +55,7 @@ import {
   effectiveDueDate,
   isStrategicLeadOf,
   milestoneProgressPct,
+  milestoneTransitionState,
   numberIndicators,
   progressBucket,
   resolveMilestoneAutoFlags,
@@ -1250,6 +1261,7 @@ function ChantierActionForm({
               companyId={companyId}
               rows={staffingDraft}
               onChange={setStaffingDraft}
+              projectDates={{ start, end }}
             />
           </div>
         </div>
@@ -1530,6 +1542,102 @@ export function ChantierDetailPanel({
       "{approver}",
       approverLabel(a) || "—"
     );
+
+  // ── Passage de jalon d'un projet (round "passage de jalon explicite") ─────────────────────────
+  // Handlers FACTORISÉS : utilisés à la fois par la check-list du projet (`MilestoneChecklistPanel`)
+  // et par la ligne d'état affichée sur la carte du projet (bandeau fermé) dès que la check-list du
+  // jalon courant est à 100 %. Flux : le propriétaire (ou un admin) DEMANDE le passage
+  // (`milestoneFlow` → `StrategicApproval` "milestone" adressée au pilote du chantier + marqueur
+  // `ChantierAction.milestoneApproval`), le pilote du chantier (ou admin/strategic_lead) CONFIRME
+  // (avance `currentMilestone`) ou REFUSE (vide le marqueur). Jamais d'avancée automatique.
+  const milestonePermsFor = (action: ChantierAction) => {
+    const hasPendingDecidable = pendingApprovals(sa?.pending, "milestone", action.id).length > 0;
+    // Demande posée hors `StrategicApproval` (chemin direct, ex. le pilote est lui-même le
+    // propriétaire du projet) : décidable par le pilote du chantier, un admin ou le strategic_lead.
+    const legacyPending =
+      !!action.milestoneApproval &&
+      pendingApprovals(sa?.approvals, "milestone", action.id).length === 0;
+    const isChantierDecider =
+      !!user &&
+      (isAnyAdmin(user) ||
+        (!!chantier && (isStrategicLeadOf(chantier, user) || chantier.pilote === user.username)));
+    const canApprove =
+      !readOnly &&
+      !!user &&
+      !!chantier &&
+      (hasPendingDecidable || (legacyPending && isChantierDecider));
+    return {
+      canSubmit: !readOnly && !!user && (isAnyAdmin(user) || action.owner === user.username),
+      canApprove,
+      // Rejeter/annuler : qui peut approuver, plus le propriétaire (annulation de sa demande).
+      canReject: !readOnly && !!user && (action.owner === user.username || canApprove),
+    };
+  };
+
+  const requestMilestoneTransition = async (action: ChantierAction) => {
+    try {
+      if (!user) return;
+      const outcome = await milestoneFlow(sa, action, user, data.chantiers, data.chantierActions);
+      if (outcome === "applied") {
+        await data.requestMilestoneApproval(action.id);
+      }
+      showToast(
+        t("leverDetail.approval.requested", "Demande de validation envoyée"),
+        action.name,
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        t("leverDetail.approval.error", "Action impossible"),
+        error instanceof Error ? error.message : String(error),
+        "error"
+      );
+    }
+  };
+
+  const confirmMilestoneTransition = async (action: ChantierAction) => {
+    try {
+      const pending = pendingApprovals(sa?.approvals, "milestone", action.id)[0];
+      if (sa && pending) await sa.approve(pending.id);
+      else await data.approveMilestoneGate(action.id);
+      showToast(
+        t("strategicChantierDetail.milestones.transition.confirmed", "Passage de jalon confirmé"),
+        action.name,
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        t("leverDetail.approval.error", "Action impossible"),
+        error instanceof Error ? error.message : String(error),
+        "error"
+      );
+    }
+  };
+
+  const refuseMilestoneTransition = async (action: ChantierAction, comment?: string) => {
+    try {
+      const pending = pendingApprovals(sa?.approvals, "milestone", action.id)[0];
+      if (sa && pending) {
+        // `sa.reject` exige un commentaire : texte par défaut quand le refus n'en porte pas.
+        await sa.reject(
+          pending.id,
+          comment?.trim() ||
+            t("strategicApprovals.rejectedFromSheet", "Refusé depuis la fiche du projet")
+        );
+      } else await data.rejectMilestoneApproval(action.id);
+      showToast(
+        t("leverDetail.approval.rejected", "Demande de validation rejetée"),
+        action.name,
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        t("leverDetail.approval.error", "Action impossible"),
+        error instanceof Error ? error.message : String(error),
+        "error"
+      );
+    }
+  };
 
   const navigateAway = (path: string) => {
     onClose();
@@ -3009,6 +3117,79 @@ export function ChantierDetailPanel({
                         )}
                       </div>
 
+                      {/* ── Passage de jalon (round "passage de jalon explicite") : dès que la
+                        check-list du jalon courant est à 100 % — ou qu'une demande est en cours —
+                        la carte dit ce qui se passe ensuite, même repliée : demander le passage
+                        (propriétaire/admin), attente de confirmation, ou confirmer (pilote du
+                        chantier/admin). Le refus (commentaire optionnel) se fait dans la
+                        check-list du projet, ouverte par "Refuser…". ─────────────────────────── */}
+                      {(() => {
+                        const transition = milestoneTransitionState(
+                          action,
+                          currentMilestoneAutoFlags
+                        );
+                        if (transition.status !== "ready" && transition.status !== "pending") {
+                          return null;
+                        }
+                        const perms = milestonePermsFor(action);
+                        return (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-white px-2.5 py-1.5">
+                            <MilestoneTransitionBadge state={transition} users={data.users} />
+                            {transition.status === "ready" &&
+                              (perms.canSubmit ? (
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => void requestMilestoneTransition(action)}
+                                >
+                                  <Send size={12} />{" "}
+                                  {t(
+                                    "strategicChantierDetail.milestones.transition.request",
+                                    "Demander la validation du passage en {milestone}"
+                                  ).replace("{milestone}", displayMilestoneId(transition.to))}
+                                </Button>
+                              ) : (
+                                <span className="text-[11px] text-tertiary">
+                                  {t(
+                                    "strategicChantierDetail.milestones.transition.readyNotOwner",
+                                    "Le responsable du projet doit demander la validation du passage en {milestone}."
+                                  ).replace("{milestone}", displayMilestoneId(transition.to))}
+                                </span>
+                              ))}
+                            {transition.status === "pending" && perms.canApprove && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => void confirmMilestoneTransition(action)}
+                              >
+                                <CheckCircle2 size={12} />{" "}
+                                {t(
+                                  "strategicChantierDetail.milestones.transition.confirm",
+                                  "Confirmer le passage en {milestone}"
+                                ).replace("{milestone}", displayMilestoneId(transition.to))}
+                              </Button>
+                            )}
+                            {transition.status === "pending" && perms.canReject && !isOpen && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openLevier(action.id)}
+                              >
+                                {perms.canApprove
+                                  ? t(
+                                      "strategicChantierDetail.milestones.transition.refuseOpen",
+                                      "Refuser…"
+                                    )
+                                  : t(
+                                      "strategicChantierDetail.milestones.transition.cancelOpen",
+                                      "Annuler la demande…"
+                                    )}
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       {isOpen && (
                         <>
                           {action.description && (
@@ -3240,138 +3421,18 @@ export function ChantierDetailPanel({
                                   });
                                 }}
                                 milestoneApproval={action.milestoneApproval}
-                                // Round "jalon validation gate" : propriétaire du projet ou admin —
-                                // seul habilité à SOUMETTRE une demande (voir
-                                // `requestMilestoneApproval`, lib/axisLogic.ts). Lecture seule
-                                // (`readOnly`) l'emporte toujours, même mécanique que le reste de ce
-                                // panneau (boutons Éditer/Supprimer plus haut).
-                                canSubmitApproval={
-                                  !readOnly &&
-                                  !!user &&
-                                  (isAnyAdmin(user) || action.owner === user.username)
+                                // Habilitations + handlers factorisés (voir `milestonePermsFor` et
+                                // `requestMilestoneTransition`/`confirmMilestoneTransition`/
+                                // `refuseMilestoneTransition` en tête de composant) — partagés avec
+                                // la ligne d'état "passage de jalon" de la carte du projet.
+                                canSubmitApproval={milestonePermsFor(action).canSubmit}
+                                canApproveMilestone={milestonePermsFor(action).canApprove}
+                                canRejectMilestoneApproval={milestonePermsFor(action).canReject}
+                                onRequestApproval={() => void requestMilestoneTransition(action)}
+                                onApproveMilestone={() => void confirmMilestoneTransition(action)}
+                                onRejectMilestoneApproval={(comment) =>
+                                  void refuseMilestoneTransition(action, comment)
                                 }
-                                // Round "décision unifiée" : l'approbateur RÉEL d'un jalon est
-                                // désormais le pilote du CHANTIER (`resolveApprover("milestone", ...)`,
-                                // lib/strategicApprovals.ts), plus admin/strategic_lead en repli — pas
-                                // `isStrategicLeadOf` seul, qui n'habilitait que le pilote stratégique
-                                // du PROGRAMME et laissait le pilote du chantier sans bouton ici (bug :
-                                // la demande apparaissait bien dans /validation mais jamais "Approuver"
-                                // sur la fiche projet elle-même). `sa.pending` est déjà filtré aux
-                                // demandes DÉCIDABLES par l'utilisateur courant (voir
-                                // `useStrategicApprovals`) — on vérifie juste qu'une demande "milestone"
-                                // de CE projet s'y trouve. Repli legacy : une demande encore au format
-                                // `ChantierAction.milestoneApproval` SANS équivalent nouveau système
-                                // (créée avant ce round) reste approuvable par `isStrategicLeadOf`
-                                // (ancien seul rôle habilité), pour ne pas bloquer une demande en cours.
-                                canApproveMilestone={
-                                  !readOnly &&
-                                  !!user &&
-                                  !!chantier &&
-                                  (pendingApprovals(sa?.pending, "milestone", action.id).length >
-                                    0 ||
-                                    (!!action.milestoneApproval &&
-                                      pendingApprovals(sa?.approvals, "milestone", action.id)
-                                        .length === 0 &&
-                                      (isAnyAdmin(user) || isStrategicLeadOf(chantier, user))))
-                                }
-                                // Même bascule que `canApproveMilestone` ci-dessus : rejeter est
-                                // habilité au propriétaire du projet (annulation de sa propre demande)
-                                // en plus de qui peut approuver.
-                                canRejectMilestoneApproval={
-                                  !readOnly &&
-                                  !!user &&
-                                  (action.owner === user.username ||
-                                    pendingApprovals(sa?.pending, "milestone", action.id).length >
-                                      0 ||
-                                    (!!action.milestoneApproval &&
-                                      pendingApprovals(sa?.approvals, "milestone", action.id)
-                                        .length === 0 &&
-                                      (isAnyAdmin(user) ||
-                                        (!!chantier && isStrategicLeadOf(chantier, user)))))
-                                }
-                                onRequestApproval={async () => {
-                                  try {
-                                    if (!user) return;
-                                    const outcome = await milestoneFlow(
-                                      sa,
-                                      action,
-                                      user,
-                                      data.chantiers,
-                                      data.chantierActions
-                                    );
-                                    if (outcome === "applied") {
-                                      await data.requestMilestoneApproval(action.id);
-                                    }
-                                    showToast(
-                                      t(
-                                        "leverDetail.approval.requested",
-                                        "Demande de validation envoyée"
-                                      ),
-                                      action.name,
-                                      "success"
-                                    );
-                                  } catch (error) {
-                                    showToast(
-                                      t("leverDetail.approval.error", "Action impossible"),
-                                      error instanceof Error ? error.message : String(error),
-                                      "error"
-                                    );
-                                  }
-                                }}
-                                onApproveMilestone={async () => {
-                                  try {
-                                    const pending = pendingApprovals(
-                                      sa?.approvals,
-                                      "milestone",
-                                      action.id
-                                    )[0];
-                                    if (sa && pending) await sa.approve(pending.id);
-                                    else await data.approveMilestoneGate(action.id);
-                                    showToast(
-                                      t("leverDetail.approval.approved", "Demande approuvée"),
-                                      action.name,
-                                      "success"
-                                    );
-                                  } catch (error) {
-                                    showToast(
-                                      t("leverDetail.approval.error", "Action impossible"),
-                                      error instanceof Error ? error.message : String(error),
-                                      "error"
-                                    );
-                                  }
-                                }}
-                                onRejectMilestoneApproval={async () => {
-                                  try {
-                                    const pending = pendingApprovals(
-                                      sa?.approvals,
-                                      "milestone",
-                                      action.id
-                                    )[0];
-                                    if (sa && pending) {
-                                      await sa.reject(
-                                        pending.id,
-                                        t(
-                                          "strategicApprovals.rejectedFromSheet",
-                                          "Refusé depuis la fiche du projet"
-                                        )
-                                      );
-                                    } else await data.rejectMilestoneApproval(action.id);
-                                    showToast(
-                                      t(
-                                        "leverDetail.approval.rejected",
-                                        "Demande de validation rejetée"
-                                      ),
-                                      action.name,
-                                      "success"
-                                    );
-                                  } catch (error) {
-                                    showToast(
-                                      t("leverDetail.approval.error", "Action impossible"),
-                                      error instanceof Error ? error.message : String(error),
-                                      "error"
-                                    );
-                                  }
-                                }}
                               />
                             </div>
                           </div>

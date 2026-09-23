@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Lock } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { pendingTransitionLabel } from "@/components/strategic/MilestoneTransitionBadge";
 import {
   formatTimelineDay as formatTimelineDayBase,
   packTimelineLanes,
@@ -392,6 +393,12 @@ export function ChantierGantt({
                                 )}${action.owner ? ` · ${action.owner}` : ""}${
                                   startInfo.blocked
                                     ? ` · ${l.blockedBy} ${startInfo.reasons.join(", ")}`
+                                    : ""
+                                }${
+                                  // Round "passage de jalon explicite" : demande de passage en
+                                  // attente de confirmation du pilote du chantier.
+                                  action.milestoneApproval
+                                    ? ` · ${pendingTransitionLabel(t, action.milestoneApproval.targetMilestone)}`
                                     : ""
                                 }`}
                                 label={action.name}

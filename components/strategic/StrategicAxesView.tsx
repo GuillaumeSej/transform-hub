@@ -500,6 +500,7 @@ export function StrategicAxesView() {
                           labels={projetMilestoneLabels}
                           onProjetClick={openChantierPanel}
                           clickableActionIds={data.clickableActionIds}
+                          users={data.users}
                         />
                       </div>
                     </div>

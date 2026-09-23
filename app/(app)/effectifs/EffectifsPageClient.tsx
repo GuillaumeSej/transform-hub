@@ -4,18 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, ChevronLeft, ChevronRight, Users } from "lucide-react";
-import {
-  Bar as RBar,
-  BarChart as RBarChart,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip as RTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import {
   BudgetDonutChart,
@@ -23,15 +11,10 @@ import {
 } from "@/components/shared/charts/BudgetDonutChart";
 import { Modal } from "@/components/shared/Modal";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
-import {
-  StaffingDetailModal,
-  type StaffingDetailRow,
-} from "@/components/strategic/StaffingDetailModal";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
-import { colorForDepartment } from "@/lib/axisLogic";
+import { StaffingRateSection } from "@/components/strategic/StaffingRateSection";
 import { EMPTY_BUDGET, rollupBudgets } from "@/lib/budgetRollup";
-import { needMetrics, needSeries, periodBoundsForDate, todayIso } from "@/lib/staffingNeed";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
@@ -39,19 +22,19 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatCompactCurrency, formatPercent } from "@/lib/formatCompactAmount";
-import type { ChantierStaffing } from "@/types";
 
 /**
  * Page « Effectifs mobilisés » — lecture transverse du staffing saisi chantier par chantier
  * (`ChantierStaffingEditor`, dans la pop-up de détail d'un chantier), ou importé en lot via
  * `StaffingImportButton` (round 7). Trois niveaux de lecture, dans l'ordre demandé par le PO :
  *
- *  0. BESOIN vs DISPONIBLE (round 13, nouveau) : pour chaque équipe (= `Employee.department` de la
- *     base ETP entreprise, Plan Performance), le volume d'ETP demandé par le Plan Stratégique
- *     (`ChantierStaffing.fte`, sommé) comparé au volume RÉELLEMENT disponible dans cette équipe
- *     (`Employee.fte`, sommé — `useCompanyDepartments`, live). Remplace l'ancienne section
- *     « Budget d'ETP par fonction », où le "disponible" était un chiffre saisi à la main
- *     (`Program.staffingBudgets`, retiré) plutôt que la réalité de la base ETP.
+ *  0. MOBILISÉ vs DISPONIBLE (`StaffingRateSection`, calcul dans `lib/staffingRate.ts`) : ETP
+ *     mobilisés (`ChantierStaffing.fte`, moyens sur la période) comparés au disponible RÉEL de la
+ *     base ETP entreprise (`Employee.fte` par département — `useCompanyDepartments`, live), via le
+ *     TAUX DE STAFFING = mobilisé / disponible (> 100 % sur-staffé, 85–100 % tendu). Vue par
+ *     mois/trimestre/semestre/année, filtre multi-axes, et heatmap équipe × mois (« en mars l'IT
+ *     est sur-staffée »). Remplace l'ancienne section « Besoin déclaré vs disponible » (notion de
+ *     besoin déclaré et graphique par équipe retirés à la demande du PO).
  *  1. PAR PÉRIODE ET PAR AXE (`StaffingPeriodBreakdown`, round 7, fusionné round 22) : combien
  *     d'ETP le programme mobilise-t-il, trimestre/semestre/année par trimestre/semestre/année, et
  *     par équipe OU par axe (toggle "Période"/"Axe" interne au composant) dans chaque période.
@@ -75,42 +58,11 @@ import type { ChantierStaffing } from "@/types";
  * voir `lib/nav-config.ts`). Une entreprise sans base ETP encore saisie voit cette page vide de
  * toute équipe, avec un message explicite plutôt qu'un référentiel arbitraire.
  *
- * Comparaison PAR ÉQUIPE (round <n>, remplace l'ancienne barre CSS à ratio unique) : un
- * `BarChart` recharts partagé par toutes les équipes, deux groupes de barres par équipe —
- * `disponible` (seule, à gauche) puis un EMPILEMENT `mobilisé` + `écart au besoin déclaré` (une
- * seule colonne, à droite) — voir `needVsAvailableChartData` plus bas. L'écart mobilisé/déclaré
- * devient ainsi un segment visuellement DISTINCT plutôt qu'un pourcentage à calculer mentalement
- * entre deux barres séparées (demande PO : « je veux voir l'écart directement »). Couleurs
- * SÉMANTIQUES fixes (mêmes teintes que le graphique « Évolution par période » ci-dessus) plutôt
- * que la couleur PROPRE à chaque équipe qu'utilisait l'ancienne barre CSS (`colorForDepartment`) :
- * comparer un même segment (l'écart, en particulier) d'une équipe à l'autre exige une teinte
- * commune, l'identité de l'équipe restant portée par le point de couleur + le libellé dans la
- * liste texte ci-dessous, inchangée.
- *
  * Rien à voir avec les écrans RH du Plan Performance eux-mêmes : `Chantier`/`ChantierStaffing`
  * n'existent que côté stratégique, et la route est fermée aux programmes Performance (voir la
  * garde `programType` en bas de fichier + `programTypes: ["strategic"]` dans `lib/nav-config.ts`).
  * Seule la base ETP (`Employee`, via `useCompanyDepartments`) est PARTAGÉE entre les deux plans.
  */
-
-/** Granularité du sélecteur de période du widget besoin/disponible ci-dessous — round <n>. Même
- *  triplet trimestre/semestre/année que `StaffingPeriodBreakdown.tsx` (`Granularity`, non exporté),
- *  réutilisé ici avec les MÊMES clés i18n (`staffingPeriod.granularity.*`) pour rester visuellement
- *  et sémantiquement cohérent avec l'autre sélecteur de granularité de cette même page. */
-type NeedPeriodGranularity = "quarterly" | "semiannual" | "annual";
-
-/** Une ligne de staffing est comptée sur la période courante si sa plage `startDate`/`endDate`
- *  RECOUPE (et pas seulement "démarre dans") les bornes de cette période. Une ligne sans `endDate`
- *  connue est considérée toujours en cours (voir `types/index.ts`, doc-comment de
- *  `ChantierStaffing.endDate` : "optionnelle même quand `startDate` est renseignée, staffing sans
- *  échéance connue"). Une ligne sans `startDate` (« non daté ») est exclue — même convention que
- *  `staffingPeriodBuckets`/`periodLabelForDate` : « compté dans les totaux globaux [existants, hors
- *  de ce widget] mais ignoré par toute vue PAR PÉRIODE ». */
-function overlapsPeriod(entry: ChantierStaffing, period: { start: string; end: string }): boolean {
-  if (!entry.startDate) return false;
-  const entryEnd = entry.endDate ?? "9999-12-31";
-  return entry.startDate <= period.end && entryEnd >= period.start;
-}
 
 /** Repère "à quel niveau du drill-down budgétaire suis-je ?" pour le donut « Budget financier
  *  alloué » ci-dessous (round 26) — même patron que `HierarchyLevelBreadcrumb` du module Finance
@@ -201,119 +153,9 @@ export function EffectifsPageClient() {
     }
   }, [strategicRole, axes, budgetDrillPath]);
 
-  /** Sélecteur de période du widget besoin/disponible (round <n>) — voir `periodBoundsForDate` (lib/staffingNeed.ts)
-   *  ci-dessus. Par défaut le trimestre courant, cohérent avec le défaut de
-   *  `StaffingPeriodBreakdown.tsx` (`granularity` initialisée à `"quarterly"`). État PUREMENT LOCAL
-   *  à ce widget (comme `mode`/`granularity` de `StaffingPeriodBreakdown`) : rien d'autre sur cette
-   *  page n'en dépend. */
-  const [needPeriodGranularity, setNeedPeriodGranularity] =
-    useState<NeedPeriodGranularity>("quarterly");
-  const today = useMemo(() => todayIso(new Date()), []);
-  const needPeriod = useMemo(
-    () => periodBoundsForDate(today, needPeriodGranularity),
-    [today, needPeriodGranularity]
-  );
-
-  /** Lignes de staffing dont la plage `startDate`/`endDate` recoupe la période courante
-   *  (`needPeriod`, voir `overlapsPeriod` ci-dessus) — remplace round <n> l'ancien calcul TOUT-TEMPS
-   *  (ancien total tout-temps, tuile désormais fusionnée dans ce bloc) pour le côté "besoin" du widget
-   *  besoin/disponible SEUL. */
-  const staffingInNeedPeriod = useMemo(
-    () => staffing.filter((entry) => overlapsPeriod(entry, needPeriod)),
-    [staffing, needPeriod]
-  );
-  /** ETP MOYENS (pondérés par la durée de recoupement) par équipe sur la période courante. */
-  const needTotalsByFunction = useMemo(() => {
-    const fns = new Set(staffingInNeedPeriod.map((e) => e.function));
-    return Array.from(fns).map((fn) => {
-      const m = needMetrics(
-        staffingInNeedPeriod.filter((e) => e.function === fn),
-        0,
-        needPeriod,
-        today
-      );
-      return { fn, fte: m.needed, mobilised: m.mobilised };
-    });
-  }, [staffingInNeedPeriod, needPeriod, today]);
-  const totalAvailableFte = useMemo(
-    () => Object.values(fteByDept).reduce((sum, v) => sum + v, 0),
-    [fteByDept]
-  );
-  /** Série par période (même granularité) : besoin, disponible, mobilisé, % de staffing. */
-  const needSeriesData = useMemo(
-    () => needSeries(staffing, totalAvailableFte, needPeriodGranularity, today),
-    [staffing, totalAvailableFte, needPeriodGranularity, today]
-  );
-  /** Données du graphique besoin/disponible/mobilisé — mémoïsées (auparavant un `.map` inline
-   *  dans le JSX) : un tableau recréé à chaque rendu relançait l'animation d'entrée Recharts
-   *  (barres + points de la courbe) dès que la page se re-rendait, ex. pendant un survol. */
-  const needSeriesChartData = useMemo(
-    () =>
-      needSeriesData.map((m) => ({
-        period: m.label,
-        needed: Number(m.needed.toFixed(2)),
-        available: Number(m.available.toFixed(2)),
-        mobilised: Number(m.mobilised.toFixed(2)),
-        staffingPct: m.staffingPct,
-      })),
-    [needSeriesData]
-  );
-  const needTotalMetrics = useMemo(
-    () => needMetrics(staffingInNeedPeriod, totalAvailableFte, needPeriod, today),
-    [staffingInNeedPeriod, totalAvailableFte, needPeriod, today]
-  );
-
-  /** Besoin (staffing déclaré, filtré sur `needPeriod` ci-dessus) vs disponible (base ETP réelle,
-   *  TOUJOURS "aujourd'hui" — `Employee` n'a structurellement aucune dimension temporelle, voir
-   *  `useCompanyDepartments`) par équipe — round 13, remplace la section « Budget d'ETP par
-   *  fonction » ; round <n> : le côté besoin devient filtré par période plutôt que cumulatif
-   *  tout-temps (l'ancien calcul mélangeait un besoin toutes périodes confondues avec un disponible
-   *  instantané, un pourcentage sans grand sens). Une équipe apparaît dès qu'elle a du besoin sur
-   *  CETTE période OU du disponible (une équipe entièrement dispo mais non staffée sur la période
-   *  reste visible : "cette équipe n'est staffée sur aucun chantier du plan pour cette période").
-   *  Triée par besoin décroissant. */
-  const needVsAvailable = useMemo(() => {
-    const names = new Set<string>([
-      ...needTotalsByFunction.map((row) => row.fn),
-      ...Object.keys(fteByDept),
-    ]);
-    return Array.from(names)
-      .map((fn) => ({
-        fn,
-        needed: needTotalsByFunction.find((row) => row.fn === fn)?.fte ?? 0,
-        mobilised: needTotalsByFunction.find((row) => row.fn === fn)?.mobilised ?? 0,
-        available: fteByDept[fn] ?? 0,
-      }))
-      .sort((a, b) => b.needed - a.needed);
-  }, [needTotalsByFunction, fteByDept]);
-
-  /** Projection de `needVsAvailable` pour le `BarChart` comparatif par équipe (round <n>) —
-   *  `mobilisedBase` vaut TOUJOURS `mobilised` (mobilisé est structurellement un sous-ensemble du
-   *  besoin déclaré, voir `needMetrics` dans lib/staffingNeed.ts : mêmes lignes, filtrées en plus
-   *  sur `startDate <= today` — jamais mobilisé > déclaré en usage normal, `Math.min` par
-   *  sécurité), `gapToDeclared` le reste jusqu'au besoin déclaré total. Empilées (`stackId`), ces
-   *  deux valeurs forment UNE colonne dont la hauteur totale vaut le besoin déclaré, avec le
-   *  segment mobilisé et l'écart visuellement distincts — voir le doc-comment de tête de fichier. */
-  const needVsAvailableChartData = useMemo(
-    () =>
-      needVsAvailable.map(({ fn, needed, mobilised, available }) => ({
-        fn,
-        available,
-        mobilisedBase: Math.min(mobilised, needed),
-        gapToDeclared: Math.max(needed - mobilised, 0),
-      })),
-    [needVsAvailable]
-  );
-
-  /** Détail « exploitable » ouvert par clic sur le besoin OU le disponible d'une équipe (round <n>,
-   *  même esprit que `StaffingPeriodBreakdown.detailScope`) — `null` = aucune modale ouverte.
-   *  "need" ouvre `StaffingDetailModal` (lignes `ChantierStaffing` brutes, même composant/forme que
-   *  `StaffingPeriodBreakdown.tsx`) ; "available" ouvre une modale locale dédiée (le composant
-   *  partagé `StaffingDetailModal` est typé pour des lignes `ChantierStaffing`, pas pour des
-   *  `Employee` — forme différente, voir son doc-comment). */
-  const [needDetailScope, setNeedDetailScope] = useState<
-    { kind: "need"; fn: string } | { kind: "available"; fn: string } | null
-  >(null);
+  /** Équipe dont on affiche les employés disponibles (clic sur le nom d'une équipe dans la heatmap
+   *  « Taux de staffing par équipe et par mois » de `StaffingRateSection`) — `null` = fermé. */
+  const [availableTeam, setAvailableTeam] = useState<string | null>(null);
 
   const chantierNames = useMemo(() => new Map(chantiers.map((c) => [c.id, c.name])), [chantiers]);
 
@@ -338,69 +180,21 @@ export function EffectifsPageClient() {
     [chantierActions]
   );
 
-  /** `StrategicAxis.id` → nom — pour la colonne "Axe(s)" des lignes de `StaffingDetailModal`
-   *  ci-dessous, même besoin que `axisNamesForChantier` de `StaffingPeriodBreakdown.tsx` (non
-   *  exportée, donc reconstruite localement ici avec le même résultat). */
-  const axisNameById = useMemo(() => new Map(axes.map((a) => [a.id, a.name])), [axes]);
-
-  /** Lignes `ChantierStaffing` BRUTES derrière le besoin de l'équipe couramment ouverte
-   *  (`needDetailScope.kind === "need"`), restreintes à `staffingInNeedPeriod` (même période que le
-   *  chiffre cliqué) — alimente `StaffingDetailModal`, même forme de ligne que
-   *  `StaffingPeriodBreakdown.detailRows`. Libellé de la modale volontairement honnête (« lignes de
-   *  besoin déclaré », jamais « personnes ») : `ChantierStaffing` n'a pas de champ nom structuré,
-   *  seulement `note`, un texte libre qui PEUT contenir un nom sans que ce soit garanti — voir la
-   *  colonne "Précision" déjà affichée telle quelle par `StaffingDetailModal`. */
-  const needDetailRows: StaffingDetailRow[] = useMemo(() => {
-    if (!needDetailScope || needDetailScope.kind !== "need") return [];
-    return staffingInNeedPeriod
-      .filter((e) => e.function === needDetailScope.fn)
-      .map((e) => ({
-        id: e.id,
-        chantierName: chantierNames.get(e.chantierId) ?? t("effectifs.chantierUnknown"),
-        function: e.function,
-        axisNames:
-          (axisIdsByChantier[e.chantierId] ?? [])
-            .map((id) => axisNameById.get(id) ?? t("effectifs.axisUnknown"))
-            .join(", ") || "—",
-        fte: e.fte || 0,
-        periodLabel: e.startDate
-          ? `${e.startDate} → ${e.endDate ?? "…"}`
-          : t("staffingPeriod.detailModal.undated"),
-        lever: e.actionId ? (actionNamesById[e.actionId] ?? "—") : "—",
-        note: e.note ?? "—",
-      }))
-      .sort((a, b) => b.fte - a.fte);
-  }, [
-    needDetailScope,
-    staffingInNeedPeriod,
-    chantierNames,
-    axisIdsByChantier,
-    axisNameById,
-    actionNamesById,
-    t,
-  ]);
-  const needDetailTotalFte = useMemo(
-    () => needDetailRows.reduce((sum, row) => sum + row.fte, 0),
-    [needDetailRows]
-  );
-
   /** Employés RÉELS (noms compris, `useCompanyDepartments`'s `employees`, jusqu'ici totalement
    *  ignorés par cette page qui n'en dérivait que `fteByDept`) derrière le disponible de l'équipe
-   *  couramment ouverte (`needDetailScope.kind === "available"`) — TOUJOURS l'instantané complet
-   *  d'aujourd'hui (`Employee` n'a pas de notion de période), jamais restreint à `needPeriod`. */
+   *  couramment ouverte (`availableTeam`) — TOUJOURS l'instantané complet d'aujourd'hui
+   *  (`Employee` n'a pas de notion de période). */
   const availableDetailRows = useMemo(() => {
-    if (!needDetailScope || needDetailScope.kind !== "available") return [];
+    if (!availableTeam) return [];
     return employees
-      .filter((e) => e.department === needDetailScope.fn)
+      .filter((e) => e.department === availableTeam)
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [needDetailScope, employees]);
+  }, [availableTeam, employees]);
 
-  const needDetailModalTitle = !needDetailScope
-    ? ""
-    : needDetailScope.kind === "need"
-      ? t("effectifs.needVsAvailable.needDetailTitle").replace("{team}", needDetailScope.fn)
-      : t("effectifs.needVsAvailable.availableDetailTitle").replace("{team}", needDetailScope.fn);
+  const availableModalTitle = availableTeam
+    ? t("effectifs.needVsAvailable.availableDetailTitle").replace("{team}", availableTeam)
+    : "";
 
   // ── Budget FINANCIER alloué / consommé ─────────────────────────────────────────────────────
   // SEULE source : `rollupBudgets` (lib/budgetRollup.ts) — règle bottom-up projet → chantier →
@@ -703,376 +497,20 @@ export function EffectifsPageClient() {
     </Card>
   );
 
-  // Section besoin vs disponible : indépendante de la présence de lignes de staffing (une équipe
+  // Section mobilisé vs disponible : indépendante de la présence de lignes de staffing (une équipe
   // de la base ETP peut être 100% disponible et n'apparaître ici que pour ça) — construite une
-  // seule fois et rendue dans les deux branches ci-dessous (staffing vide ou non). Round <n> :
-  // sélecteur de période (besoin uniquement, voir `periodBoundsForDate` (lib/staffingNeed.ts)/`needPeriod` ci-dessus) +
-  // les deux chiffres deviennent cliquables (`needDetailScope`), plus les deux modales de détail
-  // qui vont avec — embarquées ICI, dans le même JSX partagé par les deux branches de retour
-  // ci-dessous, plutôt qu'au niveau racine du composant (une seule des deux branches s'exécute par
-  // rendu, mais les modales doivent rester disponibles quelle que soit celle qui rend).
+  // seule fois et rendue dans les deux branches ci-dessous (staffing vide ou non), avec la modale
+  // « employés disponibles » ouverte au clic sur une équipe de la heatmap.
   const needVsAvailableSection = (
     <>
-      <Card className="mb-0">
-        <CardHeader
-          title={t("effectifs.needVsAvailable.title")}
-          actions={
-            // Même style/convention que le toggle de granularité de `StaffingPeriodBreakdown.tsx`
-            // (mêmes clés i18n `staffingPeriod.granularity.*`) — cohérence visuelle voulue entre les
-            // deux sélecteurs de période de cette page.
-            <div className="flex overflow-hidden rounded-md border border-border">
-              {(["quarterly", "semiannual", "annual"] as const).map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  aria-pressed={needPeriodGranularity === g}
-                  onClick={() => setNeedPeriodGranularity(g)}
-                  className={`px-2.5 py-1 text-[11px] font-semibold transition ${
-                    needPeriodGranularity === g
-                      ? "bg-black text-white"
-                      : "bg-white text-secondary hover:text-primary"
-                  }`}
-                >
-                  {t(`staffingPeriod.granularity.${g}`)}
-                </button>
-              ))}
-            </div>
-          }
-        />
-        <CardBody>
-          {/* Clarifie explicitement les deux périmètres temporels différents des deux côtés du
-              ratio (demande PO — voir le doc-comment de tête de fichier) : le besoin est filtré sur
-              la période choisie ci-dessus, le disponible reste structurellement une photo
-              instantanée d'aujourd'hui (`Employee` n'a aucune notion de période). */}
-          <p className="mb-3 text-[11px] text-tertiary">
-            {t("effectifs.needVsAvailable.periodHintAvg").replace("{period}", needPeriod.label)}
-          </p>
-          {needSeriesData.length > 0 && (
-            <div className="mb-5">
-              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-[12px] font-semibold text-secondary">
-                  {t("effectifs.needVsAvailable.seriesTitle")}
-                </p>
-                <p className="text-[12px] text-secondary">
-                  {needPeriod.label} :{" "}
-                  {t("effectifs.needVsAvailable.headline")
-                    .replace("{mobilised}", formatFte(needTotalMetrics.mobilised))
-                    .replace("{needed}", formatFte(needTotalMetrics.needed))
-                    .replace(
-                      "{pct}",
-                      needTotalMetrics.staffingPct !== null
-                        ? `${needTotalMetrics.staffingPct} %`
-                        : "—"
-                    )}
-                </p>
-              </div>
-              <ResponsiveContainer width="100%" height={280}>
-                <ComposedChart
-                  data={needSeriesChartData}
-                  margin={{ top: 8, right: 12, left: 4, bottom: 8 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-                  <XAxis
-                    dataKey="period"
-                    tick={{ fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval={0}
-                  />
-                  <YAxis
-                    yAxisId="fte"
-                    width={40}
-                    tick={{ fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    yAxisId="pct"
-                    orientation="right"
-                    width={44}
-                    tick={{ fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    domain={[0, (max: number) => Math.max(100, Math.ceil(max / 10) * 10)]}
-                    tickFormatter={(v) => `${v}%`}
-                  />
-                  <RTooltip
-                    formatter={(value, name) =>
-                      name === "staffingPct"
-                        ? [
-                            value === null ? "—" : `${value}%`,
-                            t("effectifs.needVsAvailable.staffingLine"),
-                          ]
-                        : [
-                            `${formatFte(Number(value))} ${t("staffing.fteUnit")}`,
-                            t(
-                              `effectifs.needVsAvailable.${name === "needed" ? "needed" : name === "available" ? "available" : "mobilised"}`
-                            ),
-                          ]
-                    }
-                  />
-                  <Legend
-                    verticalAlign="top"
-                    wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
-                    formatter={(value) =>
-                      value === "staffingPct"
-                        ? t("effectifs.needVsAvailable.staffingLine")
-                        : t(
-                            `effectifs.needVsAvailable.${value === "needed" ? "needed" : value === "available" ? "available" : "mobilised"}`
-                          )
-                    }
-                  />
-                  <RBar yAxisId="fte" dataKey="needed" fill="#a99e9a" radius={[3, 3, 0, 0]} />
-                  <RBar yAxisId="fte" dataKey="available" fill="#d4d0cd" radius={[3, 3, 0, 0]} />
-                  <RBar yAxisId="fte" dataKey="mobilised" fill="#1a1a1a" radius={[3, 3, 0, 0]} />
-                  <Line
-                    yAxisId="pct"
-                    dataKey="staffingPct"
-                    stroke="#e8543c"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    connectNulls
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[420px] text-[11.5px]">
-                  <thead>
-                    <tr className="border-b border-border text-left text-tertiary">
-                      <th className="py-1 pr-3 font-semibold">
-                        {t("effectifs.needVsAvailable.periodCol")}
-                      </th>
-                      <th className="px-2 py-1 text-right font-semibold">
-                        {t("effectifs.needVsAvailable.needed")}
-                      </th>
-                      <th className="px-2 py-1 text-right font-semibold">
-                        {t("effectifs.needVsAvailable.available")}
-                      </th>
-                      <th className="px-2 py-1 text-right font-semibold">
-                        {t("effectifs.needVsAvailable.mobilised")}
-                      </th>
-                      <th className="py-1 pl-2 text-right font-semibold">
-                        {t("effectifs.needVsAvailable.staffingLine")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {needSeriesData.map((m) => (
-                      <tr
-                        key={m.label}
-                        className={`border-b border-border/50 ${m.label === needPeriod.label ? "bg-neutral-50 font-semibold" : ""}`}
-                      >
-                        <td className="py-1 pr-3 text-primary">{m.label}</td>
-                        <td className="px-2 py-1 text-right">{formatFte(m.needed)}</td>
-                        <td className="px-2 py-1 text-right">{formatFte(m.available)}</td>
-                        <td className="px-2 py-1 text-right">{formatFte(m.mobilised)}</td>
-                        <td className="py-1 pl-2 text-right">
-                          {m.staffingPct !== null ? `${m.staffingPct} %` : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-          {needVsAvailable.length === 0 ? (
-            <p className="text-sm text-text-secondary">{t("effectifs.needVsAvailable.empty")}</p>
-          ) : (
-            <>
-              {/* Comparaison par équipe (round <n>) — voir le doc-comment de tête de fichier et
-                  celui de `needVsAvailableChartData` : disponible seul à gauche, mobilisé+écart
-                  empilés dans UNE colonne à droite, pour rendre l'écart directement lisible.
-                  Pas de paragraphe de titre dédié : réutilise volontairement les clés i18n déjà
-                  existantes de cette section (`available`/`mobilised`/`needed`/`staffingPct`)
-                  plutôt que d'en ajouter de nouvelles pour ce seul libellé. */}
-              <div className="mb-5">
-                <ResponsiveContainer
-                  width="100%"
-                  height={Math.max(220, needVsAvailableChartData.length * 60)}
-                >
-                  <RBarChart
-                    data={needVsAvailableChartData}
-                    margin={{
-                      top: 4,
-                      right: 12,
-                      left: 4,
-                      bottom: needVsAvailableChartData.length > 4 ? 32 : 4,
-                    }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="rgba(0,0,0,0.04)"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="fn"
-                      tick={{ fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval={0}
-                      angle={needVsAvailableChartData.length > 4 ? -20 : 0}
-                      textAnchor={needVsAvailableChartData.length > 4 ? "end" : "middle"}
-                      height={needVsAvailableChartData.length > 4 ? 56 : 24}
-                    />
-                    <YAxis width={40} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <RTooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload || payload.length === 0) return null;
-                        const row = payload[0]?.payload as
-                          | {
-                              fn: string;
-                              available: number;
-                              mobilisedBase: number;
-                              gapToDeclared: number;
-                            }
-                          | undefined;
-                        if (!row) return null;
-                        const needed = row.mobilisedBase + row.gapToDeclared;
-                        const staffingPct =
-                          needed > 0 ? Math.round((row.mobilisedBase / needed) * 100) : null;
-                        return (
-                          <div className="rounded-md border border-border bg-white px-3 py-2 text-[12px] shadow-sm">
-                            <p className="mb-1 font-bold text-primary">{row.fn}</p>
-                            <p className="flex items-center justify-between gap-3 text-secondary">
-                              <span>{t("effectifs.needVsAvailable.available")}</span>
-                              <span className="ml-2 font-semibold text-primary">
-                                {formatFte(row.available)} {t("staffing.fteUnit")}
-                              </span>
-                            </p>
-                            <p className="flex items-center justify-between gap-3 text-secondary">
-                              <span>{t("effectifs.needVsAvailable.mobilised")}</span>
-                              <span className="ml-2 font-semibold text-primary">
-                                {formatFte(row.mobilisedBase)} {t("staffing.fteUnit")}
-                              </span>
-                            </p>
-                            <p className="flex items-center justify-between gap-3 text-secondary">
-                              <span>{t("effectifs.needVsAvailable.needed")}</span>
-                              <span className="ml-2 font-semibold text-primary">
-                                {formatFte(needed)} {t("staffing.fteUnit")}
-                              </span>
-                            </p>
-                            <p className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-1 font-bold text-primary">
-                              <span>{t("effectifs.needVsAvailable.staffingPct")}</span>
-                              <span>{staffingPct !== null ? `${staffingPct} %` : "—"}</span>
-                            </p>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Legend
-                      verticalAlign="top"
-                      wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
-                      formatter={(value) =>
-                        value === "available"
-                          ? t("effectifs.needVsAvailable.available")
-                          : t("effectifs.needVsAvailable.mobilised")
-                      }
-                    />
-                    <RBar dataKey="available" fill="#d4d0cd" radius={[3, 3, 0, 0]} />
-                    <RBar
-                      dataKey="mobilisedBase"
-                      stackId="combined"
-                      fill="#1a1a1a"
-                      radius={[0, 0, 3, 3]}
-                    />
-                    {/* Segment "écart au besoin déclaré" — pas d'entrée de légende dédiée
-                        (`legendType="none"`) : réutilise les clés i18n existantes de cette section
-                        plutôt que d'en ajouter une nouvelle rien que pour ce libellé (voir
-                        `RTooltip` ci-dessus, qui explique déjà l'écart via "Besoin déclaré" +
-                        "Staffing %"). La couleur reste visuellement distincte (segment clair
-                        au-dessus du segment "Mobilisé" sombre), donc l'écart reste lisible même
-                        sans légende propre. */}
-                    <RBar
-                      dataKey="gapToDeclared"
-                      stackId="combined"
-                      fill="#a99e9a"
-                      radius={[3, 3, 0, 0]}
-                      legendType="none"
-                    />
-                  </RBarChart>
-                </ResponsiveContainer>
-              </div>
-              <ul className="space-y-3">
-                {needVsAvailable.map(({ fn, needed, mobilised, available }) => {
-                  const pct = available > 0 ? Math.round((needed / available) * 100) : null;
-                  const overAllocated = pct !== null && pct > 100;
-                  return (
-                    <li key={fn}>
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="flex items-center gap-1.5 text-[13px] font-semibold text-primary">
-                          <span
-                            aria-hidden
-                            className={`h-2 w-2 rounded-full ${colorForDepartment(fn)}`}
-                          />
-                          {fn}
-                        </span>
-                        <span className="text-[12px] text-secondary">
-                          <button
-                            type="button"
-                            onClick={() => setNeedDetailScope({ kind: "need", fn })}
-                            title={t("effectifs.needVsAvailable.needDetailTitle").replace(
-                              "{team}",
-                              fn
-                            )}
-                            className="font-bold text-primary underline-offset-2 hover:text-bp-coral hover:underline"
-                          >
-                            {formatFte(needed)}
-                          </button>{" "}
-                          {t("effectifs.needVsAvailable.neededOf")}{" "}
-                          <button
-                            type="button"
-                            onClick={() => setNeedDetailScope({ kind: "available", fn })}
-                            title={t("effectifs.needVsAvailable.availableToday")}
-                            className="font-bold text-primary underline-offset-2 hover:text-bp-coral hover:underline"
-                          >
-                            {formatFte(available)}
-                          </button>{" "}
-                          {t("staffing.fteUnit")}
-                          {" · "}
-                          {t("effectifs.needVsAvailable.mobilised").toLowerCase()}{" "}
-                          <span className="font-bold text-primary">{formatFte(mobilised)}</span>
-                          {needed > 0 && (
-                            <span className="ml-1 font-bold text-primary">
-                              ({t("effectifs.needVsAvailable.staffingPct").toLowerCase()}{" "}
-                              {Math.round((mobilised / needed) * 100)}%)
-                            </span>
-                          )}
-                          {pct !== null && (
-                            <span
-                              className={`ml-1.5 font-bold ${overAllocated ? "text-bp-coral" : ""}`}
-                            >
-                              ({pct}%)
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                      {overAllocated && (
-                        <p className="mt-1 text-[11px] font-semibold text-bp-coral">
-                          {t("effectifs.needVsAvailable.overAllocated")}
-                        </p>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
-          )}
-        </CardBody>
-      </Card>
-
-      {/* Détail "besoin déclaré" (round <n>) — réutilise `StaffingDetailModal` tel quel (même forme
-          de ligne que `StaffingPeriodBreakdown.tsx`) : lignes `ChantierStaffing` brutes de l'équipe
-          cliquée, sur la période sélectionnée. Titre volontairement honnête (jamais "personnes") —
-          voir le doc-comment de `needDetailRows`. */}
-      <StaffingDetailModal
-        open={needDetailScope?.kind === "need"}
-        onOpenChange={(open) => {
-          if (!open) setNeedDetailScope(null);
-        }}
-        title={needDetailModalTitle}
-        rows={needDetailRows}
-        totalFte={needDetailTotalFte}
+      <StaffingRateSection
+        staffing={staffing}
+        axes={axes}
+        axisIdsByChantier={axisIdsByChantier}
+        fteByDept={fteByDept}
+        chantierNamesById={chantierNamesById}
+        actionNamesById={actionNamesById}
+        onTeamClick={setAvailableTeam}
       />
 
       {/* Détail "disponible" (round <n>) — modale LOCALE dédiée (pas `StaffingDetailModal`, dont la
@@ -1080,11 +518,11 @@ export function EffectifsPageClient() {
           vrai tableau HTML des employés RÉELS de l'équipe cliquée, même parti pris que
           `StaffingDetailModal` (texte nativement sélectionnable plutôt qu'un panneau en prose). */}
       <Modal
-        open={needDetailScope?.kind === "available"}
+        open={availableTeam !== null}
         onOpenChange={(open) => {
-          if (!open) setNeedDetailScope(null);
+          if (!open) setAvailableTeam(null);
         }}
-        title={needDetailModalTitle}
+        title={availableModalTitle}
         maxWidth="640px"
       >
         {availableDetailRows.length === 0 ? (

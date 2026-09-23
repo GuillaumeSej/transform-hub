@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/shared/Button";
-import { formatFte, parseFte } from "@/components/strategic/ChantierStaffingEditor";
+import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
+import {
+  EMPTY_STAFFING_LINE,
+  StaffingLineFields,
+  type StaffingLineFormValue,
+} from "@/components/strategic/StaffingLineFields";
 import { colorForDepartment } from "@/lib/axisLogic";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { validateStaffingLine } from "@/lib/staffingLineValidation";
 
 /**
  * Version « brouillon » de `ChantierStaffingEditor.tsx`, pour le formulaire de CRÉATION d'un projet
@@ -22,6 +28,10 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
  * l'`action.id` définitif côté création directe tant que `data.createChantierAction` n'a pas
  * répondu) — voir `ChantierDetailPanel.tsx` pour la conversion en vraies lignes `ChantierStaffing`
  * une fois le projet effectivement créé/approuvé.
+ *
+ * Mêmes règles de saisie que l'éditeur réel (`lib/staffingLineValidation.ts`) : équipe jamais
+ * pré-remplie, ETP vide et obligatoire, dates de début/fin obligatoires (fin ≥ début), avertissement
+ * non bloquant si hors des dates saisies pour le projet (`projectDates`).
  */
 
 /** Ligne de brouillon — mêmes champs significatifs qu'une `ChantierStaffing`, moins tout ce qui
@@ -40,13 +50,11 @@ function newDraftRowId(): string {
   return `SD-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-const INPUT_CLASS =
-  "mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral";
-
 export function StaffingDraftTable({
   companyId,
   rows,
   onChange,
+  projectDates,
 }: {
   companyId: string;
   /** Lignes déjà ajoutées — possédées par l'appelant (`ChantierActionForm`), pas par ce composant :
@@ -54,46 +62,35 @@ export function StaffingDraftTable({
    *  pas réellement réussi. */
   rows: StaffingDraftRow[];
   onChange: (rows: StaffingDraftRow[]) => void;
+  /** Dates du projet en cours de création (champs Début/Fin du formulaire) — pour l'avertissement
+   *  non bloquant « hors période du projet ». */
+  projectDates?: { start?: string; end?: string };
 }) {
   const { t } = useTranslation();
   const { departmentNames } = useCompanyDepartments(companyId);
 
-  const [functionDraft, setFunctionDraft] = useState("");
-  const [fteDraft, setFteDraft] = useState("1");
-  const [noteDraft, setNoteDraft] = useState("");
-  const [startDateDraft, setStartDateDraft] = useState("");
-  const [endDateDraft, setEndDateDraft] = useState("");
-
-  // Même présélection que `ChantierStaffingEditor` : dès que la base ETP répond avec au moins une
-  // équipe, et seulement tant que l'utilisateur n'a rien choisi lui-même.
-  useEffect(() => {
-    if (!functionDraft && departmentNames.length > 0) setFunctionDraft(departmentNames[0]);
-  }, [departmentNames, functionDraft]);
+  const [form, setForm] = useState<StaffingLineFormValue>(EMPTY_STAFFING_LINE);
+  const [formKey, setFormKey] = useState(0);
 
   const totalFte = rows.reduce((sum, r) => sum + (r.fte || 0), 0);
-  const parsedFteDraft = parseFte(fteDraft);
-  const canAdd = functionDraft !== "" && parsedFteDraft !== null;
+  const validation = validateStaffingLine(form, projectDates ?? null);
 
   const add = () => {
-    if (!canAdd || parsedFteDraft === null) return;
-    const note = noteDraft.trim();
-    const startDate = startDateDraft.trim();
-    const endDate = endDateDraft.trim();
+    if (!validation.valid || validation.fte === null) return;
+    const note = form.note.trim();
     onChange([
       ...rows,
       {
         id: newDraftRowId(),
-        function: functionDraft,
-        fte: parsedFteDraft,
+        function: form.team,
+        fte: validation.fte,
         ...(note !== "" ? { note } : {}),
-        ...(startDate !== "" ? { startDate } : {}),
-        ...(endDate !== "" ? { endDate } : {}),
+        startDate: form.startDate.trim(),
+        endDate: form.endDate.trim(),
       },
     ]);
-    setFteDraft("1");
-    setNoteDraft("");
-    setStartDateDraft("");
-    setEndDateDraft("");
+    setForm(EMPTY_STAFFING_LINE);
+    setFormKey((k) => k + 1);
   };
 
   const remove = (id: string) => onChange(rows.filter((r) => r.id !== id));
@@ -162,72 +159,20 @@ export function StaffingDraftTable({
       )}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.function")}
-            {departmentNames.length > 0 ? (
-              <select
-                value={functionDraft}
-                onChange={(e) => setFunctionDraft(e.target.value)}
-                className={INPUT_CLASS}
-              >
-                {departmentNames.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <p className={`${INPUT_CLASS} bg-neutral-50 text-tertiary`}>
-                {t("staffing.noDepartments")}
-              </p>
-            )}
-          </label>
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.fte")}
-            <input
-              value={fteDraft}
-              onChange={(e) => setFteDraft(e.target.value)}
-              inputMode="decimal"
-              placeholder="1"
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.note")}
-            <input
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              placeholder={t("staffing.notePlaceholder")}
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.startDate")}
-            <input
-              type="date"
-              value={startDateDraft}
-              onChange={(e) => setStartDateDraft(e.target.value)}
-              className={INPUT_CLASS}
-            />
-          </label>
-          <label className="block text-[11px] font-medium text-secondary">
-            {t("staffing.endDate")}
-            <input
-              type="date"
-              value={endDateDraft}
-              onChange={(e) => setEndDateDraft(e.target.value)}
-              className={INPUT_CLASS}
-            />
-          </label>
-        </div>
+        <StaffingLineFields
+          key={formKey}
+          value={form}
+          onChange={setForm}
+          validation={validation}
+          departmentNames={departmentNames}
+        />
         <div className="flex items-end">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={add}
-            disabled={!canAdd}
+            disabled={!validation.valid || departmentNames.length === 0}
           >
             <Plus size={12} /> {t("staffing.add")}
           </Button>
