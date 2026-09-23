@@ -1528,6 +1528,9 @@ const en: Record<string, string> = {
   "strategicChantierDetail.milestones.preview.hint":
     "The actions below are pre-filled for every project. Add project-specific actions to any milestone if needed — you can also adjust them later.",
   "strategicChantierDetail.milestones.preview.itemsCount": "{n} action(s)",
+  "strategicChantierDetail.milestones.preview.excludeItem": "Exclude this action for this project",
+  "strategicChantierDetail.milestones.preview.excludedTitle": "Actions excluded for this project",
+  "strategicChantierDetail.milestones.preview.restoreItem": "Restore",
 
   "strategicChantierDetail.milestones.item.E0_A1": "Dependencies / prerequisites satisfied",
   "strategicChantierDetail.milestones.item.E0_A2": "Clients / sponsor identified",

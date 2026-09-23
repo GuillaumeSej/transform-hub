@@ -16,10 +16,22 @@ import type { MilestoneCustomAction, MilestoneId } from "@/types";
  * Mêmes items FIXES que `MilestoneChecklistPanel.tsx` (`MILESTONE_CHECKLISTS`, libellés i18n) —
  * mais rendus en pure lecture seule ici : aucune saisie de progression n'a de sens tant que le
  * projet n'existe pas (elle se fait ensuite sur la fiche du projet créé, via ce même panneau).
- * Seule action possible ici : ajouter/retirer des actions PERSONNALISÉES par jalon
- * (`MilestoneCustomAction`, voir `types/index.ts`) — mêmes id/style que
- * `MilestoneChecklistPanel.tsx`, dupliqués ici plutôt qu'importés (ce composant n'a pas la
- * fusion progressPct/canPassMilestone à gérer, un rendu bien plus simple).
+ * Deux actions possibles ici, sur deux brouillons INDÉPENDANTS :
+ *  - ajouter/retirer des actions PERSONNALISÉES par jalon (`MilestoneCustomAction`, voir
+ *    `types/index.ts`) — mêmes id/style que `MilestoneChecklistPanel.tsx`, dupliqués ici plutôt
+ *    qu'importés (ce composant n'a pas la fusion progressPct/canPassMilestone à gérer, un rendu
+ *    bien plus simple) ;
+ *  - EXCLURE un item FIXE du référentiel pour CE projet (round "exclusion jalons création" — retour
+ *    PO : « il faut pouvoir retirer des actions déjà présentes dans les jalons J, aujourd'hui on ne
+ *    peut qu'en ajouter »), brouillon séparé `excludedValue`/`onExcludedChange` qui devient
+ *    `ChantierAction.excludedMilestoneItems` à la création (voir son doc-comment,
+ *    `types/index.ts`). Un item exclu n'est pas simplement masqué : il bascule dans une mini-liste
+ *    "actions exclues" en bas de jalon (barré, muet) avec un bouton pour le réintégrer avant la
+ *    validation finale du formulaire — jamais de suppression silencieuse et définitive à l'aveugle.
+ *
+ * Portée VOLONTAIREMENT limitée à la création : ce composant ne gère aucune ré-inclusion après coup
+ * une fois le projet créé — `MilestoneChecklistPanel.tsx` (fiche du projet réel) lit
+ * `excludedMilestoneItems` en lecture seule, aucune UI d'édition n'y est ajoutée ce round.
  *
  * Entièrement CONTRÔLÉ, état 100% en mémoire (`value`/`onChange`) — même parti pris que
  * `StaffingDraftTable.tsx` (round 29) : le projet n'existe pas encore, rien n'est jamais écrit
@@ -42,12 +54,20 @@ function newCustomActionId(): string {
 export function MilestonePreviewEditor({
   value,
   onChange,
+  excludedValue,
+  onExcludedChange,
 }: {
   /** Brouillon courant, PAR jalon — clé absente = aucune action personnalisée ajoutée pour ce
    *  jalon (même convention `Partial` que `ChantierAction.customMilestoneActions`, dont ce
    *  brouillon prend directement la forme une fois le projet créé). */
   value: Partial<Record<MilestoneId, MilestoneCustomAction[]>>;
   onChange: (next: Partial<Record<MilestoneId, MilestoneCustomAction[]>>) => void;
+  /** Brouillon courant des items FIXES exclus, PAR jalon — clé absente = aucune exclusion pour ce
+   *  jalon (même convention `Partial` que `ChantierAction.excludedMilestoneItems`, dont ce
+   *  brouillon prend directement la forme une fois le projet créé). Chaque valeur est un `itemId`
+   *  de `MILESTONE_CHECKLISTS[jalon]`, jamais un id d'action personnalisée. */
+  excludedValue: Partial<Record<MilestoneId, string[]>>;
+  onExcludedChange: (next: Partial<Record<MilestoneId, string[]>>) => void;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Set<MilestoneId>>(() => new Set<MilestoneId>(["E0"]));
@@ -80,6 +100,20 @@ export function MilestonePreviewEditor({
     onChange(next);
   };
 
+  const excludeItem = (milestoneId: MilestoneId, itemId: string) => {
+    const existing = excludedValue[milestoneId] ?? [];
+    if (existing.includes(itemId)) return;
+    onExcludedChange({ ...excludedValue, [milestoneId]: [...existing, itemId] });
+  };
+
+  const restoreItem = (milestoneId: MilestoneId, itemId: string) => {
+    const remaining = (excludedValue[milestoneId] ?? []).filter((id) => id !== itemId);
+    const next = { ...excludedValue };
+    if (remaining.length > 0) next[milestoneId] = remaining;
+    else delete next[milestoneId];
+    onExcludedChange(next);
+  };
+
   return (
     <div>
       <span className="text-xs font-medium text-secondary">
@@ -93,6 +127,8 @@ export function MilestonePreviewEditor({
         {MILESTONE_ORDER.map((milestoneId) => {
           const defs = MILESTONE_CHECKLISTS[milestoneId];
           const custom = value[milestoneId] ?? [];
+          const excluded = excludedValue[milestoneId] ?? [];
+          const visibleDefs = defs.filter((def) => !excluded.includes(def.itemId));
           const open = expanded.has(milestoneId);
           const Chevron = open ? ChevronDown : ChevronRight;
 
@@ -114,7 +150,7 @@ export function MilestonePreviewEditor({
                 <span className="shrink-0 rounded-full border border-border bg-neutral-50 px-2 py-px text-[10px] font-semibold text-tertiary">
                   {t("strategicChantierDetail.milestones.preview.itemsCount").replace(
                     "{n}",
-                    String(defs.length + custom.length)
+                    String(visibleDefs.length + custom.length)
                   )}
                 </span>
               </button>
@@ -122,7 +158,7 @@ export function MilestonePreviewEditor({
               {open && (
                 <div className="space-y-2 border-t border-border p-3">
                   <ul className="space-y-1.5">
-                    {defs.map((def) => (
+                    {visibleDefs.map((def) => (
                       <li
                         key={def.itemId}
                         className="flex items-center gap-2 text-[12px] text-secondary"
@@ -131,7 +167,16 @@ export function MilestonePreviewEditor({
                           aria-hidden
                           className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"
                         />
-                        {t(def.i18nKey)}
+                        <span className="min-w-0 flex-1">{t(def.i18nKey)}</span>
+                        <button
+                          type="button"
+                          onClick={() => excludeItem(milestoneId, def.itemId)}
+                          aria-label={t("strategicChantierDetail.milestones.preview.excludeItem")}
+                          title={t("strategicChantierDetail.milestones.preview.excludeItem")}
+                          className="shrink-0 rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
+                        >
+                          <Trash2 size={12} />
+                        </button>
                       </li>
                     ))}
                     {custom.map((c) => (
@@ -153,6 +198,35 @@ export function MilestonePreviewEditor({
                       </li>
                     ))}
                   </ul>
+
+                  {excluded.length > 0 && (
+                    <div className="space-y-1 rounded-md border border-dashed border-border bg-neutral-50 p-2">
+                      <span className="text-[10.5px] font-medium text-tertiary">
+                        {t("strategicChantierDetail.milestones.preview.excludedTitle")}
+                      </span>
+                      <ul className="space-y-1">
+                        {excluded.flatMap((itemId) => {
+                          const def = defs.find((d) => d.itemId === itemId);
+                          if (!def) return [];
+                          return [
+                            <li
+                              key={itemId}
+                              className="flex items-center gap-2 text-[12px] text-tertiary"
+                            >
+                              <span className="min-w-0 flex-1 line-through">{t(def.i18nKey)}</span>
+                              <button
+                                type="button"
+                                onClick={() => restoreItem(milestoneId, itemId)}
+                                className="shrink-0 text-[10.5px] font-medium text-bp-coral underline-offset-2 hover:underline"
+                              >
+                                {t("strategicChantierDetail.milestones.preview.restoreItem")}
+                              </button>
+                            </li>,
+                          ];
+                        })}
+                      </ul>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-2 pt-1">
                     <input

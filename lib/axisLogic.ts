@@ -913,20 +913,32 @@ export function canPassMilestone(
  * personnalisée mêlée au calcul. Une action personnalisée bloque `canPassMilestone` exactement
  * comme un item fixe non complété, aucun traitement de faveur : voir le doc-comment de
  * `MilestoneCustomAction` (types/index.ts).
+ *
+ * `excludedItemIds` (défaut `[]`, même discipline de compat que `customActions`) : `itemId` des
+ * items FIXES de `MILESTONE_CHECKLISTS[milestoneId]` dont CE projet s'exempte (voir
+ * `ChantierAction.excludedMilestoneItems`) — filtrés de `fixed` AVANT la fusion avec `custom`, donc
+ * absents du résultat comme s'ils n'avaient jamais existé dans le référentiel : ni affichés par
+ * `MilestoneChecklistPanel.tsx`, ni exigés par `canPassMilestone` (rien à cocher = rien à
+ * bloquer). Un `itemId` exclu qui ne correspond à AUCUN item du jalon (référentiel modifié depuis,
+ * ou faute de frappe côté appelant) est un no-op silencieux, même parti pris défensif que le reste
+ * de ce fichier (ex. `maturityStageProgressRatio`) : jamais d'exception pour une donnée orpheline.
  */
 export function mergeMilestoneChecklistItems(
   milestoneId: MilestoneId,
   storedItems: MilestoneChecklistItem[],
   autoFlags: Record<string, number>,
-  customActions: MilestoneCustomAction[] = []
+  customActions: MilestoneCustomAction[] = [],
+  excludedItemIds: string[] = []
 ): MilestoneChecklistItem[] {
-  const fixed = MILESTONE_CHECKLISTS[milestoneId].map((def) =>
-    def.auto
-      ? autoFlags[def.itemId] !== undefined
-        ? { itemId: def.itemId, progressPct: autoFlags[def.itemId] }
-        : { itemId: def.itemId }
-      : (storedItems.find((i) => i.itemId === def.itemId) ?? { itemId: def.itemId })
-  );
+  const fixed = MILESTONE_CHECKLISTS[milestoneId]
+    .filter((def) => !excludedItemIds.includes(def.itemId))
+    .map((def) =>
+      def.auto
+        ? autoFlags[def.itemId] !== undefined
+          ? { itemId: def.itemId, progressPct: autoFlags[def.itemId] }
+          : { itemId: def.itemId }
+        : (storedItems.find((i) => i.itemId === def.itemId) ?? { itemId: def.itemId })
+    );
   const custom = customActions.map(
     (c) => storedItems.find((i) => i.itemId === c.id) ?? { itemId: c.id }
   );
@@ -998,11 +1010,13 @@ export function requestMilestoneApproval(
   const autoFlags = resolveMilestoneAutoFlags(currentMilestone, action, allChantiers, allActions);
   const storedItems = action.milestones?.checklists[currentMilestone] ?? [];
   const customActions = action.customMilestoneActions?.[currentMilestone] ?? [];
+  const excludedItemIds = action.excludedMilestoneItems?.[currentMilestone] ?? [];
   const mergedItems = mergeMilestoneChecklistItems(
     currentMilestone,
     storedItems,
     autoFlags,
-    customActions
+    customActions,
+    excludedItemIds
   );
   const { canPass, reasons } = canPassMilestone(currentMilestone, mergedItems);
   if (!canPass) {

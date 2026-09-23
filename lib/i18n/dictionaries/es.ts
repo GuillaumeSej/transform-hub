@@ -1518,6 +1518,11 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.preview.hint":
     "Las acciones siguientes están precargadas para todo proyecto. Añada acciones específicas de este proyecto a cualquier hito si es necesario — también podrá ajustarlas más tarde.",
   "strategicChantierDetail.milestones.preview.itemsCount": "{n} acción(es)",
+  "strategicChantierDetail.milestones.preview.excludeItem":
+    "Excluir esta acción para este proyecto",
+  "strategicChantierDetail.milestones.preview.excludedTitle":
+    "Acciones excluidas para este proyecto",
+  "strategicChantierDetail.milestones.preview.restoreItem": "Restaurar",
 
   "strategicChantierDetail.milestones.item.E0_A1": "Dependencias / requisitos previos satisfechos",
   "strategicChantierDetail.milestones.item.E0_A2": "Clientes / comanditario identificados",

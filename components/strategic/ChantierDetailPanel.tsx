@@ -915,11 +915,16 @@ function ChantierActionForm({
    *  J0→J4 ci-dessous (round "aperçu jalons création", `MilestonePreviewEditor`) — vide si
    *  `showStaffingDraft` est `false`, ou si l'utilisateur n'a rien ajouté. Même discipline que
    *  `draftStaffing` : bufferisé en mémoire ici, converti par l'appelant en
-   *  `ChantierAction.customMilestoneActions` une fois le projet réellement créé/approuvé. */
+   *  `ChantierAction.customMilestoneActions` une fois le projet réellement créé/approuvé.
+   *
+   *  `draftExcludedMilestoneItems` : items FIXES exclus jalon par jalon dans le même aperçu J0→J4
+   *  (round "exclusion jalons création") — même discipline exacte que `draftCustomMilestoneActions`
+   *  ci-dessus, converti par l'appelant en `ChantierAction.excludedMilestoneItems`. */
   onSubmit: (
     values: ChantierActionFormValues,
     draftStaffing: StaffingDraftRow[],
-    draftCustomMilestoneActions: Partial<Record<MilestoneId, MilestoneCustomAction[]>>
+    draftCustomMilestoneActions: Partial<Record<MilestoneId, MilestoneCustomAction[]>>,
+    draftExcludedMilestoneItems: Partial<Record<MilestoneId, string[]>>
   ) => void | Promise<void>;
   onCancel: () => void;
   labels: ChantierActionFormLabels;
@@ -970,6 +975,12 @@ function ChantierActionForm({
   // pour la même raison : l'édition ne rend jamais `MilestonePreviewEditor`.
   const [customMilestoneActionsDraft, setCustomMilestoneActionsDraft] = useState<
     Partial<Record<MilestoneId, MilestoneCustomAction[]>>
+  >({});
+  // Brouillon d'exclusion d'items fixes J0→J4 (round "exclusion jalons création"), même garde
+  // `showStaffingDraft` et même non-réinitialisation depuis `initial` que
+  // `customMilestoneActionsDraft` ci-dessus.
+  const [excludedMilestoneItemsDraft, setExcludedMilestoneItemsDraft] = useState<
+    Partial<Record<MilestoneId, string[]>>
   >({});
   const [description, setDescription] = useState(initial?.description ?? "");
   // Un champ de saisie PAR livrable (plus de convention « une ligne = un livrable »), chacun
@@ -1093,7 +1104,8 @@ function ChantierActionForm({
           ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
         },
         staffingDraft,
-        customMilestoneActionsDraft
+        customMilestoneActionsDraft,
+        excludedMilestoneItemsDraft
       );
     } catch (error) {
       // `onSubmit` (fourni par l'appelant) porte déjà son propre try/catch + `showToast` autour de
@@ -1249,6 +1261,8 @@ function ChantierActionForm({
         <MilestonePreviewEditor
           value={customMilestoneActionsDraft}
           onChange={setCustomMilestoneActionsDraft}
+          excludedValue={excludedMilestoneItemsDraft}
+          onExcludedChange={setExcludedMilestoneItemsDraft}
         />
       )}
 
@@ -2594,18 +2608,27 @@ export function ChantierDetailPanel({
                   showStaffingDraft={actionForm.mode === "create"}
                   labels={actionFormLabels}
                   onCancel={() => setActionForm(null)}
-                  onSubmit={async (values, draftStaffing, draftCustomMilestoneActions) => {
+                  onSubmit={async (
+                    values,
+                    draftStaffing,
+                    draftCustomMilestoneActions,
+                    draftExcludedMilestoneItems
+                  ) => {
                     try {
                       if (actionForm.mode === "edit" && actionForm.actionId) {
                         await data.updateChantierAction(actionForm.actionId, values);
                         showToast(t("strategicAxes.actionUpdated"), values.name, "success");
                       } else {
-                        // `customMilestoneActions` (round "aperçu jalons création") n'est ajouté
-                        // que si l'utilisateur a réellement saisi au moins une action dans l'aperçu
-                        // — jamais une clé vide `{}` par défaut, même discipline "clés OMISES" que
-                        // le reste de ce formulaire (voir `ChantierActionForm`'s `submit`).
+                        // `customMilestoneActions`/`excludedMilestoneItems` (round "aperçu jalons
+                        // création" / "exclusion jalons création") ne sont ajoutés que si
+                        // l'utilisateur a réellement saisi au moins une action/exclusion dans
+                        // l'aperçu — jamais une clé vide `{}` par défaut, même discipline "clés
+                        // OMISES" que le reste de ce formulaire (voir `ChantierActionForm`'s
+                        // `submit`).
                         const hasCustomMilestoneActions =
                           Object.keys(draftCustomMilestoneActions).length > 0;
+                        const hasExcludedMilestoneItems =
+                          Object.keys(draftExcludedMilestoneItems).length > 0;
                         const action = {
                           ...values,
                           chantierId: chantier.id,
@@ -2614,15 +2637,19 @@ export function ChantierDetailPanel({
                           ...(hasCustomMilestoneActions
                             ? { customMilestoneActions: draftCustomMilestoneActions }
                             : {}),
+                          ...(hasExcludedMilestoneItems
+                            ? { excludedMilestoneItems: draftExcludedMilestoneItems }
+                            : {}),
                         } as ChantierAction;
                         // Côté demande d'approbation, `action.id` (pré-généré ci-dessus) EST l'id
                         // définitif du projet une fois approuvé (`applyApprovedPayload`, cas
                         // "projet_create") : c'est celui-là qu'on rattache aux lignes ETP du payload.
-                        // `customMilestoneActions` posé directement sur `action` ci-dessus voyage
-                        // avec elle sans plomberie supplémentaire : `applyApprovedPayload` pousse
-                        // `payload.action` tel quel dans `effects.saveActions` (vérifié, contrairement
-                        // au brouillon ETP round 29, qui a besoin d'un champ de payload séparé car
-                        // `ChantierStaffing` est une collection distincte).
+                        // `customMilestoneActions`/`excludedMilestoneItems` posés directement sur
+                        // `action` ci-dessus voyagent avec elle sans plomberie supplémentaire :
+                        // `applyApprovedPayload` pousse `payload.action` tel quel dans
+                        // `effects.saveActions` (vérifié, contrairement au brouillon ETP round 29,
+                        // qui a besoin d'un champ de payload séparé car `ChantierStaffing` est une
+                        // collection distincte).
                         const pendingStaffing = draftStaffing.map((row) =>
                           draftRowToStaffing(
                             row,
@@ -2645,6 +2672,9 @@ export function ChantierDetailPanel({
                               chantierId: chantier.id,
                               ...(hasCustomMilestoneActions
                                 ? { customMilestoneActions: draftCustomMilestoneActions }
+                                : {}),
+                              ...(hasExcludedMilestoneItems
+                                ? { excludedMilestoneItems: draftExcludedMilestoneItems }
                                 : {}),
                             });
                             // Révèle immédiatement le nouveau projet (retour PO : « je ne vois pas
@@ -3111,6 +3141,11 @@ export function ChantierDetailPanel({
                                 )}
                                 customActions={
                                   action.customMilestoneActions?.[
+                                    actionMilestones.currentMilestone
+                                  ] ?? []
+                                }
+                                excludedItemIds={
+                                  action.excludedMilestoneItems?.[
                                     actionMilestones.currentMilestone
                                   ] ?? []
                                 }
