@@ -906,6 +906,25 @@ describe("computeIndicatorDelta — avancement depuis la valeur initiale", () =>
     expect(delta?.stepPeriod).toBeUndefined();
   });
 
+  it("target already met: never 0% (82% vs cible 80%, baseline already above target)", () => {
+    const indicator = makeIndicator({ direction: "up", objectiveValue: 80 });
+    // Mesure unique = baseline, déjà au-dessus de la cible.
+    const only = makeMeasurement("IND001", "2026-01", 82);
+    const single = computeIndicatorDelta(indicator, only, [only]);
+    expect(single?.progressToFinalPct).toBeCloseTo(102.5); // 82/80
+    // Baseline déjà au-delà de la cible, puis nouvelle mesure.
+    const history = [
+      makeMeasurement("IND001", "2026-01", 81),
+      makeMeasurement("IND001", "2026-03", 82),
+    ];
+    const later = computeIndicatorDelta(indicator, history[1], history);
+    expect(later?.progressToFinalPct).toBeGreaterThanOrEqual(100);
+    // Sens "down" : délai 8 j pour une cible de 10 j, baseline 9 j.
+    const down = makeIndicator({ direction: "down", objectiveValue: 10 });
+    const d = [makeMeasurement("IND001", "2026-01", 9), makeMeasurement("IND001", "2026-03", 8)];
+    expect(computeIndicatorDelta(down, d[1], d)?.progressToFinalPct).toBeGreaterThanOrEqual(100);
+  });
+
   it("down: works naturally when target < initial", () => {
     const indicator = makeIndicator({ direction: "down", objectiveValue: 10 });
     const history = [

@@ -239,9 +239,10 @@ export function resolveIndicatorStatus(
  *  (`progressToFinalPct`, chiffre principal affiché comme "avancement").
  *
  *  Repli APPROXIMATIF (`approximate`/`stepApproximate` = true) quand la formule n'est pas
- *  applicable — pas de baseline connue, ou baseline égale à la cible (dénominateur nul) : on
- *  revient à l'ancien ratio (`valeur / cible` pour "up", `cible / valeur` pour "down").
- *  Une seule mesure qui EST la baseline donne un avancement exact de 0 (rien n'a encore bougé).
+ *  applicable — pas de baseline connue, ou baseline qui atteint DÉJÀ la cible (égale, ou au-delà
+ *  dans le sens d'amélioration) : on revient à l'ancien ratio (`valeur / cible` pour "up",
+ *  `cible / valeur` pour "down"). Une cible atteinte donne donc toujours ≥ 100%.
+ *  Une seule mesure qui EST la baseline (sous la cible) donne un avancement exact de 0.
  *
  *  Bornes : les champs `progress*Pct` sont PLANCHÉS à 0 (un recul sous la situation initiale
  *  s'affiche 0%) mais JAMAIS plafonnés à 100 (un dépassement s'affiche p. ex. 112%) ; les valeurs
@@ -295,7 +296,13 @@ function progressFromBaseline(
   baseline: number | undefined,
   isDown: boolean
 ): { raw: number; approximate: boolean } {
-  if (baseline === undefined || baseline === target) {
+  // Baseline exploitable UNIQUEMENT si elle est du "mauvais" côté de la cible (en dessous pour
+  // "up", au-dessus pour "down") : une baseline égale à la cible, ou qui l'atteignait déjà (ex.
+  // 82% initial pour une cible de 80%, ou mesure unique qui EST la baseline), rendrait la formule
+  // absurde (0% ou négatif alors que la cible est dépassée) → repli ratio, qui donne bien ≥ 100%
+  // dès que la cible est atteinte.
+  const baselineUsable = baseline !== undefined && (isDown ? baseline > target : baseline < target);
+  if (!baselineUsable) {
     return { raw: ratioProgress(value, target, isDown), approximate: true };
   }
   return { raw: ((value - baseline) / (target - baseline)) * 100, approximate: false };
