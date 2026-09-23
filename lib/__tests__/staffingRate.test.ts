@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { periodBoundsForDate } from "@/lib/staffingNeed";
 import {
   availableForTeam,
+  DEFAULT_STAFFING_THRESHOLDS,
   filterStaffingByAxes,
   filterStaffingByTeam,
   monthsOfYear,
+  normalizeStaffingThresholds,
   periodRange,
   periodStaffingDetail,
   staffingRateLevel,
@@ -13,6 +15,7 @@ import {
   staffingTeams,
   teamStaffingMatrix,
   totalStaffingRow,
+  validateStaffingThresholds,
 } from "@/lib/staffingRate";
 import type { ChantierStaffing } from "@/types";
 
@@ -62,6 +65,55 @@ describe("staffingRate", () => {
     expect(staffingRateLevel(84)).toBe("ok");
     expect(staffingRateLevel(null)).toBe("none");
     expect(staffingRateLevel(null, 1)).toBe("over");
+  });
+
+  it("niveaux : seuils personnalisés (tendu 70, sur-staffé 120)", () => {
+    const th = { tense: 70, over: 120 };
+    expect(DEFAULT_STAFFING_THRESHOLDS).toEqual({ tense: 85, over: 100 });
+    expect(staffingRateLevel(121, 0, th)).toBe("over");
+    expect(staffingRateLevel(120, 0, th)).toBe("tense");
+    expect(staffingRateLevel(101, 0, th)).toBe("tense");
+    expect(staffingRateLevel(70, 0, th)).toBe("tense");
+    expect(staffingRateLevel(69, 0, th)).toBe("ok");
+    expect(staffingRateLevel(null, 2, th)).toBe("over");
+    expect(staffingRateLevel(null, 0, th)).toBe("none");
+  });
+
+  it("seuils propagés aux séries, heatmap, ligne total et détail", () => {
+    const march = periodBoundsForDate("2026-03-01", "monthly");
+    const entries = [line("IT", 9, "2026-03-01", "2026-03-31")];
+    const fte = { IT: 10 };
+    const strict = { tense: 50, over: 80 };
+    expect(staffingRatePoint(entries, 10, march).level).toBe("tense");
+    expect(staffingRatePoint(entries, 10, march, strict).level).toBe("over");
+    expect(staffingRateSeries(entries, 10, "monthly", "2026-03-15", 36, strict)[0].level).toBe(
+      "over"
+    );
+    const matrix = teamStaffingMatrix(entries, fte, [march], strict);
+    expect(matrix[0].cells[0].level).toBe("over");
+    expect(matrix[0].overCount).toBe(1);
+    expect(teamStaffingMatrix(entries, fte, [march])[0].overCount).toBe(0);
+    expect(totalStaffingRow(entries, fte, [march], strict).cells[0].level).toBe("over");
+    const detail = periodStaffingDetail(entries, fte, march, null, strict);
+    expect(detail.level).toBe("over");
+    expect(detail.teams[0].level).toBe("over");
+  });
+
+  it("validation / normalisation des seuils", () => {
+    expect(validateStaffingThresholds({ tense: 85, over: 100 })).toBeNull();
+    expect(validateStaffingThresholds({ tense: 1, over: 300 })).toBeNull();
+    expect(validateStaffingThresholds({ tense: 0, over: 100 })).toBe("tenseRange");
+    expect(validateStaffingThresholds({ tense: 100, over: 100 })).toBe("order");
+    expect(validateStaffingThresholds({ tense: 90, over: 80 })).toBe("order");
+    expect(validateStaffingThresholds({ tense: 90, over: 301 })).toBe("overMax");
+    expect(validateStaffingThresholds({ tense: NaN, over: 100 })).toBe("invalid");
+    expect(normalizeStaffingThresholds({ tense: 70, over: 120 })).toEqual({ tense: 70, over: 120 });
+    expect(normalizeStaffingThresholds({ tense: 120, over: 70 })).toEqual({ tense: 85, over: 100 });
+    expect(normalizeStaffingThresholds(undefined)).toEqual({ tense: 85, over: 100 });
+    expect(normalizeStaffingThresholds({ tense: "70", over: 120 })).toEqual({
+      tense: 85,
+      over: 100,
+    });
   });
 
   it("taux = mobilisé / disponible (ETP moyens, lignes planifiées comprises)", () => {

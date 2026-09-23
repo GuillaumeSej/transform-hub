@@ -23,20 +23,62 @@ import {
  *                  département) — instantané, jamais filtré par axe ;
  *  - taux        = mobilisé / disponible, en % arrondi ; null si disponible nul.
  *
- * Seuils : > 100 % = sur-staffé ; 85–100 % = tendu ; < 85 % = OK.
+ * Seuils (configurables par utilisateur, `StaffingThresholds`, défaut 85 / 100) :
+ * > sur-staffé = sur-staffé ; tendu–sur-staffé = tendu ; < tendu = OK.
  */
 
 export type StaffingRateLevel = "over" | "tense" | "ok" | "none";
 
+/** Seuils d'alerte en % : OK < `tense` ≤ tendu ≤ `over` < sur-staffé. Préférence utilisateur
+ *  (`AuthUser.preferences.staffingThresholds`), défaut `DEFAULT_STAFFING_THRESHOLDS`. */
+export type StaffingThresholds = { tense: number; over: number };
+
 export const STAFFING_TENSE_THRESHOLD = 85;
 export const STAFFING_OVER_THRESHOLD = 100;
+/** Borne haute acceptée pour le seuil « sur-staffé ». */
+export const STAFFING_THRESHOLD_MAX = 300;
+
+export const DEFAULT_STAFFING_THRESHOLDS: StaffingThresholds = Object.freeze({
+  tense: STAFFING_TENSE_THRESHOLD,
+  over: STAFFING_OVER_THRESHOLD,
+});
+
+export type StaffingThresholdsError = "invalid" | "tenseRange" | "order" | "overMax";
+
+/** Validation : 0 < tendu < sur-staffé ≤ 300 (nombres finis). null = valide. */
+export function validateStaffingThresholds(t: {
+  tense: number;
+  over: number;
+}): StaffingThresholdsError | null {
+  if (!Number.isFinite(t.tense) || !Number.isFinite(t.over)) return "invalid";
+  if (t.tense <= 0) return "tenseRange";
+  if (t.tense >= t.over) return "order";
+  if (t.over > STAFFING_THRESHOLD_MAX) return "overMax";
+  return null;
+}
+
+/** Normalise une valeur lue (Firestore / localStorage, donc non fiable) : seuils valides ou défaut. */
+export function normalizeStaffingThresholds(raw: unknown): StaffingThresholds {
+  if (raw && typeof raw === "object") {
+    const { tense, over } = raw as { tense?: unknown; over?: unknown };
+    if (typeof tense === "number" && typeof over === "number") {
+      const t = { tense, over };
+      if (validateStaffingThresholds(t) === null) return t;
+    }
+  }
+  return { ...DEFAULT_STAFFING_THRESHOLDS };
+}
 
 /** Niveau d'alerte d'un taux. `mobilised > 0` avec disponible nul (taux null) = sur-staffé : une
  *  équipe absente de la base ETP ne peut rien absorber. */
-export function staffingRateLevel(ratePct: number | null, mobilised = 0): StaffingRateLevel {
+export function staffingRateLevel(
+  ratePct: number | null,
+  mobilised = 0,
+  thresholds: StaffingThresholds = DEFAULT_STAFFING_THRESHOLDS
+): StaffingRateLevel {
   if (ratePct === null) return mobilised > 0 ? "over" : "none";
-  if (ratePct > STAFFING_OVER_THRESHOLD) return "over";
-  if (ratePct >= STAFFING_TENSE_THRESHOLD) return "tense";
+  if (ratePct > thresholds.over) return "over";
+  if (ratePct >= thresholds.tense) return "tense";
   return "ok";
 }
 
@@ -89,11 +131,18 @@ export type StaffingRatePoint = PeriodBounds & {
 export function staffingRatePoint(
   entries: ChantierStaffing[],
   available: number,
-  period: PeriodBounds
+  period: PeriodBounds,
+  thresholds: StaffingThresholds = DEFAULT_STAFFING_THRESHOLDS
 ): StaffingRatePoint {
   const mobilised = averageFte(entries, period);
   const ratePct = staffingRatePct(mobilised, available);
-  return { ...period, available, mobilised, ratePct, level: staffingRateLevel(ratePct, mobilised) };
+  return {
+    ...period,
+    available,
+    mobilised,
+    ratePct,
+    level: staffingRateLevel(ratePct, mobilised, thresholds),
+  };
 }
 
 /** Série continue (programme entier) de la première `startDate` à la dernière date connue (période
@@ -104,7 +153,8 @@ export function staffingRateSeries(
   totalAvailable: number,
   g: NeedGranularity,
   today: string,
-  maxPeriods = 36
+  maxPeriods = 36,
+  thresholds: StaffingThresholds = DEFAULT_STAFFING_THRESHOLDS
 ): StaffingRatePoint[] {
   const dated = entries.filter((e) => e.startDate);
   if (dated.length === 0) return [];
@@ -116,7 +166,9 @@ export function staffingRateSeries(
     if (last && last > max) max = last;
   }
   const periods = periodRange(min, max, g, 1000);
-  return periods.slice(-maxPeriods).map((p) => staffingRatePoint(dated, totalAvailable, p));
+  return periods
+    .slice(-maxPeriods)
+    .map((p) => staffingRatePoint(dated, totalAvailable, p, thresholds));
 }
 
 export type StaffingContribution = {
@@ -174,7 +226,8 @@ const contributionKey = (e: Pick<ChantierStaffing, "actionId" | "chantierId">) =
 export function staffingPeriodCell(
   entries: ChantierStaffing[],
   available: number,
-  period: PeriodBounds
+  period: PeriodBounds,
+  thresholds: StaffingThresholds = DEFAULT_STAFFING_THRESHOLDS
 ): TeamPeriodCell {
   const groups = new Map<string, StaffingContribution>();
   for (const e of entries) {
@@ -198,7 +251,7 @@ export function staffingPeriodCell(
     available,
     mobilised,
     ratePct,
-    level: staffingRateLevel(ratePct, mobilised),
+    level: staffingRateLevel(ratePct, mobilised, thresholds),
     contributions,
   };
 }
@@ -206,9 +259,10 @@ export function staffingPeriodCell(
 function staffingRow(
   entries: ChantierStaffing[],
   available: number,
-  periods: PeriodBounds[]
+  periods: PeriodBounds[],
+  thresholds: StaffingThresholds
 ): StaffingRow {
-  const cells = periods.map((period) => staffingPeriodCell(entries, available, period));
+  const cells = periods.map((period) => staffingPeriodCell(entries, available, period, thresholds));
   return { available, cells, overCount: cells.filter((c) => c.level === "over").length };
 }
 
@@ -223,7 +277,8 @@ const sortableRate = (ratePct: number | null, mobilised: number) =>
 export function teamStaffingMatrix(
   entries: ChantierStaffing[],
   fteByTeam: Record<string, number>,
-  periods: PeriodBounds[]
+  periods: PeriodBounds[],
+  thresholds: StaffingThresholds = DEFAULT_STAFFING_THRESHOLDS
 ): TeamStaffingRow[] {
   const dated = entries.filter((e) => e.startDate);
   const byTeam = new Map<string, ChantierStaffing[]>();
@@ -235,7 +290,7 @@ export function teamStaffingMatrix(
   const teams = new Set<string>([...Object.keys(fteByTeam), ...Array.from(byTeam.keys())]);
   const rows: TeamStaffingRow[] = Array.from(teams).map((team) => ({
     team,
-    ...staffingRow(byTeam.get(team) ?? [], fteByTeam[team] ?? 0, periods),
+    ...staffingRow(byTeam.get(team) ?? [], fteByTeam[team] ?? 0, periods, thresholds),
   }));
   const maxRate = (r: TeamStaffingRow) =>
     Math.max(-1, ...r.cells.map((c) => sortableRate(c.ratePct, c.mobilised)));
@@ -250,12 +305,14 @@ export function teamStaffingMatrix(
 export function totalStaffingRow(
   entries: ChantierStaffing[],
   fteByTeam: Record<string, number>,
-  periods: PeriodBounds[]
+  periods: PeriodBounds[],
+  thresholds: StaffingThresholds = DEFAULT_STAFFING_THRESHOLDS
 ): StaffingRow {
   return staffingRow(
     entries.filter((e) => e.startDate),
     availableForTeam(fteByTeam, null),
-    periods
+    periods,
+    thresholds
   );
 }
 
@@ -294,7 +351,8 @@ export function periodStaffingDetail(
   entries: ChantierStaffing[],
   fteByTeam: Record<string, number>,
   period: PeriodBounds,
-  team: string | null = null
+  team: string | null = null,
+  thresholds: StaffingThresholds = DEFAULT_STAFFING_THRESHOLDS
 ): PeriodStaffingDetail {
   const byTeam = new Map<string, Map<string, PeriodDetailGroup>>();
   for (const entry of filterStaffingByTeam(entries, team)) {
@@ -332,7 +390,7 @@ export function periodStaffingDetail(
       available,
       mobilised,
       ratePct,
-      level: staffingRateLevel(ratePct, mobilised),
+      level: staffingRateLevel(ratePct, mobilised, thresholds),
       groups,
     };
   });
@@ -351,7 +409,7 @@ export function periodStaffingDetail(
     available,
     mobilised,
     ratePct,
-    level: staffingRateLevel(ratePct, mobilised),
+    level: staffingRateLevel(ratePct, mobilised, thresholds),
     teams,
   };
 }

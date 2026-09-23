@@ -2138,7 +2138,7 @@ const es: Record<string, string> = {
   "effectifs.staffingRate.level.tense": "Tenso",
   "effectifs.staffingRate.level.ok": "OK",
   "effectifs.staffingRate.level.none": "—",
-  "effectifs.staffingRate.legend": "> 100 % sobreasignado · 85–100 % tenso · < 85 % OK",
+  "effectifs.staffingRate.legend": "OK < {tense} % ≤ Tenso ≤ {over} % < Sobreasignado",
   "effectifs.staffingRate.axisFilter": "Ejes",
   "effectifs.staffingRate.allAxes": "Todos los ejes",
   "effectifs.staffingRate.axisFilterHint":
@@ -2168,7 +2168,26 @@ const es: Record<string, string> = {
     "Clic: filtrar por el equipo y ver quién está movilizado dónde",
   "effectifs.staffingRate.columnClickHint": "Haga clic para ver quién está movilizado dónde",
   "effectifs.staffingRate.chartHint":
-    "Barra «Movilizado» en rojo: periodo sobreasignado (> 100 % de lo disponible), en rosa: tenso (85–100 %). Haga clic en una columna para ver quién está movilizado dónde.",
+    "Barra «Movilizado» en rojo: periodo sobreasignado (> {over} % de lo disponible), en rosa: tenso ({tense}–{over} %). Línea roja: tasa de staffing (eje derecho). Haga clic en una columna para ver quién está movilizado dónde.",
+  "effectifs.staffingRate.thresholds.button": "Umbrales",
+  "effectifs.staffingRate.thresholds.title": "Umbrales de la tasa de staffing",
+  "effectifs.staffingRate.thresholds.tense": "Umbral «tenso» (%)",
+  "effectifs.staffingRate.thresholds.over": "Umbral «sobreasignado» (%)",
+  "effectifs.staffingRate.thresholds.reset": "Restablecer ({tense} % / {over} %)",
+  "effectifs.staffingRate.thresholds.save": "Guardar",
+  "effectifs.staffingRate.thresholds.cancel": "Cancelar",
+  "effectifs.staffingRate.thresholds.hint":
+    "Guardados en su perfil. Vista previa en directo en el gráfico y el mapa de calor.",
+  "effectifs.staffingRate.thresholds.error.invalid": "Introduzca dos números.",
+  "effectifs.staffingRate.thresholds.error.tenseRange":
+    "El umbral «tenso» debe ser superior a 0 %.",
+  "effectifs.staffingRate.thresholds.error.order":
+    "El umbral «tenso» debe ser inferior al umbral «sobreasignado».",
+  "effectifs.staffingRate.thresholds.error.overMax":
+    "El umbral «sobreasignado» no puede superar el {max} %.",
+  "effectifs.staffingRate.thresholds.saved": "Umbrales guardados",
+  "effectifs.staffingRate.thresholds.saveError": "Umbrales no guardados en su perfil",
+  "effectifs.staffingRate.thresholds.saveErrorDetail": "Solo se conservan en este navegador.",
   "effectifs.staffingRate.chartEmpty": "Ninguna movilización fechada para estos filtros.",
   "effectifs.staffingRate.detailTitle": "Quién está movilizado dónde — {period}",
   "effectifs.staffingRate.projetChantierCol": "Proyecto / iniciativa",

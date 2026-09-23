@@ -58,6 +58,39 @@
   --text-tertiary: #737373;
   --border: #e2e2e2;
   --border-strong: #000000;
+
+  /* ---- Canaux RGB (mêmes couleurs que ci-dessus) — consommés par tailwind.config.ts sous la
+     forme rgb(var(--x-rgb) / <alpha-value>) pour que les modificateurs d'opacité Tailwind
+     (bg-bp-coral/10, hover:bg-bp-coral/90, bg-neutral-50/50…) soient réellement générés.
+     Toute modification d'une couleur hex ci-dessus doit être répercutée ici. ---- */
+  --bp-deep-red-rgb: 50 3 0;
+  --bp-coral-rgb: 255 60 71;
+  --bp-red-brick-rgb: 153 29 31;
+  --bp-coral-pink-rgb: 255 121 123;
+  --bp-light-pink-rgb: 255 177 181;
+  --bp-warm-brown-rgb: 128 102 89;
+  --bp-warm-taupe-rgb: 169 158 154;
+  --bp-warm-gray-rgb: 204 193 189;
+  --bp-purple-rgb: 66 23 153;
+  --n-0-rgb: 255 255 255;
+  --n-50-rgb: 247 247 247;
+  --n-100-rgb: 240 240 240;
+  --n-200-rgb: 226 226 226;
+  --n-300-rgb: 196 196 196;
+  --n-400-rgb: 150 150 150;
+  --n-500-rgb: 115 115 115;
+  --n-600-rgb: 89 89 89;
+  --n-700-rgb: 64 64 64;
+  --n-900-rgb: 10 10 10;
+  --green-rgb: 26 26 26;
+  --green-light-rgb: 240 240 240;
+  --green-dark-rgb: 0 0 0;
+  --amber-rgb: 128 102 89;
+  --amber-light-rgb: 231 222 219;
+  --red-rgb: 255 60 71;
+  --red-light-rgb: 255 231 232;
+  --blue-rgb: 64 64 64;
+  --blue-light-rgb: 240 240 240;
 }
 
 body {

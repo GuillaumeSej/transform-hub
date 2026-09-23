@@ -2140,7 +2140,7 @@ const de: Record<string, string> = {
   "effectifs.staffingRate.level.tense": "Angespannt",
   "effectifs.staffingRate.level.ok": "OK",
   "effectifs.staffingRate.level.none": "—",
-  "effectifs.staffingRate.legend": "> 100 % überbesetzt · 85–100 % angespannt · < 85 % OK",
+  "effectifs.staffingRate.legend": "OK < {tense} % ≤ Angespannt ≤ {over} % < Überbesetzt",
   "effectifs.staffingRate.axisFilter": "Achsen",
   "effectifs.staffingRate.allAxes": "Alle Achsen",
   "effectifs.staffingRate.axisFilterHint":
@@ -2169,7 +2169,27 @@ const de: Record<string, string> = {
     "Klicken: auf das Team filtern und sehen, wer wo eingesetzt ist",
   "effectifs.staffingRate.columnClickHint": "Klicken, um zu sehen, wer wo eingesetzt ist",
   "effectifs.staffingRate.chartHint":
-    "Balken „Eingesetzt“ in Rot: überbesetzter Zeitraum (> 100 % der Verfügbarkeit), in Rosa: angespannt (85–100 %). Klicken Sie auf eine Spalte, um zu sehen, wer wo eingesetzt ist.",
+    "Balken „Eingesetzt“ in Rot: überbesetzter Zeitraum (> {over} % der Verfügbarkeit), in Rosa: angespannt ({tense}–{over} %). Rote Linie: Besetzungsquote (rechte Achse). Klicken Sie auf eine Spalte, um zu sehen, wer wo eingesetzt ist.",
+  "effectifs.staffingRate.thresholds.button": "Schwellen",
+  "effectifs.staffingRate.thresholds.title": "Schwellenwerte der Besetzungsquote",
+  "effectifs.staffingRate.thresholds.tense": "Schwelle „angespannt“ (%)",
+  "effectifs.staffingRate.thresholds.over": "Schwelle „überbesetzt“ (%)",
+  "effectifs.staffingRate.thresholds.reset": "Zurücksetzen ({tense} % / {over} %)",
+  "effectifs.staffingRate.thresholds.save": "Speichern",
+  "effectifs.staffingRate.thresholds.cancel": "Abbrechen",
+  "effectifs.staffingRate.thresholds.hint":
+    "In Ihrem Profil gespeichert. Live-Vorschau in Diagramm und Heatmap.",
+  "effectifs.staffingRate.thresholds.error.invalid": "Geben Sie zwei Zahlen ein.",
+  "effectifs.staffingRate.thresholds.error.tenseRange":
+    "Die Schwelle „angespannt“ muss größer als 0 % sein.",
+  "effectifs.staffingRate.thresholds.error.order":
+    "Die Schwelle „angespannt“ muss kleiner als die Schwelle „überbesetzt“ sein.",
+  "effectifs.staffingRate.thresholds.error.overMax":
+    "Die Schwelle „überbesetzt“ darf {max} % nicht überschreiten.",
+  "effectifs.staffingRate.thresholds.saved": "Schwellenwerte gespeichert",
+  "effectifs.staffingRate.thresholds.saveError": "Schwellenwerte nicht im Profil gespeichert",
+  "effectifs.staffingRate.thresholds.saveErrorDetail":
+    "Sie werden nur in diesem Browser beibehalten.",
   "effectifs.staffingRate.chartEmpty": "Kein datierter Einsatz für diese Filter.",
   "effectifs.staffingRate.detailTitle": "Wer ist wo eingesetzt — {period}",
   "effectifs.staffingRate.projetChantierCol": "Projekt / Handlungsfeld",

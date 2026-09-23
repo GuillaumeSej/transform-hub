@@ -446,6 +446,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       // efface bien un `direction` précédemment enregistré si l'admin repasse à "Non renseigné".
       ...(form.direction.trim() !== "" ? { direction: form.direction.trim() } : {}),
     };
+    // setDoc remplace le document entier : conserver les préférences propres à l'utilisateur
+    // (ex. seuils du taux de staffing), que ce formulaire n'édite pas.
+    const existingPreferences =
+      editIdx !== null && originalUsername !== null
+        ? users.find(
+            (u) => u.username === originalUsername && (u.companyId ?? null) === (companyId ?? null)
+          )?.preferences
+        : undefined;
+    if (existingPreferences) newUser.preferences = existingPreferences;
 
     const isEditingExisting = editIdx !== null && originalUsername !== null;
     const usernameChanged = isEditingExisting && normalizedUsername !== originalUsername;

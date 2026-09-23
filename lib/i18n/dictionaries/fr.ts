@@ -2240,7 +2240,7 @@ const fr: Record<string, string> = {
   "effectifs.staffingRate.level.tense": "Tendu",
   "effectifs.staffingRate.level.ok": "OK",
   "effectifs.staffingRate.level.none": "—",
-  "effectifs.staffingRate.legend": "> 100 % sur-staffé · 85–100 % tendu · < 85 % OK",
+  "effectifs.staffingRate.legend": "OK < {tense} % ≤ Tendu ≤ {over} % < Sur-staffé",
   "effectifs.staffingRate.axisFilter": "Axes",
   "effectifs.staffingRate.allAxes": "Tous les axes",
   "effectifs.staffingRate.axisFilterHint":
@@ -2270,7 +2270,27 @@ const fr: Record<string, string> = {
     "Cliquer : filtrer sur l'équipe et voir qui est mobilisé où",
   "effectifs.staffingRate.columnClickHint": "Cliquer pour voir qui est mobilisé où",
   "effectifs.staffingRate.chartHint":
-    "Barre « Mobilisé » en rouge : période sur-staffée (> 100 % du disponible), en rose : tendue (85–100 %). Cliquez sur une colonne pour voir qui est mobilisé où.",
+    "Barre « Mobilisé » en rouge : période sur-staffée (> {over} % du disponible), en rose : tendue ({tense}–{over} %). Courbe rouge : taux de staffing (axe de droite). Cliquez sur une colonne pour voir qui est mobilisé où.",
+  "effectifs.staffingRate.thresholds.button": "Seuils",
+  "effectifs.staffingRate.thresholds.title": "Seuils du taux de staffing",
+  "effectifs.staffingRate.thresholds.tense": "Seuil « tendu » (%)",
+  "effectifs.staffingRate.thresholds.over": "Seuil « sur-staffé » (%)",
+  "effectifs.staffingRate.thresholds.reset": "Réinitialiser ({tense} % / {over} %)",
+  "effectifs.staffingRate.thresholds.save": "Enregistrer",
+  "effectifs.staffingRate.thresholds.cancel": "Annuler",
+  "effectifs.staffingRate.thresholds.hint":
+    "Enregistrés sur votre profil. Aperçu en direct sur le graphique et la heatmap.",
+  "effectifs.staffingRate.thresholds.error.invalid": "Saisissez deux nombres.",
+  "effectifs.staffingRate.thresholds.error.tenseRange":
+    "Le seuil « tendu » doit être supérieur à 0 %.",
+  "effectifs.staffingRate.thresholds.error.order":
+    "Le seuil « tendu » doit être inférieur au seuil « sur-staffé ».",
+  "effectifs.staffingRate.thresholds.error.overMax":
+    "Le seuil « sur-staffé » ne peut pas dépasser {max} %.",
+  "effectifs.staffingRate.thresholds.saved": "Seuils enregistrés",
+  "effectifs.staffingRate.thresholds.saveError": "Seuils non enregistrés sur votre profil",
+  "effectifs.staffingRate.thresholds.saveErrorDetail":
+    "Ils sont conservés uniquement sur ce navigateur.",
   "effectifs.staffingRate.chartEmpty": "Aucune mobilisation datée pour ces filtres.",
   "effectifs.staffingRate.detailTitle": "Qui est mobilisé où — {period}",
   "effectifs.staffingRate.projetChantierCol": "Projet / chantier",

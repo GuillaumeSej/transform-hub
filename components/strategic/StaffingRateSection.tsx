@@ -8,6 +8,8 @@ import {
   Cell,
   ComposedChart,
   Legend,
+  Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip as RTooltip,
   XAxis,
@@ -19,6 +21,7 @@ import { Modal } from "@/components/shared/Modal";
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
+import { StaffingThresholdsControl } from "@/components/strategic/StaffingThresholdsControl";
 import { hexToRgb } from "@/components/strategic/TimelineBars";
 import {
   periodBoundsForDate,
@@ -37,8 +40,10 @@ import {
   teamStaffingMatrix,
   totalStaffingRow,
   type StaffingRateLevel,
+  type StaffingThresholds,
   type TeamPeriodCell,
 } from "@/lib/staffingRate";
+import { useStaffingThresholds } from "@/lib/hooks/useStaffingThresholds";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ChantierStaffing, StrategicAxis } from "@/types";
 
@@ -68,6 +73,20 @@ const LEVEL_COLOR: Record<StaffingRateLevel, string> = {
   ok: MOBILISED_FILL,
   none: MOBILISED_FILL,
 };
+
+/** Courbe du taux de staffing (axe % de droite) : BearingPoint Red. Points colorés par niveau. */
+const RATE_LINE_COLOR = "#ff3c47";
+const RATE_DOT_FILL: Record<StaffingRateLevel, string> = {
+  over: "#ff3c47",
+  tense: "#ff797b",
+  ok: "#ffffff",
+  none: "#ffffff",
+};
+/** Lignes de référence des seuils (couleurs claires de la charte) + libellés plus soutenus. */
+const TENSE_REF_STROKE = "#a99e9a";
+const TENSE_REF_LABEL = "#806659";
+const OVER_REF_STROKE = "#ffb1b5";
+const OVER_REF_LABEL = "#991d1f";
 
 /** Classes des cellules de heatmap — texte noir/blanc uniquement (charte). */
 const LEVEL_CELL_CLASS: Record<StaffingRateLevel, string> = {
@@ -130,6 +149,14 @@ export function StaffingRateSection({
   const [heatmapYear, setHeatmapYear] = useState(currentYear);
   const [detail, setDetail] = useState<DetailState | null>(null);
 
+  // Seuils tendu / sur-staffé : préférence utilisateur (profil), aperçu en direct pendant l'édition.
+  const { thresholds: savedThresholds, save: saveThresholds, saving } = useStaffingThresholds();
+  const [previewThresholds, setPreviewThresholds] = useState<StaffingThresholds | null>(null);
+  const thresholds = previewThresholds ?? savedThresholds;
+  const legendText = t("effectifs.staffingRate.legend")
+    .replace("{tense}", String(thresholds.tense))
+    .replace("{over}", String(thresholds.over));
+
   const levelLabel = (level: StaffingRateLevel) => t(`effectifs.staffingRate.level.${level}`);
   const pctText = (pct: number | null) => (pct === null ? "—" : `${pct} %`);
   const fteText = (v: number) => `${formatFte(v)} ${t("staffing.fteUnit")}`;
@@ -182,8 +209,8 @@ export function StaffingRateSection({
     [fteByDept, teamFilter]
   );
   const series = useMemo(
-    () => staffingRateSeries(chartStaffing, chartAvailable, granularity, today),
-    [chartStaffing, chartAvailable, granularity, today]
+    () => staffingRateSeries(chartStaffing, chartAvailable, granularity, today, 36, thresholds),
+    [chartStaffing, chartAvailable, granularity, today, thresholds]
   );
   const chartData = series.map((p) => ({
     key: p.label,
@@ -194,6 +221,10 @@ export function StaffingRateSection({
     ratePct: p.ratePct,
     level: p.level,
   }));
+  /** Borne haute de l'axe % : au moins le seuil sur-staffé (+ marge) pour garder les deux lignes
+   *  de référence visibles. */
+  const rateAxisMax =
+    Math.ceil((Math.max(thresholds.over, ...chartData.map((d) => d.ratePct ?? 0)) * 1.1) / 10) * 10;
 
   const openPeriodDetail = (index: number) => {
     const p = series[index];
@@ -209,12 +240,12 @@ export function StaffingRateSection({
   const currentMonth = useMemo(() => periodBoundsForDate(today, "monthly"), [today]);
   const months = useMemo(() => monthsOfYear(heatmapYear), [heatmapYear]);
   const matrix = useMemo(
-    () => teamStaffingMatrix(filteredStaffing, fteByDept, months),
-    [filteredStaffing, fteByDept, months]
+    () => teamStaffingMatrix(filteredStaffing, fteByDept, months, thresholds),
+    [filteredStaffing, fteByDept, months, thresholds]
   );
   const totalRow = useMemo(
-    () => totalStaffingRow(filteredStaffing, fteByDept, months),
-    [filteredStaffing, fteByDept, months]
+    () => totalStaffingRow(filteredStaffing, fteByDept, months, thresholds),
+    [filteredStaffing, fteByDept, months, thresholds]
   );
 
   const contributionName = (c: { actionId?: string; chantierId: string }) =>
@@ -269,8 +300,10 @@ export function StaffingRateSection({
   // ── Popup « Qui est mobilisé où » ─────────────────────────────────────────────────────────
   const detailData = useMemo(
     () =>
-      detail ? periodStaffingDetail(filteredStaffing, fteByDept, detail.period, detail.team) : null,
-    [detail, filteredStaffing, fteByDept]
+      detail
+        ? periodStaffingDetail(filteredStaffing, fteByDept, detail.period, detail.team, thresholds)
+        : null,
+    [detail, filteredStaffing, fteByDept, thresholds]
   );
   const detailTeamOptions: DropdownOption[] = useMemo(() => {
     if (!detail) return [];
@@ -373,9 +406,20 @@ export function StaffingRateSection({
           ) : (
             <>
               <div className="mb-6">
-                <p className="mb-2 text-[12px] font-semibold text-secondary">
-                  {t("effectifs.staffingRate.seriesTitle")}
-                </p>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[12px] font-semibold text-secondary">
+                    {t("effectifs.staffingRate.seriesTitle")}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-tertiary">{legendText}</span>
+                    <StaffingThresholdsControl
+                      value={savedThresholds}
+                      onSave={saveThresholds}
+                      onPreview={setPreviewThresholds}
+                      saving={saving}
+                    />
+                  </div>
+                </div>
                 {series.length === 0 ? (
                   <p className="py-6 text-center text-[12px] text-tertiary">
                     {t("effectifs.staffingRate.chartEmpty")}
@@ -385,7 +429,7 @@ export function StaffingRateSection({
                     <ResponsiveContainer width="100%" height={280}>
                       <ComposedChart
                         data={chartData}
-                        margin={{ top: 8, right: 12, left: 4, bottom: 8 }}
+                        margin={{ top: 8, right: 4, left: 4, bottom: 8 }}
                         style={{ cursor: "pointer" }}
                         onClick={(state) => {
                           const index = Number(state?.activeTooltipIndex);
@@ -405,10 +449,45 @@ export function StaffingRateSection({
                           interval={chartData.length > 18 ? "preserveStartEnd" : 0}
                         />
                         <YAxis
+                          yAxisId="fte"
                           width={40}
                           tick={{ fontSize: 11 }}
                           axisLine={false}
                           tickLine={false}
+                        />
+                        <YAxis
+                          yAxisId="rate"
+                          orientation="right"
+                          width={44}
+                          domain={[0, rateAxisMax]}
+                          tickFormatter={(v: number) => `${v} %`}
+                          tick={{ fontSize: 11, fill: RATE_LINE_COLOR }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <ReferenceLine
+                          yAxisId="rate"
+                          y={thresholds.tense}
+                          stroke={TENSE_REF_STROKE}
+                          strokeDasharray="4 4"
+                          label={{
+                            value: `${levelLabel("tense")} ${thresholds.tense} %`,
+                            position: "insideTopLeft",
+                            fontSize: 10,
+                            fill: TENSE_REF_LABEL,
+                          }}
+                        />
+                        <ReferenceLine
+                          yAxisId="rate"
+                          y={thresholds.over}
+                          stroke={OVER_REF_STROKE}
+                          strokeDasharray="4 4"
+                          label={{
+                            value: `${levelLabel("over")} > ${thresholds.over} %`,
+                            position: "insideTopLeft",
+                            fontSize: 10,
+                            fill: OVER_REF_LABEL,
+                          }}
                         />
                         <RTooltip
                           cursor={{ fill: "rgba(0,0,0,0.04)" }}
@@ -454,19 +533,64 @@ export function StaffingRateSection({
                           formatter={(value) =>
                             value === "available"
                               ? t("effectifs.staffingRate.available")
-                              : t("effectifs.staffingRate.mobilised")
+                              : value === "ratePct"
+                                ? `${t("effectifs.staffingRate.rate")} (%)`
+                                : t("effectifs.staffingRate.mobilised")
                           }
                         />
-                        <RBar dataKey="available" fill={AVAILABLE_FILL} radius={[2, 2, 0, 0]} />
-                        <RBar dataKey="mobilised" fill={MOBILISED_FILL} radius={[2, 2, 0, 0]}>
+                        <RBar
+                          yAxisId="fte"
+                          dataKey="available"
+                          fill={AVAILABLE_FILL}
+                          radius={[2, 2, 0, 0]}
+                        />
+                        <RBar
+                          yAxisId="fte"
+                          dataKey="mobilised"
+                          fill={MOBILISED_FILL}
+                          radius={[2, 2, 0, 0]}
+                        >
                           {chartData.map((row) => (
                             <Cell key={row.key} fill={LEVEL_COLOR[row.level]} />
                           ))}
                         </RBar>
+                        <Line
+                          yAxisId="rate"
+                          type="monotone"
+                          dataKey="ratePct"
+                          stroke={RATE_LINE_COLOR}
+                          strokeWidth={2}
+                          connectNulls={false}
+                          isAnimationActive={false}
+                          dot={(props: {
+                            cx?: number;
+                            cy?: number;
+                            index?: number;
+                            payload?: (typeof chartData)[number];
+                          }) => {
+                            const { cx, cy, index, payload } = props;
+                            if (cx == null || cy == null || payload?.ratePct == null)
+                              return <g key={`rate-dot-${index}`} />;
+                            return (
+                              <circle
+                                key={`rate-dot-${index}`}
+                                cx={cx}
+                                cy={cy}
+                                r={3.5}
+                                stroke={RATE_LINE_COLOR}
+                                strokeWidth={1.5}
+                                fill={RATE_DOT_FILL[payload.level]}
+                              />
+                            );
+                          }}
+                          activeDot={{ r: 5, stroke: RATE_LINE_COLOR, fill: RATE_LINE_COLOR }}
+                        />
                       </ComposedChart>
                     </ResponsiveContainer>
                     <p className="mt-1 text-[11px] text-tertiary">
-                      {t("effectifs.staffingRate.chartHint")}
+                      {t("effectifs.staffingRate.chartHint")
+                        .replace(/\{tense\}/g, String(thresholds.tense))
+                        .replace(/\{over\}/g, String(thresholds.over))}
                     </p>
                   </>
                 )}
@@ -608,7 +732,7 @@ export function StaffingRateSection({
                         {levelLabel(level)}
                       </span>
                     ))}
-                    <span>{t("effectifs.staffingRate.legend")}</span>
+                    <span>{legendText}</span>
                   </div>
                 </div>
               )}

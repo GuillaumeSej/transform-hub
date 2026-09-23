@@ -319,7 +319,7 @@ export default function BaseEtpPage() {
           movement: m,
         };
       }),
-    [wf.movements, data.levers, alertByMovement, t]
+    [wf.movements, data.levers, alertByMovement]
   );
 
   // ─── Arborescences optionnelles (géographie prioritaire, finance en bonus) ─────────────────────

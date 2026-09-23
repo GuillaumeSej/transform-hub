@@ -156,6 +156,15 @@ export type AuthUser = {
    *  `Company.directions`). Contraint à la liste de l'entreprise via un `<select>`, jamais du texte
    *  libre, pour que le filtre par direction matche réellement une valeur existante. */
   direction?: string;
+  /** Préférences d'affichage propres à l'utilisateur, modifiables par lui-même (règle Firestore
+   *  dédiée : un utilisateur ne peut mettre à jour QUE ce champ sur son propre document). */
+  preferences?: UserPreferences;
+};
+
+export type UserPreferences = {
+  /** Seuils du taux de staffing (page Budget & effectifs) : OK < tense ≤ tendu ≤ over <
+   *  sur-staffé, en %. Voir `lib/staffingRate.ts` (défaut 85 / 100). */
+  staffingThresholds?: { tense: number; over: number };
 };
 
 // Cycle de vie unique d'un levier, affiché partout en L1-L5 (voir lib/status-config.ts) :
