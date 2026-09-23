@@ -30,6 +30,7 @@ import {
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
 import { colorForDepartment } from "@/lib/axisLogic";
+import { EMPTY_BUDGET, rollupBudgets } from "@/lib/budgetRollup";
 import { needMetrics, needSeries, periodBoundsForDate, todayIso } from "@/lib/staffingNeed";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -401,79 +402,37 @@ export function EffectifsPageClient() {
       ? t("effectifs.needVsAvailable.needDetailTitle").replace("{team}", needDetailScope.fn)
       : t("effectifs.needVsAvailable.availableDetailTitle").replace("{team}", needDetailScope.fn);
 
-  // ── Budget FINANCIER alloué (round 12) ─────────────────────────────────────────────────────
-  // Nouvelle section monétaire, distincte du besoin/disponible ETP ci-dessus (une question de €,
-  // pas d'ETP) : total du budget alloué (`Chantier.allocatedBudget`, round 7) sur tout le
-  // programme, même calcul que la puce du dashboard stratégique (`StrategicDashboardView`).
-  // Round 16 : la ventilation PAR AXE (ex-`allocatedBudgetByAxis`) est désormais construite plus
-  // bas, fusionnée avec le consommé — voir `unifiedBudgetSlices`.
-  const totalAllocatedBudget = useMemo(
-    () => chantiers.reduce((sum, c) => sum + (c.allocatedBudget ?? 0), 0),
-    [chantiers]
+  // ── Budget FINANCIER alloué / consommé ─────────────────────────────────────────────────────
+  // SEULE source : `rollupBudgets` (lib/budgetRollup.ts) — règle bottom-up projet → chantier →
+  // axe → programme, identique à la puce "Budget alloué" du dashboard stratégique. Un chantier
+  // multi-axe est attribué à son SEUL axe primaire (voir lib/budgetRollup.ts), donc la somme des
+  // parts par axe (+ la part "sans axe" éventuelle) est EXACTEMENT le total programme affiché au
+  // centre du donut. `Chantier.allocatedBudget`/`consumedBudget` (saisies manuelles) ne sont plus
+  // lus ici.
+  const budgetRollup = useMemo(
+    () => rollupBudgets(axes, chantiers, chantierActions),
+    [axes, chantiers, chantierActions]
   );
+  const totalAllocatedBudget = budgetRollup.programme.allocated;
+  const totalConsumedBudget = budgetRollup.programme.consumed;
 
-  // ── Budget FINANCIER consommé (round 15, fusionné round 16) ────────────────────────────────
-  // Le total consommé programme n'est plus recalculé séparément ici : depuis round 16, `data[].consumed`
-  // par axe (`budgetByAxisWithConsumed` ci-dessous, réinjecté dans `unifiedBudgetSlices`) alimente
-  // directement l'anneau "consommé" du donut unifié, qui somme lui-même son propre total affiché au
-  // centre — plus besoin d'un `totalConsumedBudget` séparé au niveau de cette page.
-  //
-  // PAS d'équivalent ETP (`Chantier.consumedFte`) ajouté sur cette page : le seul total ETP déjà
-  // affiché ici (`totalFte`, tuile "ETP mobilisés au total") somme le BESOIN déclaré par équipe
-  // (`ChantierStaffing.fte`), pas un objectif d'ETP par chantier — `Chantier.consumedFte` est
-  // explicitement documenté (`types/index.ts`) comme une valeur globale déclarative DISTINCTE de ce
-  // besoin, sans compteur "planifié" comparable sur `Chantier`. Les comparer produirait un
-  // rapprochement trompeur (deux notions différentes), donc volontairement omis ici.
-
-  /** Alloué ET consommé, par axe — même découpage (`axes.map` + filtre par `axisIds`) que
-   *  l'ex-`allocatedBudgetByAxis` (round 12, retiré round 16), mais regroupés ensemble : round 12
-   *  s'en servait pour une `BudgetVsActualBar` par axe séparée, round 16 le réutilise directement
-   *  ci-dessous pour alimenter l'anneau "consommé" du donut unifié.
-   *
-   *  Round 24 : un chantier peut désormais appartenir à PLUSIEURS axes — décision produit assumée
-   *  (visibilité complète par axe) : son `allocatedBudget`/`consumedBudget` COMPLET est compté sous
-   *  CHAQUE axe auquel il appartient (pas de répartition au prorata), donc la somme de ces lignes
-   *  par axe peut désormais dépasser le vrai total programme — voir `totalAllocatedBudget`/
-   *  `totalConsumedBudgetDeduped` ci-dessous pour le total PROGRAMME, qui lui compte chaque
-   *  chantier une seule fois. */
-  const budgetByAxisWithConsumed = useMemo(
-    () =>
-      axes.map((axis) => {
-        const own = chantiers.filter((c) => c.axisIds.includes(axis.id));
-        return {
-          id: axis.id,
-          name: axis.name,
-          allocated: own.reduce((sum, c) => sum + (c.allocatedBudget ?? 0), 0),
-          consumed: own.reduce((sum, c) => sum + (c.consumedBudget ?? 0), 0),
-        };
-      }),
-    [axes, chantiers]
-  );
-
-  /** Total CONSOMMÉ programme, dédupliqué — pendant de `totalAllocatedBudget` ci-dessus (déjà
-   *  correctement dédupliqué : il itère `chantiers`, la liste à plat, une fois chacun) mais pour le
-   *  consommé, round 24 : nécessaire pour l'overlay central du donut unifié ci-dessous, qui ne peut
-   *  plus dériver son total consommé de la somme des parts par axe (`unifiedBudgetSlices`) depuis
-   *  qu'un chantier multi-axe y apparaît dans plusieurs parts à la fois (voir le commentaire de
-   *  `budgetByAxisWithConsumed`). */
-  const totalConsumedBudgetDeduped = useMemo(
-    () => chantiers.reduce((sum, c) => sum + (c.consumedBudget ?? 0), 0),
-    [chantiers]
-  );
-
-  /** Round 16 (PO : fusion de la carte "Budget financier alloué" en un seul graphique) — parts du
-   *  donut UNIFIÉ par axe, alimentant à la fois l'anneau extérieur (répartition, `value`) et
-   *  l'anneau intérieur "consommé" (`showConsumedRing`) de `BudgetDonutChart`. Même découpage/ordre
-   *  d'axes que `budgetByAxisWithConsumed` ci-dessus, dont ce memo est une simple projection. */
-  const unifiedBudgetSlices: BudgetDonutSlice[] = useMemo(
-    () =>
-      budgetByAxisWithConsumed.map((row) => ({
-        name: row.name,
-        value: row.allocated,
-        consumed: row.consumed,
-      })),
-    [budgetByAxisWithConsumed]
-  );
+  /** Parts du donut au niveau 1 (axes) : alloué ET consommé par axe d'attribution, plus une part
+   *  "sans axe" si des chantiers n'ont aucun axe connu (pour que la somme des parts = le total). */
+  const unifiedBudgetSlices: BudgetDonutSlice[] = useMemo(() => {
+    const slices: BudgetDonutSlice[] = axes.map((axis) => {
+      const figures = budgetRollup.axes.get(axis.id) ?? EMPTY_BUDGET;
+      return { name: axis.name, value: figures.allocated, consumed: figures.consumed };
+    });
+    const orphan = budgetRollup.unattributed;
+    if (orphan.allocated > 0 || orphan.consumed > 0) {
+      slices.push({
+        name: t("effectifs.moneyBudget.unattributedAxis", "Sans axe"),
+        value: orphan.allocated,
+        consumed: orphan.consumed,
+      });
+    }
+    return slices;
+  }, [axes, budgetRollup, t]);
 
   /** `BudgetDonutChart.onSliceClick` ne renvoie que le NOM de la part cliquée (contrat du
    *  composant, inchangé) — ce lookup retrouve l'axe correspondant, niveau 1 du drill-down. */
@@ -484,24 +443,53 @@ export function EffectifsPageClient() {
   const budgetDrillAxisId = budgetDrillPath[0]?.id ?? null;
   const budgetDrillChantierId = budgetDrillPath[1]?.id ?? null;
 
-  /** Round 26 : parts du donut UNIFIÉ pour le niveau COURANT du drill-down EN PLACE — le même
-   *  donut redessine tour à tour les axes (`unifiedBudgetSlices`, niveau 1, ci-dessus), les
-   *  chantiers de l'axe ouvert, puis les projets (`ChantierAction`, alias « levier ») du chantier
-   *  ouvert. Même convention d'exclusion des entités sans budget renseigné que round 13
-   *  (`budgetDrilldownSlices`, retiré). */
+  /** Chantiers ATTRIBUÉS (budgétairement) à l'axe ouvert — même règle d'attribution que le niveau
+   *  axes, pour que la somme des parts chantier = la part de l'axe cliquée. */
+  const drillAxisChantiers = useMemo(
+    () =>
+      budgetDrillAxisId
+        ? chantiers.filter((c) => budgetRollup.chantierAxisId.get(c.id) === budgetDrillAxisId)
+        : [],
+    [budgetDrillAxisId, chantiers, budgetRollup]
+  );
+
+  /** Parts du donut pour le niveau COURANT du drill-down EN PLACE : axes, puis chantiers de l'axe
+   *  ouvert, puis projets du chantier ouvert — alloué et consommé à chaque niveau, tous issus de
+   *  `budgetRollup`. Les entités sans aucun montant (ni alloué ni consommé) sont omises. */
   const budgetDrillSlices: BudgetDonutSlice[] = useMemo(() => {
+    const hasAmount = (f: { allocated: number; consumed: number }) =>
+      f.allocated > 0 || f.consumed > 0;
     if (budgetDrillChantierId) {
       return chantierActions
-        .filter((a) => a.chantierId === budgetDrillChantierId && a.budget !== undefined)
-        .map((a) => ({ name: a.name, value: a.budget ?? 0 }));
+        .filter((a) => a.chantierId === budgetDrillChantierId)
+        .map((a) => ({ a, f: budgetRollup.projets.get(a.id) ?? EMPTY_BUDGET }))
+        .filter(({ f }) => hasAmount(f))
+        .map(({ a, f }) => ({ name: a.name, value: f.allocated, consumed: f.consumed }));
     }
     if (budgetDrillAxisId) {
-      return chantiers
-        .filter((c) => c.axisIds.includes(budgetDrillAxisId) && c.allocatedBudget !== undefined)
-        .map((c) => ({ name: c.name, value: c.allocatedBudget ?? 0 }));
+      return drillAxisChantiers
+        .map((c) => ({ c, f: budgetRollup.chantiers.get(c.id) ?? EMPTY_BUDGET }))
+        .filter(({ f }) => hasAmount(f))
+        .map(({ c, f }) => ({ name: c.name, value: f.allocated, consumed: f.consumed }));
     }
     return unifiedBudgetSlices;
-  }, [budgetDrillChantierId, budgetDrillAxisId, chantierActions, chantiers, unifiedBudgetSlices]);
+  }, [
+    budgetDrillChantierId,
+    budgetDrillAxisId,
+    chantierActions,
+    drillAxisChantiers,
+    budgetRollup,
+    unifiedBudgetSlices,
+  ]);
+
+  /** Total alloué/consommé du niveau COURANT (centre du donut) : programme au niveau 1 (= puce
+   *  "Budget alloué" du dashboard), puis axe ou chantier ouvert. */
+  const budgetDrillTotals =
+    budgetDrillChantierId !== null
+      ? (budgetRollup.chantiers.get(budgetDrillChantierId) ?? EMPTY_BUDGET)
+      : budgetDrillAxisId !== null
+        ? (budgetRollup.axes.get(budgetDrillAxisId) ?? EMPTY_BUDGET)
+        : budgetRollup.programme;
 
   /** `BudgetDonutChart.onSliceClick` du niveau CHANTIER (un axe est sélectionné, niveau projet pas
    *  encore atteint) ne renvoie lui aussi que le NOM de la part cliquée — ce lookup, restreint aux
@@ -509,12 +497,8 @@ export function EffectifsPageClient() {
    *  chemin de drill-down (round 14, porté round 26). */
   const drilldownChantierByName = useMemo(() => {
     if (!budgetDrillAxisId || budgetDrillChantierId) return new Map<string, string>();
-    return new Map(
-      chantiers
-        .filter((c) => c.axisIds.includes(budgetDrillAxisId))
-        .map((c) => [c.name, c.id] as const)
-    );
-  }, [budgetDrillAxisId, budgetDrillChantierId, chantiers]);
+    return new Map(drillAxisChantiers.map((c) => [c.name, c.id] as const));
+  }, [budgetDrillAxisId, budgetDrillChantierId, drillAxisChantiers]);
 
   /** `BudgetDonutChart.onSliceClick` du niveau PROJET (un chantier est sélectionné) — retrouve
    *  l'id du projet (`ChantierAction`, alias « levier ») cliqué pour naviguer vers sa fiche. Round
@@ -636,7 +620,7 @@ export function EffectifsPageClient() {
         }
       />
       <CardBody>
-        {totalAllocatedBudget === 0 ? (
+        {totalAllocatedBudget === 0 && totalConsumedBudget === 0 ? (
           <p className="text-sm text-text-secondary">{t("effectifs.moneyBudget.empty")}</p>
         ) : (
           <div>
@@ -660,9 +644,7 @@ export function EffectifsPageClient() {
                 }
                 // Niveau 1 : le centre se lit "7,7 M € / sur 23,6 M € alloués / 33 % consommé" —
                 // plus de libellé "CONSOMMÉ / ALLOUÉ" en capitales, redondant avec ces lignes.
-                centerLabel={
-                  budgetDrillPath.length === 0 ? undefined : t("effectifs.moneyBudget.centerLabel")
-                }
+                // Centre en mode consommé/alloué/% à tous les niveaux : plus de libellé "Total".
                 centerTotalLabel={(formattedTotal) =>
                   t("effectifs.moneyBudget.centerOfTotal", "sur {total} alloués").replace(
                     "{total}",
@@ -675,18 +657,20 @@ export function EffectifsPageClient() {
                     formatPercent(ratio, locale)
                   )
                 }
-                showConsumedRing={budgetDrillPath.length === 0}
+                // Anneau extérieur "consommé PAR PART" à TOUS les niveaux (axe, chantier, projet).
+                showConsumedRing
                 consumedLabel={t("effectifs.moneyBudget.consumedTooltipSuffix")}
-                // Round 24 : `unifiedBudgetSlices` compte un chantier multi-axe une fois PAR axe
-                // auquel il appartient (voir `budgetByAxisWithConsumed`) — le total/consommé affiché
-                // au centre doit rester le vrai total PROGRAMME (chaque chantier une seule fois),
-                // donc calculé séparément ici plutôt que dérivé de `data.reduce(...)`. Uniquement au
-                // niveau 1 (axes) : `BudgetDonutChart` retombe sur `data.reduce(...)` sinon, correct
-                // pour les niveaux chantier/projet (pas de double-comptage à ces niveaux).
-                total={budgetDrillPath.length === 0 ? totalAllocatedBudget : undefined}
-                consumedTotal={
-                  budgetDrillPath.length === 0 ? totalConsumedBudgetDeduped : undefined
-                }
+                allocatedLabel={t("effectifs.moneyBudget.tooltipAllocated", "Alloué")}
+                remainingLabel={t("effectifs.moneyBudget.tooltipRemaining", "Restant")}
+                overrunLabel={t("effectifs.moneyBudget.tooltipOverrun", "Dépassement")}
+                consumedRingHint={t(
+                  "effectifs.moneyBudget.consumedRingHint",
+                  "Anneau noir extérieur = budget consommé de chaque élément"
+                )}
+                // Total/consommé du centre issus de `rollupBudgets` (niveau 1 = total programme,
+                // identique à la puce "Budget alloué" du dashboard ; sinon axe/chantier ouvert).
+                total={budgetDrillTotals.allocated}
+                consumedTotal={budgetDrillTotals.consumed}
                 onSliceClick={(name) => {
                   // Niveau 3 (un chantier est déjà ouvert) : la part cliquée est un PROJET — navigue
                   // vers sa fiche (round 14, porté round 26) plutôt que de pousser un 4e niveau.

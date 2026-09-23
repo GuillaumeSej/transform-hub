@@ -1,3 +1,4 @@
+import { rollupBudgets } from "@/lib/budgetRollup";
 import { daysBetween } from "@/lib/dateUtils";
 import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import {
@@ -1835,65 +1836,48 @@ export function numberIndicators(
 }
 
 // ─── Budget par projet (round 12) ──────────────────────────────────────────────────────────────
+//
+// Ces helpers DÉLÈGUENT tous à `rollupBudgets` (lib/budgetRollup.ts), seul point de vérité de la
+// règle bottom-up projet → chantier → axe → programme. Conservés pour compat des appelants.
 
-/**
- * Somme des budgets PROJET (`ChantierAction.budget`, round 12) d'un chantier donné — pendant de
- * `Chantier.allocatedBudget` mais agrégé depuis les projets plutôt que saisi directement sur le
- * chantier ; les deux budgets COEXISTENT (l'un n'est pas déduit de l'autre, l'agrégat des projets
- * n'est PAS censé égaler `allocatedBudget`, c'est à l'appelant de les comparer si besoin).
- *
- * Un projet sans `budget` renseigné compte pour `0` (jamais exclu de la somme, contrairement à
- * `chantierMilestoneProgressPct` où un projet sans KPI est exclu du DÉNOMINATEUR d'une moyenne :
- * ici il n'y a pas de moyenne, seulement une somme, donc rien à exclure). Chantier sans aucun
- * projet, ou uniquement des projets sans budget : `0`.
- */
+/** Budget ALLOUÉ d'un chantier = somme des budgets de ses projets (`ChantierAction.budget`, absent
+ *  = 0). `Chantier.allocatedBudget` n'est PAS un budget alloué mais l'« enveloppe du chantier »
+ *  (plafond indicatif) — voir lib/budgetRollup.ts. */
 export function sumProjetBudgets(chantierId: string, actions: ChantierAction[]): number {
-  return actions
-    .filter((action) => action.chantierId === chantierId)
-    .reduce((sum, action) => sum + (action.budget ?? 0), 0);
+  return (
+    rollupBudgets([], [{ id: chantierId, axisIds: [] }], actions).chantiers.get(chantierId)
+      ?.allocated ?? 0
+  );
 }
 
-/**
- * Somme des montants CONSOMMÉS levier (`ChantierAction.consumedBudget`) d'un chantier donné —
- * pendant de `sumProjetBudgets` ci-dessus mais pour le consommé plutôt que le planifié ; même
- * remarque : ne pas comparer directement à `Chantier.consumedBudget`, les deux coexistent sans
- * qu'un des deux soit déduit de l'autre.
- *
- * Un levier sans `consumedBudget` renseigné compte pour `0` (jamais exclu de la somme). Chantier
- * sans aucun levier, ou uniquement des leviers sans consommé : `0`.
- */
+/** Budget CONSOMMÉ d'un chantier = somme des `ChantierAction.consumedBudget` de ses projets
+ *  (absent = 0). `Chantier.consumedBudget` (saisie manuelle historique) n'est plus lu. */
 export function sumConsumedBudget(chantierId: string, actions: ChantierAction[]): number {
-  return actions
-    .filter((action) => action.chantierId === chantierId)
-    .reduce((sum, action) => sum + (action.consumedBudget ?? 0), 0);
+  return (
+    rollupBudgets([], [{ id: chantierId, axisIds: [] }], actions).chantiers.get(chantierId)
+      ?.consumed ?? 0
+  );
 }
 
-/**
- * Somme des budgets PROJET (`ChantierAction.budget`) de TOUT un programme (round "budget du plan
- * stratégique") — comparée à `Program.budget` (le budget prévisionnel total déclaré) pour détecter
- * un dépassement, voir `programBudgetOverrun` ci-dessous.
- *
- * Somme DIRECTEMENT sur les projets du programme (via leur chantier parent), jamais en sommant des
- * sous-totaux PAR AXE : un chantier peut appartenir à plusieurs axes (`Chantier.axisIds`), sommer
- * un sous-total par axe compterait alors plusieurs fois le budget d'un même chantier partagé. Ici,
- * chaque projet ne compte qu'UNE fois, quel que soit le nombre d'axes de son chantier.
- */
+/** Budget alloué TOTAL d'un programme = somme de ses projets DISTINCTS (un chantier multi-axe
+ *  n'est jamais compté deux fois) — même valeur que `rollupBudgets(...).programme.allocated`. */
 export function sumProgramProjetBudgets(
   programId: string,
   chantiers: Chantier[],
   actions: ChantierAction[]
 ): number {
-  const chantierIds = new Set(chantiers.filter((c) => c.programId === programId).map((c) => c.id));
-  return actions
-    .filter((action) => chantierIds.has(action.chantierId))
-    .reduce((sum, action) => sum + (action.budget ?? 0), 0);
+  return rollupBudgets(
+    [],
+    chantiers.filter((c) => c.programId === programId),
+    actions
+  ).programme.allocated;
 }
 
 /**
- * Dépassement du budget prévisionnel total du programme (`Program.budget`) — `undefined` tant
- * qu'aucun budget total n'a été déclaré (rien à comparer, voir le commentaire de `Program.budget`
- * dans `types/index.ts`) ou si la somme réelle ne dépasse pas ce budget (pas de dépassement à
- * signaler). Sinon, le montant du dépassement (toujours strictement positif).
+ * Dépassement du budget prévisionnel total du programme (`Program.budget`) par son budget alloué
+ * (somme des projets, voir `sumProgramProjetBudgets`) — `undefined` tant qu'aucun budget total n'a
+ * été déclaré ou si le total ne le dépasse pas. Sinon, le montant du dépassement (> 0). SEULE
+ * comparaison budgétaire au prévisionnel de l'app (puce du dashboard et alerte d'AppShell).
  */
 export function programBudgetOverrun(
   program: Pick<Program, "id" | "budget">,

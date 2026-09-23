@@ -1079,14 +1079,15 @@ export type Chantier = {
     /** Valeur cible que le chantier vise sur ce KPI (prime sur `Indicator.objectiveValue`). */
     targetValue?: number;
   }[];
-  /** Budget alloué au chantier (round 7, demande PO), affiché avec `Program.currency` du programme
-   *  actif. Optionnel : `undefined` tant qu'aucun budget n'a été saisi (distinct de 0, qui signifie
-   *  "budget nul mais renseigné"). */
+  /** « Enveloppe du chantier » : plafond indicatif saisi manuellement (nom de champ historique).
+   *  N'est PAS le budget alloué du chantier, qui vaut toujours la somme des budgets de ses projets
+   *  (`rollupBudgets`, lib/budgetRollup.ts). Sert seulement de plafond : saisie refusée sous la
+   *  somme des projets, avertissement non bloquant à la création d'un projet qui la dépasse.
+   *  `undefined` = pas d'enveloppe. */
   allocatedBudget?: number;
-  /** Montant réellement consommé/dépensé sur ce chantier, déclaré manuellement — distinct
-   *  d'`allocatedBudget` qui est le montant planifié/cible. Affiché avec `Program.currency` du
-   *  programme actif, même convention : `undefined` tant qu'aucun montant n'a été saisi (distinct de
-   *  0, qui signifie "consommé nul mais renseigné"). */
+  /** HISTORIQUE — consommé saisi manuellement au niveau chantier (encore écrit par l'import Excel),
+   *  plus lu par aucun affichage : le consommé d'un chantier est la somme des
+   *  `ChantierAction.consumedBudget` de ses projets (`rollupBudgets`, lib/budgetRollup.ts). */
   consumedBudget?: number;
   /** ETP réellement consommés sur ce chantier, déclarés manuellement — pendant de `consumedBudget`
    *  mais pour l'effort humain plutôt que le montant financier. Distinct des lignes de besoin

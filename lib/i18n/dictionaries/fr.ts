@@ -1684,10 +1684,12 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.pilote": "Pilote",
   "strategicChantierDetail.allocatedBudget": "Budget alloué",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
-    "Le budget du chantier ne peut pas être inférieur à la somme des budgets de ses projets.",
+    "L'enveloppe du chantier ne peut pas être inférieure à la somme des budgets de ses projets.",
   // ─── Consommé déclaratif du chantier (round <n>) — pendants de `allocatedBudget` ci-dessus pour
   // `Chantier.consumedBudget`/`consumedFte` ────────────────────────────────────────────────────
   "strategicChantierDetail.consumedBudget": "Budget consommé",
+  "strategicChantierDetail.envelope": "Enveloppe du chantier",
+  "strategicChantierDetail.budgetFromProjets": "Somme des budgets de ses projets",
   "strategicChantierDetail.consumedFte": "ETP consommés",
   "strategicChantierDetail.confidentialityLevel": "Niveau de confidentialité",
   "strategicChantierDetail.confidentialityLevelNone": "Aucun (visible par tous)",
@@ -1772,7 +1774,7 @@ const fr: Record<string, string> = {
     "Renseignez le nom et les dates pour enregistrer.",
   "strategicChantierDetail.actionForm.budgetLabel": "Budget du projet",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "Ce projet porte le total des budgets des projets du chantier au-delà du budget alloué — les responsables du chantier et de l'axe le verront à la validation.",
+    "Ce projet porte le total des budgets des projets du chantier au-delà de l'enveloppe du chantier — les responsables du chantier et de l'axe le verront à la validation.",
   "strategicChantierDetail.actionForm.consumedBudgetLabel": "Budget consommé du projet",
   "strategicChantierDetail.actionForm.consumedFteLabel": "ETP consommés du projet",
   "strategicChantierDetail.successCriteria.placeholder": "On sera content en [année] si...",
@@ -2144,6 +2146,7 @@ const fr: Record<string, string> = {
   // descend d'un niveau (axe → chantier → projet) ; cliquer un projet navigue vers sa fiche.
   "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierEmpty": "Aucun chantier avec budget renseigné sur cet axe.",
+  "effectifs.moneyBudget.unattributedAxis": "Sans axe",
   // Round 26 : niveau projet (feuille du drill-down) vide, et libellés du repère de niveau
   // (`BudgetDrillBreadcrumb`) affiché au-dessus du donut.
   "effectifs.moneyBudget.byProjetEmpty": "Aucun projet avec budget renseigné sur ce chantier.",
@@ -2157,6 +2160,11 @@ const fr: Record<string, string> = {
   "effectifs.moneyBudget.centerOfTotal": "sur {total} alloués",
   "effectifs.moneyBudget.centerConsumedPct": "{pct} consommé",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consommé",
+  "effectifs.moneyBudget.tooltipAllocated": "Alloué",
+  "effectifs.moneyBudget.tooltipRemaining": "Restant",
+  "effectifs.moneyBudget.tooltipOverrun": "Dépassement",
+  "effectifs.moneyBudget.consumedRingHint":
+    "Anneau noir extérieur = budget consommé de chaque élément",
 
   // ─── Répartition des ETP (round 7 — StaffingPeriodBreakdown.tsx ; fusionnée round 22 avec
   // l'ex-carte "Répartition par axe" d'EffectifsPageClient.tsx) ──────────────────────────────
@@ -2260,10 +2268,6 @@ const fr: Record<string, string> = {
     "Budget alloué {amount} > budget prévisionnel {forecast} ({diff}, {pct})",
   "strategicDashboard.budgetTooltip.allocatedWithin":
     "Budget alloué {amount} sur {forecast} prévus",
-  "strategicDashboard.budgetTooltip.projetsOver":
-    "Budgets des projets {amount} > budget prévisionnel {forecast} ({diff}, {pct})",
-  "strategicDashboard.budgetTooltip.projetsWithin":
-    "Budgets des projets {amount} sur {forecast} prévus",
   "strategicDashboard.popover.axesTitle": "Axes stratégiques",
   "strategicDashboard.popover.chantiersTitle": "Chantiers",
   "strategicDashboard.popover.indicatorsTitle": "Indicateurs",

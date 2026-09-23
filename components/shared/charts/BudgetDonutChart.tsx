@@ -13,10 +13,68 @@ const COLORS = ["#FF3C47", "#991D1F", "#FF797B", "#806659", "#A99E9A", "#320300"
  *  pour l'anneau intérieur "consommé" — `--red`/`bg-rag-red` (dépassement), `--n-900`/`bg-neutral-900`
  *  (consommé, cas normal) et `--n-100`/`bg-neutral-100` (piste/restant), pas de nouvelle couleur inventée. */
 const CONSUMED_OVER_COLOR = "#FF3C47";
-const CONSUMED_COLOR = "#0A0A0A";
+/** Encre de l'anneau "consommé" par part (retour PO : "entouré en noir") — token `--green`
+ *  (#1a1a1a) de `app/globals.css`, pas une nouvelle couleur. */
+const CONSUMED_COLOR = "#1a1a1a";
 const REMAINING_COLOR = "#F0F0F0";
 
 export type BudgetDonutSlice = { name: string; value: number; consumed?: number };
+
+/** Ratio consommé/alloué d'une part (0 si rien d'alloué ou `consumed` absent). */
+function consumedRatio(slice: { value?: number; consumed?: number }): number {
+  const value = Number(slice.value ?? 0);
+  const consumed = Number(slice.consumed ?? 0);
+  return value > 0 ? consumed / value : 0;
+}
+
+/** Forme de chaque secteur de l'anneau EXTÉRIEUR "consommé par part" : recharts calcule pour ce
+ *  second `Pie` exactement les MÊMES angles que pour l'anneau principal (mêmes `data`, `dataKey`,
+ *  `paddingAngle`, angles de départ/fin par défaut) — chaque secteur reçu ici couvre donc l'étendue
+ *  angulaire de la part correspondante. On y dessine une piste gris clair sur toute l'étendue,
+ *  puis un arc encre de `startAngle` à `startAngle + étendue × consommé/alloué` (ex. part 0°→140°,
+ *  24 % consommé ⇒ arc 0°→33,6°). Dépassement (consommé > alloué) : toute l'étendue en rouge.
+ *  Fonction de module (identité stable) pour ne pas relancer d'animation au survol. */
+function renderConsumedSector(props: unknown): JSX.Element {
+  const p = props as {
+    cx: number;
+    cy: number;
+    innerRadius: number;
+    outerRadius: number;
+    startAngle: number;
+    endAngle: number;
+    value?: number;
+    consumed?: number;
+    payload?: { value?: number; consumed?: number };
+  };
+  const ratio = consumedRatio(p.payload ?? p);
+  const over = ratio > 1;
+  const span = p.endAngle - p.startAngle;
+  const filledEnd = p.startAngle + span * Math.min(1, ratio);
+  return (
+    <g style={{ pointerEvents: "none" }}>
+      <Sector
+        cx={p.cx}
+        cy={p.cy}
+        innerRadius={p.innerRadius}
+        outerRadius={p.outerRadius}
+        startAngle={p.startAngle}
+        endAngle={p.endAngle}
+        fill={REMAINING_COLOR}
+      />
+      {ratio > 0 && (
+        <Sector
+          cx={p.cx}
+          cy={p.cy}
+          innerRadius={p.innerRadius}
+          outerRadius={p.outerRadius}
+          startAngle={p.startAngle}
+          endAngle={filledEnd}
+          fill={over ? CONSUMED_OVER_COLOR : CONSUMED_COLOR}
+        />
+      )}
+    </g>
+  );
+}
 
 /** Rendu de la part active (survolée) — légèrement plus grande que les autres, même patron que les
  *  exemples recharts officiels d'`activeShape`. Reste sobre : pas d'ombre ni de couleur différente,
@@ -56,9 +114,21 @@ function renderTooltip(
     formatValue: (value: number) => string;
     consumedLabel?: string;
     clickHint?: string;
+    allocatedLabel?: string;
+    remainingLabel?: string;
+    overrunLabel?: string;
   }
 ): JSX.Element | null {
-  const { active, total, formatValue, consumedLabel, clickHint } = props;
+  const {
+    active,
+    total,
+    formatValue,
+    consumedLabel,
+    clickHint,
+    allocatedLabel,
+    remainingLabel,
+    overrunLabel,
+  } = props;
   // Round 16 : le datum d'origine (dont `consumed`, éventuel) est nesté par recharts sous
   // `payload[0].payload` — vérifié via les typings recharts (`Payload<...>.payload?: any`), PAS à
   // plat sur `payload[0]` (qui ne porte que `name`/`value`, les clés du `Pie`).
@@ -76,12 +146,26 @@ function renderTooltip(
     <div className="rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
       <p className="text-[12px] font-semibold text-primary">{entry.name}</p>
       <p className="mt-0.5 text-[12px] text-secondary">
+        {allocatedLabel ? `${allocatedLabel} : ` : ""}
         {formatValue(value)} <span className="text-tertiary">· {pct}%</span>
       </p>
       {consumed !== undefined && (
-        <p className={`mt-0.5 text-[12px] ${sliceOverBudget ? "text-rag-red" : "text-tertiary"}`}>
-          {formatValue(consumed)} {consumedLabel ?? ""} <span>({consumedPct}%)</span>
-        </p>
+        <>
+          <p className={`mt-0.5 text-[12px] ${sliceOverBudget ? "text-rag-red" : "text-tertiary"}`}>
+            {formatValue(consumed)} {consumedLabel ?? ""} <span>({consumedPct}%)</span>
+          </p>
+          {sliceOverBudget
+            ? overrunLabel && (
+                <p className="mt-0.5 text-[12px] font-semibold text-rag-red">
+                  {overrunLabel} : {formatValue(consumed - value)}
+                </p>
+              )
+            : remainingLabel && (
+                <p className="mt-0.5 text-[12px] text-tertiary">
+                  {remainingLabel} : {formatValue(value - consumed)}
+                </p>
+              )}
+        </>
       )}
       {clickHint && <p className="mt-1 text-[10.5px] italic text-tertiary">{clickHint}</p>}
     </div>
@@ -143,7 +227,6 @@ function useMeasuredWidth(fallback: number) {
 const DonutPlot = memo(function DonutPlot({
   size,
   data,
-  innerRingData,
   showConsumedRing,
   clickable,
   onSliceClick,
@@ -152,7 +235,6 @@ const DonutPlot = memo(function DonutPlot({
 }: {
   size: number;
   data: BudgetDonutSlice[];
-  innerRingData: { name: string; value: number; fill: string }[];
   showConsumedRing: boolean;
   clickable: boolean;
   onSliceClick: (name: string) => void;
@@ -184,26 +266,27 @@ const DonutPlot = memo(function DonutPlot({
           <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
         ))}
       </Pie>
-      {/* Arc "consommé vs restant" : second `Pie` FIN, AUTOUR de l'anneau principal (voir
-          `donutGeometry`) — plus jamais dans le trou central, réservé au texte. Pas d'animation
-          (`isAnimationActive={false}`) ni de tooltip (`tooltipType="none"`, ses parts n'ont pas de
-          nom lisible — le consommé est déjà détaillé au centre, en légende et dans le tooltip). */}
+      {/* Anneau "consommé PAR PART" : second `Pie` FIN, AUTOUR de l'anneau principal (voir
+          `donutGeometry`), sur les MÊMES `data`/`paddingAngle` ⇒ mêmes angles par part. Chaque
+          secteur est dessiné par `renderConsumedSector` (piste grise + arc encre proportionnel au
+          consommé de la part, rouge si dépassement). Pas d'animation, pas de tooltip, pas
+          d'interaction (`pointer-events: none` dans la forme) — le survol reste sur l'anneau
+          principal. */}
       {showConsumedRing && (
         <Pie
-          data={innerRingData}
+          data={data}
           dataKey="value"
           nameKey="name"
           cx="50%"
           cy="50%"
           innerRadius={g.consumedInnerRadius}
           outerRadius={g.consumedOuterRadius}
+          paddingAngle={1}
           isAnimationActive={false}
           tooltipType="none"
-        >
-          {innerRingData.map((entry) => (
-            <Cell key={entry.name} fill={entry.fill} />
-          ))}
-        </Pie>
+          legendType="none"
+          shape={renderConsumedSector as PieProps["shape"]}
+        />
       )}
       <Tooltip content={tooltipContent} />
     </PieChart>
@@ -268,6 +351,10 @@ export function BudgetDonutChart({
   formatCenterValue,
   centerTotalLabel,
   centerConsumedPctLabel,
+  allocatedLabel,
+  remainingLabel,
+  overrunLabel,
+  consumedRingHint,
 }: {
   data: BudgetDonutSlice[];
   formatValue: (value: number) => string;
@@ -276,9 +363,9 @@ export function BudgetDonutChart({
    *  round 13. Omis par défaut : les 3 appelants existants n'ont pas besoin de le fournir. */
   centerLabel?: string;
   /** Round 16 : affiche un second anneau fin (autour de l'anneau principal depuis la refonte du
-   *  texte central — voir `donutGeometry`),
-   *  résumant `consommé` vs `restant` (ou `consommé` seul en rouge si dépassement) sur l'ensemble
-   *  de `data`. Omis par défaut (`false`/`undefined`) : les 3 appelants existants n'ont pas à le
+   *  texte central — voir `donutGeometry`) montrant, PAR PART, `consumed / value` sur l'étendue
+   *  angulaire de cette part (arc encre + piste grise, rouge si dépassement — voir
+   *  `renderConsumedSector`), et passe le centre en mode "consommé / alloué / %". Omis par défaut (`false`/`undefined`) : les 3 appelants existants n'ont pas à le
    *  fournir et gardent le rendu à anneau unique inchangé. */
   showConsumedRing?: boolean;
   /** Round 16 : mot "consommé"/"consumed" fourni par l'appelant (ce composant reste
@@ -311,6 +398,14 @@ export function BudgetDonutChart({
   /** Mode `showConsumedRing` : troisième ligne centrale à partir du ratio consommé/total
    *  (ex. "33 % consommé"). Omise si non fournie. */
   centerConsumedPctLabel?: (ratio: number) => string;
+  /** Tooltip (optionnels, fournis traduits par l'appelant) : préfixe du montant alloué, libellé
+   *  du restant (consommé ≤ alloué) et du dépassement (consommé > alloué). Omis : ligne absente. */
+  allocatedLabel?: string;
+  remainingLabel?: string;
+  overrunLabel?: string;
+  /** Mode `showConsumedRing` : courte clé de lecture affichée sous le donut (ex. "Anneau noir
+   *  extérieur = budget consommé de chaque élément"). Omise si non fournie. */
+  consumedRingHint?: string;
 }): JSX.Element {
   const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   const maxSize = size === "lg" ? 300 : 220;
@@ -329,18 +424,9 @@ export function BudgetDonutChart({
   const total = totalOverride ?? sliceTotal;
   const consumedTotal = consumedTotalOverride ?? sliceConsumedTotal;
 
-  // Round 16 : anneau intérieur "consommé vs restant" — même périmètre que `total` ci-dessus
-  // (somme de `data[].consumed`, absent traité comme 0). Dépassement global : un seul segment
-  // rouge plein (rien à montrer comme "restant"), sinon deux segments (consommé foncé / restant
-  // clair, mêmes tokens que `BudgetVsActualBar`).
+  // Dépassement GLOBAL (overlay central en rouge). L'anneau extérieur, lui, est désormais PAR PART
+  // (`renderConsumedSector`), calculé directement depuis `data[].consumed`.
   const overBudget = consumedTotal > total;
-  const remaining = Math.max(0, total - consumedTotal);
-  const innerRingData = overBudget
-    ? [{ name: "consumed", value: consumedTotal, fill: CONSUMED_OVER_COLOR }]
-    : [
-        { name: "consumed", value: consumedTotal, fill: CONSUMED_COLOR },
-        { name: "remaining", value: remaining, fill: REMAINING_COLOR },
-      ];
 
   // Survol ≠ ré-animation : `activeIndex` (survol d'une part/ligne de légende) re-rend ce composant,
   // or Recharts 3 relance l'animation d'un `Pie` dès que ses props changent de référence (voir
@@ -348,7 +434,6 @@ export function BudgetDonutChart({
   // entrées stables — données stabilisées par contenu, handlers à identité fixe — pour qu'un survol
   // pendant l'animation d'entrée ne l'interrompe plus.
   const stableData = useStableValue(data);
-  const stableInnerRingData = useStableValue(innerRingData);
   const clickable = !!onSliceClick;
   const handleSliceClick = useLatestCallback(onSliceClick);
   const latestFormatValue = useLatestCallback(formatValue);
@@ -360,8 +445,20 @@ export function BudgetDonutChart({
         formatValue: (v: number) => latestFormatValue(v) ?? "",
         consumedLabel,
         clickHint: clickable ? clickHint : undefined,
+        allocatedLabel,
+        remainingLabel,
+        overrunLabel,
       }),
-    [sliceTotal, latestFormatValue, consumedLabel, clickable, clickHint]
+    [
+      sliceTotal,
+      latestFormatValue,
+      consumedLabel,
+      clickable,
+      clickHint,
+      allocatedLabel,
+      remainingLabel,
+      overrunLabel,
+    ]
   );
 
   const formatCenter = formatCenterValue ?? formatValue;
@@ -373,150 +470,186 @@ export function BudgetDonutChart({
   const subFontSize = Math.round(Math.min(12, Math.max(10, hole * 0.12)) * 10) / 10;
 
   return (
-    <div
-      className={`flex flex-col items-center gap-4 ${
-        size === "lg" ? "md:flex-row md:items-center md:gap-6" : "sm:flex-row sm:items-center"
-      }`}
-    >
-      {/* Zone de dessin du donut — carrée, largeur mesurée (`useMeasuredWidth`) : le donut occupe
+    <div className="w-full">
+      <div
+        className={`flex flex-col items-center gap-4 ${
+          size === "lg" ? "md:flex-row md:items-center md:gap-6" : "sm:flex-row sm:items-center"
+        }`}
+      >
+        {/* Zone de dessin du donut — carrée, largeur mesurée (`useMeasuredWidth`) : le donut occupe
           toute la largeur disponible jusqu'à `maxSize`. `relative` pour superposer le texte central
           en absolu, sans jamais laisser un composant recharts modifier sa géométrie interne. */}
-      <div
-        ref={plotRef}
-        className={`relative w-full shrink-0 ${
-          size === "lg" ? "max-w-[300px] md:w-[45%] md:min-w-[200px]" : "max-w-[220px] sm:w-[220px]"
-        }`}
-        style={{ height: plotSize ?? maxSize }}
-      >
-        {plotSize !== null && (
-          <DonutPlot
-            size={plotSize}
-            data={stableData}
-            innerRingData={stableInnerRingData}
-            showConsumedRing={!!showConsumedRing}
-            clickable={clickable}
-            onSliceClick={handleSliceClick}
-            onActiveIndexChange={setActiveIndex}
-            tooltipContent={tooltipContent}
-          />
-        )}
-        {/* Texte central — contenu dans le carré inscrit du trou (`geometry.textBox`, calculé
+        <div
+          ref={plotRef}
+          className={`relative w-full shrink-0 ${
+            size === "lg"
+              ? "max-w-[300px] md:w-[45%] md:min-w-[200px]"
+              : "max-w-[220px] sm:w-[220px]"
+          }`}
+          style={{ height: plotSize ?? maxSize }}
+        >
+          {plotSize !== null && (
+            <DonutPlot
+              size={plotSize}
+              data={stableData}
+              showConsumedRing={!!showConsumedRing}
+              clickable={clickable}
+              onSliceClick={handleSliceClick}
+              onActiveIndexChange={setActiveIndex}
+              tooltipContent={tooltipContent}
+            />
+          )}
+          {/* Texte central — contenu dans le carré inscrit du trou (`geometry.textBox`, calculé
             depuis `innerRadius`) : il ne peut pas chevaucher un anneau, à aucune largeur de carte.
             `pointer-events-none` pour ne jamais intercepter les clics/hover destinés aux parts. */}
-        {geometry && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div
-              className="flex flex-col items-center justify-center overflow-hidden text-center leading-tight"
-              style={{ width: geometry.textBox, maxHeight: geometry.textBox }}
-            >
-              {showConsumedRing ? (
-                <>
-                  <span
-                    className={`block break-words font-bold tabular-nums ${
-                      overBudget ? "text-rag-red" : "text-primary"
-                    }`}
-                    style={{ fontSize: valueFontSize, lineHeight: 1.1 }}
-                  >
-                    {formatCenter(consumedTotal)}
-                  </span>
-                  <span
-                    className="mt-1 block break-words text-secondary"
-                    style={{ fontSize: subFontSize }}
-                  >
-                    {centerTotalLabel
-                      ? centerTotalLabel(formatCenter(total))
-                      : `/ ${formatCenter(total)}`}
-                  </span>
-                  {centerConsumedPctLabel && total > 0 && (
+          {geometry && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div
+                className="flex flex-col items-center justify-center overflow-hidden text-center leading-tight"
+                style={{ width: geometry.textBox, maxHeight: geometry.textBox }}
+              >
+                {showConsumedRing ? (
+                  <>
                     <span
-                      className={`mt-0.5 block break-words font-semibold ${
-                        overBudget ? "text-rag-red" : "text-tertiary"
+                      className={`block break-words font-bold tabular-nums ${
+                        overBudget ? "text-rag-red" : "text-primary"
                       }`}
+                      style={{ fontSize: valueFontSize, lineHeight: 1.1 }}
+                    >
+                      {formatCenter(consumedTotal)}
+                    </span>
+                    <span
+                      className="mt-1 block break-words text-secondary"
                       style={{ fontSize: subFontSize }}
                     >
-                      {centerConsumedPctLabel(consumedTotal / total)}
+                      {centerTotalLabel
+                        ? centerTotalLabel(formatCenter(total))
+                        : `/ ${formatCenter(total)}`}
                     </span>
-                  )}
-                </>
-              ) : (
-                <span
-                  className="block break-words font-bold tabular-nums text-primary"
-                  style={{ fontSize: Math.min(valueFontSize, 18), lineHeight: 1.15 }}
-                >
-                  {formatCenter(total)}
-                </span>
-              )}
-              {centerLabel && (
-                <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                  {centerLabel}
-                </span>
-              )}
+                    {centerConsumedPctLabel && total > 0 && (
+                      <span
+                        className={`mt-0.5 block break-words font-semibold ${
+                          overBudget ? "text-rag-red" : "text-tertiary"
+                        }`}
+                        style={{ fontSize: subFontSize }}
+                      >
+                        {centerConsumedPctLabel(consumedTotal / total)}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span
+                    className="block break-words font-bold tabular-nums text-primary"
+                    style={{ fontSize: Math.min(valueFontSize, 18), lineHeight: 1.15 }}
+                  >
+                    {formatCenter(total)}
+                  </span>
+                )}
+                {centerLabel && (
+                  <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                    {centerLabel}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Légende maison (round 13) — pastille de couleur, nom (tronqué si trop long), valeur
+        {/* Légende maison (round 13) — pastille de couleur, nom (tronqué si trop long), valeur
           formatée et % du total alignés à droite. Cliquable exactement comme avant si
           `onSliceClick` est fourni. */}
-      <ul className="flex w-full min-w-0 flex-col gap-1.5 text-[11px]">
-        {data.map((entry, i) => {
-          const pct = sliceTotal > 0 ? Math.round((entry.value / sliceTotal) * 100) : 0;
-          const active = activeIndex === i;
-          return (
-            <li
-              key={entry.name}
-              role={onSliceClick ? "button" : undefined}
-              tabIndex={onSliceClick ? 0 : undefined}
-              onClick={onSliceClick ? () => onSliceClick(entry.name) : undefined}
-              onMouseEnter={() => setActiveIndex(i)}
-              onMouseLeave={() => setActiveIndex(undefined)}
-              onKeyDown={
-                onSliceClick
-                  ? (e) => {
-                      if (e.key === "Enter" || e.key === " ") onSliceClick(entry.name);
-                    }
-                  : undefined
-              }
-              className={`flex items-center justify-between gap-3 rounded-sm px-1 py-0.5 transition ${
-                onSliceClick ? "cursor-pointer" : ""
-              } ${active ? "bg-neutral-50" : ""}`}
-            >
-              <span className="flex min-w-0 items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className="h-2.5 w-2.5 shrink-0 rounded-sm"
-                  style={{ backgroundColor: COLORS[i % COLORS.length] }}
-                />
-                <span
-                  className={`truncate ${active ? "text-primary" : "text-secondary"}`}
-                  title={entry.name}
-                >
-                  {entry.name}
+        <ul className="flex w-full min-w-0 flex-col gap-1.5 text-[11px]">
+          {data.map((entry, i) => {
+            const pct = sliceTotal > 0 ? Math.round((entry.value / sliceTotal) * 100) : 0;
+            const active = activeIndex === i;
+            return (
+              <li
+                key={entry.name}
+                role={onSliceClick ? "button" : undefined}
+                tabIndex={onSliceClick ? 0 : undefined}
+                onClick={onSliceClick ? () => onSliceClick(entry.name) : undefined}
+                onMouseEnter={() => setActiveIndex(i)}
+                onMouseLeave={() => setActiveIndex(undefined)}
+                onKeyDown={
+                  onSliceClick
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") onSliceClick(entry.name);
+                      }
+                    : undefined
+                }
+                className={`flex items-center justify-between gap-3 rounded-sm px-1 py-0.5 transition ${
+                  onSliceClick ? "cursor-pointer" : ""
+                } ${active ? "bg-neutral-50" : ""}`}
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                    style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                  />
+                  <span
+                    className={`truncate ${active ? "text-primary" : "text-secondary"}`}
+                    title={entry.name}
+                  >
+                    {entry.name}
+                  </span>
                 </span>
-              </span>
-              <span className="flex shrink-0 flex-col items-end text-right">
-                <span className="font-semibold text-primary">
-                  {formatValue(entry.value)} <span className="text-tertiary">({pct}%)</span>
-                </span>
-                {/* Round 16 : ligne "consommé" additionnelle, uniquement quand cette part la
+                <span className="flex shrink-0 flex-col items-end text-right">
+                  <span className="font-semibold text-primary">
+                    {formatValue(entry.value)} <span className="text-tertiary">({pct}%)</span>
+                  </span>
+                  {/* Round 16 : ligne "consommé" additionnelle, uniquement quand cette part la
                     fournit (`consumed !== undefined`) — rendu conditionnel, pas un espace vide
                     pour les entrées qui n'en ont pas, afin de ne pas casser l'alignement de la
                     légende pour les 3 appelants existants qui n'ont jamais `consumed`. */}
-                {entry.consumed !== undefined && (
-                  <span
-                    className={`text-[10px] font-normal ${
-                      entry.consumed > entry.value ? "text-rag-red" : "text-tertiary"
-                    }`}
-                  >
-                    {formatValue(entry.consumed)} {consumedLabel ?? ""}
-                  </span>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+                  {entry.consumed !== undefined &&
+                    (() => {
+                      const ratio = consumedRatio(entry);
+                      const over = entry.consumed > entry.value;
+                      return (
+                        <span
+                          className={`flex items-center gap-1.5 text-[10px] font-normal ${
+                            over ? "text-rag-red" : "text-tertiary"
+                          }`}
+                        >
+                          <span>
+                            {formatValue(entry.consumed)} {consumedLabel ?? ""} (
+                            {Math.round(ratio * 100)} %)
+                          </span>
+                          {/* Mini-barre de progression : même lecture que l'arc extérieur de la
+                            part (encre, rouge si dépassement). */}
+                          <span
+                            aria-hidden
+                            className="relative h-1 w-10 shrink-0 overflow-hidden rounded-full"
+                            style={{ backgroundColor: REMAINING_COLOR }}
+                          >
+                            <span
+                              className="absolute inset-y-0 left-0 rounded-full"
+                              style={{
+                                width: `${Math.min(1, ratio) * 100}%`,
+                                backgroundColor: over ? CONSUMED_OVER_COLOR : CONSUMED_COLOR,
+                              }}
+                            />
+                          </span>
+                        </span>
+                      );
+                    })()}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      {showConsumedRing && consumedRingHint && (
+        <p className="mt-3 flex items-center gap-1.5 text-[10.5px] text-tertiary">
+          <span
+            aria-hidden
+            className="h-1 w-4 shrink-0 rounded-full"
+            style={{ backgroundColor: CONSUMED_COLOR }}
+          />
+          {consumedRingHint}
+        </p>
+      )}
     </div>
   );
 }

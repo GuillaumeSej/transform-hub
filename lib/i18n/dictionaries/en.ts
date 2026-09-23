@@ -1605,8 +1605,10 @@ const en: Record<string, string> = {
   "strategicChantierDetail.pilote": "Lead",
   "strategicChantierDetail.allocatedBudget": "Allocated budget",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
-    "The work package's budget cannot be lower than the sum of its projects' budgets.",
+    "The work package envelope cannot be lower than the sum of its projects' budgets.",
   "strategicChantierDetail.consumedBudget": "Consumed budget",
+  "strategicChantierDetail.envelope": "Work package envelope",
+  "strategicChantierDetail.budgetFromProjets": "Sum of its projects' budgets",
   "strategicChantierDetail.consumedFte": "Consumed FTEs",
   "strategicChantierDetail.confidentialityLevel": "Confidentiality level",
   "strategicChantierDetail.confidentialityLevelNone": "None (visible to everyone)",
@@ -1683,7 +1685,7 @@ const en: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint": "Fill in the name and dates to save.",
   "strategicChantierDetail.actionForm.budgetLabel": "Project budget",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "This project brings the work package's total project budgets above its allocated budget — the work package and axis owners will see it during validation.",
+    "This project brings the work package's total project budgets above the work package envelope — the work package and axis owners will see it during validation.",
   "strategicChantierDetail.actionForm.consumedBudgetLabel": "Consumed project budget",
   "strategicChantierDetail.actionForm.consumedFteLabel": "Consumed project FTEs",
   "strategicChantierDetail.successCriteria.placeholder": "We'll be happy in [year] if...",
@@ -2028,6 +2030,7 @@ const en: Record<string, string> = {
   "effectifs.moneyBudget.empty": "No budget allocated on this programme.",
   "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierEmpty": "No work package with a budget set on this axis.",
+  "effectifs.moneyBudget.unattributedAxis": "No axis",
   "effectifs.moneyBudget.byProjetEmpty": "No initiative with a budget set on this work package.",
   "effectifs.moneyBudget.levelAxis": "Axis",
   "effectifs.moneyBudget.levelChantier": "Work package",
@@ -2036,6 +2039,10 @@ const en: Record<string, string> = {
   "effectifs.moneyBudget.centerOfTotal": "of {total} allocated",
   "effectifs.moneyBudget.centerConsumedPct": "{pct} consumed",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consumed",
+  "effectifs.moneyBudget.tooltipAllocated": "Allocated",
+  "effectifs.moneyBudget.tooltipRemaining": "Remaining",
+  "effectifs.moneyBudget.tooltipOverrun": "Overrun",
+  "effectifs.moneyBudget.consumedRingHint": "Outer black ring = budget consumed by each item",
 
   // ─── FTE breakdown (round 7 — StaffingPeriodBreakdown.tsx; merged round 22 with the former
   // "Split by axis" card of EffectifsPageClient.tsx) ────────────────────────────────────────
@@ -2127,10 +2134,6 @@ const en: Record<string, string> = {
     "Allocated budget {amount} > forecasted budget {forecast} ({diff}, {pct})",
   "strategicDashboard.budgetTooltip.allocatedWithin":
     "Allocated budget {amount} of {forecast} forecasted",
-  "strategicDashboard.budgetTooltip.projetsOver":
-    "Project budgets {amount} > forecasted budget {forecast} ({diff}, {pct})",
-  "strategicDashboard.budgetTooltip.projetsWithin":
-    "Project budgets {amount} of {forecast} forecasted",
   "strategicDashboard.popover.axesTitle": "Strategic axes",
   "strategicDashboard.popover.chantiersTitle": "Work packages",
   "strategicDashboard.popover.indicatorsTitle": "Indicators",

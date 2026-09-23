@@ -51,6 +51,7 @@ import {
   sumProjetBudgets,
   type ProgressBucket,
 } from "@/lib/axisLogic";
+import { EMPTY_BUDGET, rollupBudgets } from "@/lib/budgetRollup";
 import { aggregateLinkedKpis, readKpi, resolveDeleteApproval } from "@/lib/chantierKpis";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
@@ -1692,14 +1693,16 @@ export function ChantierDetailPanel({
   // `Chantier.consumedBudget`/`consumedFte` (voir leur commentaire dans `types/index.ts`) : EXACTE
   // même discipline de saisie (texte libre local, sauvegarde au blur, clé RETIRÉE via
   // `clearChantierField` si vidée plutôt que valoir `undefined`).
-  const [consumedBudgetInput, setConsumedBudgetInput] = useState(
-    chantier?.consumedBudget !== undefined ? String(chantier.consumedBudget) : ""
+  // Budget alloué/consommé du chantier = somme de ses projets (`rollupBudgets`, même règle que le
+  // dashboard et la page Effectifs) — `Chantier.consumedBudget` n'est plus saisi ni lu ici.
+  const chantierBudget = useMemo(
+    () =>
+      chantier
+        ? (rollupBudgets([], [chantier], chantierActions).chantiers.get(chantier.id) ??
+          EMPTY_BUDGET)
+        : EMPTY_BUDGET,
+    [chantier, chantierActions]
   );
-  useEffect(() => {
-    setConsumedBudgetInput(
-      chantier?.consumedBudget !== undefined ? String(chantier.consumedBudget) : ""
-    );
-  }, [chantier?.id, chantier?.consumedBudget]);
 
   const [consumedFteInput, setConsumedFteInput] = useState(
     chantier?.consumedFte !== undefined ? String(chantier.consumedFte) : ""
@@ -2264,7 +2267,7 @@ export function ChantierDetailPanel({
                       className="h-1.5 w-1.5 shrink-0 rounded-full"
                       style={{ backgroundColor: axisAccentColor }}
                     />
-                    {t("strategicChantierDetail.allocatedBudget")}
+                    {t("strategicChantierDetail.envelope", "Enveloppe du chantier")}
                     {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
                   </label>
                   <input
@@ -2307,45 +2310,38 @@ export function ChantierDetailPanel({
                     className={INPUT_CLASS}
                   />
                 </div>
-                {/* ── Budget consommé du chantier (round <n>) — pendant déclaratif de "budget alloué"
-                ci-dessus pour `Chantier.consumedBudget` : EXACTE même discipline de saisie (texte
-                libre local, sauvegarde au blur, clé retirée si vidée), voir `clearChantierField`. */}
+                {/* ── Budget alloué / consommé du chantier — LECTURE SEULE, somme de ses projets
+                (`rollupBudgets`, lib/budgetRollup.ts), même règle que dashboard/Effectifs. La saisie
+                manuelle `Chantier.consumedBudget` n'est plus proposée ni lue (le consommé se saisit
+                par projet). L'enveloppe ci-dessus n'est qu'un plafond indicatif. */}
                 <div>
-                  <label
-                    className="flex items-center gap-1.5 text-xs font-medium text-text-secondary"
-                    htmlFor="chantier-consumed-budget"
-                  >
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-text-secondary">
                     <span
                       aria-hidden
                       className="h-1.5 w-1.5 shrink-0 rounded-full"
                       style={{ backgroundColor: axisAccentColor }}
                     />
+                    {t("strategicChantierDetail.allocatedBudget")}
+                    {" / "}
                     {t("strategicChantierDetail.consumedBudget")}
-                    {activeProgram?.currency ? ` (${activeProgram.currency})` : ""}
-                  </label>
-                  <input
-                    id="chantier-consumed-budget"
-                    type="number"
-                    inputMode="decimal"
-                    value={consumedBudgetInput}
-                    onChange={(e) => setConsumedBudgetInput(e.target.value)}
-                    onBlur={() => {
-                      const trimmed = consumedBudgetInput.trim();
-                      if (trimmed === "") {
-                        if (chantier.consumedBudget !== undefined)
-                          clearChantierField("consumedBudget");
-                        return;
-                      }
-                      const parsed = Number(trimmed);
-                      if (Number.isNaN(parsed) || parsed === chantier.consumedBudget) return;
-                      updateChantierField({ consumedBudget: parsed });
-                    }}
-                    className={INPUT_CLASS}
-                  />
+                  </span>
+                  <div className="mt-1.5 text-[14px] font-semibold text-primary">
+                    {formatBudgetAmount(chantierBudget.allocated, activeProgram?.currency)}
+                    <span className="font-normal text-text-secondary">
+                      {" · "}
+                      {formatBudgetAmount(chantierBudget.consumed, activeProgram?.currency)}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-tertiary">
+                    {t(
+                      "strategicChantierDetail.budgetFromProjets",
+                      "Somme des budgets de ses projets"
+                    )}
+                  </p>
                   <BudgetVsActualBar
                     className="mt-2"
-                    planned={chantier.allocatedBudget ?? 0}
-                    consumed={chantier.consumedBudget ?? 0}
+                    planned={chantierBudget.allocated}
+                    consumed={chantierBudget.consumed}
                     formatValue={(n) => formatBudgetAmount(n, activeProgram?.currency)}
                   />
                 </div>

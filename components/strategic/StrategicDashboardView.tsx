@@ -33,8 +33,8 @@ import {
   resolveChantierOwner,
   resolveIndicatorStatus,
   resolveUserFullName,
-  sumProgramProjetBudgets,
 } from "@/lib/axisLogic";
+import { rollupBudgets } from "@/lib/budgetRollup";
 import {
   STRATEGIC_DASHBOARD_WIDGET_REGISTRY,
   SPAN_COL_CLASS,
@@ -411,77 +411,48 @@ export function StrategicDashboardView() {
   // ─── Agrégats (toute la logique de calcul vient de lib/axisLogic.ts) ──────────────────────
   const counts = useMemo(() => countOnTrackAtRisk(indicators), [indicators]);
 
-  /** Round 7, point 2 : somme du budget alloué (`Chantier.allocatedBudget`, fondation) sur tout le
-   *  programme actif — puce supplémentaire du bandeau d'en-tête, même esprit que les compteurs
-   *  axes/chantiers/indicateurs juste à côté. Pas de nouveau widget : un chiffre agrégé de plus. */
-  const allocatedBudgetTotal = useMemo(
-    () => chantiers.reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0),
-    [chantiers]
+  /** Budgets alloué/consommé bottom-up (`rollupBudgets`, lib/budgetRollup.ts) — SEULE source de
+   *  tous les montants budgétaires de ce dashboard : puce "Budget alloué" (= total programme =
+   *  centre du donut de la page Effectifs), liste par axe de sa popover, en-têtes d'axe de la
+   *  feuille de route et donut par chantier. Un chantier multi-axe n'est attribué qu'à son axe
+   *  primaire, la somme des axes vaut donc le total programme. */
+  const budgetRollup = useMemo(
+    () => rollupBudgets(axes, chantiers, chantierActions),
+    [axes, chantiers, chantierActions]
   );
-
-  /** Round 28 : somme RÉELLE des budgets leviers du programme actif (`sumProgramProjetBudgets`,
-   *  lib/axisLogic.ts, bottom-up depuis `ChantierAction.budget`) — comparée au budget
-   *  prévisionnel TOTAL déclaré par l'admin (`Program.budget`, ProgramsPanel.tsx) dans le résumé
-   *  juste sous le bandeau Ambition ci-dessous. Distinct de `allocatedBudgetTotal` ci-dessus, qui
-   *  somme `Chantier.allocatedBudget` (une saisie manuelle par chantier), pas les leviers. */
-  const programBudgetActualTotal = useMemo(
-    () =>
-      activeProgram ? sumProgramProjetBudgets(activeProgram.id, chantiers, chantierActions) : 0,
-    [activeProgram, chantiers, chantierActions]
-  );
+  const allocatedBudgetTotal = budgetRollup.programme.allocated;
 
   /** Comparaison au budget PRÉVISIONNEL du programme (`Program.budget`) pour la puce "Budget
-   *  alloué" (remplace l'ancien encadré "Budget prévisionnel du programme" de l'en-tête). Trois
-   *  chiffres distincts sont en jeu :
-   *   - `Program.budget` : budget prévisionnel TOTAL déclaré par l'admin (ProgramsPanel.tsx) ;
-   *   - `allocatedBudgetTotal` : somme des `Chantier.allocatedBudget` (budget alloué aux chantiers,
-   *     le montant affiché par la puce) ;
-   *   - `programBudgetActualTotal` : somme des budgets PROJETS (`ChantierAction.budget`), celle que
-   *     comparait l'ancien encadré et qui déclenche l'alerte synthétique d'AppShell.
-   *  Chacune des deux sommes est comparée au prévisionnel ; la puce passe en alerte si l'une OU
-   *  l'autre le dépasse. `undefined` tant qu'aucun budget prévisionnel n'est déclaré. */
+   *  alloué" : UNE seule comparaison, budget alloué total (somme des projets) vs prévisionnel —
+   *  même règle que l'alerte d'AppShell (`programBudgetOverrun`). `undefined` tant qu'aucun
+   *  budget prévisionnel n'est déclaré. */
   const programBudgetCheck = useMemo(() => {
     const forecast = activeProgram?.budget;
     if (!activeProgram || forecast === undefined) return undefined;
     const fmt = (value: number) => formatCompactCurrency(value, activeProgram.currency, locale, 2);
-    const describe = (
-      amount: number,
-      overKey: string,
-      overFallback: string,
-      withinKey: string,
-      withinFallback: string
-    ) => {
-      const over = amount > forecast;
-      const diff = amount - forecast;
-      const text = (over ? t(overKey, overFallback) : t(withinKey, withinFallback))
-        .replace("{amount}", fmt(amount))
-        .replace("{forecast}", fmt(forecast))
-        .replace("{diff}", `+${fmt(diff)}`)
-        .replace(
-          "{pct}",
-          // Prévisionnel à 0 : pas de % calculable, tiret plutôt qu'un "Infinity %".
-          forecast > 0 ? `+${formatPercent(diff / forecast, locale, 1)}` : "—"
-        );
-      return { text, over };
-    };
-    const lines = [
-      describe(
-        allocatedBudgetTotal,
-        "strategicDashboard.budgetTooltip.allocatedOver",
-        "Budget alloué {amount} > budget prévisionnel {forecast} ({diff}, {pct})",
-        "strategicDashboard.budgetTooltip.allocatedWithin",
-        "Budget alloué {amount} sur {forecast} prévus"
-      ),
-      describe(
-        programBudgetActualTotal,
-        "strategicDashboard.budgetTooltip.projetsOver",
-        "Budgets des projets {amount} > budget prévisionnel {forecast} ({diff}, {pct})",
-        "strategicDashboard.budgetTooltip.projetsWithin",
-        "Budgets des projets {amount} sur {forecast} prévus"
-      ),
-    ];
-    return { over: lines.some((line) => line.over), lines };
-  }, [activeProgram, allocatedBudgetTotal, programBudgetActualTotal, locale, t]);
+    const over = allocatedBudgetTotal > forecast;
+    const diff = allocatedBudgetTotal - forecast;
+    const text = (
+      over
+        ? t(
+            "strategicDashboard.budgetTooltip.allocatedOver",
+            "Budget alloué {amount} > budget prévisionnel {forecast} ({diff}, {pct})"
+          )
+        : t(
+            "strategicDashboard.budgetTooltip.allocatedWithin",
+            "Budget alloué {amount} sur {forecast} prévus"
+          )
+    )
+      .replace("{amount}", fmt(allocatedBudgetTotal))
+      .replace("{forecast}", fmt(forecast))
+      .replace("{diff}", `+${fmt(diff)}`)
+      .replace(
+        "{pct}",
+        // Prévisionnel à 0 : pas de % calculable, tiret plutôt qu'un "Infinity %".
+        forecast > 0 ? `+${formatPercent(diff / forecast, locale, 1)}` : "—"
+      );
+    return { over, lines: [{ text, over }] };
+  }, [activeProgram, allocatedBudgetTotal, locale, t]);
 
   /** Numérotation globale 3-5-15 des indicateurs (`numberIndicators`, lib/axisLogic.ts) — alimente
    *  UNIQUEMENT la liste de la puce "indicateurs" du bandeau d'en-tête (round 12) : chaque ligne
@@ -498,11 +469,9 @@ export function StrategicDashboardView() {
     () =>
       axes.map((axis) => ({
         axis,
-        total: chantiers
-          .filter((chantier) => chantier.axisIds.includes(axis.id))
-          .reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0),
+        total: budgetRollup.axes.get(axis.id)?.allocated ?? 0,
       })),
-    [axes, chantiers]
+    [axes, budgetRollup]
   );
 
   const dependencyAlerts = useMemo(
@@ -742,33 +711,6 @@ export function StrategicDashboardView() {
     return map;
   }, [chantiers]);
 
-  /** Budget alloué total d'un axe — porté depuis `StrategicAxesView.tsx`, affiché dans l'en-tête
-   *  riche d'axe de la feuille de route. */
-  const axisBudgetByAxis = useMemo(() => {
-    const map = new Map<string, number>();
-    chantiersByAxis.forEach((axisChantiers, axisId) => {
-      map.set(
-        axisId,
-        axisChantiers.reduce((sum, chantier) => sum + (chantier.allocatedBudget ?? 0), 0)
-      );
-    });
-    return map;
-  }, [chantiersByAxis]);
-
-  /** Budget CONSOMMÉ total d'un axe — pendant de `axisBudgetByAxis` ci-dessus mais sommant
-   *  `Chantier.consumedBudget`, sur le MÊME ensemble de chantiers, pour alimenter
-   *  `BudgetVsActualBar` dans l'en-tête riche d'axe. */
-  const axisConsumedByAxis = useMemo(() => {
-    const map = new Map<string, number>();
-    chantiersByAxis.forEach((axisChantiers, axisId) => {
-      map.set(
-        axisId,
-        axisChantiers.reduce((sum, chantier) => sum + (chantier.consumedBudget ?? 0), 0)
-      );
-    });
-    return map;
-  }, [chantiersByAxis]);
-
   /** Indicateurs regroupés par axe — porté depuis `StrategicAxesView.tsx`, alimente les puces
    *  numérotées de l'en-tête riche d'axe. */
   const indicatorsByAxis = useMemo(() => {
@@ -783,12 +725,23 @@ export function StrategicDashboardView() {
 
   /** Parts du donut budgétaire de l'axe actuellement ouvert (`budgetDonutAxisId`) — porté depuis
    *  `StrategicAxesView.tsx`. */
+  /** Chantiers dont le budget est ATTRIBUÉ à cet axe (axe primaire, voir lib/budgetRollup.ts) —
+   *  sous-ensemble de `chantiersByAxis` : un chantier multi-axe n'y figure que sous un seul axe. */
+  const budgetAttributedChantiers = (axisId: string) =>
+    chantiers.filter((c) => budgetRollup.chantierAxisId.get(c.id) === axisId);
+
   const budgetDonutSlices: BudgetDonutSlice[] | null = useMemo(() => {
     if (!budgetDonutAxisId) return null;
-    return (chantiersByAxis.get(budgetDonutAxisId) ?? [])
-      .filter((chantier) => (chantier.allocatedBudget ?? 0) > 0)
-      .map((chantier) => ({ name: chantier.name, value: chantier.allocatedBudget ?? 0 }));
-  }, [budgetDonutAxisId, chantiersByAxis]);
+    return chantiers
+      .filter((c) => budgetRollup.chantierAxisId.get(c.id) === budgetDonutAxisId)
+      .map((chantier) => ({ chantier, f: budgetRollup.chantiers.get(chantier.id) }))
+      .filter(({ f }) => (f?.allocated ?? 0) > 0 || (f?.consumed ?? 0) > 0)
+      .map(({ chantier, f }) => ({
+        name: chantier.name,
+        value: f?.allocated ?? 0,
+        consumed: f?.consumed ?? 0,
+      }));
+  }, [budgetDonutAxisId, chantiers, budgetRollup]);
 
   /** Résout le nom d'un chantier vers son id, dans l'axe ouvert — pour le `onSliceClick` du donut
    *  (le donut ne connaît que les NOMS, voir `BudgetDonutChart`). */
@@ -813,9 +766,12 @@ export function StrategicDashboardView() {
     const shownIndicators = axisIndicators.slice(0, MAX_CARD_INDICATOR_CHIPS);
     const hiddenIndicatorsCount = axisIndicators.length - shownIndicators.length;
     const axisChantiers = chantiersByAxis.get(axis.id) ?? [];
-    const axisBudget = axisBudgetByAxis.get(axis.id) ?? 0;
-    const axisConsumed = axisConsumedByAxis.get(axis.id) ?? 0;
-    const axisHasBudgetSlices = axisChantiers.some((c) => (c.allocatedBudget ?? 0) > 0);
+    const axisFigures = budgetRollup.axes.get(axis.id);
+    const axisBudget = axisFigures?.allocated ?? 0;
+    const axisConsumed = axisFigures?.consumed ?? 0;
+    const axisHasBudgetSlices = budgetAttributedChantiers(axis.id).some(
+      (c) => (budgetRollup.chantiers.get(c.id)?.allocated ?? 0) > 0
+    );
 
     return (
       // Round 24 (Phase 3, fix A) : plus de carte propre (bordure pleine/coins arrondis/fond opaque)

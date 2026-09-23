@@ -1612,8 +1612,10 @@ const es: Record<string, string> = {
   "strategicChantierDetail.pilote": "Responsable",
   "strategicChantierDetail.allocatedBudget": "Presupuesto asignado",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
-    "El presupuesto del proyecto no puede ser inferior a la suma de los presupuestos de sus iniciativas.",
+    "La dotación del proyecto no puede ser inferior a la suma de los presupuestos de sus iniciativas.",
   "strategicChantierDetail.consumedBudget": "Presupuesto consumido",
+  "strategicChantierDetail.envelope": "Dotación del proyecto",
+  "strategicChantierDetail.budgetFromProjets": "Suma de los presupuestos de sus iniciativas",
   "strategicChantierDetail.consumedFte": "ETC consumidos",
   "strategicChantierDetail.confidentialityLevel": "Nivel de confidencialidad",
   "strategicChantierDetail.confidentialityLevelNone": "Ninguno (visible para todos)",
@@ -1693,7 +1695,7 @@ const es: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint": "Complete el nombre y las fechas para guardar.",
   "strategicChantierDetail.actionForm.budgetLabel": "Presupuesto de la iniciativa",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "Esta iniciativa lleva el total de los presupuestos de las iniciativas del proyecto por encima del presupuesto asignado — los responsables del proyecto y del eje lo verán durante la validación.",
+    "Esta iniciativa lleva el total de los presupuestos de las iniciativas del proyecto por encima de la dotación del proyecto — los responsables del proyecto y del eje lo verán durante la validación.",
   "strategicChantierDetail.actionForm.consumedBudgetLabel":
     "Presupuesto consumido de la iniciativa",
   "strategicChantierDetail.actionForm.consumedFteLabel": "ETC consumidos de la iniciativa",
@@ -2049,6 +2051,7 @@ const es: Record<string, string> = {
   "effectifs.moneyBudget.empty": "No hay presupuesto asignado en este programa.",
   "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierEmpty": "Ningún proyecto con presupuesto asignado en este eje.",
+  "effectifs.moneyBudget.unattributedAxis": "Sin eje",
   "effectifs.moneyBudget.byProjetEmpty":
     "Ninguna iniciativa con presupuesto asignado en este proyecto.",
   "effectifs.moneyBudget.levelAxis": "Eje",
@@ -2058,6 +2061,11 @@ const es: Record<string, string> = {
   "effectifs.moneyBudget.centerOfTotal": "de {total} asignados",
   "effectifs.moneyBudget.centerConsumedPct": "{pct} consumido",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consumido",
+  "effectifs.moneyBudget.tooltipAllocated": "Asignado",
+  "effectifs.moneyBudget.tooltipRemaining": "Restante",
+  "effectifs.moneyBudget.tooltipOverrun": "Exceso",
+  "effectifs.moneyBudget.consumedRingHint":
+    "Anillo negro exterior = presupuesto consumido de cada elemento",
 
   // ─── Reparto de ETC (ronda 7 — StaffingPeriodBreakdown.tsx; fusionada en la ronda 22 con la
   // antigua tarjeta "Reparto por eje" de EffectifsPageClient.tsx) ───────────────────────────
@@ -2154,10 +2162,6 @@ const es: Record<string, string> = {
     "Presupuesto asignado {amount} > presupuesto previsional {forecast} ({diff}, {pct})",
   "strategicDashboard.budgetTooltip.allocatedWithin":
     "Presupuesto asignado {amount} de {forecast} previstos",
-  "strategicDashboard.budgetTooltip.projetsOver":
-    "Presupuestos de proyectos {amount} > presupuesto previsional {forecast} ({diff}, {pct})",
-  "strategicDashboard.budgetTooltip.projetsWithin":
-    "Presupuestos de proyectos {amount} de {forecast} previstos",
   "strategicDashboard.popover.axesTitle": "Ejes estratégicos",
   "strategicDashboard.popover.chantiersTitle": "Frentes de trabajo",
   "strategicDashboard.popover.indicatorsTitle": "Indicadores",

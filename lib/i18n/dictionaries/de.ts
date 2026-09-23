@@ -1614,8 +1614,10 @@ const de: Record<string, string> = {
   "strategicChantierDetail.pilote": "Leitung",
   "strategicChantierDetail.allocatedBudget": "Zugewiesenes Budget",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
-    "Das Budget des Arbeitspakets darf nicht niedriger sein als die Summe der Budgets seiner Projekte.",
+    "Der Rahmen des Arbeitspakets darf nicht niedriger sein als die Summe der Budgets seiner Projekte.",
   "strategicChantierDetail.consumedBudget": "Verbrauchtes Budget",
+  "strategicChantierDetail.envelope": "Rahmen des Arbeitspakets",
+  "strategicChantierDetail.budgetFromProjets": "Summe der Budgets seiner Projekte",
   "strategicChantierDetail.consumedFte": "Verbrauchte VZÄ",
   "strategicChantierDetail.confidentialityLevel": "Vertraulichkeitsstufe",
   "strategicChantierDetail.confidentialityLevelNone": "Keine (für alle sichtbar)",
@@ -1695,7 +1697,7 @@ const de: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint": "Name und Daten ausfüllen, um zu speichern.",
   "strategicChantierDetail.actionForm.budgetLabel": "Budget des Projekts",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "Dieses Projekt lässt die Gesamtsumme der Projektbudgets des Arbeitspakets über das zugewiesene Budget hinausgehen — die Verantwortlichen des Arbeitspakets und der Achse sehen dies bei der Validierung.",
+    "Dieses Projekt lässt die Gesamtsumme der Projektbudgets des Arbeitspakets über den Rahmen des Arbeitspakets hinausgehen — die Verantwortlichen des Arbeitspakets und der Achse sehen dies bei der Validierung.",
   "strategicChantierDetail.actionForm.consumedBudgetLabel": "Verbrauchtes Budget des Projekts",
   "strategicChantierDetail.actionForm.consumedFteLabel": "Verbrauchte VZÄ des Projekts",
   "strategicChantierDetail.successCriteria.placeholder": "Wir sind im [Jahr] zufrieden, wenn...",
@@ -2057,10 +2059,16 @@ const de: Record<string, string> = {
   "effectifs.moneyBudget.levelProjet": "Hebel",
   "effectifs.moneyBudget.byChantierEmpty":
     "Kein Arbeitspaket mit zugewiesenem Budget auf dieser Achse.",
+  "effectifs.moneyBudget.unattributedAxis": "Ohne Achse",
   "effectifs.moneyBudget.centerLabelConsumed": "Verbraucht / zugewiesen",
   "effectifs.moneyBudget.centerOfTotal": "von {total} zugewiesen",
   "effectifs.moneyBudget.centerConsumedPct": "{pct} verbraucht",
   "effectifs.moneyBudget.consumedTooltipSuffix": "verbraucht",
+  "effectifs.moneyBudget.tooltipAllocated": "Zugewiesen",
+  "effectifs.moneyBudget.tooltipRemaining": "Verbleibend",
+  "effectifs.moneyBudget.tooltipOverrun": "Überschreitung",
+  "effectifs.moneyBudget.consumedRingHint":
+    "Äußerer schwarzer Ring = verbrauchtes Budget je Element",
 
   // ─── VZÄ-Verteilung (Runde 7 — StaffingPeriodBreakdown.tsx; Runde 22 mit der ehemaligen Karte
   // "Verteilung nach Achse" von EffectifsPageClient.tsx zusammengeführt) ────────────────────
@@ -2157,10 +2165,6 @@ const de: Record<string, string> = {
     "Zugewiesenes Budget {amount} > geplantes Budget {forecast} ({diff}, {pct})",
   "strategicDashboard.budgetTooltip.allocatedWithin":
     "Zugewiesenes Budget {amount} von {forecast} geplant",
-  "strategicDashboard.budgetTooltip.projetsOver":
-    "Projektbudgets {amount} > geplantes Budget {forecast} ({diff}, {pct})",
-  "strategicDashboard.budgetTooltip.projetsWithin":
-    "Projektbudgets {amount} von {forecast} geplant",
   "strategicDashboard.popover.axesTitle": "Strategische Achsen",
   "strategicDashboard.popover.chantiersTitle": "Arbeitspakete",
   "strategicDashboard.popover.indicatorsTitle": "Indikatoren",
