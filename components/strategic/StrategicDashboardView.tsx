@@ -765,15 +765,15 @@ export function StrategicDashboardView() {
                       onClick={
                         clickable ? () => router.push(`/kpi?indicator=${indicator.id}`) : undefined
                       }
-                      className={`flex min-h-[20px] max-w-[260px] shrink-0 flex-col items-start justify-center gap-0.5 rounded-full px-2 py-0.5 text-left text-[10px] font-bold leading-tight transition ${
-                        clickable ? "hover:bg-black hover:text-white" : "cursor-default"
+                      className={`flex min-h-[20px] max-w-[280px] shrink-0 flex-col items-start justify-center gap-0.5 rounded-lg px-2.5 py-1.5 text-left text-[10.5px] font-bold leading-tight transition ${
+                        clickable ? "hover:brightness-95" : "cursor-default"
                       } ${
                         atRisk
                           ? "bg-rag-amber-light text-rag-amber"
                           : "bg-neutral-100 text-secondary"
                       }`}
                     >
-                      <span>{`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}</span>
+                      <span className="truncate">{`#${globalIndicatorNumbers.get(indicator.id) ?? "?"} · ${indicator.name}`}</span>
                       {reading && (
                         <IndicatorReadingBadge
                           current={reading.current}
