@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { periodBoundsForDate } from "@/lib/staffingNeed";
 import {
+  availableForTeam,
   filterStaffingByAxes,
+  filterStaffingByTeam,
   monthsOfYear,
   periodRange,
+  periodStaffingDetail,
   staffingRateLevel,
   staffingRatePoint,
   staffingRateSeries,
+  staffingTeams,
   teamStaffingMatrix,
+  totalStaffingRow,
 } from "@/lib/staffingRate";
 import type { ChantierStaffing } from "@/types";
 
@@ -135,5 +140,71 @@ describe("staffingRate", () => {
     expect(achats.cells[0].level).toBe("over");
     expect(achats.cells[1].level).toBe("none");
     expect(m.find((r) => r.team === "RH")!.cells[1].ratePct).toBe(50);
+  });
+
+  it("filtre équipe, disponible par équipe et liste des équipes", () => {
+    const rows = [line("IT", 1, "2026-01-01"), line("RH", 1, "2026-01-01"), line("Achats", 1)];
+    expect(filterStaffingByTeam(rows, null)).toHaveLength(3);
+    expect(filterStaffingByTeam(rows, "RH").map((r) => r.function)).toEqual(["RH"]);
+    expect(availableForTeam({ IT: 4, RH: 2 }, null)).toBe(6);
+    expect(availableForTeam({ IT: 4, RH: 2 }, "IT")).toBe(4);
+    expect(availableForTeam({ IT: 4, RH: 2 }, "Achats")).toBe(0);
+    expect(staffingTeams(rows, { Finance: 3, IT: 4 })).toEqual(["Achats", "Finance", "IT", "RH"]);
+  });
+
+  it("ligne TOTAL toutes équipes = mobilisé total / disponible total", () => {
+    const months = monthsOfYear(2026).slice(0, 3);
+    const total = totalStaffingRow(
+      [
+        line("IT", 3, "2026-03-01", "2026-03-31", "ch1", "p1"),
+        line("RH", 1, "2026-01-01", "2026-03-31", "ch1", "p1"),
+        line("Achats", 1, "2026-01-01", "2026-01-31", "ch2"),
+        line("IT", 5),
+      ],
+      { IT: 4, RH: 2 },
+      months
+    );
+    expect(total.available).toBe(6);
+    expect(total.cells.map((c) => c.mobilised)).toEqual([2, 1, 4]);
+    expect(total.cells.map((c) => c.ratePct)).toEqual([33, 17, 67]);
+    expect(total.cells[2].contributions).toEqual([{ actionId: "p1", chantierId: "ch1", fte: 4 }]);
+    expect(total.overCount).toBe(0);
+  });
+
+  it("détail d'une période : équipes > projets > lignes, ETP moyens, filtre équipe", () => {
+    const march = periodBoundsForDate("2026-03-01", "monthly");
+    const a = { ...line("IT", 2, "2026-03-17", "2026-06-30", "ch1", "p1"), note: "Alice" };
+    const b = { ...line("IT", 3, "2026-01-01", undefined, "ch1", "p1"), note: "Bob" };
+    const c = line("IT", 1, "2026-03-01", "2026-03-31", "ch2");
+    const d = line("RH", 1, "2026-03-01", "2026-03-31", "ch1");
+    const outside = line("RH", 4, "2026-04-01", "2026-04-30", "ch1");
+    const undated = line("RH", 4);
+    const entries = [a, b, c, d, outside, undated];
+    const fte = { IT: 4, RH: 4, Finance: 2 };
+
+    const all = periodStaffingDetail(entries, fte, march);
+    expect(all.label).toBe("2026-03");
+    expect(all.available).toBe(10);
+    expect(all.mobilised).toBeCloseTo(3 + 2 * (15 / 31) + 1 + 1, 5);
+    expect(all.teams.map((t) => t.team)).toEqual(["IT", "RH"]);
+    const it = all.teams[0];
+    expect(it.available).toBe(4);
+    expect(it.level).toBe("over");
+    expect(it.groups.map((g) => g.key)).toEqual(["a:p1", "c:ch2"]);
+    expect(it.groups[0].lines.map((l) => l.entry.note)).toEqual(["Bob", "Alice"]);
+    expect(it.groups[0].lines[1].fte).toBeCloseTo(2 * (15 / 31), 5);
+    expect(it.groups[1].actionId).toBeUndefined();
+    expect(all.teams[1].ratePct).toBe(25);
+
+    const rh = periodStaffingDetail(entries, fte, march, "RH");
+    expect(rh.available).toBe(4);
+    expect(rh.mobilised).toBe(1);
+    expect(rh.ratePct).toBe(25);
+    expect(rh.teams.map((t) => t.team)).toEqual(["RH"]);
+
+    const finance = periodStaffingDetail(entries, fte, march, "Finance");
+    expect(finance.teams).toEqual([]);
+    expect(finance.ratePct).toBe(0);
+    expect(finance.level).toBe("ok");
   });
 });

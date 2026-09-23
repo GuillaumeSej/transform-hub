@@ -4,7 +4,12 @@ import { useRef, useState } from "react";
 import { useDismissable } from "@/lib/hooks/useDismissable";
 import { ChevronDown } from "lucide-react";
 
-export type DropdownOption = { value: string; label: string };
+export type DropdownOption = {
+  value: string;
+  label: string;
+  /** Pastille carrée de couleur optionnelle (ex. couleur d'axe) — rendue par `MultiSelect`. */
+  color?: string;
+};
 export type DropdownGroup = { groupLabel: string; options: DropdownOption[] };
 
 /**

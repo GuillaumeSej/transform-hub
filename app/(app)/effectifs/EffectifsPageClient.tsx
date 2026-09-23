@@ -153,8 +153,8 @@ export function EffectifsPageClient() {
     }
   }, [strategicRole, axes, budgetDrillPath]);
 
-  /** Équipe dont on affiche les employés disponibles (clic sur le nom d'une équipe dans la heatmap
-   *  « Taux de staffing par équipe et par mois » de `StaffingRateSection`) — `null` = fermé. */
+  /** Équipe dont on affiche les employés disponibles (bouton « Voir les employés disponibles » à
+   *  côté du tag de filtre équipe de `StaffingRateSection`) — `null` = fermé. */
   const [availableTeam, setAvailableTeam] = useState<string | null>(null);
 
   const chantierNames = useMemo(() => new Map(chantiers.map((c) => [c.id, c.name])), [chantiers]);

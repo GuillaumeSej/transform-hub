@@ -132,13 +132,90 @@ export type TeamPeriodCell = StaffingRatePoint & {
   contributions: StaffingContribution[];
 };
 
-export type TeamStaffingRow = {
-  team: string;
+/** Ligne de heatmap sans notion d'équipe (utilisée telle quelle pour la ligne TOTAL « Toutes
+ *  équipes »). */
+export type StaffingRow = {
   available: number;
   cells: TeamPeriodCell[];
   /** Nombre de périodes sur-staffées de la ligne. */
   overCount: number;
 };
+
+export type TeamStaffingRow = StaffingRow & { team: string };
+
+/** Filtre les lignes sur une équipe (`ChantierStaffing.function`). `null` = toutes les équipes. */
+export function filterStaffingByTeam(
+  entries: ChantierStaffing[],
+  team: string | null
+): ChantierStaffing[] {
+  return team === null ? entries : entries.filter((e) => e.function === team);
+}
+
+/** Disponible d'une équipe (base ETP) ; `null` = somme de toutes les équipes. */
+export function availableForTeam(fteByTeam: Record<string, number>, team: string | null): number {
+  if (team !== null) return fteByTeam[team] ?? 0;
+  return Object.values(fteByTeam).reduce((sum, v) => sum + (v || 0), 0);
+}
+
+/** Équipes connues : base ETP ∪ équipes présentes dans les lignes de staffing, triées par nom. */
+export function staffingTeams(
+  entries: ChantierStaffing[],
+  fteByTeam: Record<string, number>
+): string[] {
+  const teams = new Set<string>(Object.keys(fteByTeam));
+  for (const e of entries) if (e.function) teams.add(e.function);
+  return Array.from(teams).sort((a, b) => a.localeCompare(b));
+}
+
+const contributionKey = (e: Pick<ChantierStaffing, "actionId" | "chantierId">) =>
+  e.actionId ? `a:${e.actionId}` : `c:${e.chantierId}`;
+
+/** Cellule mobilisé / disponible d'une période, avec contributions regroupées par projet. */
+export function staffingPeriodCell(
+  entries: ChantierStaffing[],
+  available: number,
+  period: PeriodBounds
+): TeamPeriodCell {
+  const groups = new Map<string, StaffingContribution>();
+  for (const e of entries) {
+    const fte = averageFte([e], period);
+    if (fte <= 0) continue;
+    const key = contributionKey(e);
+    const current = groups.get(key);
+    if (current) current.fte += fte;
+    else
+      groups.set(key, {
+        ...(e.actionId ? { actionId: e.actionId } : {}),
+        chantierId: e.chantierId,
+        fte,
+      });
+  }
+  const contributions = Array.from(groups.values()).sort((a, b) => b.fte - a.fte);
+  const mobilised = contributions.reduce((sum, c) => sum + c.fte, 0);
+  const ratePct = staffingRatePct(mobilised, available);
+  return {
+    ...period,
+    available,
+    mobilised,
+    ratePct,
+    level: staffingRateLevel(ratePct, mobilised),
+    contributions,
+  };
+}
+
+function staffingRow(
+  entries: ChantierStaffing[],
+  available: number,
+  periods: PeriodBounds[]
+): StaffingRow {
+  const cells = periods.map((period) => staffingPeriodCell(entries, available, period));
+  return { available, cells, overCount: cells.filter((c) => c.level === "over").length };
+}
+
+/** Clé de tri « le plus tendu d'abord » : un taux null avec mobilisation (équipe absente de la base
+ *  ETP) passe devant tout. */
+const sortableRate = (ratePct: number | null, mobilised: number) =>
+  ratePct === null ? (mobilised > 0 ? 1e9 : -1) : ratePct;
 
 /** Matrice équipe × période : pour chaque équipe (base ETP ∪ équipes présentes dans les lignes),
  *  mobilisé/disponible sur chaque période, avec le détail des projets contributeurs. Triée par
@@ -156,49 +233,125 @@ export function teamStaffingMatrix(
     byTeam.set(e.function, list);
   }
   const teams = new Set<string>([...Object.keys(fteByTeam), ...Array.from(byTeam.keys())]);
-  const rows = Array.from(teams).map((team) => {
-    const teamEntries = byTeam.get(team) ?? [];
-    const available = fteByTeam[team] ?? 0;
-    const cells = periods.map((period) => {
-      const groups = new Map<string, StaffingContribution>();
-      for (const e of teamEntries) {
-        const fte = averageFte([e], period);
-        if (fte <= 0) continue;
-        const key = e.actionId ? `a:${e.actionId}` : `c:${e.chantierId}`;
-        const current = groups.get(key);
-        if (current) current.fte += fte;
-        else
-          groups.set(key, {
-            ...(e.actionId ? { actionId: e.actionId } : {}),
-            chantierId: e.chantierId,
-            fte,
-          });
-      }
-      const contributions = Array.from(groups.values()).sort((a, b) => b.fte - a.fte);
-      const mobilised = contributions.reduce((sum, c) => sum + c.fte, 0);
-      const ratePct = staffingRatePct(mobilised, available);
-      return {
-        ...period,
-        available,
-        mobilised,
-        ratePct,
-        level: staffingRateLevel(ratePct, mobilised),
-        contributions,
-      };
-    });
-    return {
-      team,
-      available,
-      cells,
-      overCount: cells.filter((c) => c.level === "over").length,
-    };
-  });
+  const rows: TeamStaffingRow[] = Array.from(teams).map((team) => ({
+    team,
+    ...staffingRow(byTeam.get(team) ?? [], fteByTeam[team] ?? 0, periods),
+  }));
   const maxRate = (r: TeamStaffingRow) =>
-    Math.max(
-      -1,
-      ...r.cells.map((c) => (c.ratePct === null ? (c.mobilised > 0 ? 1e9 : -1) : c.ratePct))
-    );
+    Math.max(-1, ...r.cells.map((c) => sortableRate(c.ratePct, c.mobilised)));
   return rows.sort(
     (a, b) => b.overCount - a.overCount || maxRate(b) - maxRate(a) || a.team.localeCompare(b.team)
   );
+}
+
+/** Ligne TOTAL « Toutes équipes » de la heatmap (remplace l'ancien tableau par période sous le
+ *  graphique) : mobilisé de toutes les lignes / disponible total de la base ETP, par période —
+ *  même définition que le graphique sans filtre d'équipe. */
+export function totalStaffingRow(
+  entries: ChantierStaffing[],
+  fteByTeam: Record<string, number>,
+  periods: PeriodBounds[]
+): StaffingRow {
+  return staffingRow(
+    entries.filter((e) => e.startDate),
+    availableForTeam(fteByTeam, null),
+    periods
+  );
+}
+
+// ── Détail « Qui est mobilisé où » d'une période (popup au clic sur une colonne du graphique ou
+//    sur une cellule de la heatmap). ─────────────────────────────────────────────────────────
+
+export type PeriodDetailLine = {
+  entry: ChantierStaffing;
+  /** ETP MOYENS de la ligne sur la période (≤ `entry.fte` si la ligne n'en couvre qu'une partie). */
+  fte: number;
+};
+
+export type PeriodDetailGroup = {
+  key: string;
+  /** `ChantierAction.id` (projet) ; absent = staffing transverse au chantier. */
+  actionId?: string;
+  chantierId: string;
+  fte: number;
+  lines: PeriodDetailLine[];
+};
+
+export type PeriodDetailTeam = StaffingRatePoint & {
+  team: string;
+  groups: PeriodDetailGroup[];
+};
+
+export type PeriodStaffingDetail = StaffingRatePoint & {
+  /** Équipes ayant au moins une mobilisation sur la période — les plus tendues d'abord. */
+  teams: PeriodDetailTeam[];
+};
+
+/** Lignes actives sur `period`, regroupées par ÉQUIPE puis par projet/chantier, avec leurs ETP
+ *  moyens. `team` restreint à une équipe (totaux compris) ; `null` = toutes. Les totaux d'en-tête
+ *  (mobilisé / disponible / taux) sont ceux du graphique pour le même filtre. */
+export function periodStaffingDetail(
+  entries: ChantierStaffing[],
+  fteByTeam: Record<string, number>,
+  period: PeriodBounds,
+  team: string | null = null
+): PeriodStaffingDetail {
+  const byTeam = new Map<string, Map<string, PeriodDetailGroup>>();
+  for (const entry of filterStaffingByTeam(entries, team)) {
+    if (!entry.startDate) continue;
+    const fte = averageFte([entry], period);
+    if (fte <= 0) continue;
+    const groups = byTeam.get(entry.function) ?? new Map<string, PeriodDetailGroup>();
+    byTeam.set(entry.function, groups);
+    const key = contributionKey(entry);
+    const group = groups.get(key) ?? {
+      key,
+      ...(entry.actionId ? { actionId: entry.actionId } : {}),
+      chantierId: entry.chantierId,
+      fte: 0,
+      lines: [],
+    };
+    groups.set(key, group);
+    group.fte += fte;
+    group.lines.push({ entry, fte });
+  }
+
+  const teams: PeriodDetailTeam[] = Array.from(byTeam.entries()).map(([name, groupMap]) => {
+    const groups = Array.from(groupMap.values()).sort((a, b) => b.fte - a.fte);
+    for (const g of groups) {
+      g.lines.sort(
+        (a, b) => b.fte - a.fte || (a.entry.note ?? "").localeCompare(b.entry.note ?? "")
+      );
+    }
+    const mobilised = groups.reduce((sum, g) => sum + g.fte, 0);
+    const available = fteByTeam[name] ?? 0;
+    const ratePct = staffingRatePct(mobilised, available);
+    return {
+      ...period,
+      team: name,
+      available,
+      mobilised,
+      ratePct,
+      level: staffingRateLevel(ratePct, mobilised),
+      groups,
+    };
+  });
+  teams.sort(
+    (a, b) =>
+      sortableRate(b.ratePct, b.mobilised) - sortableRate(a.ratePct, a.mobilised) ||
+      b.mobilised - a.mobilised ||
+      a.team.localeCompare(b.team)
+  );
+
+  const available = availableForTeam(fteByTeam, team);
+  const mobilised = teams.reduce((sum, row) => sum + row.mobilised, 0);
+  const ratePct = staffingRatePct(mobilised, available);
+  return {
+    ...period,
+    available,
+    mobilised,
+    ratePct,
+    level: staffingRateLevel(ratePct, mobilised),
+    teams,
+  };
 }

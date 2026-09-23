@@ -68,6 +68,13 @@ export function MultiSelect({
         >
           {checked && <Check size={10} strokeWidth={3} />}
         </span>
+        {opt.color && (
+          <span
+            aria-hidden
+            className="h-2.5 w-2.5 flex-shrink-0 rounded-[2px]"
+            style={{ backgroundColor: opt.color }}
+          />
+        )}
         <span className="truncate">{opt.label}</span>
       </button>
     );
