@@ -204,12 +204,16 @@ function StatusSplitBar({
   total,
   height = "h-3",
   ariaLabel,
+  color,
 }: {
   onTrack: number;
   atRisk: number;
   total: number;
   height?: string;
   ariaLabel: string;
+  /** Couleur d'axe (ventilation par axe) : segment "sur la trajectoire" plein, segment "à risque"
+   *  en teinte claire de la même couleur — le risque reste signalé par le triangle rouge à droite. */
+  color?: string;
 }) {
   const onTrackPct = total > 0 ? (onTrack / total) * 100 : 0;
   const atRiskPct = total > 0 ? (atRisk / total) * 100 : 0;
@@ -221,14 +225,17 @@ function StatusSplitBar({
     >
       {onTrackPct > 0 && (
         <div
-          className={`h-full ${INDICATOR_STATUS_TONE.on_track.bar}`}
-          style={{ width: `${onTrackPct}%` }}
+          className={`h-full ${color ? "" : INDICATOR_STATUS_TONE.on_track.bar}`}
+          style={{ width: `${onTrackPct}%`, ...(color ? { backgroundColor: color } : {}) }}
         />
       )}
       {atRiskPct > 0 && (
         <div
-          className={`h-full ${INDICATOR_STATUS_TONE.at_risk.bar}`}
-          style={{ width: `${atRiskPct}%` }}
+          className={`h-full ${color ? "" : INDICATOR_STATUS_TONE.at_risk.bar}`}
+          style={{
+            width: `${atRiskPct}%`,
+            ...(color ? { backgroundColor: color, opacity: 0.28 } : {}),
+          }}
         />
       )}
     </div>
@@ -285,7 +292,11 @@ function IndicatorStatusOverview({
 
   return (
     <section className="rounded-lg border border-border bg-white shadow-sm">
-      <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8">
+      <div
+        className={`grid grid-cols-1 gap-5 p-5 ${
+          perAxis.length > 0 ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] lg:gap-8" : ""
+        }`}
+      >
         {/* Bloc héros : taux sur la trajectoire + barre segmentée + légende chiffrée */}
         <div className="flex min-w-0 flex-col justify-between gap-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -323,100 +334,63 @@ function IndicatorStatusOverview({
           </div>
         </div>
 
-        {/* Deux tuiles de compte — forme (rond plein / triangle) + libellé + couleur */}
-        <div className="grid grid-cols-2 gap-3">
-          {tiles.map((tile) => {
-            const highlighted = tile.status === "at_risk" && tile.count > 0;
-            return (
-              <div
-                key={tile.status}
-                className={`flex flex-col justify-between gap-3 border border-l-[3px] border-border p-4 ${
-                  highlighted ? "bg-rag-red-light/60" : "bg-neutral-50"
-                }`}
-                style={{ borderLeftColor: INDICATOR_STATUS_TONE[tile.status].hex }}
-              >
-                <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-secondary">
-                  <IndicatorStatusMark status={tile.status} size={8} />
-                  {tile.label}
-                </span>
-                <span className="flex items-baseline gap-1">
+        {/* Ventilation par axe (page KPI uniquement), dans la couleur de chaque axe — remplace
+            les deux tuiles de compte, qui répétaient le bloc héros (retour PO). */}
+        {perAxis.length > 0 && (
+          <div className="min-w-0 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
+            <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+              {l.byAxis}
+            </div>
+            <ul className="flex flex-col gap-2.5">
+              {perAxis.map((row) => (
+                <li key={row.axis.id} className="flex min-w-0 items-center gap-2.5 text-[12px]">
                   <span
-                    className={`text-[32px] font-bold leading-none tracking-tight tabular-nums ${
-                      highlighted ? INDICATOR_STATUS_TONE.at_risk.text : "text-primary"
-                    }`}
-                  >
-                    {tile.count}
-                  </span>
-                  <span className="text-[13px] font-semibold text-tertiary tabular-nums">
-                    /{total}
-                  </span>
-                </span>
-                <span className="text-[11px] text-tertiary">
-                  <span className="font-semibold text-secondary tabular-nums">
-                    {pct(tile.count)}%
-                  </span>{" "}
-                  {l.ofIndicators}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Ventilation par axe (page KPI uniquement) */}
-      {perAxis.length > 0 && (
-        <div className="border-t border-border px-5 py-4">
-          <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-            {l.byAxis}
-          </div>
-          <ul className="grid grid-cols-1 gap-x-8 gap-y-2.5 md:grid-cols-2">
-            {perAxis.map((row) => (
-              <li key={row.axis.id} className="flex min-w-0 items-center gap-2.5 text-[12px]">
-                <span
-                  aria-hidden
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: row.axis.color ?? "var(--bp-warm-taupe)" }}
-                />
-                <span
-                  className="w-[38%] min-w-0 shrink-0 truncate font-semibold text-primary"
-                  title={row.axis.name}
-                >
-                  {row.axis.name}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <StatusSplitBar
-                    onTrack={row.onTrack}
-                    atRisk={row.atRisk}
-                    total={row.total}
-                    height="h-1.5"
-                    ariaLabel={`${row.axis.name} — ${l.onTrack} ${row.onTrack}/${row.total} · ${l.atRisk} ${row.atRisk}`}
+                    aria-hidden
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: row.axis.color ?? "var(--bp-warm-taupe)" }}
                   />
-                </span>
-                <span className="w-9 shrink-0 text-right font-semibold text-primary tabular-nums">
-                  {row.onTrack}/{row.total}
-                </span>
-                <span
-                  className={`inline-flex w-8 shrink-0 items-center justify-end gap-0.5 tabular-nums ${
-                    row.atRisk > 0
-                      ? `font-bold ${INDICATOR_STATUS_TONE.at_risk.text}`
-                      : "text-tertiary"
-                  }`}
-                  title={`${l.atRisk} : ${row.atRisk}`}
-                >
-                  {row.atRisk > 0 ? (
-                    <>
-                      <IndicatorStatusMark status="at_risk" size={7} />
-                      {row.atRisk}
-                    </>
-                  ) : (
-                    "—"
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+                  <span
+                    className="w-[38%] min-w-0 shrink-0 truncate font-semibold text-primary"
+                    title={row.axis.name}
+                  >
+                    {row.axis.name}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <StatusSplitBar
+                      onTrack={row.onTrack}
+                      atRisk={row.atRisk}
+                      total={row.total}
+                      height="h-2"
+                      color={row.axis.color ?? "var(--bp-warm-taupe)"}
+                      ariaLabel={`${row.axis.name} — ${l.onTrack} ${row.onTrack}/${row.total} · ${l.atRisk} ${row.atRisk}`}
+                    />
+                  </span>
+                  <span className="w-9 shrink-0 text-right font-semibold text-primary tabular-nums">
+                    {row.onTrack}/{row.total}
+                  </span>
+                  <span
+                    className={`inline-flex w-8 shrink-0 items-center justify-end gap-0.5 tabular-nums ${
+                      row.atRisk > 0
+                        ? `font-bold ${INDICATOR_STATUS_TONE.at_risk.text}`
+                        : "text-tertiary"
+                    }`}
+                    title={`${l.atRisk} : ${row.atRisk}`}
+                  >
+                    {row.atRisk > 0 ? (
+                      <>
+                        <IndicatorStatusMark status="at_risk" size={7} />
+                        {row.atRisk}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
