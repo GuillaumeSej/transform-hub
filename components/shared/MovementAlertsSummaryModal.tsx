@@ -2,29 +2,64 @@
 
 import { ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/shared/Modal";
 import type { MovementAlert, MovementAlertKind } from "@/lib/hrEngine";
 import { etpAlertFilterLink, etpMovementDeepLink } from "@/lib/hrMovementLink";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import type { Locale } from "@/lib/i18n/locales";
 import {
   movementAlertMessage,
   movementStatusLabel,
   movementTypeLabel,
 } from "@/lib/hrMovementLabels";
-import type { Lever } from "@/types";
+import type { Lever, MovementType } from "@/types";
 
 type T = (key: string, fallback?: string) => string;
 
 /** Ordre d'affichage des sections = ordre de gravité (même priorité que `movementAlerts`). */
 const KIND_ORDER: MovementAlertKind[] = ["overdue", "leverMismatch", "toValidate", "due"];
 
+/** Pastille de compteur des en-têtes de section — tokens de la charte uniquement. */
 const KIND_BADGE: Record<MovementAlertKind, string> = {
-  overdue: "border-rag-red-light bg-rag-red-light/60 text-rag-red",
-  leverMismatch: "border-rag-red-light bg-rag-red-light/60 text-rag-red",
-  toValidate: "border-border bg-neutral-50 text-secondary",
-  due: "border-rag-amber-light bg-rag-amber-light/60 text-primary",
+  overdue: "border-bp-coral bg-bp-coral text-white",
+  leverMismatch: "border-bp-red-brick bg-bp-red-brick text-white",
+  toValidate: "border-bp-purple bg-bp-purple text-white",
+  due: "border-bp-light-pink bg-bp-light-pink text-bp-deep-red",
 };
+
+/** Couleur de type de mouvement — même palette que `HrGooduelleCharts` (TYPE_COLORS). */
+const TYPE_DOT: Record<MovementType, string> = {
+  Recrutement: "bg-bp-purple",
+  Attrition: "bg-bp-light-pink",
+  "Départ forcé": "bg-bp-coral",
+  "Transfert entrant": "bg-bp-warm-taupe",
+  "Transfert sortant": "bg-bp-warm-brown",
+};
+
+const INTL_LOCALE: Record<Locale, string> = {
+  fr: "fr-FR",
+  en: "en-GB",
+  de: "de-DE",
+  es: "es-ES",
+};
+
+/** « 2026-03-12 » → « 12 mars 2026 » (locale active). Lu en UTC pour éviter tout décalage de jour. */
+function formatIsoDate(
+  iso: string | undefined,
+  locale: Locale,
+  month: "long" | "short"
+): string | null {
+  if (!iso) return null;
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(INTL_LOCALE[locale] ?? "fr-FR", {
+    day: "numeric",
+    month,
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(d);
+}
 
 function sectionTitle(t: T, kind: MovementAlertKind): string {
   switch (kind) {
@@ -78,7 +113,8 @@ function fmtFte(n: number, unit: string): string {
  * bandeau d'alertes (clic sur le compteur ou sur une catégorie). Aucun calcul métier : l'appelant
  * fournit la liste déjà calculée par `hr.movementAlerts` (lib/hrEngine.ts) ; la modale se contente
  * de regrouper par catégorie, trier par urgence et afficher les valeurs comparées portées par
- * `MovementAlert.detail`. Même Modal et même style de tableau que `MovementDetailDrilldownModal`.
+ * `MovementAlert.detail`. Chaque alerte = une ligne-carte en grille (qui · où · urgence) sans
+ * code mouvement visible (l'ID reste dans l'infobulle) ; en-têtes de section collants.
  *
  * - Clic sur une ligne → détail du mouvement dans la Base ETP (`etpMovementDeepLink`, ouvre sa
  *   modale d'édition).
@@ -104,7 +140,7 @@ export function MovementAlertsSummaryModal({
   levers: Lever[];
   programLabels?: Record<string, string>;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const router = useRouter();
   const [activeKind, setActiveKind] = useState<MovementAlertKind | null>(initialKind);
   const [collapsed, setCollapsed] = useState<Set<MovementAlertKind>>(new Set());
@@ -164,166 +200,168 @@ export function MovementAlertsSummaryModal({
     const l = leverById.get(leverId);
     return l ? `${l.code} — ${l.name}` : dash;
   };
-  const programOf = (programId?: string) =>
-    programId ? (programLabels[programId] ?? programId) : dash;
 
-  const th = (label: string, key?: string) => (
-    <th key={key ?? label} className="whitespace-nowrap px-3 py-2 font-semibold">
-      {label}
-    </th>
-  );
+  const fmtDate = (iso: string | undefined, month: "long" | "short" = "long"): string =>
+    formatIsoDate(iso, locale, month) ?? dash;
 
-  const colWho = t("hr.movementProgress.col.who", "Qui");
-  const colType = t("hr.movementProgress.col.type", "Type");
-  const colProgLever = t("hr.alertsModal.col.programLever", "Programme / levier");
-  const colDept = t("hr.department", "Département");
-  const colCountry = t("dashboard.country", "Pays");
-  const colPlanned = t("hr.movementProgress.col.plannedDate", "Date prévue");
-  const colActual = t("hr.movementProgress.col.actualDate", "Date réelle");
-
-  const headers: Record<MovementAlertKind, string[]> = {
-    overdue: [
-      colWho,
-      colType,
-      colProgLever,
-      colDept,
-      colCountry,
-      colPlanned,
-      t("hr.alertsModal.col.daysLate", "Retard"),
-    ],
-    leverMismatch: [
-      colWho,
-      colType,
-      t("hr.alertsModal.col.lever", "Levier"),
-      t("hr.alertsModal.col.issue", "Écart constaté"),
-      t("hr.alertsModal.col.movementValue", "Mouvement"),
-      t("hr.alertsModal.col.leverValue", "Levier"),
-    ],
-    toValidate: [colWho, colType, colProgLever, colDept, colCountry, colActual],
-    due: [
-      colWho,
-      colType,
-      colProgLever,
-      colDept,
-      colCountry,
-      colPlanned,
-      t("hr.alertsModal.col.daysLeft", "Jours restants"),
-    ],
+  const leverLabelOf = (a: MovementAlert): string => {
+    const d = a.detail;
+    if (d && "leverCode" in d) return `${d.leverCode} — ${d.leverName}`;
+    return leverOf(a.movement.leverId);
   };
 
-  const whoCells = (a: MovementAlert): ReactNode[] => {
-    const m = a.movement;
-    return [
-      <td key="who" className="px-3 py-2 font-semibold text-primary">
-        {m.label || dash}
-        <span className="ml-1.5 font-mono text-[10px] font-normal text-tertiary">{m.id}</span>
-      </td>,
-      <td key="type" className="px-3 py-2 text-secondary">
-        {movementTypeLabel(t, m.type)}
-      </td>,
-    ];
-  };
-  const contextCells = (a: MovementAlert): ReactNode[] => {
-    const m = a.movement;
-    return [
-      <td key="pl" className="px-3 py-2 text-secondary">
-        <div>{programOf(m.programId)}</div>
-        <div className="text-[11px] text-tertiary">{leverOf(m.leverId)}</div>
-      </td>,
-      <td key="dept" className="px-3 py-2 text-secondary">
-        {m.department || dash}
-      </td>,
-      <td key="country" className="px-3 py-2 text-secondary">
-        {m.country || dash}
-      </td>,
-    ];
-  };
-  const numCell = (key: string, value: ReactNode, className = "text-secondary") => (
-    <td key={key} className={`whitespace-nowrap px-3 py-2 tabular-nums ${className}`}>
-      {value}
-    </td>
-  );
-
-  const rowCells = (a: MovementAlert): ReactNode[] => {
+  /** Pastille d'urgence (colonne de droite) + date contextuelle en petit dessous. */
+  const urgency = (a: MovementAlert): { pill: string; pillClass: string; sub: string } | null => {
     const m = a.movement;
     const d = a.detail;
-    switch (a.kind) {
-      case "overdue":
-        return [
-          ...whoCells(a),
-          ...contextCells(a),
-          numCell("planned", m.plannedDate || dash),
-          numCell(
-            "late",
-            d?.reason === "overdue"
-              ? t("hr.alertsModal.daysLate", "{n} j").replace("{n}", String(d.daysLate))
-              : dash,
-            "font-semibold text-rag-red"
-          ),
-        ];
-      case "due":
-        return [
-          ...whoCells(a),
-          ...contextCells(a),
-          numCell("planned", m.plannedDate || dash),
-          numCell(
-            "left",
-            d?.reason === "due"
-              ? d.daysLeft === 0
-                ? t("hr.alertsModal.today", "Aujourd'hui")
-                : t("hr.alertsModal.daysLeft", "{n} j").replace("{n}", String(d.daysLeft))
-              : dash,
-            "font-semibold text-primary"
-          ),
-        ];
-      case "toValidate":
-        return [...whoCells(a), ...contextCells(a), numCell("actual", m.actualDate || dash)];
-      case "leverMismatch": {
-        let issue: string = movementAlertMessage(t, a);
-        let movementValue: string = dash;
-        let leverValue: string = dash;
-        let leverLabel = leverOf(m.leverId);
-        if (d?.reason === "leverCancelled") {
-          leverLabel = `${d.leverCode} — ${d.leverName}`;
-          issue = t(
-            "hr.alertsModal.issue.leverCancelled",
-            "Levier annulé : mouvement encore actif, à requalifier"
-          );
-          movementValue = movementStatusLabel(t, m.status);
-          leverValue = t("hr.alertsModal.value.cancelled", "Annulé");
-        } else if (d?.reason === "afterLeverEnd") {
-          leverLabel = `${d.leverCode} — ${d.leverName}`;
-          issue = t(
-            "hr.alertsModal.issue.afterLeverEnd",
-            "Date prévue après la fin du levier (non livré)"
-          );
-          movementValue = t("hr.alertsModal.value.planned", "Prévu le {d}").replace(
-            "{d}",
-            d.plannedDate
-          );
-          leverValue = t("hr.alertsModal.value.leverEnd", "Fin le {d}").replace("{d}", d.leverEnd);
-        } else if (d?.reason === "signMismatch") {
-          leverLabel = `${d.leverCode} — ${d.leverName}`;
-          issue = t(
-            "hr.alertsModal.issue.signMismatch",
-            "Sens ETP contraire à l'impact visé du levier"
-          );
-          movementValue = fmtFte(d.movementFte, t("etp.column.fte", "ETP"));
-          leverValue = fmtFte(d.leverFte, t("etp.column.fte", "ETP"));
-        }
-        return [
-          ...whoCells(a),
-          <td key="lever" className="px-3 py-2 text-secondary">
-            {leverLabel}
-          </td>,
-          <td key="issue" className="px-3 py-2 text-primary">
-            {issue}
-          </td>,
-          numCell("mv", movementValue, "font-semibold text-rag-red"),
-          numCell("lv", leverValue, "font-semibold text-primary"),
-        ];
-      }
+    const planned = t("hr.alertsModal.date.planned", "prévu le {d}").replace(
+      "{d}",
+      fmtDate(m.plannedDate)
+    );
+    if (a.kind === "overdue") {
+      return {
+        pill:
+          d?.reason === "overdue"
+            ? t("hr.alertsModal.pill.late", "En retard de {n} j").replace("{n}", String(d.daysLate))
+            : sectionTitle(t, "overdue"),
+        pillClass: "border-bp-coral bg-bp-coral text-white",
+        sub: planned,
+      };
     }
+    if (a.kind === "due") {
+      const today = d?.reason === "due" && d.daysLeft === 0;
+      return {
+        pill: today
+          ? t("hr.alertsModal.today", "Aujourd'hui")
+          : d?.reason === "due"
+            ? t("hr.alertsModal.pill.in", "Dans {n} j").replace("{n}", String(d.daysLeft))
+            : sectionTitle(t, "due"),
+        pillClass: today
+          ? "border-bp-coral-pink bg-bp-coral-pink text-bp-deep-red"
+          : "border-bp-light-pink bg-bp-light-pink text-bp-red-brick",
+        sub: planned,
+      };
+    }
+    if (a.kind === "toValidate") {
+      return {
+        pill: sectionTitle(t, "toValidate"),
+        pillClass: "border-bp-purple bg-white text-bp-purple",
+        sub: t("hr.alertsModal.date.done", "réalisé le {d}").replace(
+          "{d}",
+          fmtDate(d?.reason === "toValidate" ? d.actualDate : (m.actualDate ?? m.plannedDate))
+        ),
+      };
+    }
+    return null;
+  };
+
+  /** Désynchronisés : motif court + valeurs comparées « Mouvement : X ↔ Levier : Y ». */
+  const mismatch = (a: MovementAlert): { reason: string; mv: string; lv: string } => {
+    const m = a.movement;
+    const d = a.detail;
+    const fte = t("etp.column.fte", "ETP");
+    switch (d?.reason) {
+      case "leverCancelled":
+        return {
+          reason: t("hr.alertsModal.reason.leverCancelled", "Levier annulé, mouvement actif"),
+          mv: movementStatusLabel(t, m.status),
+          lv: t("hr.alertsModal.value.cancelled", "Annulé"),
+        };
+      case "afterLeverEnd":
+        return {
+          reason: t("hr.alertsModal.reason.afterLeverEnd", "Prévu après la fin du levier"),
+          mv: fmtDate(d.plannedDate, "short"),
+          lv: fmtDate(d.leverEnd, "short"),
+        };
+      case "signMismatch":
+        return {
+          reason: t("hr.alertsModal.reason.signMismatch", "Sens ETP opposé au levier"),
+          mv: fmtFte(d.movementFte, fte),
+          lv: fmtFte(d.leverFte, fte),
+        };
+      default:
+        return { reason: movementAlertMessage(t, a), mv: dash, lv: dash };
+    }
+  };
+
+  const chip = (label: string, value: string) => (
+    <span className="inline-flex min-w-0 items-center gap-1 rounded border border-border bg-neutral-50 px-1.5 py-0.5 text-[11px]">
+      <span className="shrink-0 text-tertiary">{label} :</span>
+      <span className="truncate font-semibold tabular-nums text-primary">{value}</span>
+    </span>
+  );
+
+  const renderRow = (a: MovementAlert, key: string, isMismatch: boolean) => {
+    const m = a.movement;
+    const program = m.programId ? (programLabels[m.programId] ?? m.programId) : "";
+    const lever = leverLabelOf(a);
+    const context = [program, lever !== dash ? lever : ""].filter(Boolean).join(" · ");
+    const place = [m.department, m.country].filter(Boolean).join(" · ") || dash;
+    const u = urgency(a);
+    const mm = isMismatch ? mismatch(a) : null;
+    return (
+      <li key={key} className="border-t border-border first:border-t-0">
+        <button
+          type="button"
+          onClick={() => openMovement(m.id)}
+          title={`${t("hr.movementProgress.openInEtp", "Ouvrir dans la Base ETP")} (${m.id})`}
+          className={`group grid w-full grid-cols-1 items-center gap-x-4 gap-y-2 px-4 py-3 text-left transition hover:bg-neutral-50 focus-visible:bg-neutral-50 focus-visible:outline-none ${
+            isMismatch
+              ? "sm:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,1.5fr)_1rem]"
+              : "sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_11rem_1rem]"
+          }`}
+        >
+          {/* Qui : nom + type + programme/levier */}
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="truncate text-[13px] font-bold text-primary">{m.label || dash}</span>
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-white px-2 py-0.5 text-[10.5px] font-semibold text-secondary">
+                <span
+                  aria-hidden
+                  className={`h-2 w-2 rounded-full ${TYPE_DOT[m.type as MovementType] ?? "bg-bp-warm-gray"}`}
+                />
+                {movementTypeLabel(t, m.type)}
+              </span>
+            </span>
+            {context && <span className="truncate text-[11.5px] text-tertiary">{context}</span>}
+          </span>
+
+          {/* Où : département · pays */}
+          <span className="min-w-0 truncate text-[11.5px] text-tertiary">{place}</span>
+
+          {/* Urgence / écart */}
+          {mm ? (
+            <span className="flex min-w-0 flex-col gap-1 sm:items-end">
+              <span className="text-[11.5px] font-semibold text-bp-red-brick">{mm.reason}</span>
+              <span className="flex min-w-0 flex-wrap items-center gap-1 sm:justify-end">
+                {chip(t("hr.alertsModal.col.movementValue", "Mouvement"), mm.mv)}
+                <span aria-hidden className="text-[11px] text-tertiary">
+                  ↔
+                </span>
+                {chip(t("hr.alertsModal.col.leverValue", "Levier"), mm.lv)}
+              </span>
+            </span>
+          ) : u ? (
+            <span className="flex flex-col items-start gap-0.5 sm:items-end">
+              <span
+                className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold tabular-nums ${u.pillClass}`}
+              >
+                {u.pill}
+              </span>
+              <span className="text-[11px] text-tertiary">{u.sub}</span>
+            </span>
+          ) : (
+            <span />
+          )}
+
+          <ArrowUpRight
+            size={14}
+            aria-hidden
+            className="hidden text-tertiary transition group-hover:text-bp-coral sm:block"
+          />
+        </button>
+      </li>
+    );
   };
 
   const footer = (
@@ -400,7 +438,9 @@ export function MovementAlertsSummaryModal({
                   type="button"
                   onClick={() => toggleSection(g.kind)}
                   aria-expanded={!isCollapsed}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-neutral-50"
+                  className={`sticky top-0 z-10 flex w-full items-center gap-2 bg-white px-4 py-2.5 text-left transition hover:bg-neutral-50 ${
+                    isCollapsed ? "rounded-md" : "rounded-t-md border-b border-border"
+                  }`}
                 >
                   {isCollapsed ? (
                     <ChevronRight size={14} className="text-tertiary" />
@@ -411,37 +451,17 @@ export function MovementAlertsSummaryModal({
                     {sectionTitle(t, g.kind)}
                   </span>
                   <span
-                    className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${KIND_BADGE[g.kind]}`}
+                    className={`min-w-[1.5rem] rounded-full border px-2 py-0.5 text-center text-[11px] font-bold tabular-nums ${KIND_BADGE[g.kind]}`}
                   >
                     {g.items.length}
                   </span>
                 </button>
                 {!isCollapsed && (
-                  <div className="overflow-x-auto border-t border-border">
-                    <table className="w-full min-w-[760px] border-collapse text-left text-[12px]">
-                      <thead className="bg-neutral-50 text-[11px] uppercase tracking-wide text-tertiary">
-                        <tr>
-                          {headers[g.kind].map((h, i) => th(h, `${g.kind}-${i}`))}
-                          <th className="w-8 px-2 py-2" aria-hidden />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {g.items.map((a, i) => (
-                          <tr
-                            key={`${a.movement.id}-${i}`}
-                            onClick={() => openMovement(a.movement.id)}
-                            className="cursor-pointer border-t border-border transition hover:bg-neutral-50"
-                            title={t("hr.movementProgress.openInEtp", "Ouvrir dans la Base ETP")}
-                          >
-                            {rowCells(a)}
-                            <td className="px-2 py-2 text-tertiary">
-                              <ArrowUpRight size={14} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul>
+                    {g.items.map((a, i) =>
+                      renderRow(a, `${a.movement.id}-${i}`, g.kind === "leverMismatch")
+                    )}
+                  </ul>
                 )}
               </section>
             );

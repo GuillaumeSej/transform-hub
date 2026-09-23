@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Sector, Tooltip, type PieProps } from "recharts";
+import { useLatestCallback, useStableValue } from "@/lib/hooks/useStableChartData";
 
 /** Même palette que `GeoDonutChart` — catégorielle, tons de marque, déjà validée sur fond clair.
  *  Round 12 : pas de nouvelle couleur saturée introduite, réutilisation à l'identique. Round 13 :
@@ -52,9 +53,10 @@ function renderTooltip(
     total: number;
     formatValue: (value: number) => string;
     consumedLabel?: string;
+    clickHint?: string;
   }
 ): JSX.Element | null {
-  const { active, total, formatValue, consumedLabel } = props;
+  const { active, total, formatValue, consumedLabel, clickHint } = props;
   // Round 16 : le datum d'origine (dont `consumed`, éventuel) est nesté par recharts sous
   // `payload[0].payload` — vérifié via les typings recharts (`Payload<...>.payload?: any`), PAS à
   // plat sur `payload[0]` (qui ne porte que `name`/`value`, les clés du `Pie`).
@@ -79,9 +81,78 @@ function renderTooltip(
           {formatValue(consumed)} {consumedLabel ?? ""} <span>({consumedPct}%)</span>
         </p>
       )}
+      {clickHint && <p className="mt-1 text-[10.5px] italic text-tertiary">{clickHint}</p>}
     </div>
   );
 }
+
+/** Zone de dessin Recharts du donut, MÉMOÏSÉE : ne se re-rend que si ses entrées changent
+ *  réellement (jamais sur un simple survol — voir le commentaire au-dessus de `stableData` dans
+ *  `BudgetDonutChart`), pour ne pas interrompre l'animation d'entrée du `Pie`. */
+const DonutPlot = memo(function DonutPlot({
+  data,
+  innerRingData,
+  showConsumedRing,
+  clickable,
+  onSliceClick,
+  onActiveIndexChange,
+  tooltipContent,
+}: {
+  data: BudgetDonutSlice[];
+  innerRingData: { name: string; value: number; fill: string }[];
+  showConsumedRing: boolean;
+  clickable: boolean;
+  onSliceClick: (name: string) => void;
+  onActiveIndexChange: (index: number | undefined) => void;
+  tooltipContent: (props: { active?: boolean; payload?: unknown }) => JSX.Element | null;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <PieChart>
+        <Pie
+          data={data}
+          dataKey="value"
+          nameKey="name"
+          innerRadius={55}
+          outerRadius={90}
+          paddingAngle={1}
+          activeShape={renderActiveShape as PieProps["activeShape"]}
+          onMouseEnter={(_, index) => onActiveIndexChange(index)}
+          onMouseLeave={() => onActiveIndexChange(undefined)}
+          onClick={(d) => {
+            const name = (d as { name?: string })?.name;
+            if (name) onSliceClick(name);
+          }}
+          cursor={clickable ? "pointer" : undefined}
+        >
+          {data.map((entry, i) => (
+            <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
+          ))}
+        </Pie>
+        {/* Round 16 : second `Pie` NESTÉ dans le MÊME `PieChart`/`ResponsiveContainer` que
+            l'anneau existant, à un rayon plus petit qui tient DANS le trou de celui-ci
+            (`innerRadius=55` ci-dessus ⇒ un rayon extérieur de 46 laisse un espace visible
+            entre les deux anneaux). Pas d'animation (`isAnimationActive={false}`) pour éviter
+            une ré-animation disgracieuse à chaque re-render du parent. */}
+        {showConsumedRing && (
+          <Pie
+            data={innerRingData}
+            dataKey="value"
+            nameKey="name"
+            innerRadius={28}
+            outerRadius={46}
+            isAnimationActive={false}
+          >
+            {innerRingData.map((entry) => (
+              <Cell key={entry.name} fill={entry.fill} />
+            ))}
+          </Pie>
+        )}
+        <Tooltip content={tooltipContent} />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+});
 
 /**
  * Donut GÉNÉRIQUE de répartition budgétaire (round 12, redesign visuel round 13) — patron recharts
@@ -136,6 +207,7 @@ export function BudgetDonutChart({
   consumedLabel,
   total: totalOverride,
   consumedTotal: consumedTotalOverride,
+  clickHint,
 }: {
   data: BudgetDonutSlice[];
   formatValue: (value: number) => string;
@@ -161,6 +233,9 @@ export function BudgetDonutChart({
   /** Round 24 : pendant de `total` ci-dessus pour le total "consommé" (anneau intérieur +
    *  overlay), en override de `data.reduce((s, d) => s + (d.consumed ?? 0), 0)`. */
   consumedTotal?: number;
+  /** Consigne affichée en bas du tooltip quand une part est cliquable (ex. "Cliquez pour
+   *  détailler") — optionnelle, purement additive, omise par défaut. */
+  clickHint?: string;
 }): JSX.Element {
   const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   // Somme brute de `data` — dénominateur des % par part (tooltip + légende) et périmètre réel
@@ -189,59 +264,42 @@ export function BudgetDonutChart({
         { name: "remaining", value: remaining, fill: REMAINING_COLOR },
       ];
 
+  // Survol ≠ ré-animation : `activeIndex` (survol d'une part/ligne de légende) re-rend ce composant,
+  // or Recharts 3 relance l'animation d'un `Pie` dès que ses props changent de référence (voir
+  // lib/hooks/useStableChartData.ts). Le dessin est donc isolé dans `DonutPlot` (mémoïsé) avec des
+  // entrées stables — données stabilisées par contenu, handlers à identité fixe — pour qu'un survol
+  // pendant l'animation d'entrée ne l'interrompe plus.
+  const stableData = useStableValue(data);
+  const stableInnerRingData = useStableValue(innerRingData);
+  const clickable = !!onSliceClick;
+  const handleSliceClick = useLatestCallback(onSliceClick);
+  const latestFormatValue = useLatestCallback(formatValue);
+  const tooltipContent = useCallback(
+    (props: { active?: boolean; payload?: unknown }) =>
+      renderTooltip({
+        ...props,
+        total: sliceTotal,
+        formatValue: (v: number) => latestFormatValue(v) ?? "",
+        consumedLabel,
+        clickHint: clickable ? clickHint : undefined,
+      }),
+    [sliceTotal, latestFormatValue, consumedLabel, clickable, clickHint]
+  );
+
   return (
     <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-center">
       {/* Zone de dessin du donut — `relative` pour superposer le total en absolu par-dessus, sans
           jamais laisser un composant recharts (légende, notamment) modifier sa géométrie interne. */}
       <div className="relative w-full shrink-0 sm:w-[220px]">
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="value"
-              nameKey="name"
-              innerRadius={55}
-              outerRadius={90}
-              paddingAngle={1}
-              activeShape={renderActiveShape as PieProps["activeShape"]}
-              onMouseEnter={(_, index) => setActiveIndex(index)}
-              onMouseLeave={() => setActiveIndex(undefined)}
-              onClick={(d) => {
-                const name = (d as { name?: string })?.name;
-                if (name) onSliceClick?.(name);
-              }}
-              cursor={onSliceClick ? "pointer" : undefined}
-            >
-              {data.map((entry, i) => (
-                <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
-              ))}
-            </Pie>
-            {/* Round 16 : second `Pie` NESTÉ dans le MÊME `PieChart`/`ResponsiveContainer` que
-                l'anneau existant, à un rayon plus petit qui tient DANS le trou de celui-ci
-                (`innerRadius=55` ci-dessus ⇒ un rayon extérieur de 46 laisse un espace visible
-                entre les deux anneaux). Pas d'animation (`isAnimationActive={false}`) pour éviter
-                une ré-animation disgracieuse à chaque re-render du parent. */}
-            {showConsumedRing && (
-              <Pie
-                data={innerRingData}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={28}
-                outerRadius={46}
-                isAnimationActive={false}
-              >
-                {innerRingData.map((entry) => (
-                  <Cell key={entry.name} fill={entry.fill} />
-                ))}
-              </Pie>
-            )}
-            <Tooltip
-              content={(props) =>
-                renderTooltip({ ...props, total: sliceTotal, formatValue, consumedLabel })
-              }
-            />
-          </PieChart>
-        </ResponsiveContainer>
+        <DonutPlot
+          data={stableData}
+          innerRingData={stableInnerRingData}
+          showConsumedRing={!!showConsumedRing}
+          clickable={clickable}
+          onSliceClick={handleSliceClick}
+          onActiveIndexChange={setActiveIndex}
+          tooltipContent={tooltipContent}
+        />
         {/* Total au centre de l'anneau (round 13) — dans la zone vide laissée par `innerRadius`.
             `pointer-events-none` pour ne jamais intercepter les clics/hover destinés aux parts du
             donut en dessous.

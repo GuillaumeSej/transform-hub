@@ -466,6 +466,7 @@ export function ProgramRoadmap({
                               height={CHANTIER_BAR_HEIGHT}
                               color={chantierColor}
                               variant="bracket"
+                              progressPct={chantierProgressPct}
                               roundedClassName="rounded-sm"
                               onClick={
                                 onChantierClick
@@ -586,6 +587,7 @@ export function ProgramRoadmap({
                                   height={LEVIER_BAR_HEIGHT}
                                   color={chantierColor}
                                   variant="soft"
+                                  progressPct={row.progressPct}
                                   onClick={
                                     rowClickable
                                       ? () => onProjetClick!(row.chantier.id, row.action.id)

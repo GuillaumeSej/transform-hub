@@ -21,7 +21,11 @@ import type {
   MovementBreakdownSeries,
   MovementRealizationRow,
 } from "@/lib/hrEngine";
-import { formatSignedFr, movementNetBalance } from "@/lib/hrMovementBalance";
+import {
+  formatSignedFr,
+  movementNetBalance,
+  type MovementNetBalance,
+} from "@/lib/hrMovementBalance";
 import {
   MovementNetBalanceSummary,
   netBalanceColor,
@@ -43,9 +47,12 @@ type NetLabelProps = { x?: number | string; y?: number | string; index?: number 
  *
  * Lecture : au-dessus de 0 = entrées (recrutements, transferts entrants), en dessous = sorties
  * (attrition, départs forcés, transferts sortants). Le chiffre au-dessus de chaque groupe est le
- * bilan net ETP (`movementNetBalance`, lib/hrMovementBalance.ts — transferts neutres), coloré
+ * bilan net ETP (`movementNetBalance`, lib/hrMovementBalance.ts — hors transferts), coloré
  * violet si positif / rouge corail si négatif, identique à l'infobulle et à la modale de
- * drill-down (`MovementDrilldownModal`). L'ancien « rond blanc » (net non légendé) a été retiré.
+ * drill-down (`MovementDrilldownModal`). Juste en dessous, en taupe, le solde transferts du
+ * groupe (« transf. ±N ») quand le groupe a des transferts — sens lu RELATIVEMENT AU GROUPE
+ * (`MovementBreakdownRow.transferDirections`), comme les barres. L'ancien « rond blanc » (net
+ * non légendé) a été retiré.
  */
 export function DepartmentMovementsChart({
   data,
@@ -59,7 +66,12 @@ export function DepartmentMovementsChart({
   dimensionLabel?: string;
   /** Clic sur une barre (n'importe lequel des 5 types) — ouvre le détail des mouvements de cette
    *  ligne (voir `MovementDrilldownModal`, câblé dans `app/(app)/hr/page.tsx`). */
-  onBarClick?: (label: string, movements: WorkforceMovement[]) => void;
+  onBarClick?: (
+    label: string,
+    movements: WorkforceMovement[],
+    /** Bilan du groupe (transferts lus relativement au groupe) — à repasser à la modale. */
+    balance: MovementNetBalance
+  ) => void;
 }) {
   const { t } = useTranslation();
   const etp = t("etp.column.fte", "ETP");
@@ -114,17 +126,24 @@ export function DepartmentMovementsChart({
     /** Sommet de la pile positive — ancre (invisible) de l'étiquette de bilan net. */
     positiveTop: d.recrutements + d.transfertEntrants,
     counts: d.counts,
-    balance: movementNetBalance(d.movements),
+    balance: movementNetBalance(d.movements, {
+      transferDirection: (m) => d.transferDirections[m.id],
+    }),
     movements: d.movements,
   }));
   type Row = (typeof chartData)[number];
 
   const handleBarClick = (payload: unknown) => {
-    const row = payload as { dimension?: string; movements?: WorkforceMovement[] } | undefined;
-    if (row?.dimension && onBarClick) onBarClick(row.dimension, row.movements ?? []);
+    const row = payload as Partial<Row> | undefined;
+    if (row?.dimension && row.balance && onBarClick)
+      onBarClick(row.dimension, row.movements ?? [], row.balance);
   };
 
   const rotateTicks = data.length > 4;
+  // Deux lignes d'étiquette (net + transferts) au-dessus des piles dès qu'un groupe a des transferts.
+  const hasTransferLabels = chartData.some(
+    (r) => r.balance.transfersIn.count + r.balance.transfersOut.count > 0
+  );
 
   return (
     <div>
@@ -136,7 +155,7 @@ export function DepartmentMovementsChart({
         <ComposedChart
           data={chartData}
           stackOffset="sign"
-          margin={{ top: 18, right: 8, left: -8, bottom: 0 }}
+          margin={{ top: hasTransferLabels ? 30 : 18, right: 8, left: -8, bottom: 0 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
           <XAxis
@@ -212,7 +231,6 @@ export function DepartmentMovementsChart({
               );
             }}
           />
-          <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
           <ReferenceLine y={0} stroke="rgba(0,0,0,0.35)" />
           {series.map((s) => (
             <Bar
@@ -238,29 +256,65 @@ export function DepartmentMovementsChart({
               const row = chartData[props.index ?? -1];
               if (!row || row.movements.length === 0) return <g />;
               const net = row.balance.netFte;
+              const x = Number(props.x);
+              const y = Number(props.y);
+              const hasTransfers =
+                row.balance.transfersIn.count + row.balance.transfersOut.count > 0;
               return (
-                <text
-                  x={Number(props.x)}
-                  y={Number(props.y) - 6}
-                  textAnchor="middle"
-                  fontSize={10.5}
-                  fontWeight={700}
-                  fill={netBalanceColor(net) ?? "#806659"}
-                >
-                  {t("shared.hrBreakdownCharts.netLabel", "net {v}").replace(
-                    "{v}",
-                    formatSignedFr(net)
+                <g>
+                  <text
+                    x={x}
+                    y={hasTransfers ? y - 17 : y - 6}
+                    textAnchor="middle"
+                    fontSize={10.5}
+                    fontWeight={700}
+                    fill={netBalanceColor(net) ?? "#806659"}
+                  >
+                    {t("shared.hrBreakdownCharts.netLabel", "net {v}").replace(
+                      "{v}",
+                      formatSignedFr(net)
+                    )}
+                  </text>
+                  {hasTransfers && (
+                    <text
+                      x={x}
+                      y={y - 6}
+                      textAnchor="middle"
+                      fontSize={9.5}
+                      fontWeight={600}
+                      fill={COLOR_NEUTRAL}
+                    >
+                      {t("shared.hrBreakdownCharts.transferLabel", "transf. {v}").replace(
+                        "{v}",
+                        formatSignedFr(row.balance.transferNetFte)
+                      )}
+                    </text>
                   )}
-                </text>
+                </g>
               );
             }}
           />
         </ComposedChart>
       </ResponsiveContainer>
+      {/* Légende HTML en bas, centrée, carrés uniformes — même style que
+          `MovementProgressByDimensionChart` ; hors du SVG, elle ne chevauche ni les barres ni les
+          libellés d'axe inclinés et se replie proprement en lignes centrées. */}
+      <ul className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-secondary">
+        {series.map((s) => (
+          <li key={s.key} className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="inline-block h-2.5 w-2.5"
+              style={{ backgroundColor: s.color }}
+            />
+            {s.label}
+          </li>
+        ))}
+      </ul>
       <p className="mt-1 text-[11px] text-tertiary">
         {t(
           "shared.hrBreakdownCharts.caption",
-          "Barres : ETP par type de mouvement (au-dessus de 0 = entrées, en dessous = sorties). « net ±N » : bilan net ETP du groupe (recrutements − attrition − départs forcés, transferts neutres). Survolez une barre pour le détail, cliquez pour la liste des mouvements."
+          "Barres : ETP par type de mouvement (au-dessus de 0 = entrées, en dessous = sorties). « net ±N » : bilan net ETP du groupe (recrutements − attrition − départs forcés, hors transferts). « transf. ±N » : bilan transferts du groupe (entrants − sortants), suivi à part. Survolez une barre pour le détail, cliquez pour la liste des mouvements."
         )}
       </p>
     </div>

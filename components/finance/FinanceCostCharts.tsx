@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Bar,
   CartesianGrid,
@@ -15,26 +14,21 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
-import { BudgetDonutChart } from "@/components/shared/charts/BudgetDonutChart";
 import { GranularityToggle } from "@/components/shared/GranularityToggle";
-import { InvestVsSavingsModal } from "@/components/finance/InvestVsSavingsModal";
+import { InvestVsSavingsCalcModal } from "@/components/finance/InvestVsSavingsCalcModal";
 import { CostDrilldownModal } from "@/components/finance/CostDrilldownModal";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { useStableValue } from "@/lib/hooks/useStableChartData";
 import * as engine from "@/lib/engine";
 import {
   bucketCostsByPeriod,
   bucketInvestVsSavingsByPeriod,
   costRowsForPeriod,
-  costsByHierarchyNode,
-  investVsSavingsRowsForPeriod,
-  flattenCostImpacts,
   groupCostsByWorkstream,
   isInvestNature,
-  sortedHierarchyLevels,
   type FinanceGranularity,
-  type HierarchyCostSlice,
 } from "@/lib/financeCosts";
-import type { BeTrackData, HierarchyLevelDef, HierarchyNode, Lever } from "@/types";
+import type { BeTrackData } from "@/types";
 
 /** 4 graphiques de suivi des coûts du module Finance — TOUTES les données proviennent de
  *  `data.levers[].actions[].impacts[]` via `lib/financeCosts.ts` (aucune donnée en dur). CAPEX +
@@ -43,144 +37,23 @@ import type { BeTrackData, HierarchyLevelDef, HierarchyNode, Lever } from "@/typ
  *  Inspirés des patterns déjà en place côté RH (`HrBreakdownCharts.tsx`, sélecteur
  *  mois/trimestre/année) et dashboard exécutif (`QuarterlyBridgeChart`, `BudgetDonutChart`). */
 
-/** #1 — Coûts Invest (CAPEX + OPEX one-off) déjà engagés vs à venir. Même logique de drill-down
- *  en place que `CostByHierarchyChart` ci-dessous : un premier clic (engagé/à venir) redessine LE
- *  MÊME donut en répartition par chantier (workstream), avec un bouton retour ; un second clic sur
- *  un chantier ouvre `CostDrilldownModal` directement sur SES leviers/actions (`initialWsId`), sans
- *  repasser par la liste des chantiers que le donut vient déjà de montrer. */
-export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
-  const { t } = useTranslation();
-  const [segment, setSegment] = useState<"engaged" | "upcoming" | null>(null);
-  const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
-
-  // "Engagé" doit refléter la MÊME notion que le KPI héros "CAPEX & coûts one-off" du dashboard
-  // exécutif (`engine.programSummary(data).engagedCosts`, lib/engine.ts ~ligne 277 :
-  // `implementationCosts(l) * (l.status === "delivered" ? 1 : l.progress / 100)`) — sinon les deux
-  // vues affichent un même total (même périmètre de leviers "Invest") mais des montants "engagés"
-  // différents, ce qui a été relevé comme incohérent en test métier. Avant ce fix, ce donut classait
-  // chaque ligne de coût en tout-ou-rien via des DATES (`isCostEngaged` : date de déploiement CAPEX
-  // dépassée, ou levier en cours/livré) — une notion de décaissement, différente de la notion
-  // "avancement du levier" utilisée par le KPI. On applique donc ici le même facteur d'avancement
-  // par levier (100% si livré, sinon `progress`%) à chaque ligne de coût "Invest"
-  // (`flattenCostImpacts` + `isInvestNature`, réutilisés depuis lib/financeCosts.ts), ce qui répartit
-  // CHAQUE ligne entre "engagé" et "à venir" au prorata de l'avancement plutôt qu'en bloc — le total
-  // (engagé + à venir) reste inchangé, seule la répartition change.
-  const split = useMemo(() => {
-    const investRows = flattenCostImpacts(data).filter(({ impact }) =>
-      isInvestNature(impact.nature)
-    );
-    const engagedRows: { lever: Lever; amount: number }[] = [];
-    const upcomingRows: { lever: Lever; amount: number }[] = [];
-    let engaged = 0;
-    let upcoming = 0;
-    for (const { impact, lever } of investRows) {
-      const engagedFactor = lever.status === "delivered" ? 1 : lever.progress / 100;
-      const engagedAmount = impact.amount * engagedFactor;
-      const upcomingAmount = impact.amount - engagedAmount;
-      if (engagedAmount !== 0) engagedRows.push({ lever, amount: engagedAmount });
-      if (upcomingAmount !== 0) upcomingRows.push({ lever, amount: upcomingAmount });
-      engaged += engagedAmount;
-      upcoming += upcomingAmount;
-    }
-    return {
-      engagedRows,
-      upcomingRows,
-      engaged: round2(engaged),
-      upcoming: round2(upcoming),
-      total: round2(engaged + upcoming),
-    };
-  }, [data]);
-
-  const groups = useMemo(() => {
-    if (!segment) return [];
-    const rows = segment === "engaged" ? split.engagedRows : split.upcomingRows;
-    return groupCostsByWorkstream(rows, data.workstreams);
-  }, [segment, split, data.workstreams]);
-
-  const engagedLabel = t("finance.chart.engaged", "Déjà engagé");
-  const upcomingLabel = t("finance.chart.upcoming", "À venir");
-  const segmentLabel = segment === "engaged" ? engagedLabel : upcomingLabel;
-  const segmentAmount = segment === "engaged" ? split.engaged : split.upcoming;
-
-  return (
-    <Card>
-      <CardHeader
-        title={t("finance.chart.engagedTitle", "Coûts engagés vs à venir")}
-        actions={
-          segment ? (
-            <button
-              type="button"
-              onClick={() => setSegment(null)}
-              className="flex items-center gap-1 text-[11px] font-semibold text-secondary hover:text-primary"
-            >
-              <ChevronLeft size={14} />
-              {engagedLabel} / {upcomingLabel}
-            </button>
-          ) : undefined
-        }
-      />
-      <CardBody>
-        {split.total === 0 ? (
-          <EmptyState />
-        ) : (
-          <>
-            {segment && (
-              <p className="mb-2 text-[12px] font-semibold text-primary">
-                {segmentLabel} · {engine.fmtCurr(segmentAmount)}
-              </p>
-            )}
-            {!segment ? (
-              <BudgetDonutChart
-                data={[
-                  { name: engagedLabel, value: split.engaged },
-                  { name: upcomingLabel, value: split.upcoming },
-                ]}
-                formatValue={(v) => engine.fmtCurr(v)}
-                centerLabel={t("finance.chart.totalCost", "Coût total")}
-                onSliceClick={(name) => setSegment(name === engagedLabel ? "engaged" : "upcoming")}
-              />
-            ) : groups.length === 0 ? (
-              <EmptyState />
-            ) : (
-              <BudgetDonutChart
-                data={groups.map((g) => ({ name: g.wsName, value: g.amount }))}
-                formatValue={(v) => engine.fmtCurr(v)}
-                centerLabel={t("finance.chart.byWorkstream", "Par chantier")}
-                onSliceClick={(name) => {
-                  const group = groups.find((g) => g.wsName === name);
-                  if (group) setSelectedWsId(group.wsId);
-                }}
-              />
-            )}
-          </>
-        )}
-      </CardBody>
-      <CostDrilldownModal
-        open={selectedWsId !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedWsId(null);
-        }}
-        title={segmentLabel}
-        groups={groups}
-        initialWsId={selectedWsId}
-        formatValue={(v) => engine.fmtCurr(v)}
-      />
-    </Card>
-  );
-}
-
-function round2(v: number): number {
-  return Math.round(v * 100) / 100;
-}
+/** #1 (engagé vs à venir) et #3 (répartition par centre de coût / P&L) : donuts à drill-down en
+ *  place + fil d'Ariane, déplacés dans CostDrillDonuts.tsx — ré-exportés ici pour que la page
+ *  continue d'importer depuis ce fichier. */
+export {
+  CostByHierarchyChart,
+  CostEngagedVsUpcomingChart,
+} from "@/components/finance/CostDrillDonuts";
 
 /** #2 — Engagement des coûts Invest (CAPEX + OPEX one-off) dans le temps, toggle
  *  mensuel/trimestriel/annuel, barre cliquable (drill-down par workstream/levier). */
 export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
   const { t } = useTranslation();
   const [granularity, setGranularity] = useState<FinanceGranularity>("quarter");
-  const points = useMemo(
-    () => bucketCostsByPeriod(data, granularity, isInvestNature),
-    [data, granularity]
+  // Référence stable tant que le contenu ne change pas (voir lib/hooks/useStableChartData.ts) : un
+  // re-rendu de la page avec des données identiques ne relance plus l'animation d'entrée.
+  const points = useStableValue(
+    useMemo(() => bucketCostsByPeriod(data, granularity, isInvestNature), [data, granularity])
   );
   const [selectedPeriod, setSelectedPeriod] = useState<{ key: string; label: string } | null>(null);
 
@@ -249,149 +122,6 @@ export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
   );
 }
 
-/** #3 — Répartition des coûts par centre de coût / P&L, branchée sur l'arborescence financière de
- *  l'entreprise (`Company.hierarchyLevels` + `HierarchyNode`, voir lib/financeCosts.ts). Un seul
- *  donut : il affiche d'abord la maille la plus macro (`order` le plus petit), un clic sur une
- *  part descend d'un niveau ; à la maille la plus fine, un clic supplémentaire ouvre la
- *  décomposition par workstream → levier (même `CostDrilldownModal` que les autres graphiques). */
-export function CostByHierarchyChart({
-  data,
-  hierarchyLevels,
-  hierarchyNodes,
-}: {
-  data: BeTrackData;
-  hierarchyLevels: HierarchyLevelDef[];
-  hierarchyNodes: HierarchyNode[];
-}) {
-  const { t } = useTranslation();
-  const levels = useMemo(() => sortedHierarchyLevels(hierarchyLevels), [hierarchyLevels]);
-  const [drillPath, setDrillPath] = useState<
-    { levelKey: string; parentId: string | null; label: string }[]
-  >([]);
-  const [leafSlice, setLeafSlice] = useState<HierarchyCostSlice | null>(null);
-
-  // Réinitialise le drill-down si la config d'arborescence change (ex. changement d'entreprise).
-  const currentLevelKey = levels[drillPath.length]?.key ?? levels[0]?.key;
-  const currentParentId = drillPath.length > 0 ? drillPath[drillPath.length - 1].parentId : null;
-
-  const slices = useMemo(() => {
-    if (!currentLevelKey) return [];
-    return costsByHierarchyNode(data, hierarchyNodes, currentLevelKey, currentParentId);
-  }, [data, hierarchyNodes, currentLevelKey, currentParentId]);
-
-  const groups = useMemo(() => {
-    if (!leafSlice) return [];
-    return groupCostsByWorkstream(leafSlice.rows, data.workstreams);
-  }, [leafSlice, data.workstreams]);
-
-  if (levels.length === 0) {
-    return (
-      <Card>
-        <CardHeader
-          title={t(
-            "finance.chart.hierarchyTitle",
-            "Répartition des coûts par centre de coût / P&L"
-          )}
-        />
-        <CardBody>
-          <p className="py-10 text-center text-sm text-tertiary">
-            {t(
-              "finance.chart.hierarchyNoConfig",
-              "Aucune arborescence financière n'est configurée pour cette entreprise."
-            )}
-          </p>
-        </CardBody>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader
-        title={t("finance.chart.hierarchyTitle", "Répartition des coûts par centre de coût / P&L")}
-        actions={
-          drillPath.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setDrillPath((p) => p.slice(0, -1))}
-              className="flex items-center gap-1 text-[11px] font-semibold text-secondary hover:text-primary"
-            >
-              <ChevronLeft size={14} />
-              {drillPath[drillPath.length - 1]?.label}
-            </button>
-          ) : undefined
-        }
-      />
-      <CardBody>
-        <HierarchyLevelBreadcrumb levels={levels} currentIndex={drillPath.length} />
-        {slices.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <BudgetDonutChart
-            data={slices.map((s) => ({ name: s.node.label, value: s.amount }))}
-            formatValue={(v) => engine.fmtCurr(v)}
-            centerLabel={levels[drillPath.length]?.label ?? levels[0]?.label}
-            onSliceClick={(name) => {
-              const slice = slices.find((s) => s.node.label === name);
-              if (!slice) return;
-              if (slice.hasChildren && drillPath.length < levels.length - 1) {
-                setDrillPath((p) => [
-                  ...p,
-                  { levelKey: currentLevelKey!, parentId: slice.node.id, label: slice.node.label },
-                ]);
-              } else {
-                setLeafSlice(slice);
-              }
-            }}
-          />
-        )}
-      </CardBody>
-      <CostDrilldownModal
-        open={leafSlice !== null}
-        onOpenChange={(open) => {
-          if (!open) setLeafSlice(null);
-        }}
-        title={leafSlice?.node.label ?? ""}
-        groups={groups}
-        formatValue={(v) => engine.fmtCurr(v)}
-      />
-    </Card>
-  );
-}
-
-/** Repère "à quel niveau de l'arborescence financière suis-je ?" pour le donut de répartition des
- *  coûts ci-dessus : liste tous les niveaux configurés (`HierarchyLevelDef[]`, dans l'ordre),
- *  reliés par des chevrons, avec le niveau courant mis en évidence (pastille sombre) — le reste en
- *  gris neutre. Purement informatif (le drill-down se fait toujours en cliquant une part du donut
- *  ou via le bouton retour du CardHeader) : évite de dupliquer un sélecteur existant. */
-function HierarchyLevelBreadcrumb({
-  levels,
-  currentIndex,
-}: {
-  levels: HierarchyLevelDef[];
-  currentIndex: number;
-}) {
-  if (levels.length === 0) return null;
-  return (
-    <div className="mb-3 flex flex-wrap items-center gap-1">
-      {levels.map((level, index) => (
-        <span key={level.key} className="flex items-center gap-1">
-          {index > 0 && <ChevronRight size={12} className="text-tertiary" />}
-          <span
-            className={
-              index === currentIndex
-                ? "rounded-full bg-black px-2 py-0.5 text-[10.5px] font-semibold text-white"
-                : "rounded-full px-2 py-0.5 text-[10.5px] font-medium text-tertiary"
-            }
-          >
-            {level.label}
-          </span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
 // Palette de marque (voir app/globals.css — "la marque interdit vert/orange/bleu") : le résultat
 // net d'une période négative (investissement pas encore compensé) est en rouge BearingPoint,
 // positif (gains nets > investissement de la période) en taupe foncé — jamais en vert littéral,
@@ -407,22 +137,23 @@ const COLOR_CUMULATIVE = "#0a0a0a";
 export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
   const { t } = useTranslation();
   const [granularity, setGranularity] = useState<FinanceGranularity>("quarter");
-  const [selected, setSelected] = useState<{ key: string; label: string } | null>(null);
-  const points = useMemo(
-    () =>
-      bucketInvestVsSavingsByPeriod(data, granularity).map((p) => ({
-        ...p,
-        negOpex: -p.opexRecStarted,
-        negInvest: -p.investCost,
-      })),
-    [data, granularity]
+  // Pop-up "détail du calcul" : undefined = fermée, null = vue Total, sinon clé de la période.
+  const [calcKey, setCalcKey] = useState<string | null | undefined>(undefined);
+  // Référence stable tant que le contenu ne change pas (voir lib/hooks/useStableChartData.ts) : un
+  // re-rendu de la page avec des données identiques ne relance plus l'animation d'entrée.
+  const points = useStableValue(
+    useMemo(
+      () =>
+        bucketInvestVsSavingsByPeriod(data, granularity).map((p) => ({
+          ...p,
+          negOpex: -p.opexRecStarted,
+          negInvest: -p.investCost,
+        })),
+      [data, granularity]
+    )
   );
-  const rows = useMemo(
-    () => (selected ? investVsSavingsRowsForPeriod(data, granularity, selected.key) : []),
-    [selected, data, granularity]
-  );
-  const open = (p: { sortKey?: string; period?: string } | undefined) => {
-    if (p?.sortKey) setSelected({ key: p.sortKey, label: p.period ?? p.sortKey });
+  const open = (p: { sortKey?: string } | undefined) => {
+    if (p?.sortKey) setCalcKey(p.sortKey);
   };
   const gainsLabel = t("finance.chart.grossSavings", "Gains bruts");
   const opexLabel = t("finance.chart.opexRecShort", "OPEX récurrent");
@@ -455,7 +186,16 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
               }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-              <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+              <XAxis
+                dataKey="period"
+                tick={{ fontSize: 11, cursor: "pointer" }}
+                axisLine={false}
+                tickLine={false}
+                onClick={(tick: unknown) => {
+                  const label = (tick as { value?: string } | undefined)?.value;
+                  open(points.find((p) => p.period === label));
+                }}
+              />
               <YAxis
                 tick={{ fontSize: 12 }}
                 axisLine={false}
@@ -523,18 +263,23 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
               />
               {netNegLabel}
             </span>
+            <button
+              type="button"
+              className="text-[11px] font-medium text-primary underline underline-offset-2 hover:text-bp-coral"
+              onClick={() => setCalcKey(null)}
+            >
+              {t("finance.calc.seeDetail", "Voir le détail du calcul")}
+            </button>
           </div>
         )}
       </CardBody>
-      <InvestVsSavingsModal
-        open={selected !== null}
-        onOpenChange={(o) => {
-          if (!o) setSelected(null);
-        }}
-        title={`${t("finance.chart.investVsSavingsTitle", "Coût d'investissement vs Économies")} — ${selected?.label ?? ""}`}
-        rows={rows}
-        workstreams={data.workstreams}
-        formatValue={(v) => engine.fmtCurr(v)}
+      <InvestVsSavingsCalcModal
+        data={data}
+        granularity={granularity}
+        points={points}
+        periodKey={calcKey}
+        onPeriodChange={setCalcKey}
+        onClose={() => setCalcKey(undefined)}
       />
     </Card>
   );
@@ -584,6 +329,9 @@ function InvestVsSavingsTooltip({
       </p>
       <p className="mt-0.5 text-[12px] text-tertiary">
         {t("finance.chart.netCumulative", "Cumul net")} : {engine.fmtCurr(d.netCumulative)}
+      </p>
+      <p className="mt-1 text-[10.5px] italic text-tertiary">
+        {t("finance.calc.clickHint", "Cliquer pour le détail du calcul")}
       </p>
     </div>
   );

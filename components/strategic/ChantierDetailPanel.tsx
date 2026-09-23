@@ -1786,7 +1786,7 @@ export function ChantierDetailPanel({
       chantierActions.length === 0
         ? []
         : timelineColumns(progressionMinTime, progressionMaxTime, progressionScale, locale),
-    [progressionMinTime, progressionMaxTime, progressionScale, chantierActions.length]
+    [progressionMinTime, progressionMaxTime, progressionScale, chantierActions.length, locale]
   );
   const progressionYearBands = useMemo(
     () => timelineYearBands(progressionColumns),
@@ -2576,6 +2576,7 @@ export function ChantierDetailPanel({
                             height={DELIVERABLE_BAR_HEIGHT}
                             color={progressionBarColor}
                             variant="soft"
+                            progressPct={pct}
                             onClick={() => focusLevierFromProgression(action.id)}
                             ariaLabel={action.name}
                             tooltipText={`${action.name} · ${formatTimelineDay(action.start, locale)} → ${formatTimelineDay(

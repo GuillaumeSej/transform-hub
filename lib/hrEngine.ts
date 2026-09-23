@@ -570,7 +570,14 @@ export type MovementBreakdownRow = Omit<DepartmentMovements, "department"> & {
    *  y compris le double comptage source/cible des transferts en dimension département) —
    *  alimente l'infobulle "N pers. · ±X ETP" de `DepartmentMovementsChart`. */
   counts: MovementBreakdownCounts;
+  /** Sens de chaque transfert (par id de mouvement) RELATIVEMENT À CETTE LIGNE — même classement
+   *  que les barres "Transferts entrants/sortants" : en dimension département, un transfert est
+   *  sortant pour `department` et entrant pour `toDepartment`, quel que soit son type enregistré.
+   *  Alimente le « Bilan transferts » du groupe (`movementNetBalance(..., { transferDirection })`). */
+  transferDirections: Record<string, TransferDirection>;
 };
+
+export type TransferDirection = "in" | "out";
 
 export type MovementBreakdownSeries =
   "recrutements" | "attritions" | "forcedDepartures" | "transfertEntrants" | "transfertSortants";
@@ -604,13 +611,21 @@ export function movementBreakdownByDimension(
           transfertEntrants: 0,
           transfertSortants: 0,
         },
+        transferDirections: {},
       });
     }
     return rows.get(key)!;
   };
-  const add = (row: MovementBreakdownRow, series: MovementBreakdownSeries, fte: number) => {
+  const add = (
+    row: MovementBreakdownRow,
+    series: MovementBreakdownSeries,
+    fte: number,
+    movementId?: string
+  ) => {
     row[series] += fte;
     row.counts[series] += 1;
+    if (movementId && series === "transfertEntrants") row.transferDirections[movementId] = "in";
+    if (movementId && series === "transfertSortants") row.transferDirections[movementId] = "out";
   };
   for (const movement of movements) {
     if (!isActiveMovement(movement)) continue;
@@ -625,8 +640,10 @@ export function movementBreakdownByDimension(
       if (movement.type === "Recrutement") add(row, "recrutements", movement.fte);
       if (movement.type === "Attrition") add(row, "attritions", movement.fte);
       if (movement.type === "Départ forcé") add(row, "forcedDepartures", movement.fte);
-      if (movement.type === "Transfert entrant") add(row, "transfertEntrants", movement.fte);
-      if (movement.type === "Transfert sortant") add(row, "transfertSortants", movement.fte);
+      if (movement.type === "Transfert entrant")
+        add(row, "transfertEntrants", movement.fte, movement.id);
+      if (movement.type === "Transfert sortant")
+        add(row, "transfertSortants", movement.fte, movement.id);
       row.movements.push(movement);
     } else {
       const source = ensure(movement.department);
@@ -634,10 +651,10 @@ export function movementBreakdownByDimension(
       if (movement.type === "Attrition") add(source, "attritions", movement.fte);
       if (movement.type === "Départ forcé") add(source, "forcedDepartures", movement.fte);
       if (movement.type === "Transfert entrant" || movement.type === "Transfert sortant") {
-        add(source, "transfertSortants", movement.fte);
+        add(source, "transfertSortants", movement.fte, movement.id);
         if (movement.toDepartment && movement.toDepartment !== movement.department) {
           const target = ensure(movement.toDepartment);
-          add(target, "transfertEntrants", movement.fte);
+          add(target, "transfertEntrants", movement.fte, movement.id);
           target.movements.push(movement);
         }
       }

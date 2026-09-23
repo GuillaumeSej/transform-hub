@@ -7,6 +7,7 @@ import { movementRhythmSeries } from "@/lib/hrTimeSeries";
 import { GranularityToggle } from "@/components/shared/GranularityToggle";
 import { DepartmentMovementsChart } from "@/components/shared/charts/HrBreakdownCharts";
 import { MovementRhythmChart } from "@/components/shared/charts/HrGooduelleCharts";
+import type { MovementNetBalance } from "@/lib/hrMovementBalance";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { WorkforceMovement } from "@/types";
 
@@ -47,7 +48,12 @@ export function MovementBreakdownMergedChart({
   /** Callback drill-down commun aux deux modes — même signature que `onBarClick` des deux
    *  graphiques source, déjà câblée par l'appelant vers `setDrilldownModal` (voir
    *  `MovementDrilldownModal`, app/(app)/hr/page.tsx). */
-  onDrilldown?: (title: string, movements: WorkforceMovement[]) => void;
+  onDrilldown?: (
+    title: string,
+    movements: WorkforceMovement[],
+    /** Mode dimension : bilan du groupe (transferts lus relativement au groupe). */
+    balance?: MovementNetBalance
+  ) => void;
 }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<"dimension" | "period">("dimension");
@@ -61,10 +67,15 @@ export function MovementBreakdownMergedChart({
   ];
   const dimensionLabel = dimensionOptions.find((o) => o.value === dimension)?.label;
 
-  const handleDimensionClick = (label: string, movs: WorkforceMovement[]) => {
+  const handleDimensionClick = (
+    label: string,
+    movs: WorkforceMovement[],
+    balance: MovementNetBalance
+  ) => {
     onDrilldown?.(
       t("hr.drilldown.dimensionTitle", "Mouvements — {label}").replace("{label}", label),
-      movs
+      movs,
+      balance
     );
   };
 

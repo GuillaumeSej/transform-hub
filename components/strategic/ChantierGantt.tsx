@@ -24,6 +24,7 @@ import {
   chantierBounds,
   chantierDeclaredProgress,
   chantierShadesForAxis,
+  milestoneProgressPct,
   type ChantierDependencyAlert,
 } from "@/lib/axisLogic";
 import type { Chantier, ChantierAction, MaturityStageConfig } from "@/types";
@@ -326,6 +327,7 @@ export function ChantierGantt({
                           height={CHANTIER_BAR_HEIGHT}
                           color={blockColor}
                           variant="bracket"
+                          progressPct={progressPct}
                           roundedClassName="rounded-sm"
                           ringed={isAlerted}
                           onClick={() => openChantier(chantier)}
@@ -366,6 +368,9 @@ export function ChantierGantt({
                                 height={ACTION_BAR_HEIGHT}
                                 color={blockColor}
                                 variant="soft"
+                                // Jauge "chargement" : même avancement jalons E0→E4 que celui
+                                // agrégé (pondéré) dans l'en-tête du chantier.
+                                progressPct={milestoneProgressPct(action)}
                                 roundedClassName="rounded-sm"
                                 // Sous ~14 % de la piste, un nom écrit dans la barre serait réduit
                                 // à « D… » : on le rabat alors juste à droite de la barre.

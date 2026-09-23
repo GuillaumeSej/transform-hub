@@ -93,6 +93,23 @@ export function withAlpha(color: string, alpha: number): string {
   return rgb ? `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})` : color;
 }
 
+/** Variante ASSOMBRIE d'une couleur hex (mélange vers le noir, `amount` ∈ [0, 1]) — sert au filet
+ *  des barres `"soft"`/`"bracket"` à jauge d'avancement : un contour légèrement plus foncé que la
+ *  nuance du chantier pour voir nettement où la barre (la durée, 100 %) se termine. Couleur non hex :
+ *  renvoyée telle quelle. */
+export function darkenColor(color: string, amount: number): string {
+  const rgb = hexToRgb(color);
+  if (!rgb) return color;
+  const k = 1 - Math.min(1, Math.max(0, amount));
+  return `#${rgb
+    .map((c) =>
+      Math.round(c * k)
+        .toString(16)
+        .padStart(2, "0")
+    )
+    .join("")}`;
+}
+
 /** Noir ou blanc selon la luminance du fond — les couleurs d'axe vont du bordeaux très sombre
  *  (#320300) au taupe clair (#B8A99A) : un texte blanc câblé en dur serait illisible sur la
  *  moitié de la palette. */
@@ -375,13 +392,15 @@ export function TimelineBar({
    *  fourni — requis par le type mais alors utilisé uniquement pour `aria-label`/l'infobulle).
    *  Refonte visuelle Gantt (retour PO — distinguer chantier/projet) : `"soft"` — barre de PROJET
    *  sous une ligne d'en-tête de chantier : teinte claire unique de la couleur d'axe + filet fin de
-   *  la même teinte, texte sombre (`text-primary`). Pas de surcouche d'avancement (une seule
-   *  couleur, jamais d'effet "double barre") — l'avancement vit dans l'infobulle/le badge jalon. */
+   *  la même teinte, texte sombre (`text-primary`). Jauge d'avancement (retour PO) : avec
+   *  `progressPct`, `"soft"` ET `"bracket"` deviennent une jauge "chargement" — barre entière en
+   *  teinte claire, remplissage de la nuance pleine sur `progressPct`% à gauche, filet plus foncé
+   *  (`darkenColor`) autour de toute la barre. */
   variant?: "outline" | "solid" | "bracket" | "soft";
   /** 0-100 — surcouche d'avancement à gauche. Pertinent pour `variant="outline"` (surcouche sur fond
    *  translucide) ET, round 19, pour `variant="solid"` (remplissage à deux tons — voir le
    *  doc-comment de `TimelineBar` ci-dessus). Omis pour un `"solid"` : remplissage plat inchangé.
-   *  Sans effet sur `variant="bracket"` (pas de surcouche d'avancement sur un simple repère). */
+   *  Pour `"soft"`/`"bracket"` : jauge "chargement" (voir `variant`) ; omis = rendu historique. */
   progressPct?: number;
   /** Anneau ambre (cascade de dépendance en alerte, etc.). */
   ringed?: boolean;
@@ -406,6 +425,48 @@ export function TimelineBar({
   // sur les DEUX conditions : un `variant="solid"` sans `progressPct` (actions de
   // `ChantierGantt.tsx`) doit rester inchangé.
   const solidWithTrack = variant === "solid" && progressPct !== undefined;
+  // Jauge "chargement" (retour PO) : pour `"soft"` (barres de projet) et `"bracket"` (barre d'en-tête
+  // de chantier), `progressPct` fourni ⇒ la barre entière = 100 % (teinte claire), les `progressPct`
+  // premiers % de son intérieur sont remplis de la nuance PLEINE, et un filet plus foncé
+  // (`darkenColor`) délimite la fin de la barre. Sans `progressPct` : rendu historique inchangé.
+  const gauge = (isSoft || isBracket) && progressPct !== undefined;
+  const gaugePct = gauge ? Math.min(100, Math.max(0, progressPct ?? 0)) : 0;
+  const gaugeBorder = darkenColor(color, 0.3);
+  // Libellé à cheval sur le remplissage : texte sombre sur la teinte claire, et — si la nuance
+  // pleine est trop foncée pour un texte sombre — une COPIE du contenu en texte clair, découpée
+  // (`clip-path`) exactement sur la zone remplie. Aucun halo/ombre, la bascule suit le bord du
+  // remplissage au pixel près.
+  const gaugeFillText = readableTextColor(color);
+  const gaugeOverlayText = gauge && gaugePct > 0 && gaugeFillText === "#ffffff";
+  const inlineContent = (overlay: boolean) => (
+    <div
+      aria-hidden={overlay || undefined}
+      className={`${overlay ? "pointer-events-none absolute inset-0" : "relative"} flex h-full items-center gap-1 px-1.5`}
+      style={
+        overlay ? { clipPath: `inset(0 ${100 - gaugePct}% 0 0)`, color: gaugeFillText } : undefined
+      }
+    >
+      {icon}
+      <span
+        className={`${labelClassName ?? "min-w-0 flex-1 truncate text-[10px] font-semibold"} ${
+          // Round 26 (retour PO — halo texte "pas propre") : le libellé (nom du projet) peut
+          // chevaucher la piste neutre ET le remplissage coloré selon `progressPct`. round 25
+          // réglait ça avec un halo `text-shadow` 4 directions, jugé sale par le PO. Remplacé
+          // par une "puce" de fond semi-opaque juste derrière le texte (même patron que la
+          // pastille "aujourd'hui" plus haut dans ce fichier, `bg-neutral-700`/`rounded-sm`) :
+          // le texte blanc reste lisible sur les DEUX fonds sans aucun effet ombre/glow. Gated
+          // au seul cas concerné (piste+remplissage ET texte blanc), sans effet sur les
+          // couleurs d'axe claires (texte déjà sombre) ni sur le remplissage plat historique.
+          solidWithTrack && readableTextColor(color) === "#ffffff"
+            ? "rounded-sm bg-black/35 px-1"
+            : ""
+        }`}
+      >
+        {label}
+      </span>
+      {trailing}
+    </div>
+  );
   return (
     <Tooltip
       text={tooltipText}
@@ -427,7 +488,7 @@ export function TimelineBar({
               }
             : undefined
         }
-        className={`relative w-full overflow-hidden ${roundedClassName} ${variant === "outline" || isSoft ? "border" : ""} ${
+        className={`relative w-full overflow-hidden ${roundedClassName} ${variant === "outline" || isSoft || gauge ? "border" : ""} ${
           solidWithTrack ? "bg-neutral-100" : ""
         } ${
           onClick
@@ -440,17 +501,21 @@ export function TimelineBar({
             ? undefined
             : variant === "solid"
               ? withAlpha(color, 0.9)
-              : isBracket
-                ? color
-                : isSoft
-                  ? withAlpha(color, 0.2)
-                  : withAlpha(color, 0.16),
+              : gauge
+                ? withAlpha(color, 0.2)
+                : isBracket
+                  ? color
+                  : isSoft
+                    ? withAlpha(color, 0.2)
+                    : withAlpha(color, 0.16),
           borderColor:
             variant === "outline"
               ? withAlpha(color, 0.65)
-              : isSoft
-                ? withAlpha(color, 0.45)
-                : undefined,
+              : gauge
+                ? gaugeBorder
+                : isSoft
+                  ? withAlpha(color, 0.45)
+                  : undefined,
           color:
             variant === "solid"
               ? readableTextColor(color)
@@ -473,29 +538,16 @@ export function TimelineBar({
             style={{ width: `${progressPct}%`, backgroundColor: withAlpha(color, 0.9) }}
           />
         )}
-        {inline && (
-          <div className="relative flex h-full items-center gap-1 px-1.5">
-            {icon}
-            <span
-              className={`${labelClassName ?? "min-w-0 flex-1 truncate text-[10px] font-semibold"} ${
-                // Round 26 (retour PO — halo texte "pas propre") : le libellé (nom du projet) peut
-                // chevaucher la piste neutre ET le remplissage coloré selon `progressPct`. round 25
-                // réglait ça avec un halo `text-shadow` 4 directions, jugé sale par le PO. Remplacé
-                // par une "puce" de fond semi-opaque juste derrière le texte (même patron que la
-                // pastille "aujourd'hui" plus haut dans ce fichier, `bg-neutral-700`/`rounded-sm`) :
-                // le texte blanc reste lisible sur les DEUX fonds sans aucun effet ombre/glow. Gated
-                // au seul cas concerné (piste+remplissage ET texte blanc), sans effet sur les
-                // couleurs d'axe claires (texte déjà sombre) ni sur le remplissage plat historique.
-                solidWithTrack && readableTextColor(color) === "#ffffff"
-                  ? "rounded-sm bg-black/35 px-1"
-                  : ""
-              }`}
-            >
-              {label}
-            </span>
-            {trailing}
-          </div>
+        {gauge && gaugePct > 0 && (
+          <div
+            aria-hidden
+            data-testid="timeline-bar-gauge"
+            className="absolute inset-y-0 left-0"
+            style={{ width: `${gaugePct}%`, backgroundColor: color }}
+          />
         )}
+        {inline && inlineContent(false)}
+        {inline && gaugeOverlayText && inlineContent(true)}
       </div>
       {!inline && !isBracket && (
         <span

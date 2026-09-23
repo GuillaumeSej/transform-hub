@@ -36,6 +36,7 @@ import { HrKPICard } from "@/components/shared/HrKPICard";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { Modal } from "@/components/shared/Modal";
 import { MovementDrilldownModal } from "@/components/shared/MovementDrilldownModal";
+import type { MovementNetBalance } from "@/lib/hrMovementBalance";
 import { Button } from "@/components/shared/Button";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
 import { DashboardExportButton } from "@/components/shared/DashboardExportButton";
@@ -68,7 +69,7 @@ import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter, parseFilterValues, serializeFilterValues } from "@/lib/filterUtils";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
-import { DateRangePicker } from "@/components/shared/DateRangePicker";
+import { PeriodToolbar, type PeriodPreset } from "@/components/shared/PeriodToolbar";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { generateFiscalYears } from "@/lib/fiscalYear";
 import type { MovementAlertKind } from "@/lib/hrEngine";
@@ -191,6 +192,8 @@ export default function HrDashboardPage() {
   const [drilldownModal, setDrilldownModal] = useState<{
     title: string;
     movements: WorkforceMovement[];
+    /** Bilan précalculé (vues par dimension : sens des transferts relatif au groupe cliqué). */
+    balance?: MovementNetBalance;
   } | null>(null);
   // Drill-down détaillé ("qui a fait quoi") du widget "Avancement des mouvements par {dimension}"
   // — voir `components/shared/MovementDetailDrilldownModal.tsx`. État séparé de `drilldownModal`
@@ -265,6 +268,27 @@ export default function HrDashboardPage() {
     setDateFromISO(movementDateRange.from);
     setDateToISO(movementDateRange.to);
   }, [movementDateRange.from, movementDateRange.to]);
+  // Préréglages de la barre transverse (PeriodToolbar) — uniquement quand un programme est résolu.
+  const hrPeriodPresets = useMemo<PeriodPreset[]>(() => {
+    if (!activeProgram) return [];
+    return [
+      {
+        key: "full",
+        label: t("hr.presetFullProgram", "Programme complet"),
+        fromISO: movementDateRange.from,
+        toISO: movementDateRange.to,
+      },
+      {
+        key: "toDate",
+        label: t("leverDetail.realizedToDate", "Réalisé à date"),
+        fromISO: activeProgram.fyStart,
+        toISO: hr.HR_TODAY,
+      },
+      ...generateFiscalYears(activeProgram, movementDateRange.from, movementDateRange.to).map(
+        (fy) => ({ key: `fy-${fy.label}`, label: fy.label, fromISO: fy.startISO, toISO: fy.endISO })
+      ),
+    ];
+  }, [activeProgram, movementDateRange.from, movementDateRange.to, t]);
 
   // ─── Arborescences optionnelles (géographie prioritaire, finance en bonus) ─────────────────────
   // Même pattern défensif que `DashboardPagePerformance.tsx`/`app/(app)/levers/page.tsx` : ces
@@ -1265,13 +1289,14 @@ export default function HrDashboardPage() {
                       ? t("dashboard.program", "Programme")
                       : t("hr.department", "Département")
                 }
-                onBarClick={(label, movements) =>
+                onBarClick={(label, movements, balance) =>
                   setDrilldownModal({
                     title: t("hr.drilldown.dimensionTitle", "Mouvements — {label}").replace(
                       "{label}",
                       label
                     ),
                     movements,
+                    balance,
                   })
                 }
               />
@@ -1475,7 +1500,9 @@ export default function HrDashboardPage() {
                 movements={filteredMovements}
                 programLabels={programLabels}
                 dateRange={dateRange}
-                onDrilldown={(title, movements) => setDrilldownModal({ title, movements })}
+                onDrilldown={(title, movements, balance) =>
+                  setDrilldownModal({ title, movements, balance })
+                }
               />
               <p className="mt-2 text-[11px] text-tertiary">
                 {t(
@@ -2059,106 +2086,38 @@ export default function HrDashboardPage() {
         </div>
       )}
 
-      <div className="mb-4 rounded-lg border border-border bg-white p-3">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          {isConsolidatedView ? (
-            // Vue consolidée active (Topbar) : `activeProgram` global est null (voir
-            // lib/hooks/useActiveProgram.tsx) — pas de sélecteur mono-programme pertinent ici, le
-            // scope des mouvements couvre déjà tous les programmes (voir filteredMovements).
-            <div className="inline-flex items-center gap-1">
-              <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                {t("dashboard.program", "Programme")}
-              </span>
-              <span className="rounded-sm border border-border bg-neutral-50 px-1.5 py-0.5 text-[11px] font-semibold text-secondary">
-                {t("topbar.consolidatedViewShort", "Vue consolidée")}
-              </span>
-            </div>
-          ) : (
-            programs.length > 1 && (
-              <div className="inline-flex items-center gap-1">
-                <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                  {t("dashboard.program", "Programme")}
-                </span>
-                <select
-                  value={selectedProgramId}
-                  onChange={(e) => setSelectedProgramId(e.target.value)}
-                  className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[11px] font-semibold text-secondary focus:border-black focus:outline-none"
-                >
-                  {programs.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )
-          )}
-          <div className="inline-flex items-center gap-1">
-            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-              {t("hr.period", "Période")}
-            </span>
-            <DateRangePicker
-              fromISO={dateFromISO}
-              toISO={dateToISO}
-              minISO={movementDateRange.from}
-              maxISO={movementDateRange.to}
-              onChange={({ fromISO, toISO }) => {
-                setDateFromISO(fromISO);
-                setDateToISO(toISO);
-              }}
-              showSummary
-            />
-          </div>
-          {activeProgram && (
-            <div className="inline-flex flex-wrap items-center gap-1">
-              <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                {t("hr.presets", "Préréglages")}
-              </span>
-              {/* Preset "Programme complet" = plage RÉELLE des mouvements (pas activeProgram
-               *  .fyStart/fyEnd qui pouvait exclure les exercices ultérieurs). Le libellé
-               *  reflète le vrai périmètre visible. */}
-              <button
-                type="button"
-                onClick={() => {
-                  setDateFromISO(movementDateRange.from);
-                  setDateToISO(movementDateRange.to);
-                }}
-                className="rounded-sm border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-secondary hover:border-black hover:text-primary"
-              >
-                {t("hr.presetFullProgram", "Programme complet")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDateFromISO(activeProgram.fyStart);
-                  setDateToISO(hr.HR_TODAY);
-                }}
-                className="rounded-sm border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-secondary hover:border-black hover:text-primary"
-              >
-                {t("leverDetail.realizedToDate", "Réalisé à date")}
-              </button>
-              {/* Presets FY générés sur la plage RÉELLE des mouvements. FY2026 / FY2027 /
-               *  FY2028 apparaîtront dès qu'un mouvement les couvre, indépendamment de
-               *  Program.fyStart/fyEnd (qui reste sur FY2026 dans le mock actuel). */}
-              {generateFiscalYears(activeProgram, movementDateRange.from, movementDateRange.to).map(
-                (fy) => (
-                  <button
-                    key={fy.label}
-                    type="button"
-                    onClick={() => {
-                      setDateFromISO(fy.startISO);
-                      setDateToISO(fy.endISO);
-                    }}
-                    className="rounded-sm border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-secondary hover:border-black hover:text-primary"
-                  >
-                    {fy.label}
-                  </button>
-                )
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Barre transverse modernisée (voir components/shared/PeriodToolbar.tsx) — mêmes états
+       *  (selectedProgramId, dateFromISO/dateToISO) et mêmes préréglages qu'avant : "Programme
+       *  complet" = plage RÉELLE des mouvements (pas activeProgram.fyStart/fyEnd qui pouvait exclure
+       *  les exercices ultérieurs), "Réalisé à date", puis un préréglage par FY couvert par les
+       *  mouvements. En vue consolidée (Topbar), `activeProgram` global est null : pas de sélecteur
+       *  mono-programme, le scope couvre déjà tous les programmes (voir filteredMovements). */}
+      <PeriodToolbar
+        program={
+          isConsolidatedView
+            ? { kind: "consolidated", label: t("topbar.consolidatedViewShort", "Vue consolidée") }
+            : {
+                kind: "select",
+                value: selectedProgramId,
+                options: programs.map((p) => ({ value: p.id, label: p.name })),
+                onChange: setSelectedProgramId,
+              }
+        }
+        fromISO={dateFromISO}
+        toISO={dateToISO}
+        minISO={movementDateRange.from}
+        maxISO={movementDateRange.to}
+        onRangeChange={({ fromISO, toISO }) => {
+          setDateFromISO(fromISO);
+          setDateToISO(toISO);
+        }}
+        presets={hrPeriodPresets}
+        onReset={() => {
+          setDateFromISO(movementDateRange.from);
+          setDateToISO(movementDateRange.to);
+        }}
+        isDefault={dateFromISO === movementDateRange.from && dateToISO === movementDateRange.to}
+      />
 
       <div
         data-hr-dashboard-widget-grid
@@ -2261,6 +2220,7 @@ export default function HrDashboardPage() {
         onOpenChange={(open) => !open && setDrilldownModal(null)}
         title={drilldownModal?.title ?? ""}
         movements={drilldownModal?.movements ?? []}
+        balance={drilldownModal?.balance}
       />
 
       {/* Drill-down détaillé ("qui a fait quoi") — widget "Avancement des mouvements par

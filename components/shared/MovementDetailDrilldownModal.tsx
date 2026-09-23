@@ -4,7 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/shared/Modal";
 import { MovementNetBalanceSummary } from "@/components/shared/MovementNetBalanceSummary";
-import { movementNetBalance } from "@/lib/hrMovementBalance";
+import { movementNetBalance, type MovementNetBalance } from "@/lib/hrMovementBalance";
 import {
   MOVEMENT_PROGRESS_COLORS,
   movementProgressStatusLabel,
@@ -28,12 +28,17 @@ export function MovementDetailDrilldownModal({
   onOpenChange,
   title,
   movements,
+  balance,
   programLabels = {},
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   movements: WorkforceMovement[];
+  /** Bilan déjà calculé par l'appelant quand le sens des transferts dépend du groupe cliqué
+   *  (vue par département : un transfert est sortant pour la source, entrant pour la cible — voir
+   *  `DepartmentMovementsChart`). Absent = `movementNetBalance(movements)` (type enregistré). */
+  balance?: MovementNetBalance;
   programLabels?: Record<string, string>;
 }) {
   const { t } = useTranslation();
@@ -57,7 +62,7 @@ export function MovementDetailDrilldownModal({
         </p>
       ) : (
         <div className="flex flex-col gap-3">
-          <MovementNetBalanceSummary balance={movementNetBalance(sorted)} />
+          <MovementNetBalanceSummary balance={balance ?? movementNetBalance(sorted)} />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[12px] text-secondary">
               {t("hr.movementProgress.count", "{n} mouvement(s)").replace(

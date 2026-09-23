@@ -672,13 +672,15 @@ export function MovementRhythmChart({
                     <MovementNetBalanceSummary
                       balance={movementNetBalance(row.movements)}
                       compact
+                      netFooter={
+                        <div className="mt-0.5 text-tertiary">
+                          {t(
+                            "shared.hrGooduelleCharts.cumulNetSinceStart",
+                            "Cumul net depuis le début de la plage : {v} ETP"
+                          ).replace("{v}", formatSignedFr(row.cumulNet, locale))}
+                        </div>
+                      }
                     />
-                    <div className="mt-0.5 text-tertiary">
-                      {t(
-                        "shared.hrGooduelleCharts.cumulNetSinceStart",
-                        "Cumul net depuis le début de la plage : {v} ETP"
-                      ).replace("{v}", formatSignedFr(row.cumulNet, locale))}
-                    </div>
                   </div>
                   {onBarClick && row.movements.length > 0 && (
                     <div className="mt-1 text-[10.5px] italic text-tertiary">

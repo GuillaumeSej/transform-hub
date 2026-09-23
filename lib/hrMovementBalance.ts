@@ -1,6 +1,7 @@
 import type { WorkforceMovement } from "@/types";
 import { isActiveMovement } from "@/lib/workforceLogic";
 import { targetMovementFteImpact } from "@/lib/hrProgramSummary";
+import type { TransferDirection } from "@/lib/hrEngine";
 
 /**
  * Bilan net d'une liste de mouvements — alimente la ligne "Bilan net : ±N ETP" des infobulles
@@ -12,7 +13,13 @@ import { targetMovementFteImpact } from "@/lib/hrProgramSummary";
  *   - ETP cible = `lockedPlan.fte` si présent, sinon `fte` ;
  *   - mouvements "Abandonné" exclus ;
  *   - entrées = Recrutements, sorties = Attrition + Départs forcés ;
- *   - transferts entrants/sortants comptés à part : neutres sur l'effectif total, donc exclus du net.
+ *   - transferts entrants/sortants comptés à part : neutres sur l'effectif total, donc exclus du
+ *     net ETP et restitués dans un « Bilan transferts » distinct (entrants, sortants, solde).
+ *
+ * Sens d'un transfert : par défaut le type enregistré ("Transfert entrant"/"Transfert sortant").
+ * Dans une vue par groupe (département, pays, programme), passer `transferDirection` pour lire le
+ * sens RELATIVEMENT AU GROUPE — un même transfert est sortant pour le département source et entrant
+ * pour le département cible (voir `MovementBreakdownRow.transferDirections`, lib/hrEngine.ts).
  */
 export type MovementFlow = { count: number; fte: number };
 
@@ -23,6 +30,8 @@ export type MovementNetBalance = {
   exits: MovementFlow;
   transfersIn: MovementFlow;
   transfersOut: MovementFlow;
+  /** Solde transferts ETP (entrants − sortants) — suivi à part, NON inclus dans `netFte`. */
+  transferNetFte: number;
   /** Net ETP cible (entrées − sorties), transferts neutralisés — arrondi à 0,1. */
   netFte: number;
   /** Net en nombre de personnes (entrées − sorties), distinct du net ETP en cas de temps partiel. */
@@ -33,7 +42,15 @@ export type MovementNetBalance = {
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
 
-export function movementNetBalance(movements: WorkforceMovement[]): MovementNetBalance {
+export type MovementNetBalanceOptions = {
+  /** Sens d'un transfert relativement au groupe affiché ; `undefined` = type enregistré. */
+  transferDirection?: (movement: WorkforceMovement) => TransferDirection | undefined;
+};
+
+export function movementNetBalance(
+  movements: WorkforceMovement[],
+  options: MovementNetBalanceOptions = {}
+): MovementNetBalance {
   const flow = (): MovementFlow => ({ count: 0, fte: 0 });
   const entries = flow();
   const exits = flow();
@@ -48,12 +65,14 @@ export function movementNetBalance(movements: WorkforceMovement[]): MovementNetB
       continue;
     }
     const fte = m.lockedPlan?.fte ?? m.fte;
+    const transferIn = () =>
+      (options.transferDirection?.(m) ?? (m.type === "Transfert entrant" ? "in" : "out")) === "in";
     const target =
       m.type === "Recrutement"
         ? entries
         : m.type === "Attrition" || m.type === "Départ forcé"
           ? exits
-          : m.type === "Transfert entrant"
+          : transferIn()
             ? transfersIn
             : transfersOut;
     target.count += 1;
@@ -68,6 +87,7 @@ export function movementNetBalance(movements: WorkforceMovement[]): MovementNetB
     exits,
     transfersIn,
     transfersOut,
+    transferNetFte: round1(transfersIn.fte - transfersOut.fte) || 0,
     netFte: round1(netFte) || 0,
     netHeadcount: entries.count - exits.count,
     abandonedCount,

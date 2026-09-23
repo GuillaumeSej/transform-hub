@@ -24,6 +24,24 @@ export function InvestVsSavingsModal({
   workstreams: Workstream[];
   formatValue: (v: number) => string;
 }) {
+  return (
+    <Modal open={open} onOpenChange={onOpenChange} title={title} maxWidth="760px">
+      <InvestVsSavingsLeverTable rows={rows} workstreams={workstreams} formatValue={formatValue} />
+    </Modal>
+  );
+}
+
+/** Tableau chantier → levier (gains bruts, OPEX récurrent/ponctuel, CAPEX, économie nette) —
+ *  réutilisé par `InvestVsSavingsModal` et `InvestVsSavingsCalcModal`. */
+export function InvestVsSavingsLeverTable({
+  rows,
+  workstreams,
+  formatValue,
+}: {
+  rows: InvestVsSavingsLeverRow[];
+  workstreams: Workstream[];
+  formatValue: (v: number) => string;
+}) {
   const { t } = useTranslation();
   const router = useRouter();
   const wsName = (id: string) => workstreams.find((w) => w.id === id)?.name ?? id;
@@ -47,7 +65,7 @@ export function InvestVsSavingsModal({
     </td>
   );
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={title} maxWidth="760px">
+    <>
       {rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-tertiary">
           {t("finance.drilldown.empty", "Aucun levier ne contribue à ce montant.")}
@@ -105,6 +123,6 @@ export function InvestVsSavingsModal({
           </table>
         </div>
       )}
-    </Modal>
+    </>
   );
 }

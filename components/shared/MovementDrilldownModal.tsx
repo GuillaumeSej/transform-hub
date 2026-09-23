@@ -4,7 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/shared/Modal";
 import { MovementNetBalanceSummary } from "@/components/shared/MovementNetBalanceSummary";
-import { movementNetBalance } from "@/lib/hrMovementBalance";
+import { movementNetBalance, type MovementNetBalance } from "@/lib/hrMovementBalance";
 import { etpMovementDeepLink } from "@/lib/hrMovementLink";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { movementStatusLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
@@ -30,11 +30,16 @@ export function MovementDrilldownModal({
   onOpenChange,
   title,
   movements,
+  balance,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   movements: WorkforceMovement[];
+  /** Bilan déjà calculé par l'appelant quand le sens des transferts dépend du groupe cliqué
+   *  (vue par département : un transfert est sortant pour la source, entrant pour la cible — voir
+   *  `DepartmentMovementsChart`). Absent = `movementNetBalance(movements)` (type enregistré). */
+  balance?: MovementNetBalance;
 }) {
   const { t } = useTranslation();
   const router = useRouter();
@@ -52,7 +57,7 @@ export function MovementDrilldownModal({
         </p>
       ) : (
         <div className="flex flex-col gap-3">
-          <MovementNetBalanceSummary balance={movementNetBalance(movements)} />
+          <MovementNetBalanceSummary balance={balance ?? movementNetBalance(movements)} />
           {movements.length >= 2 && (
             <button
               type="button"

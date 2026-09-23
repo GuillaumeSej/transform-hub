@@ -242,6 +242,20 @@ export function EffectifsPageClient() {
     () => needSeries(staffing, totalAvailableFte, needPeriodGranularity, today),
     [staffing, totalAvailableFte, needPeriodGranularity, today]
   );
+  /** Données du graphique besoin/disponible/mobilisé — mémoïsées (auparavant un `.map` inline
+   *  dans le JSX) : un tableau recréé à chaque rendu relançait l'animation d'entrée Recharts
+   *  (barres + points de la courbe) dès que la page se re-rendait, ex. pendant un survol. */
+  const needSeriesChartData = useMemo(
+    () =>
+      needSeriesData.map((m) => ({
+        period: m.label,
+        needed: Number(m.needed.toFixed(2)),
+        available: Number(m.available.toFixed(2)),
+        mobilised: Number(m.mobilised.toFixed(2)),
+        staffingPct: m.staffingPct,
+      })),
+    [needSeriesData]
+  );
   const needTotalMetrics = useMemo(
     () => needMetrics(staffingInNeedPeriod, totalAvailableFte, needPeriod, today),
     [staffingInNeedPeriod, totalAvailableFte, needPeriod, today]
@@ -750,13 +764,7 @@ export function EffectifsPageClient() {
               </div>
               <ResponsiveContainer width="100%" height={280}>
                 <ComposedChart
-                  data={needSeriesData.map((m) => ({
-                    period: m.label,
-                    needed: Number(m.needed.toFixed(2)),
-                    available: Number(m.available.toFixed(2)),
-                    mobilised: Number(m.mobilised.toFixed(2)),
-                    staffingPct: m.staffingPct,
-                  }))}
+                  data={needSeriesChartData}
                   margin={{ top: 8, right: 12, left: 4, bottom: 8 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />

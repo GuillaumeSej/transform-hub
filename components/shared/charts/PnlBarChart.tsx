@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { useStableValue } from "@/lib/hooks/useStableChartData";
 
 export type PnlBarPoint = { account: string; plan: number; realized: number };
 
@@ -45,6 +46,14 @@ export function PnlBarChart({
   const { t } = useTranslation();
   const resolvedLabelPlan = labelPlan ?? t("chart.pnl.plan", "Plan");
   const resolvedLabelRealized = labelRealized ?? t("chart.pnl.realized", "Réalisé");
+  // Référence stable tant que le contenu ne change pas : un tableau recréé à chaque rendu relançait
+  // l'animation d'entrée des barres (Recharts 3 anime sur changement de référence de `data`).
+  const chartData = useStableValue(
+    data.map((d) => ({
+      ...d,
+      remaining: Math.max(0, Math.round((d.plan - d.realized) * 10) / 10),
+    }))
+  );
 
   if (data.length === 0) {
     return (
@@ -54,10 +63,6 @@ export function PnlBarChart({
     );
   }
 
-  const chartData = data.map((d) => ({
-    ...d,
-    remaining: Math.max(0, Math.round((d.plan - d.realized) * 10) / 10),
-  }));
   const hasNegativeValues = chartData.some((d) => d.plan < 0 || d.realized < 0);
   // Largeur de l'axe Y adaptée aux libellés RÉELS (au lieu d'une largeur fixe de 140px pensée pour
   // le pire cas à 18 caractères) : la plupart des comptes P&L sont bien plus courts, ce qui

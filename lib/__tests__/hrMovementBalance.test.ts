@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatSignedFr, movementNetBalance } from "@/lib/hrMovementBalance";
+import { movementBreakdownByDimension } from "@/lib/hrEngine";
 import { movementRhythmSeries } from "@/lib/hrTimeSeries";
 import type { WorkforceMovement } from "@/types";
 
@@ -40,9 +41,52 @@ describe("hrMovementBalance — movementNetBalance", () => {
     expect(balance.exits).toEqual({ count: 2, fte: 2 });
     expect(balance.transfersIn).toEqual({ count: 1, fte: 2 });
     expect(balance.transfersOut).toEqual({ count: 1, fte: 1 });
+    expect(balance.transferNetFte).toBe(1);
     expect(balance.netFte).toBe(-0.5);
     expect(balance.netHeadcount).toBe(0);
     expect(balance.abandonedCount).toBe(1);
+  });
+
+  it("keeps transfers out of the net FTE and reports them in a separate transfer balance", () => {
+    const balance = movementNetBalance([
+      makeMovement({ id: "R1", type: "Recrutement", fte: 1 }),
+      makeMovement({ id: "TO1", type: "Transfert sortant", fte: 2 }),
+      makeMovement({ id: "TO2", type: "Transfert sortant", fte: 0.5 }),
+      makeMovement({ id: "TI", type: "Transfert entrant", fte: 1 }),
+    ]);
+    expect(balance.netFte).toBe(1);
+    expect(balance.transfersIn).toEqual({ count: 1, fte: 1 });
+    expect(balance.transfersOut).toEqual({ count: 2, fte: 2.5 });
+    expect(balance.transferNetFte).toBe(-1.5);
+  });
+
+  it("reads transfer direction relative to the group when a resolver is given", () => {
+    // Un transfert IT → HR : sortant pour IT, entrant pour HR, quel que soit son type enregistré.
+    const transfer = makeMovement({
+      id: "T1",
+      type: "Transfert entrant",
+      department: "IT",
+      toDepartment: "HR",
+      fte: 2,
+    });
+    const rows = movementBreakdownByDimension([transfer], "department");
+    const balanceFor = (label: string) => {
+      const row = rows.find((r) => r.label === label)!;
+      return movementNetBalance(row.movements, {
+        transferDirection: (m) => row.transferDirections[m.id],
+      });
+    };
+    const itBalance = balanceFor("IT");
+    expect(itBalance.transfersOut).toEqual({ count: 1, fte: 2 });
+    expect(itBalance.transfersIn.count).toBe(0);
+    expect(itBalance.transferNetFte).toBe(-2);
+    expect(itBalance.netFte).toBe(0);
+    const hrBalance = balanceFor("HR");
+    expect(hrBalance.transfersIn).toEqual({ count: 1, fte: 2 });
+    expect(hrBalance.transfersOut.count).toBe(0);
+    expect(hrBalance.transferNetFte).toBe(2);
+    // Sans résolveur : type enregistré (« Transfert entrant »).
+    expect(movementNetBalance([transfer]).transferNetFte).toBe(2);
   });
 
   it("uses the locked plan FTE when present (same target as the KPI and the chart)", () => {
@@ -62,6 +106,7 @@ describe("hrMovementBalance — movementNetBalance", () => {
     expect(balance.netFte).toBe(0);
     expect(Object.is(balance.netFte, -0)).toBe(false);
     expect(balance.netHeadcount).toBe(0);
+    expect(Object.is(balance.transferNetFte, -0)).toBe(false);
   });
 
   it("matches the per-period net of movementRhythmSeries", () => {
