@@ -1480,7 +1480,7 @@ const de: Record<string, string> = {
   "strategicChantierDetail.actionForm.missingHint": "Name und Daten ausfüllen, um zu speichern.",
   "strategicChantierDetail.actionForm.budgetLabel": "Budget des Projekts",
   "strategicChantierDetail.actionForm.budgetExceedsChantier":
-    "Die Summe der Budgets der Projekte würde das zugewiesene Budget des Arbeitspakets überschreiten.",
+    "Dieses Projekt lässt die Gesamtsumme der Projektbudgets des Arbeitspakets über das zugewiesene Budget hinausgehen — die Verantwortlichen des Arbeitspakets und der Achse sehen dies bei der Validierung.",
   "strategicChantierDetail.actionForm.consumedBudgetLabel": "Verbrauchtes Budget des Projekts",
   "strategicChantierDetail.actionForm.consumedFteLabel": "Verbrauchte VZÄ des Projekts",
   "strategicChantierDetail.successCriteria.placeholder": "Wir sind im [Jahr] zufrieden, wenn...",

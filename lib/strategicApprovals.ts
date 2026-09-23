@@ -28,12 +28,36 @@ import type {
  * Qui valide quoi :
  *  - "milestone"       passage de jalon d'un projet      → responsable (pilote) du CHANTIER
  *  - "kpi_value"       valeur KPI renseignée             → responsable du plan (strategic_lead)
- *  - "projet_create"   projet ajouté à un chantier       → responsable de l'AXE
+ *  - "projet_create"   projet ajouté à un chantier       → DOUBLE validation séquentielle : pilote
+ *                                                          du CHANTIER PUIS responsable de l'AXE
+ *                                                          (voir "Double validation" ci-dessous)
  *  - "projet_delete"   suppression d'un projet           → responsable du CHANTIER
  *  - "chantier_delete" suppression d'un chantier         → responsable de l'AXE
  * Repli en cascade quand le responsable nominal n'est pas renseigné : pilote de chantier → owner
  * d'axe → strategic_lead. Un admin peut toujours décider ; le strategic_lead du programme aussi
  * (escalade). Personne (hors admin) ne décide sa propre demande.
+ *
+ * Double validation de "projet_create" (round <n>, retour PO : « il faut un double go-ahead ») :
+ * le modèle `StrategicApproval` ne porte qu'UNE décision (`approverRole`/`status`) — pas de chaîne
+ * multi-signatures. Plutôt que de redessiner le moteur (partagé, testé), on ENCHAÎNE deux demandes
+ * du MÊME kind "projet_create", distinguées par `payload.stage` :
+ *   1. `stage: "chantier"` → approbateur = pilote du chantier (repli cascade `chantierLevel()` :
+ *      axe puis strategic_lead si pas de pilote). Son approbation NE crée PAS le projet : voir
+ *      `applyApprovedPayload` (effets vides pour ce stage) et `nextProjetCreateApproval`, appelée
+ *      par `useStrategicApprovals.decide()` juste après, qui enchaîne la 2e demande.
+ *   2. `stage: "axis"` (ou ABSENT — c'est le format d'avant cette fonctionnalité, relu tel quel :
+ *      compatible par construction) → approbateur = responsable de l'axe (`axisLevel()`, même
+ *      repli que l'ancien schéma à un seul palier). Son approbation crée réellement le projet.
+ * Cas particuliers gérés (voir `createProjetFlow` et `nextProjetCreateApproval`) :
+ *   - Si le CRÉATEUR est déjà l'un des deux paliers (ex. il EST le pilote), ce palier n'est jamais
+ *     formellement demandé (il agit directement) ; s'il est admin/strategic_lead ou les DEUX
+ *     paliers à la fois, la création est immédiate, sans aucune demande (comme avant).
+ *   - Si le créateur (déjà validé au palier chantier par quelqu'un d'autre) s'avère être LUI-MÊME
+ *     le responsable d'axe résolu pour le palier 2, ce palier ne peut de toute façon pas être
+ *     décidé par lui (`canDecide` interdit de décider sa propre demande) : on ne le crée pas, le
+ *     projet est créé directement à la place.
+ *   - Si aucun palier axe n'est résolvable (aucun owner d'axe, aucun strategic_lead), idem : pas de
+ *     2e demande, création directe (repli documenté ci-dessus, jamais de blocage définitif).
  */
 
 export type StrategicApprovalKind =
@@ -62,12 +86,22 @@ export type MilestoneApprovalPayload = {
   fromMilestone?: MilestoneId;
 };
 export type KpiValueApprovalPayload = { period: string; value?: number; note?: string };
+/** Palier de la double validation d'un `"projet_create"` (voir l'en-tête du fichier) :
+ *  `"chantier"` = 1er palier (pilote du chantier), `"axis"` = palier terminal (responsable de
+ *  l'axe) — celui qui crée réellement le projet. */
+export type ProjetCreateStage = "chantier" | "axis";
 /** `action` complet (avec son `id` déjà généré : l'application est idempotente). `staffing`
  *  (round 29, optionnel) : lignes ETP bufferisées dans le formulaire de création
  *  (`StaffingDraftTable.tsx`) — déjà des `ChantierStaffing` complètes, `actionId` = `action.id`
  *  ci-dessus. Absent/vide pour toute demande d'avant round 29 (relecture d'anciennes demandes en
- *  base) — traité comme une liste vide partout où lu. */
-export type ProjetCreateApprovalPayload = { action: ChantierAction; staffing?: ChantierStaffing[] };
+ *  base) — traité comme une liste vide partout où lu. `stage` (round <n>, double validation,
+ *  optionnel) : ABSENT = format d'avant cette fonctionnalité, traité comme `"axis"` (palier
+ *  terminal, comportement historique inchangé pour toute demande déjà en base). */
+export type ProjetCreateApprovalPayload = {
+  action: ChantierAction;
+  staffing?: ChantierStaffing[];
+  stage?: ProjetCreateStage;
+};
 export type DeleteApprovalPayload = { name?: string };
 export type StrategicApprovalPayload =
   | MilestoneApprovalPayload
@@ -173,11 +207,16 @@ function strategicLeadUsernames(programId: string | undefined, data: StrategicAp
     .map((u) => u.username);
 }
 
-/** Approbateur attendu pour une demande de ce `kind` sur cette cible (voir en-tête du fichier). */
+/** Approbateur attendu pour une demande de ce `kind` sur cette cible (voir en-tête du fichier).
+ *  `stage` : UNIQUEMENT significatif pour `"projet_create"` (double validation, voir l'en-tête) —
+ *  `"chantier"` résout le pilote du chantier (repli cascade vers l'axe), `"axis"` (ou absent, pour
+ *  rester identique au comportement d'avant cette fonctionnalité) résout le responsable de l'axe.
+ *  Ignoré pour tous les autres kinds. */
 export function resolveApprover(
   kind: StrategicApprovalKind,
   target: StrategicApprovalTarget,
-  data: StrategicApprovalData
+  data: StrategicApprovalData,
+  stage?: ProjetCreateStage
 ): ResolvedApprover {
   const programId = resolveTargetProgramId(target, data);
   const lead = (): ResolvedApprover => {
@@ -204,9 +243,14 @@ export function resolveApprover(
     case "milestone":
     case "projet_delete":
       return chantierLevel();
-    case "projet_create":
     case "chantier_delete":
       return axisLevel();
+    case "projet_create":
+      // Double validation (voir l'en-tête) : palier "chantier" = pilote (repli axe/lead) ; palier
+      // "axis" ou absent = responsable de l'axe (repli lead), IDENTIQUE à l'ancien schéma à un seul
+      // palier — une demande relue depuis avant cette fonctionnalité (sans `payload.stage`) résout
+      // donc exactement comme avant.
+      return stage === "chantier" ? chantierLevel() : axisLevel();
   }
 }
 
@@ -232,16 +276,19 @@ function isApproverFor(
 
 /**
  * L'acteur doit-il passer par une demande ? `false` s'il est lui-même l'approbateur (ou admin, ou
- * strategic_lead du programme) : l'action est alors appliquée directement.
+ * strategic_lead du programme) : l'action est alors appliquée directement. `stage` : voir
+ * `resolveApprover` — ne concerne que `"projet_create"`, permet à l'appelant (`createProjetFlow`)
+ * de tester séparément le palier "chantier" et le palier "axis" de la double validation.
  */
 export function needsApproval(
   kind: StrategicApprovalKind,
   actor: Actor | null | undefined,
   target: StrategicApprovalTarget,
-  data: StrategicApprovalData
+  data: StrategicApprovalData,
+  stage?: ProjetCreateStage
 ): boolean {
   if (!actor) return true;
-  const approver = resolveApprover(kind, target, data);
+  const approver = resolveApprover(kind, target, data, stage);
   return !isApproverFor(actor, approver, resolveTargetProgramId(target, data));
 }
 
@@ -254,10 +301,15 @@ export function canDecide(
   if (!user || approval.status !== "pending") return false;
   if (isAnyAdmin(user)) return true;
   if (approval.requestedBy === user.username) return false;
+  const stage =
+    approval.kind === "projet_create"
+      ? (approval.payload as ProjetCreateApprovalPayload).stage
+      : undefined;
   const resolved = resolveApprover(
     approval.kind,
     { type: approval.targetType, id: approval.targetId, name: approval.targetName },
-    data
+    data,
+    stage
   );
   const usernames = Array.from(new Set([...resolved.usernames, ...approval.approverUsernames]));
   return isApproverFor(user, { ...resolved, usernames }, approval.programId);
@@ -294,7 +346,11 @@ export function buildApproval(input: {
   id?: string;
   now?: string;
 }): StrategicApproval {
-  const approver = resolveApprover(input.kind, input.target, input.data);
+  const stage =
+    input.kind === "projet_create"
+      ? (input.payload as ProjetCreateApprovalPayload).stage
+      : undefined;
+  const approver = resolveApprover(input.kind, input.target, input.data, stage);
   return stripUndefined({
     id: input.id ?? newApprovalId(),
     companyId: input.companyId,
@@ -437,7 +493,14 @@ export function applyApprovedPayload(
       return effects;
     }
     case "projet_create": {
-      const { action, staffing } = approval.payload as ProjetCreateApprovalPayload;
+      const payload = approval.payload as ProjetCreateApprovalPayload;
+      if (payload.stage === "chantier") {
+        // Palier 1/2 (pilote du chantier) : pas de création ici — `useStrategicApprovals.decide()`
+        // enchaîne juste après sur `nextProjetCreateApproval` (2e demande, palier "axis"), ou crée
+        // directement si ce palier s'avère inutile (voir cette fonction). Voir l'en-tête du fichier.
+        return effects;
+      }
+      const { action, staffing } = payload;
       if (!data.chantiers.some((c) => c.id === action.chantierId)) {
         throw new Error("Chantier introuvable : il a peut-être été supprimé");
       }
@@ -479,6 +542,57 @@ export function applyRejectedPayload(
   return effects;
 }
 
+/**
+ * À appeler par `useStrategicApprovals.decide()` juste après l'APPROBATION d'un `"projet_create"`
+ * palier `"chantier"` (voir l'en-tête du fichier) : construit la 2e demande, palier `"axis"`, avec
+ * le MÊME payload (action/staffing), même cible, même demandeur d'origine (`approval.requestedBy`).
+ * Retourne `undefined` quand ce 2e palier serait inutile ou indécidable — l'appelant doit alors
+ * créer le projet directement (via `applyApprovedPayload` avec `payload.stage` forcé à `"axis"`) :
+ *  - aucun responsable d'axe NI strategic_lead résolvable (repli documenté : jamais de blocage) ;
+ *  - le demandeur d'origine EST lui-même ce responsable d'axe (ou le strategic_lead du programme) :
+ *    il ne pourrait de toute façon pas décider sa propre demande (`canDecide`), la lui reposer
+ *    bloquerait pour rien.
+ * Pure : ne persiste rien (l'appelant fait `saveStrategicApproval` + l'audit "requested").
+ */
+export function nextProjetCreateApproval(
+  approval: StrategicApproval,
+  data: StrategicApprovalData
+): StrategicApproval | undefined {
+  if (approval.kind !== "projet_create" || approval.status !== "approved") return undefined;
+  const payload = approval.payload as ProjetCreateApprovalPayload;
+  if (payload.stage !== "chantier") return undefined;
+  const target: StrategicApprovalTarget = {
+    type: approval.targetType,
+    id: approval.targetId,
+    name: approval.targetName,
+  };
+  const axisApprover = resolveApprover("projet_create", target, data, "axis");
+  if (axisApprover.usernames.length === 0) return undefined;
+  const requesterUser = data.users?.find((u) => u.username === approval.requestedBy);
+  // Note : pas besoin de tester l'admin ici — un demandeur admin n'aurait jamais atteint le palier
+  // "chantier" en premier lieu (`createProjetFlow` l'aurait créé directement, voir cette fonction).
+  const requesterIsAxisApprover =
+    axisApprover.usernames.includes(approval.requestedBy) ||
+    isLeadOfProgram(
+      requesterUser ? { username: requesterUser.username, profiles: requesterUser.profiles } : null,
+      approval.programId
+    );
+  if (requesterIsAxisApprover) return undefined;
+  return buildApproval({
+    kind: "projet_create",
+    target,
+    payload: { ...payload, stage: "axis" },
+    reason: approval.reason,
+    companyId: approval.companyId,
+    programId: approval.programId,
+    requester: {
+      username: approval.requestedBy,
+      name: approval.requestedByName ?? approval.requestedBy,
+    },
+    data,
+  });
+}
+
 // ─── Description (UI) ───────────────────────────────────────────────────────────────────────
 
 export type ApprovalDescription = {
@@ -517,8 +631,22 @@ export function describeApproval(
       };
     }
     case "projet_create": {
-      const { action } = approval.payload as ProjetCreateApprovalPayload;
-      return { subject: action.name || subject, after: `${action.start} → ${action.end}` };
+      const { action, stage } = approval.payload as ProjetCreateApprovalPayload;
+      // `before` détourné pour porter le PALIER de la double validation (voir l'en-tête du
+      // fichier) plutôt qu'une "valeur avant" (une création n'en a pas) : le seul moyen, sans
+      // toucher `StrategicApprovalsPanel.tsx`, de distinguer visuellement les deux demandes
+      // "projet_create" d'un même projet plutôt que d'afficher deux cartes identiques.
+      const stageLabel =
+        stage === "chantier"
+          ? "Validation du pilote de chantier"
+          : stage === "axis"
+            ? "Validation du responsable d'axe"
+            : undefined;
+      return {
+        subject: action.name || subject,
+        before: stageLabel,
+        after: `${action.start} → ${action.end}`,
+      };
     }
     default: {
       const p = approval.payload as DeleteApprovalPayload;
@@ -556,8 +684,20 @@ function verbPhrase(approval: StrategicApproval, pastTense: boolean): string {
         ? `a renseigné ${p.value ?? "—"} (${p.period}) sur l'indicateur « ${name} »`
         : `la valeur ${p.value ?? "—"} (${p.period}) de l'indicateur « ${name} »`;
     }
-    case "projet_create":
-      return pastTense ? `a ajouté le projet « ${name} »` : `l'ajout du projet « ${name} »`;
+    case "projet_create": {
+      // Suffixe de palier (voir `describeApproval`) — vide pour une demande d'avant la double
+      // validation (`payload.stage` absent) : texte inchangé par rapport à l'ancien schéma.
+      const { stage } = approval.payload as ProjetCreateApprovalPayload;
+      const suffix =
+        stage === "chantier"
+          ? " (validation du pilote de chantier)"
+          : stage === "axis"
+            ? " (validation du responsable d'axe)"
+            : "";
+      return pastTense
+        ? `a ajouté le projet « ${name} »${suffix}`
+        : `l'ajout du projet « ${name} »${suffix}`;
+    }
     case "projet_delete":
       return pastTense
         ? `a supprimé le projet « ${name} »`

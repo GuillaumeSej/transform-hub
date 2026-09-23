@@ -10,6 +10,7 @@ import {
   canDecide,
   describeApproval,
   needsApproval,
+  nextProjetCreateApproval,
   resolveApprover,
   stripUndefined,
   type StrategicApproval,
@@ -178,6 +179,27 @@ describe("resolveApprover", () => {
     const d = data({ users: [user("zoe", "strategic_lead", "P2")] });
     expect(resolveApprover("kpi_value", { type: "indicateur", id: "IND1" }, d).usernames).toEqual(
       []
+    );
+  });
+  it('projet_create avec `stage` : "chantier" -> pilote (repli axe), "axis"/absent -> axe (inchangé)', () => {
+    const t = { type: "chantier" as const, id: "CH1" };
+    expect(resolveApprover("projet_create", t, data(), "chantier")).toMatchObject({
+      role: "chantier_owner",
+      usernames: ["bob"],
+    });
+    // Sans pilote, le palier "chantier" cascade vers l'axe (même résolution que le palier "axis").
+    const noPilote = data({ chantiers: [chantier({ pilote: undefined })] });
+    expect(resolveApprover("projet_create", t, noPilote, "chantier")).toMatchObject({
+      role: "axis_sponsor",
+      usernames: ["alice"],
+    });
+    expect(resolveApprover("projet_create", t, data(), "axis")).toMatchObject({
+      role: "axis_sponsor",
+      usernames: ["alice"],
+    });
+    // Sans `stage` (relecture d'une demande d'avant la double validation) : identique à "axis".
+    expect(resolveApprover("projet_create", t, data())).toEqual(
+      resolveApprover("projet_create", t, data(), "axis")
     );
   });
 });
@@ -361,6 +383,61 @@ describe("effets de demande / refus", () => {
   });
 });
 
+describe("projet_create — double validation (nextProjetCreateApproval)", () => {
+  const stage1 = (o: Partial<StrategicApproval> = {}) =>
+    approval({
+      kind: "projet_create",
+      targetType: "chantier",
+      targetId: "CH1",
+      targetName: "Chantier",
+      payload: { action: action({ id: "NEW" }), stage: "chantier" },
+      requestedBy: "carl",
+      requestedByName: "CARL",
+      approverRole: "chantier_owner",
+      approverUsername: "bob",
+      approverUsernames: ["bob"],
+      status: "approved",
+      decidedBy: "bob",
+      ...o,
+    });
+
+  it("palier chantier approuvé -> enchaîne une 2e demande, palier axe, même payload/cible", () => {
+    const next = nextProjetCreateApproval(stage1(), data());
+    expect(next).toMatchObject({
+      kind: "projet_create",
+      targetType: "chantier",
+      targetId: "CH1",
+      requestedBy: "carl",
+      approverRole: "axis_sponsor",
+      approverUsernames: ["alice"],
+      status: "pending",
+      payload: { stage: "axis" },
+    });
+    expect((next!.payload as { action: { id: string } }).action.id).toBe("NEW");
+  });
+  it("n'agit que sur un palier chantier approuvé (pas sur les autres kinds/statuts/paliers)", () => {
+    expect(nextProjetCreateApproval(approval(), data())).toBeUndefined(); // kind "milestone"
+    expect(nextProjetCreateApproval(stage1({ status: "pending" }), data())).toBeUndefined();
+    expect(
+      nextProjetCreateApproval(
+        stage1({ payload: { action: action({ id: "NEW" }), stage: "axis" } }),
+        data()
+      )
+    ).toBeUndefined(); // déjà au palier terminal
+  });
+  it("repli : aucun responsable d'axe ni strategic_lead -> pas de 2e demande (création directe)", () => {
+    const d = data({ axes: [axis({ owner: undefined })], users: [] });
+    expect(nextProjetCreateApproval(stage1(), d)).toBeUndefined();
+  });
+  it("le demandeur d'origine est déjà le responsable d'axe -> pas de 2e demande (il ne pourrait pas se décider lui-même)", () => {
+    const d = data({ axes: [axis({ owner: "carl" })] });
+    expect(nextProjetCreateApproval(stage1({ requestedBy: "carl" }), d)).toBeUndefined();
+  });
+  it("le demandeur d'origine est le strategic_lead du programme -> pas de 2e demande", () => {
+    expect(nextProjetCreateApproval(stage1({ requestedBy: "lea" }), data())).toBeUndefined();
+  });
+});
+
 describe("describeApproval", () => {
   it("avant/après par kind", () => {
     expect(describeApproval(approval(), data())).toMatchObject({
@@ -397,6 +474,45 @@ describe("describeApproval", () => {
     );
     expect(del.after).toBeUndefined();
     expect(del.before).toBe("Chantier");
+  });
+  it("projet_create : le palier apparaît en `before` (distingue les 2 demandes dans l'UI)", () => {
+    const proj = action({ id: "NEW", name: "Nouveau", start: "2026-02-01", end: "2026-03-01" });
+    const chantierStage = describeApproval(
+      approval({
+        kind: "projet_create",
+        targetType: "chantier",
+        targetId: "CH1",
+        payload: { action: proj, stage: "chantier" },
+      }),
+      data()
+    );
+    expect(chantierStage).toMatchObject({
+      subject: "Nouveau",
+      before: "Validation du pilote de chantier",
+      after: "2026-02-01 → 2026-03-01",
+    });
+    const axisStage = describeApproval(
+      approval({
+        kind: "projet_create",
+        targetType: "chantier",
+        targetId: "CH1",
+        payload: { action: proj, stage: "axis" },
+      }),
+      data()
+    );
+    expect(axisStage.before).toBe("Validation du responsable d'axe");
+    expect(chantierStage.before).not.toBe(axisStage.before);
+    // Sans `stage` (relecture d'avant la double validation) : pas de palier à afficher.
+    const legacy = describeApproval(
+      approval({
+        kind: "projet_create",
+        targetType: "chantier",
+        targetId: "CH1",
+        payload: { action: proj },
+      }),
+      data()
+    );
+    expect(legacy.before).toBeUndefined();
   });
 });
 
