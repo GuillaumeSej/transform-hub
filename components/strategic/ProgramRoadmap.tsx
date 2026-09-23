@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Layers, TriangleAlert } from "lucide-react";
 import {
   axisSponsorLabel,
+  chantierShadesByAxis,
   displayMilestoneId,
   isProjetLate,
   programRoadmap,
@@ -175,6 +176,7 @@ function groupRowsByAxisAndChantier(rows: ProgramRoadmapRow[]): AxisGroup[] {
 export function ProgramRoadmap({
   axes,
   chantiers,
+  allChantiers,
   actions,
   onProjetClick,
   onChantierClick,
@@ -187,6 +189,11 @@ export function ProgramRoadmap({
   users?: { username: string; name: string }[];
   axes: StrategicAxis[];
   chantiers: Chantier[];
+  /** Univers NON filtré des chantiers (optionnel, repli sur `chantiers`) — sert uniquement au
+   *  calcul des nuances de chantier (`chantierShadesByAxis`, lib/axisLogic.ts), pour qu'un filtre
+   *  de la feuille de route (chantier, responsable…) ne décale jamais la couleur d'un chantier par
+   *  rapport à l'onglet "Avancement" de la page Axes. */
+  allChantiers?: Chantier[];
   /** Tous les leviers du programme actif (toutes les actions, pas filtrées par axe/chantier — voir
    *  `axisLogic.programRoadmap`). */
   actions: ChantierAction[];
@@ -234,6 +241,12 @@ export function ProgramRoadmap({
 
   const rows = useMemo(() => programRoadmap(axes, chantiers, actions), [axes, chantiers, actions]);
   const grouped = useMemo(() => groupRowsByAxisAndChantier(rows), [rows]);
+  /** `axisId` → (`chantierId` → nuance de la couleur d'axe) — même calcul que l'onglet
+   *  "Avancement" de `StrategicAxesView.tsx` : un chantier a la même couleur partout. */
+  const chantierShades = useMemo(
+    () => chantierShadesByAxis(axes, allChantiers ?? chantiers),
+    [axes, allChantiers, chantiers]
+  );
 
   /** Round 25 : un levier est cliquable si `onProjetClick` est fourni ET (`clickableActionIds`
    *  vaut `"all"` OU liste explicitement son id) — voir le doc-comment du prop ci-dessus. */
@@ -371,6 +384,11 @@ export function ProgramRoadmap({
                       (max, r) => (r.end > max ? r.end : max),
                       chantierGroup.rows[0].end
                     );
+                    // Nuance du chantier dans CET axe (en-tête, barre et projets) — l'accent
+                    // d'axe (liséré/fond de la carte, pastille d'en-tête) reste `axisColor`.
+                    const chantierColor =
+                      chantierShades.get(axisGroup.axis.id)?.get(chantierGroup.chantier.id) ??
+                      axisColor;
                     const chantierStartPct = pctOf(chantierStart);
                     const chantierWidthPct = Math.max(1.2, pctOf(chantierEnd) - chantierStartPct);
                     return (
@@ -385,7 +403,7 @@ export function ProgramRoadmap({
                           `onChantierClick` est fourni, sinon simple texte non interactif. */}
                         <div
                           className="flex items-stretch gap-2 border-b border-border"
-                          style={{ backgroundColor: withAlpha(axisColor, 0.13) }}
+                          style={{ backgroundColor: withAlpha(chantierColor, 0.13) }}
                         >
                           <button
                             type="button"
@@ -403,7 +421,7 @@ export function ProgramRoadmap({
                               <Layers
                                 size={13}
                                 className="shrink-0"
-                                style={{ color: axisColor }}
+                                style={{ color: chantierColor }}
                                 aria-hidden
                               />
                               <span
@@ -441,7 +459,7 @@ export function ProgramRoadmap({
                               width={chantierWidthPct}
                               top={(CHANTIER_ROW_HEIGHT - CHANTIER_BAR_HEIGHT) / 2}
                               height={CHANTIER_BAR_HEIGHT}
-                              color={axisColor}
+                              color={chantierColor}
                               variant="bracket"
                               roundedClassName="rounded-sm"
                               onClick={
@@ -561,7 +579,7 @@ export function ProgramRoadmap({
                                   width={widthPct}
                                   top={LEVIER_LABEL_HEIGHT}
                                   height={LEVIER_BAR_HEIGHT}
-                                  color={axisColor}
+                                  color={chantierColor}
                                   variant="soft"
                                   onClick={
                                     rowClickable

@@ -23,9 +23,10 @@ import type { Chantier, ChantierAction, MilestoneId } from "@/types";
  *
  * La bulle affiche le nom du levier ET le nom de son CHANTIER PARENT en texte visible (jamais
  * seulement en infobulle — demande PO explicite : on doit voir de quel chantier relève un levier
- * sans avoir à survoler chaque bulle), colorée/bordée par `colorForChantier(chantier.id)`
- * (lib/axisLogic.ts, round 8) pour qu'un même chantier se reconnaisse d'un coup d'œil entre les
- * colonnes E0-E4.
+ * sans avoir à survoler chaque bulle), colorée/bordée par la nuance du chantier dérivée de la
+ * couleur de son axe (`chantierShadesForAxis`, lib/axisLogic.ts) pour qu'un même chantier se
+ * reconnaisse d'un coup d'œil entre les colonnes E0-E4 tout en restant visiblement rattaché à son
+ * axe.
  *
  * Clic sur une bulle → même destination que l'ancienne matrice (`onProjetClick`, ouverture du
  * panneau du CHANTIER parent — un levier n'a pas de panneau propre).
@@ -34,7 +35,8 @@ import type { Chantier, ChantierAction, MilestoneId } from "@/types";
 export type ProjetBoardCard = {
   action: ChantierAction;
   chantier: Chantier;
-  /** `colorForChantier(chantier.id)` (lib/axisLogic.ts) — classe Tailwind `bg-*-500` pleine. */
+  /** Nuance hex du chantier dans son axe (`chantierShadesForAxis`, lib/axisLogic.ts) — appliquée
+   *  en style inline (pastille + liséré gauche de la carte). */
   chantierColor: string;
 };
 
@@ -57,14 +59,6 @@ export type ProjetBoardGroup = {
   chantiers?: Chantier[];
 };
 
-/** Correspondance `bg-*-500` → `border-*-500` pour la palette FIXE de `colorForChantier`
- *  (`CHANTIER_COLOR_PALETTE`, lib/axisLogic.ts) — mapping VOLONTAIREMENT littéral (jamais de
- *  substitution de chaîne `chantierColor.replace("bg-", "border-")` à l'exécution) : Tailwind JIT
- *  scanne le CODE SOURCE pour les classes utilisées, une classe construite dynamiquement à
- *  l'exécution n'y apparaît jamais et ne serait donc jamais générée. Exporté pour rester réutilisable
- *  par un futur composant ayant le même besoin plutôt que d'en dupliquer une copie qui pourrait
- *  diverger si la palette d'axisLogic.ts change un jour (round 18 : son unique autre consommateur,
- *  `LevierKanbanBoard.tsx`, a été supprimé). */
 /** Pastille de couleur d'un `progressBucket` (lib/axisLogic.ts) — même convention visuelle que
  *  `BUCKET_DOT_CLASS` de `MilestoneChecklistPanel.tsx` (round 14, cohérence entre écrans) :
  *  déclarée ici séparément plutôt que réimportée, ce fichier n'ayant pas accès à cette constante
@@ -89,19 +83,6 @@ const CARD_PROGRESS_PILL_CLASS: Record<ProgressBucket, string> = {
   green: "bg-rag-green-light text-rag-green-dark",
 };
 
-export const CHANTIER_BORDER_CLASS: Record<string, string> = {
-  "bg-blue-500": "border-blue-500",
-  "bg-emerald-500": "border-emerald-500",
-  "bg-violet-500": "border-violet-500",
-  "bg-pink-500": "border-pink-500",
-  "bg-amber-500": "border-amber-500",
-  "bg-indigo-500": "border-indigo-500",
-  "bg-teal-500": "border-teal-500",
-  "bg-orange-500": "border-orange-500",
-  "bg-rose-500": "border-rose-500",
-  "bg-cyan-500": "border-cyan-500",
-};
-
 /** Carte/bulle d'un levier, colorée par son chantier parent (round 18 : jusqu'ici réutilisée telle
  *  quelle par `LevierKanbanBoard.tsx`, supprimé — reste exportée pour un futur consommateur ayant le
  *  même besoin). */
@@ -119,7 +100,6 @@ export function ProjetCard({
   clickable?: boolean;
 }) {
   const { t } = useTranslation();
-  const borderClass = CHANTIER_BORDER_CLASS[chantierColor] ?? "border-border";
   // Round 19, point 3 : avancement PROPRE de ce levier (jalons pondérés `milestoneProgressPct`,
   // lib/axisLogic.ts) — jusqu'ici seule la moyenne PAR COLONNE était visible sur ce widget
   // (`avgPct`, plus bas), jamais le pourcentage individuel d'une carte précise. Mode dégradé
@@ -144,15 +124,20 @@ export function ProjetCard({
       disabled={!clickable}
       onClick={clickable ? () => onProjetClick(chantier.id, action.id) : undefined}
       title={`${action.name} · ${chantier.name} · ${displayedStage} · ${progressPct}%`}
-      className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 p-2 pb-2.5 text-left transition last:mb-0 focus:outline-none ${borderClass} ${
+      className={`group relative mb-1.5 flex w-full flex-col items-start gap-0.5 overflow-hidden rounded-md border border-l-4 border-border p-2 pb-2.5 text-left transition last:mb-0 focus:outline-none ${
         clickable
           ? "hover:-translate-y-px hover:shadow-sm focus:ring-2 focus:ring-black"
           : "opacity-60"
       } ${late ? "bg-rag-red-light/40 ring-2 ring-inset ring-rag-red" : "bg-white"}`}
+      style={{ borderLeftColor: chantierColor }}
     >
       <span className="flex w-full flex-col gap-1">
         <span className="flex w-full items-center gap-1.5">
-          <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${chantierColor}`} />
+          <span
+            aria-hidden
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: chantierColor }}
+          />
           <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-primary">
             {action.name}
           </span>

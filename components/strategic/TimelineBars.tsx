@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Tooltip } from "@/components/shared/Tooltip";
+import { hexToRgb } from "@/lib/axisLogic";
 import { parseISO } from "@/lib/dateUtils";
 
 /**
@@ -59,25 +60,10 @@ export function formatTimelineDay(iso: string): string {
 // ─── Couleur ────────────────────────────────────────────────────────────────────────────────────
 
 /** `#rgb` / `#rrggbb` → `[r, g, b]` ; `null` pour toute autre notation (l'appelant retombe alors
- *  sur la couleur brute, sans transparence calculée). */
-export function hexToRgb(color: string): [number, number, number] | null {
-  const hex = color.trim().replace("#", "");
-  if (hex.length === 3 && /^[0-9a-f]{3}$/i.test(hex)) {
-    return [
-      parseInt(hex[0] + hex[0], 16),
-      parseInt(hex[1] + hex[1], 16),
-      parseInt(hex[2] + hex[2], 16),
-    ];
-  }
-  if (hex.length === 6 && /^[0-9a-f]{6}$/i.test(hex)) {
-    return [
-      parseInt(hex.slice(0, 2), 16),
-      parseInt(hex.slice(2, 4), 16),
-      parseInt(hex.slice(4, 6), 16),
-    ];
-  }
-  return null;
-}
+ *  sur la couleur brute, sans transparence calculée). Définie dans `lib/axisLogic.ts` (logique
+ *  pure, aussi utilisée par `chantierShadeForAxis`) et ré-exportée ici pour les consommateurs
+ *  historiques de ce module. */
+export { hexToRgb };
 
 export function withAlpha(color: string, alpha: number): string {
   const rgb = hexToRgb(color);

@@ -18,6 +18,10 @@ import {
   chantierHealthState,
   chantierMilestoneProgressPct,
   colorForChantier,
+  chantierShadeForAxis,
+  chantierShadesByAxis,
+  chantierShadesForAxis,
+  AXIS_FALLBACK_COLOR,
   computeIndicatorDelta,
   computeIndicatorStatus,
   countOnTrackAtRisk,
@@ -2123,6 +2127,74 @@ describe("colorForChantier", () => {
   it("returns a non-empty Tailwind background class for any id", () => {
     expect(colorForChantier("CH1")).toMatch(/^bg-\w+-500$/);
     expect(colorForChantier("")).toMatch(/^bg-\w+-500$/);
+  });
+});
+
+// ─── Nuances de chantier dérivées de la couleur d'axe ──────────────────────────────────────────
+
+describe("chantierShadeForAxis", () => {
+  it("returns the axis color itself (normalized hex) at index 0", () => {
+    expect(chantierShadeForAxis("#320300", 0)).toBe("#320300");
+    expect(chantierShadeForAxis("#ABC", 0)).toBe("#aabbcc");
+  });
+
+  it("alternates lighter (mix with white) and darker (mix with black) shades", () => {
+    // +0.35 blanc : 100 + (255 - 100) * 0.35 = 154.25 → 154 = 0x9a
+    expect(chantierShadeForAxis("#646464", 1)).toBe("#9a9a9a");
+    // −0.3 noir : 100 * 0.7 = 70 = 0x46
+    expect(chantierShadeForAxis("#646464", 2)).toBe("#464646");
+    // +0.55 blanc : 100 + 155 * 0.55 = 185.25 → 185 = 0xb9
+    expect(chantierShadeForAxis("#646464", 3)).toBe("#b9b9b9");
+    // −0.5 noir : 50 = 0x32
+    expect(chantierShadeForAxis("#646464", 4)).toBe("#323232");
+  });
+
+  it("gives distinct shades for the first indexes of a same axis", () => {
+    const shades = [0, 1, 2, 3, 4, 5, 6].map((i) => chantierShadeForAxis("#8a2be2", i));
+    expect(new Set(shades).size).toBe(shades.length);
+  });
+
+  it("cycles through the ladder", () => {
+    expect(chantierShadeForAxis("#8a2be2", 7)).toBe(chantierShadeForAxis("#8a2be2", 0));
+    expect(chantierShadeForAxis("#8a2be2", 9)).toBe(chantierShadeForAxis("#8a2be2", 2));
+  });
+
+  it("falls back to the neutral axis color on invalid/missing color or index", () => {
+    expect(chantierShadeForAxis(undefined, 0)).toBe(AXIS_FALLBACK_COLOR);
+    expect(chantierShadeForAxis("not-a-color", 0)).toBe(AXIS_FALLBACK_COLOR);
+    expect(chantierShadeForAxis("#8a2be2", -3)).toBe("#8a2be2");
+    expect(chantierShadeForAxis("#8a2be2", Number.NaN)).toBe("#8a2be2");
+  });
+});
+
+describe("chantierShadesForAxis / chantierShadesByAxis", () => {
+  const ch = (id: string, createdAt: string, axisIds: string[] = ["AX1"]) =>
+    ({ id, createdAt, axisIds }) as unknown as Chantier;
+
+  it("assigns shades in canonical order (createdAt, then id), independent of input order", () => {
+    const a = ch("CH-b", "2026-01-01");
+    const b = ch("CH-a", "2026-02-01");
+    const c = ch("CH-c", "2026-01-01");
+    const forward = chantierShadesForAxis("#646464", [a, b, c]);
+    const reversed = chantierShadesForAxis("#646464", [c, b, a]);
+    expect(forward).toEqual(reversed);
+    expect(forward.get("CH-b")).toBe(chantierShadeForAxis("#646464", 0));
+    expect(forward.get("CH-c")).toBe(chantierShadeForAxis("#646464", 1));
+    expect(forward.get("CH-a")).toBe(chantierShadeForAxis("#646464", 2));
+  });
+
+  it("gives a multi-axis chantier a shade of each of its axes", () => {
+    const axes = [
+      { id: "AX1", color: "#646464" },
+      { id: "AX2", color: "#8a2be2" },
+    ] as unknown as StrategicAxis[];
+    const shared = ch("CH1", "2026-01-01", ["AX1", "AX2"]);
+    const only1 = ch("CH0", "2025-01-01", ["AX1"]);
+    const byAxis = chantierShadesByAxis(axes, [shared, only1]);
+    expect(byAxis.get("AX1")?.get("CH0")).toBe("#646464");
+    expect(byAxis.get("AX1")?.get("CH1")).toBe(chantierShadeForAxis("#646464", 1));
+    expect(byAxis.get("AX2")?.get("CH1")).toBe("#8a2be2");
+    expect(byAxis.get("AX2")?.has("CH0")).toBe(false);
   });
 });
 

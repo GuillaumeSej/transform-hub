@@ -6,7 +6,8 @@ import { ProgressBar } from "@/components/shared/ProgressBar";
 import {
   axisProgressPct,
   chantierDeclaredProgress,
-  colorForChantier,
+  AXIS_FALLBACK_COLOR,
+  chantierShadesForAxis,
   milestoneProgressPct,
   projetMilestoneCounts,
 } from "@/lib/axisLogic";
@@ -229,6 +230,9 @@ export function AxisChantierProjetAccordion({
     <div className="space-y-2">
       {axes.map((axis, axisIndex) => {
         const axisChantiers = chantiers.filter((c) => c.axisIds.includes(axis.id));
+        // Nuance de la couleur d'axe par chantier — même calcul que l'onglet "Avancement" et les
+        // Gantt (`chantierShadesForAxis`, lib/axisLogic.ts) : un chantier a la même couleur partout.
+        const chantierShades = chantierShadesForAxis(axis.color, axisChantiers);
         const axisOpen = expandedAxisIds.has(axis.id);
         return (
           <div key={axis.id} className="overflow-hidden rounded-lg border border-border bg-white">
@@ -279,7 +283,11 @@ export function AxisChantierProjetAccordion({
                           dot={
                             <span
                               aria-hidden
-                              className={`h-2 w-2 shrink-0 rounded-full ${colorForChantier(chantier.id)}`}
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{
+                                backgroundColor:
+                                  chantierShades.get(chantier.id) ?? AXIS_FALLBACK_COLOR,
+                              }}
                             />
                           }
                           name={chantier.name}

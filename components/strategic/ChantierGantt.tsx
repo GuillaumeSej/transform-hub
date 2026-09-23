@@ -22,6 +22,7 @@ import {
   canStartAction,
   chantierBounds,
   chantierDeclaredProgress,
+  chantierShadesForAxis,
   type ChantierDependencyAlert,
 } from "@/lib/axisLogic";
 import type { Chantier, ChantierAction, MaturityStageConfig } from "@/types";
@@ -139,7 +140,9 @@ export function ChantierGantt({
    *  et la satisfaction des prérequis (`canStartAction`). L'avancement affiché ne s'appuie plus sur
    *  ce référentiel : il vient des jalons E0-E4 du chantier (`axisLogic.milestoneProgressPct`). */
   stages: MaturityStageConfig[];
-  /** Couleur de l'axe (`StrategicAxis.color`) — teinte de tous les blocs de ce Gantt. */
+  /** Couleur de l'axe (`StrategicAxis.color`) — chaque chantier en reçoit une NUANCE
+   *  (`chantierShadesForAxis`, lib/axisLogic.ts, calculée sur `chantiers`), identique à celle de
+   *  l'onglet "Avancement" : en-tête, barre et projets du chantier sont teintés de cette nuance. */
   axisColor?: string;
   onChantierClick?: (chantier: Chantier) => void;
   /** Clic sur une action : l'appelant ouvre la MÊME pop-up que pour son chantier, focalisée sur
@@ -190,6 +193,7 @@ export function ChantierGantt({
   const [scale, setScale] = useState<TimelineScale>("quarter");
 
   const color = axisColor && hexToRgb(axisColor) ? axisColor : FALLBACK_COLOR;
+  const chantierShades = useMemo(() => chantierShadesForAxis(color, chantiers), [color, chantiers]);
 
   const rows = useMemo<Row[]>(
     () =>
@@ -277,7 +281,9 @@ export function ChantierGantt({
                 const progressPct = chantierDeclaredProgress(chantier.id, items);
                 const lanes = packTimelineLanes(items);
                 const trackHeight = LANES_TOP + Math.max(1, lanes.length) * ACTION_LANE_HEIGHT;
-                const blockColor = isAlerted ? ALERT_COLOR : color;
+                const blockColor = isAlerted
+                  ? ALERT_COLOR
+                  : (chantierShades.get(chantier.id) ?? color);
 
                 return (
                   <div key={chantier.id} className="border-b border-border last:border-b-0">
@@ -398,7 +404,9 @@ export function ChantierGantt({
                 key={chantier.id}
                 onClick={() => openChantier(chantier)}
                 className="rounded-md border border-dashed border-border px-3 py-2 text-left transition hover:border-black"
-                style={{ backgroundColor: withAlpha(color, 0.08) }}
+                style={{
+                  backgroundColor: withAlpha(chantierShades.get(chantier.id) ?? color, 0.08),
+                }}
               >
                 <div className="text-[11.5px] font-semibold text-primary">{chantier.name}</div>
                 <div className="text-[10px] text-tertiary">{l.noDates}</div>

@@ -16,7 +16,11 @@ import {
 } from "@/components/strategic/ProjetMilestoneBoard";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
 import { hexToRgb, withAlpha } from "@/components/strategic/TimelineBars";
-import { chantierDeclaredProgress, colorForChantier } from "@/lib/axisLogic";
+import {
+  AXIS_FALLBACK_COLOR,
+  chantierDeclaredProgress,
+  chantierShadesByAxis,
+} from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantierAction } from "@/lib/firestore/chantierActions";
 import { saveChantier } from "@/lib/firestore/chantiers";
@@ -71,7 +75,6 @@ import type { Chantier, MilestoneId } from "@/types";
  *    tout replié par défaut — vue de navigation/drilldown, complémentaire à la vue "Avancement"
  *    groupée par jalon.
  */
-const STRATEGIC_AXES_FALLBACK_COLOR = "#a99e9a";
 
 export function StrategicAxesView() {
   const { user } = useRole();
@@ -139,9 +142,17 @@ export function StrategicAxesView() {
    *  chantier n'ouvre pas de section vide. Round 18 : TOUS les leviers de l'axe (avec ou sans KPI
    *  rattaché) sont groupés par `action.milestones?.currentMilestone ?? "E0"` (5 colonnes) — l'ancien
    *  bucket séparé des leviers sans KPI (`withoutKpi`, consommé par le kanban classique supprimé) a
-   *  disparu. Chaque entrée porte `chantierColor` (`colorForChantier`, lib/axisLogic.ts) pour que le
-   *  même chantier affiche systématiquement la même couleur.
+   *  disparu. Chaque entrée porte `chantierColor` (nuance de la couleur d'axe, `chantierShadesByAxis`,
+   *  lib/axisLogic.ts) pour que le même chantier affiche la même couleur ici, dans l'accordéon et
+   *  dans les Gantt.
    */
+  /** `axisId` → (`chantierId` → nuance hex de la couleur d'axe) — calculé sur TOUS les chantiers
+   *  de chaque axe, dans l'ordre canonique de `chantierShadesForAxis` (lib/axisLogic.ts). */
+  const chantierShades = useMemo(
+    () => chantierShadesByAxis(data.axes, data.chantiers),
+    [data.axes, data.chantiers]
+  );
+
   const projetBoardGroups = useMemo<ProjetBoardGroup[]>(
     () =>
       data.axes
@@ -149,6 +160,7 @@ export function StrategicAxesView() {
         .filter((row) => row.chantiers.length > 0)
         .map((row) => {
           const chantierById = new Map(row.chantiers.map((chantier) => [chantier.id, chantier]));
+          const shades = chantierShades.get(row.axis.id);
 
           const milestones = MILESTONE_ORDER.reduce(
             (acc, milestoneId) => ({ ...acc, [milestoneId]: [] as ProjetBoardCard[] }),
@@ -161,7 +173,7 @@ export function StrategicAxesView() {
             const card: ProjetBoardCard = {
               action,
               chantier,
-              chantierColor: colorForChantier(chantier.id),
+              chantierColor: shades?.get(chantier.id) ?? AXIS_FALLBACK_COLOR,
             };
             const milestoneId = action.milestones?.currentMilestone ?? "E0";
             milestones[milestoneId].push(card);
@@ -175,7 +187,7 @@ export function StrategicAxesView() {
             chantiers: row.chantiers,
           };
         }),
-    [data.axes, data.chantierActions, chantiersByAxis]
+    [data.axes, data.chantierActions, chantiersByAxis, chantierShades]
   );
 
   /** Placeholder d'une colonne de jalon E0-E4 sans levier — même clé i18n que l'ex-widget dashboard
@@ -421,9 +433,8 @@ export function StrategicAxesView() {
               <div className="space-y-4">
                 {projetBoardGroups.map((group) => {
                   const axisColor =
-                    group.color && hexToRgb(group.color)
-                      ? group.color
-                      : STRATEGIC_AXES_FALLBACK_COLOR;
+                    group.color && hexToRgb(group.color) ? group.color : AXIS_FALLBACK_COLOR;
+                  const shades = chantierShades.get(group.key);
                   const axisNumber = axisNumberById.get(group.key);
                   return (
                     <div
@@ -463,7 +474,11 @@ export function StrategicAxesView() {
                                 >
                                   <span
                                     aria-hidden
-                                    className={`h-2 w-2 shrink-0 rounded-full ${colorForChantier(chantier.id)}`}
+                                    className="h-2 w-2 shrink-0 rounded-full"
+                                    style={{
+                                      backgroundColor:
+                                        shades?.get(chantier.id) ?? AXIS_FALLBACK_COLOR,
+                                    }}
                                   />
                                   {chantier.name}
                                 </Button>

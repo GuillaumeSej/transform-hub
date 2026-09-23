@@ -1394,6 +1394,7 @@ export function StrategicDashboardView() {
               <ProgramRoadmap
                 axes={axes}
                 chantiers={roadmapChantiers}
+                allChantiers={chantiers}
                 actions={roadmapActions}
                 onProjetClick={openChantierPanel}
                 onChantierClick={(chantierId) => openChantierPanel(chantierId)}

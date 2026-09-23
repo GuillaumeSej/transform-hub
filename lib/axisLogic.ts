@@ -1466,6 +1466,101 @@ export function hexForDepartment(departmentName: string): string {
   return hexForChantier(departmentName);
 }
 
+// ─── Nuances de chantier dérivées de la couleur d'axe ──────────────────────────────────────────
+
+/** Couleur de repli quand un axe n'a pas de couleur valide — taupe BearingPoint
+ *  (`--bp-warm-taupe`), même valeur que les `FALLBACK_COLOR` locaux de `ChantierGantt.tsx`/
+ *  `ProgramRoadmap.tsx`. */
+export const AXIS_FALLBACK_COLOR = "#a99e9a";
+
+/** `#rgb` / `#rrggbb` → `[r, g, b]` ; `null` pour toute autre notation. Source unique, ré-exportée
+ *  telle quelle par `components/strategic/TimelineBars.tsx` pour ses consommateurs historiques. */
+export function hexToRgb(color: string): [number, number, number] | null {
+  const hex = color.trim().replace("#", "");
+  if (hex.length === 3 && /^[0-9a-f]{3}$/i.test(hex)) {
+    return [
+      parseInt(hex[0] + hex[0], 16),
+      parseInt(hex[1] + hex[1], 16),
+      parseInt(hex[2] + hex[2], 16),
+    ];
+  }
+  if (hex.length === 6 && /^[0-9a-f]{6}$/i.test(hex)) {
+    return [
+      parseInt(hex.slice(0, 2), 16),
+      parseInt(hex.slice(2, 4), 16),
+      parseInt(hex.slice(4, 6), 16),
+    ];
+  }
+  return null;
+}
+
+/** Échelle de nuances d'un chantier au sein de son axe : >0 = mélange avec du BLANC (plus clair),
+ *  <0 = mélange avec du NOIR (plus sombre), 0 = la couleur d'axe elle-même. Alterne clair/sombre
+ *  pour que deux chantiers voisins restent bien distincts ; cyclique au-delà de sa longueur. */
+const CHANTIER_SHADE_LADDER = [0, 0.35, -0.3, 0.55, -0.5, 0.2, -0.15] as const;
+
+/**
+ * Nuance (hex `#rrggbb`) d'un chantier dérivée de la couleur de SON axe — remplace, sur les vues
+ * du Plan stratégique (onglet "Avancement", accordéon "Vue par axe", Gantt), l'ancienne palette
+ * catégorielle Tailwind hors charte (`colorForChantier`). Index 0 = couleur d'axe telle quelle,
+ * puis mélanges alternés vers le blanc/le noir (`CHANTIER_SHADE_LADDER`). Couleur d'axe invalide
+ * ou absente → `AXIS_FALLBACK_COLOR`.
+ */
+export function chantierShadeForAxis(axisColor: string | undefined, index: number): string {
+  const rgb = (axisColor ? hexToRgb(axisColor) : null) ?? hexToRgb(AXIS_FALLBACK_COLOR)!;
+  const safeIndex = Number.isFinite(index) && index > 0 ? Math.floor(index) : 0;
+  const step = CHANTIER_SHADE_LADDER[safeIndex % CHANTIER_SHADE_LADDER.length];
+  const target = step >= 0 ? 255 : 0;
+  const amount = Math.abs(step);
+  return `#${rgb
+    .map((c) =>
+      Math.round(c + (target - c) * amount)
+        .toString(16)
+        .padStart(2, "0")
+    )
+    .join("")}`;
+}
+
+/** Ordre CANONIQUE des chantiers d'un axe pour l'attribution des nuances — indépendant de l'ordre
+ *  de rendu propre à chaque vue (Gantt trié par date, filtres du dashboard…) pour qu'un chantier
+ *  ait la MÊME nuance partout : date de création puis id (un chantier ajouté plus tard prend la
+ *  nuance suivante sans décaler celles des chantiers existants). */
+function compareChantiersForShade(a: Chantier, b: Chantier): number {
+  return (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id);
+}
+
+/** Nuance de chaque chantier d'UN axe (`chantierId` → hex). `axisChantiers` = les chantiers de cet
+ *  axe (non filtrés par la vue, sinon les nuances glisseraient au gré des filtres). */
+export function chantierShadesForAxis(
+  axisColor: string | undefined,
+  axisChantiers: Chantier[]
+): Map<string, string> {
+  const map = new Map<string, string>();
+  [...axisChantiers]
+    .sort(compareChantiersForShade)
+    .forEach((chantier, index) => map.set(chantier.id, chantierShadeForAxis(axisColor, index)));
+  return map;
+}
+
+/** `axisId` → (`chantierId` → nuance) pour tous les axes — un chantier multi-axes (`axisIds`)
+ *  reçoit une nuance dans CHAQUE axe auquel il appartient. */
+export function chantierShadesByAxis(
+  axes: StrategicAxis[],
+  chantiers: Chantier[]
+): Map<string, Map<string, string>> {
+  const byAxis = new Map<string, Map<string, string>>();
+  for (const axis of axes) {
+    byAxis.set(
+      axis.id,
+      chantierShadesForAxis(
+        axis.color,
+        chantiers.filter((c) => c.axisIds.includes(axis.id))
+      )
+    );
+  }
+  return byAxis;
+}
+
 // ─── Staffing par période (round 7) ────────────────────────────────────────────────────────────
 
 /** Une entrée de staffing par période/fonction, alimentant `StaffingPeriodBreakdown.tsx`. */
