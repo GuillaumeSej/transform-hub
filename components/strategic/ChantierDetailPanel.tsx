@@ -827,10 +827,23 @@ function AddDeliverableForm({
 /** Convertit une ligne du brouillon ETP de création (`StaffingDraftTable.tsx`, round 29) en vraie
  *  `ChantierStaffing` rattachée à un projet réel. Même génération d'id que la fonction homonyme
  *  (non exportée) de `ChantierStaffingEditor.tsx` — dupliquée ici à l'identique plutôt
- *  qu'exportée, cette dernière n'ayant pas vocation à devenir une API publique de ce fichier. */
-function draftRowToStaffing(
+ *  qu'exportée, cette dernière n'ayant pas vocation à devenir une API publique de ce fichier.
+ *
+ * `projectDates` (retour PO : une ligne ETP saisie à la création d'un projet n'apparaissait ni sur
+ * la page globale `/effectifs` ni sur les vues « par période » de l'onglet Effectifs du chantier)
+ * — `Début`/`Fin` sont FACULTATIFS dans `StaffingDraftTable` (même choix que le formulaire d'ajout
+ * de `ChantierStaffingEditor`, une ligne peut légitimement n'avoir aucune échéance connue), mais
+ * TOUTE vue « par période » de la page `/effectifs` (`lib/staffingNeed.ts`, `staffingPeriodBuckets`
+ * dans `lib/axisLogic.ts`) ignore silencieusement une ligne sans `startDate` — par conception,
+ * documentée sur place, pas un bug de ces fonctions-là. Une ligne rattachée à un projet a toujours
+ * une période de référence évidente et déjà saisie obligatoirement (`start`/`end` du projet lui-même,
+ * champs requis du formulaire) : on l'utilise comme valeur par défaut plutôt que de laisser la ligne
+ * sans date par simple oubli de l'utilisateur dans le mini-tableau ETP. Un `startDate`/`endDate`
+ * explicitement saisi dans le brouillon reste toujours prioritaire. */
+export function draftRowToStaffing(
   row: StaffingDraftRow,
-  ids: { companyId: string; programId: string; chantierId: string; actionId: string }
+  ids: { companyId: string; programId: string; chantierId: string; actionId: string },
+  projectDates: { start: string; end: string }
 ): ChantierStaffing {
   return {
     id: `ST-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -841,8 +854,8 @@ function draftRowToStaffing(
     function: row.function,
     fte: row.fte,
     ...(row.note ? { note: row.note } : {}),
-    ...(row.startDate ? { startDate: row.startDate } : {}),
-    ...(row.endDate ? { endDate: row.endDate } : {}),
+    startDate: row.startDate || projectDates.start,
+    endDate: row.endDate || projectDates.end,
     createdAt: new Date().toISOString().slice(0, 10),
   };
 }
@@ -2611,12 +2624,16 @@ export function ChantierDetailPanel({
                         // au brouillon ETP round 29, qui a besoin d'un champ de payload séparé car
                         // `ChantierStaffing` est une collection distincte).
                         const pendingStaffing = draftStaffing.map((row) =>
-                          draftRowToStaffing(row, {
-                            companyId: user?.companyId ?? "",
-                            programId: activeProgramId ?? "",
-                            chantierId: chantier.id,
-                            actionId: action.id,
-                          })
+                          draftRowToStaffing(
+                            row,
+                            {
+                              companyId: user?.companyId ?? "",
+                              programId: activeProgramId ?? "",
+                              chantierId: chantier.id,
+                              actionId: action.id,
+                            },
+                            { start: values.start, end: values.end }
+                          )
                         );
                         const outcome = await createProjetFlow(
                           sa,
@@ -2640,12 +2657,16 @@ export function ChantierDetailPanel({
                             // projet : les lignes ETP s'y rattachent, jamais à `action.id`.
                             for (const row of draftStaffing) {
                               await saveChantierStaffing(
-                                draftRowToStaffing(row, {
-                                  companyId: user?.companyId ?? "",
-                                  programId: activeProgramId ?? "",
-                                  chantierId: chantier.id,
-                                  actionId: created.id,
-                                })
+                                draftRowToStaffing(
+                                  row,
+                                  {
+                                    companyId: user?.companyId ?? "",
+                                    programId: activeProgramId ?? "",
+                                    chantierId: chantier.id,
+                                    actionId: created.id,
+                                  },
+                                  { start: values.start, end: values.end }
+                                )
                               );
                             }
                             return created;
