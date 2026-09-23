@@ -8,8 +8,8 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 const STYLE: Record<MovementExecutionStatus, string> = {
   realized: "bg-[#421799]",
   overdue: "bg-[#FF3C47]",
-  dueSoon: "bg-[#FFB1B5]",
-  later: "bg-[#A99E9A]",
+  dueSoon: "bg-[#FF797B]",
+  later: "bg-[#FFB1B5]",
   abandoned: "bg-[#806659]",
 };
 /** Icône affichée DANS chaque tuile pour que le statut se lise sans survol : un triangle
@@ -28,7 +28,7 @@ const ICON: Record<MovementExecutionStatus, LucideIcon> = {
 };
 /** Couleur d'icône par statut, câblée en dur (pas de helper de luminance partagé hors de
  * `components/strategic`) : blanc semi-transparent sur les 3 fonds sombres (violet/rouge/brun),
- * teinte sombre semi-transparente sur les 2 fonds clairs (rose pâle/gris moyen) — l'opacité
+ * teinte sombre semi-transparente sur les 2 fonds clairs (rose corail/rose pâle) — l'opacité
  * réduite (vs. un blanc/noir plein) évite l'effet "pictogramme app mobile" et laisse la couleur
  * de fond porter l'essentiel de la lecture. */
 const ICON_COLOR: Record<MovementExecutionStatus, string> = {

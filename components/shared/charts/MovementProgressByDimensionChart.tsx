@@ -34,8 +34,8 @@ export const MOVEMENT_PROGRESS_COLORS: Record<MovementExecutionStatus, string> =
   abandoned: EXECUTION_STATUS_COLORS.abandoned, // --bp-warm-brown #806659
   overdue: EXECUTION_STATUS_COLORS.overdue, // --bp-coral #FF3C47
   realized: EXECUTION_STATUS_COLORS.realized, // --bp-purple #421799
-  dueSoon: "#FF797B", // --bp-coral-pink
-  later: "#FFB1B5", // --bp-light-pink
+  dueSoon: EXECUTION_STATUS_COLORS.dueSoon, // --bp-coral-pink #FF797B
+  later: EXECUTION_STATUS_COLORS.later, // --bp-light-pink #FFB1B5
 };
 
 /** Couleur du chiffre centré dans chaque segment (lisibilité sur les teintes claires). */

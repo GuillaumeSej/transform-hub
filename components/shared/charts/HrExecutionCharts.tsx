@@ -19,8 +19,8 @@ import type { WorkforceMovement } from "@/types";
 export const STATUS_COLORS: Record<MovementExecutionStatus, string> = {
   realized: "#421799",
   overdue: "#FF3C47",
-  dueSoon: "#FFB1B5",
-  later: "#A99E9A",
+  dueSoon: "#FF797B",
+  later: "#FFB1B5",
   abandoned: "#806659",
 };
 

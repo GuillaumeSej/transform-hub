@@ -112,26 +112,29 @@ import type { Indicator, StrategicAxis } from "@/types";
  *  volontairement `amber` (déjà réservé au risque) et `rose`/`pink`/`red` (trop proches de
  *  `--red`). Fond de la puce et bordure restent neutres par défaut ; seuls l'icône, son halo et la
  *  bordure au survol portent la teinte. */
+// Teintes ramenées dans la charte BearingPoint (plus de bleu/teal/orange Tailwind) — les clés
+// historiques sont conservées pour ne pas toucher aux appelants : violet (purple), brun chaud,
+// rouge brique, rose corail. Le rouge vif `--bp-coral` reste réservé au signal "à risque".
 const CHIP_ACCENTS = {
   blue: {
-    icon: "text-blue-500",
-    iconBg: "bg-blue-50",
-    hoverBorder: "hover:border-blue-300",
+    icon: "text-bp-purple",
+    iconBg: "bg-[#421799]/10",
+    hoverBorder: "hover:border-[#421799]/40",
   },
   violet: {
-    icon: "text-violet-500",
-    iconBg: "bg-violet-50",
-    hoverBorder: "hover:border-violet-300",
+    icon: "text-bp-warm-brown",
+    iconBg: "bg-[#806659]/10",
+    hoverBorder: "hover:border-[#806659]/40",
   },
   teal: {
-    icon: "text-teal-500",
-    iconBg: "bg-teal-50",
-    hoverBorder: "hover:border-teal-300",
+    icon: "text-bp-red-brick",
+    iconBg: "bg-[#991D1F]/10",
+    hoverBorder: "hover:border-[#991D1F]/40",
   },
   orange: {
-    icon: "text-orange-500",
-    iconBg: "bg-orange-50",
-    hoverBorder: "hover:border-orange-300",
+    icon: "text-bp-coral-pink",
+    iconBg: "bg-[#FF797B]/15",
+    hoverBorder: "hover:border-[#FF797B]/60",
   },
 } as const;
 
