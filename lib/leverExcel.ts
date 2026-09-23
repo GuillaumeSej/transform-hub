@@ -33,7 +33,7 @@ export function leverToExcelRow(
     Code: lever.code,
     "Type de levier": lever.type,
     "Nom du levier": lever.name,
-    Workstream: ws?.name ?? lever.ws,
+    Chantier: ws?.name ?? lever.ws,
     Programme: programs.find((p) => p.id === lever.programId)?.name ?? lever.programId ?? "",
     Owner: lever.owner,
     "Owner (initiales)": lever.ownerInit,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { AuthUser } from "@/types";
 
 /**
@@ -42,6 +43,7 @@ export function UserPicker({
   label?: string;
   id?: string;
 }) {
+  const { t } = useTranslation();
   const knownValue = value ? users.some((u) => u.username === value) : true;
 
   return (
@@ -57,8 +59,12 @@ export function UserPicker({
         onChange={(e) => onChange(e.target.value ? e.target.value : undefined)}
         className={`${label ? "mt-1 " : ""}w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral`}
       >
-        <option value="">{placeholder ?? "Non assigné"}</option>
-        {!knownValue && value && <option value={value}>{value} (non reconnu)</option>}
+        <option value="">{placeholder ?? t("strategicAxes.unassigned", "Non assigné")}</option>
+        {!knownValue && value && (
+          <option value={value}>
+            {value} {t("strategicAxes.form.unknownUser", "(non reconnu)")}
+          </option>
+        )}
         {users.map((u) => (
           <option key={u.username} value={u.username}>
             {u.name || `${u.firstName} ${u.lastName}`.trim()}

@@ -56,7 +56,7 @@ export function StaffingPeriodModal({
     <Modal open={open} onOpenChange={onOpenChange} title={title} maxWidth="1100px">
       {rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-tertiary">
-          {t("staffingPeriod.detailModal.empty", "Aucune ligne de staffing pour cette sélection.")}
+          {t("staffingPeriod.detailModal.empty", "Aucune ligne d'ETP pour cette sélection.")}
         </p>
       ) : (
         <div className="space-y-4">

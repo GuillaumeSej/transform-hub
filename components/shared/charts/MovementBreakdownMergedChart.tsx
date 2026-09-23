@@ -54,6 +54,13 @@ export function MovementBreakdownMergedChart({
   const [dimension, setDimension] = useState<MovementBreakdownDimension>("department");
   const [granularity, setGranularity] = useState<BridgeGranularity>("quarter");
 
+  const dimensionOptions: { value: MovementBreakdownDimension; label: string }[] = [
+    { value: "department", label: t("hr.department", "Département") },
+    { value: "country", label: t("dashboard.country", "Pays") },
+    { value: "program", label: t("dashboard.program", "Programme") },
+  ];
+  const dimensionLabel = dimensionOptions.find((o) => o.value === dimension)?.label;
+
   const handleDimensionClick = (label: string, movs: WorkforceMovement[]) => {
     onDrilldown?.(
       t("hr.drilldown.dimensionTitle", "Mouvements — {label}").replace("{label}", label),
@@ -84,11 +91,7 @@ export function MovementBreakdownMergedChart({
         />
         {mode === "dimension" ? (
           <SegmentedToggle
-            options={[
-              { value: "department", label: t("hr.department", "Département") },
-              { value: "country", label: t("dashboard.country", "Pays") },
-              { value: "program", label: t("dashboard.program", "Programme") },
-            ]}
+            options={dimensionOptions}
             value={dimension}
             onChange={(next) => setDimension(next as MovementBreakdownDimension)}
           />
@@ -100,6 +103,7 @@ export function MovementBreakdownMergedChart({
         <DepartmentMovementsChart
           data={movementBreakdownByDimension(movements, dimension, programLabels)}
           height={height}
+          dimensionLabel={dimensionLabel}
           onBarClick={handleDimensionClick}
         />
       ) : (

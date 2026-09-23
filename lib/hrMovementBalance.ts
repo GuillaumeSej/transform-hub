@@ -74,9 +74,10 @@ export function movementNetBalance(movements: WorkforceMovement[]): MovementNetB
   };
 }
 
-/** Valeur signée au format français : « +3 », « −2,5 », « 0 ». */
-export function formatSignedFr(value: number): string {
-  const abs = Math.abs(value).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+/** Valeur signée : « +3 », « −2,5 », « 0 ». Format français par défaut ; passer la locale active
+ *  (`useTranslation().locale`) pour le séparateur décimal de la langue affichée. */
+export function formatSignedFr(value: number, locale: string = "fr-FR"): string {
+  const abs = Math.abs(value).toLocaleString(locale, { maximumFractionDigits: 1 });
   if (value > 0) return `+${abs}`;
   if (value < 0) return `−${abs}`;
   return abs;

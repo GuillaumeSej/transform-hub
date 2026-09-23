@@ -234,7 +234,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   },
   {
     type: "s-curve",
-    label: "S-Curve — Plan initial / Réalisé / Réactualisé",
+    label: "Courbe en S — Plan initial / Réalisé / Réactualisé",
     icon: "TrendingUp",
     defaultSpan: "XL",
     allowedSpans: ["L", "XL"],
@@ -261,7 +261,7 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
   },
   {
     type: "geo-breakdown",
-    label: "Savings par Pays / Département",
+    label: "Économies par pays / département",
     icon: "PieChart",
     defaultSpan: "M",
     allowedSpans: ["M", "L", "XL"],

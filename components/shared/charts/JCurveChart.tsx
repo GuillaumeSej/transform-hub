@@ -132,7 +132,7 @@ export function JCurveChart({
             strokeWidth={1.5}
             strokeDasharray="6 3"
             label={{
-              value: t("lever.payback", "Payback"),
+              value: t("lever.payback", "Délai de retour"),
               position: "top",
               fontSize: 10,
               fill: "#2E7D32",

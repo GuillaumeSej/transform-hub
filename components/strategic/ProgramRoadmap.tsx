@@ -11,8 +11,9 @@ import {
   type ProgramRoadmapRow,
 } from "@/lib/axisLogic";
 import { Tooltip } from "@/components/shared/Tooltip";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
-  formatTimelineDay,
+  formatTimelineDay as formatTimelineDayBase,
   timelineColumns,
   timelinePctOf,
   timelineRange,
@@ -219,18 +220,21 @@ export function ProgramRoadmap({
    *  (comportement historique inchangé) : tous les autres appelants restent inutilement affectés. */
   clickableActionIds?: Set<string> | "all";
 }) {
+  const { t, locale } = useTranslation();
+  const formatTimelineDay = (iso: string) => formatTimelineDayBase(iso, locale);
   const l = {
-    empty: labels?.empty ?? "Aucun levier daté sur le programme.",
-    scale: labels?.scale ?? "Échelle",
-    scaleQuarter: labels?.scaleQuarter ?? "Trimestre",
-    scaleSemester: labels?.scaleSemester ?? "Semestre",
-    scaleYear: labels?.scaleYear ?? "Année",
-    progress: labels?.progress ?? "Avancement",
-    today: labels?.today ?? "Aujourd'hui",
-    leviersSuffix: labels?.leviersSuffix ?? "leviers",
-    late: labels?.late ?? "En retard",
+    empty: labels?.empty ?? t("strategicAxes.roadmap.empty", "Aucun projet daté sur le programme."),
+    scale: labels?.scale ?? t("strategicAxes.roadmap.scale", "Échelle"),
+    scaleQuarter: labels?.scaleQuarter ?? t("strategicAxes.roadmap.scaleQuarter", "Trimestre"),
+    scaleSemester: labels?.scaleSemester ?? t("strategicAxes.roadmap.scaleSemester", "Semestre"),
+    scaleYear: labels?.scaleYear ?? t("strategicAxes.roadmap.scaleYear", "Année"),
+    progress: labels?.progress ?? t("strategicAxes.roadmap.progress", "Avancement"),
+    today: labels?.today ?? t("strategicAxes.ganttToday", "Aujourd'hui"),
+    leviersSuffix: labels?.leviersSuffix ?? t("strategicAxes.roadmap.leviersSuffix", "projets"),
+    late: labels?.late ?? t("strategicAxes.roadmap.late", "En retard"),
     lateCount: labels?.lateCount,
-    currentMilestone: labels?.currentMilestone ?? "Jalon actuel",
+    currentMilestone:
+      labels?.currentMilestone ?? t("strategicAxes.roadmap.currentMilestone", "Jalon actuel"),
   };
 
   // Semestre par défaut : le programme complet s'étend typiquement sur plusieurs années, la maille
@@ -256,8 +260,8 @@ export function ProgramRoadmap({
   const { minTime, maxTime } = useMemo(() => timelineRange(rows, scale), [rows, scale]);
   const pctOf = useMemo(() => timelinePctOf(minTime, maxTime), [minTime, maxTime]);
   const columns = useMemo(
-    () => (rows.length === 0 ? [] : timelineColumns(minTime, maxTime, scale)),
-    [minTime, maxTime, scale, rows.length]
+    () => (rows.length === 0 ? [] : timelineColumns(minTime, maxTime, scale, locale)),
+    [minTime, maxTime, scale, rows.length, locale]
   );
   const yearBands = useMemo(() => timelineYearBands(columns), [columns]);
   const todayPct = useMemo(
@@ -337,7 +341,8 @@ export function ProgramRoadmap({
                       </span>
                       {axisGroup.axis.owner && (
                         <span className="truncate text-[10.5px] text-tertiary">
-                          · Sponsor : {axisSponsorLabel(axisGroup.axis, users)}
+                          · {t("strategicAxes.sponsorShort", "Commanditaire")} :{" "}
+                          {axisSponsorLabel(axisGroup.axis, users)}
                         </span>
                       )}
                     </div>

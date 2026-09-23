@@ -434,7 +434,7 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
   return (
     <Card>
       <CardHeader
-        title={t("finance.chart.investVsSavingsTitle", "Coût d'investissement vs Savings")}
+        title={t("finance.chart.investVsSavingsTitle", "Coût d'investissement vs Économies")}
         actions={<GranularityToggle value={granularity} onChange={setGranularity} />}
       />
       <CardBody>
@@ -531,7 +531,7 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
         onOpenChange={(o) => {
           if (!o) setSelected(null);
         }}
-        title={`${t("finance.chart.investVsSavingsTitle", "Coût d'investissement vs Savings")} — ${selected?.label ?? ""}`}
+        title={`${t("finance.chart.investVsSavingsTitle", "Coût d'investissement vs Économies")} — ${selected?.label ?? ""}`}
         rows={rows}
         workstreams={data.workstreams}
         formatValue={(v) => engine.fmtCurr(v)}

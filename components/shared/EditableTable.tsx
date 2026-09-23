@@ -13,6 +13,8 @@ export type ColumnDef<T> = {
   type?: "text" | "number" | "select" | "date" | "textarea" | "readonly";
   editable?: boolean;
   options?: string[];
+  /** Libellé affiché (traduit) d'une option — la valeur stockée reste `opt`. Défaut : `opt`. */
+  optionLabel?: (opt: string) => string;
   allowCustom?: boolean;
   /** `false` = pas de filtre multi-sélection auto dans la barre du tableau pour cette colonne. */
   filterable?: boolean;
@@ -177,7 +179,10 @@ export function EditableTable<T extends { id: string }>({
             placeholder={t("shared.editableTable.allSuffix", "(tous)")}
             values={columnFilters[c.key] ?? []}
             onChange={(vals) => setColumnFilters((prev) => ({ ...prev, [c.key]: vals }))}
-            options={c.options!.map((opt) => ({ value: opt, label: opt }))}
+            options={c.options!.map((opt) => ({
+              value: opt,
+              label: c.optionLabel ? c.optionLabel(opt) : opt,
+            }))}
           />
         ))}
         {(search || Object.values(columnFilters).some((v) => v.length > 0)) && (
@@ -322,7 +327,7 @@ export function EditableTable<T extends { id: string }>({
                           >
                             {c.options.map((opt) => (
                               <option key={opt} value={opt}>
-                                {opt}
+                                {c.optionLabel ? c.optionLabel(opt) : opt}
                               </option>
                             ))}
                             {c.allowCustom && (

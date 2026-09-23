@@ -30,35 +30,64 @@ import { normalizeClearanceLevel } from "@/lib/confidentiality";
  *  le message affiché quand Firebase Auth rejette lui-même le mot de passe côté serveur. */
 export const MIN_PASSWORD_LENGTH = 6;
 
-const PASSWORD_TOO_SHORT_MESSAGE = `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`;
+const PASSWORD_TOO_SHORT_MESSAGE = "Le mot de passe doit contenir au moins {n} caractères.";
+
+/** Clé i18n de chacun des libellés (français, testés tels quels) renvoyés par
+ *  `missingRequiredFields` — traduits au moment de l'affichage du toast. */
+const MISSING_FIELD_KEYS: Record<string, string> = {
+  Identifiant: "adminUsers.fieldUsername",
+  "Nom affiché (ou Prénom + Nom)": "adminUsers.fieldDisplayNameOrFull",
+  "Mot de passe": "adminUsers.fieldPassword",
+  Entreprise: "adminUsers.fieldCompany",
+};
 
 /** Libellés FR des 6 rôles du Plan Performance (round historique) — cet écran d'admin n'est pas
  *  traduit, mêmes libellés littéraux que les rôles du Plan Stratégique ci-dessous. */
-const PERFORMANCE_ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: "cto", label: "CTO" },
+const PERFORMANCE_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }[] = [
+  { value: "cto", labelKey: "roles.cto.short", label: "CTO" },
   // Libellé "Responsable de chantier" (renommage du libellé affiché — la clé technique `sponsor` reste
   // inchangée, toujours scopée WORKSTREAM, voir types/index.ts).
-  { value: "sponsor", label: "Responsable de chantier" },
-  { value: "lever", label: "Lever Owner" },
-  { value: "finance", label: "Finance" },
-  { value: "hr", label: "HR" },
-  { value: "ops", label: "Ops" },
+  { value: "sponsor", labelKey: "roles.sponsor.label", label: "Responsable de chantier" },
+  { value: "lever", labelKey: "roles.lever.label", label: "Responsable de levier" },
+  { value: "finance", labelKey: "roles.finance.label", label: "Contrôleur financier" },
+  { value: "hr", labelKey: "roles.hr.label", label: "Directeur RH" },
+  { value: "ops", labelKey: "roles.ops.label", label: "Responsable Opérations" },
   // Fondation vue consolidée multi-programmes (voir types/index.ts) : deux rôles Plan Performance
   // scopés PROGRAMME (pas workstream) — même visualisation qu'un CTO, mais restreints à leur
   // périmètre de programmes (sponsor/owner), voir lib/consolidatedProgramAccess.ts.
-  { value: "program_sponsor", label: "Program Sponsor" },
-  { value: "program_owner", label: "Program Owner" },
+  {
+    value: "program_sponsor",
+    labelKey: "roles.programSponsor.label",
+    label: "Commanditaire du programme",
+  },
+  {
+    value: "program_owner",
+    labelKey: "roles.programOwner.label",
+    label: "Responsable du programme",
+  },
 ];
 
 /** Libellés FR des 6 profils du Plan Stratégique (organigramme 3-5-15) — les clés i18n `roles.*`
  *  correspondantes existent séparément pour la sidebar/topbar. */
-const STRATEGIC_ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: "strategic_lead", label: "Pilote du plan stratégique" },
-  { value: "axis_sponsor", label: "Sponsor d'axe" },
-  { value: "chantier_owner", label: "Responsable de chantier" },
-  { value: "chantier_contributor", label: "Responsable projet" },
-  { value: "internal_comm", label: "Communication interne" },
-  { value: "budget_control", label: "Contrôle de gestion" },
+const STRATEGIC_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }[] = [
+  {
+    value: "strategic_lead",
+    labelKey: "roles.strategicLead.label",
+    label: "Pilote du plan stratégique",
+  },
+  { value: "axis_sponsor", labelKey: "roles.axisSponsor.label", label: "Commanditaire d'axe" },
+  {
+    value: "chantier_owner",
+    labelKey: "roles.chantierOwner.label",
+    label: "Responsable de chantier",
+  },
+  {
+    value: "chantier_contributor",
+    labelKey: "roles.chantierContributor.label",
+    label: "Responsable projet",
+  },
+  { value: "internal_comm", labelKey: "roles.internalComm.label", label: "Communication interne" },
+  { value: "budget_control", labelKey: "roles.budgetControl.label", label: "Contrôle de gestion" },
 ];
 
 /** Rôle transverse (round 25) : contrairement aux 12 rôles ci-dessus, chacun strictement mono-
@@ -67,8 +96,8 @@ const STRATEGIC_ROLE_OPTIONS: { value: Role; label: string }[] = [
  *  optgroup plutôt que dupliqué dans les deux listes ci-dessus : la valeur soumise par un
  *  `<option>` HTML ne porte que le `Role`, pas l'optgroup d'origine — un doublon dans les deux
  *  listes produirait deux entrées de menu identiques et indiscernables l'une de l'autre. */
-const CROSS_TRACK_ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: "comex_member", label: "Membre du COMEX" },
+const CROSS_TRACK_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }[] = [
+  { value: "comex_member", labelKey: "roles.comexMember.label", label: "Membre du COMEX" },
 ];
 
 /** Réunion des trois listes ci-dessus — sert uniquement à retrouver le libellé d'un `Role` donné
@@ -279,8 +308,13 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
 
   // Validation temps réel du mot de passe — recalculée à chaque frappe, affichée sous le champ ET
   // utilisée pour désactiver le bouton Enregistrer tant qu'elle échoue.
+  const passwordTooShortMessage = t(
+    "adminUsers.passwordTooShort",
+    PASSWORD_TOO_SHORT_MESSAGE
+  ).replace("{n}", String(MIN_PASSWORD_LENGTH));
+  const unknownError = t("adminUsers.unknownError", "Erreur inconnue");
   const passwordError =
-    (form.password ?? "").length < MIN_PASSWORD_LENGTH ? PASSWORD_TOO_SHORT_MESSAGE : null;
+    (form.password ?? "").length < MIN_PASSWORD_LENGTH ? passwordTooShortMessage : null;
 
   // Le formulaire utilisateur est "dirty" dès qu'il est ouvert avec au moins un champ utile
   // rempli. En mode édition (editIdx != null), il est dirty tant qu'il est ouvert — on n'a pas
@@ -354,8 +388,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     );
     if (missing.length > 0) {
       showToast(
-        "Champs obligatoires manquants",
-        `Merci de renseigner : ${missing.join(", ")}.`,
+        t("adminUsers.missingFieldsTitle", "Champs obligatoires manquants"),
+        t("adminUsers.missingFieldsBody", "Merci de renseigner : {fields}.").replace(
+          "{fields}",
+          missing.map((m) => (MISSING_FIELD_KEYS[m] ? t(MISSING_FIELD_KEYS[m], m) : m)).join(", ")
+        ),
         "error"
       );
       return;
@@ -364,7 +401,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     // un mot de passe non-vide mais trop court — affiché en temps réel sous le champ, et rappelé
     // ici dans une modale impossible à manquer si l'admin a quand même cliqué Enregistrer.
     if (passwordError) {
-      setErrorDialog({ title: "Mot de passe invalide", messages: [passwordError] });
+      setErrorDialog({
+        title: t("adminUsers.invalidPasswordTitle", "Mot de passe invalide"),
+        messages: [passwordError],
+      });
       return;
     }
 
@@ -377,8 +417,8 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       assertValidProfiles(profiles);
     } catch (err) {
       setErrorDialog({
-        title: "Profils invalides",
-        messages: [err instanceof Error ? err.message : "Erreur inconnue"],
+        title: t("adminUsers.invalidProfilesTitle", "Profils invalides"),
+        messages: [err instanceof Error ? err.message : unknownError],
       });
       return;
     }
@@ -440,8 +480,8 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         setShowForm(false);
       } catch (err) {
         showToast(
-          "Échec de l'enregistrement",
-          err instanceof Error ? err.message : "Erreur inconnue",
+          t("adminUsers.saveFailed", "Échec de l'enregistrement"),
+          err instanceof Error ? err.message : unknownError,
           "error"
         );
       }
@@ -460,12 +500,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       setShowForm(false);
     } catch (err) {
       if (isFirebaseErrorCode(err, "auth/weak-password")) {
-        setErrorDialog({ title: "Mot de passe invalide", messages: [PASSWORD_TOO_SHORT_MESSAGE] });
+        setErrorDialog({
+          title: t("adminUsers.invalidPasswordTitle", "Mot de passe invalide"),
+          messages: [passwordTooShortMessage],
+        });
         return;
       }
       showToast(
-        "Échec de l'enregistrement",
-        err instanceof Error ? err.message : "Erreur inconnue",
+        t("adminUsers.saveFailed", "Échec de l'enregistrement"),
+        err instanceof Error ? err.message : unknownError,
         "error"
       );
     }
@@ -475,7 +518,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
    *  `.message` est déjà une chaîne française prête à afficher) ou de toute autre exception. */
   function adminApiErrorMessage(err: unknown): string {
     if (err instanceof AdminApiError) return err.message;
-    return err instanceof Error ? err.message : "Erreur inconnue";
+    return err instanceof Error ? err.message : unknownError;
   }
 
   /** Récupère le jeton d'ID de l'admin CONNECTÉ (session principale, jamais l'auth secondaire
@@ -486,7 +529,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     if (!current) {
       throw new AdminApiError(
         "unauthenticated",
-        "Session administrateur expirée — merci de vous reconnecter."
+        t(
+          "adminUsers.sessionExpired",
+          "Session administrateur expirée — merci de vous reconnecter."
+        )
       );
     }
     return current.getIdToken();
@@ -508,15 +554,24 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       // (nouveau document, ancien supprimé) redéclenche l'abonnement tout seul — rien à refaire ici.
       setShowForm(false);
       showToast(
-        isPasswordOnly ? "Mot de passe modifié" : "Utilisateur renommé",
         isPasswordOnly
-          ? `Le mot de passe du compte « ${oldUsername} » a été mis à jour.`
-          : `Le compte « ${oldUsername} » a été renommé en « ${newUser.username} ».`,
+          ? t("adminUsers.passwordChangedTitle", "Mot de passe modifié")
+          : t("adminUsers.renamedTitle", "Utilisateur renommé"),
+        isPasswordOnly
+          ? t(
+              "adminUsers.passwordChangedBody",
+              "Le mot de passe du compte « {username} » a été mis à jour."
+            ).replace("{username}", oldUsername)
+          : t("adminUsers.renamedBody", "Le compte « {old} » a été renommé en « {new} ».")
+              .replace("{old}", oldUsername)
+              .replace("{new}", newUser.username),
         "success"
       );
     } catch (err) {
       setErrorDialog({
-        title: isPasswordOnly ? "Échec du changement de mot de passe" : "Échec du renommage",
+        title: isPasswordOnly
+          ? t("adminUsers.passwordChangeFailed", "Échec du changement de mot de passe")
+          : t("adminUsers.renameFailed", "Échec du renommage"),
         messages: [adminApiErrorMessage(err)],
       });
     }
@@ -583,9 +638,19 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       await deleteUserAccount(idToken, { username, companyId });
       // Même remarque que confirmRename() : subscribeUsers() se met à jour tout seul une fois le
       // document Firestore supprimé côté backend.
-      showToast("Utilisateur supprimé", `Le compte « ${username} » a été supprimé.`, "success");
+      showToast(
+        t("adminUsers.deletedTitle", "Utilisateur supprimé"),
+        t("adminUsers.deletedBody", "Le compte « {username} » a été supprimé.").replace(
+          "{username}",
+          username
+        ),
+        "success"
+      );
     } catch (err) {
-      setErrorDialog({ title: "Échec de la suppression", messages: [adminApiErrorMessage(err)] });
+      setErrorDialog({
+        title: t("adminUsers.deleteFailed", "Échec de la suppression"),
+        messages: [adminApiErrorMessage(err)],
+      });
     }
   };
 
@@ -593,12 +658,13 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
    *  tableau : libellés des profils métier séparés par des virgules, puis badges "Admin" /
    *  "Admin entreprise" quand les flags additifs sont actifs. Vide ("—") si aucun des deux. */
   function profilesSummary(u: AuthUser): { profileLabels: string[]; badges: string[] } {
-    const profileLabels = (u.profiles ?? []).map(
-      (p) => ALL_ROLE_OPTIONS.find((r) => r.value === p.role)?.label ?? p.role
-    );
+    const profileLabels = (u.profiles ?? []).map((p) => {
+      const opt = ALL_ROLE_OPTIONS.find((r) => r.value === p.role);
+      return opt ? t(opt.labelKey, opt.label) : p.role;
+    });
     const badges: string[] = [];
-    if (u.isGlobalAdmin) badges.push("Admin");
-    if (u.isCompanyAdmin) badges.push("Admin entreprise");
+    if (u.isGlobalAdmin) badges.push(t("adminUsers.badgeAdmin", "Admin"));
+    if (u.isCompanyAdmin) badges.push(t("adminUsers.badgeCompanyAdmin", "Admin entreprise"));
     return { profileLabels, badges };
   }
 
@@ -607,13 +673,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Users size={22} className="text-bp-coral" />
-          <h1 className="text-xl font-bold text-text-primary">Gestion des Utilisateurs</h1>
+          <h1 className="text-xl font-bold text-text-primary">
+            {t("adminUsers.title", "Gestion des Utilisateurs")}
+          </h1>
         </div>
         <button
           onClick={startCreate}
           className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
         >
-          <Plus size={14} /> Ajouter
+          <Plus size={14} /> {t("common.add", "Ajouter")}
         </button>
       </div>
 
@@ -622,7 +690,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         onOpenChange={(open) => {
           if (!open) setShowForm(false);
         }}
-        title={editIdx !== null ? "Modifier l'utilisateur" : "Nouvel utilisateur"}
+        title={
+          editIdx !== null
+            ? t("adminUsers.editTitle", "Modifier l'utilisateur")
+            : t("adminUsers.newTitle", "Nouvel utilisateur")
+        }
         maxWidth="640px"
         footer={
           <>
@@ -630,14 +702,14 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               onClick={() => setShowForm(false)}
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
             >
-              Annuler
+              {t("common.cancel", "Annuler")}
             </button>
             <button
               onClick={save}
               disabled={passwordError !== null}
               className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Enregistrer
+              {t("common.save", "Enregistrer")}
             </button>
           </>
         }
@@ -646,55 +718,65 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-text-secondary">
-                Identifiant <span className="text-red-500">*</span>
+                {t("adminUsers.fieldUsername", "Identifiant")}{" "}
+                <span className="text-red-500">*</span>
               </label>
               <input
                 value={form.username}
                 onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder="prenom.nom"
+                placeholder={t("adminUsers.usernamePlaceholder", "prenom.nom")}
                 required
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-text-secondary">Prénom</label>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("adminUsers.fieldFirstName", "Prénom")}
+              </label>
               <input
                 value={form.firstName}
                 onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder="Prénom"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-text-secondary">Nom</label>
-              <input
-                value={form.lastName}
-                onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder="Nom"
+                placeholder={t("adminUsers.fieldFirstName", "Prénom")}
               />
             </div>
             <div>
               <label className="text-xs font-medium text-text-secondary">
-                Nom affiché <span className="text-red-500">*</span>
+                {t("adminUsers.fieldLastName", "Nom")}
+              </label>
+              <input
+                value={form.lastName}
+                onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+                placeholder={t("adminUsers.fieldLastName", "Nom")}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("adminUsers.fieldDisplayName", "Nom affiché")}{" "}
+                <span className="text-red-500">*</span>
               </label>
               <input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-                placeholder="Prénom Nom"
+                placeholder={t("adminUsers.displayNamePlaceholder", "Prénom Nom")}
                 required={!form.firstName.trim() && !form.lastName.trim()}
               />
             </div>
             <div className="col-span-2 -mt-2">
               <p className="text-xs text-text-secondary">
-                <span className="text-red-500">*</span> Nom affiché requis, sauf si Prénom et Nom
-                sont tous les deux renseignés.
+                <span className="text-red-500">*</span>{" "}
+                {t(
+                  "adminUsers.displayNameHint",
+                  "Nom affiché requis, sauf si Prénom et Nom sont tous les deux renseignés."
+                )}
               </p>
             </div>
             <div>
               <label className="text-xs font-medium text-text-secondary">
-                Mot de passe <span className="text-red-500">*</span>
+                {t("adminUsers.fieldPassword", "Mot de passe")}{" "}
+                <span className="text-red-500">*</span>
               </label>
               <input
                 value={form.password}
@@ -731,7 +813,8 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             {!form.isGlobalAdmin && !fixedCompanyId && (
               <div>
                 <label className="text-xs font-medium text-text-secondary">
-                  Entreprise <span className="text-red-500">*</span>
+                  {t("adminUsers.fieldCompany", "Entreprise")}{" "}
+                  <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={form.companyId}
@@ -740,7 +823,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                   required
                 >
                   <option value="" disabled>
-                    Sélectionner une entreprise
+                    {t("adminUsers.selectCompany", "Sélectionner une entreprise")}
                   </option>
                   {companies.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -758,7 +841,9 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               (voir assertValidProfiles, appelée comme filet de sécurité dans save()). */}
           <div className="rounded-lg border border-border bg-bg-surface p-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-text-secondary">Profils métier</label>
+              <label className="text-xs font-medium text-text-secondary">
+                {t("adminUsers.profilesLabel", "Profils métier")}
+              </label>
               <button
                 type="button"
                 onClick={() =>
@@ -772,13 +857,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 }
                 className="rounded-sm bg-bp-coral/10 px-2 py-0.5 text-xs font-semibold text-bp-coral transition hover:bg-bp-coral/20"
               >
-                + Ajouter un profil
+                {t("adminUsers.addProfile", "+ Ajouter un profil")}
               </button>
             </div>
             {form.profiles.length === 0 && (
               <p className="mt-2 text-xs text-text-secondary">
-                Aucun profil métier — utilisateur purement admin, ou compte de type picker (ex.
-                référence pour un champ owner/sponsor).
+                {t(
+                  "adminUsers.noProfiles",
+                  "Aucun profil métier — utilisateur purement admin, ou compte de type picker (ex. référence pour un champ owner/sponsor)."
+                )}
               </p>
             )}
             <div className="mt-2 space-y-2">
@@ -809,25 +896,30 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                       }}
                       className="w-56 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                     >
-                      <option value="">Choisir un rôle</option>
-                      <optgroup label="Plan Performance">
+                      <option value="">{t("adminUsers.chooseRole", "Choisir un rôle")}</option>
+                      <optgroup label={t("adminUsers.groupPerformance", "Plan Performance")}>
                         {PERFORMANCE_ROLE_OPTIONS.map((r) => (
                           <option key={r.value} value={r.value}>
-                            {r.label}
+                            {t(r.labelKey, r.label)}
                           </option>
                         ))}
                       </optgroup>
-                      <optgroup label="Plan Stratégique">
+                      <optgroup label={t("adminUsers.groupStrategic", "Plan Stratégique")}>
                         {STRATEGIC_ROLE_OPTIONS.map((r) => (
                           <option key={r.value} value={r.value}>
-                            {r.label}
+                            {t(r.labelKey, r.label)}
                           </option>
                         ))}
                       </optgroup>
-                      <optgroup label="Transverse (Performance + Stratégique)">
+                      <optgroup
+                        label={t(
+                          "adminUsers.groupCrossTrack",
+                          "Transverse (Performance + Stratégique)"
+                        )}
+                      >
                         {CROSS_TRACK_ROLE_OPTIONS.map((r) => (
                           <option key={r.value} value={r.value}>
-                            {r.label}
+                            {t(r.labelKey, r.label)}
                           </option>
                         ))}
                       </optgroup>
@@ -847,12 +939,17 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                         className="flex-1 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                       >
                         <option value="">
-                          Tous les programmes{" "}
                           {profile.role === "comex_member"
-                            ? ""
+                            ? t("adminUsers.allPrograms", "Tous les programmes")
                             : isStrategicRole(profile.role)
-                              ? "Stratégique"
-                              : "Performance"}
+                              ? t(
+                                  "adminUsers.allProgramsStrategic",
+                                  "Tous les programmes Stratégique"
+                                )
+                              : t(
+                                  "adminUsers.allProgramsPerformance",
+                                  "Tous les programmes Performance"
+                                )}
                         </option>
                         {rolePrograms.map((p) => (
                           <option key={p.id} value={p.id}>
@@ -870,7 +967,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                         }))
                       }
                       className="text-text-secondary hover:text-red-500"
-                      aria-label="Retirer ce profil"
+                      aria-label={t("adminUsers.removeProfile", "Retirer ce profil")}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -890,7 +987,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                   checked={form.isCompanyAdmin}
                   onChange={(e) => setForm((f) => ({ ...f, isCompanyAdmin: e.target.checked }))}
                 />
-                Administrateur de l&apos;entreprise
+                {t("adminUsers.companyAdmin", "Administrateur de l'entreprise")}
               </label>
             )}
             {canAssignGlobalAdmin && (
@@ -906,7 +1003,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                     }))
                   }
                 />
-                Administrateur global
+                {t("adminUsers.globalAdmin", "Administrateur global")}
               </label>
             )}
           </div>
@@ -914,27 +1011,30 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           {showClearanceControl && (
             <div className="rounded-lg border border-border bg-bg-surface p-3">
               <label className="text-xs font-medium text-text-secondary">
-                Habilitation de confidentialité (individuelle)
+                {t("adminUsers.clearanceTitle", "Habilitation de confidentialité (individuelle)")}
               </label>
               <p className="mt-1 text-xs text-text-secondary">
-                Remplace l&apos;habilitation par défaut du rôle pour ce seul utilisateur — dans les
-                deux sens : « Niveau personnalisé » ou « Tous les niveaux » peuvent aussi bien
-                restreindre qu&apos;étendre l&apos;accès au-delà de ce que son rôle donne
-                normalement (ex. donner à un profil « Lever Owner » l&apos;accès à un niveau
-                confidentiel réservé au CTO).
+                {t(
+                  "adminUsers.clearanceHelp",
+                  "Remplace l'habilitation par défaut du rôle pour ce seul utilisateur — dans les deux sens : « Niveau personnalisé » ou « Tous les niveaux » peuvent aussi bien restreindre qu'étendre l'accès au-delà de ce que son rôle donne normalement (ex. donner à un profil « Responsable de levier » l'accès à un niveau confidentiel réservé au CTO)."
+                )}
               </p>
               <p className="mt-1.5 text-xs font-medium text-text-secondary">
-                Ce réglage contrôle uniquement l&apos;accès aux niveaux confidentiels. Il ne modifie
-                pas le périmètre de base d&apos;un rôle (ex. un Lever Owner continuera à ne voir que
-                ses propres leviers, même avec « Tous les niveaux »).
+                {t(
+                  "adminUsers.clearanceScopeNote",
+                  "Ce réglage contrôle uniquement l'accès aux niveaux confidentiels. Il ne modifie pas le périmètre de base d'un rôle (ex. un Responsable de levier continuera à ne voir que ses propres leviers, même avec « Tous les niveaux »)."
+                )}
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {(
                   [
-                    { value: "inherit", label: "Hérite du rôle" },
-                    { value: "none", label: "Aucun accès" },
-                    { value: "custom", label: "Niveau personnalisé" },
-                    { value: "all", label: "Tous les niveaux" },
+                    { value: "inherit", label: t("adminUsers.clearanceInherit", "Hérite du rôle") },
+                    { value: "none", label: t("adminUsers.clearanceNone", "Aucun accès") },
+                    {
+                      value: "custom",
+                      label: t("adminUsers.clearanceCustom", "Niveau personnalisé"),
+                    },
+                    { value: "all", label: t("adminUsers.clearanceAll", "Tous les niveaux") },
                   ] as { value: ClearanceMode; label: string }[]
                 ).map((opt) => (
                   <button
@@ -955,7 +1055,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 <div className="mt-3">
                   <div
                     role="radiogroup"
-                    aria-label="Niveau de confidentialité"
+                    aria-label={t("adminUsers.clearanceLevel", "Niveau de confidentialité")}
                     className="flex flex-wrap gap-3"
                   >
                     {(formCompany?.confidentialityLevels ?? []).map((level) => (
@@ -974,7 +1074,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                     ))}
                   </div>
                   <p className="mt-1.5 text-xs text-text-secondary">
-                    Ce niveau donne aussi accès aux niveaux inférieurs.
+                    {t(
+                      "adminUsers.clearanceHierarchyNote",
+                      "Ce niveau donne aussi accès aux niveaux inférieurs."
+                    )}
                   </p>
                 </div>
               )}
@@ -983,8 +1086,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
 
           {showClearanceHint && (
             <p className="rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
-              Configurez d&apos;abord des niveaux de confidentialité dans l&apos;onglet Paramètres
-              de cette entreprise pour activer ce contrôle.
+              {t(
+                "adminUsers.clearanceNoLevels",
+                "Configurez d'abord des niveaux de confidentialité dans l'onglet Paramètres de cette entreprise pour activer ce contrôle."
+              )}
             </p>
           )}
         </div>
@@ -993,17 +1098,20 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       {!fixedCompanyId && companies.length > 0 && (
         <div className="flex items-center gap-3">
           <label className="text-xs font-semibold text-text-secondary">
-            Filtrer par entreprise
+            {t("adminUsers.filterByCompany", "Filtrer par entreprise")}
           </label>
           <MultiSelect
-            label="Entreprise"
-            placeholder="Toutes les entreprises"
+            label={t("adminUsers.fieldCompany", "Entreprise")}
+            placeholder={t("adminUsers.allCompanies", "Toutes les entreprises")}
             values={companyFilter}
             onChange={setCompanyFilter}
             options={companies.map((c) => ({ value: c.id, label: c.name }))}
           />
           <span className="text-xs text-text-secondary">
-            {users.filter((u) => matchesFilter(u.companyId, companyFilter)).length} utilisateur(s)
+            {t("adminUsers.userCount", "{n} utilisateur(s)").replace(
+              "{n}",
+              String(users.filter((u) => matchesFilter(u.companyId, companyFilter)).length)
+            )}
           </span>
         </div>
       )}
@@ -1013,22 +1121,22 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
               <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
-                Identifiant
+                {t("adminUsers.fieldUsername", "Identifiant")}
               </th>
               <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
-                Prénom
+                {t("adminUsers.fieldFirstName", "Prénom")}
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                Nom
+                {t("adminUsers.fieldLastName", "Nom")}
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                Profils
+                {t("adminUsers.colProfiles", "Profils")}
               </th>
               <th className="hidden px-4 py-2.5 text-left text-xs font-semibold text-text-secondary sm:table-cell">
-                Entreprise
+                {t("adminUsers.fieldCompany", "Entreprise")}
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
-                Actions
+                {t("adminUsers.colActions", "Actions")}
               </th>
             </tr>
           </thead>
@@ -1077,12 +1185,14 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                       <button
                         onClick={() => startEdit(u, idx)}
                         className="mr-2 text-text-secondary hover:text-bp-coral"
+                        aria-label={t("common.edit", "Modifier")}
                       >
                         <Pencil size={14} />
                       </button>
                       <button
                         onClick={() => remove(u.username, u.companyId ?? null)}
                         className="text-text-secondary hover:text-red-500"
+                        aria-label={t("common.delete", "Supprimer")}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -1125,34 +1235,34 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           if (!next) setRenameConfirm(null);
         }}
         title={
-          renameConfirm?.isPasswordOnly ? "Changer le mot de passe ?" : "Renommer l'utilisateur ?"
+          renameConfirm?.isPasswordOnly
+            ? t("adminUsers.confirmPasswordTitle", "Changer le mot de passe ?")
+            : t("adminUsers.confirmRenameTitle", "Renommer l'utilisateur ?")
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setRenameConfirm(null)}>
-              Annuler
+              {t("common.cancel", "Annuler")}
             </Button>
             <Button variant="danger" onClick={confirmRename}>
-              Confirmer
+              {t("adminUsers.confirm", "Confirmer")}
             </Button>
           </>
         }
       >
         <p className="text-sm text-text-secondary">
-          {renameConfirm?.isPasswordOnly ? (
-            <>
-              Vous vous apprêtez à changer le mot de passe du compte «&nbsp;
-              {renameConfirm?.oldUsername}&nbsp;». Si ce compte n&apos;avait encore jamais de mot de
-              passe (ex. owner créé sans compte de connexion), il en sera créé un.
-            </>
-          ) : (
-            <>
-              Vous vous apprêtez à renommer le compte «&nbsp;{renameConfirm?.oldUsername}&nbsp;» en
-              «&nbsp;{renameConfirm?.newUser.username}&nbsp;». L&apos;ancien identifiant cessera de
-              fonctionner ; les profils, l&apos;entreprise et les droits associés sont conservés.
-            </>
-          )}{" "}
-          Cette action n&apos;est pas réversible depuis cet écran.
+          {renameConfirm?.isPasswordOnly
+            ? t(
+                "adminUsers.confirmPasswordBody",
+                "Vous vous apprêtez à changer le mot de passe du compte « {username} ». Si ce compte n'avait encore jamais de mot de passe (ex. owner créé sans compte de connexion), il en sera créé un."
+              ).replace("{username}", renameConfirm?.oldUsername ?? "")
+            : t(
+                "adminUsers.confirmRenameBody",
+                "Vous vous apprêtez à renommer le compte « {old} » en « {new} ». L'ancien identifiant cessera de fonctionner ; les profils, l'entreprise et les droits associés sont conservés."
+              )
+                .replace("{old}", renameConfirm?.oldUsername ?? "")
+                .replace("{new}", renameConfirm?.newUser.username ?? "")}{" "}
+          {t("adminUsers.notReversible", "Cette action n'est pas réversible depuis cet écran.")}
         </p>
       </Modal>
 
@@ -1163,21 +1273,23 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         onOpenChange={(next) => {
           if (!next) setDeleteConfirm(null);
         }}
-        title="Supprimer l'utilisateur ?"
+        title={t("adminUsers.confirmDeleteTitle", "Supprimer l'utilisateur ?")}
         footer={
           <>
             <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>
-              Annuler
+              {t("common.cancel", "Annuler")}
             </Button>
             <Button variant="danger" onClick={confirmDelete}>
-              Supprimer
+              {t("common.delete", "Supprimer")}
             </Button>
           </>
         }
       >
         <p className="text-sm text-text-secondary">
-          Le compte «&nbsp;{deleteConfirm?.username}&nbsp;» sera définitivement supprimé (Firebase
-          Auth et profil). Cette action est irréversible.
+          {t(
+            "adminUsers.confirmDeleteBody",
+            "Le compte « {username} » sera définitivement supprimé (Firebase Auth et profil). Cette action est irréversible."
+          ).replace("{username}", deleteConfirm?.username ?? "")}
         </p>
       </Modal>
     </div>

@@ -12,7 +12,7 @@ describe("translate", () => {
   it("resolves the Initiative terminology mapping in English", () => {
     expect(translate("en", "nav.leverLibrary")).toBe("Initiative Library");
     expect(translate("en", "roles.lever.label")).toBe("Initiative Leader");
-    expect(translate("en", "roles.sponsor.label")).toBe("Workstream Leader");
+    expect(translate("en", "roles.sponsor.label")).toBe("Work Package Leader");
     // French must NOT be affected by the English terminology swap.
     expect(translate("fr", "nav.leverLibrary")).toBe("Bibliothèque des leviers");
     expect(translate("fr", "roles.lever.label")).toBe("Responsable de levier");

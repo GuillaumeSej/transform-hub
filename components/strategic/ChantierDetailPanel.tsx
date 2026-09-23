@@ -40,6 +40,7 @@ import {
   chantierBounds,
   chantierDeclaredProgress,
   chantierDependencyAlerts,
+  chantierShadesForAxis,
   displayMilestoneId,
   effectiveDueDate,
   isStrategicLeadOf,
@@ -184,16 +185,8 @@ const PROGRESSION_COLOR_RED = "#ff3c47";
 const PROGRESSION_COLOR_AMBER = "#806659";
 const PROGRESSION_COLOR_GREEN = "#1a1a1a";
 
-/** Couleur d'une barre de l'onglet "Progression" (round 12), à partir du pourcentage d'avancement
- *  du levier — voir `PROGRESSION_COLOR_*` ci-dessus pour la provenance des valeurs. */
-function progressionColorFor(pct: number): string {
-  if (pct <= 0) return PROGRESSION_COLOR_RED;
-  if (pct >= 100) return PROGRESSION_COLOR_GREEN;
-  return PROGRESSION_COLOR_AMBER;
-}
-
 /** Couleur du losange d'un livrable sur l'onglet "Timeline" fusionné, à partir de son
- *  `Deliverable.status` — mêmes 3 couleurs que `progressionColorFor` ci-dessus (todo/rouge,
+ *  `Deliverable.status` — mêmes 3 couleurs que `ProgramRoadmap.tsx` (todo/rouge,
  *  in_progress/ambre, done/vert), `undefined` traité comme "todo" (même convention que
  *  `LevierKanbanStatusControl`). */
 function deliverableStatusColor(status: ProjetKanbanStatus | undefined): string {
@@ -229,14 +222,14 @@ function progressionPctFor(
  *  étroite que celle du Gantt (`w-64`) : chaque ligne ne porte que le nom du livrable + celui de
  *  son action, pas d'avancement ni d'étape. */
 const TIMELINE_LABEL_WIDTH = "w-56";
-const DELIVERABLE_LANE_HEIGHT = 28;
-const DELIVERABLE_BAR_HEIGHT = 20;
-/** Hauteur de la sous-piste compacte portant les losanges de livrables sous la barre d'un levier,
- *  sur l'onglet "Timeline" fusionné (round <n>) — seulement ajoutée si le levier a au moins un
- *  livrable avec une échéance EFFECTIVE (`effectiveDueDate`, `lib/axisLogic.ts` : `dueDate`
- *  déclarée, ou repli sur la fin de sa dernière phase — voir son calcul dans le rendu de
- *  l'onglet). */
-const DELIVERABLE_MARKER_LANE_HEIGHT = 18;
+/** Hauteur d'une ligne de projet sur l'onglet "Timeline" et de sa barre. Les losanges de livrable
+ *  sont posés DIRECTEMENT sur la barre (même centre vertical), comme sur la feuille de route
+ *  programme (`ProgramRoadmap.tsx`) — plus de sous-piste dédiée sous la barre. */
+const DELIVERABLE_LANE_HEIGHT = 30;
+const DELIVERABLE_BAR_HEIGHT = 24;
+/** Repli de couleur de barre quand l'axe primaire n'a pas de couleur valide — même taupe que
+ *  `ProgramRoadmap.tsx` (`FALLBACK_COLOR`). */
+const TIMELINE_FALLBACK_COLOR = "#a99e9a";
 
 /** Date ISO ("2026-09-03") → « 03/09/2026 » — même analyse de date que `formatTimelineDay`
  *  (`parseISO`, `lib/dateUtils.ts`) mais rendu numérique DD/MM/YYYY, jour/mois zéro-paddés, plus
@@ -1435,7 +1428,7 @@ export function ChantierDetailPanel({
   const { user } = useRole();
   const readOnly = isReadOnlyUser(user);
   const { activeProgram, activeProgramId } = useActiveProgram();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -1754,15 +1747,45 @@ export function ChantierDetailPanel({
   // levier, sur son propre axe temporel `action.start` → `action.end`, complétée par un losange par
   // livrable ayant une `dueDate` déclarée (voir `deliverableStatusColor`, le rendu plus bas).
   const [progressionScale, setProgressionScale] = useState<TimelineScale>("quarter");
+  // Bornes = plages des projets PLUS l'échéance effective de chaque livrable : un livrable daté
+  // après la fin de son projet ne doit pas tomber hors de la grille (losange rogné au bord droit).
   const { minTime: progressionMinTime, maxTime: progressionMaxTime } = useMemo(
-    () => timelineRange(chantierActions, progressionScale),
+    () =>
+      timelineRange(
+        [
+          ...chantierActions,
+          ...chantierActions.flatMap((a) =>
+            normalizeDeliverables(a.deliverables).flatMap((d) => {
+              const due = effectiveDueDate(d);
+              return due ? [{ start: due, end: due }] : [];
+            })
+          ),
+        ],
+        progressionScale
+      ),
     [chantierActions, progressionScale]
   );
+  /** Couleur des barres de projet de l'onglet "Timeline" — nuance du chantier dans son axe
+   *  primaire (`chantierShadesForAxis`), EXACTEMENT celle de ses barres sur la feuille de route
+   *  programme (`ProgramRoadmap.tsx`, variante `"soft"`). */
+  const progressionBarColor = useMemo(() => {
+    if (!chantier || !primaryAxis) return TIMELINE_FALLBACK_COLOR;
+    const axisColor =
+      primaryAxis.color && hexToRgb(primaryAxis.color)
+        ? primaryAxis.color
+        : TIMELINE_FALLBACK_COLOR;
+    return (
+      chantierShadesForAxis(
+        axisColor,
+        data.chantiers.filter((c) => c.axisIds.includes(primaryAxis.id))
+      ).get(chantier.id) ?? axisColor
+    );
+  }, [chantier, primaryAxis, data.chantiers]);
   const progressionColumns = useMemo(
     () =>
       chantierActions.length === 0
         ? []
-        : timelineColumns(progressionMinTime, progressionMaxTime, progressionScale),
+        : timelineColumns(progressionMinTime, progressionMaxTime, progressionScale, locale),
     [progressionMinTime, progressionMaxTime, progressionScale, chantierActions.length]
   );
   const progressionYearBands = useMemo(
@@ -2116,7 +2139,7 @@ export function ChantierDetailPanel({
               // autres traductions qui la référencent (voir aussi le `CardHeader` plus bas), seule
               // sa VALEUR change dans les 4 dictionnaires.
               id: "progression",
-              label: t("strategicChantierDetail.tabs.progression", "Timeline"),
+              label: t("strategicChantierDetail.tabs.progression", "Chronologie"),
             },
             { id: "leviers", label: t("strategicAxes.chantierActions") },
             { id: "staffing", label: t("strategicChantierDetail.tabs.staffing", "Effectifs") },
@@ -2465,9 +2488,9 @@ export function ChantierDetailPanel({
       </div>
 
       {/* ── Onglet "Timeline" (ex-"Progression", round 12 ; fusionné round <n> avec l'ex-onglet
-          dédié aux phases de livrables) : une barre par levier, façon Gantt, remplie/colorée selon
-          son avancement — jalons E0→E4 pour tout levier, avec ou sans KPI rattaché (round 18, voir
-          `progressionPctFor`/`progressionColorFor` en tête de fichier) — complétée d'un losange par
+          dédié aux phases de livrables) : une barre par levier, même style que la feuille de route
+          programme (variante `"soft"`, nuance du chantier) avec son avancement en % — jalons E0→E4
+          (round 18, voir `progressionPctFor` en tête de fichier) — complétée d'un losange par
           livrable ayant une échéance EFFECTIVE (`effectiveDueDate`, `lib/axisLogic.ts` : `dueDate`
           déclarée, ou repli sur la fin de sa dernière phase si aucune `dueDate` autonome n'est
           renseignée) (`TimelineMarker`, couleur via `deliverableStatusColor`), sur le MÊME axe
@@ -2476,7 +2499,7 @@ export function ChantierDetailPanel({
       <div className={activeTab === "progression" ? undefined : "hidden"}>
         <Card>
           <CardHeader
-            title={t("strategicChantierDetail.tabs.progression", "Timeline")}
+            title={t("strategicChantierDetail.tabs.progression", "Chronologie")}
             actions={
               <div className="flex items-center gap-2">
                 {chantierActions.length > 0 && (
@@ -2509,8 +2532,11 @@ export function ChantierDetailPanel({
                 {t("strategicAxes.noActions")}
               </p>
             ) : (
+              // `pr-3` : réserve la demi-largeur d'un losange (12px pivoté ≈ 17px) au-delà du bord
+              // droit de la piste — un livrable échu pile en fin de grille reste entier au lieu
+              // d'être rogné par `overflow-x-auto`. Côté gauche, la colonne d'identité joue ce rôle.
               <div className="overflow-x-auto">
-                <div className="min-w-[560px]">
+                <div className="min-w-[560px] pr-3">
                   <TimelineHeaderRow
                     columns={progressionColumns}
                     yearBands={progressionYearBands}
@@ -2518,58 +2544,71 @@ export function ChantierDetailPanel({
                   />
                   {chantierActions.map((action) => {
                     const pct = progressionPctFor(action, data.chantiers, data.chantierActions);
-                    const color = progressionColorFor(pct);
                     const left = progressionPctOfComputed(action.start);
                     const width = Math.max(1.5, progressionPctOfComputed(action.end) - left);
                     const dueDeliverables = normalizeDeliverables(action.deliverables).filter(
                       (d) => effectiveDueDate(d) !== undefined
                     );
-                    const laneHeight =
-                      dueDeliverables.length > 0
-                        ? DELIVERABLE_LANE_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT
-                        : DELIVERABLE_LANE_HEIGHT;
+                    const barTop = (DELIVERABLE_LANE_HEIGHT - DELIVERABLE_BAR_HEIGHT) / 2;
                     return (
                       <div
                         key={action.id}
-                        className="flex items-stretch gap-2 border-b border-border py-1.5 last:border-b-0"
+                        className="flex items-stretch gap-2 border-b border-border/60 py-1 last:border-b-0"
                       >
-                        <div className={`${TIMELINE_LABEL_WIDTH} shrink-0`}>
-                          <div
-                            className="truncate text-[11.5px] font-semibold text-primary"
-                            title={action.name}
-                          >
-                            {action.name}
-                          </div>
+                        <div
+                          className={`${TIMELINE_LABEL_WIDTH} flex shrink-0 items-center truncate text-[12.5px] font-medium text-primary`}
+                          title={action.name}
+                        >
+                          <span className="min-w-0 truncate">{action.name}</span>
                         </div>
-                        <div className="relative flex-1" style={{ height: laneHeight }}>
+                        <div
+                          className="relative flex-1"
+                          style={{ height: DELIVERABLE_LANE_HEIGHT }}
+                        >
                           <TimelineGridColumns columns={progressionColumns} />
+                          {/* Même barre que la feuille de route programme (`ProgramRoadmap.tsx`) :
+                              variante `"soft"` teintée de la nuance du chantier — l'avancement reste
+                              affiché en clair dans la barre et dans l'infobulle. */}
                           <TimelineBar
                             left={left}
                             width={width}
-                            top={0}
+                            top={barTop}
                             height={DELIVERABLE_BAR_HEIGHT}
-                            color={color}
-                            variant="outline"
-                            progressPct={pct}
+                            color={progressionBarColor}
+                            variant="soft"
                             onClick={() => focusLevierFromProgression(action.id)}
                             ariaLabel={action.name}
-                            tooltipText={`${action.name} · ${pct}%`}
+                            tooltipText={`${action.name} · ${formatTimelineDay(action.start, locale)} → ${formatTimelineDay(
+                              action.end,
+                              locale
+                            )} · ${pct}%`}
                             label={`${pct}%`}
-                            labelClassName="min-w-0 flex-1 truncate text-[10px] font-semibold text-primary"
+                            labelClassName="min-w-0 flex-1 truncate text-[11px] font-semibold"
                           />
-                          {dueDeliverables.map((d) => (
-                            <TimelineMarker
-                              key={d.id}
-                              leftPct={progressionPctOfComputed(effectiveDueDate(d)!)}
-                              top={DELIVERABLE_LANE_HEIGHT + DELIVERABLE_MARKER_LANE_HEIGHT / 2}
-                              color={deliverableStatusColor(d.status)}
-                              onClick={() =>
-                                setOpenDeliverable({ actionId: action.id, deliverableId: d.id })
-                              }
-                              ariaLabel={d.label}
-                              tooltipText={`${d.label} · ${formatTimelineDay(effectiveDueDate(d)!)}`}
-                            />
-                          ))}
+                          {/* Losanges de livrable posés DIRECTEMENT sur la barre (même centre
+                              vertical), comme sur la feuille de route programme. */}
+                          {dueDeliverables.map((d) => {
+                            const due = effectiveDueDate(d)!;
+                            const statusLabel =
+                              d.status === "done"
+                                ? deliverableKanbanLabels.done
+                                : d.status === "in_progress"
+                                  ? deliverableKanbanLabels.inProgress
+                                  : deliverableKanbanLabels.todo;
+                            return (
+                              <TimelineMarker
+                                key={d.id}
+                                leftPct={Math.min(100, Math.max(0, progressionPctOfComputed(due)))}
+                                top={DELIVERABLE_LANE_HEIGHT / 2}
+                                color={deliverableStatusColor(d.status)}
+                                onClick={() =>
+                                  setOpenDeliverable({ actionId: action.id, deliverableId: d.id })
+                                }
+                                ariaLabel={d.label}
+                                tooltipText={`${d.label} · ${formatTimelineDay(due, locale)} · ${statusLabel}`}
+                              />
+                            );
+                          })}
                         </div>
                       </div>
                     );

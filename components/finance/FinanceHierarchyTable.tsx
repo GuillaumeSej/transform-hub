@@ -47,12 +47,13 @@ function leverYears(l: Lever): number[] {
   return Array.from(years);
 }
 
-const COLUMNS: { key: Exclude<FinanceSortKey, "label">; label: string }[] = [
-  { key: "planned", label: "Planifié initial" },
-  { key: "reforecast", label: "Réactualisé" },
-  { key: "cancelled", label: "Annulé" },
-  { key: "late", label: "En retard" },
-  { key: "realized", label: "Réalisé" },
+/** `labelKey`/`label` = clé i18n + fallback français, résolus au rendu via `t()`. */
+const COLUMNS: { key: Exclude<FinanceSortKey, "label">; labelKey: string; label: string }[] = [
+  { key: "planned", labelKey: "finance.hierarchyTable.col.planned", label: "Planifié initial" },
+  { key: "reforecast", labelKey: "finance.hierarchyTable.col.reforecast", label: "Réactualisé" },
+  { key: "cancelled", labelKey: "finance.hierarchyTable.col.cancelled", label: "Annulé" },
+  { key: "late", labelKey: "finance.hierarchyTable.col.late", label: "En retard" },
+  { key: "realized", labelKey: "finance.hierarchyTable.col.realized", label: "Réalisé" },
 ];
 
 const fmt = (v: number) => v.toFixed(1);
@@ -150,24 +151,13 @@ export function FinanceHierarchyTable({
 
   const exportXlsx = () => {
     const rows: Record<string, string | number>[] = [];
-    for (const r of tree) {
-      rows.push({
-        [level.label]: r.label,
-        "Planifié initial": r.planned,
-        Réactualisé: r.reforecast,
-        Annulé: r.cancelled,
-        "En retard": r.late,
-        Réalisé: r.realized,
-      });
-    }
-    rows.push({
-      [level.label]: "Total",
-      "Planifié initial": totals.planned,
-      Réactualisé: totals.reforecast,
-      Annulé: totals.cancelled,
-      "En retard": totals.late,
-      Réalisé: totals.realized,
-    });
+    const toRow = (label: string, values: Record<Exclude<FinanceSortKey, "label">, number>) => {
+      const row: Record<string, string | number> = { [level.label]: label };
+      for (const c of COLUMNS) row[t(c.labelKey, c.label)] = values[c.key];
+      return row;
+    };
+    for (const r of tree) rows.push(toRow(r.label, r));
+    rows.push(toRow(t("finance.hierarchyTable.total", "Total"), totals));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Finance");
     XLSX.writeFile(wb, `finance_${level.key}_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -293,7 +283,7 @@ export function FinanceHierarchyTable({
                 {COLUMNS.map((c) => (
                   <th key={c.key} className="px-3 py-2 text-right">
                     <button type="button" onClick={() => toggleSort(c.key)}>
-                      {c.label}
+                      {t(c.labelKey, c.label)}
                       {arrow(c.key)}
                     </button>
                   </th>
@@ -311,7 +301,11 @@ export function FinanceHierarchyTable({
                         {canExpand ? (
                           <button
                             type="button"
-                            aria-label={open ? "Replier" : "Déplier"}
+                            aria-label={
+                              open
+                                ? t("finance.hierarchyTable.collapse", "Replier")
+                                : t("finance.hierarchyTable.expand", "Déplier")
+                            }
                             onClick={() =>
                               setExpanded((prev) => {
                                 const next = new Set(prev);

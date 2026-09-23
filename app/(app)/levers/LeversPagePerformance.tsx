@@ -369,7 +369,7 @@ export function LeversPagePerformance() {
   // puis les filtres sans colonne dédiée (arborescence, coût, alertes, dates de fin).
   const filterDefs: FilterDef<Lever>[] = useMemo(
     () => [
-      { key: "f_type", label: "Type", getValue: (l) => l.type },
+      { key: "f_type", label: t("levers.column.type", "Type"), getValue: (l) => l.type },
       {
         key: "f_ws",
         label: t("leverForm.workstream", "Chantier"),
@@ -385,7 +385,11 @@ export function LeversPagePerformance() {
           ]
         : []),
       { key: "f_owner", label: t("leverForm.owner", "Responsable"), getValue: (l) => l.owner },
-      { key: "f_sponsor", label: t("leverForm.sponsor", "Sponsor"), getValue: (l) => l.sponsor },
+      {
+        key: "f_sponsor",
+        label: t("leverForm.sponsor", "Commanditaire"),
+        getValue: (l) => l.sponsor,
+      },
       {
         key: "f_function",
         label: t("dashboard.leverDepartment", "Département"),
@@ -568,7 +572,7 @@ export function LeversPagePerformance() {
     // ── Identification ──
     {
       key: "code",
-      label: "Code",
+      label: t("levers.column.code", "Code"),
       width: "90px",
       mobile: "primary",
       render: (r) => (
@@ -592,7 +596,7 @@ export function LeversPagePerformance() {
       width: "220px",
       render: (r) => <strong>{r.name}</strong>,
     },
-    { key: "type", label: "Type", mobile: "hide", width: "100px" },
+    { key: "type", label: t("levers.column.type", "Type"), mobile: "hide", width: "100px" },
     { key: "wsName", label: t("leverForm.workstream"), mobile: "hide", width: "150px" },
     // Colonne "Programme" (Tâche 1, vue consolidée) : uniquement quand le jeu de leviers affiché
     // couvre réellement plus d'un programme (voir showProgramColumn plus haut) — sans objet en
@@ -648,7 +652,7 @@ export function LeversPagePerformance() {
     // ── Financier ──
     {
       key: "netSavings",
-      label: "Net Savings €M",
+      label: t("levers.column.netSavings", "Économies nettes (€M)"),
       align: "right",
       editable: true,
       type: "number",
@@ -658,7 +662,7 @@ export function LeversPagePerformance() {
     },
     {
       key: "realized",
-      label: t("levers.realized", "Savings réalisé (€M)"),
+      label: t("levers.realized", "Économies réalisées (€M)"),
       align: "right",
       // Visible dans la vue carte mobile : avec Net Savings, c'est LA paire que DG/CTO
       // regardent (réalisé vs engagé) — le reste du détail financier reste desktop.
@@ -668,14 +672,14 @@ export function LeversPagePerformance() {
     },
     {
       key: "progressPct",
-      label: "Avancement",
+      label: t("levers.column.progress", "Avancement"),
       mobile: "secondary",
       width: "120px",
       render: (r) => <ProgressBar pct={r.progressPct} />,
     },
     {
       key: "fteImpact",
-      label: "ETP impacté",
+      label: t("levers.column.fteImpact", "ETP impacté"),
       align: "right",
       editable: true,
       type: "number",
@@ -684,7 +688,7 @@ export function LeversPagePerformance() {
     },
     {
       key: "capex",
-      label: "CAPEX",
+      label: t("leverForm.capex", "CAPEX"),
       align: "right",
       editable: true,
       type: "number",
@@ -694,7 +698,7 @@ export function LeversPagePerformance() {
     },
     {
       key: "opexOneOff",
-      label: "OPEX one-off",
+      label: t("levers.column.opexOneOff", "OPEX ponctuel"),
       align: "right",
       editable: true,
       type: "number",

@@ -71,7 +71,7 @@ export function HrOwnerActionTable({
         <thead>
           <tr>
             <th className="border-b border-border bg-neutral-50 px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-secondary">
-              {t("shared.hrOwnerActionTable.rhOwner", "RH Owner")}
+              {t("shared.hrOwnerActionTable.rhOwner", "Responsable RH")}
             </th>
             {COLUMNS.map((column) => (
               <th

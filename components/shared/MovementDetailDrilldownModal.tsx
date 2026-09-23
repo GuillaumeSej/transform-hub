@@ -12,6 +12,7 @@ import {
 import { classifyMovementExecution } from "@/lib/hrExecution";
 import { etpMovementDeepLink } from "@/lib/hrMovementLink";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { movementTypeLabel } from "@/lib/hrMovementLabels";
 import type { WorkforceMovement } from "@/types";
 
 /**
@@ -115,7 +116,7 @@ export function MovementDetailDrilldownModal({
                     >
                       <td className="px-3 py-2 font-semibold text-primary">{m.label || dash}</td>
                       <td className="px-3 py-2 text-secondary">
-                        {m.type}
+                        {movementTypeLabel(t, m.type)}
                         {m.toDepartment && m.toDepartment !== m.department
                           ? ` → ${m.toDepartment}`
                           : ""}

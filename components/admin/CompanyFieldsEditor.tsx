@@ -63,25 +63,45 @@ export const DEFAULT_RISK_THRESHOLDS_FORM: {
  *  `Indicator`...) — lacune comblée round 25 en ajoutant les 6 rôles Stratégiques, à l'occasion de
  *  l'ajout de `comex_member` (transverse aux deux pistes, voir types/index.ts) qui en avait de
  *  toute façon besoin. */
-export const OPERATIONAL_ROLES: { value: Role; label: string }[] = [
-  { value: "cto", label: "CTO" },
+export const OPERATIONAL_ROLES: { value: Role; labelKey: string; label: string }[] = [
+  { value: "cto", labelKey: "roles.cto.short", label: "CTO" },
   // Libellé "Responsable de chantier" (renommage du libellé affiché — la clé technique `sponsor` reste
   // inchangée, toujours scopée WORKSTREAM, voir types/index.ts).
-  { value: "sponsor", label: "Responsable de chantier" },
-  { value: "lever", label: "Lever Owner" },
-  { value: "finance", label: "Finance" },
-  { value: "hr", label: "HR" },
-  { value: "ops", label: "Ops" },
+  { value: "sponsor", labelKey: "roles.sponsor.label", label: "Responsable de chantier" },
+  { value: "lever", labelKey: "roles.lever.label", label: "Responsable de levier" },
+  { value: "finance", labelKey: "roles.finance.label", label: "Finance" },
+  { value: "hr", labelKey: "roles.hr.label", label: "RH" },
+  { value: "ops", labelKey: "roles.ops.label", label: "Ops" },
   // Fondation vue consolidée multi-programmes (voir types/index.ts).
-  { value: "program_sponsor", label: "Program Sponsor" },
-  { value: "program_owner", label: "Program Owner" },
-  { value: "strategic_lead", label: "Pilote du plan stratégique" },
-  { value: "axis_sponsor", label: "Sponsor d'axe" },
-  { value: "chantier_owner", label: "Responsable de chantier" },
-  { value: "chantier_contributor", label: "Responsable projet" },
-  { value: "internal_comm", label: "Communication interne" },
-  { value: "budget_control", label: "Contrôle de gestion" },
-  { value: "comex_member", label: "Membre du COMEX" },
+  {
+    value: "program_sponsor",
+    labelKey: "roles.programSponsor.label",
+    label: "Commanditaire du programme",
+  },
+  {
+    value: "program_owner",
+    labelKey: "roles.programOwner.label",
+    label: "Responsable du programme",
+  },
+  {
+    value: "strategic_lead",
+    labelKey: "roles.strategicLead.label",
+    label: "Pilote du plan stratégique",
+  },
+  { value: "axis_sponsor", labelKey: "roles.axisSponsor.label", label: "Commanditaire d'axe" },
+  {
+    value: "chantier_owner",
+    labelKey: "roles.chantierOwner.label",
+    label: "Responsable de chantier",
+  },
+  {
+    value: "chantier_contributor",
+    labelKey: "roles.chantierContributor.label",
+    label: "Responsable projet",
+  },
+  { value: "internal_comm", labelKey: "roles.internalComm.label", label: "Communication interne" },
+  { value: "budget_control", labelKey: "roles.budgetControl.label", label: "Contrôle de gestion" },
+  { value: "comex_member", labelKey: "roles.comexMember.label", label: "Membre du COMEX" },
 ];
 
 export type CompanyFormState = {
@@ -451,14 +471,15 @@ export function CompanyFieldsEditor({
                       value.confidentialityLevels
                     );
                     const currentRank = current ? value.confidentialityLevels.indexOf(current) : -1;
+                    const roleLabel = t(r.labelKey, r.label);
                     return (
                       <tr key={r.value} className="border-b border-border last:border-0">
-                        <td className="px-3 py-2 font-medium text-text-primary">{r.label}</td>
+                        <td className="px-3 py-2 font-medium text-text-primary">{roleLabel}</td>
                         <td className="px-3 py-2 text-center">
                           <input
                             type="radio"
                             name={`clearance-${r.value}`}
-                            aria-label={`${r.label} — ${t("adminCompanyFields.colNoClearance", "Aucun")}`}
+                            aria-label={`${roleLabel} — ${t("adminCompanyFields.colNoClearance", "Aucun")}`}
                             checked={!current}
                             onChange={() => setClearance(r.value, "")}
                             className="h-4 w-4 border-border accent-bp-coral"
@@ -474,7 +495,7 @@ export function CompanyFieldsEditor({
                             <input
                               type="radio"
                               name={`clearance-${r.value}`}
-                              aria-label={`${r.label} — ${level}`}
+                              aria-label={`${roleLabel} — ${level}`}
                               checked={current === level}
                               onChange={() => setClearance(r.value, level)}
                               className="h-4 w-4 border-border accent-bp-coral"

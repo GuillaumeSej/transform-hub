@@ -120,7 +120,7 @@ export function ActionForm({
         </div>
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
-            {t("shared.actionForm.owner", "Owner")}
+            {t("shared.actionForm.owner", "Responsable")}
           </label>
           <input className={inputClass} value={owner} onChange={(e) => setOwner(e.target.value)} />
         </div>

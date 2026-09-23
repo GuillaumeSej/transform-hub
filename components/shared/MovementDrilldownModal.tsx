@@ -7,6 +7,7 @@ import { MovementNetBalanceSummary } from "@/components/shared/MovementNetBalanc
 import { movementNetBalance } from "@/lib/hrMovementBalance";
 import { etpMovementDeepLink } from "@/lib/hrMovementLink";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { movementStatusLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
 import type { WorkforceMovement } from "@/types";
 
 /**
@@ -75,10 +76,10 @@ export function MovementDrilldownModal({
               >
                 <span className="min-w-0">
                   <span className="block truncate text-[12.5px] font-semibold text-primary">
-                    {m.type} · {m.label}
+                    {movementTypeLabel(t, m.type)} · {m.label}
                   </span>
                   <span className="text-[11px] text-tertiary">
-                    {m.plannedDate} · {m.status}
+                    {m.plannedDate} · {movementStatusLabel(t, m.status)}
                     {m.hrValidated ? " ✓RH" : ""} · {m.fte} {t("etp.column.fte", "ETP")}
                   </span>
                 </span>

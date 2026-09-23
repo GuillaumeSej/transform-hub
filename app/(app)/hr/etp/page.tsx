@@ -9,6 +9,11 @@ import { useToast } from "@/lib/hooks/useToast";
 import { isReadOnlyUser } from "@/lib/roleProfiles";
 import * as hr from "@/lib/hrEngine";
 import { classifyMovementExecution, EXECUTION_LABELS } from "@/lib/hrExecution";
+import {
+  executionLabelFromValue,
+  movementStatusLabel,
+  movementTypeLabel,
+} from "@/lib/hrMovementLabels";
 import { movementStatusPatch } from "@/lib/workforceLogic";
 import { computeMovementFinancials, tenureYears } from "@/lib/hrFinancials";
 import { fmtCurr } from "@/lib/engine";
@@ -232,13 +237,13 @@ export default function BaseEtpPage() {
         salary: e.salary,
         hrOwner: e.hrOwner,
         hasMovement: m ? t("etp.yes", "Oui") : t("etp.no", "Non"),
-        movementType: m?.type ?? "—",
+        movementType: m ? movementTypeLabel(t, m.type) : "—",
         leverCode: lever?.code ?? "—",
         leverId: lever?.id ?? null,
         plannedDate: m?.plannedDate ?? "—",
         actualDate: m?.actualDate ?? "—",
         movementStatus: m
-          ? `${m.status}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`
+          ? `${movementStatusLabel(t, m.status)}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`
           : "—",
         pse: m?.inPSE ? t("etp.yes", "Oui") : t("etp.no", "Non"),
         movement: m,
@@ -264,12 +269,12 @@ export default function BaseEtpPage() {
           salary: m.salaryImpact,
           hrOwner: m.hrOwner,
           hasMovement: t("etp.yes", "Oui"),
-          movementType: m.type,
+          movementType: movementTypeLabel(t, m.type),
           leverCode: lever?.code ?? "—",
           leverId: lever?.id ?? null,
           plannedDate: m.plannedDate,
           actualDate: m.actualDate ?? "—",
-          movementStatus: `${m.status}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`,
+          movementStatus: `${movementStatusLabel(t, m.status)}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`,
           pse: t("etp.no", "Non"),
           movement: m,
           alertKind: alertByMovement.get(m.id) ?? null,
@@ -439,7 +444,12 @@ export default function BaseEtpPage() {
 
   const movementFilterDefs: FilterDef<MovementRow>[] = useMemo(
     () => [
-      { key: "f_type", label: t("etp.filter.type", "Type"), getValue: (r) => r.type },
+      {
+        key: "f_type",
+        label: t("etp.filter.type", "Type"),
+        getValue: (r) => r.type,
+        formatValue: (v) => movementTypeLabel(t, v),
+      },
       {
         key: "f_department",
         label: t("hr.department", "Département"),
@@ -466,15 +476,21 @@ export default function BaseEtpPage() {
       },
       {
         key: "f_hrOwner",
-        label: t("etp.filter.hrOwnerMovement", "RH Owner"),
+        label: t("etp.filter.hrOwnerMovement", "Responsable RH"),
         getValue: (r) => r.hrOwner,
       },
       {
         key: "f_execution",
         label: t("etp.filter.executionStatus", "État d'exécution"),
         getValue: (r) => r.executionStatus,
+        formatValue: (v) => executionLabelFromValue(t, v),
       },
-      { key: "f_status", label: t("hr.status", "Statut"), getValue: (r) => r.status },
+      {
+        key: "f_status",
+        label: t("hr.status", "Statut"),
+        getValue: (r) => r.status,
+        formatValue: (v) => movementStatusLabel(t, v),
+      },
       {
         key: "f_hrValidated",
         label: t("etp.hrValidated", "Validé RH"),
@@ -752,6 +768,8 @@ export default function BaseEtpPage() {
       label: t("etp.filter.type", "Type"),
       editable: true,
       options: MOVEMENT_TYPES,
+      optionLabel: (opt) => movementTypeLabel(t, opt),
+      render: (r) => movementTypeLabel(t, r.type),
     },
     {
       key: "department",
@@ -791,9 +809,10 @@ export default function BaseEtpPage() {
       label: t("hr.status", "Statut"),
       editable: true,
       options: MOVEMENT_STATUSES,
+      optionLabel: (opt) => movementStatusLabel(t, opt),
       render: (r) => (
         <span>
-          {r.status}
+          {movementStatusLabel(t, r.status)}
           {r.hrValidated && t("etp.hrValidatedSuffix", " ✓RH")}
         </span>
       ),
@@ -1011,7 +1030,7 @@ export default function BaseEtpPage() {
               <span className="text-[12.5px] text-primary">
                 {t(
                   "etp.deepLink.filteredHint",
-                  "Affichage filtré sur {n} mouvement(s) sélectionné(s) depuis le dashboard."
+                  "Affichage filtré sur {n} mouvement(s) sélectionné(s) depuis le tableau de bord."
                 ).replace("{n}", String(highlightedMovementIds.length))}
               </span>
               <button

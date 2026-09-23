@@ -7,6 +7,11 @@ import { Modal } from "@/components/shared/Modal";
 import type { MovementAlert, MovementAlertKind } from "@/lib/hrEngine";
 import { etpAlertFilterLink, etpMovementDeepLink } from "@/lib/hrMovementLink";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import {
+  movementAlertMessage,
+  movementStatusLabel,
+  movementTypeLabel,
+} from "@/lib/hrMovementLabels";
 import type { Lever } from "@/types";
 
 type T = (key: string, fallback?: string) => string;
@@ -64,8 +69,8 @@ function urgencyScore(a: MovementAlert): number {
   }
 }
 
-function fmtFte(n: number): string {
-  return `${n > 0 ? "+" : ""}${n} ETP`;
+function fmtFte(n: number, unit: string): string {
+  return `${n > 0 ? "+" : ""}${n} ${unit}`;
 }
 
 /**
@@ -214,7 +219,7 @@ export function MovementAlertsSummaryModal({
         <span className="ml-1.5 font-mono text-[10px] font-normal text-tertiary">{m.id}</span>
       </td>,
       <td key="type" className="px-3 py-2 text-secondary">
-        {m.type}
+        {movementTypeLabel(t, m.type)}
       </td>,
     ];
   };
@@ -274,7 +279,7 @@ export function MovementAlertsSummaryModal({
       case "toValidate":
         return [...whoCells(a), ...contextCells(a), numCell("actual", m.actualDate || dash)];
       case "leverMismatch": {
-        let issue: string = a.message;
+        let issue: string = movementAlertMessage(t, a);
         let movementValue: string = dash;
         let leverValue: string = dash;
         let leverLabel = leverOf(m.leverId);
@@ -284,7 +289,7 @@ export function MovementAlertsSummaryModal({
             "hr.alertsModal.issue.leverCancelled",
             "Levier annulé : mouvement encore actif, à requalifier"
           );
-          movementValue = m.status;
+          movementValue = movementStatusLabel(t, m.status);
           leverValue = t("hr.alertsModal.value.cancelled", "Annulé");
         } else if (d?.reason === "afterLeverEnd") {
           leverLabel = `${d.leverCode} — ${d.leverName}`;
@@ -303,8 +308,8 @@ export function MovementAlertsSummaryModal({
             "hr.alertsModal.issue.signMismatch",
             "Sens ETP contraire à l'impact visé du levier"
           );
-          movementValue = fmtFte(d.movementFte);
-          leverValue = fmtFte(d.leverFte);
+          movementValue = fmtFte(d.movementFte, t("etp.column.fte", "ETP"));
+          leverValue = fmtFte(d.leverFte, t("etp.column.fte", "ETP"));
         }
         return [
           ...whoCells(a),

@@ -14,6 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { Modal } from "@/components/shared/Modal";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import { IndicatorDeltaStat } from "@/components/strategic/IndicatorDeltaStat";
 import {
   computeIndicatorDelta,
@@ -160,15 +161,25 @@ export function IndicatorChart({
   windowMeasurements = "recent",
   frequency,
   compact = false,
-  labelValue = "Valeur",
-  labelObjective = "Objectif",
-  emptyLabel = "Aucune mesure enregistrée.",
-  labelViewFull = "Voir l'historique complet",
-  fullHistoryTitle = "Historique complet",
-  labelProgress,
+  labelValue: labelValueProp,
+  labelObjective: labelObjectiveProp,
+  emptyLabel: emptyLabelProp,
+  labelViewFull: labelViewFullProp,
+  fullHistoryTitle: fullHistoryTitleProp,
+  labelProgress: labelProgressProp,
   hideDeltaStat = false,
-  labelToday = "Aujourd'hui",
+  labelToday: labelTodayProp,
 }: IndicatorChartProps) {
+  // Libellés fournis par l'appelant, sinon repli sur le dictionnaire i18n actif.
+  const { t } = useTranslation();
+  const labelValue = labelValueProp ?? t("kpi.chart.value", "Valeur");
+  const labelObjective = labelObjectiveProp ?? t("kpi.chart.objective", "Objectif");
+  const emptyLabel = emptyLabelProp ?? t("kpi.chart.empty", "Aucune mesure enregistrée.");
+  const labelViewFull = labelViewFullProp ?? t("kpi.chart.viewFull", "Voir l'historique complet");
+  const fullHistoryTitle = fullHistoryTitleProp ?? t("kpi.chart.fullHistory", "Historique complet");
+  const labelProgress =
+    labelProgressProp ?? t("kpi.chart.progressToTarget", "Progression vers la cible");
+  const labelToday = labelTodayProp ?? t("kpi.chart.today", "Aujourd'hui");
   // Hooks appelés avant tout retour anticipé (repli qualitatif / absence de mesure). `useId`
   // fournit un identifiant STABLE et unique par instance pour le `<linearGradient>` du remplissage
   // de la courbe (voir `chart` plus bas) : sans lui, deux `IndicatorChart` montés côte à côte sur

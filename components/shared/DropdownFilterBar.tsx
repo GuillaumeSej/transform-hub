@@ -77,7 +77,10 @@ export function DropdownFilterBar<T>(props: Common<T> & (SingleProps | MultiProp
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className ?? ""}`}>
       {defs.map((def) => {
-        const options = (optionsMap[def.key] ?? []).map((opt) => ({ value: opt, label: opt }));
+        const options = (optionsMap[def.key] ?? []).map((opt) => ({
+          value: opt,
+          label: def.formatValue ? def.formatValue(opt) : opt,
+        }));
         if (props.multiple) {
           const { active, onChange } = props;
           return (

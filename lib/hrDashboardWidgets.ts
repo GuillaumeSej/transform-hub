@@ -57,6 +57,28 @@ export type HrWidgetType =
   | "movements-merged"
   | "movement-progress";
 
+/** Clé i18n du titre de chaque widget RH — le `label` du registre sert de fallback français
+ *  (`t(HR_WIDGET_LABEL_KEYS[type], def.label)`), pour le sélecteur "Ajouter un widget" et le titre
+ *  des slides de l'export PowerPoint (`data-widget-title`). */
+export const HR_WIDGET_LABEL_KEYS: Record<HrWidgetType, string> = {
+  "fte-waterfall": "hr.widget.fteWaterfall",
+  "staff-cost-waterfall": "hr.widget.staffCostWaterfall",
+  "savings-period-cumul": "hr.widget.savingsPeriodCumul",
+  "social-cost-enr": "hr.widget.socialCostEnr",
+  "net-economy": "hr.widget.netEconomy",
+  "movement-rhythm": "hr.widget.movementRhythm",
+  "movement-status-by-type": "hr.widget.movementStatusByType",
+  "department-breakdown": "hr.widget.departmentBreakdownTitle",
+  "fte-execution-status": "hr.widget.movementStatus",
+  "salary-execution-status": "hr.widget.salaryExecutionStatus",
+  "hr-owner-actions": "hr.widget.ownerActions",
+  "pse-summary": "hr.widget.pseSummary",
+  "department-table": "hr.widget.departmentTable",
+  "movements-table": "hr.widget.movementsTable",
+  "movements-merged": "hr.widget.movementsMerged",
+  "movement-progress": "hr.widget.movementProgressTitle",
+};
+
 /** Une configuration de vue construite par l'utilisateur pour un widget RH du builder générique
  *  (voir `lib/hrDashboardPivot.ts` pour `HR_METRIC_REGISTRY`/`HR_DIMENSION_REGISTRY`) — une seule
  *  clé de dimension (aucun widget RH n'a de forme à 2 dimensions), contrairement à

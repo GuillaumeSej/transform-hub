@@ -633,6 +633,10 @@ export type Alert = {
   scopeLabel?: string;
   title: string;
   desc: string;
+  /** Alertes AUTO uniquement (lib/alertEngine.ts) : clés i18n + variables pour réafficher
+   *  `title`/`desc` dans la langue active (voir `lib/alertText.ts`) ; `title`/`desc` restent le
+   *  texte français de repli. Absent pour les alertes manuelles (texte libre saisi). */
+  i18n?: { titleKey: string; descKey: string; vars: Record<string, string | number> };
   actorRole: string;
   /** Impact € sur le run-rate (négatif = perte de valeur, positif = gain). */
   impactEur?: number;

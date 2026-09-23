@@ -560,7 +560,7 @@ export function ImpactsEditor({
                             {
                               value: "one_shot",
                               label: "1×",
-                              title: t("impactsEditor.oneOff", "One-off"),
+                              title: t("impactsEditor.oneOff", "Ponctuel"),
                             },
                             {
                               value: "smoothed",

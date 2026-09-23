@@ -4,6 +4,23 @@ import type { ReactNode } from "react";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { hexToRgb } from "@/lib/axisLogic";
 import { parseISO } from "@/lib/dateUtils";
+import type { Locale } from "@/lib/i18n/locales";
+
+/** Locale BCP 47 utilisée pour formater dates/mois selon la langue active de l'interface. */
+const DATE_LOCALE: Record<Locale, string> = {
+  fr: "fr-FR",
+  en: "en-GB",
+  de: "de-DE",
+  es: "es-ES",
+};
+
+/** Préfixes de colonne trimestre/semestre par langue (T1/S1 en français, Q1/H1 en anglais…). */
+const PERIOD_PREFIX: Record<Locale, { quarter: string; semester: string }> = {
+  fr: { quarter: "T", semester: "S" },
+  en: { quarter: "Q", semester: "H" },
+  de: { quarter: "Q", semester: "H" },
+  es: { quarter: "T", semester: "S" },
+};
 
 /**
  * Primitives PARTAGÉES de rendu de timeline à colonnes (round 4, point 9 — extraction depuis
@@ -39,18 +56,24 @@ export const TIMELINE_SCALE_MONTHS: Record<TimelineScale, number> = {
  *  partout ailleurs dans l'app (cf. `formatTimestamp`, app/(app)/admin/history/page.tsx).
  *  `"year"` : chaîne vide — le bandeau des années (`TimelineYearBand`, déjà affiché au-dessus de la
  *  grille) porte déjà l'information, un sous-libellé de colonne redirait la même valeur en double. */
-export function timelineColumnLabel(date: Date, scale: TimelineScale): string {
-  if (scale === "month") return date.toLocaleDateString("fr-FR", { month: "short" });
-  if (scale === "quarter") return `T${Math.floor(date.getMonth() / 3) + 1}`;
-  if (scale === "semester") return `S${Math.floor(date.getMonth() / 6) + 1}`;
+export function timelineColumnLabel(
+  date: Date,
+  scale: TimelineScale,
+  locale: Locale = "fr"
+): string {
+  if (scale === "month") return date.toLocaleDateString(DATE_LOCALE[locale], { month: "short" });
+  if (scale === "quarter")
+    return `${PERIOD_PREFIX[locale].quarter}${Math.floor(date.getMonth() / 3) + 1}`;
+  if (scale === "semester")
+    return `${PERIOD_PREFIX[locale].semester}${Math.floor(date.getMonth() / 6) + 1}`;
   return "";
 }
 
 /** Date ISO ("2026-09-03") → « 3 sept. 2026 », utilisé dans les infobulles des barres. */
-export function formatTimelineDay(iso: string): string {
+export function formatTimelineDay(iso: string, locale: Locale = "fr"): string {
   const time = parseISO(iso);
   if (Number.isNaN(time)) return iso;
-  return new Date(time).toLocaleDateString("fr-FR", {
+  return new Date(time).toLocaleDateString(DATE_LOCALE[locale], {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -135,7 +158,8 @@ export function timelineRange(
 export function timelineColumns(
   minTime: number,
   maxTime: number,
-  scale: TimelineScale
+  scale: TimelineScale,
+  locale: Locale = "fr"
 ): TimelineColumn[] {
   if (minTime >= maxTime) return [];
   const step = TIMELINE_SCALE_MONTHS[scale];
@@ -146,7 +170,7 @@ export function timelineColumns(
     const next = new Date(cur.getFullYear(), cur.getMonth() + step, 1);
     out.push({
       key: `${cur.getFullYear()}-${cur.getMonth()}`,
-      label: timelineColumnLabel(cur, scale),
+      label: timelineColumnLabel(cur, scale, locale),
       year: cur.getFullYear(),
       left: ((cur.getTime() - minTime) / range) * 100,
       width: ((next.getTime() - cur.getTime()) / range) * 100,

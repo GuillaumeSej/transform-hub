@@ -566,7 +566,15 @@ export type MovementBreakdownRow = Omit<DepartmentMovements, "department"> & {
    *  dans les deux lignes qu'il traverse (département source ET département cible), à l'image du
    *  reste de l'agrégation ci-dessous. */
   movements: WorkforceMovement[];
+  /** Nombre de mouvements derrière chaque série ETP ci-dessus (même classement que les montants,
+   *  y compris le double comptage source/cible des transferts en dimension département) —
+   *  alimente l'infobulle "N pers. · ±X ETP" de `DepartmentMovementsChart`. */
+  counts: MovementBreakdownCounts;
 };
+
+export type MovementBreakdownSeries =
+  "recrutements" | "attritions" | "forcedDepartures" | "transfertEntrants" | "transfertSortants";
+export type MovementBreakdownCounts = Record<MovementBreakdownSeries, number>;
 
 /** Ventilation prévue des cinq types de mouvements par département ou pays. */
 export function movementBreakdownByDimension(
@@ -589,9 +597,20 @@ export function movementBreakdownByDimension(
         transferts: 0,
         net: 0,
         movements: [],
+        counts: {
+          recrutements: 0,
+          attritions: 0,
+          forcedDepartures: 0,
+          transfertEntrants: 0,
+          transfertSortants: 0,
+        },
       });
     }
     return rows.get(key)!;
+  };
+  const add = (row: MovementBreakdownRow, series: MovementBreakdownSeries, fte: number) => {
+    row[series] += fte;
+    row.counts[series] += 1;
   };
   for (const movement of movements) {
     if (!isActiveMovement(movement)) continue;
@@ -603,22 +622,22 @@ export function movementBreakdownByDimension(
           : rawKey
         : "Non renseigné";
       const row = ensure(key);
-      if (movement.type === "Recrutement") row.recrutements += movement.fte;
-      if (movement.type === "Attrition") row.attritions += movement.fte;
-      if (movement.type === "Départ forcé") row.forcedDepartures += movement.fte;
-      if (movement.type === "Transfert entrant") row.transfertEntrants += movement.fte;
-      if (movement.type === "Transfert sortant") row.transfertSortants += movement.fte;
+      if (movement.type === "Recrutement") add(row, "recrutements", movement.fte);
+      if (movement.type === "Attrition") add(row, "attritions", movement.fte);
+      if (movement.type === "Départ forcé") add(row, "forcedDepartures", movement.fte);
+      if (movement.type === "Transfert entrant") add(row, "transfertEntrants", movement.fte);
+      if (movement.type === "Transfert sortant") add(row, "transfertSortants", movement.fte);
       row.movements.push(movement);
     } else {
       const source = ensure(movement.department);
-      if (movement.type === "Recrutement") source.recrutements += movement.fte;
-      if (movement.type === "Attrition") source.attritions += movement.fte;
-      if (movement.type === "Départ forcé") source.forcedDepartures += movement.fte;
+      if (movement.type === "Recrutement") add(source, "recrutements", movement.fte);
+      if (movement.type === "Attrition") add(source, "attritions", movement.fte);
+      if (movement.type === "Départ forcé") add(source, "forcedDepartures", movement.fte);
       if (movement.type === "Transfert entrant" || movement.type === "Transfert sortant") {
-        source.transfertSortants += movement.fte;
+        add(source, "transfertSortants", movement.fte);
         if (movement.toDepartment && movement.toDepartment !== movement.department) {
           const target = ensure(movement.toDepartment);
-          target.transfertEntrants += movement.fte;
+          add(target, "transfertEntrants", movement.fte);
           target.movements.push(movement);
         }
       }

@@ -101,7 +101,7 @@ export function DashboardExportButton({
         t("shared.dashboardExportButton.impossibleTitle", "Export impossible"),
         t(
           "shared.dashboardExportButton.noWidgets",
-          "Aucun widget affiché sur le dashboard à exporter pour le moment."
+          "Aucun widget affiché sur le tableau de bord à exporter pour le moment."
         ),
         "error"
       );
@@ -221,12 +221,11 @@ export function DashboardExportButton({
     }
   };
 
+  const exportLabel = t("shared.dashboardExportButton.label", "Export COPIL deck");
   return (
-    <Button variant="outline" onClick={handleExport} disabled={disabled} title="Export COPIL deck">
+    <Button variant="outline" onClick={handleExport} disabled={disabled} title={exportLabel}>
       {exporting ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
-      {exporting
-        ? t("shared.dashboardExportButton.exporting", "Export en cours...")
-        : "Export COPIL deck"}
+      {exporting ? t("shared.dashboardExportButton.exporting", "Export en cours...") : exportLabel}
     </Button>
   );
 }

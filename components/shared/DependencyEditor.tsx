@@ -4,11 +4,8 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import {
-  DEPENDENCY_TYPES,
-  DEPENDENCY_TYPE_DESCRIPTION,
-  DEPENDENCY_TYPE_LABEL,
-} from "@/lib/status-config";
+import { DEPENDENCY_TYPES } from "@/lib/status-config";
+import { dependencyTypeDescription, dependencyTypeLabel } from "@/lib/dependencyLabels";
 import type { BeTrackData, DependencyType, LeverDependency } from "@/types";
 
 const inputClass =
@@ -74,11 +71,11 @@ export function DependencyEditor({
               )
             }
             className={inputClass}
-            title={DEPENDENCY_TYPE_DESCRIPTION[dep.type]}
+            title={dependencyTypeDescription(t, dep.type)}
           >
-            {DEPENDENCY_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t} — {DEPENDENCY_TYPE_LABEL[t]}
+            {DEPENDENCY_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type} — {dependencyTypeLabel(t, type)}
               </option>
             ))}
           </select>
@@ -112,11 +109,11 @@ export function DependencyEditor({
           value={draftType}
           onChange={(e) => setDraftType(e.target.value as DependencyType)}
           className={inputClass}
-          title={DEPENDENCY_TYPE_DESCRIPTION[draftType]}
+          title={dependencyTypeDescription(t, draftType)}
         >
-          {DEPENDENCY_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t} — {DEPENDENCY_TYPE_LABEL[t]}
+          {DEPENDENCY_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type} — {dependencyTypeLabel(t, type)}
             </option>
           ))}
         </select>
@@ -130,7 +127,9 @@ export function DependencyEditor({
           <Plus size={12} /> {t("common.add", "Ajouter")}
         </Button>
       </div>
-      <p className="mt-1.5 text-[10.5px] text-tertiary">{DEPENDENCY_TYPE_DESCRIPTION[draftType]}</p>
+      <p className="mt-1.5 text-[10.5px] text-tertiary">
+        {dependencyTypeDescription(t, draftType)}
+      </p>
     </div>
   );
 }

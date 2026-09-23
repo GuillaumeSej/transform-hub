@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { MovementExecutionStatus, MovementStatusByTypeRow } from "@/lib/hrExecution";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { movementTypeLabel } from "@/lib/hrMovementLabels";
 import type { WorkforceMovement } from "@/types";
 
 export function MovementStatusByTypeChart({
@@ -49,11 +50,13 @@ export function MovementStatusByTypeChart({
           type="category"
           dataKey="type"
           width={115}
+          tickFormatter={(value) => movementTypeLabel(t, String(value))}
           tick={{ fontSize: 10 }}
           axisLine={false}
           tickLine={false}
         />
         <Tooltip
+          labelFormatter={(label) => movementTypeLabel(t, String(label))}
           formatter={(value, name) => [
             t("shared.forcedDepartureStatusChart.movementsTooltip", "{n} mouvement(s)").replace(
               "{n}",

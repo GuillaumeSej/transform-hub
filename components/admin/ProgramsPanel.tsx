@@ -34,15 +34,25 @@ import { UserPicker } from "@/components/strategic/UserPicker";
  *  détermine la nature même des entités du programme (leviers financiers vs axes/chantiers/
  *  indicateurs) — le basculer après coup laisserait des données orphelines sans équivalent dans
  *  l'autre modèle. */
-const PROGRAM_TYPE_OPTIONS: { value: ProgramType; label: string; hint: string }[] = [
+const PROGRAM_TYPE_OPTIONS: {
+  value: ProgramType;
+  labelKey: string;
+  label: string;
+  hintKey: string;
+  hint: string;
+}[] = [
   {
     value: "performance",
+    labelKey: "adminProgramsPanel.typePerformance",
     label: "Plan Performance",
+    hintKey: "adminProgramsPanel.typePerformanceHint",
     hint: "Leviers financiers, cycle de vie L1-L5, impacts CAPEX/OPEX.",
   },
   {
     value: "strategic",
+    labelKey: "adminProgramsPanel.typeStrategic",
     label: "Plan Stratégique",
+    hintKey: "adminProgramsPanel.typeStrategicHint",
     hint: "Axes, chantiers et indicateurs (3-5-15), étapes de maturité configurables.",
   },
 ];
@@ -467,14 +477,14 @@ export function ProgramsPanel({
               users={companyUsers}
               value={form.sponsor}
               onChange={(sponsor) => setForm((f) => ({ ...f, sponsor }))}
-              label={t("adminProgramsPanel.sponsor", "Sponsor")}
+              label={t("adminProgramsPanel.sponsor", "Commanditaire")}
               id="program-sponsor"
             />
             <UserPicker
               users={companyUsers}
               value={form.owner}
               onChange={(owner) => setForm((f) => ({ ...f, owner }))}
-              label={t("adminProgramsPanel.owner", "Owner")}
+              label={t("adminProgramsPanel.owner", "Responsable")}
               id="program-owner"
             />
           </div>
@@ -550,15 +560,20 @@ export function ProgramsPanel({
               détermine la nature des entités du programme (leviers vs axes/chantiers). */}
           {editId ? (
             <div className="text-xs text-text-secondary">
-              Type de programme :{" "}
+              {t("adminProgramsPanel.typeLabelPrefix", "Type de programme :")}{" "}
               <span className="font-semibold text-text-primary">
-                {PROGRAM_TYPE_OPTIONS.find((o) => o.value === form.type)?.label ?? form.type}
+                {(() => {
+                  const opt = PROGRAM_TYPE_OPTIONS.find((o) => o.value === form.type);
+                  return opt ? t(opt.labelKey, opt.label) : form.type;
+                })()}
               </span>{" "}
-              — figé à la création, non modifiable.
+              {t("adminProgramsPanel.typeFrozen", "— figé à la création, non modifiable.")}
             </div>
           ) : (
             <fieldset className="space-y-2">
-              <legend className="text-xs font-medium text-text-secondary">Type de programme</legend>
+              <legend className="text-xs font-medium text-text-secondary">
+                {t("adminProgramsPanel.typeLegend", "Type de programme")}
+              </legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {PROGRAM_TYPE_OPTIONS.map((option) => (
                   <label
@@ -578,8 +593,12 @@ export function ProgramsPanel({
                       className="mt-0.5 accent-bp-coral"
                     />
                     <span>
-                      <span className="block font-medium text-text-primary">{option.label}</span>
-                      <span className="block text-xs text-text-secondary">{option.hint}</span>
+                      <span className="block font-medium text-text-primary">
+                        {t(option.labelKey, option.label)}
+                      </span>
+                      <span className="block text-xs text-text-secondary">
+                        {t(option.hintKey, option.hint)}
+                      </span>
                     </span>
                   </label>
                 ))}
@@ -658,7 +677,7 @@ export function ProgramsPanel({
                 {t("adminProgramsPanel.colProgram", "Programme")}
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                {t("adminProgramsPanel.sponsor", "Sponsor")}
+                {t("adminProgramsPanel.sponsor", "Commanditaire")}
               </th>
               <th className="px-4 py-2.5 text-right text-xs font-semibold text-text-secondary">
                 {t("adminProgramsPanel.colActions", "Actions")}

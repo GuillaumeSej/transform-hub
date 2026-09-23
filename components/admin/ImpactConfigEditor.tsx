@@ -62,8 +62,10 @@ export function ImpactConfigEditor({ companyId }: { companyId: string }) {
     window.confirm(
       t(
         "adminImpactConfig.removeWarn",
-        `« ${label} » est encore utilisé par ${count} levier(s). Le supprimer ne modifie pas ces leviers mais la valeur n'apparaîtra plus dans les listes. Supprimer quand même ?`
+        "« {label} » est encore utilisé par {count} levier(s). Le supprimer ne modifie pas ces leviers mais la valeur n'apparaîtra plus dans les listes. Supprimer quand même ?"
       )
+        .replace("{label}", label)
+        .replace("{count}", String(count))
     );
 
   const save = async (next?: { types?: string[] | null; natures?: ImpactNatureDef[] | null }) => {
@@ -128,7 +130,7 @@ export function ImpactConfigEditor({ companyId }: { companyId: string }) {
                 className={iconBtn}
                 disabled={i === 0}
                 onClick={() => setTypes((l) => moveItem(l, i, i - 1))}
-                aria-label="Monter"
+                aria-label={t("adminImpactConfig.moveUp", "Monter")}
               >
                 <ArrowUp size={14} />
               </button>
@@ -136,13 +138,13 @@ export function ImpactConfigEditor({ companyId }: { companyId: string }) {
                 className={iconBtn}
                 disabled={i === types.length - 1}
                 onClick={() => setTypes((l) => moveItem(l, i, i + 1))}
-                aria-label="Descendre"
+                aria-label={t("adminImpactConfig.moveDown", "Descendre")}
               >
                 <ArrowDown size={14} />
               </button>
               <button
                 className={iconBtn}
-                aria-label="Supprimer"
+                aria-label={t("common.delete", "Supprimer")}
                 onClick={() => {
                   if (confirmRemove(typeCounts[label] ?? 0, label))
                     setTypes((l) => l.filter((_, j) => j !== i));
@@ -206,7 +208,7 @@ export function ImpactConfigEditor({ companyId }: { companyId: string }) {
               </span>
               <button
                 className={iconBtn}
-                aria-label="Supprimer"
+                aria-label={t("common.delete", "Supprimer")}
                 onClick={() => {
                   if (confirmRemove(natureCounts[n.id] ?? 0, n.label))
                     setNatures((l) => l.filter((x) => x.id !== n.id));

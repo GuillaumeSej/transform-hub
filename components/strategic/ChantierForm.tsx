@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { UserPicker } from "@/components/strategic/UserPicker";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { AuthUser, Chantier, MaturityStageConfig, StrategicAxis } from "@/types";
 
 /**
@@ -59,6 +60,7 @@ export function ChantierForm({
   /** Mise en page resserrée pour une création rapide inline (une colonne, pas de description). */
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [axisIds, setAxisIds] = useState<string[]>(
@@ -112,20 +114,27 @@ export function ChantierForm({
       <div className={compact ? "space-y-3" : "grid gap-3 sm:grid-cols-2"}>
         <div>
           <label className="text-xs font-medium text-text-secondary" htmlFor="chantier-name">
-            Nom du chantier
+            {t("strategicAxes.form.chantierName", "Nom du chantier")}
           </label>
           <input
             id="chantier-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className={inputClass}
-            placeholder="Ex. Refonte du parcours client"
+            placeholder={t(
+              "strategicAxes.form.chantierNamePlaceholder",
+              "Ex. Refonte du parcours client"
+            )}
           />
         </div>
         <div>
-          <span className="text-xs font-medium text-text-secondary">Axes de rattachement</span>
+          <span className="text-xs font-medium text-text-secondary">
+            {t("strategicAxes.form.parentAxes", "Axes de rattachement")}
+          </span>
           {axes.length === 0 ? (
-            <p className="mt-1 text-xs text-text-secondary">Aucun axe disponible</p>
+            <p className="mt-1 text-xs text-text-secondary">
+              {t("strategicAxes.form.noAxisAvailable", "Aucun axe disponible")}
+            </p>
           ) : (
             // Liste défilante à cases à cocher (round "chantier form") — remplace les puces à
             // bascule : l'axe d'origine (`initial.axisIds`) arrive déjà PRÉ-COCHÉ (voir l'état
@@ -133,7 +142,7 @@ export function ChantierForm({
             // multi-axes sans perdre la présélection.
             <div
               role="group"
-              aria-label="Axes de rattachement"
+              aria-label={t("strategicAxes.form.parentAxes", "Axes de rattachement")}
               className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2"
             >
               {axes.map((axis) => (
@@ -159,7 +168,7 @@ export function ChantierForm({
               className="text-xs font-medium text-text-secondary"
               htmlFor="chantier-confidentiality"
             >
-              Niveau de confidentialité
+              {t("strategicAxes.form.confidentiality", "Niveau de confidentialité")}
             </label>
             <select
               id="chantier-confidentiality"
@@ -167,7 +176,9 @@ export function ChantierForm({
               onChange={(e) => setConfidentialityLevel(e.target.value)}
               className={inputClass}
             >
-              <option value="">Aucun (visible par tous)</option>
+              <option value="">
+                {t("strategicAxes.form.confidentialityNone", "Aucun (visible par tous)")}
+              </option>
               {confidentialityLevels.map((level) => (
                 <option key={level} value={level}>
                   {level}
@@ -181,8 +192,8 @@ export function ChantierForm({
             users={users}
             value={pilote}
             onChange={setPilote}
-            label="Responsable de chantier"
-            placeholder="Non assigné"
+            label={t("strategicAxes.form.chantierOwner", "Responsable de chantier")}
+            placeholder={t("strategicAxes.unassigned", "Non assigné")}
             id="chantier-pilote"
           />
         )}
@@ -191,7 +202,7 @@ export function ChantierForm({
       {!compact && (
         <div>
           <label className="text-xs font-medium text-text-secondary" htmlFor="chantier-description">
-            Description
+            {t("strategicAxes.form.description", "Description")}
           </label>
           <textarea
             id="chantier-description"
@@ -199,7 +210,10 @@ export function ChantierForm({
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             className={inputClass}
-            placeholder="Ce que ce chantier regroupe comme actions concrètes."
+            placeholder={t(
+              "strategicAxes.form.chantierDescriptionPlaceholder",
+              "Ce que ce chantier regroupe comme actions concrètes."
+            )}
           />
         </div>
       )}
@@ -210,14 +224,14 @@ export function ChantierForm({
           disabled={!canSubmit}
           className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:opacity-50"
         >
-          {submitLabel ?? "Enregistrer"}
+          {submitLabel ?? t("common.save", "Enregistrer")}
         </button>
         {onCancel && (
           <button
             onClick={onCancel}
             className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
           >
-            Annuler
+            {t("common.cancel", "Annuler")}
           </button>
         )}
       </div>

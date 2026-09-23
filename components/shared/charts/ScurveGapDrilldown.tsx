@@ -154,7 +154,7 @@ export function ScurveGapDrilldown({
                   className="px-2 text-right font-medium"
                   title={t(
                     "chart.gapDrill.reforecast.tooltip",
-                    "Cible réactualisée du levier (reforecast, ou plan figé, ou valeur courante), cumulée à sa date de fin."
+                    "Cible réactualisée du levier (réactualisation, ou plan figé, ou valeur courante), cumulée à sa date de fin."
                   )}
                 >
                   {t("chart.gapDrill.reforecast", "Réactualisé")}

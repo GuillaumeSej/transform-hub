@@ -54,6 +54,7 @@ import { ManualAlertForm } from "@/components/shared/ManualAlertForm";
 import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { DEPENDENCY_TYPE_META } from "@/lib/status-config";
+import { dependencyMilestoneLabel } from "@/lib/dependencyLabels";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { paginateDashboardItems } from "@/lib/dashboardPagination";
 import { groupLeversByHealthDimension, type LeverHealthDimension } from "@/lib/leverHealth";
@@ -100,13 +101,39 @@ import {
 /** Libellé lisible d'une vue construite (builder générique) — `label` explicite si fourni par
  * l'utilisateur, sinon généré à partir des libellés de la métrique et des dimensions choisies
  * (ex. "Économies réalisées par Fonction × Pays"). */
-function describeCustomView(view: CustomViewConfig, hierarchyLevels: HierarchyLevelDef[]): string {
+function describeCustomView(
+  view: CustomViewConfig,
+  hierarchyLevels: HierarchyLevelDef[],
+  t: (key: string, fallback?: string) => string
+): string {
   if (view.label) return view.label;
-  const metricLabel = getMetricDef(view.metric)?.label ?? view.metric;
+  const metric = getMetricDef(view.metric);
+  const metricLabel = metric ? pivotMetricLabel(t, metric) : view.metric;
   const dimLabels = view.dimensions
-    .map((d) => getDimensionDef(d, hierarchyLevels)?.label ?? d)
+    .map((d) => {
+      const def = getDimensionDef(d, hierarchyLevels);
+      return def ? pivotDimensionLabel(t, def) : d;
+    })
     .join(" × ");
-  return `${metricLabel} par ${dimLabels}`;
+  return t("dashboard.builderModal.viewByPattern", "{metric} par {dimension}")
+    .replace("{metric}", metricLabel)
+    .replace("{dimension}", dimLabels);
+}
+
+/** Libellés traduits des indicateurs / dimensions du builder (clé `dashboard.pivot.*`, fallback =
+ *  libellé français du registre ; les dimensions d'arborescence `hierarchy:*` gardent le nom de
+ *  niveau saisi par l'entreprise). */
+function pivotMetricLabel(
+  t: (key: string, fallback?: string) => string,
+  m: { key: string; label: string }
+): string {
+  return t(`dashboard.pivot.metric.${m.key}`, m.label);
+}
+function pivotDimensionLabel(
+  t: (key: string, fallback?: string) => string,
+  d: { key: string; label: string }
+): string {
+  return d.key.includes(":") ? d.label : t(`dashboard.pivot.dim.${d.key}`, d.label);
 }
 
 /** Correspondance dimension → paramètre de filtre de `/levers` (`f_xxx`, voir
@@ -353,10 +380,10 @@ export function DashboardPagePerformance() {
       },
       {
         key: "ws",
-        label: "Chantier",
+        label: t("dashboard.workstream", "Chantier"),
         getValue: (l) => data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       },
-      { key: "owner", label: "Owner", getValue: (l) => l.owner },
+      { key: "owner", label: t("dashboard.filter.owner", "Owner"), getValue: (l) => l.owner },
       ...(geographyFilterDefs.length > 0
         ? geographyFilterDefs
         : [
@@ -371,7 +398,7 @@ export function DashboardPagePerformance() {
         label: t("dashboard.leverDepartment", "Département"),
         getValue: (l) => l.function,
       },
-      { key: "type", label: "Type", getValue: (l) => l.type },
+      { key: "type", label: t("dashboard.filter.type", "Type"), getValue: (l) => l.type },
     ],
     [data.workstreams, lifecycle, geographyFilterDefs, t]
   );
@@ -1182,7 +1209,10 @@ export function DashboardPagePerformance() {
                   </div>
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <span className="text-[10.5px] font-semibold text-tertiary">
-                      {depAlerts.length} alerte{depAlerts.length !== 1 ? "s" : ""}
+                      {t("dashboard.dependency.alertCount", "{n} alerte(s)").replace(
+                        "{n}",
+                        String(depAlerts.length)
+                      )}
                     </span>
                     <select
                       className="ml-auto rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary"
@@ -1215,7 +1245,10 @@ export function DashboardPagePerformance() {
                                 <div className="mb-2 flex items-start justify-between gap-2">
                                   <div>
                                     <div className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
-                                      {t("dashboard.dependency.planningRule", "Règle de planning")}
+                                      {t(
+                                        "dashboard.dependency.planningRule",
+                                        "Règle de planification"
+                                      )}
                                     </div>
                                     <div className="mt-1 text-[11px] font-semibold text-primary">
                                       {a.type === "FS" &&
@@ -1256,7 +1289,8 @@ export function DashboardPagePerformance() {
                                         {a.targetName}
                                       </div>
                                       <div className="mt-0.5 text-[10px] text-secondary">
-                                        {meta.targetMilestone} : {a.targetDate}
+                                        {dependencyMilestoneLabel(t, meta.targetMilestone)} :{" "}
+                                        {a.targetDate}
                                       </div>
                                     </div>
                                     <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
@@ -1274,7 +1308,8 @@ export function DashboardPagePerformance() {
                                         {a.sourceName}
                                       </div>
                                       <div className="mt-0.5 text-[10px] text-secondary">
-                                        {meta.sourceMilestone} : {a.sourceDate}
+                                        {dependencyMilestoneLabel(t, meta.sourceMilestone)} :{" "}
+                                        {a.sourceDate}
                                       </div>
                                     </div>
                                   </div>
@@ -1289,7 +1324,8 @@ export function DashboardPagePerformance() {
                                         {a.sourceName}
                                       </div>
                                       <div className="mt-0.5 text-[10px] text-secondary">
-                                        {meta.sourceMilestone} : {a.sourceDate}
+                                        {dependencyMilestoneLabel(t, meta.sourceMilestone)} :{" "}
+                                        {a.sourceDate}
                                       </div>
                                     </div>
                                     <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
@@ -1304,7 +1340,8 @@ export function DashboardPagePerformance() {
                                         {a.targetName}
                                       </div>
                                       <div className="mt-0.5 text-[10px] text-secondary">
-                                        {meta.targetMilestone} : {a.targetDate}
+                                        {dependencyMilestoneLabel(t, meta.targetMilestone)} :{" "}
+                                        {a.targetDate}
                                       </div>
                                     </div>
                                   </div>
@@ -1449,7 +1486,7 @@ export function DashboardPagePerformance() {
                   <DimensionToggle
                     options={views.map((v) => ({
                       value: v.id,
-                      label: describeCustomView(v, hierarchyLevels),
+                      label: describeCustomView(v, hierarchyLevels, t),
                     }))}
                     value={activeView.id}
                     onChange={(next) =>
@@ -1525,7 +1562,7 @@ export function DashboardPagePerformance() {
                   <DimensionToggle
                     options={views.map((v) => ({
                       value: v.id,
-                      label: describeCustomView(v, hierarchyLevels),
+                      label: describeCustomView(v, hierarchyLevels, t),
                     }))}
                     value={activeView.id}
                     onChange={(next) =>
@@ -1602,7 +1639,7 @@ export function DashboardPagePerformance() {
                     ? activeView.id === "country"
                       ? t("dashboard.widgets.countrySavings")
                       : t("dashboard.widgets.functionSavings")
-                    : describeCustomView(activeView, hierarchyLevels)
+                    : describeCustomView(activeView, hierarchyLevels, t)
                   : t("dashboard.widgets.geoBreakdown")
               }
               actions={
@@ -1610,7 +1647,7 @@ export function DashboardPagePerformance() {
                   <DimensionToggle
                     options={views.map((v) => ({
                       value: v.id,
-                      label: describeCustomView(v, hierarchyLevels),
+                      label: describeCustomView(v, hierarchyLevels, t),
                     }))}
                     value={activeView.id}
                     onChange={(next) =>
@@ -1653,7 +1690,7 @@ export function DashboardPagePerformance() {
                         t("dashboard.tableHeader.capexRealizedPlan", "CAPEX (réalisé / plan)"),
                         t(
                           "dashboard.tableHeader.opexOneOffRealizedPlan",
-                          "OPEX one-off (réalisé / plan)"
+                          "OPEX ponctuels (réalisé / plan)"
                         ),
                       ].map((h) => (
                         <th
@@ -2076,7 +2113,7 @@ export function DashboardPagePerformance() {
         onOpenChange={(open) => !open && setBuilderChoiceType(null)}
         title={t(
           "dashboard.builderModal.alreadyOnDashboard",
-          "Ce graphique est déjà sur votre dashboard"
+          "Ce graphique est déjà sur votre tableau de bord"
         )}
       >
         <div className="flex flex-col gap-3">
@@ -2123,7 +2160,7 @@ export function DashboardPagePerformance() {
                       <span className="mt-0.5 block text-[11px] text-tertiary">
                         {t("dashboard.builderModal.currentView", "Vue actuelle : {view}").replace(
                           "{view}",
-                          describeCustomView(active, hierarchyLevels)
+                          describeCustomView(active, hierarchyLevels, t)
                         )}
                       </span>
                     )}
@@ -2171,7 +2208,7 @@ export function DashboardPagePerformance() {
               </option>
               {METRIC_REGISTRY.map((m) => (
                 <option key={m.key} value={m.key}>
-                  {m.label}
+                  {pivotMetricLabel(t, m)}
                 </option>
               ))}
             </select>
@@ -2200,7 +2237,7 @@ export function DashboardPagePerformance() {
                 </option>
                 {getAvailableDimensions(hierarchyLevels).map((d) => (
                   <option key={d.key} value={d.key}>
-                    {d.label}
+                    {pivotDimensionLabel(t, d)}
                   </option>
                 ))}
               </select>

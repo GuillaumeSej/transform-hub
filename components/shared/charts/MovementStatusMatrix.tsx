@@ -2,7 +2,7 @@
 
 import { Ban, CalendarDays, Check, Clock, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { MovementExecutionStatus, MovementStatusGroup } from "@/lib/hrExecution";
-import { EXECUTION_LABELS } from "@/lib/hrExecution";
+import { executionLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { groupBlockWidth, useAdaptiveGroupColumns } from "@/lib/hooks/useAdaptiveGroupColumns";
 
@@ -107,8 +107,8 @@ export function MovementStatusMatrix({
                           type="button"
                           onClick={() => onMovementClick(movement.id)}
                           className={`flex h-[21px] items-center justify-center rounded-[2px] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-black ${STYLE[execution]}`}
-                          title={`${movement.label} · ${movement.type}\n${EXECUTION_LABELS[execution]} · ${movement.fte} ETP\n${t("shared.movementStatusMatrix.initiativeLabel", "Initiative")} : ${getInitiativeLabel?.(movement.leverId) ?? movement.leverId}\n${t("etp.filter.hrOwnerMovement", "RH Owner")} : ${movement.hrOwner}\n${t("etp.column.plannedDate", "Date prévue")} : ${movement.plannedDate}`}
-                          aria-label={`${movement.label} ${EXECUTION_LABELS[execution]}`}
+                          title={`${movement.label} · ${movementTypeLabel(t, movement.type)}\n${executionLabel(t, execution)} · ${movement.fte} ${t("etp.column.fte", "ETP")}\n${t("shared.movementStatusMatrix.initiativeLabel", "Initiative")} : ${getInitiativeLabel?.(movement.leverId) ?? movement.leverId}\n${t("etp.filter.hrOwnerMovement", "Responsable RH")} : ${movement.hrOwner}\n${t("etp.column.plannedDate", "Date prévue")} : ${movement.plannedDate}`}
+                          aria-label={`${movement.label} ${executionLabel(t, execution)}`}
                         >
                           <StatusIcon
                             aria-hidden
@@ -137,7 +137,7 @@ export function MovementStatusMatrix({
         {ORDER.map((status) => (
           <span key={status} className="inline-flex items-center gap-1.5">
             <span className={`h-2.5 w-2.5 rounded-[2px] ${STYLE[status]}`} />
-            {EXECUTION_LABELS[status]}
+            {executionLabel(t, status)}
           </span>
         ))}
       </div>

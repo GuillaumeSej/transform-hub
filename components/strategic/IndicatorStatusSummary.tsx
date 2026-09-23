@@ -63,6 +63,7 @@ export function IndicatorStatusSummary({
   className,
   radialHero = false,
   axes,
+  interaction,
 }: {
   indicators: Indicator[];
   measurements: IndicatorMeasurement[];
@@ -92,21 +93,26 @@ export function IndicatorStatusSummary({
    * explicitement par le dashboard stratégique (polish round 4, point 1).
    */
   radialHero?: boolean;
+  /** Rend la synthèse interactive (page KPI) : lignes « Par axe », compteur à risque de chaque
+   *  ligne et légende du bloc héros deviennent des boutons de filtre. Absent (fiche d'axe,
+   *  dashboard) = rendu statique inchangé. */
+  interaction?: OverviewInteraction;
 }) {
+  const { t } = useTranslation();
   const { total, onTrack, atRisk } = countOnTrackAtRisk(indicators);
   const cumulative = sumLatestQuantitativeValues(indicators, measurements);
   const onTrackPct = total > 0 ? (onTrack / total) * 100 : 0;
   const atRiskPct = total > 0 ? (atRisk / total) * 100 : 0;
 
   const l = {
-    tracked: labels?.tracked ?? "Indicateurs suivis",
-    onTrack: labels?.onTrack ?? "Sur la trajectoire",
-    atRisk: labels?.atRisk ?? "À risque",
-    total: labels?.total ?? "Cumul des indicateurs",
-    indicatorsSuffix: labels?.indicatorsSuffix ?? "indicateurs",
-    title: labels?.title ?? "Santé des indicateurs",
-    byAxis: labels?.byAxis ?? "Par axe",
-    ofIndicators: labels?.ofIndicators ?? "des indicateurs",
+    tracked: labels?.tracked ?? t("kpi.summary.tracked", "Indicateurs suivis"),
+    onTrack: labels?.onTrack ?? t("kpi.summary.onTrack", "Sur la trajectoire"),
+    atRisk: labels?.atRisk ?? t("kpi.summary.atRisk", "À risque"),
+    total: labels?.total ?? t("kpi.summary.total", "Cumul des indicateurs"),
+    indicatorsSuffix: labels?.indicatorsSuffix ?? t("kpi.summary.indicatorsSuffix", "indicateurs"),
+    title: labels?.title ?? t("kpi.summary.title", "Santé des indicateurs"),
+    byAxis: labels?.byAxis ?? t("kpi.summary.byAxis", "Par axe"),
+    ofIndicators: labels?.ofIndicators ?? t("kpi.summary.ofIndicators", "des indicateurs"),
   };
 
   return (
@@ -170,13 +176,14 @@ export function IndicatorStatusSummary({
             onTrack={onTrack}
             atRisk={atRisk}
             labels={l}
+            interaction={interaction}
           />
           {showTotal && (
             <KPICard
               label={l.total}
               value={totalUnit ? `${cumulative} ${totalUnit}` : String(cumulative)}
               icon={Sigma}
-              sub="Somme des dernières valeurs quantitatives"
+              sub={t("kpi.summary.totalSub", "Somme des dernières valeurs quantitatives")}
               className="mt-3"
             />
           )}
@@ -195,6 +202,27 @@ type OverviewLabels = {
   byAxis: string;
   ofIndicators: string;
 };
+
+/** Filtrage piloté depuis la synthèse (page KPI) — l'état vit chez l'appelant (paramètres d'URL),
+ *  ce composant ne fait que refléter la sélection et remonter les clics. */
+export type OverviewInteraction = {
+  /** Axe actuellement filtré (un seul) — sa ligne est mise en avant, les autres estompées. */
+  selectedAxisId: string | null;
+  selectedStatus: IndicatorRiskStatus | null;
+  onAxisClick: (axisId: string) => void;
+  /** Clic sur le compteur à risque d'une ligne : axe + statut « à risque ». */
+  onAxisAtRiskClick: (axisId: string) => void;
+  onStatusClick: (status: IndicatorRiskStatus) => void;
+  /** Libellés d'accessibilité — `{name}` / `{status}` sont remplacés à l'affichage. */
+  labels: {
+    filterAxis: string;
+    filterAxisAtRisk: string;
+    filterStatus: string;
+  };
+};
+
+const FOCUS_RING =
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1";
 
 /** Barre segmentée sur la trajectoire / à risque — même rendu que le bandeau héros du dashboard
  *  stratégique (encre + BearingPoint Red, palette partagée `INDICATOR_STATUS_TONE`). */
@@ -259,6 +287,7 @@ function IndicatorStatusOverview({
   onTrack,
   atRisk,
   labels: l,
+  interaction,
 }: {
   indicators: Indicator[];
   axes?: Pick<StrategicAxis, "id" | "name" | "color">[];
@@ -266,6 +295,7 @@ function IndicatorStatusOverview({
   onTrack: number;
   atRisk: number;
   labels: OverviewLabels;
+  interaction?: OverviewInteraction;
 }) {
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
 
@@ -323,13 +353,39 @@ function IndicatorStatusOverview({
               ariaLabel={`${l.onTrack} ${pct(onTrack)}% · ${l.atRisk} ${pct(atRisk)}%`}
             />
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-secondary">
-              {tiles.map((tile) => (
-                <span key={tile.status} className="inline-flex items-center gap-1.5">
-                  <IndicatorStatusMark status={tile.status} size={8} />
-                  <span className="font-semibold text-primary">{tile.label}</span>
-                  <span className="tabular-nums">{pct(tile.count)}%</span>
-                </span>
-              ))}
+              {tiles.map((tile) => {
+                const inner = (
+                  <>
+                    <IndicatorStatusMark status={tile.status} size={8} />
+                    <span className="font-semibold text-primary">{tile.label}</span>
+                    <span className="tabular-nums">{pct(tile.count)}%</span>
+                  </>
+                );
+                if (!interaction) {
+                  return (
+                    <span key={tile.status} className="inline-flex items-center gap-1.5">
+                      {inner}
+                    </span>
+                  );
+                }
+                const active = interaction.selectedStatus === tile.status;
+                return (
+                  <button
+                    key={tile.status}
+                    type="button"
+                    onClick={() => interaction.onStatusClick(tile.status)}
+                    aria-pressed={active}
+                    aria-label={interaction.labels.filterStatus.replace("{status}", tile.label)}
+                    className={`-mx-1.5 inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-1.5 py-0.5 transition ${FOCUS_RING} ${
+                      active
+                        ? "border-primary bg-neutral-100"
+                        : "border-transparent hover:border-border hover:bg-neutral-50"
+                    }`}
+                  >
+                    {inner}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -341,52 +397,122 @@ function IndicatorStatusOverview({
             <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
               {l.byAxis}
             </div>
-            <ul className="flex flex-col gap-2.5">
-              {perAxis.map((row) => (
-                <li key={row.axis.id} className="flex min-w-0 items-center gap-2.5 text-[12px]">
-                  <span
-                    aria-hidden
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: row.axis.color ?? "var(--bp-warm-taupe)" }}
-                  />
-                  <span
-                    className="w-[38%] min-w-0 shrink-0 truncate font-semibold text-primary"
-                    title={row.axis.name}
-                  >
-                    {row.axis.name}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <StatusSplitBar
-                      onTrack={row.onTrack}
-                      atRisk={row.atRisk}
-                      total={row.total}
-                      height="h-2"
-                      color={row.axis.color ?? "var(--bp-warm-taupe)"}
-                      ariaLabel={`${row.axis.name} — ${l.onTrack} ${row.onTrack}/${row.total} · ${l.atRisk} ${row.atRisk}`}
+            <ul className={`flex flex-col ${interaction ? "gap-1" : "gap-2.5"}`}>
+              {perAxis.map((row) => {
+                const axisColor = row.axis.color ?? "var(--bp-warm-taupe)";
+                const rowSummary = `${row.axis.name} — ${l.onTrack} ${row.onTrack}/${row.total} · ${l.atRisk} ${row.atRisk}`;
+                const selected = interaction?.selectedAxisId === row.axis.id;
+                const dimmed = !!interaction?.selectedAxisId && !selected;
+                const atRiskFilterActive = selected && interaction?.selectedStatus === "at_risk";
+
+                const main = (
+                  <>
+                    <span
+                      aria-hidden
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: axisColor }}
                     />
-                  </span>
-                  <span className="w-9 shrink-0 text-right font-semibold text-primary tabular-nums">
-                    {row.onTrack}/{row.total}
-                  </span>
-                  <span
-                    className={`inline-flex w-8 shrink-0 items-center justify-end gap-0.5 tabular-nums ${
-                      row.atRisk > 0
-                        ? `font-bold ${INDICATOR_STATUS_TONE.at_risk.text}`
-                        : "text-tertiary"
+                    <span
+                      className="w-[38%] min-w-0 shrink-0 truncate font-semibold text-primary"
+                      title={row.axis.name}
+                    >
+                      {row.axis.name}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <StatusSplitBar
+                        onTrack={row.onTrack}
+                        atRisk={row.atRisk}
+                        total={row.total}
+                        height="h-2"
+                        color={axisColor}
+                        ariaLabel={rowSummary}
+                      />
+                    </span>
+                    <span className="w-9 shrink-0 text-right font-semibold text-primary tabular-nums">
+                      {row.onTrack}/{row.total}
+                    </span>
+                  </>
+                );
+
+                const atRiskContent =
+                  row.atRisk > 0 ? (
+                    <>
+                      <IndicatorStatusMark status="at_risk" size={7} />
+                      {row.atRisk}
+                    </>
+                  ) : (
+                    "—"
+                  );
+                const atRiskTone =
+                  row.atRisk > 0
+                    ? `font-bold ${INDICATOR_STATUS_TONE.at_risk.text}`
+                    : "text-tertiary";
+
+                if (!interaction) {
+                  return (
+                    <li key={row.axis.id} className="flex min-w-0 items-center gap-2.5 text-[12px]">
+                      {main}
+                      <span
+                        className={`inline-flex w-8 shrink-0 items-center justify-end gap-0.5 tabular-nums ${atRiskTone}`}
+                        title={`${l.atRisk} : ${row.atRisk}`}
+                      >
+                        {atRiskContent}
+                      </span>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li
+                    key={row.axis.id}
+                    className={`flex min-w-0 items-center gap-1 rounded-md text-[12px] transition-opacity ${
+                      dimmed ? "opacity-50 hover:opacity-100 focus-within:opacity-100" : ""
                     }`}
-                    title={`${l.atRisk} : ${row.atRisk}`}
                   >
+                    <button
+                      type="button"
+                      onClick={() => interaction.onAxisClick(row.axis.id)}
+                      aria-pressed={selected}
+                      aria-label={`${interaction.labels.filterAxis.replace("{name}", row.axis.name)} — ${rowSummary}`}
+                      title={interaction.labels.filterAxis.replace("{name}", row.axis.name)}
+                      className={`flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md border px-1.5 py-1 text-left transition ${FOCUS_RING} ${
+                        selected
+                          ? "border-border bg-neutral-100 shadow-sm"
+                          : "border-transparent hover:border-border hover:bg-neutral-50"
+                      }`}
+                      style={selected ? { boxShadow: `inset 3px 0 0 ${axisColor}` } : undefined}
+                    >
+                      {main}
+                    </button>
                     {row.atRisk > 0 ? (
-                      <>
-                        <IndicatorStatusMark status="at_risk" size={7} />
-                        {row.atRisk}
-                      </>
+                      <button
+                        type="button"
+                        onClick={() => interaction.onAxisAtRiskClick(row.axis.id)}
+                        aria-pressed={atRiskFilterActive}
+                        aria-label={interaction.labels.filterAxisAtRisk.replace(
+                          "{name}",
+                          row.axis.name
+                        )}
+                        title={interaction.labels.filterAxisAtRisk.replace("{name}", row.axis.name)}
+                        className={`inline-flex w-10 shrink-0 cursor-pointer items-center justify-end gap-0.5 rounded-md border px-1 py-1 tabular-nums transition ${FOCUS_RING} ${atRiskTone} ${
+                          atRiskFilterActive
+                            ? "border-current bg-red-50"
+                            : "border-transparent hover:border-current hover:bg-red-50"
+                        }`}
+                      >
+                        {atRiskContent}
+                      </button>
                     ) : (
-                      "—"
+                      <span
+                        className={`inline-flex w-10 shrink-0 items-center justify-end gap-0.5 px-1 tabular-nums ${atRiskTone}`}
+                        title={`${l.atRisk} : ${row.atRisk}`}
+                      >
+                        {atRiskContent}
+                      </span>
                     )}
-                  </span>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
@@ -440,9 +566,10 @@ export function BusinessKpiCards({
   labels?: BusinessKpiLabels;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const macro = indicators.filter(isMarketKpi);
 
-  const l = resolveBusinessKpiLabels(labels);
+  const l = resolveBusinessKpiLabels(labels, t);
 
   /** Mesures indexées par indicateur : `IndicatorChart` attend l'historique DÉJÀ filtré, et un
    *  `filter` par carte re-parcourrait tout le tableau de mesures du programme à chaque rendu. */
@@ -494,20 +621,27 @@ type BusinessKpiLabels = {
   progressToTarget?: string;
 };
 
-function resolveBusinessKpiLabels(labels?: BusinessKpiLabels): Required<BusinessKpiLabels> {
+function resolveBusinessKpiLabels(
+  labels: BusinessKpiLabels | undefined,
+  t: (key: string, fallback?: string) => string
+): Required<BusinessKpiLabels> {
   return {
     empty:
       labels?.empty ??
-      "Aucun KPI business défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs.",
-    noValue: labels?.noValue ?? "Aucune mesure",
-    objective: labels?.objective ?? "Objectif",
-    onTrack: labels?.onTrack ?? "Sur la trajectoire",
-    atRisk: labels?.atRisk ?? "À risque",
+      t(
+        "businessKpis.empty",
+        "Aucun KPI business défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs."
+      ),
+    noValue: labels?.noValue ?? t("businessKpis.noValue", "Aucune mesure"),
+    objective: labels?.objective ?? t("kpi.objectiveValue", "Objectif"),
+    onTrack: labels?.onTrack ?? t("indicatorStatus.onTrack", "Sur la trajectoire"),
+    atRisk: labels?.atRisk ?? t("indicatorStatus.atRisk", "À risque"),
     atRiskTooltip: labels?.atRiskTooltip ?? "",
-    fullHistory: labels?.fullHistory ?? "Historique complet",
-    chartValue: labels?.chartValue ?? "Valeur",
-    chartObjective: labels?.chartObjective ?? "Objectif",
-    progressToTarget: labels?.progressToTarget ?? "Progression vers la cible",
+    fullHistory: labels?.fullHistory ?? t("kpi.chart.fullHistory", "Historique complet"),
+    chartValue: labels?.chartValue ?? t("kpi.chart.value", "Valeur"),
+    chartObjective: labels?.chartObjective ?? t("kpi.chart.objective", "Objectif"),
+    progressToTarget:
+      labels?.progressToTarget ?? t("kpi.chart.progressToTarget", "Progression vers la cible"),
   };
 }
 

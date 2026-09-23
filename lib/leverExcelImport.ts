@@ -80,7 +80,9 @@ export const LEVER_IMPORT_HEADERS = [
   "Code",
   "Type de levier",
   "Nom du levier",
-  "Workstream",
+  // Ex-"Workstream" : libellé visible aligné sur la terminologie de l'app ("Chantier"). L'import
+  // accepte toujours l'ancienne colonne "Workstream" (anciens templates/exports), cf. plus bas.
+  "Chantier",
   "Programme",
   "Owner",
   "Owner (initiales)",
@@ -430,9 +432,10 @@ export function validateLeverImportRows(
       return;
     }
 
-    const wsRaw = str(row["Workstream"]);
+    // "Workstream" = nom historique de la colonne, toujours accepté pour les anciens fichiers.
+    const wsRaw = str(row["Chantier"]) || str(row["Workstream"]);
     if (!wsRaw) {
-      errors.push({ sheet: "Leviers", rowNumber, reason: `"Workstream" est obligatoire` });
+      errors.push({ sheet: "Leviers", rowNumber, reason: `"Chantier" est obligatoire` });
       return;
     }
     let ws =

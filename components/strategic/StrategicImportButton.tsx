@@ -126,14 +126,33 @@ type PersonCreationResult = {
  *  liste, voir la convention "chaque fichier reste autonome" de `lib/strategicExcelImport.ts`).
  *  `chantier_contributor` ("Responsable projet") en premier = rôle par défaut proposé pour une
  *  personne simplement référencée comme owner/pilote/sponsor dans le fichier importé. */
-const PERSON_ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: "chantier_contributor", label: "Responsable projet" },
-  { value: "chantier_owner", label: "Responsable de chantier" },
-  { value: "axis_sponsor", label: "Sponsor d'axe" },
-  { value: "internal_comm", label: "Communication interne" },
-  { value: "budget_control", label: "Contrôle de gestion" },
-  { value: "strategic_lead", label: "Pilote du plan stratégique" },
+const PERSON_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }[] = [
+  {
+    value: "chantier_contributor",
+    labelKey: "roles.chantierContributor.label",
+    label: "Responsable projet",
+  },
+  {
+    value: "chantier_owner",
+    labelKey: "roles.chantierOwner.label",
+    label: "Responsable de chantier",
+  },
+  { value: "axis_sponsor", labelKey: "roles.axisSponsor.label", label: "Commanditaire d'axe" },
+  { value: "internal_comm", labelKey: "roles.internalComm.label", label: "Communication interne" },
+  { value: "budget_control", labelKey: "roles.budgetControl.label", label: "Contrôle de gestion" },
+  {
+    value: "strategic_lead",
+    labelKey: "roles.strategicLead.label",
+    label: "Pilote du plan stratégique",
+  },
 ];
+
+/** Clé i18n d'affichage de chaque statut de création de compte (valeurs internes en français). */
+const CREATION_STATUS_KEY: Record<PersonCreationResult["status"], string> = {
+  créé: "strategicImport.accountStatusCreated",
+  "déjà existant (compte conservé)": "strategicImport.accountStatusExisting",
+  échec: "strategicImport.accountStatusFailed",
+};
 
 /** Retire les accents d'une chaîne — même technique que `lib/leverOwnerReconciliation.ts::normalize`
  *  (dupliquée : ce composant ne dépend pas de ce module pour cette seule fonction). */
@@ -554,7 +573,7 @@ export function StrategicImportButton({
                             : "text-tertiary"
                       }
                     >
-                      {r.status}
+                      {t(CREATION_STATUS_KEY[r.status], r.status)}
                     </span>
                   </span>
                   {r.tempPassword && (
@@ -609,7 +628,7 @@ export function StrategicImportButton({
                   <strong className="text-rag-green-dark">
                     {preview.toCreate.measurements.length}
                   </strong>{" "}
-                  {t("strategicImport.measurementsCountLabel", "mesure(s) de baseline à créer")}
+                  {t("strategicImport.measurementsCountLabel", "mesure(s) de référence à créer")}
                 </span>
               )}
               {!!preview?.toCreate.staffing.length && (
@@ -667,7 +686,7 @@ export function StrategicImportButton({
                       >
                         {PERSON_ROLE_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>
-                            {opt.label}
+                            {t(opt.labelKey, opt.label)}
                           </option>
                         ))}
                       </select>

@@ -33,6 +33,7 @@ import { movementRhythmAxisDomains } from "@/lib/hrTimeSeries";
 import type { FteBridgeSummary } from "@/lib/hrEngine";
 import type { MovementType, WorkforceMovement } from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { movementTypeLabel } from "@/lib/hrMovementLabels";
 import { formatSignedFr, movementNetBalance } from "@/lib/hrMovementBalance";
 import {
   MovementNetBalanceSummary,
@@ -545,7 +546,7 @@ export function MovementRhythmChart({
    *  période (voir `MovementDrilldownModal`, câblé dans `app/(app)/hr/page.tsx`). */
   onBarClick?: (label: string, movements: WorkforceMovement[]) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
 
   if (buckets.length === 0) {
     return (
@@ -662,7 +663,7 @@ export function MovementRhythmChart({
                             {s.label}
                           </span>
                           <span className="tabular-nums text-secondary">
-                            {formatSignedFr(row[s.key])} {etp}
+                            {formatSignedFr(row[s.key], locale)} {etp}
                           </span>
                         </div>
                       ))}
@@ -676,7 +677,7 @@ export function MovementRhythmChart({
                       {t(
                         "shared.hrGooduelleCharts.cumulNetSinceStart",
                         "Cumul net depuis le début de la plage : {v} ETP"
-                      ).replace("{v}", formatSignedFr(row.cumulNet))}
+                      ).replace("{v}", formatSignedFr(row.cumulNet, locale))}
                     </div>
                   </div>
                   {onBarClick && row.movements.length > 0 && (
@@ -727,7 +728,7 @@ export function MovementRhythmChart({
                   fontWeight={700}
                   fill={netBalanceColor(Number(props.value)) ?? COLOR_INK}
                 >
-                  {formatSignedFr(Number(props.value))} {etp}
+                  {formatSignedFr(Number(props.value), locale)} {etp}
                 </text>
               ) : (
                 <g />
@@ -786,7 +787,7 @@ export function EtpBridgeChart({
     const start = running;
     running += c.delta;
     data.push({
-      label: c.type,
+      label: movementTypeLabel(t, c.type),
       kind: c.delta === 0 ? "zero" : c.delta > 0 ? "positive" : "negative",
       base: Math.min(start, running),
       height: Math.abs(c.delta),

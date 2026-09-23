@@ -1,5 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { IndicatorRiskStatus } from "@/types";
 
 /**
@@ -93,6 +94,12 @@ export const INDICATOR_STATUS_DEFAULT_LABEL: Record<IndicatorRiskStatus, string>
   at_risk: "À risque",
 };
 
+/** Clé i18n du libellé par défaut de chaque statut (repli quand l'appelant ne fournit rien). */
+export const INDICATOR_STATUS_LABEL_KEY: Record<IndicatorRiskStatus, string> = {
+  on_track: "indicatorStatus.onTrack",
+  at_risk: "indicatorStatus.atRisk",
+};
+
 export function IndicatorStatusBadge({
   status,
   label,
@@ -113,7 +120,9 @@ export function IndicatorStatusBadge({
   size?: "xs" | "sm";
   className?: string;
 }) {
-  const text = label ?? INDICATOR_STATUS_DEFAULT_LABEL[status];
+  const { t } = useTranslation();
+  const text =
+    label ?? t(INDICATOR_STATUS_LABEL_KEY[status], INDICATOR_STATUS_DEFAULT_LABEL[status]);
   return (
     <span
       title={title ?? text}
@@ -139,6 +148,7 @@ export function IndicatorStatusLegend({
   labels?: Partial<Record<IndicatorRiskStatus, string>>;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const statuses: IndicatorRiskStatus[] = ["on_track", "at_risk"];
   return (
     <span className={cn("inline-flex flex-wrap items-center gap-x-3 gap-y-1", className)}>
@@ -148,7 +158,8 @@ export function IndicatorStatusLegend({
           className="inline-flex items-center gap-1 text-[10.5px] font-medium text-secondary"
         >
           <IndicatorStatusMark status={status} size={8} />
-          {labels?.[status] ?? INDICATOR_STATUS_DEFAULT_LABEL[status]}
+          {labels?.[status] ??
+            t(INDICATOR_STATUS_LABEL_KEY[status], INDICATOR_STATUS_DEFAULT_LABEL[status])}
         </span>
       ))}
     </span>

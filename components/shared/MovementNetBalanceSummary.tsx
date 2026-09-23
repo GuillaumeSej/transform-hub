@@ -14,8 +14,6 @@ export function netBalanceColor(value: number): string | undefined {
   return undefined;
 }
 
-const fmt = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
-
 /**
  * Bandeau "Bilan net" d'une liste de mouvements (entrées, sorties, transferts, net ETP signé et
  * coloré). Affiché en tête des modales de drill-down et dans l'infobulle de `MovementRhythmChart`.
@@ -29,7 +27,8 @@ export function MovementNetBalanceSummary({
   /** Variante infobulle : moins de padding, pas de fond. */
   compact?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
+  const fmt = (v: number) => v.toLocaleString(locale, { maximumFractionDigits: 1 });
   const etp = t("etp.column.fte", "ETP");
   const { entries, exits, transfersIn, transfersOut, netFte, netHeadcount } = balance;
   const hasTransfers = transfersIn.count > 0 || transfersOut.count > 0;
@@ -48,10 +47,10 @@ export function MovementNetBalanceSummary({
       }
     >
       <div className="text-[12.5px] font-bold" style={{ color: netBalanceColor(netFte) }}>
-        {t("hr.netBalance.title", "Bilan net")} : {formatSignedFr(netFte)} {etp}
+        {t("hr.netBalance.title", "Bilan net")} : {formatSignedFr(netFte, locale)} {etp}
         {showHeadcount && (
           <span className="ml-1 font-semibold">
-            ({formatSignedFr(netHeadcount)} {t("hr.netBalance.people", "pers.")})
+            ({formatSignedFr(netHeadcount, locale)} {t("hr.netBalance.people", "pers.")})
           </span>
         )}
       </div>

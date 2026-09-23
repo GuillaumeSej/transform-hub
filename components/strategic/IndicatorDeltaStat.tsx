@@ -2,6 +2,7 @@
 
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { IndicatorDelta } from "@/lib/axisLogic";
 
 /**
@@ -40,6 +41,7 @@ export function IndicatorDeltaStat({
   labels?: { progress?: string };
   className?: string;
 }) {
+  const { t } = useTranslation();
   if (!delta) return null;
 
   const { delta: value, deltaPct, progressPct, favorable } = delta;
@@ -70,7 +72,8 @@ export function IndicatorDeltaStat({
   const pctSign = deltaPct > 0 ? "+" : deltaPct < 0 ? "−" : "";
   const formattedPct = `(${pctSign}${Math.abs(deltaPct).toFixed(1)}%)`;
 
-  const progressLabel = labels?.progress ?? "Progression vers la cible";
+  const progressLabel =
+    labels?.progress ?? t("kpi.chart.progressToTarget", "Progression vers la cible");
   const roundedProgress = Math.round(progressPct);
 
   return (

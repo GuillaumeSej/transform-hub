@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { Lock } from "lucide-react";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
-  formatTimelineDay,
+  formatTimelineDay as formatTimelineDayBase,
   packTimelineLanes,
   timelineColumns,
   timelinePctOf,
@@ -154,19 +155,26 @@ export function ChantierGantt({
   alerts?: ChantierDependencyAlert[];
   labels?: ChantierGanttLabels;
 }) {
+  const { t, locale } = useTranslation();
+  const formatTimelineDay = (iso: string) => formatTimelineDayBase(iso, locale);
   const l = {
-    empty: labels?.empty ?? "Aucun chantier sur cet axe.",
-    unplannedTitle: labels?.unplannedTitle ?? "Chantiers sans action planifiée",
-    noDates: labels?.noDates ?? "Pas encore de date — ajoutez une action",
-    actionsSuffix: labels?.actionsSuffix ?? "actions",
-    scale: labels?.scale ?? "Échelle",
-    scaleMonth: labels?.scaleMonth ?? "Mois",
-    scaleQuarter: labels?.scaleQuarter ?? "Trimestre",
-    scaleSemester: labels?.scaleSemester ?? "Semestre",
-    progress: labels?.progress ?? "Avancement",
-    alerted: labels?.alerted ?? "Dépendance en alerte",
-    today: labels?.today ?? "Aujourd'hui",
-    blockedBy: labels?.blockedBy ?? "Bloqué par :",
+    empty: labels?.empty ?? t("strategicAxes.noChantiers", "Aucun chantier sur cet axe."),
+    unplannedTitle:
+      labels?.unplannedTitle ??
+      t("strategicAxes.chantierUnplanned", "Chantiers sans projet planifié"),
+    noDates:
+      labels?.noDates ??
+      t("strategicAxes.chantierNoDates", "Pas encore de date — ajoutez un projet"),
+    actionsSuffix: labels?.actionsSuffix ?? t("strategicAxes.actionsSuffix", "projets"),
+    scale: labels?.scale ?? t("strategicAxes.ganttScale", "Échelle"),
+    scaleMonth: labels?.scaleMonth ?? t("strategicAxes.ganttScaleMonth", "Mois"),
+    scaleQuarter: labels?.scaleQuarter ?? t("strategicAxes.ganttScaleQuarter", "Trimestre"),
+    scaleSemester: labels?.scaleSemester ?? t("strategicAxes.ganttScaleSemester", "Semestre"),
+    progress: labels?.progress ?? t("strategicAxes.progress", "Avancement"),
+    alerted: labels?.alerted ?? t("strategicAxes.chantierAlerted", "Dépendance en alerte"),
+    today: labels?.today ?? t("strategicAxes.ganttToday", "Aujourd'hui"),
+    blockedBy:
+      labels?.blockedBy ?? t("strategicChantierDetail.prerequisites.blockedBy", "Bloqué par :"),
   };
 
   const effectiveAllActions = allActions ?? actions;
@@ -222,8 +230,8 @@ export function ChantierGantt({
   const pctOf = useMemo(() => timelinePctOf(minTime, maxTime), [minTime, maxTime]);
 
   const columns = useMemo(
-    () => (planned.length === 0 ? [] : timelineColumns(minTime, maxTime, scale)),
-    [minTime, maxTime, scale, planned.length]
+    () => (planned.length === 0 ? [] : timelineColumns(minTime, maxTime, scale, locale)),
+    [minTime, maxTime, scale, planned.length, locale]
   );
 
   const yearBands = useMemo(() => timelineYearBands(columns), [columns]);

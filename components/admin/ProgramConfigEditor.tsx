@@ -195,7 +195,7 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
       <p className="text-xs text-text-secondary">
         {t(
           "adminProgramConfig.hint",
-          "Configuration du programme historique de l'entreprise (nom, sponsor, exercice, cibles financières) et de ses chantiers — utilisée par le tableau de bord et les calculs financiers."
+          "Configuration du programme historique de l'entreprise (nom, commanditaire, exercice, cibles financières) et de ses chantiers — utilisée par le tableau de bord et les calculs financiers."
         )}
       </p>
 
@@ -213,7 +213,7 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
         </div>
         <div>
           <label className="text-xs font-medium text-text-secondary">
-            {t("adminProgramConfig.sponsor", "Sponsor")}
+            {t("adminProgramConfig.sponsor", "Commanditaire")}
           </label>
           <input
             value={form.sponsor}
@@ -315,7 +315,7 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
                     {t("adminProgramConfig.colName", "Nom")}
                   </th>
                   <th className="px-3 py-2 text-left font-semibold text-text-secondary">
-                    {t("adminProgramConfig.sponsor", "Sponsor")}
+                    {t("adminProgramConfig.sponsor", "Commanditaire")}
                   </th>
                   <th className="px-3 py-2 text-left font-semibold text-text-secondary">
                     {t("adminProgramConfig.colColor", "Couleur")}
@@ -395,7 +395,7 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
           </div>
           <div className="w-36">
             <UserPicker
-              label={t("adminProgramConfig.sponsor", "Sponsor")}
+              label={t("adminProgramConfig.sponsor", "Commanditaire")}
               users={companyUsers}
               value={newWs.sponsorUsername}
               onChange={(username) => {

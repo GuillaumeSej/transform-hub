@@ -100,23 +100,23 @@ export default function WorkstreamsPage() {
   }));
 
   const columns: ColumnDef<Row>[] = [
-    { key: "code", label: "Code", width: "90px" },
+    { key: "code", label: t("levers.column.code", "Code"), width: "90px" },
     {
       key: "name",
       label: t("levers.columnName", "Levier"),
       render: (r) => <strong>{r.name}</strong>,
     },
-    { key: "wsName", label: "Chantier" },
+    { key: "wsName", label: t("leverForm.workstream", "Chantier") },
     {
       key: "owner",
-      label: "Owner",
+      label: t("leverForm.owner", "Responsable"),
       render: (r) => (
         <span className="inline-flex items-center gap-1.5">
           <Avatar initials={r.ownerInit} size="sm" /> {r.owner}
         </span>
       ),
     },
-    { key: "sponsor", label: "Sponsor" },
+    { key: "sponsor", label: t("leverForm.sponsor", "Commanditaire") },
     {
       key: "reforecastNet",
       label: t("workstreams.reforecastTarget", "Cible réactualisée €M"),
@@ -129,7 +129,11 @@ export default function WorkstreamsPage() {
       align: "right",
       render: (r) => r.realized.toFixed(1),
     },
-    { key: "progressPct", label: "Progress", render: (r) => <ProgressBar pct={r.progressPct} /> },
+    {
+      key: "progressPct",
+      label: t("levers.column.progress", "Avancement"),
+      render: (r) => <ProgressBar pct={r.progressPct} />,
+    },
     {
       key: "risk",
       label: t("leverForm.risk", "Risque"),
@@ -205,9 +209,21 @@ export default function WorkstreamsPage() {
           value={`${engine.fmtCurr(summary.realized)} / ${engine.fmtCurr(summary.reforecastTarget)}`}
           sub={`${reforecastPct}% ${t("workstreams.vsReforecast", "de la cible réactualisée")}`}
         />
-        <Kpi label="On track" value={String(summary.onTrack)} tone="green" />
-        <Kpi label="At risk" value={String(summary.atRisk)} tone="amber" />
-        <Kpi label="Critical" value={String(summary.critical)} tone="red" />
+        <Kpi
+          label={t("workstreams.kpi.onTrack", "Dans les temps")}
+          value={String(summary.onTrack)}
+          tone="green"
+        />
+        <Kpi
+          label={t("workstreams.kpi.atRisk", "À risque")}
+          value={String(summary.atRisk)}
+          tone="amber"
+        />
+        <Kpi
+          label={t("workstreams.kpi.critical", "Critique")}
+          value={String(summary.critical)}
+          tone="red"
+        />
       </div>
 
       <Card>
@@ -218,7 +234,7 @@ export default function WorkstreamsPage() {
             onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
             searchPlaceholder={t(
               "workstreams.searchPlaceholder",
-              "Rechercher (nom, code, owner...)"
+              "Rechercher (nom, code, responsable...)"
             )}
             defaultSort={{ key: "risk", direction: "desc" }}
           />

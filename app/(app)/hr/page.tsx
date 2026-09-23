@@ -87,6 +87,12 @@ import {
   subscribePrograms,
 } from "@/lib/firestore/admin";
 import { buildMovementTableRows, type HrMovementTableRow } from "@/lib/hrMovementTable";
+import {
+  executionLabel,
+  movementAlertMessage,
+  movementStatusLabel,
+  movementTypeLabel,
+} from "@/lib/hrMovementLabels";
 import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceLogic";
 import { forcedDeparturesBySocialScheme } from "@/lib/hrSocialPlan";
 import {
@@ -106,6 +112,7 @@ import {
   getHrDimensionDef,
 } from "@/lib/hrDashboardPivot";
 import {
+  HR_WIDGET_LABEL_KEYS,
   HR_WIDGET_REGISTRY,
   SPAN_COL_CLASS,
   addCustomViewToHrInstance,
@@ -145,8 +152,10 @@ function describeHrCustomView(
   t: (key: string, fallback?: string) => string
 ): string {
   if (view.label) return view.label;
-  const metricLabel = getHrMetricDef(view.metric)?.label ?? view.metric;
-  const dimLabel = getHrDimensionDef(view.dimension)?.label ?? view.dimension;
+  const metric = getHrMetricDef(view.metric);
+  const dim = getHrDimensionDef(view.dimension);
+  const metricLabel = metric ? t(`hr.pivot.metric.${metric.key}`, metric.label) : view.metric;
+  const dimLabel = dim ? t(`hr.pivot.dim.${dim.key}`, dim.label) : view.dimension;
   return t("hr.builderModal.viewByPattern", "{metric} par {dimension}")
     .replace("{metric}", metricLabel)
     .replace("{dimension}", dimLabel);
@@ -348,8 +357,17 @@ export default function HrDashboardPage() {
   // ─── Filtres RH ──────────────────────────────────────────────────────────────────────────────
   const filterDefs: FilterDef<WorkforceMovement>[] = useMemo(
     () => [
-      { key: "type", label: "Type", getValue: (m) => m.type },
-      { key: "workstream", label: "Chantier", getValue: (m) => m.workstream || "—" },
+      {
+        key: "type",
+        label: t("etp.filter.type", "Type"),
+        getValue: (m) => m.type,
+        formatValue: (v) => movementTypeLabel(t, v),
+      },
+      {
+        key: "workstream",
+        label: t("dashboard.workstream", "Chantier"),
+        getValue: (m) => m.workstream || "—",
+      },
       {
         key: "function",
         label: t("dashboard.function", "Fonction"),
@@ -369,8 +387,13 @@ export default function HrDashboardPage() {
               getValue: (m: WorkforceMovement) => m.country,
             },
           ]),
-      { key: "status", label: t("hr.status", "Statut"), getValue: (m) => m.status },
-      { key: "hrOwner", label: t("hr.hrOwner", "Owner RH"), getValue: (m) => m.hrOwner },
+      {
+        key: "status",
+        label: t("hr.status", "Statut"),
+        getValue: (m) => m.status,
+        formatValue: (v) => movementStatusLabel(t, v),
+      },
+      { key: "hrOwner", label: t("hr.hrOwner", "Responsable RH"), getValue: (m) => m.hrOwner },
       ...hierarchyFilterDefs,
     ],
     [t, geographyFilterDefs, hierarchyFilterDefs]
@@ -498,12 +521,19 @@ export default function HrDashboardPage() {
 
   const movementTableColumns: ColumnDef<HrMovementTableRow>[] = [
     { key: "label", label: t("hr.column.movement", "Mouvement"), mobile: "primary" },
-    { key: "type", label: "Type", options: hr.MOVEMENT_TYPES },
+    {
+      key: "type",
+      label: t("etp.filter.type", "Type"),
+      options: hr.MOVEMENT_TYPES,
+      optionLabel: (opt) => movementTypeLabel(t, opt),
+      render: (row) => movementTypeLabel(t, row.type),
+    },
     { key: "programName", label: t("dashboard.program", "Programme") },
     {
       key: "socialScheme",
       label: t("hr.column.socialScheme", "Dispositif social"),
       options: socialSchemeOptions,
+      optionLabel: (opt) => (opt === "Autre" ? t("shared.movementForm.schemeOther", "Autre") : opt),
       render: (row) =>
         canEditMovements && row.type === "Départ forcé" ? (
           <select
@@ -517,24 +547,30 @@ export default function HrDashboardPage() {
           >
             {socialSchemeOptions.map((scheme) => (
               <option key={scheme} value={scheme}>
-                {scheme}
+                {scheme === "Autre" ? t("shared.movementForm.schemeOther", "Autre") : scheme}
               </option>
             ))}
           </select>
+        ) : row.socialScheme === "Autre" ? (
+          t("shared.movementForm.schemeOther", "Autre")
         ) : (
           row.socialScheme
         ),
     },
     { key: "department", label: t("hr.department", "Département") },
     { key: "country", label: t("dashboard.country", "Pays") },
-    { key: "initiativeOwner", label: t("hr.column.initiativeOwner", "Owner Initiative") },
-    { key: "hrOwner", label: t("hr.hrOwner", "Owner RH") },
-    { key: "fte", label: "ETP", align: "right" },
+    {
+      key: "initiativeOwner",
+      label: t("hr.column.initiativeOwner", "Responsable de l'initiative"),
+    },
+    { key: "hrOwner", label: t("hr.hrOwner", "Responsable RH") },
+    { key: "fte", label: t("etp.column.fte", "ETP"), align: "right" },
     { key: "plannedDate", label: t("hr.column.plannedDate", "Date prévisionnelle") },
     {
       key: "status",
       label: t("hr.status", "Statut"),
       options: movementStatusOptions,
+      optionLabel: (opt) => movementStatusLabel(t, opt),
       render: (row) =>
         canEditMovements ? (
           <select
@@ -548,12 +584,12 @@ export default function HrDashboardPage() {
           >
             {movementStatusOptions.map((status) => (
               <option key={status} value={status}>
-                {status}
+                {movementStatusLabel(t, status)}
               </option>
             ))}
           </select>
         ) : (
-          row.status
+          movementStatusLabel(t, row.status)
         ),
     },
     {
@@ -778,7 +814,7 @@ export default function HrDashboardPage() {
       <div
         key={instance.instanceId}
         data-widget-id={instance.instanceId}
-        data-widget-title={def.label}
+        data-widget-title={t(HR_WIDGET_LABEL_KEYS[instance.type], def.label)}
         className={`relative h-full self-stretch ${SPAN_COL_CLASS[instance.span]} ${
           isDragOver ? "outline outline-2 outline-offset-2 outline-bp-coral" : ""
         }`}
@@ -1004,7 +1040,7 @@ export default function HrDashboardPage() {
                   setDrilldownModal({
                     title: t("hr.drilldown.dimensionStatusTitle", "Mouvements — {label} · {status}")
                       .replace("{label}", value)
-                      .replace("{status}", EXECUTION_LABELS[status]),
+                      .replace("{status}", executionLabel(t, status)),
                     movements,
                   })
                 }
@@ -1018,7 +1054,7 @@ export default function HrDashboardPage() {
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
-            <CardHeader title={t("hr.widget.ownerActions", "Plan d'actions par RH Owner")} />
+            <CardHeader title={t("hr.widget.ownerActions", "Plan d'actions par responsable RH")} />
             <CardBody flush>
               <HrOwnerActionTable
                 rows={rows}
@@ -1071,7 +1107,7 @@ export default function HrDashboardPage() {
           instance,
           <Card className="mb-0 h-full">
             <CardHeader
-              title={t("hr.widget.netEconomy", "Économie nette (savings récurrentes − ENR)")}
+              title={t("hr.widget.netEconomy", "Économie nette (économies récurrentes − ENR)")}
               actions={timeControls}
             />
             <CardBody>
@@ -1079,7 +1115,7 @@ export default function HrDashboardPage() {
               <p className="mt-2 text-[11px] text-tertiary">
                 {t(
                   "hr.widget.netEconomyHint",
-                  "Réalisé + prévision : économies staff costs récurrentes − coûts sociaux one-off, par période et en cumul"
+                  "Réalisé + prévision : économies de coûts de personnel récurrentes − coûts sociaux ponctuels, par période et en cumul"
                 )}
               </p>
             </CardBody>
@@ -1169,8 +1205,8 @@ export default function HrDashboardPage() {
                 onBarClick={(type, status, movements) =>
                   setDrilldownModal({
                     title: t("hr.drilldown.typeStatusTitle", "Mouvements — {type} · {status}")
-                      .replace("{type}", type)
-                      .replace("{status}", EXECUTION_LABELS[status]),
+                      .replace("{type}", movementTypeLabel(t, type))
+                      .replace("{status}", executionLabel(t, status)),
                     movements,
                   })
                 }
@@ -1222,6 +1258,13 @@ export default function HrDashboardPage() {
             <CardBody>
               <DepartmentMovementsChart
                 data={rows}
+                dimensionLabel={
+                  dimension === "country"
+                    ? t("dashboard.country", "Pays")
+                    : dimension === "program"
+                      ? t("dashboard.program", "Programme")
+                      : t("hr.department", "Département")
+                }
                 onBarClick={(label, movements) =>
                   setDrilldownModal({
                     title: t("hr.drilldown.dimensionTitle", "Mouvements — {label}").replace(
@@ -1271,14 +1314,14 @@ export default function HrDashboardPage() {
             <CardHeader
               title={t(
                 "hr.widget.departmentTable",
-                "Effectifs par dimension — baseline vs actuel vs cible"
+                "Effectifs par dimension — référence vs actuel vs cible"
               )}
               actions={
                 <ViewToggle
                   options={[
                     { value: "department", label: t("hr.department", "Département") },
                     { value: "country", label: t("dashboard.country", "Pays") },
-                    { value: "workstream", label: "Chantier" },
+                    { value: "workstream", label: t("dashboard.workstream", "Chantier") },
                   ]}
                   value={dimension}
                   onChange={(next) =>
@@ -1298,7 +1341,7 @@ export default function HrDashboardPage() {
                           : dimension === "country"
                             ? t("dashboard.country", "Pays")
                             : "Chantier",
-                        t("hr.column.baselineFte", "Baseline ETP"),
+                        t("hr.column.baselineFte", "ETP de référence"),
                         t("hr.current", "Actuel"),
                         t("hr.target", "Cible"),
                         t("hr.gapVsTarget", "Écart vs cible"),
@@ -1363,7 +1406,7 @@ export default function HrDashboardPage() {
                       </div>
                       <dl className="mb-2 grid grid-cols-3 gap-x-3 gap-y-1.5">
                         {[
-                          { label: t("finance.baseline", "Baseline"), value: d.baseline },
+                          { label: t("finance.baseline", "Référence"), value: d.baseline },
                           { label: t("hr.current", "Actuel"), value: d.current },
                           { label: t("hr.target", "Cible"), value: d.target },
                         ].map((item) => (
@@ -1402,7 +1445,7 @@ export default function HrDashboardPage() {
                 }}
                 searchPlaceholder={t(
                   "hr.movementsSearchPlaceholder",
-                  "Rechercher un mouvement, programme, owner..."
+                  "Rechercher un mouvement, programme, responsable..."
                 )}
                 defaultSort={{ key: "plannedDate", direction: "asc" }}
               />
@@ -1529,7 +1572,7 @@ export default function HrDashboardPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-              {t("nav.hrDashboard", "Dashboard RH")}
+              {t("nav.hrDashboard", "Tableau de bord RH")}
             </h1>
             <span className="flex items-center gap-1 rounded-sm border border-neutral-300 bg-neutral-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-secondary">
               <Lock size={10} />
@@ -1639,7 +1682,7 @@ export default function HrDashboardPage() {
         </div>
         <div className="mt-1 flex justify-between text-[10px] text-tertiary">
           <span>
-            {t("hr.baselineFteLine", "Baseline {n} ETP").replace(
+            {t("hr.baselineFteLine", "Référence {n} ETP").replace(
               "{n}",
               wf.totalFTE.toLocaleString("fr-FR")
             )}
@@ -1661,7 +1704,7 @@ export default function HrDashboardPage() {
         <HrKPICard
           label={t("hr.kpi.fteImpact", "Impact ETP")}
           value={summary.fte.realized.toLocaleString("fr-FR")}
-          sub={t("hr.kpi.subPattern", "Cible {target} · Reforecast {reforecast} · {pct}%")
+          sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
             .replace("{target}", summary.fte.target.toLocaleString("fr-FR"))
             .replace("{reforecast}", summary.fte.reforecast.toLocaleString("fr-FR"))
             .replace("{pct}", String(summary.fte.progressPct))}
@@ -1680,7 +1723,7 @@ export default function HrDashboardPage() {
         <HrKPICard
           label={t("hr.kpi.annualSalarySavings", "Économies salariales annuelles")}
           value={fmtCurr(summary.salarySavings.realized / 1_000_000)}
-          sub={t("hr.kpi.subPattern", "Cible {target} · Reforecast {reforecast} · {pct}%")
+          sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
             .replace("{target}", fmtCurr(summary.salarySavings.target / 1_000_000))
             .replace("{reforecast}", fmtCurr(summary.salarySavings.reforecast / 1_000_000))
             .replace("{pct}", String(summary.salarySavings.progressPct))}
@@ -1695,7 +1738,7 @@ export default function HrDashboardPage() {
         <HrKPICard
           label={t("hr.kpi.socialCostsConsumed", "Coûts sociaux consommés")}
           value={fmtCurr(summary.socialCost.realized / 1_000_000)}
-          sub={t("hr.kpi.subPattern", "Cible {target} · Reforecast {reforecast} · {pct}%")
+          sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
             .replace("{target}", fmtCurr(summary.socialCost.target / 1_000_000))
             .replace("{reforecast}", fmtCurr(summary.socialCost.reforecast / 1_000_000))
             .replace("{pct}", String(summary.socialCost.progressPct))}
@@ -1710,7 +1753,7 @@ export default function HrDashboardPage() {
         <HrKPICard
           label={t("hr.kpi.netSavings", "Économies nettes")}
           value={fmtCurr(summary.netEconomy.realized / 1_000_000)}
-          sub={t("hr.kpi.subPattern", "Cible {target} · Reforecast {reforecast} · {pct}%")
+          sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
             .replace("{target}", fmtCurr(summary.netEconomy.target / 1_000_000))
             .replace("{reforecast}", fmtCurr(summary.netEconomy.reforecast / 1_000_000))
             .replace("{pct}", String(summary.netEconomy.progressPct))}
@@ -1760,7 +1803,7 @@ export default function HrDashboardPage() {
             {alerts.slice(0, 3).map((a, i) => (
               <div key={i} className="text-xs text-secondary">
                 <span className="font-mono text-[10px] text-tertiary">{a.movement.id}</span>{" "}
-                {a.message}
+                {movementAlertMessage(t, a)}
               </div>
             ))}
             {alerts.length > 3 && (
@@ -1784,7 +1827,7 @@ export default function HrDashboardPage() {
           <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-t-lg border-b border-bp-coral/20 bg-white/95 p-4 shadow-sm backdrop-blur">
             <div>
               <div className="text-[13px] font-bold text-primary">
-                {t("hr.customizePanelTitle", "Personnalisez votre Dashboard RH")}
+                {t("hr.customizePanelTitle", "Personnalisez votre tableau de bord RH")}
               </div>
               <div className="text-[11.5px] text-secondary">
                 {t(
@@ -1833,11 +1876,11 @@ export default function HrDashboardPage() {
                       <Icon size={16} />
                     </span>
                     <span className="text-[12px] font-semibold leading-tight text-primary">
-                      {def.label}
+                      {t(HR_WIDGET_LABEL_KEYS[def.type], def.label)}
                     </span>
                     {alreadyPresent && (
                       <span className="text-[10px] font-medium text-tertiary">
-                        {t("hr.alreadyOnDashboard", "Déjà sur le dashboard")}
+                        {t("hr.alreadyOnDashboard", "Déjà sur le tableau de bord")}
                       </span>
                     )}
                   </button>
@@ -1855,7 +1898,7 @@ export default function HrDashboardPage() {
         onOpenChange={(open) => !open && setBuilderChoiceType(null)}
         title={t(
           "dashboard.builderModal.alreadyOnDashboard",
-          "Ce graphique est déjà sur votre dashboard"
+          "Ce graphique est déjà sur votre tableau de bord"
         )}
       >
         <div className="flex flex-col gap-3">
@@ -1948,7 +1991,7 @@ export default function HrDashboardPage() {
               </option>
               {HR_METRIC_REGISTRY.map((m) => (
                 <option key={m.key} value={m.key}>
-                  {m.label}
+                  {t(`hr.pivot.metric.${m.key}`, m.label)}
                 </option>
               ))}
             </select>
@@ -1965,7 +2008,7 @@ export default function HrDashboardPage() {
               </option>
               {HR_DIMENSION_REGISTRY.map((d) => (
                 <option key={d.key} value={d.key}>
-                  {d.label}
+                  {t(`hr.pivot.dim.${d.key}`, d.label)}
                 </option>
               ))}
             </select>
@@ -1999,7 +2042,7 @@ export default function HrDashboardPage() {
           </strong>{" "}
           {t(
             "hr.noProgramBody",
-            "pour cette entreprise. Les widgets restent en lecture sur toute la période de mouvements disponibles. Configurer un programme dans Admin → Programmes pour activer les presets FY et le scope programme."
+            "pour cette entreprise. Les widgets restent en lecture sur toute la période de mouvements disponibles. Configurer un programme dans Admin → Programmes pour activer les préréglages d'exercice et le périmètre programme."
           )}
         </div>
       )}
@@ -2011,7 +2054,7 @@ export default function HrDashboardPage() {
           </strong>{" "}
           {t(
             "hr.programScopeMismatchBody",
-            "aucun mouvement RH ne référence ce programme : le scope programme est temporairement désactivé et tous les mouvements disponibles sont affichés."
+            "aucun mouvement RH ne référence ce programme : le périmètre programme est temporairement désactivé et tous les mouvements disponibles sont affichés."
           )}
         </div>
       )}
@@ -2069,7 +2112,7 @@ export default function HrDashboardPage() {
           {activeProgram && (
             <div className="inline-flex flex-wrap items-center gap-1">
               <span className="text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
-                {t("hr.presets", "Presets")}
+                {t("hr.presets", "Préréglages")}
               </span>
               {/* Preset "Programme complet" = plage RÉELLE des mouvements (pas activeProgram
                *  .fyStart/fyEnd qui pouvait exclure les exercices ultérieurs). Le libellé
@@ -2181,7 +2224,7 @@ export default function HrDashboardPage() {
                     </button>
                     <span className={`text-sm font-bold text-primary`}>
                       {entry.value > 0 ? "+" : ""}
-                      {entry.value} {drillKind === "salary" ? "€M" : "ETP"}
+                      {entry.value} {drillKind === "salary" ? "€M" : t("etp.column.fte", "ETP")}
                     </span>
                   </div>
                   {lever && (
@@ -2194,11 +2237,11 @@ export default function HrDashboardPage() {
                     {entry.movements.map((m) => (
                       <div key={m.id} className="flex items-center justify-between text-[11px]">
                         <span className="text-secondary">
-                          {m.type} · {m.label}
+                          {movementTypeLabel(t, m.type)} · {m.label}
                         </span>
                         <span className="text-tertiary">
-                          {m.plannedDate} · {m.status}
-                          {m.hrValidated ? " ✓RH" : ""}
+                          {m.plannedDate} · {movementStatusLabel(t, m.status)}
+                          {m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}
                         </span>
                       </div>
                     ))}

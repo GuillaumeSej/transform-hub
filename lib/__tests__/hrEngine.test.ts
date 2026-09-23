@@ -432,6 +432,25 @@ describe("hrEngine — movementBreakdownByDimension", () => {
     expect(rows[0]).toMatchObject({ label: "France", recrutements: 2, attritions: 1, net: 1 });
   });
 
+  it("counts movements per series alongside FTE (tooltip 'N pers. · ±X ETP')", () => {
+    const rows = movementBreakdownByDimension(
+      [
+        makeMovement({ id: "M1", type: "Recrutement", country: "France", fte: 0.5 }),
+        makeMovement({ id: "M2", type: "Recrutement", country: "France", fte: 1 }),
+        makeMovement({ id: "M3", type: "Attrition", country: "France", fte: 1 }),
+      ],
+      "country"
+    );
+    expect(rows[0].counts).toEqual({
+      recrutements: 2,
+      attritions: 1,
+      forcedDepartures: 0,
+      transfertEntrants: 0,
+      transfertSortants: 0,
+    });
+    expect(rows[0].recrutements).toBe(1.5);
+  });
+
   it("groups movement breakdown by program label", () => {
     const rows = movementBreakdownByDimension(
       [makeMovement({ type: "Recrutement", programId: "p1", fte: 2 })],

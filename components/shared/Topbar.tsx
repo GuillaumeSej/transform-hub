@@ -17,6 +17,7 @@ import type { Alert, Company, Lever } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { STATUS_SHORT_LABEL } from "@/lib/status-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { alertDesc, alertTitle } from "@/lib/alertText";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
 
 const CRUMBS: Record<string, string> = {
@@ -230,10 +231,10 @@ export function Topbar({
                       className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
                     >
                       <span className="block text-xs font-semibold text-primary">
-                        {alert.title}
+                        {alertTitle(t, alert)}
                       </span>
                       <span className="mt-1 block line-clamp-2 text-[11px] text-secondary">
-                        {alert.desc}
+                        {alertDesc(t, alert)}
                       </span>
                       <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
                         {alert.source === "auto"
@@ -278,7 +279,7 @@ export function Topbar({
                         <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
                           {t(
                             "shared.topbar.approvalPending",
-                            "En attente · sponsor ou CTO · {stage}"
+                            "En attente · commanditaire ou CTO · {stage}"
                           ).replace(
                             "{stage}",
                             lever.approval ? STATUS_SHORT_LABEL[lever.approval.targetStatus] : ""

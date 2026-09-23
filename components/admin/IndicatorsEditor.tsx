@@ -489,7 +489,7 @@ export function IndicatorsEditor({
                 className="text-xs font-medium text-text-secondary"
                 htmlFor="indicator-frequency"
               >
-                {t("adminIndicators.frequency", "Fréquence de reporting")}
+                {t("adminIndicators.frequency", "Fréquence de suivi")}
               </label>
               <select
                 id="indicator-frequency"

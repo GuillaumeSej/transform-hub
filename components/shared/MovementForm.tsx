@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { movementStatusLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
 import {
   computeMovementFinancials,
   tenureYears,
@@ -329,7 +330,7 @@ export function MovementForm({
           >
             {TYPES.map((movementType) => (
               <option key={movementType} value={movementType}>
-                {movementType}
+                {movementTypeLabel(translate, movementType)}
               </option>
             ))}
           </select>
@@ -479,8 +480,8 @@ export function MovementForm({
           <Field
             label={translate(
               "shared.movementForm.geographyLeaf",
-              `${finestGeographyLevel.label} (arborescence géo)`
-            )}
+              "{level} (arborescence géo)"
+            ).replace("{level}", finestGeographyLevel.label)}
           >
             <select
               className={inputClass}
@@ -504,8 +505,8 @@ export function MovementForm({
           <Field
             label={translate(
               "shared.movementForm.hierarchyLeaf",
-              `${finestHierarchyLevel?.label ?? ""} (arborescence financière)`
-            )}
+              "{level} (arborescence financière)"
+            ).replace("{level}", finestHierarchyLevel?.label ?? "")}
           >
             <select
               className={inputClass}
@@ -574,7 +575,7 @@ export function MovementForm({
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {movementStatusLabel(translate, s)}
               </option>
             ))}
           </select>
@@ -604,7 +605,9 @@ export function MovementForm({
               </option>
               {SOCIAL_SCHEMES.map((scheme) => (
                 <option key={scheme} value={scheme}>
-                  {scheme}
+                  {scheme === "Autre"
+                    ? translate("shared.movementForm.schemeOther", "Autre")
+                    : scheme}
                 </option>
               ))}
             </select>
@@ -675,7 +678,7 @@ export function MovementForm({
               {translate(
                 "shared.movementForm.suggestionMechanism",
                 "Suggestion calculée selon le mécanisme « {type} »"
-              ).replace("{type}", values.type)}
+              ).replace("{type}", movementTypeLabel(translate, values.type))}
             </span>
             <Button
               type="button"

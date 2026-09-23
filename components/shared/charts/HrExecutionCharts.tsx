@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import type { ExecutionImpactRow, MovementExecutionStatus } from "@/lib/hrExecution";
-import { EXECUTION_LABELS } from "@/lib/hrExecution";
+import { executionLabel } from "@/lib/hrMovementLabels";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { WorkforceMovement } from "@/types";
 
@@ -101,7 +101,9 @@ export function ExecutionStatusChart({
                 <div className="mb-1 font-semibold text-primary">{label}</div>
                 {STATUS_ORDER.map((status) => (
                   <div key={status} className="flex items-center justify-between gap-5 py-0.5">
-                    <span style={{ color: STATUS_COLORS[status] }}>{EXECUTION_LABELS[status]}</span>
+                    <span style={{ color: STATUS_COLORS[status] }}>
+                      {executionLabel(t, status)}
+                    </span>
                     <span className="font-semibold tabular-nums text-primary">
                       {formatValue(row[status].volume)} ·{" "}
                       {t("shared.executionStatusChart.movementCount", "{n} mvt").replace(
@@ -123,7 +125,7 @@ export function ExecutionStatusChart({
           <Bar
             key={status}
             dataKey={status}
-            name={EXECUTION_LABELS[status]}
+            name={executionLabel(t, status)}
             stackId="status"
             fill={STATUS_COLORS[status]}
             onClick={(entry) => {

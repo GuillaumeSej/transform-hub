@@ -4,6 +4,7 @@ import { CircleAlert, CircleCheck, CircleUser, TriangleAlert } from "lucide-reac
 import { cn } from "@/lib/utils";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { alertDesc, alertTitle } from "@/lib/alertText";
 import type { Alert } from "@/types";
 
 const ICONS = { red: CircleAlert, amber: TriangleAlert, green: CircleCheck, blue: CircleUser };
@@ -101,7 +102,7 @@ export function AlertItem({
               resolved ? "font-normal line-through decoration-neutral-300" : "font-semibold"
             )}
           >
-            {alert.title}
+            {alertTitle(t, alert)}
           </div>
           {/* Badge impact € */}
           {alert.impactEur != null && alert.impactEur !== 0 && (
@@ -119,7 +120,7 @@ export function AlertItem({
             </Tooltip>
           )}
         </div>
-        <div className="mt-0.5 text-[11.5px] text-secondary">{alert.desc}</div>
+        <div className="mt-0.5 text-[11.5px] text-secondary">{alertDesc(t, alert)}</div>
         <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-tertiary">
           {alert.owner && <span className="font-medium text-secondary">{alert.owner}</span>}
           {alert.owner && <span>·</span>}

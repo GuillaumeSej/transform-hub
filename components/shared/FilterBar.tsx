@@ -8,6 +8,9 @@ export type FilterDef<T> = {
   key: string;
   label: string;
   getValue: (item: T) => string;
+  /** Libellé affiché (traduit) d'une valeur de filtre — la valeur filtrée/persistée reste celle de
+   *  `getValue` (ex. `MovementType` en français). Défaut : la valeur elle-même. */
+  formatValue?: (value: string) => string;
 };
 
 export type ActiveFilters = Record<string, string[]>;
@@ -123,7 +126,7 @@ export function FilterBar<T>({
                             : "border-border bg-white text-secondary hover:border-black"
                         }`}
                       >
-                        {opt}
+                        {def.formatValue ? def.formatValue(opt) : opt}
                         {isSelected && <X size={10} className="text-tertiary" />}
                       </button>
                     );

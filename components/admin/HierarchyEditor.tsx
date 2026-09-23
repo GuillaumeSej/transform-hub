@@ -449,7 +449,7 @@ export function HierarchyEditor({
     XLSX.utils.book_append_sheet(wb, sheet, "Arborescence");
     XLSX.writeFile(wb, "template_arborescence.xlsx");
     showToast(
-      t("adminHierarchy.toastTemplateDownloadedTitle", "Template téléchargé"),
+      t("adminHierarchy.toastTemplateDownloadedTitle", "Modèle téléchargé"),
       t(
         "adminHierarchy.toastTemplateDownloadedBody",
         'Une ligne par nœud : "Niveau" (libellé ou clé configuré(e)), "Code", "Libellé", "Code parent" (vide pour le niveau macro).'
@@ -763,7 +763,7 @@ export function HierarchyEditor({
             </h2>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={downloadTemplate}>
-                <Download size={13} /> {t("adminHierarchy.templateExcel", "Template Excel")}
+                <Download size={13} /> {t("adminHierarchy.templateExcel", "Modèle Excel")}
               </Button>
               <Button variant="outline" onClick={exportTree} disabled={nodes.length === 0}>
                 <FileSpreadsheet size={13} />{" "}
@@ -835,7 +835,7 @@ export function HierarchyEditor({
                         )}
                         {isPnl && (
                           <th className="px-4 py-2 text-left text-xs font-semibold text-text-secondary">
-                            {t("adminHierarchy.colBaseline", "Baseline")}
+                            {t("adminHierarchy.colBaseline", "Référence")}
                           </th>
                         )}
                         <th className="px-4 py-2 text-center text-xs font-semibold text-text-secondary">
@@ -1017,7 +1017,7 @@ export function HierarchyEditor({
                         )}
                         {isPnl && (
                           <div className="mt-1 text-xs text-secondary">
-                            {t("adminHierarchy.baselinePrefix", "Baseline :")}{" "}
+                            {t("adminHierarchy.baselinePrefix", "Référence :")}{" "}
                             {editingBaselineId === n.id ? (
                               <input
                                 type="number"
@@ -1143,7 +1143,7 @@ export function HierarchyEditor({
       <section className="rounded-xl border border-border bg-neutral-50 p-4">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-primary">
           <GitBranch size={16} className="text-bp-coral" />{" "}
-          {t("adminHierarchy.livePreviewTitle", "Aperçu live de l'arborescence")}
+          {t("adminHierarchy.livePreviewTitle", "Aperçu en direct de l'arborescence")}
         </h2>
         {forest.length === 0 ? (
           <p className="text-xs text-secondary">

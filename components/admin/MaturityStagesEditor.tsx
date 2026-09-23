@@ -10,6 +10,7 @@ import {
   subscribeMaturityStages,
 } from "@/lib/firestore/maturityStageConfigs";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
  * Édition des étapes de maturité d'UN programme stratégique (à la CMMI/PPAP). Mirroring de
@@ -53,6 +54,7 @@ export function MaturityStagesEditor({
   companyId: string;
   programId: string;
 }) {
+  const { t } = useTranslation();
   const [stages, setStages] = useState<MaturityStageConfig[]>([]);
   /** Dernier état persisté connu — sert à détecter les modifs non enregistrées ET à savoir
    *  quelles étapes ont été supprimées côté brouillon (à effacer en base à l'enregistrement). */
@@ -93,7 +95,10 @@ export function MaturityStagesEditor({
 
   const addStage = () => {
     setStages((prev) => {
-      const label = `Étape ${prev.length + 1}`;
+      const label = t("adminMaturityStages.newStageLabel", "Étape {n}").replace(
+        "{n}",
+        String(prev.length + 1)
+      );
       return [
         ...prev,
         {
@@ -144,16 +149,16 @@ export function MaturityStagesEditor({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-2xl text-sm text-text-secondary">
-          Personnalisez les étapes de maturité des axes et chantiers de CE programme. Vous pouvez
-          ajouter, supprimer, renommer et réordonner librement les étapes — leur nombre n&apos;est
-          pas limité. Une étape « terminale » (ex. Atteint / Non atteint) est un état de sortie,
-          hors du cycle linéaire.
+          {t(
+            "adminMaturityStages.intro",
+            "Personnalisez les étapes de maturité des axes et chantiers de CE programme. Vous pouvez ajouter, supprimer, renommer et réordonner librement les étapes — leur nombre n'est pas limité. Une étape « terminale » (ex. Atteint / Non atteint) est un état de sortie, hors du cycle linéaire."
+          )}
         </p>
         <button
           onClick={addStage}
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
         >
-          <Plus size={14} /> Ajouter une étape
+          <Plus size={14} /> {t("adminMaturityStages.addStage", "Ajouter une étape")}
         </button>
       </div>
 
@@ -164,19 +169,19 @@ export function MaturityStagesEditor({
           <thead>
             <tr className="bg-bg-elevated border-b border-border">
               <th className="px-4 py-2.5 w-12 text-center text-xs font-semibold text-text-secondary">
-                Ordre
+                {t("adminLifecycleEditor.colOrder", "Ordre")}
               </th>
               <th className="px-4 py-2.5 w-32 text-center text-xs font-semibold text-text-secondary">
-                Clé
+                {t("adminLifecycleEditor.colKey", "Clé")}
               </th>
               <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
-                Libellé
+                {t("adminLifecycleEditor.colLabel", "Libellé")}
               </th>
               <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
-                Étape terminale
+                {t("adminMaturityStages.colTerminal", "Étape terminale")}
               </th>
               <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
-                Actions
+                {t("adminMaturityStages.colActions", "Actions")}
               </th>
             </tr>
           </thead>
@@ -207,14 +212,14 @@ export function MaturityStagesEditor({
                         : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                     }`}
                   >
-                    {stage.isTerminal ? "Oui" : "Non"}
+                    {stage.isTerminal ? t("common.yes", "Oui") : t("common.no", "Non")}
                   </button>
                 </td>
                 <td className="whitespace-nowrap px-4 py-2.5 text-center">
                   <button
                     onClick={() => moveStage(stage.id, "up")}
                     disabled={idx === 0}
-                    aria-label="Monter l'étape"
+                    aria-label={t("adminMaturityStages.moveUp", "Monter l'étape")}
                     className="mr-1 text-text-secondary hover:text-bp-coral disabled:opacity-30"
                   >
                     <ChevronUp size={14} />
@@ -222,14 +227,14 @@ export function MaturityStagesEditor({
                   <button
                     onClick={() => moveStage(stage.id, "down")}
                     disabled={idx === stages.length - 1}
-                    aria-label="Descendre l'étape"
+                    aria-label={t("adminMaturityStages.moveDown", "Descendre l'étape")}
                     className="mr-3 text-text-secondary hover:text-bp-coral disabled:opacity-30"
                   >
                     <ChevronDown size={14} />
                   </button>
                   <button
                     onClick={() => removeStage(stage.id)}
-                    aria-label="Supprimer l'étape"
+                    aria-label={t("adminMaturityStages.remove", "Supprimer l'étape")}
                     className="text-text-secondary hover:text-red-500"
                   >
                     <Trash2 size={14} />
@@ -240,7 +245,7 @@ export function MaturityStagesEditor({
             {stages.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-sm text-text-secondary">
-                  Aucune étape configurée pour ce programme.
+                  {t("adminMaturityStages.empty", "Aucune étape configurée pour ce programme.")}
                 </td>
               </tr>
             )}
@@ -270,13 +275,14 @@ export function MaturityStagesEditor({
                     : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                 }`}
               >
-                Terminale : {stage.isTerminal ? "Oui" : "Non"}
+                {t("adminMaturityStages.terminalPrefix", "Terminale :")}{" "}
+                {stage.isTerminal ? t("common.yes", "Oui") : t("common.no", "Non")}
               </button>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => moveStage(stage.id, "up")}
                   disabled={idx === 0}
-                  aria-label="Monter l'étape"
+                  aria-label={t("adminMaturityStages.moveUp", "Monter l'étape")}
                   className="text-text-secondary hover:text-bp-coral disabled:opacity-30"
                 >
                   <ChevronUp size={16} />
@@ -284,14 +290,14 @@ export function MaturityStagesEditor({
                 <button
                   onClick={() => moveStage(stage.id, "down")}
                   disabled={idx === stages.length - 1}
-                  aria-label="Descendre l'étape"
+                  aria-label={t("adminMaturityStages.moveDown", "Descendre l'étape")}
                   className="mr-2 text-text-secondary hover:text-bp-coral disabled:opacity-30"
                 >
                   <ChevronDown size={16} />
                 </button>
                 <button
                   onClick={() => removeStage(stage.id)}
-                  aria-label="Supprimer l'étape"
+                  aria-label={t("adminMaturityStages.remove", "Supprimer l'étape")}
                   className="text-text-secondary hover:text-red-500"
                 >
                   <Trash2 size={16} />
@@ -302,7 +308,7 @@ export function MaturityStagesEditor({
         ))}
         {stages.length === 0 && (
           <div className="p-4 text-center text-sm text-text-secondary">
-            Aucune étape configurée pour ce programme.
+            {t("adminMaturityStages.empty", "Aucune étape configurée pour ce programme.")}
           </div>
         )}
       </div>
@@ -313,13 +319,13 @@ export function MaturityStagesEditor({
           disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:opacity-50"
         >
-          <Save size={14} /> Enregistrer
+          <Save size={14} /> {t("common.save", "Enregistrer")}
         </button>
         <button
           onClick={resetToDefault}
           className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
         >
-          Réinitialiser aux étapes par défaut
+          {t("adminMaturityStages.resetDefault", "Réinitialiser aux étapes par défaut")}
         </button>
       </div>
     </div>

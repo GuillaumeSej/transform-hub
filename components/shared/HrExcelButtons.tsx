@@ -108,7 +108,7 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
     XLSX.utils.book_append_sheet(wb, movSheet, "Mouvements");
     XLSX.writeFile(wb, `template_base_etp.xlsx`);
     showToast(
-      t("shared.excelIO.templateDownloadedTitle", "Template téléchargé"),
+      t("shared.excelIO.templateDownloadedTitle", "Modèle téléchargé"),
       t(
         "shared.hrExcelButtons.templateDownloadedBody",
         "Remplissez les colonnes puis importez le fichier"
@@ -195,7 +195,7 @@ export function HrExcelButtons({ data }: { data: ReturnType<typeof useBeTrackDat
   return (
     <>
       <Button variant="outline" onClick={downloadTemplate}>
-        <Download size={13} /> {t("shared.excelIO.templateButton", "Template Excel")}
+        <Download size={13} /> {t("shared.excelIO.templateButton", "Modèle Excel")}
       </Button>
       <Button variant="outline" onClick={exportExcel}>
         <FileSpreadsheet size={13} /> {t("shared.hrExcelButtons.exportButton", "Exporter Excel")}

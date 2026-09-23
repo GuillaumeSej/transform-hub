@@ -89,26 +89,29 @@ export function AxisForm({
       <div className={compact ? "space-y-3" : "grid gap-3 sm:grid-cols-2"}>
         <div>
           <label className="text-xs font-medium text-text-secondary" htmlFor="axis-name">
-            Nom de l&apos;axe
+            {t("strategicAxes.form.axisName", "Nom de l'axe")}
           </label>
           <input
             id="axis-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className={inputClass}
-            placeholder="Ex. Excellence opérationnelle"
+            placeholder={t(
+              "strategicAxes.form.axisNamePlaceholder",
+              "Ex. Excellence opérationnelle"
+            )}
           />
         </div>
         <UserPicker
           users={users}
           value={owner}
           onChange={setOwner}
-          label={t("strategicAxes.owner", "Sponsor de l'axe")}
+          label={t("strategicAxes.owner", "Commanditaire de l'axe")}
           id="axis-owner"
         />
         <div>
           <label className="text-xs font-medium text-text-secondary" htmlFor="axis-stage">
-            Étape de maturité
+            {t("strategicAxes.form.maturityStage", "Étape de maturité")}
           </label>
           <select
             id="axis-stage"
@@ -116,7 +119,9 @@ export function AxisForm({
             onChange={(e) => setStage(e.target.value)}
             className={inputClass}
           >
-            {stages.length === 0 && <option value="">Aucune étape configurée</option>}
+            {stages.length === 0 && (
+              <option value="">{t("strategicAxes.form.noStage", "Aucune étape configurée")}</option>
+            )}
             {stages.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
@@ -130,7 +135,7 @@ export function AxisForm({
               className="text-xs font-medium text-text-secondary"
               htmlFor="axis-confidentiality"
             >
-              Niveau de confidentialité
+              {t("strategicAxes.form.confidentiality", "Niveau de confidentialité")}
             </label>
             <select
               id="axis-confidentiality"
@@ -138,7 +143,9 @@ export function AxisForm({
               onChange={(e) => setConfidentialityLevel(e.target.value)}
               className={inputClass}
             >
-              <option value="">Aucun (visible par tous)</option>
+              <option value="">
+                {t("strategicAxes.form.confidentialityNone", "Aucun (visible par tous)")}
+              </option>
               {confidentialityLevels.map((level) => (
                 <option key={level} value={level}>
                   {level}
@@ -148,14 +155,16 @@ export function AxisForm({
           </div>
         )}
         <div>
-          <span className="text-xs font-medium text-text-secondary">Couleur</span>
+          <span className="text-xs font-medium text-text-secondary">
+            {t("strategicAxes.form.color", "Couleur")}
+          </span>
           <div className="mt-1 flex flex-wrap gap-2">
             {COLOR_CHOICES.map((c) => (
               <button
                 key={c}
                 type="button"
                 onClick={() => setColor(c)}
-                aria-label={`Couleur ${c}`}
+                aria-label={`${t("strategicAxes.form.color", "Couleur")} ${c}`}
                 aria-pressed={color === c}
                 className={`h-7 w-7 rounded-full border-2 transition ${
                   color === c ? "border-text-primary" : "border-transparent"
@@ -170,7 +179,7 @@ export function AxisForm({
       {!compact && (
         <div>
           <label className="text-xs font-medium text-text-secondary" htmlFor="axis-description">
-            Description
+            {t("strategicAxes.form.description", "Description")}
           </label>
           <textarea
             id="axis-description"
@@ -178,7 +187,10 @@ export function AxisForm({
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             className={inputClass}
-            placeholder="Ce que cet axe cherche à transformer."
+            placeholder={t(
+              "strategicAxes.form.axisDescriptionPlaceholder",
+              "Ce que cet axe cherche à transformer."
+            )}
           />
         </div>
       )}
@@ -189,14 +201,14 @@ export function AxisForm({
           disabled={!canSubmit}
           className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:opacity-50"
         >
-          {submitLabel ?? "Enregistrer"}
+          {submitLabel ?? t("common.save", "Enregistrer")}
         </button>
         {onCancel && (
           <button
             onClick={onCancel}
             className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
           >
-            Annuler
+            {t("common.cancel", "Annuler")}
           </button>
         )}
       </div>

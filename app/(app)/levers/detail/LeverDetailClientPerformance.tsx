@@ -31,7 +31,8 @@ import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
 import type { CascadeResult } from "@/lib/engine";
-import { DEPENDENCY_TYPE_DESCRIPTION, STATUS_ORDER } from "@/lib/status-config";
+import { STATUS_ORDER } from "@/lib/status-config";
+import { dependencyAlertMessage, dependencyTypeDescription } from "@/lib/dependencyLabels";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { Avatar } from "@/components/shared/Avatar";
@@ -199,7 +200,7 @@ export function LeverDetailClientPerformance() {
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
         {t("leverDetail.notFound", "Levier introuvable.")}{" "}
         <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
-          {t("leverDetail.backToPipeline", "Retour au pipeline")}
+          {t("leverDetail.backToPipeline", "Retour aux leviers par étape")}
         </button>
       </div>
     );
@@ -221,7 +222,7 @@ export function LeverDetailClientPerformance() {
           "Accès restreint — ce levier est classé « {level} », un niveau de confidentialité auquel votre profil n'est pas habilité."
         ).replace("{level}", lever.confidentialityLevel ?? "")}{" "}
         <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
-          {t("leverDetail.backToPipeline", "Retour au pipeline")}
+          {t("leverDetail.backToPipeline", "Retour aux leviers par étape")}
         </button>
       </div>
     );
@@ -411,7 +412,7 @@ export function LeverDetailClientPerformance() {
                         : isCascadeGated
                           ? t(
                               "leverDetail.approval.stageHint",
-                              "Cette étape nécessite une demande de validation (porteur → sponsor ou CTO), voir ci-dessous"
+                              "Cette étape nécessite une demande de validation (porteur → commanditaire ou CTO), voir ci-dessous"
                             )
                           : isPast
                             ? t(
@@ -467,7 +468,7 @@ export function LeverDetailClientPerformance() {
                   <Send size={13} />{" "}
                   {t(
                     "leverDetail.approval.submitHint",
-                    "Ce levier est prêt pour une demande de validation (porteur → sponsor ou CTO)."
+                    "Ce levier est prêt pour une demande de validation (porteur → commanditaire ou CTO)."
                   )}
                 </span>
                 <Button
@@ -500,7 +501,7 @@ export function LeverDetailClientPerformance() {
                 <Info size={13} />
                 {t(
                   "leverDetail.approval.pending",
-                  "En attente d'approbation (sponsor ou CTO) pour passer en « {stage} »"
+                  "En attente d'approbation (commanditaire ou CTO) pour passer en « {stage} »"
                 ).replace("{stage}", lifecycle.shortLabel(lever.approval.targetStatus))}
               </div>
               {!readOnly && canActOnPendingApproval && (
@@ -785,7 +786,7 @@ export function LeverDetailClientPerformance() {
             <p className="mb-3 text-xs text-secondary">
               {t(
                 "leverDetail.impactedLeversHint",
-                "Ces leviers dépendent de l'élément retardé. Leurs dates ne sont jamais modifiées automatiquement : rapprochez-vous de leur owner."
+                "Ces leviers dépendent de l'élément retardé. Leurs dates ne sont jamais modifiées automatiquement : rapprochez-vous de leur responsable."
               )}
             </p>
             <div className="space-y-1.5">
@@ -896,8 +897,16 @@ export function LeverDetailClientPerformance() {
                   voir lib/leverConsolidate.ts). Rendu "muted" : continuation visuelle du bandeau,
                   pas un second bloc de titres concurrents. */}
               <div className="flex w-full flex-wrap gap-x-8 gap-y-2 border-t border-border pt-3">
-                <BigStat label="CAPEX" value={engine.fmtCurr(capexTotal)} muted />
-                <BigStat label="OPEX one-off" value={engine.fmtCurr(opexOneOffTotal)} muted />
+                <BigStat
+                  label={t("leverForm.capex", "CAPEX")}
+                  value={engine.fmtCurr(capexTotal)}
+                  muted
+                />
+                <BigStat
+                  label={t("levers.column.opexOneOff", "OPEX ponctuel")}
+                  value={engine.fmtCurr(opexOneOffTotal)}
+                  muted
+                />
                 <BigStat
                   label={t("leverDetail.opexRecYear", "OPEX récurrent /an")}
                   value={engine.fmtCurr(opexRecTotal)}
@@ -917,18 +926,18 @@ export function LeverDetailClientPerformance() {
                 <OverviewField label={t("leverDetail.codeLabel", "Code")}>
                   <span className="font-mono text-[13px] text-primary">{lever.code}</span>
                 </OverviewField>
-                <OverviewField label="Type">{lever.type}</OverviewField>
-                <OverviewField label="Chantier">
+                <OverviewField label={t("levers.column.type", "Type")}>{lever.type}</OverviewField>
+                <OverviewField label={t("leverForm.workstream", "Chantier")}>
                   <span className="font-medium" style={{ color: ws?.color }}>
                     {ws?.name}
                   </span>
                 </OverviewField>
-                <OverviewField label="Owner">
+                <OverviewField label={t("leverForm.owner", "Responsable")}>
                   <span className="inline-flex items-center gap-2">
                     <Avatar initials={lever.ownerInit} /> {lever.owner}
                   </span>
                 </OverviewField>
-                <OverviewField label="Sponsor">
+                <OverviewField label={t("leverForm.sponsor", "Commanditaire")}>
                   <span className="inline-flex items-center gap-2">
                     <Avatar initials={lever.sponsorInit} /> {lever.sponsor}
                   </span>
@@ -966,7 +975,7 @@ export function LeverDetailClientPerformance() {
             </Collapsible>
 
             {/* ── 5. Planning ─────────────────────────────────────────────── */}
-            <Collapsible title={t("leverDetail.planningTitle", "Planning")}>
+            <Collapsible title={t("leverDetail.planningTitle", "Calendrier")}>
               <div className="flex flex-wrap items-center gap-3 text-[12.5px] text-primary">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-neutral-50 px-3 py-1">
                   <span className="text-tertiary">{t("leverDetail.start", "Début")}</span>
@@ -993,7 +1002,9 @@ export function LeverDetailClientPerformance() {
                 {engine.hasLeverImpacts(lever) && <ImpactTrajectoryChart lever={lever} />}
                 {(lever.actions ?? []).length > 0 && (
                   <>
-                    <SectionTitle>{t("lever.actionTimeline", "Timeline des actions")}</SectionTitle>
+                    <SectionTitle>
+                      {t("lever.actionTimeline", "Chronologie des actions")}
+                    </SectionTitle>
                     <ActionGantt actions={lever.actions ?? []} onActionClick={openActionForEdit} />
                   </>
                 )}
@@ -1049,7 +1060,11 @@ export function LeverDetailClientPerformance() {
                         onClick={() => {
                           router.push(`/levers/detail?id=${d.targetId}`);
                         }}
-                        title={alert ? alert.message : DEPENDENCY_TYPE_DESCRIPTION[d.type]}
+                        title={
+                          alert
+                            ? dependencyAlertMessage(t, alert)
+                            : dependencyTypeDescription(t, d.type)
+                        }
                         className={`mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition hover:border-black ${
                           alert
                             ? "border-rag-red-light bg-rag-red-light/40"
@@ -1107,7 +1122,7 @@ export function LeverDetailClientPerformance() {
                       <TriangleAlert size={13} className="mt-0.5 shrink-0 text-rag-red" />
                       <span className="flex flex-wrap items-center gap-1">
                         <strong>{a.sourceName}</strong> <DependencyTypeBadge type={a.type} />
-                        <span>— {a.message}</span>
+                        <span>— {dependencyAlertMessage(t, a)}</span>
                       </span>
                     </div>
                   ))}
@@ -1281,8 +1296,10 @@ export function LeverDetailClientPerformance() {
               >
                 {engine.fmtCurr(real)}
               </Stat>
-              <Stat label="CAPEX">{engine.fmtCurr(consolidatedKPIs?.capex ?? lever.capex)}</Stat>
-              <Stat label="One-off">
+              <Stat label={t("leverForm.capex", "CAPEX")}>
+                {engine.fmtCurr(consolidatedKPIs?.capex ?? lever.capex)}
+              </Stat>
+              <Stat label={t("leverDetail.oneOff", "Ponctuel")}>
                 {engine.fmtCurr(consolidatedKPIs?.opexOneOff ?? lever.opexOneOff)}
               </Stat>
               <Stat label={t("leverDetail.opexRecYear", "OPEX récurrent /an")}>

@@ -150,7 +150,7 @@ export function LeverImportButton({
 
     XLSX.writeFile(wb, "template_leviers.xlsx");
     showToast(
-      t("shared.excelIO.templateDownloadedTitle", "Template téléchargé"),
+      t("shared.excelIO.templateDownloadedTitle", "Modèle téléchargé"),
       t(
         "shared.leverImportButton.templateDownloadedBody",
         "3 feuilles : Leviers (Code = clé), Actions (Code Levier = FK), Impacts (Code Levier + Nom de l'action = FK). Supprimez la ligne d'exemple avant de remplir."
@@ -241,7 +241,7 @@ export function LeverImportButton({
   return (
     <>
       <Button variant="outline" onClick={downloadTemplate}>
-        <Download size={13} /> {t("shared.excelIO.templateButton", "Template Excel")}
+        <Download size={13} /> {t("shared.excelIO.templateButton", "Modèle Excel")}
       </Button>
       <input
         ref={fileInputRef}

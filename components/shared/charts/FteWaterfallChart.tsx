@@ -228,7 +228,7 @@ export function FteWaterfallChart({
           stroke="rgba(0,0,0,0.35)"
           strokeWidth={1}
           label={{
-            value: `${t("finance.baseline", "Baseline")} ${fmt(baseline)}`,
+            value: `${t("finance.baseline", "Référence")} ${fmt(baseline)}`,
             fontSize: 10,
             position: "insideTopLeft",
             fill: "#806659",

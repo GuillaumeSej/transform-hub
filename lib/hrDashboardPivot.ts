@@ -56,7 +56,7 @@ export const HR_METRIC_REGISTRY: HrMetricDef[] = [
   },
   {
     key: "socialCost",
-    label: "ENR (coût social one-off)",
+    label: "ENR (coût social ponctuel)",
     aggregation: "sum",
     getValue: (m) => m.cost,
   },
@@ -144,7 +144,7 @@ export const HR_DIMENSION_REGISTRY: HrDimensionDef[] = [
   { key: "country", label: "Pays", getValue: (m) => m.country || FALLBACK_LABEL },
   { key: "workstream", label: "Chantier", getValue: (m) => m.workstream || FALLBACK_LABEL },
   { key: "function", label: "Fonction", getValue: (m) => m.function || FALLBACK_LABEL },
-  { key: "hrOwner", label: "Owner RH", getValue: (m) => m.hrOwner || FALLBACK_LABEL },
+  { key: "hrOwner", label: "Responsable RH", getValue: (m) => m.hrOwner || FALLBACK_LABEL },
   { key: "status", label: "Statut", getValue: (m) => m.status },
   { key: "pse", label: "PSE", getValue: (m) => (m.inPSE ? "Oui" : "Non") },
   { key: "plannedMonth", label: "Mois (date prévue)", getValue: (m) => monthLabel(m.plannedDate) },

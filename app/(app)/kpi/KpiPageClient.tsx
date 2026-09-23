@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarClock,
@@ -31,6 +31,7 @@ import {
   latestMeasurement,
   numberIndicators,
   resolveIndicatorOwner,
+  resolveIndicatorStatus,
   resolveUserFullName,
 } from "@/lib/axisLogic";
 import {
@@ -59,6 +60,7 @@ import type {
   Indicator,
   IndicatorDirection,
   IndicatorMeasurement,
+  IndicatorRiskStatus,
   StrategicAxis,
 } from "@/types";
 
@@ -787,6 +789,76 @@ export function KpiPageClient() {
     [router, searchParams]
   );
 
+  // Filtre de statut (sur la trajectoire / à risque) — piloté uniquement depuis la synthèse « Santé
+  // des indicateurs » (légende du bloc héros, compteur à risque d'une ligne « Par axe ») et retiré
+  // via sa puce au-dessus de la liste. Valeur unique ; toute autre valeur d'URL est ignorée.
+  const statusParam = searchParams.get("status");
+  const selectedStatus: IndicatorRiskStatus | null =
+    statusParam === "on_track" || statusParam === "at_risk" ? statusParam : null;
+
+  /** Plusieurs paramètres en UN seul `router.replace` (même raison que le garde-fou de cohérence
+   *  plus bas : deux `setParam` successifs s'écraseraient mutuellement). `null`/[] = retirer. */
+  const setParams = useCallback(
+    (updates: Partial<Record<"axis" | "status", string[] | null>>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, values] of Object.entries(updates)) {
+        if (values && values.length > 0) params.set(key, serializeFilterValues(values));
+        else params.delete(key);
+      }
+      const qs = params.toString();
+      router.replace(qs ? `/kpi?${qs}` : "/kpi", { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  /** Ancre de la liste filtrée : un clic dans la synthèse y fait défiler en douceur. */
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollToList = useCallback(() => {
+    // Après le rendu du nouveau filtre (la hauteur de la page change avec le périmètre).
+    requestAnimationFrame(() =>
+      listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    );
+  }, []);
+
+  /** Axe unique actuellement filtré (mis en avant dans la synthèse) — `null` si 0 ou plusieurs. */
+  const singleSelectedAxisId = selectedAxisIds.length === 1 ? selectedAxisIds[0] : null;
+
+  const handleOverviewAxisClick = useCallback(
+    (axisId: string) => {
+      if (singleSelectedAxisId === axisId) {
+        setParams({ axis: null });
+        return;
+      }
+      setParams({ axis: [axisId] });
+      scrollToList();
+    },
+    [singleSelectedAxisId, setParams, scrollToList]
+  );
+
+  const handleOverviewAxisAtRiskClick = useCallback(
+    (axisId: string) => {
+      if (singleSelectedAxisId === axisId && selectedStatus === "at_risk") {
+        setParams({ axis: null, status: null });
+        return;
+      }
+      setParams({ axis: [axisId], status: ["at_risk"] });
+      scrollToList();
+    },
+    [singleSelectedAxisId, selectedStatus, setParams, scrollToList]
+  );
+
+  const handleOverviewStatusClick = useCallback(
+    (status: IndicatorRiskStatus) => {
+      if (selectedStatus === status) {
+        setParams({ status: null });
+        return;
+      }
+      setParams({ status: [status] });
+      scrollToList();
+    },
+    [selectedStatus, setParams, scrollToList]
+  );
+
   const axisOptions: DropdownOption[] = useMemo(
     () => axes.map((a) => ({ value: a.id, label: a.name })),
     [axes]
@@ -893,9 +965,19 @@ export function KpiPageClient() {
           )
         )
           return false;
+        if (selectedStatus && resolveIndicatorStatus(i) !== selectedStatus) return false;
         return true;
       }),
-    [indicators, axes, chantiers, t, selectedAxisIds, selectedChantierIds, selectedOwners]
+    [
+      indicators,
+      axes,
+      chantiers,
+      t,
+      selectedAxisIds,
+      selectedChantierIds,
+      selectedOwners,
+      selectedStatus,
+    ]
   );
 
   /** Regroupement d'affichage : par axe, puis par chantier. Les indicateurs "macro" (sans
@@ -1093,6 +1175,21 @@ export function KpiPageClient() {
           ofIndicators: t("kpi.summary.ofIndicators", "des indicateurs"),
         }}
         axes={axes}
+        interaction={{
+          selectedAxisId: singleSelectedAxisId,
+          selectedStatus,
+          onAxisClick: handleOverviewAxisClick,
+          onAxisAtRiskClick: handleOverviewAxisAtRiskClick,
+          onStatusClick: handleOverviewStatusClick,
+          labels: {
+            filterAxis: t("kpi.summary.filterAxis", "Filtrer les indicateurs sur l'axe {name}"),
+            filterAxisAtRisk: t(
+              "kpi.summary.filterAxisAtRisk",
+              "Afficher les indicateurs à risque de l'axe {name}"
+            ),
+            filterStatus: t("kpi.summary.filterStatus", "Filtrer les indicateurs : {status}"),
+          },
+        }}
       />
 
       {/* Bascule Cartes / Tableau (nouvelle vue tabulaire, sans graphique, round "cible évolutive")
@@ -1157,7 +1254,7 @@ export function KpiPageClient() {
           </CardBody>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div ref={listRef} className="scroll-mt-4 space-y-4">
           <h2 className="relative w-fit pb-1.5 text-lg font-bold tracking-tight text-text-primary after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-7 after:bg-bp-coral">
             {t("kpi.axesSectionTitle")}
           </h2>
@@ -1189,6 +1286,53 @@ export function KpiPageClient() {
               options={ownerOptions}
             />
           </div>
+
+          {/* Puces de filtre actif (axe / statut) — posées notamment par un clic dans la synthèse
+              « Santé des indicateurs » ; chaque ✕ retire uniquement son critère. */}
+          {(selectedAxisIds.length > 0 || selectedStatus) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedAxisIds.map((axisId) => {
+                const axis = axes.find((a) => a.id === axisId);
+                if (!axis) return null;
+                return (
+                  <FilterChip
+                    key={axisId}
+                    color={axis.color ?? "var(--bp-warm-taupe)"}
+                    label={`${t("kpi.filterAxis", "Axe")} : ${axis.name}`}
+                    removeLabel={t("kpi.filterChip.remove", "Retirer le filtre {label}").replace(
+                      "{label}",
+                      axis.name
+                    )}
+                    onRemove={() =>
+                      setParams({ axis: selectedAxisIds.filter((id) => id !== axisId) })
+                    }
+                  />
+                );
+              })}
+              {selectedStatus && (
+                <FilterChip
+                  label={`${t("kpi.filterChip.status", "Statut")} : ${
+                    selectedStatus === "at_risk"
+                      ? t("kpi.summary.atRisk", "À risque")
+                      : t("kpi.summary.onTrack", "Sur la trajectoire")
+                  }`}
+                  removeLabel={t("kpi.filterChip.remove", "Retirer le filtre {label}").replace(
+                    "{label}",
+                    selectedStatus === "at_risk"
+                      ? t("kpi.summary.atRisk", "À risque")
+                      : t("kpi.summary.onTrack", "Sur la trajectoire")
+                  )}
+                  onRemove={() => setParams({ status: null })}
+                />
+              )}
+            </div>
+          )}
+
+          {filteredIndicators.length === 0 && (
+            <p className="text-sm text-text-secondary">
+              {t("kpi.filterChip.noMatch", "Aucun indicateur ne correspond aux filtres actifs.")}
+            </p>
+          )}
 
           {kpiView === "table" ? (
             <KpiTableView
@@ -1256,7 +1400,8 @@ function AxisSection({
         <h2 className="text-sm font-bold uppercase tracking-wide text-text-primary">{axis.name}</h2>
         {axis.owner && (
           <span className="text-xs text-text-secondary">
-            {t("strategicAxes.sponsorShort", "Sponsor")} : {resolveUserFullName(axis.owner, users)}
+            {t("strategicAxes.sponsorShort", "Commanditaire")} :{" "}
+            {resolveUserFullName(axis.owner, users)}
           </span>
         )}
       </div>
@@ -1292,5 +1437,40 @@ function AxisSection({
         </div>
       ))}
     </section>
+  );
+}
+
+/** Puce de filtre actif, retirable (✕) — pastille de la couleur de l'axe si fournie. */
+function FilterChip({
+  label,
+  removeLabel,
+  onRemove,
+  color,
+}: {
+  label: string;
+  removeLabel: string;
+  onRemove: () => void;
+  color?: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white py-0.5 pl-2.5 pr-1 text-xs font-semibold text-text-primary shadow-sm">
+      {color && (
+        <span
+          aria-hidden
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      )}
+      {label}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={removeLabel}
+        title={removeLabel}
+        className="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-text-secondary transition hover:bg-neutral-100 hover:text-bp-coral focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+      >
+        <X size={12} />
+      </button>
+    </span>
   );
 }

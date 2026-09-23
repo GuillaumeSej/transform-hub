@@ -87,7 +87,7 @@ export function LifecycleEditor({
                 {t("adminLifecycleEditor.colLabel", "Libellé")}
               </th>
               <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
-                {t("adminLifecycleEditor.colValidation", "Validation (gate)")}
+                {t("adminLifecycleEditor.colValidation", "Validation (point de contrôle)")}
               </th>
               <th className="px-4 py-2.5 text-center text-xs font-semibold text-text-secondary">
                 {t("adminLifecycleEditor.colOrder", "Ordre")}

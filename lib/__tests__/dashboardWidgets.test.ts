@@ -378,7 +378,7 @@ describe("dashboardWidgets — builder générique (customViews)", () => {
 
 describe("dashboardWidgets — getWidgetDef", () => {
   it("finds a known widget", () => {
-    expect(getWidgetDef("s-curve")?.label).toContain("S-Curve");
+    expect(getWidgetDef("s-curve")?.label).toContain("Courbe en S");
   });
 
   it("returns undefined for an unknown type", () => {

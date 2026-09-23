@@ -129,11 +129,16 @@ export function WorkstreamBarDetail({
   point: WorkstreamBarPoint;
   fmt: (v: number) => string;
 }) {
+  const { t } = useTranslation();
   const rows = mergeLeverBreakdown(point);
   const maxTarget = Math.max(1, ...rows.map((r) => Math.max(r.target, r.realized)));
 
   if (rows.length === 0) {
-    return <p className="text-sm text-tertiary">Aucun détail par levier disponible.</p>;
+    return (
+      <p className="text-sm text-tertiary">
+        {t("chart.bar.noLeverDetail", "Aucun détail par levier disponible.")}
+      </p>
+    );
   }
 
   return (
