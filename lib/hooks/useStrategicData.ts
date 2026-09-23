@@ -347,8 +347,14 @@ export function useStrategicData(
   }, [filterActive, companyId]);
   const isAdmin = isAnyAdmin(user);
   const clearance = useMemo(
-    () => resolveConfidentialityClearance(user, company?.roleClearance, "strategic"),
-    [user, company?.roleClearance]
+    () =>
+      resolveConfidentialityClearance(
+        user,
+        company?.roleClearance,
+        "strategic",
+        company?.confidentialityLevels
+      ),
+    [user, company?.roleClearance, company?.confidentialityLevels]
   );
 
   // ── Périmètre de visibilité par propriétaire nommé (round 25) ─────────────────────────────

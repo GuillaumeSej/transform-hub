@@ -970,7 +970,10 @@ const fr: Record<string, string> = {
   "adminCompanyFields.newLevelPlaceholder": "Ex : Confidentiel",
   "adminCompanyFields.addLevel": "Ajouter le niveau",
   "adminCompanyFields.clearanceLabel":
-    "Habilitations par profil — un levier au niveau X n'est visible que par les profils habilités pour X (un levier sans niveau reste visible par tous)",
+    "Habilitation par profil — un seul niveau par profil ; un élément au niveau X n'est visible que par les profils habilités au niveau X ou à un niveau supérieur (un élément sans niveau reste visible par tous)",
+  "adminCompanyFields.clearanceHierarchyHint":
+    "Ce niveau donne aussi accès aux niveaux inférieurs.",
+  "adminCompanyFields.colNoClearance": "Aucun",
   "adminCompanyFields.colProfile": "Profil",
   "adminCompanyFields.directionsLabel": "Directions / services",
   "adminCompanyFields.directionsEmpty":
@@ -1756,6 +1759,9 @@ const fr: Record<string, string> = {
   "kpi.summary.atRisk": "À risque",
   "kpi.summary.total": "Cumul des indicateurs",
   "kpi.summary.indicatorsSuffix": "indicateurs",
+  "kpi.summary.title": "Santé des indicateurs",
+  "kpi.summary.byAxis": "Par axe",
+  "kpi.summary.ofIndicators": "des indicateurs",
 
   // ─── KPI business (indicateurs de niveau axe) — page KPI ET dashboard stratégique ───
   "businessKpis.title": "KPI business — Suivi du marché",

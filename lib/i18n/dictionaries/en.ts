@@ -933,7 +933,9 @@ const en: Record<string, string> = {
   "adminCompanyFields.newLevelPlaceholder": "E.g.: Confidential",
   "adminCompanyFields.addLevel": "Add level",
   "adminCompanyFields.clearanceLabel":
-    "Clearance by profile — an initiative at level X is only visible to profiles cleared for X (an initiative with no level remains visible to everyone)",
+    "Clearance by profile — one level per profile; an item at level X is only visible to profiles cleared for level X or a higher level (an item with no level remains visible to everyone)",
+  "adminCompanyFields.clearanceHierarchyHint": "This level also grants access to all lower levels.",
+  "adminCompanyFields.colNoClearance": "None",
   "adminCompanyFields.colProfile": "Profile",
   "adminCompanyFields.directionsLabel": "Directions / departments",
   "adminCompanyFields.directionsEmpty":
@@ -1650,6 +1652,9 @@ const en: Record<string, string> = {
   "kpi.summary.atRisk": "At risk",
   "kpi.summary.total": "Indicator total",
   "kpi.summary.indicatorsSuffix": "indicators",
+  "kpi.summary.title": "Indicator health",
+  "kpi.summary.byAxis": "By axis",
+  "kpi.summary.ofIndicators": "of indicators",
 
   // ─── Business KPIs (axis-level indicators) — KPI page AND strategic dashboard ───
   "businessKpis.title": "Business KPIs — Market tracking",

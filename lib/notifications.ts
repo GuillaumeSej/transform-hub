@@ -31,7 +31,12 @@ export function canUserAccessLever(
   if (user.companyId !== lever.companyId) return false;
   if (user.isCompanyAdmin) return true;
 
-  const clearance = resolveConfidentialityClearance(user, company?.roleClearance);
+  const clearance = resolveConfidentialityClearance(
+    user,
+    company?.roleClearance,
+    "performance",
+    company?.confidentialityLevels
+  );
   if (!isLeverVisibleForClearance(lever.confidentialityLevel, clearance)) return false;
   // Comparaison via `isLeverOwnedBy`/`isLeverSponsoredBy` (voir lib/leversLogic.ts, seules
   // implémentations partagées par tous les call sites de cette question) : lien id-based en

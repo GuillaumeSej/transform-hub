@@ -159,7 +159,12 @@ export function DashboardPagePerformance() {
     return unsub;
   }, [user?.companyId]);
 
-  const clearance = resolveConfidentialityClearance(user, company?.roleClearance, "performance");
+  const clearance = resolveConfidentialityClearance(
+    user,
+    company?.roleClearance,
+    "performance",
+    company?.confidentialityLevels
+  );
   const visibleLevers = useMemo(
     () =>
       data.levers.filter(
@@ -172,6 +177,7 @@ export function DashboardPagePerformance() {
       user?.isGlobalAdmin,
       user?.isCompanyAdmin,
       company?.roleClearance,
+      company?.confidentialityLevels,
       user?.confidentialityClearance,
     ]
   );

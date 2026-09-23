@@ -147,9 +147,11 @@ export type AuthUser = {
   /** Habilitation de confidentialité INDIVIDUELLE, surcharge Company.roleClearance[role] quand
    *  définie (voir Company.confidentialityLevels). Non défini = hérite du niveau de son rôle.
    *  "all" = accès à tous les niveaux de confidentialité de l'entreprise, quel que soit le rôle.
-   *  string[] (peut être vide = "aucun") = liste explicite des niveaux autorisés pour CET
-   *  utilisateur. Sans effet pour un admin (global ou entreprise, toujours accès total). */
-  confidentialityClearance?: "all" | string[];
+   *  string = UN niveau (hiérarchique, voir `lib/confidentiality.ts`) : donne accès à ce niveau et
+   *  à tous les niveaux inférieurs de l'échelle. [] = "aucun accès".
+   *  string[] non vide = format LEGACY (liste de niveaux cochés), normalisé à la lecture vers son
+   *  niveau de plus haut accès — plus jamais écrit. Sans effet pour un admin (accès total). */
+  confidentialityClearance?: "all" | string | string[];
   /** Direction/service métier de rattachement (round 4, filtres Plan Stratégique — voir
    *  `Company.directions`). Contraint à la liste de l'entreprise via un `<select>`, jamais du texte
    *  libre, pour que le filtre par direction matche réellement une valeur existante. */
@@ -721,10 +723,12 @@ export type Company = {
    *  référencée par `AuthUser.direction`. Non conditionnée au type de programme (comme
    *  `confidentialityLevels`), donc sans impact sur le Plan Performance. */
   directions?: string[];
-  /** Pour chaque rôle, la liste des niveaux de confidentialityLevels auxquels il a accès
-   *  (en plus des leviers sans niveau défini, toujours visibles). admin/admin_entreprise ne
-   *  sont jamais filtrés (accès total) — pas besoin de les lister ici. */
-  roleClearance?: Partial<Record<Role, string[]>>;
+  /** Pour chaque rôle, SON niveau d'habilitation (un seul, hiérarchique : donne accès à ce niveau
+   *  et à tous ceux placés avant lui dans confidentialityLevels — voir `lib/confidentiality.ts`),
+   *  en plus des éléments sans niveau défini, toujours visibles. string[] = format LEGACY (liste de
+   *  niveaux cochés), normalisé à la lecture vers son niveau de plus haut accès. admin /
+   *  admin_entreprise ne sont jamais filtrés (accès total) — pas besoin de les lister ici. */
+  roleClearance?: Partial<Record<Role, string | string[]>>;
   /** Arborescence de maille financière configurée en début de mission, du plus macro (proche du
    *  compte P&L) au plus fin. Les leviers/sous-leviers ne renseignent que la maille la plus fine
    *  (voir Lever.hierarchyLeafId) ; les niveaux intermédiaires sont dérivés via HierarchyNode. */

@@ -75,7 +75,13 @@ export default function WorkstreamsPage() {
       (!lever.programId ||
         lever.programId === selectedProgramId ||
         !performanceProgramIds.has(lever.programId)) &&
-      canUserViewLever(user, lever, company?.roleClearance, data.workstreams)
+      canUserViewLever(
+        user,
+        lever,
+        company?.roleClearance,
+        data.workstreams,
+        company?.confidentialityLevels
+      )
   );
   const summary = engine.programSummary({ ...data, levers: visibleLevers });
 

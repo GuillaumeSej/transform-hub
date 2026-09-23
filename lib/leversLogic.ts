@@ -23,6 +23,7 @@ import {
   hasRole,
   isAnyAdmin,
 } from "@/lib/roleProfiles";
+import { accessibleLevels, normalizeClearanceLevel } from "@/lib/confidentiality";
 
 /**
  * Résout la liste des niveaux de confidentialité auxquels un utilisateur non-admin a accès,
@@ -30,33 +31,49 @@ import {
  * prioritaire quand définie, sinon repli sur l'habilitation de son profil (Company.roleClearance).
  * Ne s'applique pas à un admin (global ou entreprise, accès total, géré par l'appelant en amont).
  *  - user.confidentialityClearance === "all"  -> accès à tous les niveaux
- *  - user.confidentialityClearance: string[]  -> exactement cette liste (même vide = aucun accès)
+ *  - user.confidentialityClearance: string    -> ce niveau + tous les niveaux inférieurs
+ *  - user.confidentialityClearance: []        -> aucun accès
+ *  - user.confidentialityClearance: string[]  -> LEGACY, normalisé vers son niveau le plus haut
  *  - user.confidentialityClearance === undefined -> repli sur roleClearance[profil] (ou [])
  * `planType` précise QUELLE piste consulter pour ce repli (un utilisateur peut avoir un/des
  * profil(s) Plan Performance et un/des profil(s) Plan Stratégique distincts) — "performance" par
  * défaut, pour les appelants historiques (leviers du Plan de Performance).
  *
+ * `orderedLevels` = `Company.confidentialityLevels` (du moins au plus restreint). Quand fourni,
+ * la résolution est HIÉRARCHIQUE (voir `lib/confidentiality.ts`) : l'habilitation est ramenée à
+ * un niveau unique (le plus haut), puis étendue à tous les niveaux inférieurs. Sans échelle
+ * fournie, repli sur l'ancienne sémantique "liste exacte" (aucune expansion possible).
+ *
  * Round multi-profils multi-programmes : un utilisateur peut désormais avoir PLUSIEURS profils
  * sur la piste concernée (un par programme, ex. "lever" sur programme A + "finance" sur programme
- * B) — le repli unione les `roleClearance[role]` de TOUS ces profils (le plus permissif l'emporte)
+ * B) — le repli retient l'habilitation la plus permissive de TOUS ces profils (union / niveau max)
  * plutôt que de ne lire que le premier trouvé, pour ne pas amputer silencieusement l'accès d'un
  * des rôles cumulés. */
 export function resolveConfidentialityClearance(
   user: Pick<AuthUser, "profiles" | "confidentialityClearance"> | null | undefined,
-  roleClearance: Partial<Record<Role, string[]>> | undefined,
-  planType: "performance" | "strategic" = "performance"
+  roleClearance: Partial<Record<Role, string | string[]>> | undefined,
+  planType: "performance" | "strategic" = "performance",
+  orderedLevels?: string[]
 ): "all" | string[] {
   if (!user) return [];
-  if (user.confidentialityClearance === "all") return "all";
-  if (Array.isArray(user.confidentialityClearance)) return user.confidentialityClearance;
-  const profiles =
-    planType === "strategic" ? getStrategicProfiles(user) : getPerformanceProfiles(user);
-  const levels = new Set<string>();
-  for (const profile of profiles) {
-    const forRole = roleClearance?.[profile.role];
-    if (forRole) forRole.forEach((level) => levels.add(level));
+  const override = user.confidentialityClearance;
+  if (override === "all") return "all";
+  let raw: string[];
+  if (override !== undefined) {
+    raw = Array.isArray(override) ? override : [override];
+  } else {
+    const profiles =
+      planType === "strategic" ? getStrategicProfiles(user) : getPerformanceProfiles(user);
+    const levels = new Set<string>();
+    for (const profile of profiles) {
+      const forRole = roleClearance?.[profile.role];
+      if (forRole == null) continue;
+      (Array.isArray(forRole) ? forRole : [forRole]).forEach((level) => levels.add(level));
+    }
+    raw = Array.from(levels);
   }
-  return Array.from(levels);
+  if (!orderedLevels || orderedLevels.length === 0) return raw;
+  return accessibleLevels(normalizeClearanceLevel(raw, orderedLevels), orderedLevels);
 }
 
 /** Un levier confidentiel est-il visible pour cette habilitation (résolue via
@@ -150,8 +167,11 @@ export function canUserViewLever(
     | "companyId"
     | "confidentialityLevel"
   >,
-  roleClearance: Partial<Record<Role, string[]>> | undefined,
-  workstreams: Pick<Workstream, "id" | "sponsorUsername">[] = []
+  roleClearance: Partial<Record<Role, string | string[]>> | undefined,
+  workstreams: Pick<Workstream, "id" | "sponsorUsername">[] = [],
+  /** `Company.confidentialityLevels` — active la résolution hiérarchique (voir
+   *  `resolveConfidentialityClearance`). */
+  confidentialityLevels?: string[]
 ): boolean {
   if (!user) return false;
   if (user.isGlobalAdmin) return true;
@@ -164,7 +184,7 @@ export function canUserViewLever(
   }
   return isLeverVisibleForClearance(
     lever.confidentialityLevel,
-    resolveConfidentialityClearance(user, roleClearance)
+    resolveConfidentialityClearance(user, roleClearance, "performance", confidentialityLevels)
   );
 }
 

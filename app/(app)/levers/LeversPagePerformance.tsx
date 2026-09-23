@@ -156,7 +156,14 @@ export function LeversPagePerformance() {
       const company = companies.find((c) => c.id === user?.companyId);
       setHierarchyLevels(company?.hierarchyLevels ?? []);
       setGeographyHierarchyLevels(company?.geographyHierarchyLevels ?? []);
-      setClearance(resolveConfidentialityClearance(user, company?.roleClearance, "performance"));
+      setClearance(
+        resolveConfidentialityClearance(
+          user,
+          company?.roleClearance,
+          "performance",
+          company?.confidentialityLevels
+        )
+      );
       setRiskThresholds(company?.riskThresholds);
     }, user?.companyId ?? null);
     return unsub;

@@ -205,7 +205,13 @@ export function LeverDetailClientPerformance() {
     );
   }
 
-  const canView = canUserViewLever(user, lever, roleClearance, data.workstreams);
+  const canView = canUserViewLever(
+    user,
+    lever,
+    roleClearance,
+    data.workstreams,
+    company?.confidentialityLevels
+  );
 
   if (!canView) {
     return (

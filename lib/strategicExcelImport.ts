@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { currentPeriod } from "@/lib/kpiHistory";
 import type {
   Chantier,
@@ -240,9 +241,22 @@ function str(v: unknown): string {
   return String(v).trim();
 }
 
+/** Convertit une cellule en nombre en tolérant la saisie "à la française" d'un fichier rempli à la
+ *  main ou par IA : virgule décimale ("99,5") et espaces de milliers ("150 000", y compris
+ *  espaces insécables). Retourne `NaN` si non interprétable — la sémantique d'erreur reste celle
+ *  de chaque appelant. */
+function toNumber(v: unknown): number {
+  if (typeof v === "number") return v;
+  const s = String(v)
+    .trim()
+    .replace(/[\s  ]/g, "");
+  if (!s) return NaN;
+  return Number(/^-?\d+,\d+$/.test(s) ? s.replace(",", ".") : s);
+}
+
 function numOrUndefined(v: unknown): number | undefined {
   if (v === undefined || v === null || v === "") return undefined;
-  const n = Number(v);
+  const n = toNumber(v);
   return Number.isFinite(n) ? n : undefined;
 }
 
@@ -257,7 +271,7 @@ function parseOptionalNumberField(
   fieldLabel: string
 ): { value?: number; error?: string } {
   if (!raw) return {};
-  const n = Number(raw);
+  const n = toNumber(raw);
   if (!Number.isFinite(n)) return { error: `"${fieldLabel}" doit être un nombre` };
   return { value: n };
 }
@@ -507,8 +521,9 @@ export function validateStrategicImportRows(
     }
 
     const stageRaw = str(row["Étape de maturité"]);
-    const stage = stageRaw ? resolveStage(stageRaw, maturityStages) : undefined;
-    if (!stage) {
+    // Facultative comme sur Chantiers/Projets : le Kanban est abandonné au profit des jalons J0-J4.
+    const stage = resolveOptionalStage(stageRaw, maturityStages);
+    if (stage === undefined) {
       errors.push({
         sheet: "Axes",
         rowNumber,
@@ -864,12 +879,15 @@ export function validateStrategicImportRows(
       return;
     }
 
-    const startRaw = str(row["Début"]);
-    const endRaw = str(row["Fin"]);
+    // Valeurs BRUTES passées à `parseFlexibleDate` (pas `str(...)`) : une vraie date Excel arrive
+    // en numéro de série (nombre) via `sheet_to_json`, que la conversion en chaîne rendrait
+    // ininterprétable ("46023" lu comme l'an 46023).
+    const startCell = row["Début"];
+    const endCell = row["Fin"];
     const phases: DeliverablePhase[] = [];
-    if (startRaw || endRaw) {
-      const start = parseFlexibleDate(startRaw);
-      const end = parseFlexibleDate(endRaw);
+    if (str(startCell) || str(endCell)) {
+      const start = parseFlexibleDate(startCell);
+      const end = parseFlexibleDate(endCell);
       if (!start || !end) {
         errors.push({
           sheet: "Livrables",
@@ -1139,7 +1157,7 @@ export function validateStrategicImportRows(
     }
 
     const fteRaw = str(row["Nombre d'ETP"]);
-    const fte = Number(fteRaw);
+    const fte = toNumber(fteRaw);
     if (!fteRaw || !Number.isFinite(fte) || fte <= 0) {
       errors.push({
         sheet: "ETP",
@@ -1153,10 +1171,11 @@ export function validateStrategicImportRows(
     // phase) : chacune est facultative, une valeur présente mais non interprétable reste une
     // erreur plutôt que d'être silencieusement ignorée (même discipline que "Date début"/
     // "Date fin" de la feuille Projets).
+    // Valeurs brutes (dates Excel natives) — même raison que la feuille Livrables ci-dessus.
     const startRaw = str(row["Date début"]);
     let startDate: string | undefined;
     if (startRaw) {
-      startDate = parseFlexibleDate(startRaw);
+      startDate = parseFlexibleDate(row["Date début"]);
       if (!startDate) {
         errors.push({
           sheet: "ETP",
@@ -1169,7 +1188,7 @@ export function validateStrategicImportRows(
     const endRaw = str(row["Date fin"]);
     let endDate: string | undefined;
     if (endRaw) {
-      endDate = parseFlexibleDate(endRaw);
+      endDate = parseFlexibleDate(row["Date fin"]);
       if (!endDate) {
         errors.push({
           sheet: "ETP",
@@ -1228,6 +1247,29 @@ export const STRATEGIC_IMPORT_SHEET_NAMES = {
   etp: "ETP",
 } as const;
 
+/** Trouve une feuille par nom insensible à la casse (un onglet "axes" au lieu de "Axes" ne doit
+ *  pas bloquer) et la convertit en lignes objet indexées par en-tête. */
+function findSheetRows(workbook: XLSX.WorkBook, name: string): Record<string, unknown>[] {
+  const sheetName = workbook.SheetNames.find((n) => n.trim().toLowerCase() === name.toLowerCase());
+  if (!sheetName) return [];
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
+    defval: "",
+  });
+}
+
+/** Extrait les 6 feuilles de données d'un classeur (la feuille "Lisez-moi" est ignorée) — point
+ *  d'entrée unique partagé par `StrategicImportButton` et les tests (pas de DOM requis). */
+export function parseStrategicImportWorkbook(workbook: XLSX.WorkBook): StrategicImportRawSheets {
+  return {
+    axes: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.axes),
+    chantiers: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.chantiers),
+    actions: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.actions),
+    livrables: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.livrables),
+    indicateurs: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.indicateurs),
+    etp: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.etp),
+  };
+}
+
 /**
  * Contenu de la feuille "Lisez-moi" (round 31, point 4) — une ligne = une ligne de cellule A de la
  * feuille (`aoa_to_sheet` d'un tableau à une seule colonne, largeur forcée par `StrategicImportButton`
@@ -1255,11 +1297,9 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
   ],
   [""],
   ["3. Obligatoire vs facultatif"],
+  ['Obligatoires : "Code"/"Nom" de chaque feuille, dates de Projets.'],
   [
-    'Obligatoires : "Code"/"Nom" de chaque feuille, dates de Projets, "Étape de maturité" des Axes.',
-  ],
-  [
-    'Facultatifs : Description/Pilote/Owner/Sponsor, budgets et ETP consommés, "Étape de maturité" des Chantiers/Projets (vide = 1re étape du programme), "Valeur initiale" des Indicateurs (situation de départ du KPI), et les feuilles Livrables et ETP dans leur intégralité.',
+    'Facultatifs : Description/Pilote/Owner/Sponsor, budgets et ETP consommés, "Étape de maturité" des Axes/Chantiers/Projets (vide = 1re étape du programme), "Valeur initiale" des Indicateurs (situation de départ du KPI), et les feuilles Livrables et ETP dans leur intégralité.',
   ],
   [""],
   ["4. Workflow conseillé (pré-remplissage par IA)"],

@@ -22,6 +22,7 @@ import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import { isAnyAdmin, isStrategicRole, assertValidProfiles } from "@/lib/roleProfiles";
 import { resolveProgramType } from "@/lib/axisLogic";
+import { normalizeClearanceLevel } from "@/lib/confidentiality";
 
 /** Longueur minimale du mot de passe — DOIT rester alignée sur la politique de Firebase Auth
  *  (aucune autre règle par défaut ; un mot de passe plus court est rejeté avec `auth/weak-password`
@@ -87,6 +88,16 @@ function clearanceModeOf(clearance: AuthUser["confidentialityClearance"]): Clear
   return clearance.length === 0 ? "none" : "custom";
 }
 
+/** Niveau unique (hiérarchique) de l'override individuel, pour pré-remplir le formulaire — un
+ *  tableau legacy est normalisé vers son niveau de plus haut accès (voir lib/confidentiality.ts). */
+function clearanceLevelOf(
+  clearance: AuthUser["confidentialityClearance"],
+  orderedLevels: string[]
+): string {
+  if (clearance === undefined || clearance === "all") return "";
+  return normalizeClearanceLevel(clearance, orderedLevels) ?? "";
+}
+
 /**
  * Traduit le contrôle 4-états du formulaire en le patch à fusionner sur AuthUser avant
  * saveUser(). Fonction pure (testable sans React/Firestore) — extraite pour deux raisons :
@@ -102,12 +113,15 @@ function clearanceModeOf(clearance: AuthUser["confidentialityClearance"]): Clear
 export function buildClearancePatch(
   isAdmin: boolean,
   clearanceMode: ClearanceMode,
-  clearanceLevels: string[]
+  /** UN seul niveau (hiérarchique : donne aussi accès aux niveaux inférieurs). "" = aucun. */
+  clearanceLevel: string
 ): Pick<AuthUser, "confidentialityClearance"> | Record<string, never> {
   if (isAdmin) return {};
   if (clearanceMode === "all") return { confidentialityClearance: "all" };
   if (clearanceMode === "none") return { confidentialityClearance: [] };
-  if (clearanceMode === "custom") return { confidentialityClearance: clearanceLevels };
+  if (clearanceMode === "custom") {
+    return { confidentialityClearance: clearanceLevel ? clearanceLevel : [] };
+  }
   return {};
 }
 
@@ -209,7 +223,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     companyId: "",
     password: "test",
     clearanceMode: "inherit" as ClearanceMode,
-    clearanceLevels: [] as string[],
+    clearanceLevel: "",
     /** Direction/service métier de rattachement (round 4, filtres Plan Stratégique) — contrainte
      *  au `Company.directions` de l'entreprise sélectionnée, jamais du texte libre (voir
      *  `AuthUser.direction`). "" = non renseigné, toujours optionnel : ne JAMAIS entrer dans
@@ -295,7 +309,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       companyId: fixedCompanyId ?? companies[0]?.id ?? "",
       password: "test",
       clearanceMode: "inherit",
-      clearanceLevels: [],
+      clearanceLevel: "",
       direction: "",
     });
     setShowForm(true);
@@ -316,7 +330,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       companyId: u.companyId ?? companies[0]?.id ?? "",
       password: u.password ?? "",
       clearanceMode: clearanceModeOf(u.confidentialityClearance),
-      clearanceLevels: Array.isArray(u.confidentialityClearance) ? u.confidentialityClearance : [],
+      clearanceLevel: clearanceLevelOf(
+        u.confidentialityClearance,
+        companies.find((c) => c.id === u.companyId)?.confidentialityLevels ?? []
+      ),
       direction: u.direction ?? "",
     });
     setShowForm(true);
@@ -381,7 +398,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       ...buildClearancePatch(
         isAnyAdmin({ isGlobalAdmin: form.isGlobalAdmin, isCompanyAdmin: form.isCompanyAdmin }),
         form.clearanceMode,
-        form.clearanceLevels
+        form.clearanceLevel
       ),
       // "" (non renseigné) omet la clé plutôt que de la mettre à `undefined` — même précaution que
       // buildClearancePatch en mode "inherit" : Firestore setDoc() rejette toute valeur de champ
@@ -537,15 +554,6 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       }
     });
   }
-
-  const toggleClearanceLevel = (level: string) => {
-    setForm((f) => ({
-      ...f,
-      clearanceLevels: f.clearanceLevels.includes(level)
-        ? f.clearanceLevels.filter((l) => l !== level)
-        : [...f.clearanceLevels, level],
-    }));
-  };
 
   // Contrôle affiché seulement si l'entreprise ciblée a activé une échelle de confidentialité et
   // que le compte n'est pas admin (global ou entreprise, accès total, contrôle sans effet).
@@ -910,7 +918,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               </label>
               <p className="mt-1 text-xs text-text-secondary">
                 Remplace l&apos;habilitation par défaut du rôle pour ce seul utilisateur — dans les
-                deux sens : « Accès personnalisé » ou « Tous les niveaux » peuvent aussi bien
+                deux sens : « Niveau personnalisé » ou « Tous les niveaux » peuvent aussi bien
                 restreindre qu&apos;étendre l&apos;accès au-delà de ce que son rôle donne
                 normalement (ex. donner à un profil « Lever Owner » l&apos;accès à un niveau
                 confidentiel réservé au CTO).
@@ -925,7 +933,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                   [
                     { value: "inherit", label: "Hérite du rôle" },
                     { value: "none", label: "Aucun accès" },
-                    { value: "custom", label: "Accès personnalisé" },
+                    { value: "custom", label: "Niveau personnalisé" },
                     { value: "all", label: "Tous les niveaux" },
                   ] as { value: ClearanceMode; label: string }[]
                 ).map((opt) => (
@@ -944,20 +952,30 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                 ))}
               </div>
               {form.clearanceMode === "custom" && (
-                <div className="mt-3 flex flex-wrap gap-3">
-                  {(formCompany?.confidentialityLevels ?? []).map((level) => (
-                    <label
-                      key={level}
-                      className="flex items-center gap-1.5 text-xs text-text-primary"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.clearanceLevels.includes(level)}
-                        onChange={() => toggleClearanceLevel(level)}
-                      />
-                      {level}
-                    </label>
-                  ))}
+                <div className="mt-3">
+                  <div
+                    role="radiogroup"
+                    aria-label="Niveau de confidentialité"
+                    className="flex flex-wrap gap-3"
+                  >
+                    {(formCompany?.confidentialityLevels ?? []).map((level) => (
+                      <label
+                        key={level}
+                        className="flex items-center gap-1.5 text-xs text-text-primary"
+                      >
+                        <input
+                          type="radio"
+                          name="user-clearance-level"
+                          checked={form.clearanceLevel === level}
+                          onChange={() => setForm((f) => ({ ...f, clearanceLevel: level }))}
+                        />
+                        {level}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-xs text-text-secondary">
+                    Ce niveau donne aussi accès aux niveaux inférieurs.
+                  </p>
                 </div>
               )}
             </div>

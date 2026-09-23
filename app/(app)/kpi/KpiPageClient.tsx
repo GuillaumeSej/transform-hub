@@ -1088,7 +1088,11 @@ export function KpiPageClient() {
           onTrack: t("kpi.summary.onTrack"),
           atRisk: t("kpi.summary.atRisk"),
           indicatorsSuffix: t("kpi.summary.indicatorsSuffix"),
+          title: t("kpi.summary.title", "Santé des indicateurs"),
+          byAxis: t("kpi.summary.byAxis", "Par axe"),
+          ofIndicators: t("kpi.summary.ofIndicators", "des indicateurs"),
         }}
+        axes={axes}
       />
 
       {/* Bascule Cartes / Tableau (nouvelle vue tabulaire, sans graphique, round "cible évolutive")

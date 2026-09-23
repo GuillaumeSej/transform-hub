@@ -29,7 +29,9 @@ import { HierarchyEditor } from "@/components/admin/HierarchyEditor";
 import { ProgramsPanel } from "@/components/admin/ProgramsPanel";
 import { ProgramConfigEditor } from "@/components/admin/ProgramConfigEditor";
 import { CompanyDataHistoryPanel } from "@/components/admin/CompanyDataHistoryPanel";
+import { StrategicPlanOnboarding } from "@/components/admin/StrategicPlanOnboarding";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { normalizeRoleClearance } from "@/lib/confidentiality";
 
 type TabId =
   | "settings"
@@ -121,6 +123,10 @@ export default function CompanyDetailClient() {
   // components/shared/ProgramSwitcher.tsx). Sans paramètre, comportement historique : « Paramètres ».
   const urlTab = searchParams.get("tab");
   const urlManageProgram = searchParams.get("manageProgram");
+  // `?onboarding=strategic` : posé par `/admin/companies` juste après la CRÉATION d'une entreprise
+  // — propose en tête de page de démarrer son plan stratégique (import Excel en option primaire,
+  // saisie manuelle en secondaire), voir `StrategicPlanOnboarding`.
+  const showStrategicOnboarding = searchParams.get("onboarding") === "strategic";
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -157,7 +163,10 @@ export default function CompanyDetailClient() {
       fyEnd: company.fyEnd,
       confidentialityLevels: company.confidentialityLevels ?? [],
       directions: company.directions ?? [],
-      roleClearance: company.roleClearance ?? {},
+      roleClearance: normalizeRoleClearance(
+        company.roleClearance,
+        company.confidentialityLevels ?? []
+      ),
       riskThresholds: company.riskThresholds?.map((t) => ({
         level: t.level,
         minAmount: String(t.minAmount / 1000),
@@ -179,7 +188,10 @@ export default function CompanyDetailClient() {
       fyEnd: company.fyEnd,
       confidentialityLevels: company.confidentialityLevels ?? [],
       directions: company.directions ?? [],
-      roleClearance: company.roleClearance ?? {},
+      roleClearance: normalizeRoleClearance(
+        company.roleClearance,
+        company.confidentialityLevels ?? []
+      ),
       riskThresholds: company.riskThresholds?.map((t) => ({
         level: t.level,
         minAmount: String(t.minAmount / 1000),
@@ -297,6 +309,25 @@ export default function CompanyDetailClient() {
           )}
         </div>
       </div>
+
+      {showStrategicOnboarding && company && (
+        <StrategicPlanOnboarding
+          companyId={company.id}
+          onManual={() =>
+            router.replace(
+              `/admin/companies/detail?id=${encodeURIComponent(company.id)}&tab=projects`
+            )
+          }
+          onOpenProgram={(programId) =>
+            router.replace(
+              `/admin/companies/detail?id=${encodeURIComponent(company.id)}&tab=projects&manageProgram=${encodeURIComponent(programId)}`
+            )
+          }
+          onDismiss={() =>
+            router.replace(`/admin/companies/detail?id=${encodeURIComponent(company.id)}`)
+          }
+        />
+      )}
 
       <div className="flex snap-x gap-2 overflow-x-auto border-b border-border pb-2">
         {TABS.map((tabDef) => {

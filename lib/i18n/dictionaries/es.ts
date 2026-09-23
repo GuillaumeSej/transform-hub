@@ -916,7 +916,10 @@ const es: Record<string, string> = {
   "adminCompanyFields.newLevelPlaceholder": "Ej.: Confidencial",
   "adminCompanyFields.addLevel": "Añadir nivel",
   "adminCompanyFields.clearanceLabel":
-    "Habilitaciones por perfil — una palanca de nivel X solo es visible para los perfiles habilitados para X (una palanca sin nivel sigue siendo visible para todos)",
+    "Habilitación por perfil — un solo nivel por perfil; un elemento de nivel X solo es visible para los perfiles habilitados para el nivel X o un nivel superior (un elemento sin nivel sigue siendo visible para todos)",
+  "adminCompanyFields.clearanceHierarchyHint":
+    "Este nivel también da acceso a todos los niveles inferiores.",
+  "adminCompanyFields.colNoClearance": "Ninguno",
   "adminCompanyFields.colProfile": "Perfil",
   "adminCompanyFields.directionsLabel": "Direcciones / departamentos",
   "adminCompanyFields.directionsEmpty":
@@ -1647,6 +1650,9 @@ const es: Record<string, string> = {
   "kpi.summary.atRisk": "En riesgo",
   "kpi.summary.total": "Acumulado de los indicadores",
   "kpi.summary.indicatorsSuffix": "indicadores",
+  "kpi.summary.title": "Estado de los indicadores",
+  "kpi.summary.byAxis": "Por eje",
+  "kpi.summary.ofIndicators": "de los indicadores",
 
   // ─── KPI de negocio (indicadores de nivel eje) — página KPI Y panel estratégico ───
   "businessKpis.title": "KPI de negocio — Seguimiento del mercado",

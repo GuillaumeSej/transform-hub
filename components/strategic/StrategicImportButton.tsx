@@ -18,10 +18,10 @@ import {
   STRATEGIC_INDICATOR_IMPORT_HEADERS,
   STRATEGIC_STAFFING_EXAMPLE_ROWS,
   STRATEGIC_STAFFING_IMPORT_HEADERS,
+  parseStrategicImportWorkbook,
   validateStrategicImportRows,
   type StrategicImportExistingData,
   type StrategicImportPreview,
-  type StrategicImportRawSheets,
 } from "@/lib/strategicExcelImport";
 import type { AuthUser, MaturityStageConfig, Role } from "@/types";
 import { Button } from "@/components/shared/Button";
@@ -35,15 +35,61 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { matchLeverOwner, type OwnerMatchCandidate } from "@/lib/leverOwnerReconciliation";
 
-/** Trouve une feuille par nom insensible à la casse — même tolérance que
- *  `LeverImportButton.findSheet` : un utilisateur qui renomme légèrement un onglet ("axes" au lieu
- *  de "Axes") ne doit pas être bloqué. */
-function findSheet(workbook: XLSX.WorkBook, name: string): Record<string, unknown>[] {
-  const sheetName = workbook.SheetNames.find((n) => n.toLowerCase() === name.toLowerCase());
-  if (!sheetName) return [];
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
-    defval: "",
-  });
+/** Génère et télécharge le modèle Excel vierge (feuille "Lisez-moi" + 6 feuilles avec lignes
+ *  d'exemple) — exporté pour être réutilisé tel quel par le parcours de création d'entreprise
+ *  (`components/admin/StrategicPlanOnboarding.tsx`), sans dupliquer la composition du classeur. */
+export function downloadStrategicImportTemplate(): void {
+  const wb = XLSX.utils.book_new();
+
+  // Feuille de garde (round 31, point 4) — colonne unique volontairement large (`!cols`) pour
+  // rester lisible dans Excel/Google Sheets sans réglage manuel de l'utilisateur.
+  const guideSheet = XLSX.utils.aoa_to_sheet(STRATEGIC_IMPORT_GUIDE_ROWS);
+  guideSheet["!cols"] = [{ wch: 110 }];
+  XLSX.utils.book_append_sheet(wb, guideSheet, STRATEGIC_IMPORT_SHEET_NAMES.guide);
+
+  /** Largeur de colonne proportionnelle au libellé d'en-tête — évite les en-têtes tronqués à
+   *  l'ouverture du fichier (round 31, "que l'Excel soit propre") sans avoir à régler chaque
+   *  feuille à la main. */
+  const autoCols = (headers: readonly string[]) =>
+    headers.map((h) => ({ wch: Math.max(14, Math.min(48, h.length + 2)) }));
+
+  const addSheet = (name: string, headers: readonly string[], rows: unknown[][]) => {
+    const sheet = XLSX.utils.aoa_to_sheet([[...headers], ...rows]);
+    sheet["!cols"] = autoCols(headers);
+    XLSX.utils.book_append_sheet(wb, sheet, name);
+  };
+  addSheet(
+    STRATEGIC_IMPORT_SHEET_NAMES.axes,
+    STRATEGIC_AXIS_IMPORT_HEADERS,
+    STRATEGIC_AXIS_EXAMPLE_ROWS
+  );
+  addSheet(
+    STRATEGIC_IMPORT_SHEET_NAMES.chantiers,
+    STRATEGIC_CHANTIER_IMPORT_HEADERS,
+    STRATEGIC_CHANTIER_EXAMPLE_ROWS
+  );
+  addSheet(
+    STRATEGIC_IMPORT_SHEET_NAMES.actions,
+    STRATEGIC_ACTION_IMPORT_HEADERS,
+    STRATEGIC_ACTION_EXAMPLE_ROWS
+  );
+  addSheet(
+    STRATEGIC_IMPORT_SHEET_NAMES.livrables,
+    STRATEGIC_DELIVERABLE_IMPORT_HEADERS,
+    STRATEGIC_DELIVERABLE_EXAMPLE_ROWS
+  );
+  addSheet(
+    STRATEGIC_IMPORT_SHEET_NAMES.indicateurs,
+    STRATEGIC_INDICATOR_IMPORT_HEADERS,
+    STRATEGIC_INDICATOR_EXAMPLE_ROWS
+  );
+  addSheet(
+    STRATEGIC_IMPORT_SHEET_NAMES.etp,
+    STRATEGIC_STAFFING_IMPORT_HEADERS,
+    STRATEGIC_STAFFING_EXAMPLE_ROWS
+  );
+
+  XLSX.writeFile(wb, "modele_plan_strategique.xlsx");
 }
 
 /** Un « projet » = une ligne de la feuille `ChantierAction` dont le nom d'`owner`/`sponsor` (ou le
@@ -176,6 +222,10 @@ export function StrategicImportButton({
   programId,
   maturityStages,
   onImport,
+  showTemplateButton = true,
+  uploadLabel,
+  uploadVariant = "outline",
+  disabled = false,
 }: {
   /** Entités déjà en base — sert de repli de résolution des clés étrangères (voir doc-comment de
    *  `validateStrategicImportRows`) pour un import complémentaire qui référence un axe/chantier/
@@ -189,6 +239,16 @@ export function StrategicImportButton({
   /** Écrit les entités prêtes à créer (appelant = `save*` en boucle) — voir doc-comment du
    *  composant. Peut lever : les erreurs d'écriture sont laissées à la charge de l'appelant. */
   onImport: (toCreate: StrategicImportPreview["toCreate"]) => Promise<void>;
+  /** Parcours de création d'entreprise : le lien "Télécharger le modèle Excel" y est rendu à part
+   *  (voir `downloadStrategicImportTemplate`), d'où la possibilité de masquer ce bouton-ci. */
+  showTemplateButton?: boolean;
+  /** Libellé/variante du bouton d'upload — "Importer mon plan depuis Excel" en action primaire
+   *  dans le parcours de création d'entreprise. */
+  uploadLabel?: string;
+  uploadVariant?: "outline" | "primary";
+  /** Désactive le bouton d'upload (ex. import déjà réalisé) sans démonter la modale — l'écran de
+   *  résultat des comptes créés doit rester affiché. */
+  disabled?: boolean;
 }) {
   const { showToast } = useToast();
   const { t } = useTranslation();
@@ -301,63 +361,7 @@ export function StrategicImportButton({
   }
 
   const downloadTemplate = () => {
-    const wb = XLSX.utils.book_new();
-
-    // Feuille de garde (round 31, point 4) — colonne unique volontairement large (`!cols`) pour
-    // rester lisible dans Excel/Google Sheets sans réglage manuel de l'utilisateur.
-    const guideSheet = XLSX.utils.aoa_to_sheet(STRATEGIC_IMPORT_GUIDE_ROWS);
-    guideSheet["!cols"] = [{ wch: 110 }];
-    XLSX.utils.book_append_sheet(wb, guideSheet, STRATEGIC_IMPORT_SHEET_NAMES.guide);
-
-    /** Largeur de colonne proportionnelle au libellé d'en-tête — évite les en-têtes tronqués à
-     *  l'ouverture du fichier (round 31, "que l'Excel soit propre") sans avoir à régler chaque
-     *  feuille à la main. */
-    const autoCols = (headers: readonly string[]) =>
-      headers.map((h) => ({ wch: Math.max(14, Math.min(48, h.length + 2)) }));
-
-    const axesSheet = XLSX.utils.aoa_to_sheet([
-      [...STRATEGIC_AXIS_IMPORT_HEADERS],
-      ...STRATEGIC_AXIS_EXAMPLE_ROWS,
-    ]);
-    axesSheet["!cols"] = autoCols(STRATEGIC_AXIS_IMPORT_HEADERS);
-    XLSX.utils.book_append_sheet(wb, axesSheet, STRATEGIC_IMPORT_SHEET_NAMES.axes);
-
-    const chantiersSheet = XLSX.utils.aoa_to_sheet([
-      [...STRATEGIC_CHANTIER_IMPORT_HEADERS],
-      ...STRATEGIC_CHANTIER_EXAMPLE_ROWS,
-    ]);
-    chantiersSheet["!cols"] = autoCols(STRATEGIC_CHANTIER_IMPORT_HEADERS);
-    XLSX.utils.book_append_sheet(wb, chantiersSheet, STRATEGIC_IMPORT_SHEET_NAMES.chantiers);
-
-    const actionsSheet = XLSX.utils.aoa_to_sheet([
-      [...STRATEGIC_ACTION_IMPORT_HEADERS],
-      ...STRATEGIC_ACTION_EXAMPLE_ROWS,
-    ]);
-    actionsSheet["!cols"] = autoCols(STRATEGIC_ACTION_IMPORT_HEADERS);
-    XLSX.utils.book_append_sheet(wb, actionsSheet, STRATEGIC_IMPORT_SHEET_NAMES.actions);
-
-    const livrablesSheet = XLSX.utils.aoa_to_sheet([
-      [...STRATEGIC_DELIVERABLE_IMPORT_HEADERS],
-      ...STRATEGIC_DELIVERABLE_EXAMPLE_ROWS,
-    ]);
-    livrablesSheet["!cols"] = autoCols(STRATEGIC_DELIVERABLE_IMPORT_HEADERS);
-    XLSX.utils.book_append_sheet(wb, livrablesSheet, STRATEGIC_IMPORT_SHEET_NAMES.livrables);
-
-    const indicateursSheet = XLSX.utils.aoa_to_sheet([
-      [...STRATEGIC_INDICATOR_IMPORT_HEADERS],
-      ...STRATEGIC_INDICATOR_EXAMPLE_ROWS,
-    ]);
-    indicateursSheet["!cols"] = autoCols(STRATEGIC_INDICATOR_IMPORT_HEADERS);
-    XLSX.utils.book_append_sheet(wb, indicateursSheet, STRATEGIC_IMPORT_SHEET_NAMES.indicateurs);
-
-    const etpSheet = XLSX.utils.aoa_to_sheet([
-      [...STRATEGIC_STAFFING_IMPORT_HEADERS],
-      ...STRATEGIC_STAFFING_EXAMPLE_ROWS,
-    ]);
-    etpSheet["!cols"] = autoCols(STRATEGIC_STAFFING_IMPORT_HEADERS);
-    XLSX.utils.book_append_sheet(wb, etpSheet, STRATEGIC_IMPORT_SHEET_NAMES.etp);
-
-    XLSX.writeFile(wb, "modele_plan_strategique.xlsx");
+    downloadStrategicImportTemplate();
     showToast(
       t("strategicImport.templateDownloadedTitle", "Modèle téléchargé"),
       t(
@@ -373,14 +377,7 @@ export function StrategicImportButton({
       ? XLSX.read(await file.text(), { type: "string" })
       : XLSX.read(await file.arrayBuffer(), { type: "array" });
 
-    const sheets: StrategicImportRawSheets = {
-      axes: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.axes),
-      chantiers: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.chantiers),
-      actions: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.actions),
-      livrables: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.livrables),
-      indicateurs: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.indicateurs),
-      etp: findSheet(workbook, STRATEGIC_IMPORT_SHEET_NAMES.etp),
-    };
+    const sheets = parseStrategicImportWorkbook(workbook);
 
     const result = validateStrategicImportRows(
       sheets,
@@ -474,9 +471,11 @@ export function StrategicImportButton({
 
   return (
     <>
-      <Button variant="outline" onClick={downloadTemplate}>
-        <Download size={13} /> {t("strategicImport.templateButton", "Télécharger le modèle")}
-      </Button>
+      {showTemplateButton && (
+        <Button variant="outline" onClick={downloadTemplate}>
+          <Download size={13} /> {t("strategicImport.templateButton", "Télécharger le modèle")}
+        </Button>
+      )}
       <input
         ref={fileInputRef}
         type="file"
@@ -488,8 +487,13 @@ export function StrategicImportButton({
           if (file) void handleImportFile(file);
         }}
       />
-      <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-        <Upload size={13} /> {t("strategicImport.uploadButton", "Importer un fichier")}
+      <Button
+        variant={uploadVariant}
+        disabled={disabled}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        <Upload size={13} />{" "}
+        {uploadLabel ?? t("strategicImport.uploadButton", "Importer un fichier")}
       </Button>
 
       <Modal

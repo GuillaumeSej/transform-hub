@@ -1,10 +1,13 @@
 "use client";
 
-import { INDICATOR_STATUS_TONE } from "@/components/strategic/IndicatorStatusBadge";
+import {
+  INDICATOR_STATUS_TONE,
+  IndicatorStatusMark,
+} from "@/components/strategic/IndicatorStatusBadge";
 import { PendingKpiValues } from "@/components/strategic/PendingKpiValues";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, Sigma } from "lucide-react";
+import { Sigma } from "lucide-react";
 import { KPICard } from "@/components/shared/KPICard";
 import { Modal } from "@/components/shared/Modal";
 import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
@@ -13,6 +16,7 @@ import {
   computeIndicatorDelta,
   countOnTrackAtRisk,
   latestMeasurement,
+  resolveIndicatorStatus,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
@@ -25,7 +29,13 @@ import {
   type YearSelection,
 } from "@/lib/kpiHistory";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { AuthUser, Indicator, IndicatorMeasurement } from "@/types";
+import type {
+  AuthUser,
+  Indicator,
+  IndicatorMeasurement,
+  IndicatorRiskStatus,
+  StrategicAxis,
+} from "@/types";
 
 /**
  * Compteur d'ensemble « N indicateurs suivis · X sur la trajectoire · Y à risque ». Affiché en tête
@@ -52,6 +62,7 @@ export function IndicatorStatusSummary({
   labels,
   className,
   radialHero = false,
+  axes,
 }: {
   indicators: Indicator[];
   measurements: IndicatorMeasurement[];
@@ -64,8 +75,15 @@ export function IndicatorStatusSummary({
     atRisk?: string;
     total?: string;
     indicatorsSuffix?: string;
+    title?: string;
+    byAxis?: string;
+    ofIndicators?: string;
   };
   className?: string;
+  /** Axes du programme : si fournis (page KPI), la synthèse ajoute une ventilation PAR AXE
+   *  (mini-barre sur la trajectoire / à risque par axe). Absent (fiche d'un axe) = pas de
+   *  ventilation, elle n'aurait qu'une ligne. */
+  axes?: Pick<StrategicAxis, "id" | "name" | "color">[];
   /**
    * Bandeau `RadialProgress` (jauge de progression, même langage visuel que le Plan Performance,
    * voir `LeverDetailClientPerformance.tsx`) mis en avant AU-DESSUS de la grille de cartes — défaut
@@ -86,6 +104,9 @@ export function IndicatorStatusSummary({
     atRisk: labels?.atRisk ?? "À risque",
     total: labels?.total ?? "Cumul des indicateurs",
     indicatorsSuffix: labels?.indicatorsSuffix ?? "indicateurs",
+    title: labels?.title ?? "Santé des indicateurs",
+    byAxis: labels?.byAxis ?? "Par axe",
+    ofIndicators: labels?.ofIndicators ?? "des indicateurs",
   };
 
   return (
@@ -138,30 +159,17 @@ export function IndicatorStatusSummary({
           </div>
         </Link>
       )}
-      {/* Round 8 : en mode `radialHero`, le PO ne veut QUE le donut agrandi ci-dessus — la grille
-          de `KPICard` ci-dessous (redondante avec la phrase déjà affichée dans le bandeau) reste
-          réservée aux appelants non-hero (page KPI, fiche d'axe), inchangés. */}
+      {/* Round 8 : en mode `radialHero`, le PO ne veut QUE le bandeau ci-dessus. Hors héros (page
+          KPI, fiche d'axe) : panneau de synthèse moderne, voir `IndicatorStatusOverview`. */}
       {!radialHero && (
-        <div
-          className={
-            className ??
-            // Round 11 : une seule tuile "Sur la trajectoire" reste par défaut (la tuile "À
-            // risque" est retirée) — plus qu'une grille à 2/3 colonnes systématique, sinon la
-            // grille laisse une ou deux cellules vides selon `showTotal`.
-            (showTotal ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "grid grid-cols-1 gap-3")
-          }
-        >
-          <KPICard
-            label={l.onTrack}
-            value={`${onTrack} / ${total}`}
-            icon={Activity}
-            accent="green"
-            // Round 11 : la tuile "À risque" séparée est retirée (chiffre redondant avec le
-            // bandeau héros et la puce d'en-tête du dashboard) — le compte à risque est replié en
-            // prose dans le sous-titre de cette tuile, même phrasé que le paragraphe du bandeau
-            // héros ci-dessus pour ne pas faire diverger deux lectures du même chiffre.
-            sub={`${total} ${l.tracked.toLowerCase()} · ${atRisk} ${l.atRisk.toLowerCase()}`}
-            barPct={onTrackPct}
+        <div className={className}>
+          <IndicatorStatusOverview
+            indicators={indicators}
+            axes={axes}
+            total={total}
+            onTrack={onTrack}
+            atRisk={atRisk}
+            labels={l}
           />
           {showTotal && (
             <KPICard
@@ -169,11 +177,247 @@ export function IndicatorStatusSummary({
               value={totalUnit ? `${cumulative} ${totalUnit}` : String(cumulative)}
               icon={Sigma}
               sub="Somme des dernières valeurs quantitatives"
+              className="mt-3"
             />
           )}
         </div>
       )}
     </>
+  );
+}
+
+type OverviewLabels = {
+  tracked: string;
+  onTrack: string;
+  atRisk: string;
+  indicatorsSuffix: string;
+  title: string;
+  byAxis: string;
+  ofIndicators: string;
+};
+
+/** Barre segmentée sur la trajectoire / à risque — même rendu que le bandeau héros du dashboard
+ *  stratégique (encre + BearingPoint Red, palette partagée `INDICATOR_STATUS_TONE`). */
+function StatusSplitBar({
+  onTrack,
+  atRisk,
+  total,
+  height = "h-3",
+  ariaLabel,
+}: {
+  onTrack: number;
+  atRisk: number;
+  total: number;
+  height?: string;
+  ariaLabel: string;
+}) {
+  const onTrackPct = total > 0 ? (onTrack / total) * 100 : 0;
+  const atRiskPct = total > 0 ? (atRisk / total) * 100 : 0;
+  return (
+    <div
+      className={`flex w-full gap-[2px] overflow-hidden rounded-full bg-neutral-100 ${height}`}
+      role="img"
+      aria-label={ariaLabel}
+    >
+      {onTrackPct > 0 && (
+        <div
+          className={`h-full ${INDICATOR_STATUS_TONE.on_track.bar}`}
+          style={{ width: `${onTrackPct}%` }}
+        />
+      )}
+      {atRiskPct > 0 && (
+        <div
+          className={`h-full ${INDICATOR_STATUS_TONE.at_risk.bar}`}
+          style={{ width: `${atRiskPct}%` }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Synthèse des statuts d'indicateur de la page KPI (et de la fiche d'axe) — refonte (retour PO :
+ * l'ancienne tuile « Sur la trajectoire 5/13 » faisait daté à côté du tableau de bord
+ * stratégique). Même langage visuel que le bandeau héros du dashboard : grand pourcentage, barre
+ * segmentée encre / BearingPoint Red, puis deux tuiles de compte (rond plein vs triangle d'alerte,
+ * jamais la couleur seule) et, si `axes` est fourni, une ventilation par axe.
+ *
+ * Aucun calcul métier propre : comptes issus de `countOnTrackAtRisk` (passés par le parent) et
+ * statut par indicateur via `resolveIndicatorStatus` (`lib/axisLogic.ts`).
+ */
+function IndicatorStatusOverview({
+  indicators,
+  axes,
+  total,
+  onTrack,
+  atRisk,
+  labels: l,
+}: {
+  indicators: Indicator[];
+  axes?: Pick<StrategicAxis, "id" | "name" | "color">[];
+  total: number;
+  onTrack: number;
+  atRisk: number;
+  labels: OverviewLabels;
+}) {
+  const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+
+  const perAxis = useMemo(() => {
+    if (!axes || axes.length === 0) return [];
+    return axes
+      .map((axis) => {
+        let axisOnTrack = 0;
+        let axisAtRisk = 0;
+        for (const indicator of indicators) {
+          if (indicator.axisId !== axis.id) continue;
+          if (resolveIndicatorStatus(indicator) === "at_risk") axisAtRisk += 1;
+          else axisOnTrack += 1;
+        }
+        return { axis, onTrack: axisOnTrack, atRisk: axisAtRisk, total: axisOnTrack + axisAtRisk };
+      })
+      .filter((row) => row.total > 0);
+  }, [axes, indicators]);
+
+  const tiles: { status: IndicatorRiskStatus; label: string; count: number }[] = [
+    { status: "on_track", label: l.onTrack, count: onTrack },
+    { status: "at_risk", label: l.atRisk, count: atRisk },
+  ];
+
+  return (
+    <section className="rounded-lg border border-border bg-white shadow-sm">
+      <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8">
+        {/* Bloc héros : taux sur la trajectoire + barre segmentée + légende chiffrée */}
+        <div className="flex min-w-0 flex-col justify-between gap-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h3 className="border-l-[3px] border-bp-coral pl-2 text-[13px] font-bold tracking-tight text-primary">
+              {l.title}
+            </h3>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+              {total} {l.tracked.toLowerCase()}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+            <span className="text-[44px] font-bold leading-none tracking-tight text-primary tabular-nums">
+              {pct(onTrack)}%
+            </span>
+            <span className="pb-1 text-[11px] font-bold uppercase tracking-wide text-secondary">
+              {l.onTrack} · {onTrack}/{total}
+            </span>
+          </div>
+          <div className="flex flex-col gap-2">
+            <StatusSplitBar
+              onTrack={onTrack}
+              atRisk={atRisk}
+              total={total}
+              ariaLabel={`${l.onTrack} ${pct(onTrack)}% · ${l.atRisk} ${pct(atRisk)}%`}
+            />
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-secondary">
+              {tiles.map((tile) => (
+                <span key={tile.status} className="inline-flex items-center gap-1.5">
+                  <IndicatorStatusMark status={tile.status} size={8} />
+                  <span className="font-semibold text-primary">{tile.label}</span>
+                  <span className="tabular-nums">{pct(tile.count)}%</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Deux tuiles de compte — forme (rond plein / triangle) + libellé + couleur */}
+        <div className="grid grid-cols-2 gap-3">
+          {tiles.map((tile) => {
+            const highlighted = tile.status === "at_risk" && tile.count > 0;
+            return (
+              <div
+                key={tile.status}
+                className={`flex flex-col justify-between gap-3 border border-l-[3px] border-border p-4 ${
+                  highlighted ? "bg-rag-red-light/60" : "bg-neutral-50"
+                }`}
+                style={{ borderLeftColor: INDICATOR_STATUS_TONE[tile.status].hex }}
+              >
+                <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-secondary">
+                  <IndicatorStatusMark status={tile.status} size={8} />
+                  {tile.label}
+                </span>
+                <span className="flex items-baseline gap-1">
+                  <span
+                    className={`text-[32px] font-bold leading-none tracking-tight tabular-nums ${
+                      highlighted ? INDICATOR_STATUS_TONE.at_risk.text : "text-primary"
+                    }`}
+                  >
+                    {tile.count}
+                  </span>
+                  <span className="text-[13px] font-semibold text-tertiary tabular-nums">
+                    /{total}
+                  </span>
+                </span>
+                <span className="text-[11px] text-tertiary">
+                  <span className="font-semibold text-secondary tabular-nums">
+                    {pct(tile.count)}%
+                  </span>{" "}
+                  {l.ofIndicators}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Ventilation par axe (page KPI uniquement) */}
+      {perAxis.length > 0 && (
+        <div className="border-t border-border px-5 py-4">
+          <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+            {l.byAxis}
+          </div>
+          <ul className="grid grid-cols-1 gap-x-8 gap-y-2.5 md:grid-cols-2">
+            {perAxis.map((row) => (
+              <li key={row.axis.id} className="flex min-w-0 items-center gap-2.5 text-[12px]">
+                <span
+                  aria-hidden
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: row.axis.color ?? "var(--bp-warm-taupe)" }}
+                />
+                <span
+                  className="w-[38%] min-w-0 shrink-0 truncate font-semibold text-primary"
+                  title={row.axis.name}
+                >
+                  {row.axis.name}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <StatusSplitBar
+                    onTrack={row.onTrack}
+                    atRisk={row.atRisk}
+                    total={row.total}
+                    height="h-1.5"
+                    ariaLabel={`${row.axis.name} — ${l.onTrack} ${row.onTrack}/${row.total} · ${l.atRisk} ${row.atRisk}`}
+                  />
+                </span>
+                <span className="w-9 shrink-0 text-right font-semibold text-primary tabular-nums">
+                  {row.onTrack}/{row.total}
+                </span>
+                <span
+                  className={`inline-flex w-8 shrink-0 items-center justify-end gap-0.5 tabular-nums ${
+                    row.atRisk > 0
+                      ? `font-bold ${INDICATOR_STATUS_TONE.at_risk.text}`
+                      : "text-tertiary"
+                  }`}
+                  title={`${l.atRisk} : ${row.atRisk}`}
+                >
+                  {row.atRisk > 0 ? (
+                    <>
+                      <IndicatorStatusMark status="at_risk" size={7} />
+                      {row.atRisk}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

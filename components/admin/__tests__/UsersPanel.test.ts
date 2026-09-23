@@ -7,37 +7,39 @@ import {
 
 describe("UsersPanel — buildClearancePatch", () => {
   it('omits the key entirely (never sets it to `undefined`) for mode "inherit"', () => {
-    const patch = buildClearancePatch(false, "inherit", []);
+    const patch = buildClearancePatch(false, "inherit", "");
     expect(patch).toEqual({});
     expect("confidentialityClearance" in patch).toBe(false);
   });
 
   it('returns "all" for mode "all", even including levels the role would not normally see', () => {
-    expect(buildClearancePatch(false, "all", [])).toEqual({
+    expect(buildClearancePatch(false, "all", "")).toEqual({
       confidentialityClearance: "all",
     });
   });
 
   it('returns an empty array for mode "none"', () => {
-    expect(buildClearancePatch(false, "none", ["public", "secret"])).toEqual({
+    expect(buildClearancePatch(false, "none", "secret")).toEqual({
       confidentialityClearance: [],
     });
   });
 
   it(
-    'returns the selected levels verbatim for mode "custom" — this is what lets an admin grant a ' +
-      "profile MORE access than its role default (additive override, not clamped to the role's levels)",
+    'returns the single selected level for mode "custom" (hierarchical: it also grants every lower ' +
+      "level) — this is what lets an admin grant a profile MORE access than its role default",
     () => {
-      expect(buildClearancePatch(false, "custom", ["public", "secret", "top-secret"])).toEqual({
-        confidentialityClearance: ["public", "secret", "top-secret"],
+      expect(buildClearancePatch(false, "custom", "top-secret")).toEqual({
+        confidentialityClearance: "top-secret",
       });
+      // No level picked yet -> no access (never an empty string stored).
+      expect(buildClearancePatch(false, "custom", "")).toEqual({ confidentialityClearance: [] });
     }
   );
 
   it("has no effect for an admin (global or company), total access regardless of mode", () => {
-    expect(buildClearancePatch(true, "custom", ["secret"])).toEqual({});
-    expect(buildClearancePatch(true, "all", [])).toEqual({});
-    expect(buildClearancePatch(true, "none", [])).toEqual({});
+    expect(buildClearancePatch(true, "custom", "secret")).toEqual({});
+    expect(buildClearancePatch(true, "all", "")).toEqual({});
+    expect(buildClearancePatch(true, "none", "")).toEqual({});
   });
 });
 

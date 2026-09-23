@@ -1,3 +1,4 @@
+import { TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { IndicatorRiskStatus } from "@/types";
 
@@ -18,35 +19,74 @@ import type { IndicatorRiskStatus } from "@/types";
  */
 
 /**
- * Refonte visuelle (retour PO — « la case est trop grosse, les couleurs ne sont pas jolies, on ne
- * sait pas si c'est à risque ou sur la trajectoire ») : la charte monochrome historique
- * (`rag-green` = encre quasi noire, `rag-amber` = taupe) rendait les deux statuts quasi
- * indiscernables. Palette DÉDIÉE aux statuts d'indicateur, vert/ambre adoucis (texte ≥ 4.5:1 sur
- * son fond clair), exportée pour que TOUS les rendus de statut d'indicateur (badge, lecture
- * actuel→cible, puces de la feuille de route, légende, barre de synthèse) partagent exactement les
- * mêmes teintes. Classes Tailwind littérales (arbitraires) pour rester détectables par le JIT.
+ * Palette des statuts d'indicateur — CHARTE BEARINGPOINT UNIQUEMENT (retour PO : le vert/orange
+ * introduit par la refonte précédente est hors charte, la marque interdit vert/orange/bleu, voir
+ * `app/globals.css`). Même convention que le reste du Plan Stratégique pour une échelle binaire :
+ * les deux extrêmes de l'échelle RAG de marque (`ProgressBar`, ancien bandeau héros round 10) —
+ *  - `on_track` : encre (`rag-green` = #1a1a1a), pastille PLEINE ronde, pilule neutre grise ;
+ *  - `at_risk`  : BearingPoint Red (`rag-red` = #ff3c47), icône TRIANGLE d'alerte, pilule rose
+ *    pâle (`rag-red-light`) au texte rouge brique (`bp-red-brick`, ≥ 4.5:1 sur ce fond — le corail
+ *    pur est trop clair pour un texte de 10-11px).
+ * Le statut est donc porté par la FORME (rond plein vs triangle) + le libellé + la couleur, jamais
+ * par la couleur seule. Le taupe (`rag-amber`) est volontairement écarté : trop proche de l'encre,
+ * c'était précisément la confusion d'origine du PO.
  *
- * `IndicatorRiskStatus` n'a que DEUX valeurs (`on_track` / `at_risk`) — toutes deux mappées ici.
+ * Exportée pour que TOUS les rendus de statut d'indicateur (badge, lecture actuel→cible, puces de
+ * la feuille de route, légende, synthèse de la page KPI) partagent exactement les mêmes teintes.
+ * `hex` sert aux attributs `style` (liséré gauche des puces) où une classe ne suffit pas.
  */
 export const INDICATOR_STATUS_TONE: Record<
   IndicatorRiskStatus,
   { pill: string; dot: string; text: string; bar: string; hex: string }
 > = {
   on_track: {
-    pill: "border-[#bfe3cf] bg-[#ebf6ef] text-[#1e6b45]",
-    dot: "bg-[#3a9d6a]",
-    text: "text-[#1e6b45]",
-    bar: "bg-[#3a9d6a]",
-    hex: "#3a9d6a",
+    pill: "border-neutral-200 bg-neutral-100 text-primary",
+    dot: "bg-rag-green",
+    text: "text-primary",
+    bar: "bg-rag-green",
+    hex: "#1a1a1a",
   },
   at_risk: {
-    pill: "border-[#f1d7a2] bg-[#fdf4e2] text-[#8a5a00]",
-    dot: "bg-[#e0a030]",
-    text: "text-[#8a5a00]",
-    bar: "bg-[#e0a030]",
-    hex: "#e0a030",
+    pill: "border-bp-light-pink bg-rag-red-light text-bp-red-brick",
+    dot: "bg-rag-red",
+    text: "text-bp-red-brick",
+    bar: "bg-rag-red",
+    hex: "#ff3c47",
   },
 };
+
+/**
+ * Marqueur de statut seul (sans libellé) : rond plein encre pour `on_track`, triangle d'alerte
+ * BearingPoint Red pour `at_risk`. Forme ET couleur diffèrent → lisible même en niveaux de gris.
+ * `size` = diamètre du rond en px ; le triangle est légèrement plus grand pour un poids visuel égal.
+ */
+export function IndicatorStatusMark({
+  status,
+  size = 8,
+  className,
+}: {
+  status: IndicatorRiskStatus;
+  size?: number;
+  className?: string;
+}) {
+  if (status === "at_risk") {
+    return (
+      <TriangleAlert
+        aria-hidden
+        size={Math.round(size * 1.5)}
+        strokeWidth={2.5}
+        className={cn("shrink-0 text-rag-red", className)}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      className={cn("shrink-0 rounded-full", INDICATOR_STATUS_TONE.on_track.dot, className)}
+      style={{ width: size, height: size }}
+    />
+  );
+}
 
 export const INDICATOR_STATUS_DEFAULT_LABEL: Record<IndicatorRiskStatus, string> = {
   on_track: "Sur la trajectoire",
@@ -84,16 +124,13 @@ export function IndicatorStatusBadge({
         className
       )}
     >
-      <span
-        aria-hidden
-        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", INDICATOR_STATUS_TONE[status].dot)}
-      />
+      <IndicatorStatusMark status={status} size={size === "xs" ? 6 : 7} />
       {text}
     </span>
   );
 }
 
-/** Légende compacte des statuts d'indicateur (pastille + libellé), pour lire le code couleur d'un
+/** Légende compacte des statuts d'indicateur (marqueur rond/triangle + libellé), pour lire le code couleur d'un
  *  coup d'œil à côté d'une liste de puces d'indicateur. */
 export function IndicatorStatusLegend({
   labels,
@@ -110,10 +147,7 @@ export function IndicatorStatusLegend({
           key={status}
           className="inline-flex items-center gap-1 text-[10.5px] font-medium text-secondary"
         >
-          <span
-            aria-hidden
-            className={cn("h-2 w-2 shrink-0 rounded-full", INDICATOR_STATUS_TONE[status].dot)}
-          />
+          <IndicatorStatusMark status={status} size={8} />
           {labels?.[status] ?? INDICATOR_STATUS_DEFAULT_LABEL[status]}
         </span>
       ))}

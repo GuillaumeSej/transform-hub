@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { MovementExecutionStatus, MovementProgressRow } from "@/lib/hrExecution";
 import { MOVEMENT_PROGRESS_STATUS_ORDER } from "@/lib/hrExecution";
+import { STATUS_COLORS as EXECUTION_STATUS_COLORS } from "@/components/shared/charts/HrExecutionCharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
@@ -25,15 +26,25 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
  * fait quoi" est rendu par `MovementDetailDrilldownModal` (câblé dans app/(app)/hr/page.tsx).
  */
 
-/** Couleurs sémantiques demandées pour ce widget (gris / rouge / vert / bleu / bleu clair). NB : la
- *  charte (app/globals.css) proscrit vert/bleu — `#2E7D32` est toutefois déjà utilisé par
- *  JCurveChart/SankeyChart/MarimekkoChart, et le rouge est l'accent BearingPoint (`--bp-coral`). */
+/** Couleurs charte BP (app/globals.css proscrit vert/orange/bleu), alignées sur le widget "vue
+ *  combinée" et `ExecutionStatusChart` : réalisé / en retard / abandonné reprennent exactement les
+ *  couleurs de statut existantes (`STATUS_COLORS`) ; les deux "à venir" forment une rampe rouge
+ *  d'urgence (plus l'échéance est proche, plus c'est saturé) sans se confondre avec "en retard". */
 export const MOVEMENT_PROGRESS_COLORS: Record<MovementExecutionStatus, string> = {
-  abandoned: "#A3A3A3",
-  overdue: "#FF3C47",
-  realized: "#2E7D32",
-  dueSoon: "#2F6FB5",
-  later: "#9CC3E6",
+  abandoned: EXECUTION_STATUS_COLORS.abandoned, // --bp-warm-brown #806659
+  overdue: EXECUTION_STATUS_COLORS.overdue, // --bp-coral #FF3C47
+  realized: EXECUTION_STATUS_COLORS.realized, // --bp-purple #421799
+  dueSoon: "#FF797B", // --bp-coral-pink
+  later: "#FFB1B5", // --bp-light-pink
+};
+
+/** Couleur du chiffre centré dans chaque segment (lisibilité sur les teintes claires). */
+const SEGMENT_LABEL_COLORS: Record<MovementExecutionStatus, string> = {
+  abandoned: "#ffffff",
+  overdue: "#ffffff",
+  realized: "#ffffff",
+  dueSoon: "#320300",
+  later: "#320300",
 };
 
 /** Libellés i18n des 5 statuts — partagés avec `MovementDetailDrilldownModal`. */
@@ -123,18 +134,6 @@ export function MovementProgressByDimensionChart({
 
   return (
     <div>
-      <ul className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-secondary">
-        {MOVEMENT_PROGRESS_STATUS_ORDER.map((status) => (
-          <li key={status} className="flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className="inline-block h-2.5 w-2.5 rounded-[2px]"
-              style={{ backgroundColor: MOVEMENT_PROGRESS_COLORS[status] }}
-            />
-            {movementProgressStatusLabel(t, status)}
-          </li>
-        ))}
-      </ul>
       <ResponsiveContainer width="100%" height={Math.max(height, data.length * 36 + 40)}>
         <BarChart
           data={chartData}
@@ -142,11 +141,11 @@ export function MovementProgressByDimensionChart({
           margin={{ top: 4, right: 16, left: 4, bottom: 4 }}
           barCategoryGap="22%"
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" horizontal={false} />
           <XAxis
             type="number"
             allowDecimals={false}
-            tick={{ fontSize: 10 }}
+            tick={{ fontSize: 11 }}
             axisLine={false}
             tickLine={false}
           />
@@ -215,13 +214,27 @@ export function MovementProgressByDimensionChart({
                 dataKey={status}
                 position="center"
                 fontSize={10}
-                fill={status === "later" ? "#0a0a0a" : "#ffffff"}
+                fill={SEGMENT_LABEL_COLORS[status]}
                 formatter={(value: unknown) => (Number(value) > 0 ? String(value) : "")}
               />
             </Bar>
           ))}
         </BarChart>
       </ResponsiveContainer>
+      {/* Légende en bas, centrée — même position/taille que la `<Legend>` Recharts du widget
+          "vue combinée" (DepartmentMovementsChart). */}
+      <ul className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-secondary">
+        {MOVEMENT_PROGRESS_STATUS_ORDER.map((status) => (
+          <li key={status} className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="inline-block h-2.5 w-2.5"
+              style={{ backgroundColor: MOVEMENT_PROGRESS_COLORS[status] }}
+            />
+            {movementProgressStatusLabel(t, status)}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

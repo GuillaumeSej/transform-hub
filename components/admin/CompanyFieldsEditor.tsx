@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import type { Role, RiskLevel } from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { levelBelow, normalizeClearanceLevel } from "@/lib/confidentiality";
 
 function riskLevels(
   t: (key: string, fallback?: string) => string
@@ -93,7 +94,9 @@ export type CompanyFormState = {
    *  pattern éditable que `confidentialityLevels` juste au-dessus, référencé par
    *  `AuthUser.direction`. Additif/optionnel, sans impact sur le Plan Performance. */
   directions: string[];
-  roleClearance: Partial<Record<Role, string[]>>;
+  /** UN niveau par rôle (hiérarchique, voir `lib/confidentiality.ts`). Les tableaux legacy lus en
+   *  base restent acceptés et sont normalisés à l'affichage vers leur niveau le plus haut. */
+  roleClearance: Partial<Record<Role, string | string[]>>;
   /** Seuils de risque par niveau, saisis en €K (voir Company.riskThresholds — stocké en € brut,
    *  conversion à la charge de qui branche la sauvegarde). `delayDays` (ancienneté en jours de la
    *  plus vieille alerte ouverte du scope) fait aussi basculer le niveau de risque, en plus du
@@ -139,14 +142,18 @@ export function CompanyFieldsEditor({
   };
 
   const removeLevel = (level: string) => {
+    // Un rôle habilité au niveau supprimé est rétrogradé au niveau immédiatement inférieur (il
+    // conserve l'accès à tout ce qu'il voyait déjà sous ce niveau), plutôt que de perdre tout accès.
+    const levels = value.confidentialityLevels;
+    const nextClearance: Partial<Record<Role, string>> = {};
+    for (const [role, stored] of Object.entries(value.roleClearance)) {
+      const current = normalizeClearanceLevel(stored, levels);
+      const next = current === level ? levelBelow(level, levels) : current;
+      if (next) nextClearance[role as Role] = next;
+    }
     onChange({
-      confidentialityLevels: value.confidentialityLevels.filter((l) => l !== level),
-      roleClearance: Object.fromEntries(
-        Object.entries(value.roleClearance).map(([role, levels]) => [
-          role,
-          (levels ?? []).filter((l) => l !== level),
-        ])
-      ),
+      confidentialityLevels: levels.filter((l) => l !== level),
+      roleClearance: nextClearance,
     });
   };
 
@@ -161,10 +168,12 @@ export function CompanyFieldsEditor({
     onChange({ directions: value.directions.filter((d) => d !== direction) });
   };
 
-  const toggleClearance = (role: Role, level: string) => {
-    const current = value.roleClearance[role] ?? [];
-    const next = current.includes(level) ? current.filter((l) => l !== level) : [...current, level];
-    onChange({ roleClearance: { ...value.roleClearance, [role]: next } });
+  /** Choix UNIQUE du niveau d'un rôle ("" = aucun accès aux éléments confidentiels). */
+  const setClearance = (role: Role, level: string) => {
+    const next = { ...value.roleClearance };
+    if (level) next[role] = level;
+    else delete next[role];
+    onChange({ roleClearance: next });
   };
 
   const riskThresholdFor = (level: RiskLevel): string => {
@@ -406,15 +415,24 @@ export function CompanyFieldsEditor({
             <label className="text-xs font-medium text-text-secondary">
               {t(
                 "adminCompanyFields.clearanceLabel",
-                "Habilitations par profil — un levier au niveau X n'est visible que par les profils habilités pour X (un levier sans niveau reste visible par tous)"
+                "Habilitation par profil — un seul niveau par profil ; un élément au niveau X n'est visible que par les profils habilités au niveau X ou à un niveau supérieur (un élément sans niveau reste visible par tous)"
               )}
             </label>
+            <p className="mt-1 text-xs text-text-secondary">
+              {t(
+                "adminCompanyFields.clearanceHierarchyHint",
+                "Ce niveau donne aussi accès aux niveaux inférieurs."
+              )}
+            </p>
             <div className="mt-2 overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-bg-surface border-b border-border">
                     <th className="px-3 py-2 text-left font-semibold text-text-secondary">
                       {t("adminCompanyFields.colProfile", "Profil")}
+                    </th>
+                    <th className="px-3 py-2 text-center font-semibold text-text-secondary">
+                      {t("adminCompanyFields.colNoClearance", "Aucun")}
                     </th>
                     {value.confidentialityLevels.map((level) => (
                       <th
@@ -427,21 +445,45 @@ export function CompanyFieldsEditor({
                   </tr>
                 </thead>
                 <tbody>
-                  {OPERATIONAL_ROLES.map((r) => (
-                    <tr key={r.value} className="border-b border-border last:border-0">
-                      <td className="px-3 py-2 font-medium text-text-primary">{r.label}</td>
-                      {value.confidentialityLevels.map((level) => (
-                        <td key={level} className="px-3 py-2 text-center">
+                  {OPERATIONAL_ROLES.map((r) => {
+                    const current = normalizeClearanceLevel(
+                      value.roleClearance[r.value],
+                      value.confidentialityLevels
+                    );
+                    const currentRank = current ? value.confidentialityLevels.indexOf(current) : -1;
+                    return (
+                      <tr key={r.value} className="border-b border-border last:border-0">
+                        <td className="px-3 py-2 font-medium text-text-primary">{r.label}</td>
+                        <td className="px-3 py-2 text-center">
                           <input
-                            type="checkbox"
-                            checked={(value.roleClearance[r.value] ?? []).includes(level)}
-                            onChange={() => toggleClearance(r.value, level)}
-                            className="h-4 w-4 rounded border-border accent-bp-coral"
+                            type="radio"
+                            name={`clearance-${r.value}`}
+                            aria-label={`${r.label} — ${t("adminCompanyFields.colNoClearance", "Aucun")}`}
+                            checked={!current}
+                            onChange={() => setClearance(r.value, "")}
+                            className="h-4 w-4 border-border accent-bp-coral"
                           />
                         </td>
-                      ))}
-                    </tr>
-                  ))}
+                        {value.confidentialityLevels.map((level, idx) => (
+                          <td
+                            key={level}
+                            className={`px-3 py-2 text-center ${
+                              idx < currentRank ? "bg-bp-coral/5" : ""
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`clearance-${r.value}`}
+                              aria-label={`${r.label} — ${level}`}
+                              checked={current === level}
+                              onChange={() => setClearance(r.value, level)}
+                              className="h-4 w-4 border-border accent-bp-coral"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -15,7 +15,8 @@ import { EXECUTION_LABELS } from "@/lib/hrExecution";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { WorkforceMovement } from "@/types";
 
-const STATUS_COLORS: Record<MovementExecutionStatus, string> = {
+/** Couleurs de statut d'exécution (charte BP) — réutilisées par `MovementProgressByDimensionChart`. */
+export const STATUS_COLORS: Record<MovementExecutionStatus, string> = {
   realized: "#421799",
   overdue: "#FF3C47",
   dueSoon: "#FFB1B5",

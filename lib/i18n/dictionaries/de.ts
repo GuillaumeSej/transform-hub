@@ -917,7 +917,10 @@ const de: Record<string, string> = {
   "adminCompanyFields.newLevelPlaceholder": "Z. B.: Vertraulich",
   "adminCompanyFields.addLevel": "Stufe hinzufügen",
   "adminCompanyFields.clearanceLabel":
-    "Freigaben nach Profil — ein Hebel der Stufe X ist nur für Profile sichtbar, die für X freigegeben sind (ein Hebel ohne Stufe bleibt für alle sichtbar)",
+    "Freigabe nach Profil — eine Stufe pro Profil; ein Element der Stufe X ist nur für Profile sichtbar, die für Stufe X oder eine höhere Stufe freigegeben sind (ein Element ohne Stufe bleibt für alle sichtbar)",
+  "adminCompanyFields.clearanceHierarchyHint":
+    "Diese Stufe gewährt auch Zugriff auf alle niedrigeren Stufen.",
+  "adminCompanyFields.colNoClearance": "Keine",
   "adminCompanyFields.colProfile": "Profil",
   "adminCompanyFields.directionsLabel": "Direktionen / Abteilungen",
   "adminCompanyFields.directionsEmpty":
@@ -1647,6 +1650,9 @@ const de: Record<string, string> = {
   "kpi.summary.atRisk": "Gefährdet",
   "kpi.summary.total": "Summe der Indikatoren",
   "kpi.summary.indicatorsSuffix": "Indikatoren",
+  "kpi.summary.title": "Indikatorstatus",
+  "kpi.summary.byAxis": "Nach Achse",
+  "kpi.summary.ofIndicators": "der Indikatoren",
 
   // ─── Business-KPIs (Indikatoren auf Achsenebene) — KPI-Seite UND Strategie-Dashboard ───
   "businessKpis.title": "Business-KPIs — Marktbeobachtung",

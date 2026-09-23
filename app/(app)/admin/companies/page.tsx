@@ -15,6 +15,7 @@ import {
   type CompanyFormState,
 } from "@/components/admin/CompanyFieldsEditor";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { normalizeRoleClearance } from "@/lib/confidentiality";
 
 const DEFAULT_FORM: CompanyFormState = DEFAULT_COMPANY_FORM;
 
@@ -48,7 +49,7 @@ export default function AdminCompaniesPage() {
       fyEnd: c.fyEnd,
       confidentialityLevels: c.confidentialityLevels ?? [],
       directions: c.directions ?? [],
-      roleClearance: c.roleClearance ?? {},
+      roleClearance: normalizeRoleClearance(c.roleClearance, c.confidentialityLevels ?? []),
       riskThresholds: c.riskThresholds?.map((t) => ({
         level: t.level,
         minAmount: String(t.minAmount / 1000),
@@ -89,7 +90,9 @@ export default function AdminCompaniesPage() {
       } else {
         const id = `c${Date.now()}`;
         await saveCompany({ id, ...common, createdAt: new Date().toISOString().slice(0, 10) });
-        router.push(`/admin/companies/detail?id=${id}`);
+        // `onboarding=strategic` : propose aussitôt d'importer le plan stratégique depuis Excel
+        // (voir `StrategicPlanOnboarding`, rendu par la page de détail).
+        router.push(`/admin/companies/detail?id=${id}&onboarding=strategic`);
       }
       setShowForm(false);
     } catch (err) {

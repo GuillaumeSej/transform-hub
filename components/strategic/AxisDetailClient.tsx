@@ -316,8 +316,10 @@ export function AxisDetailClient() {
           onTrack: t("indicatorStatus.onTrack"),
           atRisk: t("indicatorStatus.atRisk"),
           indicatorsSuffix: t("strategicAxes.indicatorsCount"),
+          title: t("kpi.summary.title", "Santé des indicateurs"),
+          ofIndicators: t("kpi.summary.ofIndicators", "des indicateurs"),
         }}
-        className="mb-4 grid grid-cols-1 gap-3"
+        className="mb-4"
       />
 
       {/* ── Alertes de cascade de dépendance entre chantiers ───────────────────────────────── */}
