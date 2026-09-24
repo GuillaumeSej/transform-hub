@@ -540,34 +540,9 @@ export function LeversPagePerformance() {
     };
   });
 
-  /** Édition inline (double-clic) : les colonnes marquées editable écrivent directement sur le
-   * levier. Les selects (statut/priorité/risque) passent par un mapping label → valeur interne. */
-  const handleCellUpdate = (rowId: string, field: keyof LeverRow, value: string | number) => {
-    const patch: Partial<Lever> = {};
-    if (field === "statusLabel") {
-      const status = data.leverStatuses.find((s) => lifecycle.label(s) === value);
-      if (status) patch.status = status;
-    } else if (field === "netSavings" || field === "fteImpact") {
-      patch[field] = Number(value);
-    } else if (
-      field === "name" ||
-      field === "owner" ||
-      field === "sponsor" ||
-      field === "geography" ||
-      field === "country" ||
-      field === "function" ||
-      field === "costCenter" ||
-      field === "start" ||
-      field === "end"
-    ) {
-      patch[field] = String(value);
-    } else {
-      return;
-    }
-    data.updateLever(rowId, patch);
-    showToast(t("leverForm.updated"), "", "success");
-  };
-
+  // Pas d'édition inline dans ce tableau (décision audit 2026-09-24) : le 1er clic d'un double-clic
+  // ouvrait la fiche, l'édition était donc inatteignable, et plusieurs colonnes « éditables »
+  // étaient ignorées en silence. Toute modification passe par « Modifier le levier » de la fiche.
   const columns: ColumnDef<LeverRow>[] = [
     // ── Identification ──
     {
@@ -591,7 +566,6 @@ export function LeversPagePerformance() {
     {
       key: "name",
       label: t("levers.columnName"),
-      editable: true,
       mobile: "primary",
       width: "220px",
       render: (r) => <strong>{r.name}</strong>,
@@ -616,7 +590,6 @@ export function LeversPagePerformance() {
     {
       key: "owner",
       label: t("leverForm.owner"),
-      editable: true,
       mobile: "primary",
       width: "150px",
       render: (r) => (
@@ -628,7 +601,6 @@ export function LeversPagePerformance() {
     {
       key: "sponsor",
       label: t("leverForm.sponsor"),
-      editable: true,
       mobile: "hide",
       width: "150px",
     },
@@ -637,24 +609,21 @@ export function LeversPagePerformance() {
     {
       key: "geography",
       label: t("leverForm.geography"),
-      editable: true,
       mobile: "hide",
       width: "110px",
     },
     {
       key: "country",
       label: t("leverForm.country"),
-      editable: true,
       mobile: "hide",
       width: "110px",
     },
-    { key: "entity", label: t("leverForm.entity"), editable: true, mobile: "hide", width: "150px" },
+    { key: "entity", label: t("leverForm.entity"), mobile: "hide", width: "150px" },
     // ── Financier ──
     {
       key: "netSavings",
       label: t("levers.column.netSavings", "Économies nettes (€M)"),
       align: "right",
-      editable: true,
       type: "number",
       mobile: "secondary",
       width: "110px",
@@ -681,7 +650,6 @@ export function LeversPagePerformance() {
       key: "fteImpact",
       label: t("levers.column.fteImpact", "ETP impacté"),
       align: "right",
-      editable: true,
       type: "number",
       mobile: "hide",
       width: "100px",
@@ -690,7 +658,6 @@ export function LeversPagePerformance() {
       key: "capex",
       label: t("leverForm.capex", "CAPEX"),
       align: "right",
-      editable: true,
       type: "number",
       mobile: "hide",
       width: "90px",
@@ -700,7 +667,6 @@ export function LeversPagePerformance() {
       key: "opexOneOff",
       label: t("levers.column.opexOneOff", "OPEX ponctuel"),
       align: "right",
-      editable: true,
       type: "number",
       mobile: "hide",
       width: "110px",
@@ -711,7 +677,6 @@ export function LeversPagePerformance() {
       key: "statusLabel",
       label: t("levers.columnMaturity"),
       filterable: false, // filtre Maturité retiré en vue Table
-      editable: true,
       type: "select",
       options: data.leverStatuses.map((s) => lifecycle.label(s)),
       mobile: "secondary",
@@ -923,7 +888,6 @@ export function LeversPagePerformance() {
           <EditableTable
             data={activeRows}
             columns={visibleColumns}
-            onCellUpdate={handleCellUpdate}
             onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
             searchPlaceholder={t("levers.searchPlaceholder")}
             defaultSort={{ key: "risk", direction: "desc" }}
@@ -938,7 +902,6 @@ export function LeversPagePerformance() {
               <EditableTable
                 data={cancelledRows}
                 columns={visibleColumns}
-                onCellUpdate={handleCellUpdate}
                 onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
                 searchPlaceholder={t("levers.searchPlaceholder")}
                 defaultSort={{ key: "risk", direction: "desc" }}
