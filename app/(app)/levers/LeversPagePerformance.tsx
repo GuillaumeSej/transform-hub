@@ -40,6 +40,8 @@ import { Modal } from "@/components/shared/Modal";
 import { initialsFromName, LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter } from "@/lib/filterUtils";
+import { matchesLeverSearch } from "@/lib/leverSearch";
+import { leversPageTitleKey } from "@/lib/nav-config";
 import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
 
 type LeverRow = Lever & {
@@ -51,6 +53,8 @@ type LeverRow = Lever & {
    *  stade), même valeur que Kanban, arborescence, fiche et export. */
   progressPct: number;
   wsName: string;
+  /** Nom du programme (colonne "Programme", vue multi-programmes) — cherché par la recherche. */
+  programName: string;
   statusLabel: string;
   costCenterLabel: string;
   hasAlert: boolean;
@@ -548,6 +552,7 @@ export function LeversPagePerformance() {
       reforecastNet: engine.displayedReforecastNet(l).value,
       progressPct: engine.leverProgressPct(l),
       wsName: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
+      programName: showProgramColumn ? programLabel(l) : "",
       statusLabel: lifecycle.label(l.status),
       costCenterLabel: (() => {
         const centers = (l.actions ?? [])
@@ -722,6 +727,13 @@ export function LeversPagePerformance() {
   // l'arborescence, voir Kanban.tsx CancelledLeversStrip et LeverLibraryTree.tsx).
   const activeRows = rows.filter((r) => r.status !== "cancelled");
   const cancelledRows = rows.filter((r) => r.status === "cancelled");
+  // UNE seule recherche pour les deux tableaux (saisie dans celui des actifs), avec le MÊME
+  // prédicat `matchesLeverSearch` (champs visibles uniquement) : auparavant le tableau des
+  // abandonnés avait sa propre recherche, vide, et listait donc tous les abandonnés quel que soit
+  // le terme saisi au-dessus (ex. « PROC » laissait DIG-002) — export compris.
+  const [leverSearch, setLeverSearch] = useState("");
+  const searchedCancelledRows = cancelledRows.filter((r) => matchesLeverSearch(r, leverSearch));
+  const showCancelledTable = searchedCancelledRows.length > 0;
   // Export = exactement ce qui est affiché : en vue Tableau, les lignes des deux tableaux (actifs
   // puis abandonnés) après leur recherche/filtres de colonnes et dans leur ordre de tri ; en vue
   // Kanban/Arborescence (sans recherche), les leviers filtrés par la barre de filtres.
@@ -730,12 +742,20 @@ export function LeversPagePerformance() {
   const leversToExport = useMemo(() => {
     if (view !== "table" || visibleActiveIds === null) return filteredLevers;
     const byId = new Map(filteredLevers.map((l) => [l.id, l]));
-    const cancelledIds =
-      cancelledRows.length === 0 ? [] : (visibleCancelledIds ?? cancelledRows.map((r) => r.id));
+    const cancelledIds = !showCancelledTable
+      ? []
+      : (visibleCancelledIds ?? searchedCancelledRows.map((r) => r.id));
     return [...visibleActiveIds, ...cancelledIds]
       .map((id) => byId.get(id))
       .filter((l): l is Lever => !!l);
-  }, [view, filteredLevers, visibleActiveIds, visibleCancelledIds, cancelledRows]);
+  }, [
+    view,
+    filteredLevers,
+    visibleActiveIds,
+    visibleCancelledIds,
+    showCancelledTable,
+    searchedCancelledRows,
+  ]);
 
   // Entreprise sans aucun Plan Performance : pas de programme sur lequel scoper la table, donc
   // rien à afficher (même repli que le dashboard exécutif, voir DashboardPagePerformance).
@@ -744,9 +764,7 @@ export function LeversPagePerformance() {
       <div className="animate-fade-up">
         <div className="mb-5">
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            {user && (hasRole(user, "lever") || hasRole(user, "sponsor"))
-              ? t("levers.title.mine")
-              : t("levers.title.library")}
+            {t(leversPageTitleKey(user))}
           </h1>
         </div>
         <div className="rounded-lg border border-border bg-white p-10 text-center">
@@ -766,9 +784,7 @@ export function LeversPagePerformance() {
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
         <div>
           <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
-            {user && (hasRole(user, "lever") || hasRole(user, "sponsor"))
-              ? t("levers.title.mine")
-              : t("levers.title.library")}
+            {t(leversPageTitleKey(user))}
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -924,14 +940,19 @@ export function LeversPagePerformance() {
             defaultSort={{ key: "risk", direction: "desc" }}
             readOnly={readOnly}
             onVisibleIdsChange={setVisibleActiveIds}
+            search={leverSearch}
+            onSearchChange={setLeverSearch}
+            searchMatcher={matchesLeverSearch}
           />
-          {cancelledRows.length > 0 && (
+          {showCancelledTable && (
             <div>
               <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-tertiary">
-                {t("shared.kanban.cancelled", "Abandonnés")} ({cancelledRows.length})
+                {t("shared.kanban.cancelled", "Abandonnés")} ({searchedCancelledRows.length})
               </div>
+              {/* Lignes déjà filtrées par la recherche commune ci-dessus — pas de 2e champ. */}
               <EditableTable
-                data={cancelledRows}
+                data={searchedCancelledRows}
+                hideSearch
                 columns={visibleColumns}
                 onRowClick={(row) => router.push(`/levers/detail?id=${row.id}`)}
                 searchPlaceholder={t("levers.searchPlaceholder")}

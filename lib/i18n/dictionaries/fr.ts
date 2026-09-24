@@ -2847,6 +2847,8 @@ const fr: Record<string, string> = {
   "finance.hierarchyTable.level": "Niveau",
   "finance.hierarchyTable.export": "Exporter",
   "finance.hierarchyTable.total": "Total",
+  "finance.hierarchyTable.totalHint":
+    "Totaux calculés sur les montants non arrondis (mêmes valeurs que le dashboard) — la somme des lignes arrondies peut différer de ±0,1.",
   "finance.hierarchyTable.note":
     "Planifié initial = plan figé (tous leviers). Réactualisé et réalisé excluent les leviers annulés ; « Annulé » = plan des leviers annulés ; « En retard » = reste à réaliser des leviers en retard.",
   "finance.hierarchyTable.allYears": "Toutes les années",

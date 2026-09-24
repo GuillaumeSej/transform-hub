@@ -1,4 +1,4 @@
-import { savingsTriple } from "@/lib/dashboardSavings";
+import { financeTotals, savingsTriple } from "@/lib/dashboardSavings";
 import { describe, it, expect } from "vitest";
 import * as engine from "@/lib/engine";
 import {
@@ -554,6 +554,30 @@ describe("savingsWaterfall & financeByHierarchyLevel", () => {
     expect(rows.find((r) => r.nodeId === "__unattributed__")?.planned).toBe(3);
     const cc = engine.financeByHierarchyLevel(d, company, 1, nodes);
     expect(cc.map((r) => r.nodeId).sort()).toEqual(["__unattributed__", "cc1", "cc2"]);
+  });
+  it("Finance totals = dashboard figures (computed from unrounded rows, same lever scope)", () => {
+    // 3 lignes à 0,14 (+ un abandonné 0,14 en cc1) : les lignes arrondies (0,1 / 0,3) sommées
+    // donnaient 0,3 / 0,5 alors que le dashboard affiche 0,4 / 0,6 (QA : 39,3 vs 39,4).
+    const small = [
+      lever({ id: "X", hierarchyLeafId: "cc1", netSavings: 0.14 }),
+      lever({ id: "Y", hierarchyLeafId: "cc2", netSavings: 0.14 }),
+      lever({ id: "Z", netSavings: 0.14 }),
+      lever({ id: "K", hierarchyLeafId: "cc1", netSavings: 0.14, status: "cancelled" }),
+    ];
+    const ds = data(small);
+    const w = engine.savingsWaterfall(ds);
+    const rounded = engine.financeByHierarchyLevel(ds, company, 1, nodes);
+    expect(financeTotals(rounded).reforecast).toBe(0.3); // l'ancien calcul, faux
+    const rows = engine.financeByHierarchyLevel(ds, company, 1, nodes, { unrounded: true });
+    const totals = financeTotals(rows);
+    expect(totals.reforecast).toBe(w.target);
+    expect(totals.reforecast).toBe(0.4);
+    expect(totals.planned).toBe(w.initial);
+    expect(totals.planned).toBe(0.6);
+    expect(totals.cancelled).toBe(w.cancelled);
+    expect(totals.realized).toBe(w.realized);
+    expect(totals.planned).toBe(savingsTriple(small).planned);
+    expect(totals.reforecast).toBe(savingsTriple(small).reforecast);
   });
 });
 

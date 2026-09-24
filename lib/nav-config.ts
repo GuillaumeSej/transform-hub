@@ -453,6 +453,16 @@ export function resolveUserNav(
   return result;
 }
 
+/** Clé i18n du titre de la page `/levers` (Plan Performance) : le libellé de l'item de nav
+ *  "levers" que l'utilisateur voit dans la barre latérale (même résolution `resolveUserNav`, donc
+ *  même profil gagnant en cas de cumul) — la nav fait foi, le titre ne peut plus diverger
+ *  (ex. sponsor : « Leviers par étape » dans la nav, pas « Mes leviers »). Repli : bibliothèque. */
+export function leversPageTitleKey(
+  user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
+): string {
+  return resolveUserNav(user).find((item) => item.id === "levers")?.label ?? "nav.leverLibrary";
+}
+
 /** `RoleDefinition` (label/short) à afficher pour l'utilisateur — pour un simple badge texte
  *  (Sidebar/Topbar), PAS pour des vérifications de permission. Priorité : profil Plan Performance,
  *  puis profil Plan Stratégique, puis admin global, puis admin entreprise. `null` = aucun profil ni

@@ -49,6 +49,15 @@ export type EditableTableProps<T extends { id: string }> = {
   /** Reçoit les ids des lignes réellement affichées (après recherche, filtres de colonnes et tri),
    *  à chaque changement — ex. pour exporter exactement ce que voit l'utilisateur. */
   onVisibleIdsChange?: (ids: string[]) => void;
+  /** Recherche contrôlée par l'appelant (optionnelle) — ex. une même saisie appliquée à plusieurs
+   *  tableaux. Sans elle, la recherche reste un état local du tableau. */
+  search?: string;
+  onSearchChange?: (search: string) => void;
+  /** Prédicat de recherche (optionnel) remplaçant la recherche par défaut sur toutes les colonnes —
+   *  ex. restreindre aux seuls champs texte visibles. */
+  searchMatcher?: (row: T, query: string) => boolean;
+  /** Masque le champ de recherche (la recherche contrôlée `search` s'applique quand même). */
+  hideSearch?: boolean;
 };
 
 /**
@@ -67,11 +76,20 @@ export function EditableTable<T extends { id: string }>({
   className,
   readOnly = false,
   onVisibleIdsChange,
+  search: controlledSearch,
+  onSearchChange,
+  searchMatcher,
+  hideSearch = false,
 }: EditableTableProps<T>) {
   const { t } = useTranslation();
   const resolvedSearchPlaceholder =
     searchPlaceholder ?? t("shared.editableTable.searchPlaceholder", "Rechercher...");
-  const [search, setSearch] = useState("");
+  const [localSearch, setLocalSearch] = useState("");
+  const search = controlledSearch ?? localSearch;
+  const setSearch = (value: string) => {
+    if (controlledSearch === undefined) setLocalSearch(value);
+    onSearchChange?.(value);
+  };
   const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
   const [sort, setSort] = useState(defaultSort ?? null);
   const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
@@ -85,14 +103,18 @@ export function EditableTable<T extends { id: string }>({
   const filtered = useMemo(() => {
     let rows = data;
     if (search.trim()) {
-      const q = search.toLowerCase();
-      rows = rows.filter((row) =>
-        columns.some((c) =>
-          String(row[c.key] ?? "")
-            .toLowerCase()
-            .includes(q)
-        )
-      );
+      if (searchMatcher) {
+        rows = rows.filter((row) => searchMatcher(row, search));
+      } else {
+        const q = search.toLowerCase();
+        rows = rows.filter((row) =>
+          columns.some((c) =>
+            String(row[c.key] ?? "")
+              .toLowerCase()
+              .includes(q)
+          )
+        );
+      }
     }
     Object.entries(columnFilters).forEach(([key, value]) => {
       if (!value || value.length === 0) return;
@@ -110,7 +132,7 @@ export function EditableTable<T extends { id: string }>({
       });
     }
     return rows;
-  }, [data, search, columnFilters, sort, columns]);
+  }, [data, search, searchMatcher, columnFilters, sort, columns]);
 
   // Clé texte plutôt que tableau : `data` est souvent recalculé à chaque rendu par l'appelant, un
   // tableau neuf à chaque fois déclencherait l'effet (et un setState parent) en boucle.
@@ -177,13 +199,15 @@ export function EditableTable<T extends { id: string }>({
   return (
     <div className={className}>
       <div className="mb-3.5 flex flex-wrap items-center gap-2 rounded-md border border-border bg-white p-3">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={resolvedSearchPlaceholder}
-          className="min-w-[220px] rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none"
-        />
+        {!hideSearch && (
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={resolvedSearchPlaceholder}
+            className="min-w-[220px] rounded-sm border border-border px-2.5 py-1.5 text-xs focus:border-black focus:outline-none"
+          />
+        )}
         {filterableColumns.map((c) => (
           <MultiSelect
             key={c.key}

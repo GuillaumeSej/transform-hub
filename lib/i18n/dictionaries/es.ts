@@ -2667,6 +2667,8 @@ const es: Record<string, string> = {
   "finance.hierarchyTable.level": "Nivel",
   "finance.hierarchyTable.export": "Exportar",
   "finance.hierarchyTable.total": "Total",
+  "finance.hierarchyTable.totalHint":
+    "Los totales se calculan con importes sin redondear (mismas cifras que el panel) — la suma de las filas redondeadas puede diferir en ±0,1.",
   "finance.hierarchyTable.note":
     "Planificado inicial = plan congelado (todas las palancas). Reproyectado y realizado excluyen las palancas canceladas; «Cancelado» = plan de las palancas canceladas; «Retrasado» = resto por realizar de las palancas retrasadas.",
   "finance.hierarchyTable.allYears": "Todos los años",

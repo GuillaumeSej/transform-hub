@@ -56,7 +56,11 @@ const COLUMNS: { key: Exclude<FinanceSortKey, "label">; labelKey: string; label:
   { key: "realized", labelKey: "finance.hierarchyTable.col.realized", label: "Réalisé" },
 ];
 
-const fmt = (v: number) => v.toFixed(1);
+/** Arrondi d'AFFICHAGE uniquement : lignes et totaux sont calculés sur des montants non arrondis
+ *  (`unrounded: true` ci-dessous), le total n'est donc plus la somme de lignes déjà arrondies — il
+ *  égale au dixième près les mêmes agrégats du dashboard (KPI, cascade). */
+const r1 = (v: number) => Math.round(v * 10) / 10;
+const fmt = (v: number) => r1(v).toFixed(1);
 
 /** Tableau Finance (€M) par niveau de la hiérarchie financière (P&L, centre de coût…), avec
  *  totaux, tri par colonne, export Excel et dépliage parent → enfants (niveau suivant). Les
@@ -118,6 +122,7 @@ export function FinanceHierarchyTable({
       level
         ? engine.financeByHierarchyLevel(data, company, level.order, hierarchyNodes, {
             years: yearsOpt,
+            unrounded: true,
           })
         : [],
     [data, company, level, hierarchyNodes, yearsOpt]
@@ -127,6 +132,7 @@ export function FinanceHierarchyTable({
       childLevel
         ? engine.financeByHierarchyLevel(data, company, childLevel.order, hierarchyNodes, {
             years: yearsOpt,
+            unrounded: true,
           })
         : [],
     [data, company, childLevel, hierarchyNodes, yearsOpt]
@@ -153,7 +159,7 @@ export function FinanceHierarchyTable({
     const rows: Record<string, string | number>[] = [];
     const toRow = (label: string, values: Record<Exclude<FinanceSortKey, "label">, number>) => {
       const row: Record<string, string | number> = { [level.label]: label };
-      for (const c of COLUMNS) row[t(c.labelKey, c.label)] = values[c.key];
+      for (const c of COLUMNS) row[t(c.labelKey, c.label)] = r1(values[c.key]);
       return row;
     };
     for (const r of tree) rows.push(toRow(r.label, r));
@@ -346,7 +352,13 @@ export function FinanceHierarchyTable({
                   </Fragment>
                 );
               })}
-              <tr className="bg-neutral-100 font-bold text-primary">
+              <tr
+                className="bg-neutral-100 font-bold text-primary"
+                title={t(
+                  "finance.hierarchyTable.totalHint",
+                  "Totaux calculés sur les montants non arrondis (mêmes valeurs que le dashboard) — la somme des lignes arrondies peut différer de ±0,1."
+                )}
+              >
                 <td className="px-3 py-2">{t("finance.hierarchyTable.total", "Total")}</td>
                 {COLUMNS.map((c) => (
                   <td key={c.key} className={numCell}>

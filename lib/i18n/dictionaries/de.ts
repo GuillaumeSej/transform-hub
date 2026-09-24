@@ -2672,6 +2672,8 @@ const de: Record<string, string> = {
   "finance.hierarchyTable.level": "Ebene",
   "finance.hierarchyTable.export": "Exportieren",
   "finance.hierarchyTable.total": "Gesamt",
+  "finance.hierarchyTable.totalHint":
+    "Summen werden aus ungerundeten Beträgen berechnet (gleiche Werte wie im Dashboard) — die Summe der gerundeten Zeilen kann um ±0,1 abweichen.",
   "finance.hierarchyTable.note":
     "Ursprünglich geplant = fixierter Plan (alle Hebel). Neuprognose und Ist schließen stornierte Hebel aus; „Storniert“ = Plan der stornierten Hebel; „Verspätet“ = verbleibender Rest verspäteter Hebel.",
   "finance.hierarchyTable.allYears": "Alle Jahre",

@@ -2202,13 +2202,17 @@ function impactMatchesYears(imp: LeverImpact, years: Set<number>): boolean {
  * impact) est nécessairement une approximation proportionnelle ; réactualisé/réalisé suivent le
  * même prorata pour rester cohérents entre colonnes plutôt que de mélanger une colonne exacte et une
  * colonne approximée.
+ *
+ * `opts.unrounded` : montants NON arrondis — à utiliser pour tout total (voir `financeTotals`) :
+ * sommer des lignes déjà arrondies à 0,1 dérivait du total réel (ex. Réactualisé 39,3 au tableau
+ * Finance contre 39,4 au dashboard pour les mêmes leviers). Par défaut, lignes arrondies à 0,1.
  */
 export function financeByHierarchyLevel(
   data: BeTrackData,
   company: { hierarchyLevels?: HierarchyLevelDef[] } | null | undefined,
   levelOrder: number,
   nodes: HierarchyNode[],
-  opts: { today?: Date; years?: Set<number> } = {}
+  opts: { today?: Date; years?: Set<number>; unrounded?: boolean } = {}
 ): FinanceHierarchyRow[] {
   const today = opts.today ?? new Date();
   const years = opts.years && opts.years.size > 0 ? opts.years : null;
@@ -2242,7 +2246,8 @@ export function financeByHierarchyLevel(
   };
 
   for (const l of data.levers) {
-    const locked = l.lockedPlan?.netSavings ?? l.netSavings;
+    // Même définition que `plannedInitialNet` (KPI / cascade du dashboard).
+    const locked = displayedLockedPlanNet(l).value;
     const isCancelled = l.status === "cancelled";
     const refo = isCancelled ? 0 : displayedReforecastNet(l).value;
     const real = isCancelled ? 0 : realizedSavings(l);
@@ -2296,14 +2301,19 @@ export function financeByHierarchyLevel(
       row.realized += scaledReal * f;
     }
   }
+  const round = !opts.unrounded;
   return Array.from(rows.values())
-    .map((r) => ({
-      ...r,
-      planned: r1(r.planned),
-      reforecast: r1(r.reforecast),
-      cancelled: r1(r.cancelled),
-      late: r1(r.late),
-      realized: r1(r.realized),
-    }))
+    .map((r) =>
+      !round
+        ? r
+        : {
+            ...r,
+            planned: r1(r.planned),
+            reforecast: r1(r.reforecast),
+            cancelled: r1(r.cancelled),
+            late: r1(r.late),
+            realized: r1(r.realized),
+          }
+    )
     .sort((a, b) => b.planned - a.planned);
 }

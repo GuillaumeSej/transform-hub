@@ -2690,6 +2690,8 @@ const en: Record<string, string> = {
   "finance.hierarchyTable.level": "Level",
   "finance.hierarchyTable.export": "Export",
   "finance.hierarchyTable.total": "Total",
+  "finance.hierarchyTable.totalHint":
+    "Totals are computed from unrounded amounts (same figures as the dashboard) — the sum of the rounded rows may differ by ±0.1.",
   "finance.hierarchyTable.note":
     "Initial planned = locked plan (all initiatives). Reforecast and actual exclude cancelled initiatives; “Cancelled” = plan of cancelled initiatives; “Late” = remaining to be delivered on late initiatives.",
   "finance.hierarchyTable.allYears": "All years",

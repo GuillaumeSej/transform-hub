@@ -161,6 +161,9 @@ export function sortFinanceRows<T extends FinanceHierarchyRow>(
   );
 }
 
+/** Totaux du tableau Finance, arrondis UNE fois à 0,1. Passer des lignes NON arrondies
+ *  (`financeByHierarchyLevel(..., { unrounded: true })`) : sommer des lignes déjà arrondies dérive
+ *  du total réel (39,3 vs 39,4 au dashboard pour les mêmes leviers). */
 export function financeTotals(rows: FinanceHierarchyRow[]) {
   const sum = (k: "planned" | "reforecast" | "cancelled" | "late" | "realized") =>
     r1(rows.reduce((s, r) => s + r[k], 0));
