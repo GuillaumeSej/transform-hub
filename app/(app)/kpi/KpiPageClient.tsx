@@ -31,6 +31,7 @@ import {
 } from "@/components/strategic/YearSegmentedControl";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
 import { KpiTableView } from "@/components/strategic/KpiTableView";
+import { Modal } from "@/components/shared/Modal";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
@@ -1056,6 +1057,12 @@ export function KpiPageClient() {
   // sont lus sur la dernière mesure DE L'ANNÉE choisie. Défaut = historique complet, soit la
   // dernière mesure connue (comportement historique de la vue).
   const tableYear = useYearSelection(measurements, "all");
+  // Vue Tableau : clic sur une ligne = la carte complète du KPI (graphique, saisie…) en pop-up,
+  // sans basculer en vue Cartes.
+  const [popupIndicatorId, setPopupIndicatorId] = useState<string | null>(null);
+  const popupIndicator = popupIndicatorId
+    ? indicators.find((indicator) => indicator.id === popupIndicatorId)
+    : undefined;
 
   const renderCard = (indicator: Indicator) => (
     <IndicatorCard
@@ -1315,6 +1322,7 @@ export function KpiPageClient() {
               orphans={orphans}
               measurements={tableYear.filtered}
               baselineMeasurements={measurements}
+              onIndicatorClick={setPopupIndicatorId}
               labels={{
                 axisUnknown: t("kpi.axisUnknown"),
                 indicator: t("kpi.table.indicator"),
@@ -1351,6 +1359,19 @@ export function KpiPageClient() {
           )}
         </div>
       )}
+
+      <Modal
+        open={!!popupIndicator}
+        onOpenChange={(open) => {
+          if (!open) setPopupIndicatorId(null);
+        }}
+        title={popupIndicator?.name ?? ""}
+        maxWidth="960px"
+      >
+        {popupIndicator && (
+          <div className="max-h-[75vh] overflow-y-auto">{renderCard(popupIndicator)}</div>
+        )}
+      </Modal>
     </div>
   );
 }

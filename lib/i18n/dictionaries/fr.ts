@@ -2053,6 +2053,7 @@ const fr: Record<string, string> = {
   "kpi.table.indicator": "Indicateur",
   "kpi.table.baseline": "Référence",
   "kpi.table.baselineHint": "Valeur au début du plan stratégique",
+  "kpi.table.openIndicator": "Voir le détail du KPI",
   "kpi.table.current": "Actuel",
   "kpi.table.target": "Cible",
   "kpi.table.finalTarget": "Cible finale",

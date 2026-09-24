@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import { Maximize2 } from "lucide-react";
 import {
   baselineMeasurement,
   computeIndicatorDelta,
@@ -57,6 +58,7 @@ export function KpiTableView({
   measurements,
   baselineMeasurements,
   labels,
+  onIndicatorClick,
 }: {
   grouped: {
     axis: StrategicAxis;
@@ -68,6 +70,9 @@ export function KpiTableView({
   /** Historique COMPLET (non filtré par année) d'où est tirée la valeur initiale du calcul
    *  d'avancement — voir `computeIndicatorDelta`. Défaut : `measurements`. */
   baselineMeasurements?: IndicatorMeasurement[];
+  /** Clic sur une ligne : ouvre la carte du KPI (graphique compris) en pop-up, sans quitter la
+   *  vue Tableau. */
+  onIndicatorClick?: (indicatorId: string) => void;
   labels: {
     axisUnknown: string;
     indicator: string;
@@ -114,12 +119,46 @@ export function KpiTableView({
     return (
       <tr
         key={indicator.id}
-        className={`border-b border-l-4 border-border transition-colors last:border-b-0 hover:bg-bp-coral/[0.04] ${
-          ROW_ACCENT[bucket]
-        } ${index % 2 === 1 ? "bg-neutral-50/60" : "bg-white"}`}
+        onClick={onIndicatorClick ? () => onIndicatorClick(indicator.id) : undefined}
+        onKeyDown={
+          onIndicatorClick
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onIndicatorClick(indicator.id);
+                }
+              }
+            : undefined
+        }
+        tabIndex={onIndicatorClick ? 0 : undefined}
+        aria-label={
+          onIndicatorClick
+            ? `${t("kpi.table.openIndicator", "Voir le détail du KPI")} : ${indicator.name}`
+            : undefined
+        }
+        className={`group border-b border-l-4 border-border transition-colors last:border-b-0 hover:bg-bp-coral/[0.04] ${
+          onIndicatorClick
+            ? "cursor-pointer focus:outline-none focus-visible:bg-bp-coral/[0.06]"
+            : ""
+        } ${ROW_ACCENT[bucket]} ${index % 2 === 1 ? "bg-neutral-50/60" : "bg-white"}`}
       >
         <td className={td}>
-          <div className="font-medium">{indicator.name}</div>
+          <div className="flex items-center gap-1.5 font-medium">
+            <span
+              className={
+                onIndicatorClick ? "group-hover:text-bp-coral group-hover:underline" : undefined
+              }
+            >
+              {indicator.name}
+            </span>
+            {onIndicatorClick && (
+              <Maximize2
+                size={12}
+                aria-hidden
+                className="shrink-0 text-tertiary opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100"
+              />
+            )}
+          </div>
           {chantierName && <div className="text-[11px] text-text-secondary">{chantierName}</div>}
           <IndicatorMetaLine indicator={indicator} className="mt-1" />
         </td>

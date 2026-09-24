@@ -1948,6 +1948,7 @@ const en: Record<string, string> = {
   "kpi.table.indicator": "Indicator",
   "kpi.table.baseline": "Baseline",
   "kpi.table.baselineHint": "Value at the start of the strategic plan",
+  "kpi.table.openIndicator": "View KPI details",
   "kpi.table.current": "Current",
   "kpi.table.target": "Target",
   "kpi.table.finalTarget": "Final target",
