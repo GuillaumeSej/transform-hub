@@ -37,6 +37,12 @@ import {
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { isAnyAdmin } from "@/lib/roleProfiles";
 import {
+  applyMeasurementEdit,
+  findPeriodCollision,
+  MeasurementPeriodCollisionError,
+  type MeasurementEditPatch,
+} from "@/lib/kpiHistory";
+import {
   buildUpdateAuditEntries,
   makeCreatedAuditEntry,
   makeDeletedAuditEntry,
@@ -183,6 +189,14 @@ export type StrategicData = {
     input: Pick<IndicatorMeasurement, "indicatorId" | "period" | "reportedBy"> &
       Partial<Pick<IndicatorMeasurement, "value" | "note">>
   ) => Promise<IndicatorMeasurement>;
+  /** Corrige une mesure publiée (valeur / commentaire / période) et recalcule le statut de
+   *  l'indicateur. Saisie d'origine (`reportedBy`/`reportedAt`) conservée, `updatedBy`/`updatedAt`
+   *  posés. Lève `MeasurementPeriodCollisionError` si la nouvelle période est déjà prise par une
+   *  autre mesure du même indicateur. */
+  updateMeasurement: (id: string, patch: MeasurementEditPatch) => Promise<IndicatorMeasurement>;
+  /** Supprime une mesure ET recalcule le statut de l'indicateur. */
+  deleteMeasurement: (id: string) => Promise<void>;
+  /** Alias historique de `deleteMeasurement`. */
   removeMeasurement: (id: string) => Promise<void>;
 
   /** Ajoute une ligne de staffing sur un chantier. Pas d'`updateStaffing` : une ligne n'a que
@@ -753,9 +767,64 @@ export function useStrategicData(
     [companyId]
   );
 
-  const removeMeasurement = useCallback<StrategicData["removeMeasurement"]>(async (id) => {
-    await deleteIndicatorMeasurement(id);
-  }, []);
+  /** Recalcule/persiste le statut calculé d'un indicateur sur une base de mesures donnée — même
+   *  règle que `addMeasurement` (`statusOverride` jamais touché). */
+  const recomputeIndicatorStatus = useCallback(
+    async (indicatorId: string, nextMeasurements: IndicatorMeasurement[]) => {
+      const indicator = indicatorsRef.current.find((i) => i.id === indicatorId);
+      if (!indicator) return;
+      const status = computeIndicatorStatus(indicator, nextMeasurements);
+      if (status !== indicator.status) {
+        await saveIndicator({ ...indicator, status, lastUpdate: nowDate() });
+      }
+    },
+    []
+  );
+
+  const updateMeasurement = useCallback<StrategicData["updateMeasurement"]>(
+    async (id, patch) => {
+      const existing = measurementsRef.current.find((m) => m.id === id);
+      if (!existing) throw new Error("updateMeasurement: mesure introuvable");
+      if (
+        patch.period !== undefined &&
+        findPeriodCollision(measurementsRef.current, existing.indicatorId, patch.period, id)
+      ) {
+        throw new MeasurementPeriodCollisionError(patch.period.trim());
+      }
+      const next = applyMeasurementEdit(
+        existing,
+        patch,
+        user?.username ?? auditUser,
+        new Date().toISOString()
+      );
+      if (!next) throw new Error("updateMeasurement: valeur ou commentaire requis");
+      // `setDoc` sur le MÊME id (écrasement complet) : autorisé par la règle `update` de
+      // `indicatorMeasurements` (companyId inchangé) — et c'est ce qui permet de RETIRER un champ
+      // vidé (valeur/commentaire), ce qu'un merge ne ferait pas.
+      await saveIndicatorMeasurement(next);
+      await recomputeIndicatorStatus(existing.indicatorId, [
+        ...measurementsRef.current.filter((m) => m.id !== id),
+        next,
+      ]);
+      return next;
+    },
+    [user?.username, auditUser, recomputeIndicatorStatus]
+  );
+
+  const deleteMeasurement = useCallback<StrategicData["deleteMeasurement"]>(
+    async (id) => {
+      const existing = measurementsRef.current.find((m) => m.id === id);
+      await deleteIndicatorMeasurement(id);
+      if (existing) {
+        await recomputeIndicatorStatus(
+          existing.indicatorId,
+          measurementsRef.current.filter((m) => m.id !== id)
+        );
+      }
+    },
+    [recomputeIndicatorStatus]
+  );
+  const removeMeasurement = deleteMeasurement;
 
   const createStaffing = useCallback<StrategicData["createStaffing"]>(
     async (input) => {
@@ -809,6 +878,8 @@ export function useStrategicData(
     updateIndicator,
     removeIndicator,
     addMeasurement,
+    updateMeasurement,
+    deleteMeasurement,
     removeMeasurement,
     createStaffing,
     removeStaffing,

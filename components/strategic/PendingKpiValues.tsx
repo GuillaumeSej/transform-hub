@@ -38,6 +38,13 @@ export function PendingKpiValues({
             className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-border bg-bg-surface/60 px-2 py-1 text-xs italic text-text-secondary opacity-70"
           >
             <Clock size={11} className="text-rag-amber" />
+            {p.measurementId && (
+              <span className="not-italic font-semibold uppercase tracking-wide text-[10px]">
+                {p.remove
+                  ? t("kpi.measurement.pendingDeletion", "Suppression")
+                  : t("kpi.measurement.pendingCorrection", "Correction")}
+              </span>
+            )}
             <span className="font-medium">{p.period}</span>
             <span>
               {p.value !== undefined ? `${p.value}${unit ? ` ${unit}` : ""}` : (p.note ?? "—")}

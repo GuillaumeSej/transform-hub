@@ -8,6 +8,10 @@ import {
   measurementGap,
   periodYear,
   submitIndicatorValue,
+  applyMeasurementEdit,
+  findPeriodCollision,
+  isBaseline,
+  measurementLabel,
 } from "@/lib/kpiHistory";
 import type { IndicatorMeasurement } from "@/types";
 
@@ -54,5 +58,60 @@ describe("kpiHistory", () => {
       note: "  ",
     });
     expect(add).toHaveBeenCalledWith({ indicatorId: "i", period: "2026", reportedBy: "u" });
+  });
+});
+
+describe("correction d'une mesure", () => {
+  const base: IndicatorMeasurement = {
+    id: "A",
+    companyId: "c",
+    indicatorId: "i",
+    period: "2026-01",
+    value: 5,
+    note: "n",
+    reportedBy: "u",
+    reportedAt: "2026-01-02T00:00:00Z",
+  };
+  const b: IndicatorMeasurement = { ...base, id: "B", period: "2026-02", value: 6 };
+  const other: IndicatorMeasurement = { ...base, id: "C", indicatorId: "j", period: "2026-03" };
+
+  it("findPeriodCollision : même indicateur, autre mesure, période trimée", () => {
+    const all = [base, b, other];
+    expect(findPeriodCollision(all, "i", " 2026-02 ", "A")?.id).toBe("B");
+    expect(findPeriodCollision(all, "i", "2026-02", "B")).toBeUndefined();
+    expect(findPeriodCollision(all, "i", "2026-03", "A")).toBeUndefined();
+    expect(findPeriodCollision(all, "i", "2026-01")?.id).toBe("A");
+  });
+
+  it("applyMeasurementEdit : conserve la saisie d'origine, pose updatedBy/At", () => {
+    expect(applyMeasurementEdit(base, { value: 8 }, "v", "T")).toEqual({
+      ...base,
+      value: 8,
+      updatedBy: "v",
+      updatedAt: "T",
+    });
+    const cleared = applyMeasurementEdit(base, { note: "  ", period: " 2026-05 " }, "v", "T");
+    expect(cleared).toEqual({
+      id: "A",
+      companyId: "c",
+      indicatorId: "i",
+      period: "2026-05",
+      value: 5,
+      reportedBy: "u",
+      reportedAt: "2026-01-02T00:00:00Z",
+      updatedBy: "v",
+      updatedAt: "T",
+    });
+    expect(cleared && "note" in cleared).toBe(false);
+    expect(applyMeasurementEdit(base, { value: null, note: null }, "v", "T")).toBeNull();
+    expect(applyMeasurementEdit(base, { period: " " }, "v", "T")).toBeNull();
+  });
+
+  it("isBaseline / measurementLabel", () => {
+    expect(isBaseline(base, [b, base])).toBe(true);
+    expect(isBaseline(b, [b, base])).toBe(false);
+    expect(measurementLabel({ value: 3 }, "%")).toBe("3 %");
+    expect(measurementLabel({ note: "qual" })).toBe("qual");
+    expect(measurementLabel({})).toBe("—");
   });
 });

@@ -1978,6 +1978,26 @@ const de: Record<string, string> = {
   "kpi.qualitativeNote": "Beobachtung der Periode",
   "kpi.valueSubmittedForApproval": "Wert zur Freigabe durch den Planverantwortlichen eingereicht",
   "kpi.pendingValidation": "Freigabe ausstehend",
+  "kpi.measurement.editTitle": "Messung korrigieren",
+  "kpi.measurement.deleteTitle": "Messung löschen",
+  "kpi.measurement.deleteConfirm": "Messung für {period} ({value}) löschen?",
+  "kpi.measurement.baselineDeleteWarning":
+    "Diese Messung ist der Ausgangswert (Referenz) des Indikators: Wenn Sie sie löschen, ändert sich der Referenzwert für die Fortschrittsberechnung.",
+  "kpi.measurement.baselineEditHint":
+    "Diese Messung ist der Ausgangswert (Referenz) des Indikators: Eine Korrektur ändert die Grundlage der Fortschrittsberechnung.",
+  "kpi.measurement.updated": "Messung korrigiert",
+  "kpi.measurement.deleted": "Messung gelöscht",
+  "kpi.measurement.deleteError": "Löschen fehlgeschlagen",
+  "kpi.measurement.periodCollision": "Für den Zeitraum {period} existiert bereits eine Messung.",
+  "kpi.measurement.correctionSubmitted":
+    "Korrektur zur Freigabe durch den Planverantwortlichen eingereicht",
+  "kpi.measurement.deletionSubmitted":
+    "Löschung zur Freigabe durch den Planverantwortlichen eingereicht",
+  "kpi.measurement.correctLatest": "Letzten Wert korrigieren",
+  "kpi.measurement.pendingCorrection": "Korrektur",
+  "kpi.measurement.pendingDeletion": "Löschung",
+  "kpi.history.actions": "Aktionen",
+  "kpi.history.correctedBy": "korrigiert von",
   "strategicDelete.pendingBy": "Löschung wartet auf Genehmigung durch {approver}",
   "strategicAxes.actionCreationPending":
     "Projekt zur Freigabe durch den Achsenverantwortlichen eingereicht",

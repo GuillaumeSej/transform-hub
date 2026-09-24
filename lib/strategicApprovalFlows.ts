@@ -7,7 +7,11 @@
  * sinon une demande est créée et RIEN n'est écrit côté données publiées.
  */
 import { requestMilestoneApproval as requestMilestoneApprovalLogic } from "@/lib/axisLogic";
-import { submitIndicatorValue, type IndicatorValueInput } from "@/lib/kpiHistory";
+import {
+  submitIndicatorValue,
+  type IndicatorValueInput,
+  type MeasurementEditPatch,
+} from "@/lib/kpiHistory";
 import type {
   ProjetCreateApprovalPayload,
   ProjetCreateStage,
@@ -16,7 +20,14 @@ import type {
   StrategicApprovalPayload,
   StrategicApprovalTarget,
 } from "@/lib/strategicApprovals";
-import type { AuthUser, Chantier, ChantierAction, ChantierStaffing, Indicator } from "@/types";
+import type {
+  AuthUser,
+  Chantier,
+  ChantierAction,
+  ChantierStaffing,
+  Indicator,
+  IndicatorMeasurement,
+} from "@/types";
 
 export type ApprovalGate = {
   /** `stage` : uniquement significatif pour `"projet_create"` (double validation, voir l'en-tête
@@ -80,6 +91,66 @@ export async function submitKpiValueFlow<M>(
     return "pending";
   }
   await submitIndicatorValue(addMeasurement, input);
+  return "applied";
+}
+
+/**
+ * Correction d'une mesure KPI déjà publiée — MÊME porte que la saisie (`"kpi_value"`) : une
+ * correction change une valeur publiée exactement comme une saisie, elle ne doit donc pas
+ * permettre de contourner la validation. Approbateur (lead/admin) ou hors contexte ⇒ correction
+ * directe ; sinon demande `"kpi_value"` portant `measurementId` (le doc est réécrit à
+ * l'approbation, voir `applyApprovedPayload`).
+ */
+export async function editKpiValueFlow(
+  gate: ApprovalGate | null | undefined,
+  indicator: Pick<Indicator, "id" | "name">,
+  measurement: Pick<IndicatorMeasurement, "id" | "period" | "value" | "note">,
+  patch: MeasurementEditPatch,
+  updateMeasurement: (id: string, patch: MeasurementEditPatch) => Promise<unknown>
+): Promise<FlowOutcome> {
+  const target: StrategicApprovalTarget = {
+    type: "indicateur",
+    id: indicator.id,
+    name: indicator.name,
+  };
+  if (gate && gate.needsApproval("kpi_value", target)) {
+    const period = patch.period !== undefined ? patch.period.trim() : measurement.period;
+    const value = patch.value === undefined ? measurement.value : (patch.value ?? undefined);
+    const note = (patch.note === undefined ? measurement.note : (patch.note ?? undefined))?.trim();
+    await gate.request("kpi_value", target, {
+      period,
+      measurementId: measurement.id,
+      ...(value !== undefined ? { value } : {}),
+      ...(note ? { note } : {}),
+    });
+    return "pending";
+  }
+  await updateMeasurement(measurement.id, patch);
+  return "applied";
+}
+
+/** Suppression d'une mesure KPI publiée — même porte `"kpi_value"` que la saisie/correction. */
+export async function deleteKpiValueFlow(
+  gate: ApprovalGate | null | undefined,
+  indicator: Pick<Indicator, "id" | "name">,
+  measurement: Pick<IndicatorMeasurement, "id" | "period" | "value">,
+  deleteMeasurement: (id: string) => Promise<unknown>
+): Promise<FlowOutcome> {
+  const target: StrategicApprovalTarget = {
+    type: "indicateur",
+    id: indicator.id,
+    name: indicator.name,
+  };
+  if (gate && gate.needsApproval("kpi_value", target)) {
+    await gate.request("kpi_value", target, {
+      period: measurement.period,
+      measurementId: measurement.id,
+      remove: true,
+      ...(measurement.value !== undefined ? { value: measurement.value } : {}),
+    });
+    return "pending";
+  }
+  await deleteMeasurement(measurement.id);
   return "applied";
 }
 

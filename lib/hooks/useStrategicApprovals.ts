@@ -47,7 +47,10 @@ import { saveChantierAction, deleteChantierAction } from "@/lib/firestore/chanti
 import { deleteChantier } from "@/lib/firestore/chantiers";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { saveIndicator } from "@/lib/firestore/indicators";
-import { saveIndicatorMeasurement } from "@/lib/firestore/indicatorMeasurements";
+import {
+  deleteIndicatorMeasurement,
+  saveIndicatorMeasurement,
+} from "@/lib/firestore/indicatorMeasurements";
 import { appendAuditEntries } from "@/lib/firestore/levers";
 import {
   applyApprovedPayload,
@@ -81,6 +84,7 @@ async function runEffects(effects: ApprovalEffects): Promise<void> {
   for (const id of effects.deleteActionIds) await deleteChantierAction(id);
   for (const id of effects.deleteChantierIds) await deleteChantier(id);
   for (const m of effects.saveMeasurements) await saveIndicatorMeasurement(m);
+  for (const id of effects.deleteMeasurementIds) await deleteIndicatorMeasurement(id);
   for (const i of effects.saveIndicators) await saveIndicator(i);
   for (const s of effects.saveStaffing) await saveChantierStaffing(s);
 }

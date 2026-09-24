@@ -85,7 +85,16 @@ export type MilestoneApprovalPayload = {
   targetMilestone: MilestoneId;
   fromMilestone?: MilestoneId;
 };
-export type KpiValueApprovalPayload = { period: string; value?: number; note?: string };
+/** `measurementId` (optionnel) : la demande CORRIGE une mesure déjà publiée (même doc réécrit,
+ *  saisie d'origine conservée) ; avec `remove: true` elle la SUPPRIME. Absent = nouvelle valeur
+ *  (format historique, relu tel quel). */
+export type KpiValueApprovalPayload = {
+  period: string;
+  value?: number;
+  note?: string;
+  measurementId?: string;
+  remove?: boolean;
+};
 /** Palier de la double validation d'un `"projet_create"` (voir l'en-tête du fichier) :
  *  `"chantier"` = 1er palier (pilote du chantier), `"axis"` = palier terminal (responsable de
  *  l'axe) — celui qui crée réellement le projet. */
@@ -379,6 +388,8 @@ export type ApprovalEffects = {
   deleteActionIds: string[];
   deleteChantierIds: string[];
   saveMeasurements: IndicatorMeasurement[];
+  /** Mesures à supprimer — alimenté uniquement par un `"kpi_value"` de suppression approuvé. */
+  deleteMeasurementIds: string[];
   saveIndicators: Indicator[];
   /** Lignes ETP à écrire (round 29) — alimenté uniquement par `"projet_create"` quand la demande
    *  approuvée porte un `payload.staffing` (voir `ProjetCreateApprovalPayload`). Vide dans tous les
@@ -392,6 +403,7 @@ function emptyEffects(): ApprovalEffects {
     deleteActionIds: [],
     deleteChantierIds: [],
     saveMeasurements: [],
+    deleteMeasurementIds: [],
     saveIndicators: [],
     saveStaffing: [],
   };
@@ -470,6 +482,46 @@ export function applyApprovedPayload(
       const indicator = data.indicators.find((i) => i.id === approval.targetId);
       if (!indicator) throw new Error("Indicateur introuvable : il a peut-être été supprimé");
       const p = approval.payload as KpiValueApprovalPayload;
+      const decidedAt = approval.decidedAt ?? new Date().toISOString();
+      const all = data.measurements ?? [];
+      if (p.measurementId) {
+        // Correction / suppression d'une mesure déjà publiée.
+        const existing = all.find((m) => m.id === p.measurementId);
+        if (!existing) throw new Error("Mesure introuvable : elle a peut-être été supprimée");
+        const others = all.filter((m) => m.id !== existing.id);
+        let next: IndicatorMeasurement[] = others;
+        if (p.remove) {
+          effects.deleteMeasurementIds.push(existing.id);
+        } else {
+          if (
+            others.some(
+              (m) => m.indicatorId === existing.indicatorId && m.period.trim() === p.period.trim()
+            )
+          ) {
+            throw new Error(`Une mesure existe déjà pour la période ${p.period} : demande périmée`);
+          }
+          const { value: _v, note: _n, updatedBy: _ub, updatedAt: _ua, ...rest } = existing;
+          void _v;
+          void _n;
+          void _ub;
+          void _ua;
+          const corrected: IndicatorMeasurement = stripUndefined({
+            ...rest,
+            period: p.period,
+            value: p.value,
+            note: p.note,
+            updatedBy: approval.requestedBy,
+            updatedAt: decidedAt,
+          });
+          effects.saveMeasurements.push(corrected);
+          next = [...others, corrected];
+        }
+        const status = computeIndicatorStatus(indicator, next);
+        if (status !== indicator.status) {
+          effects.saveIndicators.push({ ...indicator, status, lastUpdate: decidedAt.slice(0, 10) });
+        }
+        return effects;
+      }
       const measurement: IndicatorMeasurement = stripUndefined({
         id: `IM-${approval.id}`,
         companyId: approval.companyId,
@@ -623,6 +675,14 @@ export function describeApproval(
       const p = approval.payload as KpiValueApprovalPayload;
       const indicator = data.indicators.find((i) => i.id === approval.targetId);
       const unit = indicator?.unit ? ` ${indicator.unit}` : "";
+      if (p.measurementId) {
+        const existing = (data.measurements ?? []).find((m) => m.id === p.measurementId);
+        return {
+          subject,
+          before: existing ? `${existing.value ?? "—"}${unit} (${existing.period})` : undefined,
+          after: p.remove ? undefined : `${p.value ?? "—"}${unit} (${p.period})`,
+        };
+      }
       const latest = latestMeasurement(approval.targetId, data.measurements ?? []);
       return {
         subject,
@@ -680,6 +740,16 @@ function verbPhrase(approval: StrategicApproval, pastTense: boolean): string {
     }
     case "kpi_value": {
       const p = approval.payload as KpiValueApprovalPayload;
+      if (p.measurementId && p.remove) {
+        return pastTense
+          ? `a supprimé la mesure ${p.value ?? "—"} (${p.period}) de l'indicateur « ${name} »`
+          : `la suppression de la mesure ${p.value ?? "—"} (${p.period}) de l'indicateur « ${name} »`;
+      }
+      if (p.measurementId) {
+        return pastTense
+          ? `a corrigé la mesure en ${p.value ?? "—"} (${p.period}) sur l'indicateur « ${name} »`
+          : `la correction de la mesure en ${p.value ?? "—"} (${p.period}) de l'indicateur « ${name} »`;
+      }
       return pastTense
         ? `a renseigné ${p.value ?? "—"} (${p.period}) sur l'indicateur « ${name} »`
         : `la valeur ${p.value ?? "—"} (${p.period}) de l'indicateur « ${name} »`;

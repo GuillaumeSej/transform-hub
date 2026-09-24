@@ -1360,6 +1360,11 @@ export type IndicatorMeasurement = {
   /** Username de l'auteur de la mesure. */
   reportedBy: string;
   reportedAt: string;
+  /** Dernière correction (valeur/commentaire/période) d'une mesure déjà publiée — username et
+   *  horodatage ISO. `reportedBy`/`reportedAt` restent ceux de la saisie d'origine. Absents tant
+   *  que la mesure n'a jamais été corrigée (voir `lib/kpiHistory.ts::applyMeasurementEdit`). */
+  updatedBy?: string;
+  updatedAt?: string;
 };
 
 // ─── Staffing des chantiers (ETP par grande fonction) ─────────────────────────────────────────

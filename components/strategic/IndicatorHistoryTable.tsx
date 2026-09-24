@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { buildHistoryRows } from "@/lib/kpiHistory";
 import type { Indicator, IndicatorMeasurement } from "@/types";
@@ -11,10 +12,18 @@ import type { Indicator, IndicatorMeasurement } from "@/types";
 export function IndicatorHistoryTable({
   indicator,
   measurements,
+  onEdit,
+  onDelete,
 }: {
   indicator: Pick<Indicator, "objectiveValue" | "direction" | "unit">;
   measurements: IndicatorMeasurement[];
+  /** Actions par ligne (« Modifier » / « Supprimer ») — colonne affichée seulement si fournies
+   *  (l'appelant les omet quand l'utilisateur n'a pas le droit de corriger, voir
+   *  `useMeasurementCorrection`). */
+  onEdit?: (measurement: IndicatorMeasurement) => void;
+  onDelete?: (measurement: IndicatorMeasurement) => void;
 }) {
+  const withActions = !!onEdit || !!onDelete;
   const { t } = useTranslation();
   const rows = useMemo(
     () => buildHistoryRows(measurements, indicator.objectiveValue, indicator.direction),
@@ -43,6 +52,11 @@ export function IndicatorHistoryTable({
                 <th className={th}>{t("kpi.history.gap", "Écart à la cible")}</th>
                 <th className={th}>{t("kpi.history.author", "Auteur")}</th>
                 <th className={th}>{t("kpi.history.comment", "Commentaire")}</th>
+                {withActions && (
+                  <th className={th}>
+                    <span className="sr-only">{t("kpi.history.actions", "Actions")}</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-border align-top">
@@ -68,10 +82,42 @@ export function IndicatorHistoryTable({
                     <span className="block text-[10px] text-tertiary">
                       {m.reportedAt ? new Date(m.reportedAt).toLocaleString() : ""}
                     </span>
+                    {m.updatedBy && (
+                      <span className="block text-[10px] italic text-tertiary">
+                        {t("kpi.history.correctedBy", "corrigé par")} {m.updatedBy}
+                        {m.updatedAt ? ` — ${new Date(m.updatedAt).toLocaleString()}` : ""}
+                      </span>
+                    )}
                   </td>
                   <td className="min-w-[140px] whitespace-pre-wrap break-words px-2 py-1.5 text-text-primary">
                     {m.note ?? "—"}
                   </td>
+                  {withActions && (
+                    <td className="whitespace-nowrap px-1 py-1 text-right">
+                      {onEdit && (
+                        <button
+                          type="button"
+                          onClick={() => onEdit(m)}
+                          aria-label={`${t("common.edit", "Modifier")} ${m.period}`}
+                          title={t("common.edit", "Modifier")}
+                          className="cursor-pointer rounded p-1 text-text-secondary hover:bg-bg-surface hover:text-bp-coral"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          type="button"
+                          onClick={() => onDelete(m)}
+                          aria-label={`${t("common.delete", "Supprimer")} ${m.period}`}
+                          title={t("common.delete", "Supprimer")}
+                          className="cursor-pointer rounded p-1 text-text-secondary hover:bg-bg-surface hover:text-bp-coral"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

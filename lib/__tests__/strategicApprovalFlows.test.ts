@@ -13,6 +13,8 @@ import {
 import {
   createProjetFlow,
   deleteFlow,
+  deleteKpiValueFlow,
+  editKpiValueFlow,
   milestoneFlow,
   pendingApprovals,
   submitKpiValueFlow,
@@ -330,5 +332,77 @@ describe("milestone flow", () => {
       applyApprovedPayload({ ...a, status: "approved" }, dp).saveActions[0].milestones
         ?.currentMilestone
     ).toBe("E1");
+  });
+});
+
+describe("KPI value correction / deletion flow", () => {
+  const measurement = {
+    id: "IM1",
+    companyId: "c",
+    indicatorId: "IND1",
+    period: "2026-03",
+    value: 7,
+    note: "orig",
+    reportedBy: "carl",
+    reportedAt: "2026-03-01T00:00:00Z",
+  };
+  const other = { ...measurement, id: "IM2", period: "2026-04", value: 12, note: undefined };
+  const dataWithMeasures: StrategicApprovalData = { ...data, measurements: [measurement, other] };
+
+  it("approbateur : correction et suppression directes", async () => {
+    const { gate, store } = gateFor(user("lea", "strategic_lead"));
+    const update = vi.fn(async () => undefined);
+    const del = vi.fn(async () => undefined);
+    expect(await editKpiValueFlow(gate, kpi, measurement, { value: 8 }, update)).toBe("applied");
+    expect(update).toHaveBeenCalledWith("IM1", { value: 8 });
+    expect(await deleteKpiValueFlow(gate, kpi, measurement, del)).toBe("applied");
+    expect(del).toHaveBeenCalledWith("IM1");
+    expect(store).toHaveLength(0);
+  });
+
+  it("non-approbateur : correction soumise (measurementId), rien d'écrit", async () => {
+    const { gate, store } = gateFor(user("carl", "chantier_contributor"));
+    const update = vi.fn();
+    expect(await editKpiValueFlow(gate, kpi, measurement, { value: 9, note: null }, update)).toBe(
+      "pending"
+    );
+    expect(update).not.toHaveBeenCalled();
+    expect(store[0].payload).toEqual({ period: "2026-03", value: 9, measurementId: "IM1" });
+  });
+
+  it("approbation d'une correction : même doc réécrit, saisie d'origine conservée", async () => {
+    const { gate, store } = gateFor(user("carl", "chantier_contributor"));
+    await editKpiValueFlow(gate, kpi, measurement, { value: 11, period: "2026-02" }, vi.fn());
+    const decided = { ...store[0], status: "approved" as const, decidedAt: "2026-05-01T00:00:00Z" };
+    const e = applyApprovedPayload(decided, dataWithMeasures);
+    expect(e.saveMeasurements).toEqual([
+      {
+        ...measurement,
+        period: "2026-02",
+        value: 11,
+        updatedBy: "carl",
+        updatedAt: "2026-05-01T00:00:00Z",
+      },
+    ]);
+    expect(e.deleteMeasurementIds).toEqual([]);
+  });
+
+  it("approbation d'une correction vers une période déjà prise : demande périmée", async () => {
+    const { gate, store } = gateFor(user("carl", "chantier_contributor"));
+    await editKpiValueFlow(gate, kpi, measurement, { period: "2026-04" }, vi.fn());
+    const decided = { ...store[0], status: "approved" as const };
+    expect(() => applyApprovedPayload(decided, dataWithMeasures)).toThrow(/2026-04/);
+  });
+
+  it("approbation d'une suppression : mesure supprimée + statut recalculé", async () => {
+    const { gate, store } = gateFor(user("carl", "chantier_contributor"));
+    // Dernière mesure 12 >= cible 10 → on_track ; sans elle, 7 < 10 → at_risk.
+    expect(await deleteKpiValueFlow(gate, kpi, other, vi.fn())).toBe("pending");
+    expect(store[0].payload).toMatchObject({ measurementId: "IM2", remove: true });
+    const decided = { ...store[0], status: "approved" as const, decidedAt: "2026-05-01T00:00:00Z" };
+    const e = applyApprovedPayload(decided, dataWithMeasures);
+    expect(e.deleteMeasurementIds).toEqual(["IM2"]);
+    expect(e.saveMeasurements).toEqual([]);
+    expect(e.saveIndicators[0]).toMatchObject({ id: "IND1", status: "at_risk" });
   });
 });

@@ -22,10 +22,12 @@ import {
 } from "@/lib/axisLogic";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
 import { IndicatorValueModal } from "@/components/strategic/IndicatorValueModal";
+import { useMeasurementCorrection } from "@/components/strategic/MeasurementCorrection";
 import {
   canFillIndicatorValue,
   isMarketKpi,
   type IndicatorValueInput,
+  type MeasurementEditPatch,
   type YearSelection,
 } from "@/lib/kpiHistory";
 import { IndicatorMetaLine } from "@/components/strategic/IndicatorMetaLine";
@@ -555,12 +557,18 @@ export function BusinessKpiCards({
   className,
   user,
   addMeasurement,
+  updateMeasurement,
+  deleteMeasurement,
   year = "all",
 }: {
   /** Saisie de valeur (KPI marché, responsabilité CTO) : bouton affiché seulement si `user` ET
    *  `addMeasurement` sont fournis et que `canFillIndicatorValue` l'autorise. */
   user?: AuthUser | null;
   addMeasurement?: (input: IndicatorValueInput) => Promise<unknown>;
+  /** Correction / suppression d'une mesure publiée — actions affichées seulement si fournies et
+   *  que `canFillIndicatorValue` l'autorise. */
+  updateMeasurement?: (id: string, patch: MeasurementEditPatch) => Promise<unknown>;
+  deleteMeasurement?: (id: string) => Promise<unknown>;
   /** Année affichée (défaut : tout l'historique, comportement historique). */
   year?: YearSelection;
   /** Périmètre complet (le filtrage « macro » est fait ici, pour que les deux appelants ne
@@ -602,6 +610,8 @@ export function BusinessKpiCards({
           labels={l}
           user={user}
           addMeasurement={addMeasurement}
+          updateMeasurement={updateMeasurement}
+          deleteMeasurement={deleteMeasurement}
           year={year}
         />
       ))}
@@ -662,6 +672,8 @@ function BusinessKpiCard({
   labels: l,
   user,
   addMeasurement,
+  updateMeasurement,
+  deleteMeasurement,
   year,
 }: {
   indicator: Indicator;
@@ -669,6 +681,8 @@ function BusinessKpiCard({
   labels: Required<BusinessKpiLabels>;
   user?: AuthUser | null;
   addMeasurement?: (input: IndicatorValueInput) => Promise<unknown>;
+  updateMeasurement?: (id: string, patch: MeasurementEditPatch) => Promise<unknown>;
+  deleteMeasurement?: (id: string) => Promise<unknown>;
   year: YearSelection;
 }) {
   const { t } = useTranslation();
@@ -681,6 +695,13 @@ function BusinessKpiCard({
   const yearMeasurements = modalYear.filtered;
 
   const latest = latestMeasurement(indicator.id, measurements);
+  const correction = useMeasurementCorrection({
+    indicator,
+    measurements,
+    user,
+    updateMeasurement,
+    deleteMeasurement,
+  });
   const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
   const value =
     latest?.value !== undefined ? `${latest.value}${unitSuffix}` : (latest?.note ?? l.noValue);
@@ -752,6 +773,16 @@ function BusinessKpiCard({
       <p className="text-[10px] text-tertiary">{t("kpi.market.owner", "Saisie : CTO")}</p>
       <PendingKpiValues indicatorId={indicator.id} unit={indicator.unit} compact />
       {fillButton}
+      {correction.canCorrect && latest && (
+        <button
+          type="button"
+          onClick={() => correction.startEdit(latest)}
+          className="cursor-pointer self-start text-[11px] font-medium text-bp-coral underline-offset-2 hover:underline"
+        >
+          {t("kpi.measurement.correctLatest", "Corriger la dernière valeur")}
+        </button>
+      )}
+      {correction.dialogs}
       {canFill && user && addMeasurement && (
         <IndicatorValueModal
           indicator={indicator}
@@ -794,7 +825,12 @@ function BusinessKpiCard({
             targetSchedule={indicator.targetSchedule}
             baselineMeasurements={measurements}
           />
-          <IndicatorHistoryTable indicator={indicator} measurements={yearMeasurements} />
+          <IndicatorHistoryTable
+            indicator={indicator}
+            measurements={yearMeasurements}
+            onEdit={correction.canCorrect ? correction.startEdit : undefined}
+            onDelete={correction.canCorrect ? correction.startDelete : undefined}
+          />
         </Modal>
       )}
     </div>

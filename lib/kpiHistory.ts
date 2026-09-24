@@ -1,4 +1,4 @@
-import { canFillIndicator } from "@/lib/axisLogic";
+import { baselineMeasurement, canFillIndicator } from "@/lib/axisLogic";
 import type { AuthUser, Indicator, IndicatorFrequency, IndicatorMeasurement, Role } from "@/types";
 
 /**
@@ -132,6 +132,84 @@ export async function submitIndicatorValue<M>(
     ...(input.value !== undefined ? { value: input.value } : {}),
     ...(note ? { note } : {}),
   });
+}
+
+// ─── Correction d'une mesure déjà publiée ────────────────────────────────────────────────────
+
+/** Correction d'une mesure. `null` (ou commentaire vide) = effacer le champ ; clé absente = inchangé. */
+export type MeasurementEditPatch = {
+  period?: string;
+  value?: number | null;
+  note?: string | null;
+};
+
+/** Autre mesure DU MÊME indicateur déjà enregistrée sur `period` (hors `excludeId`, la mesure en
+ *  cours de correction) — une correction ne doit pas créer de doublon de période. */
+export function findPeriodCollision(
+  measurements: Pick<IndicatorMeasurement, "id" | "indicatorId" | "period">[],
+  indicatorId: string,
+  period: string,
+  excludeId?: string
+): Pick<IndicatorMeasurement, "id" | "indicatorId" | "period"> | undefined {
+  const target = period.trim();
+  return measurements.find(
+    (m) => m.indicatorId === indicatorId && m.id !== excludeId && m.period.trim() === target
+  );
+}
+
+/** Erreur levée par `useStrategicData.updateMeasurement` quand la nouvelle période est déjà prise. */
+export class MeasurementPeriodCollisionError extends Error {
+  constructor(public readonly period: string) {
+    super(`Une mesure existe déjà pour la période ${period}`);
+    this.name = "MeasurementPeriodCollisionError";
+  }
+}
+
+/**
+ * Mesure corrigée : `reportedBy`/`reportedAt` d'origine conservés, `updatedBy`/`updatedAt` posés.
+ * Champs vidés OMIS (Firestore rejette `undefined`). `null` si le résultat n'a plus ni valeur ni
+ * commentaire (même règle que la saisie).
+ */
+export function applyMeasurementEdit(
+  existing: IndicatorMeasurement,
+  patch: MeasurementEditPatch,
+  updatedBy: string,
+  updatedAt: string
+): IndicatorMeasurement | null {
+  const period = patch.period !== undefined ? patch.period.trim() : existing.period;
+  const value = patch.value === undefined ? existing.value : (patch.value ?? undefined);
+  const rawNote = patch.note === undefined ? existing.note : (patch.note ?? undefined);
+  const note = rawNote?.trim() ? rawNote.trim() : undefined;
+  if (!period || (value === undefined && note === undefined)) return null;
+  const { value: _v, note: _n, ...rest } = existing;
+  void _v;
+  void _n;
+  return {
+    ...rest,
+    period,
+    ...(value !== undefined ? { value } : {}),
+    ...(note !== undefined ? { note } : {}),
+    updatedBy,
+    updatedAt,
+  };
+}
+
+/** `true` si `measurement` est la baseline (1re mesure numérique) de son indicateur — sa
+ *  suppression/correction change la valeur de référence de l'avancement. */
+export function isBaseline(
+  measurement: Pick<IndicatorMeasurement, "id" | "indicatorId">,
+  measurements: IndicatorMeasurement[]
+): boolean {
+  return baselineMeasurement(measurement.indicatorId, measurements)?.id === measurement.id;
+}
+
+/** Libellé court d'une mesure pour une confirmation (« 42 % », ou le commentaire). */
+export function measurementLabel(
+  measurement: Pick<IndicatorMeasurement, "value" | "note">,
+  unit?: string
+): string {
+  if (measurement.value !== undefined) return `${measurement.value}${unit ? ` ${unit}` : ""}`;
+  return measurement.note ?? "—";
 }
 
 export type UserForFill = Pick<

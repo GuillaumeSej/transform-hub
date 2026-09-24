@@ -30,6 +30,7 @@ import {
   useYearSelection,
 } from "@/components/strategic/YearSegmentedControl";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
+import { useMeasurementCorrection } from "@/components/strategic/MeasurementCorrection";
 import { KpiTableView } from "@/components/strategic/KpiTableView";
 import { Modal } from "@/components/shared/Modal";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -91,6 +92,8 @@ function IndicatorCard({
   measurements,
   user,
   addMeasurement,
+  updateMeasurement,
+  deleteMeasurement,
   updateIndicator,
   number,
   highlighted,
@@ -101,6 +104,8 @@ function IndicatorCard({
   measurements: IndicatorMeasurement[];
   user: AuthUser | null;
   addMeasurement: StrategicData["addMeasurement"];
+  updateMeasurement: StrategicData["updateMeasurement"];
+  deleteMeasurement: StrategicData["deleteMeasurement"];
   updateIndicator: StrategicData["updateIndicator"];
   /** Numéro global (round 10, `axisLogic.numberIndicators`) — `undefined` si l'axe de cet
    *  indicateur n'existe pas dans `axes` (indicateur "orphelin", voir `orphans` plus bas) : la
@@ -124,6 +129,14 @@ function IndicatorCard({
   const canFill = canFillIndicatorValue(indicator, user);
   const quantitative = indicator.kind === "quantitative";
   const latest = latestMeasurement(indicator.id, measurements);
+  // Correction / suppression d'une mesure déjà publiée — même droit que la saisie.
+  const correction = useMeasurementCorrection({
+    indicator,
+    measurements,
+    user,
+    updateMeasurement,
+    deleteMeasurement,
+  });
 
   // ── Année affichée — round "cible évolutive" : PER-INDICATEUR (plus un sélecteur global de
   // page) suite à la demande explicite du PO ("je ne veux pas regarder l'historique global pour
@@ -417,6 +430,15 @@ function IndicatorCard({
                     <span>
                       {t("kpi.reportedBy")} {latest.reportedBy}
                     </span>
+                    {correction.canCorrect && (
+                      <button
+                        type="button"
+                        onClick={() => correction.startEdit(latest)}
+                        className="cursor-pointer text-[11px] font-medium text-bp-coral underline-offset-2 hover:underline"
+                      >
+                        {t("kpi.measurement.correctLatest", "Corriger la dernière valeur")}
+                      </button>
+                    )}
                   </>
                 ) : (
                   <span>{t("kpi.noMeasurement")}</span>
@@ -425,7 +447,13 @@ function IndicatorCard({
               {/* Avancement vers la cible finale (chiffre principal) + palier courant — voir
                   `IndicatorProgressDetail`. */}
               <IndicatorProgressDetail delta={delta} unit={indicator.unit} />
-              <IndicatorHistoryTable indicator={indicator} measurements={yearMeasurements} />
+              <IndicatorHistoryTable
+                indicator={indicator}
+                measurements={yearMeasurements}
+                onEdit={correction.canCorrect ? correction.startEdit : undefined}
+                onDelete={correction.canCorrect ? correction.startDelete : undefined}
+              />
+              {correction.dialogs}
             </div>
 
             {/* ── Écriture : objectif + saisie de mesure ───────────────────────────────────── */}
@@ -719,6 +747,8 @@ export function KpiPageClient() {
     measurements,
     loading: dataLoading,
     addMeasurement,
+    updateMeasurement,
+    deleteMeasurement,
     updateIndicator,
   } = useStrategicData(user?.companyId ?? null, activeProgramId, user);
 
@@ -1071,6 +1101,8 @@ export function KpiPageClient() {
       measurements={measurementsByIndicator.get(indicator.id) ?? []}
       user={user}
       addMeasurement={addMeasurement}
+      updateMeasurement={updateMeasurement}
+      deleteMeasurement={deleteMeasurement}
       updateIndicator={updateIndicator}
       number={indicatorNumbers.get(indicator.id)}
       highlighted={indicator.id === highlightedIndicatorId}
@@ -1215,6 +1247,8 @@ export function KpiPageClient() {
               labels={businessKpiLabels}
               user={user}
               addMeasurement={addMeasurement}
+              updateMeasurement={updateMeasurement}
+              deleteMeasurement={deleteMeasurement}
             />
           </CardBody>
         </Card>
